@@ -40,7 +40,7 @@ Citry keeps local, patched copies of two Vize 0.420.0 compiler crates under `rus
 Both archives come from the upstream Vize repository at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`
 ([`ubugeeei-prod/vize`](https://github.com/ubugeeei-prod/vize/commit/b7b308966c9baf4aa32d053448dc6d5ace6359c2)).
-Citry identifies the patched packages as version `0.420.0+citry.2`. They are
+Citry identifies the patched packages as version `0.420.0+citry.3`. They are
 MIT-licensed; the exact Citry patch inventory is recorded in each crate's
 [`README.citry.md`](rust/vize_atelier_core/README.citry.md) and
 [`README.citry.md`](rust/vize_s1_to_s2/README.citry.md).

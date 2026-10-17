@@ -1330,7 +1330,7 @@ def test_callback_exception_rolls_back_before_native_default_continues(page) -> 
     assert sum("context callback boom" in error for error in errors) == 1
 
 
-def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, serve_citry_ui_live) -> None:
+def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, serve_citry_ui_live, send_event) -> None:
     app, html = _page(refresh=True)
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
@@ -1349,7 +1349,12 @@ def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, se
     before = page.locator("#basic-point").bounding_box()
     assert before is not None
     assert page.locator("#basic").get_attribute("data-invocation") == "pointer"
-    page.locator(".refresh-context").evaluate("element => element.click()")
+    # The open menu and its initialized root are already in place before the
+    # click, so waiting for them alone can pass before the server's revision
+    # arrives. A revision that lands during the shadow move or the tampering
+    # below replaces each menu's controller midway and resets the anchors the
+    # later waits expect, so wait until the browser has applied it.
+    send_event(lambda: page.locator(".refresh-context").evaluate("element => element.click()"), handler="refresh")
     page.wait_for_function(
         """
           document.querySelector('#basic')?.hasAttribute('data-citry-context-menu-initialized')
@@ -1592,6 +1597,7 @@ def test_nested_boundary_server_revision_shadow_move_and_hostile_repair(page, se
 
 
 def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanly(page, serve_citry_ui_live) -> None:
+    """A server revision that changes the open menu's items closes it and reports the close to `onOpenChange`."""
     app, html = _reordered_context_menu_page()
     errors: list[str] = []
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
@@ -1618,7 +1624,13 @@ def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanl
         "Second action",
         "First action",
     ]
-    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True]
+    # The owner learns about the forced close, so state that tracks
+    # `onOpenChange` does not still say the menu is open.
+    page.wait_for_function("window.__contextReorderEvents.length === 2")
+    assert page.evaluate("window.__contextReorderEvents") == [
+        {"open": True, "reason": "contextmenu"},
+        {"open": False, "reason": "ancestor"},
+    ]
 
     page.locator("#reorder-context-target").click(button="right")
     page.wait_for_function("document.querySelector('#reorder-context-menu')?.matches(':popover-open')")
@@ -1626,7 +1638,7 @@ def test_open_context_menu_reorder_preserves_declaration_order_and_closes_cleanl
         "Second action",
         "First action",
     ]
-    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True, True]
+    assert page.evaluate("window.__contextReorderEvents.map(event => event.open)") == [True, False, True]
     assert errors == []
 
 
@@ -1739,6 +1751,86 @@ def test_point_close_capability_loss_and_invalid_target_fail_closed(page) -> Non
     assert not any("is not a function" in error for error in errors)
 
 
+def test_untrusted_root_waits_without_rewriting_itself(page) -> None:
+    """A root the page has broken stays not ready and makes no DOM changes until the page changes it again."""
+    # The menus become ready on timers, so the clock runs normally through the
+    # load and is paused before the page breaks the root; after that only
+    # `run_for()` moves it, until the final open checks resume it.
+    page.clock.install()
+    errors = _load(page)
+    page.clock.pause_at(page.evaluate("Date.now() + 1_000"))
+    page.evaluate(
+        """
+          () => {
+            document.querySelector('#geometry').removeAttribute('data-citry-context-menu-initialized');
+            document.querySelector('#geometry-point').style.setProperty(
+              'anchor-name', '--_cui-menu-anchor-ref-untrusted'
+            );
+            document.querySelector('#geometry-menu').style.setProperty(
+              'position-anchor', '--_cui-untrusted-menu-anchor'
+            );
+          }
+        """
+    )
+    # Let the controller react to the break once before counting.
+    page.clock.run_for(50)
+    page.evaluate(
+        """
+          () => {
+            const root = document.querySelector('#geometry');
+            window.__geometryWrites = 0;
+            new MutationObserver((records) => {
+              window.__geometryWrites += records.length;
+            }).observe(root, { subtree: true, attributes: true, childList: true });
+          }
+        """
+    )
+    # Each repair rewrites the root's attributes and wakes the controller's
+    # own observer, so a controller that reacts to its own writes would
+    # rewrite the root on every timer tick while nothing else changes.
+    page.clock.run_for(1_000)
+    assert page.evaluate("window.__geometryWrites") == 0
+    assert not page.locator("#geometry").evaluate(
+        "element => element.hasAttribute('data-citry-context-menu-initialized')"
+    )
+
+    page.evaluate(
+        """
+          () => {
+            document.querySelector('#geometry-point').style.setProperty(
+              'anchor-name', '--_cui-menu-anchor-ref-handoff'
+            );
+            document.querySelector('#geometry-menu').style.setProperty(
+              'position-anchor', '--_cui-menu-anchor-ref-handoff'
+            );
+          }
+        """
+    )
+    page.clock.run_for(50)
+    page.wait_for_function(
+        """
+          document.querySelector('#geometry').hasAttribute('data-citry-context-menu-initialized')
+          && document.querySelector('#geometry-menu').hasAttribute('data-citry-menu-initialized')
+        """
+    )
+    # The repaired menu must answer both ways of opening it, which go through
+    # the event handlers' readiness check rather than the watcher's.
+    page.clock.resume()
+    target = page.locator("#geometry-target")
+    target.click(button="right")
+    page.wait_for_function("document.querySelector('#geometry-menu')?.matches(':popover-open')")
+    page.keyboard.press("Escape")
+    page.wait_for_function("!document.querySelector('#geometry-menu')?.matches(':popover-open')")
+    target.focus()
+    page.keyboard.press("Shift+F10")
+    page.wait_for_function("document.querySelector('#geometry-menu')?.matches(':popover-open')")
+    # The page broke the root once, so the controller reports it exactly
+    # once, and nothing else logs an error.
+    broken_root = "[citry-ui] CContextMenu cannot open because page code changed its markup;"
+    assert len(errors) == 1, errors
+    assert errors[0].startswith(broken_root), errors
+
+
 def test_disabled_focus_fallback_removes_temporary_body_tabindex(page) -> None:
     errors = _load(page)
 
@@ -1790,4 +1882,73 @@ def test_final_cleanup_disconnects_shared_observers_and_clears_readiness(page) -
         "baseline => window.__contextObserverDisconnects > baseline",
         arg=baseline_disconnects,
     )
+    assert errors == []
+
+
+def test_server_revision_binds_the_open_callback_when_the_root_breaks_before_the_first_read(
+    page, serve_citry_ui_live, send_event, wait_for_count
+) -> None:
+    """A server revision that lands while the page breaks the root still binds `onOpenChange` once repaired."""
+    app, html = _page(refresh=True)
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    # Hold the refresh call so the page can arm its mutation below before the
+    # browser applies the server revision.
+    held: list = []
+    page.route(
+        "**/ext/events/**",
+        lambda route: held.append(route) if route.request.method == "POST" else route.continue_(),
+    )
+    page.goto(serve_citry_ui_live(app, html) + "/")
+    page.wait_for_function("document.querySelectorAll('[data-citry-context-menu-initialized]').length === 11")
+    page.locator(".refresh-context").evaluate("element => element.click()")
+    wait_for_count(held, 1)
+    # The revision gives #geometry a new controller. It marks the root ready
+    # and reads the props, onOpenChange included, on a zero-delay timer. Break
+    # the root in the same task that marks it ready, so that read finds an
+    # invalid root.
+    page.evaluate(
+        """
+          () => {
+            const root = document.querySelector('#geometry');
+            const owner = Symbol.for('citry-ui:context-menu-owner');
+            const previous = root[owner];
+            const observer = new MutationObserver(() => {
+              if (root[owner] === previous || !root.hasAttribute('data-citry-context-menu-initialized')) return;
+              observer.disconnect();
+              root.removeAttribute('data-citry-context-menu-initialized');
+              document.querySelector('#geometry-point').style.setProperty(
+                'anchor-name', '--_cui-menu-anchor-ref-untrusted'
+              );
+              document.querySelector('#geometry-menu').style.setProperty(
+                'position-anchor', '--_cui-untrusted-menu-anchor'
+              );
+              window.__geometryBroken = true;
+            });
+            observer.observe(root, { attributes: true });
+          }
+        """
+    )
+    send_event(held[0].continue_, handler="refresh")
+    page.wait_for_function(
+        "window.__geometryBroken"
+        " && !document.querySelector('#geometry').hasAttribute('data-citry-context-menu-initialized')"
+    )
+    page.evaluate(
+        """
+          () => {
+            document.querySelector('#geometry-point').style.setProperty(
+              'anchor-name', '--_cui-menu-anchor-ref-handoff'
+            );
+            document.querySelector('#geometry-menu').style.setProperty(
+              'position-anchor', '--_cui-menu-anchor-ref-handoff'
+            );
+          }
+        """
+    )
+    page.wait_for_function("document.querySelector('#geometry').hasAttribute('data-citry-context-menu-initialized')")
+    page.locator("#geometry-target").click(button="right")
+    page.wait_for_function("document.querySelector('#geometry-menu').matches(':popover-open')")
+    page.wait_for_function("window.__contextState.geometryEvents.length === 1", timeout=5_000)
+    assert page.evaluate("window.__contextState.geometryEvents") == [True]
     assert errors == []

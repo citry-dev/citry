@@ -55,7 +55,7 @@ from citry._component_introspection import _build_component_catalog, _build_comp
 from citry._linting import _application_lint_info, _component_lint_info
 from citry.analysis import TemplateAnalysis
 from citry.autodiscovery import import_component_modules
-from citry.cache import CitryCache, InMemoryCache
+from citry.cache import CitryCache, InMemoryCache, _forget_stored_keys
 from citry.component_registry import (
     BUILTIN_COMPONENT_NAMES,
     AlreadyRegistered,
@@ -68,6 +68,8 @@ from citry.constness import ConstBodyCache
 from citry.extension import ExtensionManager
 from citry.introspection import _new_engine_id
 from citry.settings import (
+    DEFAULT_MAX_COMPONENT_DEPTH,
+    DEFAULT_VUE_ASSET_MAX_BYTES,
     CitrySettings,
     LintSettings,
     SecurityCspMode,
@@ -75,6 +77,7 @@ from citry.settings import (
     SecurityScriptIntegrityMode,
 )
 from citry.tag_rules import build_tag_rules
+from citry.util.routing import normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
@@ -134,16 +137,17 @@ class Citry:
     A Citry instance owns:
 
     - A private component-name registry reached through the engine's methods
-    - Settings (to be expanded as the engine grows)
+    - Settings
     - Transient rendering state
 
     All Component classes are assigned to a Citry instance at class
     definition time. If no instance is specified, the default instance
     is used.
 
-    Call :meth:`initialize` after startup-time registration and before a
-    server starts request threads. Lazy initialization remains available, but
-    a thread that encounters lifecycle work owned by another thread receives
+    Call [`initialize()`][citry.Citry.initialize] after startup-time
+    registration and before a server starts request threads. Lazy
+    initialization remains available, but a thread that encounters
+    lifecycle work owned by another thread receives
     [`CitryLifecycleInProgress`][citry.CitryLifecycleInProgress].
 
     """
@@ -167,6 +171,10 @@ class Citry:
         security_csp: SecurityCspMode = "off",
         security_javascript: SecurityJavascriptMode = "allow",
         security_script_integrity: SecurityScriptIntegrityMode = "off",
+        ssr: bool = True,
+        ssr_element_threshold: int = 0,
+        vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES,
+        max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH,
     ) -> None:
         self._engine_id = _new_engine_id()
         # CitrySettings.__post_init__ copies every field into its immutable
@@ -191,6 +199,10 @@ class Citry:
             security_csp=security_csp,
             security_javascript=security_javascript,
             security_script_integrity=security_script_integrity,
+            ssr=ssr,
+            ssr_element_threshold=ssr_element_threshold,
+            vue_asset_max_bytes=vue_asset_max_bytes,
+            max_component_depth=max_component_depth,
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,
@@ -206,7 +218,7 @@ class Citry:
 
         # The build environment (dev_prod_mode.md), validated in the settings.
         # Read directly off the instance by the pieces that vary by environment:
-        # the built-in extension set below, and the client ownership graph.
+        # the built-in extension set below, and how i18n loads catalog packages.
         self.mode: Literal["production", "development"] = self.settings.mode
 
         # The cache backend (docs/design/dependencies.md section 10): derived
@@ -1083,6 +1095,9 @@ class Citry:
                 # after the hooks accept a final removal.
                 if not self._registry._has_class(comp_cls):
                     self._evict_component_cache(comp_cls)
+                if names_removed:
+                    # Alias removal changes authored tag resolution even while
+                    # the same class remains reachable under another name.
                     self.extensions._advance_render_cache_revision()
                 self._clear_standalone_template_cache()
             except BaseException:
@@ -1496,11 +1511,12 @@ class Citry:
         process that builds URLs without mounting the routes itself (for
         example a worker that renders fragments served by another process).
         ``prefix`` must start with ``/``; a trailing ``/`` is dropped.
+
+        Raises:
+            ValueError: If ``prefix`` does not start with ``/``.
+
         """
-        if not prefix.startswith("/"):
-            msg = f"Mount prefix must start with '/', got {prefix!r}"
-            raise ValueError(msg)
-        self._mounted_prefix = prefix.rstrip("/")
+        self._mounted_prefix = normalize_mount_prefix(prefix)
 
     def build_url(self, path: str) -> str:
         """
@@ -1689,7 +1705,8 @@ class Citry:
         """
         The component classes whose assets resolved to ``path``.
 
-        Most callers want :meth:`invalidate_file`, which both finds these
+        Most callers want
+        [`invalidate_file()`][citry.Citry.invalidate_file], which both finds these
         classes and resets them. This lower-level lookup is for a caller that
         wants the classes without resetting (a custom hot-reload handler, a
         test). Dead weakrefs are pruned on read.
@@ -1718,8 +1735,9 @@ class Citry:
         Returns the component classes it reset. An empty list means the file
         backs no loaded component, which a hot-reload handler can read as "not
         mine" and, if it wants, fall through to a full restart. This is the
-        host-neutral call a file watcher drives; see the watcher in
-        :mod:`citry.reload` and ``docs/design/hot_reload.md``.
+        call a file watcher makes, whatever web framework hosts the app; see
+        [Hot reload during development](/guides/dev-server/) for the built-in
+        watchers.
         """
         classes = self.get_components_for_file(path)
         for comp_cls in classes:
@@ -1737,9 +1755,9 @@ class Citry:
         (in first-seen order).
 
         For when a change cannot be mapped to a single path: a bulk edit, a
-        branch switch, or a custom watcher reporting an event it cannot resolve
-        to one file. Unlike :meth:`clear`, this leaves the registry and
-        autodiscovery untouched.
+        branch switch, or a custom watcher reporting an event it cannot
+        resolve to one file. Unlike [`clear()`][citry.Citry.clear], this
+        leaves the registry and autodiscovery untouched.
         """
         # First-seen order, de-duplicated: a class can be indexed under several
         # files (template + js + css), and dict keys preserve insertion order.
@@ -1792,6 +1810,10 @@ class Citry:
                 cache_clear = getattr(self.cache, "clear", None)
                 if callable(cache_clear):
                     cache_clear()
+                # This engine skips re-checking keys it recently saw stored;
+                # after a wipe that memory is wrong, so the next render must
+                # write its assets again.
+                _forget_stored_keys(self)
 
     def _clear_standalone_template_cache(self) -> None:
         """Discard sources compiled against an obsolete component registry."""

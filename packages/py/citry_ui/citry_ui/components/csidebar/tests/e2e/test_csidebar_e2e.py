@@ -132,14 +132,34 @@ def test_uncontrolled_rail_toggle_is_form_safe_and_preserves_panel(page: Any) ->
     assert toggle_box is not None
     assert header_box is not None
     assert abs((toggle_box["y"] + toggle_box["height"] / 2) - (header_box["y"] + header_box["height"] / 2)) < 1
+    # The transition state lasts about 180 ms, and on a loaded runner a few
+    # separate reads after the click can outlast it. The sidebar applies the
+    # click synchronously, so a document listener that runs after the
+    # toggle's own listener records the state within the same dispatch.
+    page.evaluate(
+        """() => document.addEventListener('click', () => {
+          const root = document.querySelector('#rail');
+          const panel = root.querySelector('[data-citry-ui-part="panel"]');
+          const toggle = root.querySelector('[data-citry-ui-part="toggle"]');
+          window.__railAfterClick = {
+            collapsed: root.getAttribute('data-collapsed'),
+            transitioning: root.getAttribute('data-citry-sidebar-transitioning'),
+            expanded: toggle.getAttribute('aria-expanded'),
+            panelVisible: panel.getBoundingClientRect().width > 0 && getComputedStyle(panel).visibility !== 'hidden',
+            panelWidth: getComputedStyle(panel).width,
+            overflowX: getComputedStyle(root).overflowX,
+          };
+        }, {once: true})"""
+    )
     toggle.click()
 
-    assert root.get_attribute("data-collapsed") == ""
-    assert root.get_attribute("data-citry-sidebar-transitioning") == ""
-    assert toggle.get_attribute("aria-expanded") == "false"
-    assert panel.is_visible()
-    assert panel.evaluate("element => getComputedStyle(element).width") == "288px"
-    assert root.evaluate("element => getComputedStyle(element).overflowX") in {"hidden", "clip"}
+    after_click = page.evaluate("window.__railAfterClick")
+    assert after_click["collapsed"] == ""
+    assert after_click["transitioning"] == ""
+    assert after_click["expanded"] == "false"
+    assert after_click["panelVisible"] is True
+    assert after_click["panelWidth"] == "288px"
+    assert after_click["overflowX"] in {"hidden", "clip"}
     assert page.url.endswith("#") is False
     page.wait_for_function("!document.querySelector('#rail').hasAttribute('data-citry-sidebar-transitioning')")
     assert root.evaluate("element => getComputedStyle(element).width") == "64px"

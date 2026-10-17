@@ -386,8 +386,11 @@ immutable source mapping.
 
 Citry UI components that need a registered decorative glyph use CIcon's
 private resolver instead of reading the generated mapping directly. The
-resolver performs the same allowlist and safe-Markup conversion and returns
-logical-direction metadata with the glyph. It does not expose a second public
+resolver applies the same allowlist, renders the glyph through
+`Citry.render_template()`, and returns logical-direction metadata with it. A
+template places that rendered glyph inside its `<svg>` with `{{ }}`; the
+resolver never hands out the catalog string, which `{{ }}` would escape into
+visible text. It does not expose a second public
 Icon API or accept client-selected names.
 
 ## 16. Assets and performance
@@ -449,7 +452,7 @@ role/name assertions do not replace an assistive-technology sample.
 3. **Evolvable design:** exact glyph paths, stroke shapes, size fallback values,
    and private alignment details may improve without changing alias meaning.
 4. **Private implementation:** Python mapping organization, the shared
-   registered-glyph resolver and metadata record, trusted-markup
+   registered-glyph resolver and metadata record, rendered-glyph
    representation, `.cui-*` classes, private variables, and vendoring tools.
 
 Adding an alias is backward-compatible. Removing or repurposing one is a

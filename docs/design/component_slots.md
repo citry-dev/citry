@@ -464,8 +464,15 @@ OnSlotRenderedContext(
 )
 ```
 
-Return semantics match `on_component_rendered`: `None` keeps the result, a
-returned `RenderPart` replaces it, raising propagates. There is no
+Return semantics follow `on_component_rendered`: `None` keeps the result, a
+returned `CitryRender`, `str`, or `Markup` replaces it, raising propagates.
+Returning `ctx.result` unchanged keeps it too. Any other value raises
+`TypeError` naming the extension, the slot, and the component, on static and
+interactive pages alike. A returned plain `str` is
+text and is escaped, and `Markup` (or any object with `__html__`) is HTML, the
+rule of a `{{ ... }}` value. The manager wraps that text or HTML in a
+`CitryRender` of its own before the next extension sees it, which is also the
+shape a slot rendered for Vue needs for its fill. There is no
 `slot_is_default` field (DJC has one because of its `default` flag; in citry
 `slot_name == "default"` carries the same information).
 

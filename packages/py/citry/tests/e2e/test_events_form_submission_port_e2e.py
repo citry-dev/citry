@@ -15,8 +15,6 @@ from citry.ext.events import ViewEvents, actions
 
 pytestmark = pytest.mark.e2e
 
-READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
-
 
 def _form_port() -> tuple[Citry, str, type[Component]]:
     engine = Citry(secret="e2e-secret")  # noqa: S106 - deterministic test signing key
@@ -47,8 +45,7 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
             def post(self, data: ContactIn):  # noqa: F821
                 return actions.Render(
                     ThankYouMessage(name=data.name),
-                    target="#thank-you-container",
-                    swap="inner",
+                    target="mark:thank-you",
                 )
 
         def template_data(self, kwargs, slots):
@@ -66,7 +63,9 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
               <input type="text" name="name" id="name" />
               <button type="submit">Submit through compatibility route</button>
             </form>
-            <div id="thank-you-container"></div>
+            <div id="thank-you-container">
+              <c-mark name="thank-you"></c-mark>
+            </div>
           </section>
         """
 
@@ -82,14 +81,18 @@ def _form_port() -> tuple[Citry, str, type[Component]]:
     return engine, str(Page()), ContactForm
 
 
-def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: Any, serve_live: Any) -> None:
-    """The old HTMX target becomes a Citry Render target and keeps the form page."""
+def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
+    """The old HTMX CSS target becomes a Citry marker target and keeps the form page."""
     engine, html, contact_form = _form_port()
     requests: list[Any] = []
-    page.on("request", lambda request: requests.append(request) if "/ext/events/e/" in request.url else None)
+    # Runtime event calls share one batched endpoint; the handler name travels in the body.
+    page.on("request", lambda request: requests.append(request) if request.url.endswith("/ext/events/call") else None)
     base = serve_live(engine, html, "")
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    # `_apps` gains the app before Vue mounts it; `citry:ready` comes after.
+    wait_for_citry_ready()
     page.fill(".runtime-form input[name=name]", "John Doe")
     page.click(".runtime-form button[type=submit]")
     page.wait_for_function("document.querySelector('.thanks')?.innerText.includes('John Doe')")
@@ -98,11 +101,18 @@ def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(page: 
     assert page.locator(".runtime-form").count() == 1
     assert len(requests) == 1
     assert requests[0].method == "POST"
-    assert requests[0].url.endswith(f"/e/{contact_form.class_id}/post")
-    assert json.loads(requests[0].post_data)["calls"][0]["args"] == {"name": "John Doe"}
+    assert requests[0].url.endswith("/ext/events/call")
+    call = json.loads(requests[0].post_data)["calls"][0]
+    # The batched endpoint names the component in the body, so check the call
+    # still reaches ContactForm's handler rather than any handler named post.
+    assert call["componentClassId"] == contact_form.class_id
+    assert call["handlerName"] == "post"
+    assert call["args"] == {"name": "John Doe"}
 
 
-def test_view_events_native_form_reaches_the_verb_compatibility_route(page: Any, serve_live: Any) -> None:
+def test_view_events_native_form_reaches_the_verb_compatibility_route(
+    page: Any, serve_live: Any, wait_for_citry_ready: Any
+) -> None:
     """The initial verb-shaped migration remains available as a native form POST."""
     engine, html, contact_form = _form_port()
 
@@ -122,10 +132,10 @@ def test_view_events_native_form_reaches_the_verb_compatibility_route(page: Any,
     page.on("request", capture)
     base = serve_live(engine, html, "")
     page.goto(base + "/")
-    page.wait_for_function(READY)
+    # `_apps` gains the app before Vue mounts it; `citry:ready` comes after.
+    wait_for_citry_ready()
     page.fill(".native-form input[name=name]", "John Doe")
-    with page.expect_navigation():
-        page.click(".native-form button[type=submit]")
+    page.click(".native-form button[type=submit]")
     page.wait_for_function("document.querySelector('.thanks')?.innerText.includes('John Doe')")
 
     assert page.locator(".thanks").inner_text() == "Thank you for your submission, John Doe!"

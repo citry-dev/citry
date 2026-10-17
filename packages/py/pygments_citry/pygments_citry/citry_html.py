@@ -116,7 +116,7 @@ def _handler_value(
     *,
     allow_args: bool,
 ) -> Iterator[tuple[int, Any, str]]:
-    """Highlight a Citry handler reference and its optional Alpine arguments."""
+    """Highlight a Citry handler reference and its optional Vue arguments."""
     raw = match.group()
     quote = raw[0] if raw[0] in "\"'" else ""
     closed = bool(quote) and len(raw) > 1 and raw[-1] == quote
@@ -163,7 +163,7 @@ def _event_handler(
     match: re.Match[str],
     ctx: Any,
 ) -> Iterator[tuple[int, Any, str]]:
-    """Highlight an ``@c-*`` handler plus its optional Alpine argument object."""
+    """Highlight an ``@c-*`` handler plus its optional Vue argument object."""
     yield from _handler_value(match, ctx, allow_args=True)
 
 
@@ -226,13 +226,7 @@ _COMMON_ATTR_RULES = [
     (r"(/?)(\s*)(>)", bygroups(Punctuation, Text, Punctuation), "#pop"),
 ]
 _WS_RULE = (r"\s+", Text)
-# `$c-props` is evaluated by the client runtime, so its value is JavaScript.
-_CLIENT_PROPS_ATTR_RULE = (
-    r"(\$c-props)(\s*)(=)(\s*)",
-    bygroups(Name.Attribute, Text, Operator, Text),
-    _JS_ATTR_STATE,
-)
-# `$c-tr` values are Alpine named-value expressions. Its c-prefixed form is
+# `$c-tr` values are Vue named-value expressions. Its c-prefixed form is
 # still matched by `_C_ATTR_RULE` and therefore remains a Python expression.
 _CLIENT_I18N_ATTR_RULE = (
     rf"(\$c-tr(?=[:.\[]){_ATTR_TAIL})(\s*)(=)(\s*)",
@@ -247,7 +241,7 @@ _META_KEY_ATTR_RULE = (
     _PY_ATTR_STATE,
 )
 # Citry Events values name a server handler. An @c-* handler may append one
-# parenthesized Alpine expression, while a :c-* value is only a handler name.
+# parenthesized Vue expression, while a :c-* value is only a handler name.
 _EVENT_ATTR_RULE = (
     rf"(@c-{_ATTR_TAIL})(\s*)(=)(\s*)",
     bygroups(Name.Attribute, Text, Operator, Text),
@@ -258,10 +252,10 @@ _STATE_BINDING_ATTR_RULE = (
     bygroups(Name.Attribute, Text, Operator, Text),
     _STATE_HANDLER_STATE,
 )
-# Direct Alpine directives are evaluated in the browser. Their c-prefixed
+# Direct Vue directives are evaluated in the browser. Their c-prefixed
 # dynamic forms are matched by _C_ATTR_RULE first and stay Python.
 _CLIENT_ATTR_RULE = (
-    rf"((?:@|:|x-){_ATTR_TAIL})(\s*)(=)(\s*)",
+    rf"((?:@|:|v-){_ATTR_TAIL})(\s*)(=)(\s*)",
     bygroups(Name.Attribute, Text, Operator, Text),
     _JS_ATTR_STATE,
 )
@@ -322,7 +316,6 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         # An ordinary element's attributes.
         "tag": [
             _WS_RULE,
-            _CLIENT_PROPS_ATTR_RULE,
             _CLIENT_I18N_ATTR_RULE,
             _META_KEY_ATTR_RULE,
             _C_ATTR_RULE,
@@ -333,7 +326,6 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         ],
         "condition-tag": [
             _WS_RULE,
-            _CLIENT_PROPS_ATTR_RULE,
             _CLIENT_I18N_ATTR_RULE,
             _META_KEY_ATTR_RULE,
             _C_ATTR_RULE,
@@ -345,7 +337,6 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         ],
         "for-tag": [
             _WS_RULE,
-            _CLIENT_PROPS_ATTR_RULE,
             _CLIENT_I18N_ATTR_RULE,
             _META_KEY_ATTR_RULE,
             _C_ATTR_RULE,
@@ -357,54 +348,58 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         ],
         # A c-* value whose trimmed body begins with a tag or <> fragment is a
         # nested template. Other values are Python expressions.
+        # In this state and the value states below, a quoted value ends at
+        # the first matching quote, as in the template grammar. The grammar
+        # has no escape character, so a backslash cannot keep the value open,
+        # and a template the parser rejects must not highlight as valid.
         "dynamic-attr": [
             (
-                r'(")(\s*<(?=>|[A-Za-z])(?:[^"\\]|\\.)*)(")',
+                r'(")(\s*<(?=>|[A-Za-z])[^"]*)(")',
                 bygroups(Punctuation, _nested_template, Punctuation),
                 "#pop",
             ),
             (
-                r"(')(\s*<(?=>|[A-Za-z])(?:[^'\\]|\\.)*)(')",
+                r"(')(\s*<(?=>|[A-Za-z])[^']*)(')",
                 bygroups(Punctuation, _nested_template, Punctuation),
                 "#pop",
             ),
-            (r'(")((?:[^"\\]|\\.)*)(")', bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
-            (r"(')((?:[^'\\]|\\.)*)(')", bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
+            (r'(")([^"]*)(")', bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
+            (r"(')([^']*)(')", bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
             (r'(")([\s\S]*)$', bygroups(Punctuation, using(PythonLexer)), "#pop"),
             (r"(')([\s\S]*)$", bygroups(Punctuation, using(PythonLexer)), "#pop"),
             (r"[^\s>]+", using(PythonLexer), "#pop"),
         ],
         # The value of a fixed server-side attribute is a Python expression.
         "python-attr": [
-            (r'(")((?:[^"\\]|\\.)*)(")', bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
-            (r"(')((?:[^'\\]|\\.)*)(')", bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
+            (r'(")([^"]*)(")', bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
+            (r"(')([^']*)(')", bygroups(Punctuation, using(PythonLexer), Punctuation), "#pop"),
             (r'(")([\s\S]*)$', bygroups(Punctuation, using(PythonLexer)), "#pop"),
             (r"(')([\s\S]*)$", bygroups(Punctuation, using(PythonLexer)), "#pop"),
             (r"[^\s>]+", using(PythonLexer), "#pop"),
         ],
-        # The direct client props value is an Alpine/JavaScript expression.
+        # Direct Vue directive values are JavaScript expressions.
         "javascript-attr": [
-            (r'(")((?:[^"\\]|\\.)*)(")', bygroups(Punctuation, using(JavascriptLexer), Punctuation), "#pop"),
-            (r"(')((?:[^'\\]|\\.)*)(')", bygroups(Punctuation, using(JavascriptLexer), Punctuation), "#pop"),
+            (r'(")([^"]*)(")', bygroups(Punctuation, using(JavascriptLexer), Punctuation), "#pop"),
+            (r"(')([^']*)(')", bygroups(Punctuation, using(JavascriptLexer), Punctuation), "#pop"),
             (r'(")([\s\S]*)$', bygroups(Punctuation, using(JavascriptLexer)), "#pop"),
             (r"(')([\s\S]*)$", bygroups(Punctuation, using(JavascriptLexer)), "#pop"),
             (r"[^\s>]+", using(JavascriptLexer), "#pop"),
         ],
         # @c-* values use a handler reference followed by an optional
-        # parenthesized Alpine expression. The lexer cannot know registry
+        # parenthesized Vue expression. The lexer cannot know registry
         # aliases that themselves contain parentheses, so it treats the first
         # opening parenthesis as the author-facing call shell.
         "event-handler": [
-            (r'"(?:[^"\\]|\\.)*"', _event_handler, "#pop"),
-            (r"'(?:[^'\\]|\\.)*'", _event_handler, "#pop"),
+            (r'"[^"]*"', _event_handler, "#pop"),
+            (r"'[^']*'", _event_handler, "#pop"),
             (r'"[\s\S]*$', _event_handler, "#pop"),
             (r"'[\s\S]*$", _event_handler, "#pop"),
             (r"[^\s>]+", _event_handler, "#pop"),
         ],
         # A valued :c-* binding names the handler that flushes the update.
         "state-handler": [
-            (r'"(?:[^"\\]|\\.)*"', _state_handler, "#pop"),
-            (r"'(?:[^'\\]|\\.)*'", _state_handler, "#pop"),
+            (r'"[^"]*"', _state_handler, "#pop"),
+            (r"'[^']*'", _state_handler, "#pop"),
             (r'"[\s\S]*$', _state_handler, "#pop"),
             (r"'[\s\S]*$", _state_handler, "#pop"),
             (r"[^\s>]+", _state_handler, "#pop"),

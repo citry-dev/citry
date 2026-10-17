@@ -56,15 +56,19 @@ async function exerciseFormatting(folder) {
 	const formatted = (await vscode.workspace.openTextDocument(uri)).getText();
 	assert.notEqual(formatted, source, "Citry formatting did not change the deliberately untidy fixture");
 	if (fixture) {
-		assert.match(formatted, /<article class="card" x-data="/);
+		assert.match(formatted, /<article class="card" :class="/);
 		assert.doesNotMatch(formatted, /<article class=\\"card\\"/);
 		assert.ok(
 			formatted.includes(
 				[
 					'    js = """',
-					"      $component(({ els, data }) => {",
-					"        const cardEl = els[0];",
-					"        animateLikes(cardEl, data.likes);",
+					"      $component({",
+					"        data() {",
+					"          return { open: false };",
+					"        },",
+					"        onServerRender({ component }) {",
+					"          component.$el.dataset.likes = String(component.likes);",
+					"        },",
 					"      });",
 					'    """',
 				].join("\n"),

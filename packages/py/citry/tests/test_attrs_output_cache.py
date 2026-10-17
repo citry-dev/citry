@@ -54,6 +54,7 @@ def test_cache_preserves_value_changes_types_order_and_escaping(output_cache):
         (attrs, "_underlying"),
         (attrs, "_html_attr_identity"),
         (attrs, "escape_to_str"),
+        (attrs, "escape_attribute_value"),
         (html, "_escape_to_str_impl"),
         (nodes, "_format_resolved_attrs_to_str"),
     ],
@@ -146,7 +147,7 @@ def test_protocols_proxies_and_mutable_class_values_remain_live(output_cache):
     assert render(node, {"class": flags}) == ' class="active"'
     flags["active"] = False
     assert render(node, {"class": flags}) == ""
-    assert render(node, {"title": Markup("<b>")}) == ' title="<b>"'
+    assert render(node, {"title": Markup("<b>")}) == ' title="&lt;b&gt;"'
     assert render(node, {"title": Const("x")}) == ' title="x"'
     assert output_cache == {}
 
@@ -164,7 +165,7 @@ def test_cache_does_not_retain_nodes_or_contexts(output_cache):
     assert context_ref() is None
 
 
-def test_independent_engines_and_clear_keep_input_callbacks_live(output_cache):
+def test_independent_engines_and_clear_keep_input_callbacks_live():
     first, second = Citry(), Citry()
     calls = []
     data = {"title": "same"}
@@ -190,8 +191,6 @@ def test_independent_engines_and_clear_keep_input_callbacks_live(output_cache):
 
     assert 'title="same"' in output(first_component)
     assert 'title="same"' in output(second_component)
-    if html._CACHEABLE_ESCAPE_BACKEND:
-        assert output_cache
     first.clear()
     data["title"] = "changed<&"
     assert 'title="changed&lt;&amp;"' in output(first_component)

@@ -143,6 +143,31 @@ class TestUrlRouteHandlerAsync:
             URLRoute("solo", handler_async=_pick_async)
 
 
+class TestUrlRouteMethods:
+    def test_uppercase_method_tuples_are_accepted(self):
+        route = URLRoute("echo", handler=_echo, methods=("POST", "PUT"))
+        assert route.methods == ("POST", "PUT")
+
+    @pytest.mark.parametrize(
+        ("methods", "error", "message"),
+        [
+            # A string is iterable, so it must not pass as a list of one-letter methods.
+            ("GET", TypeError, r"must be a tuple of HTTP method names, e\.g\. \(\"POST\",\); got 'GET'\."),
+            (["GET"], TypeError, r"must be a tuple of HTTP method names"),
+            (("GET", 1), TypeError, r"must be a tuple of HTTP method names"),
+            ((), ValueError, r"must name at least one HTTP method; got an empty tuple\."),
+            # Adapters compare methods exactly, so a lowercase name would answer 405 to everything.
+            (("get",), ValueError, r"contains 'get', which is not an uppercase HTTP method name\."),
+            (("BAD METHOD",), ValueError, r"contains 'BAD METHOD'"),
+        ],
+    )
+    def test_invalid_methods_are_rejected_when_the_route_is_built(
+        self, methods: object, error: type[Exception], message: str
+    ):
+        with pytest.raises(error, match=message):
+            URLRoute("echo", handler=_echo, methods=methods)  # type: ignore[arg-type]
+
+
 class TestAsgiAdapter:
     """The neutral request under FastAPI/Starlette, through the mounted ASGI app."""
 
@@ -372,6 +397,26 @@ class TestWsgiAdapter:
         assert status == "200 OK"
         assert json.loads(body) == {"echo": {"n": 1, "s": "x"}, "content_type": "application/json"}
 
+    def test_declared_methods_gate_the_handler(self):
+        seen = []
+
+        def handler(request):
+            seen.append(request.method)
+            return RouteResponse(content="served")
+
+        engine = _engine(URLRoute("gated", handler=handler, methods=("PATCH",)))
+
+        def call(method):
+            environ = {"REQUEST_METHOD": method, "PATH_INFO": "/ext/probe/gated", "wsgi.input": io.BytesIO()}
+            status, _headers, body = self._call(engine, environ)
+            return status, body
+
+        # A declared method reaches the handler; an undeclared one is
+        # answered by the adapter without running it.
+        assert call("PATCH") == ("200 OK", b"served")
+        assert call("PUT")[0] == "405 Method Not Allowed"
+        assert seen == ["PATCH"]
+
     def test_response_headers_reach_the_client(self):
         engine = _engine(URLRoute("headers", handler=_with_headers))
         _status, headers, _body = self._call(engine, {"REQUEST_METHOD": "GET", "PATH_INFO": "/ext/probe/headers"})
@@ -546,6 +591,26 @@ class TestDjangoAdapter:
         assert "'async def' handler" in message
         assert "Django view adapter cannot run" in message
         assert "citry.contrib.asgi.asgi_app" in message
+
+    def test_rejected_async_handler_leaves_the_prefix_unrecorded(self):
+        # The prefix is recorded only once every route is accepted, so a
+        # failed urlconf build does not leave URL building pointing at it.
+        from citry.contrib.django import urlpatterns
+
+        async def async_handler(_request):
+            return RouteResponse(content="never")
+
+        engine = _engine(URLRoute("async", handler=async_handler))
+        with pytest.raises(TypeError):
+            urlpatterns(engine, prefix="/citry")
+        assert engine.mounted_prefix is None
+
+    def test_root_prefix_is_recorded_as_the_host_root(self):
+        from citry.contrib.django import urlpatterns
+
+        engine = _engine(URLRoute("plain", handler=lambda _request: RouteResponse(content="ok")))
+        urlpatterns(engine, prefix="/")
+        assert engine.mounted_prefix == ""
 
     def test_route_with_an_async_twin_mounts_and_runs_the_plain_handler(self):
         # The twin is for adapters with an event loop; the synchronous Django

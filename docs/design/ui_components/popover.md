@@ -145,7 +145,7 @@ component's dialog semantics.
 | Python input | Type | Default | Class | Effect |
 |---|---|---|---|---|
 | `id` | `str | None` | generated | structural | Popover identity and title/description/activator relationships |
-| `open` | `bool` | `False` | initial state | server-visible initial state and uncontrolled fallback |
+| `open` | `bool` | `False` | server state | server-visible state and uncontrolled fallback; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state |
 | `dismissible` | `bool` | `True` | reactive configuration | permits Escape, outside pointer, and focus-outside close requests |
 | `placement` | `Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]` | `"bottom-start"` | reactive presentation | preferred logical placement; collision fallback may choose another rendered side |
 | `match_width` | `bool` | `False` | reactive presentation | makes the surface at least as wide as its activator |
@@ -385,8 +385,12 @@ initially open surface into the top layer without changing ownership.
 
 On a correlated retained rerender:
 
-- uncontrolled open state is handed to the new initializer through a private
-  DOM symbol and preserved;
+- the old initializer hands its uncontrolled open state, together with the
+  server `open` value it rendered with, to the new initializer through a
+  private DOM symbol. The new initializer keeps that open state only when the
+  server `open` value is unchanged; a changed value opens or closes the
+  Popover to match. Neither path calls `onOpenChange`, because the server, not
+  the user, made the change;
 - controlled state is reapplied from the latest valid prop;
 - changed placement/configuration updates without rebuilding the layer;
 - the activator relationship is re-resolved and all generated ARIA values are

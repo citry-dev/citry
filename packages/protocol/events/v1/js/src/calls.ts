@@ -11,6 +11,7 @@ import {
 import type {
 	EventActionKind,
 	EventCall,
+	EventRenderer,
 	EventSwap,
 	EventsCallEnvelope,
 	EventsCapabilities,
@@ -36,9 +37,14 @@ export const SWAPS = [
 	"remove",
 	"none",
 ] as const satisfies readonly EventSwap[];
+export const RENDERERS = [
+	"html-fragment/1",
+	"vue-prepared/1",
+] as const satisfies readonly EventRenderer[];
 export const CAPABILITIES_BASELINE_V1 = {
 	swaps: ["replace", "inner", "append", "prepend", "remove", "none"],
 	actions: ACTION_KINDS,
+	renderers: ["html-fragment/1"],
 } as const;
 export const CARRIER_FIELDS = {
 	callerRenderId: "_citry_caller_render_id",
@@ -206,15 +212,19 @@ export const validateCapabilities = (
 	const jsonIssue = validateStrictJson(value, path);
 	if (jsonIssue) return jsonIssue;
 	const message =
-		"The envelope's 'capabilities' must contain only 'swaps' and 'actions'; each value must be a duplicate-free array of known v1 names.";
+		"The envelope's 'capabilities' must contain only 'swaps', 'actions', and 'renderers'; each value must be a duplicate-free array of known v1 names.";
 	if (!isPlainObject(value)) return { path, category: "type", message };
-	const unknown = firstUnknown(value, new Set(["swaps", "actions"]));
+	const unknown = firstUnknown(
+		value,
+		new Set(["swaps", "actions", "renderers"]),
+	);
 	if (unknown !== null) {
 		return { path: pointer(path, unknown), category: "unknown_field", message };
 	}
 	for (const [name, known] of [
 		["swaps", SWAPS],
 		["actions", ACTION_KINDS],
+		["renderers", RENDERERS],
 	] as const) {
 		if (!hasOwn(value, name)) continue;
 		const items = value[name];

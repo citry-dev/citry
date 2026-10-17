@@ -27,7 +27,6 @@ from typing import TYPE_CHECKING, Any
 
 from citry.ext.events.codecs import FormCodec
 from citry.ext.events.config import Events
-from citry.ext.events.dispatcher import EventsDispatcher
 from citry.ext.events.handlers import EVENT_OPTIONS_ATTR, EventOptions, event_options
 
 # The transport translation is the per-event route's, unchanged; only the
@@ -151,7 +150,9 @@ def _as_empty_form(request: RouteRequest) -> RouteRequest:
 
 def view_events_routes(citry: Citry) -> list[URLRoute]:
     """The shim's route table: the verb-dispatch route, bound to one ``Citry`` instance."""
-    dispatcher = EventsDispatcher()
+    from citry.ext.events.renderers import dispatcher_for  # noqa: PLC0415
+
+    dispatcher = dispatcher_for(citry)
 
     def accepts_view_events(class_id: str) -> bool:
         try:

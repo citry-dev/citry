@@ -1,6 +1,5 @@
 {
   "protocol": "citry-events/1",
-  "clientGraphRevision": null,
   "componentClasses": [
     {
       "componentClassId": "Clock_123abc",

@@ -20,9 +20,11 @@ PROTOCOL = "citry-events/1"
 CALLS_LIMIT = 16
 ACTION_KINDS = ("render", "data", "state", "event", "redirect", "url")
 SWAPS = ("morph", "replace", "inner", "append", "prepend", "remove", "none")
+RENDERERS = ("html-fragment/1", "vue-prepared/1")
 CAPABILITIES_BASELINE_V1: dict[str, tuple[str, ...]] = {
     "swaps": ("replace", "inner", "append", "prepend", "remove", "none"),
     "actions": ACTION_KINDS,
+    "renderers": ("html-fragment/1",),
 }
 
 _ENVELOPE_FIELDS = ("protocol", "requestId", "capabilities", "calls")
@@ -196,15 +198,15 @@ def validate_capabilities(value: Any, path: str = "/capabilities") -> Validation
 def _validate_capabilities_shape(value: Any, path: str) -> ValidationIssue | None:
     """Validate capabilities after their containing value passed strict JSON."""
     message = (
-        "The envelope's 'capabilities' must contain only 'swaps' and 'actions';"
+        "The envelope's 'capabilities' must contain only 'swaps', 'actions', and 'renderers';"
         " each value must be a duplicate-free array of known v1 names."
     )
     if not isinstance(value, dict):
         return ValidationIssue(path, "type", message)
-    found, unknown = first_unknown(value, {"swaps", "actions"})
+    found, unknown = first_unknown(value, {"swaps", "actions", "renderers"})
     if found:
         return ValidationIssue(pointer(path, unknown), "unknown_field", message)
-    for name, known in (("swaps", SWAPS), ("actions", ACTION_KINDS)):
+    for name, known in (("swaps", SWAPS), ("actions", ACTION_KINDS), ("renderers", RENDERERS)):
         if name not in value:
             continue
         items = value[name]
@@ -230,7 +232,8 @@ def resolve_capabilities(value: Mapping[str, Any] | None = None) -> dict[str, fr
     if issue is not None:
         raise ProtocolValueError(issue)
     return {
-        name: frozenset(raw[name] if name in raw else CAPABILITIES_BASELINE_V1[name]) for name in ("swaps", "actions")
+        name: frozenset(raw[name] if name in raw else CAPABILITIES_BASELINE_V1[name])
+        for name in ("swaps", "actions", "renderers")
     }
 
 
@@ -300,7 +303,7 @@ def inspect_call_envelope(value: Any) -> ValidatedCallEnvelope | CallEnvelopeFai
         raw_capabilities = value["capabilities"]
         capabilities = {
             name: frozenset(raw_capabilities[name] if name in raw_capabilities else CAPABILITIES_BASELINE_V1[name])
-            for name in ("swaps", "actions")
+            for name in ("swaps", "actions", "renderers")
         }
     else:
         capabilities = {name: frozenset(values) for name, values in CAPABILITIES_BASELINE_V1.items()}

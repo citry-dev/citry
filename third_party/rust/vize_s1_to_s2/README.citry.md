@@ -7,7 +7,7 @@ SHA-256 is
 `13d57e14a66a37b558d10c5a46c6c1deb857ffbbfaa7f99118db584646ca096d`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.2`.
+package as `0.420.0+citry.3`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,13 +16,13 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.2` package version, omits the
+- `Cargo.toml`: records the local `0.420.0+citry.3` package version, omits the
   upstream `emit_for` test target (the published manifest does not contain its
   `vize_atelier_dom` development dependency, and adding it would create a
-  cycle), registers the `citry_runtime_directives` and
-  `citry_event_handler_statements` regression targets, and drops the upstream
-  `davinci_storage` benchmark target because its source is not included
-  here.
+  cycle), registers the `citry_runtime_directives`,
+  `citry_event_handler_statements`, and `citry_event_key_modifiers`
+  regression targets, and drops the upstream `davinci_storage` benchmark
+  target because its source is not included here.
 - `src/emit/directive.rs`: keeps runtime directive and `v-model` wrappers on a
   single element unwrapped from `<template v-for>`; custom-directive modifier
   names are emitted as quoted and escaped JavaScript object keys.
@@ -39,11 +39,20 @@ Relative to that archive, the Citry delta is:
   the text that `vize_atelier_core` reports as an invalid expression. They
   also write trailing line comments in an event handler so that they cannot
   hide the closing `}` or the `,` before the next prop.
+- `src/emit/on.rs`, `src/emit/on/tests.rs`, and `src/emit/props_object.rs`:
+  apply the same key-modifier rule as the patched `vize_atelier_core` (keep
+  a key modifier only on a keyboard event or a dynamic event name, and check
+  `.left` and `.right` both ways on a dynamic name), so the emitter writes
+  the listener and patch flag that `@vue/compiler-dom` writes. The element
+  kind is passed down because it decides the handler key that the keyboard
+  check reads.
 - `tests/emit_tpl.rs`: adds regression assertions for keyed component and slot
   children inside `v-if` template branches.
 - `tests/citry_runtime_directives.rs`: adds Citry coverage for custom,
   `v-show`, and `v-model` wrappers in unwrapped loops, modifier-key escaping,
   keyed loop and conditional children, and mixed runtime directives.
+- `tests/citry_event_key_modifiers.rs`: adds Citry coverage for the
+  key-modifier rule, compared with the output of `@vue/compiler-dom` 3.5.42.
 - `tests/citry_event_handler_statements.rs`: adds Citry coverage for the
   statement rule in event handlers, interpolations, and conditions (with and
   without TypeScript when the `typescript` feature is on), for handlers that

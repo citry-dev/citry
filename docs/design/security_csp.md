@@ -1,26 +1,27 @@
 # Design: Content Security Policy and JavaScript delivery
 
-**Status (2026-08-12): complete through phase 11 and promoted.** Alpine core
-and morph are upgraded to 3.17.1, and `@alpinejs/csp` is pinned at the same
-version. Typed security settings, serialization overrides, and the immutable
+**Vue cutover:** [`vue.md`](vue.md) defines the current runtime-only compiler
+and browser delivery. Nonce, integrity and JavaScript delivery contracts below
+remain relevant. Alpine evaluator and bundle-selection sections describe the
+earlier runtime; they do not constrain Vue expression compilation. Under Vue,
+Citry finds CSP problems only when it serializes a render (section 4.3).
+Migration qualification and the completed cutover are recorded in
+[`vue.md`](vue.md).
+
+**Status (2026-08-12): complete through phase 11 and promoted.** Typed
+security settings, serialization overrides, and the immutable
 `serialize_result()` contract are implemented. Structured scripts now produce
 exact SHA-384 metadata, Citry-owned external scripts receive verified SRI, and
 trusted tags are reconciled after string hooks. Request-scoped nonces now reach
 every structured script, each inline structured style, and browser-created
-fragment dependencies, with explicit conflicts rejected. The version-pinned
-compatibility checker now feeds `citry check` and the LSP, and a committed CSP
-Events runtime is built from the same TypeScript source as the standard
-runtime. Warning serialization now reports reached-tree and settled-output
-incompatibilities without changing the standard-runtime HTML. Strict
-serialization selects the CSP runtime, rejects incompatible reached or final
-output, and emits fragments for an already-installed matching manager without
-an inline preloader. JavaScript inventory, managed-runtime omission, and
-JavaScript-free enforcement now operate above every dependency strategy. The
-Citry UI's public and registered internal production components are checked in
-CI against the pinned Alpine CSP subset. Documentation snippets remain
-teaching material rather than a product compatibility ledger. The landing page
-now promotes that graduated path without claiming that Citry constructs the
-host's complete header. The implemented Alpine ownership contract remains
+fragment dependencies, with explicit conflicts rejected. One Events runtime
+serves every CSP mode. Warning serialization reports final-output
+incompatibilities without changing the HTML. Strict serialization raises
+instead of warning, and it requires `csp_nonce` when Citry emits an executable
+script or a `<style>` element. JavaScript inventory, managed-runtime omission,
+and JavaScript-free enforcement now operate above every dependency strategy. The landing page now promotes that
+graduated path without claiming that Citry constructs the host's complete
+header. The earlier Alpine ownership contract is recorded in
 [`alpinejs.md`](alpinejs.md). CSRF is a separate browser-request concern and
 lives in [`security_csrf.md`](security_csrf.md).
 
@@ -261,111 +262,33 @@ JavaScript and expose a method or getter on the component scope:
 
 This keeps the inline expression small and testable without weakening CSP.
 
-### 4.3 Compatibility checker contract
+### 4.3 Where Citry finds CSP problems
 
-The compatibility spike is the first, bounded part of the checker phase. It is
-not the production checker. Its job is to establish the exact contract before
-Citry implements that contract in its portable analysis layer.
+Citry compiles Vue templates on the server into ordinary script assets, so a
+Vue expression never asks the browser to evaluate a string and never needs
+`unsafe-eval`. `citry check` and the language server therefore report no CSP
+findings for template expressions.
 
-The spike runs a checked-in expression corpus against the parser and evaluator
-from the exact pinned `@alpinejs/csp` version. Directive-only restrictions,
-such as the CSP build rejecting `x-html` even when its expression parses, use a
-small browser canary. The corpus covers:
+Citry finds CSP problems when it serializes a render (section 6.1). It checks
+the dependency tags it emits and the final HTML, after extensions have
+changed it, for raw `<script>` and `<style>` tags written in templates, native
+`on*` event attributes, and `javascript:` URLs. `"off"` skips the check,
+`"warn"` reports the findings in one `RuntimeWarning`, and `"strict"` raises
+`ValueError`. Strict mode also requires `csp_nonce` when Citry emits an
+executable script or a `<style>` element, and rejects dependencies that are not structured
+(section 6). This check does not report `style` attributes. A strict
+`style-src` without `'unsafe-hashes'` blocks and reports each one in the
+browser, and Vue then applies the same styles through the DOM (see the
+"Inline style attributes" section of `docs_site/content/vue/csp.md`).
 
-- representative Alpine expressions authored in Citry's UI, documentation,
-  and focused test fixtures, with full component-by-component ratification
-  remaining phase 10;
-- the supported and rejected boundaries of the pinned tokenizer, parser, and
-  evaluator, including assignments, updates, calls, object and array literals,
-  operators, multiple statements, optional chaining, arrow functions, and
-  blocked property access;
-- the expression contexts Citry extracts, including value expressions, event
-  statements, normal Alpine evaluation, `$c-props`, and `@c-*` arguments.
-  Native-element `@c-*` arguments use Alpine's normal evaluator, while
-  component-boundary handlers, props, and `@c-*` arguments use its raw
-  evaluator. The corpus also covers the synthesized `x-model` and
-  `x-modelable` setter and the iterable side of `x-for`;
-- representative scope and magic values needed to distinguish parser success
-  from evaluator failure.
-
-Each case records the Alpine version, directive or attribute, exact source,
-scope fixture when needed, expected compatibility, and expected failure class.
-The development runner may be disposable, but the versioned corpus remains as
-a release conformance fixture. A dependency upgrade must rerun it and reconcile
-every changed result before the compatibility version is advanced. The spike is
-deliberately finite: it samples the real Citry catalog and checks targeted
-grammar boundaries, not an open-ended fuzzing or benchmarking exercise.
-
-The production checker then implements the proven classification in Citry's
-portable browser-analysis layer. A fail-closed recursive-descent parser mirrors
-the small pinned Alpine CSP grammar and preserves UTF-8 ranges; existing OXC
-analysis remains responsible for free-name discovery. Normal `citry check` and
-IDE operation do not start Node, load a browser, or evaluate application code.
-One version constant ties the classifier, corpus, CSP client bundle, and Alpine
-pin together. Conformance tests run every corpus case against the real pinned
-evaluator and against Citry's static expectation. `"compatible"` means
-source-compatible, not that runtime values were proven safe. Corpus cases that
-deliberately inject a known browser-global value are marked
-`"runtime-dependent"`; other value-dependent enforcement remains with the
-browser evaluator.
-
-For one template, the analysis flow is:
-
-1. the Citry parser identifies exact Alpine and Citry expression hosts;
-2. the portable host record supplies the browser-canonical element tag and
-   directive name, expression mode, UTF-8 source range, lexical bindings, and
-   whether Alpine uses its normal or raw evaluator path. Phase 6 extends
-   `BrowserExpression` with that context and normalizes HTML tag and attribute
-   names using ASCII case folding so
-   spellings such as `X-HTML` cannot bypass the checker;
-3. the pinned classifier checks directive support, grammar, and statically
-   identifiable evaluator restrictions;
-4. one structured Citry finding is mapped back to the authored range;
-5. `citry check` and the LSP render that same finding, and editor clients merely
-   display the LSP diagnostic.
-
-A finding should point at the smallest unsupported token or directive that
-Citry's classifier can prove, and otherwise at the exact expression or
-attribute range. Alpine's parser does not consistently retain source spans, so
-token-level ranges are a Citry classifier requirement rather than an assumed
-upstream feature. Every finding names both the pinned Alpine version and an
-actionable refactor. For example:
-
-```text
-citry.csp.incompatible-browser-code
-Alpine CSP 3.17.1 cannot evaluate arrow functions here. Move the logic to
-Component.js and call a scope method, for example @click="openLater".
-```
-
-The central diagnostic catalog owns the stable code, message variants, help
-URL, and examples. A physical source range and rule are reported once even
-when several component registrations consume the same template.
-
-The selected Citry application supplies its configured engine-default mode to
-project tooling:
-
-- `"off"` produces no CSP compatibility findings;
-- `"warn"` produces warning diagnostics while the standard Alpine runtime
-  remains selected;
-- `"strict"` produces error diagnostics;
-- syntax-only checking without a selected application does not guess a CSP
-  policy.
-
-The LSP discovery snapshot therefore needs to carry the selected engine's
-configured `security_csp` value. A per-serialization override is intentionally
-not predicted by project tooling; reached-tree serialization enforces it. VS
-Code, PyCharm, and other LSP clients require no editor-specific checker. A
-browser playground may call the same portable classifier only when the example
-explicitly selects a CSP analysis mode and its worker protocol preserves the
-diagnostic severity.
-
-Static acceptance cannot prove facts that depend on runtime values, such as a
-scope method returning a browser global or an otherwise ordinary object being
-a DOM object. The CSP evaluator remains the enforcement boundary for those
-cases. Later settled-output validation also covers dynamically produced
-attributes and extension output. The checker guarantees parity for its
-versioned, source-classifiable contract; it must not claim that every possible
-runtime value was statically proven safe.
+Prepared applications that expose Events must use the `security_csp` and
+`security_javascript` modes configured on their `Citry` instance. A call-local
+override cannot be retained as authenticated application state for later
+server revisions, and a later revision may introduce trusted opaque HTML even
+when the initial render did not contain it. Serialization therefore rejects a
+different call-local mode for a revisable Events application. Configure the
+required modes on `Citry(...)`; call-local overrides remain available for
+static serialization that has no Events revisions.
 
 ## 5. CSP modes
 
@@ -381,16 +304,13 @@ Warning mode must not switch to the CSP evaluator and then continue after a
 warning. An unsupported expression would stop working in the browser. It must
 leave output behavior unchanged and report that strict mode is not ready.
 
-Diagnostics should be structured Citry findings, rendered by `citry check`,
-the IDE, or the development terminal. They should be deduplicated by source
-location and rule when that identity survives rendering. When an arbitrary
+Findings are structured and reported when Citry serializes the render. They
+are deduplicated by rendered instance, location, and rule. When an arbitrary
 string hook makes the source site unknowable, render-time validation keeps
 instances separate rather than hiding a potentially distinct conditional
-site. Dynamic attributes and extension-added tags still need a final
-render-time check.
-Project checking may report every discoverable component; strict
-serialization fails only for behavior reached by that rendered tree and its
-emitted dependencies.
+site.
+Strict serialization fails only for problems in that render's final HTML and
+its emitted dependencies.
 
 ## 6. Nonce and serialization contract
 
@@ -462,16 +382,14 @@ would let unstructured markup enter a security-sensitive protocol. Structured
 Citry manifests are distinguished by a per-serialization private marker that
 is verified after every string hook and removed before HTML is returned.
 
-Warning mode runs the same reached-tree and settled-output checks, emits one
-Python `RuntimeWarning` containing findings deduplicated by rendered instance,
-location, and rule, and preserves the standard-runtime HTML. When arbitrary
+Warning mode runs the same final-output checks, emits one Python
+`RuntimeWarning` containing findings deduplicated by rendered instance,
+location, and rule, and returns the HTML unchanged. When arbitrary
 string hooks make source identity unknowable, Citry keeps separate rendered
 instances rather than hiding a potentially distinct conditional source site.
 It also remembers raw active tags before dependency insertion, so a later
 identical structured tag cannot authenticate authored raw markup; this can
 conservatively warn even when a later hook removes that original raw tag.
-Static `citry check` and LSP diagnostics remain the structured source-facing
-path for normal development.
 
 ### 6.2 Fragments
 
@@ -479,23 +397,14 @@ A nonce belongs to the loaded document's policy. A later fragment response
 cannot generate a new nonce and expect that value to be accepted inside the
 existing document.
 
-In strict mode:
-
-- the base document installs the CSP-compatible Citry runtime and records its
-  nonce;
-- a fragment carries inert manifests and markup, not today's inline preloader;
-- the existing manager creates any needed script, style, or stylesheet-link
-  elements with the document nonce; and
-- ordinary CSP-compatible Alpine attributes initialize through the existing
-  Alpine mutation lifecycle.
-
-A strict fragment therefore requires a Citry-managed base document. A present
-manager rejects a runtime-variant or nonce mismatch before dependency adoption.
-If the base page did not install the manager, an inert fragment cannot observe
-that fact or execute an error without reintroducing a bootstrap script; it
-therefore remains inert. Hosts that insert strict fragments must treat the
-matching base manager as a precondition. Registration needed by a fragment
-must occur before Alpine adopts its markup.
+The CSP mode does not change which runtime a fragment uses; one runtime
+serves every mode. A fragment is serialized with the same `csp_nonce` as its
+page, and Citry stamps that nonce on the scripts and styles it emits. Before
+the browser starts a fragment, Citry's runtime checks that its nonce, runtime,
+components, and assets match the page; if they do not, the fragment does not
+start and the browser console shows an error. The CSP mode
+changes only the render-time checks on the fragment's HTML and whether a
+missing `csp_nonce` is an error.
 
 Phase 5 implements the nonce transport used by the strict contract.
 The document manager captures the nonce from its own authorizing script tag.
@@ -570,7 +479,12 @@ The trust and byte-ownership rules are:
   Its author supplies explicit `integrity` metadata, and Citry preserves and
   validates its shape while the browser verifies the resource.
 - Cross-origin SRI resources also need the appropriate CORS request and
-  response configuration. Citry must not add `crossorigin` blindly.
+  response configuration. For a file whose bytes Citry owns, Citry sets
+  `crossorigin="anonymous"` on the tag (unless the author set a value) and its
+  asset routes send `Access-Control-Allow-Origin: *`, so the check also works
+  in a sandboxed iframe with an opaque origin
+  ([`dependencies.md`](dependencies.md) 9.6). For a third-party URL, Citry
+  leaves `crossorigin` exactly as the author wrote it.
 - Fragment descriptors carry `integrity` and any explicit `crossorigin` value
   into dynamically created script elements before the request begins.
 - Changing any script bytes changes its digest and the CSP header value.
@@ -766,6 +680,28 @@ complete body before the host sends the response header. Per-request inline
 data may produce per-request hashes, while static output produces stable
 hashes.
 
+An interactive document keeps its per-request data out of executable scripts.
+The server sends the app's configuration (the prepared manifest with the
+page's data) as a JSON data block,
+`<script type="application/json" data-citry-vue-document="APP_ID">`, and
+starts the app with a one-line module script,
+`__citryRuntime.startDocument("APP_ID")` ([`dependencies.md`](dependencies.md)
+8.2). The browser never runs a data block, so CSP does not apply to it: a
+nonce policy does not need the block's nonce, and a hash policy does not need
+its hash. `csp_script_hashes` therefore lists the start script, whose text
+holds only the random app id, and not the configuration. The per-script
+records in `serialized.security.scripts` still describe the data block with
+its digest, as they do for every inert structured script. Citry still stamps
+the request nonce on the data block, and the runtime refuses a block whose
+nonce differs from the nonce of the runtime's own script tag. The runtime
+therefore trusts a configuration only when it comes from the same document,
+carries the id named by an authorized start script, is the only block with
+that id, and, under a nonce policy, carries the page nonce. With a hash-only
+policy and a predictable id (an application `id_generator`), injected markup
+before the real block can hide it (an unclosed comment or attribute value)
+and supply its own block, so such pages should keep the default random ids
+or use a nonce policy.
+
 A fragment is different. Its serialization result can describe its scripts
 and carry SRI metadata, but the fragment response cannot add hash sources to
 the CSP header of a document that is already loaded. The first implementation
@@ -852,14 +788,16 @@ rather than aliasing either value.
 
 ### 7.1 Combining JavaScript, CSP, and dependency modes
 
-JavaScript delivery is applied before CSP runtime selection:
+The JavaScript mode decides what Citry emits; the CSP mode then checks that
+output. One runtime serves every CSP mode, so the CSP mode never changes which
+scripts are emitted:
 
 | Effective JavaScript mode | Effect of CSP mode |
 |---|---|
-| `"allow"` | `off` and `warn` use standard Alpine; `strict` uses the CSP build. |
-| `"warn"` | Same runtime choice as `allow`, plus the JavaScript-requirement inventory. |
-| `"omit"` | No Citry Alpine or executable dependency runtime is emitted, so Alpine expression compatibility is not checked for inert attributes. Strict CSP still validates raw executable markup and applies nonces to structured styles. |
-| `"forbid"` | Client requirements fail before runtime emission. If the subtree passes, no Alpine runtime exists for CSP to select; strict CSP still validates remaining raw executable markup and applies nonces to structured styles. |
+| `"allow"` | `warn` and `strict` check the final HTML; `strict` also requires `csp_nonce` for emitted scripts and `<style>` elements. |
+| `"warn"` | Same as `allow`, plus the JavaScript-requirement inventory. |
+| `"omit"` | No Citry runtime or executable dependency is emitted. Strict CSP still checks raw executable markup and applies nonces to structured styles. |
+| `"forbid"` | Client requirements fail before any runtime is emitted. If the render passes, strict CSP still checks remaining raw executable markup and applies nonces to structured styles. |
 
 The JavaScript policy is a restrictive ceiling over `deps_strategy`:
 
@@ -875,8 +813,8 @@ The JavaScript policy is a restrictive ceiling over `deps_strategy`:
 An omit fragment emits retained styles directly. It has no preloader,
 dependency manifest, mount requirement, or existing-manager requirement.
 Inventory under `ignore` does not invoke dependency hooks that the strategy
-historically skipped; it examines reached bindings, collected declarations,
-and final string-hook output instead.
+historically skipped; it examines the browser requirements Citry selects for
+the render, collected declarations, and final string-hook output instead.
 
 This precedence makes combinations such as `security_csp="strict"` with
 `security_javascript="omit"` coherent: the result has no Citry JavaScript,
@@ -919,10 +857,10 @@ made practical under that model.
 | CSP header and directives | Owns | Documents requirements | Does not construct globally |
 | Nonce generation and freshness | Owns | Validates shape and propagates | Does not cache or invent |
 | Runtime evaluator | Chooses Citry mode | Owns matching bundle | Uses the supported surface |
-| Alpine expression compatibility | May select strict mode | Checks and fails early | Refactors unsupported expressions |
+| Vue expression compilation | May select strict mode | Compiles expressions on the server; no expression check | Writes ordinary Vue expressions |
 | Component and extension JS | Authorizes source policy | Emits with nonce or URL | Keeps code free of blocked dynamic evaluation |
 | Third-party resources | Allow-lists or proxies | Preserves declared dependency data | Chooses trustworthy dependencies |
-| Report-only rollout | Owns header and reports | Supplies source diagnostics | Resolves findings |
+| Report-only rollout | Owns header and reports | Supplies render-time findings | Resolves findings |
 | JavaScript-free usability | Owns complete page | Controls the Citry subtree | Provides native links/forms and meaningful HTML |
 
 ## 10. Implementation sequence
@@ -964,7 +902,7 @@ made practical under that model.
    `new Function` path. The browser canary distinguishes both active evaluator
    paths after full startup and runs the CSP artifact under an enforcing policy
    without `unsafe-eval`.
-8. **Complete (2026-08-12).** Add reached-tree and settled-output CSP
+8. **Complete (2026-08-12, Alpine era).** Add reached-tree and settled-output CSP
    validation for dynamic attributes and extension output using the same
    versioned classifier from phase 6. Warning mode emits a deduplicated warning
    without changing standard-runtime output. Strict mode selects the CSP
@@ -985,12 +923,13 @@ made practical under that model.
    included in forbid-mode validation.
 10. **Complete (revised 2026-08-13).** Check every Citry UI production
     component definition against the pinned Alpine 3.17.1 subset in CI. The
-    check discovers every public and private `LibraryComponent` in production
-    modules, requires each one to belong to the installed library manifest,
-    and runs the same compatibility analysis used by `citry check` over that
-    complete registry. Documentation snippets are intentionally outside this
-    guarantee because examples may teach syntax for the standard Alpine
-    evaluator; they are not a product compatibility ledger.
+    check discovered every public and private `LibraryComponent` in production
+    modules, required each one to belong to the installed library manifest,
+    and ran the Alpine-era compatibility analysis over that complete
+    registry. Documentation snippets were outside this guarantee because
+    examples could teach syntax for the standard Alpine evaluator. The
+    manifest-completeness check remains in
+    `packages/py/citry_ui/tests/test_citry_ui_registration.py`.
 11. **Complete (2026-08-12).** Add the CSP progression to "Grow without a
     rewrite." The entry starts with warning-mode migration, shows strict mode
     and Citry-owned SRI, and keeps nonce generation plus the complete CSP
@@ -999,13 +938,11 @@ made practical under that model.
 Phases 2 and 3 establish the stable configuration and result contracts. Phase 4
 implements `security_script_integrity="citry"`, and phase 5 implements the
 request-scoped `csp_nonce` transport. Phase 6.1 retained the executable Alpine
-3.17.1 corpus, and phase 6.2 added the production checker, stable diagnostic,
-and configured-mode transport through `citry check` and the LSP. Phase 6 can
-report the selected future policy
-through check and IDE tooling, but it does not by itself make strict runtime
-output safe. Phase 7 provides the matching runtime artifact, phase 8 owns
-production selection and final dynamic validation, and phase 9 owns the
-orthogonal JavaScript-delivery ceiling. CSP and JavaScript modes are now
+3.17.1 corpus, and phase 6.2 added the Alpine-era production checker. Phase 6
+did not by itself make strict runtime output safe. Phase 7 provides the
+matching runtime artifact, phase 8 owns production selection and final
+dynamic validation, and phase 9 owns the orthogonal JavaScript-delivery
+ceiling. CSP and JavaScript modes are now
 enabled. The compatibility defaults keep the old emission path and empty
 metadata, and per-call overrides remain serialization-local.
 

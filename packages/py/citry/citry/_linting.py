@@ -12,7 +12,7 @@ from citry._class_introspection import _safe_class_import_path, _static_class_di
 from citry._nested_declarations import _active_nested_class_declarations
 from citry._schema_introspection import _format_annotation
 from citry.introspection import _is_utf8_string
-from citry.settings import LintSettings, LintSeverity, _is_alpine_variable_name
+from citry.settings import LintSettings, LintSeverity, _is_vue_variable_name, _replaced_lint_settings_hint
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -95,8 +95,8 @@ class TemplateVariableInfo:
 
 
 @dataclass(frozen=True, slots=True)
-class AlpineVariableInfo:
-    """Describe one known Alpine variable using detached portable text."""
+class VueVariableInfo:
+    """Describe one known Vue variable using detached portable text."""
 
     name: str
     type_display: str | None
@@ -105,30 +105,30 @@ class AlpineVariableInfo:
     source: VariableSource
 
     def __post_init__(self) -> None:
-        if not _is_alpine_variable_name(self.name):
-            msg = f"Invalid portable Alpine variable name: {self.name!r}"
+        if not _is_vue_variable_name(self.name):
+            msg = f"Invalid portable Vue variable name: {self.name!r}"
             raise ValueError(msg)
         normalized = type(self.type_display) is str and bool(self.type_display)
         unavailable = self.type_display is None
         if (self.type_fidelity == "normalized" and not normalized) or (
             self.type_fidelity == "unavailable" and not unavailable
         ):
-            msg = "Alpine variable type fidelity must match its display value"
+            msg = "Vue variable type fidelity must match its display value"
             raise ValueError(msg)
         if self.type_display is not None and not _is_utf8_string(self.type_display):
-            msg = "Alpine variable type displays must be valid UTF-8 strings"
+            msg = "Vue variable type displays must be valid UTF-8 strings"
             raise ValueError(msg)
         if self.type_display is not None and _normalize_type_display(self.type_display) != self.type_display:
-            msg = "Alpine variable type displays must be canonical passive annotation expressions"
+            msg = "Vue variable type displays must be canonical passive annotation expressions"
             raise ValueError(msg)
         if self.description is not None and (type(self.description) is not str or not self.description):
-            msg = "Alpine variable descriptions must be non-empty strings or None"
+            msg = "Vue variable descriptions must be non-empty strings or None"
             raise ValueError(msg)
         if self.description is not None and not _is_utf8_string(self.description):
-            msg = "Alpine variable descriptions must be valid UTF-8 strings"
+            msg = "Vue variable descriptions must be valid UTF-8 strings"
             raise ValueError(msg)
         if type(self.source) is not str or self.source not in _VARIABLE_SOURCES:
-            msg = f"Unknown Alpine variable source: {self.source!r}"
+            msg = f"Unknown Vue variable source: {self.source!r}"
             raise ValueError(msg)
 
     def to_dict(self) -> dict[str, object]:
@@ -142,7 +142,7 @@ class AlpineVariableInfo:
         }
 
     @classmethod
-    def from_dict(cls, value: object) -> AlpineVariableInfo:
+    def from_dict(cls, value: object) -> VueVariableInfo:
         """Validate and restore one detached variable record."""
         if type(value) is not dict or set(value) != {
             "name",
@@ -151,7 +151,7 @@ class AlpineVariableInfo:
             "description",
             "source",
         }:
-            msg = "Alpine variable data must contain the exact supported fields"
+            msg = "Vue variable data must contain the exact supported fields"
             raise ValueError(msg)
         return cls(
             name=value["name"],  # type: ignore[arg-type]
@@ -169,11 +169,17 @@ class TemplateLintInfo:
     rule_unknown_template_variable: LintSeverity
     template_variables: tuple[TemplateVariableInfo, ...]
     rule_i18n_missing_param_type: LintSeverity = "warning"
-    rule_unknown_alpine_variable: LintSeverity = "error"
-    alpine_variables: tuple[AlpineVariableInfo, ...] = ()
+    rule_unknown_vue_variable: LintSeverity = "error"
+    vue_variables: tuple[VueVariableInfo, ...] = ()
     rule_unknown_component_js_variable: LintSeverity = "error"
-    component_js_globals: tuple[AlpineVariableInfo, ...] = ()
+    component_js_globals: tuple[VueVariableInfo, ...] = ()
     allows_extra_variables: bool = False
+    rule_unknown_component_js_member: LintSeverity = "error"
+    rule_vue_python_variable: LintSeverity = "warning"
+    rule_alpine_attribute: LintSeverity = "warning"
+    rule_alpine_cloak: LintSeverity = "error"
+    rule_invalid_attribute_value: LintSeverity = "warning"
+    rule_i18n_cross_language_fallback: LintSeverity = "warning"
 
     def __post_init__(self) -> None:
         if (
@@ -193,16 +199,13 @@ class TemplateLintInfo:
         ):
             msg = f"Unknown i18n missing-param lint severity: {self.rule_i18n_missing_param_type!r}"
             raise ValueError(msg)
-        if (
-            type(self.rule_unknown_alpine_variable) is not str
-            or self.rule_unknown_alpine_variable not in _RULE_SEVERITIES
-        ):
-            msg = f"Unknown Alpine lint severity: {self.rule_unknown_alpine_variable!r}"
+        if type(self.rule_unknown_vue_variable) is not str or self.rule_unknown_vue_variable not in _RULE_SEVERITIES:
+            msg = f"Unknown Vue lint severity: {self.rule_unknown_vue_variable!r}"
             raise ValueError(msg)
-        if type(self.alpine_variables) is not tuple or any(
-            type(item) is not AlpineVariableInfo for item in self.alpine_variables
+        if type(self.vue_variables) is not tuple or any(
+            type(item) is not VueVariableInfo for item in self.vue_variables
         ):
-            msg = "TemplateLintInfo.alpine_variables must be a tuple of AlpineVariableInfo values"
+            msg = "TemplateLintInfo.vue_variables must be a tuple of VueVariableInfo values"
             raise TypeError(msg)
         if (
             type(self.rule_unknown_component_js_variable) is not str
@@ -211,20 +214,47 @@ class TemplateLintInfo:
             msg = f"Unknown component-JavaScript lint severity: {self.rule_unknown_component_js_variable!r}"
             raise ValueError(msg)
         if type(self.component_js_globals) is not tuple or any(
-            type(item) is not AlpineVariableInfo for item in self.component_js_globals
+            type(item) is not VueVariableInfo for item in self.component_js_globals
         ):
-            msg = "TemplateLintInfo.component_js_globals must be a tuple of AlpineVariableInfo values"
+            msg = "TemplateLintInfo.component_js_globals must be a tuple of VueVariableInfo values"
             raise TypeError(msg)
         if type(self.allows_extra_variables) is not bool:
             msg = "TemplateLintInfo.allows_extra_variables must be a bool"
             raise TypeError(msg)
+        if (
+            type(self.rule_unknown_component_js_member) is not str
+            or self.rule_unknown_component_js_member not in _RULE_SEVERITIES
+        ):
+            msg = f"Unknown component-JavaScript member lint severity: {self.rule_unknown_component_js_member!r}"
+            raise ValueError(msg)
+        if type(self.rule_vue_python_variable) is not str or self.rule_vue_python_variable not in _RULE_SEVERITIES:
+            msg = f"Unknown Vue Python-variable lint severity: {self.rule_vue_python_variable!r}"
+            raise ValueError(msg)
+        if type(self.rule_alpine_attribute) is not str or self.rule_alpine_attribute not in _RULE_SEVERITIES:
+            msg = f"Unknown Alpine-attribute lint severity: {self.rule_alpine_attribute!r}"
+            raise ValueError(msg)
+        if type(self.rule_alpine_cloak) is not str or self.rule_alpine_cloak not in _RULE_SEVERITIES:
+            msg = f"Unknown Alpine x-cloak lint severity: {self.rule_alpine_cloak!r}"
+            raise ValueError(msg)
+        if (
+            type(self.rule_invalid_attribute_value) is not str
+            or self.rule_invalid_attribute_value not in _RULE_SEVERITIES
+        ):
+            msg = f"Unknown attribute-value lint severity: {self.rule_invalid_attribute_value!r}"
+            raise ValueError(msg)
+        if (
+            type(self.rule_i18n_cross_language_fallback) is not str
+            or self.rule_i18n_cross_language_fallback not in _RULE_SEVERITIES
+        ):
+            msg = f"Unknown i18n cross-language fallback lint severity: {self.rule_i18n_cross_language_fallback!r}"
+            raise ValueError(msg)
         names = tuple(item.name for item in self.template_variables)
         if names != tuple(sorted(set(names))):
             msg = "Template lint variables must be unique and sorted by name"
             raise ValueError(msg)
-        alpine_names = tuple(item.name for item in self.alpine_variables)
-        if alpine_names != tuple(sorted(set(alpine_names))):
-            msg = "Alpine lint variables must be unique and sorted by name"
+        vue_names = tuple(item.name for item in self.vue_variables)
+        if vue_names != tuple(sorted(set(vue_names))):
+            msg = "Vue lint variables must be unique and sorted by name"
             raise ValueError(msg)
         component_js_names = tuple(item.name for item in self.component_js_globals)
         if component_js_names != tuple(sorted(set(component_js_names))):
@@ -237,11 +267,17 @@ class TemplateLintInfo:
             "rule_unknown_template_variable": self.rule_unknown_template_variable,
             "template_variables": [item.to_dict() for item in self.template_variables],
             "rule_i18n_missing_param_type": self.rule_i18n_missing_param_type,
-            "rule_unknown_alpine_variable": self.rule_unknown_alpine_variable,
-            "alpine_variables": [item.to_dict() for item in self.alpine_variables],
+            "rule_unknown_vue_variable": self.rule_unknown_vue_variable,
+            "vue_variables": [item.to_dict() for item in self.vue_variables],
             "rule_unknown_component_js_variable": self.rule_unknown_component_js_variable,
             "component_js_globals": [item.to_dict() for item in self.component_js_globals],
             "allows_extra_variables": self.allows_extra_variables,
+            "rule_unknown_component_js_member": self.rule_unknown_component_js_member,
+            "rule_vue_python_variable": self.rule_vue_python_variable,
+            "rule_alpine_attribute": self.rule_alpine_attribute,
+            "rule_alpine_cloak": self.rule_alpine_cloak,
+            "rule_invalid_attribute_value": self.rule_invalid_attribute_value,
+            "rule_i18n_cross_language_fallback": self.rule_i18n_cross_language_fallback,
         }
 
     @classmethod
@@ -251,11 +287,17 @@ class TemplateLintInfo:
             "rule_unknown_template_variable",
             "template_variables",
             "rule_i18n_missing_param_type",
-            "rule_unknown_alpine_variable",
-            "alpine_variables",
+            "rule_unknown_vue_variable",
+            "vue_variables",
             "rule_unknown_component_js_variable",
             "component_js_globals",
             "allows_extra_variables",
+            "rule_unknown_component_js_member",
+            "rule_vue_python_variable",
+            "rule_alpine_attribute",
+            "rule_alpine_cloak",
+            "rule_invalid_attribute_value",
+            "rule_i18n_cross_language_fallback",
         }:
             msg = "template lint data must contain the exact supported fields"
             raise ValueError(msg)
@@ -263,9 +305,9 @@ class TemplateLintInfo:
         if type(variables) is not list:
             msg = "template_variables must be a list"
             raise ValueError(msg)
-        alpine_variables = value["alpine_variables"]
-        if type(alpine_variables) is not list:
-            msg = "alpine_variables must be a list"
+        vue_variables = value["vue_variables"]
+        if type(vue_variables) is not list:
+            msg = "vue_variables must be a list"
             raise ValueError(msg)
         component_js_globals = value["component_js_globals"]
         if type(component_js_globals) is not list:
@@ -275,11 +317,17 @@ class TemplateLintInfo:
             rule_unknown_template_variable=value["rule_unknown_template_variable"],  # type: ignore[arg-type]
             template_variables=tuple(TemplateVariableInfo.from_dict(item) for item in variables),
             rule_i18n_missing_param_type=value["rule_i18n_missing_param_type"],  # type: ignore[arg-type]
-            rule_unknown_alpine_variable=value["rule_unknown_alpine_variable"],  # type: ignore[arg-type]
-            alpine_variables=tuple(AlpineVariableInfo.from_dict(item) for item in alpine_variables),
+            rule_unknown_vue_variable=value["rule_unknown_vue_variable"],  # type: ignore[arg-type]
+            vue_variables=tuple(VueVariableInfo.from_dict(item) for item in vue_variables),
             rule_unknown_component_js_variable=value["rule_unknown_component_js_variable"],  # type: ignore[arg-type]
-            component_js_globals=tuple(AlpineVariableInfo.from_dict(item) for item in component_js_globals),
+            component_js_globals=tuple(VueVariableInfo.from_dict(item) for item in component_js_globals),
             allows_extra_variables=value["allows_extra_variables"],  # type: ignore[arg-type]
+            rule_unknown_component_js_member=value["rule_unknown_component_js_member"],  # type: ignore[arg-type]
+            rule_vue_python_variable=value["rule_vue_python_variable"],  # type: ignore[arg-type]
+            rule_alpine_attribute=value["rule_alpine_attribute"],  # type: ignore[arg-type]
+            rule_alpine_cloak=value["rule_alpine_cloak"],  # type: ignore[arg-type]
+            rule_invalid_attribute_value=value["rule_invalid_attribute_value"],  # type: ignore[arg-type]
+            rule_i18n_cross_language_fallback=value["rule_i18n_cross_language_fallback"],  # type: ignore[arg-type]
         )
 
 
@@ -291,12 +339,18 @@ class _ComponentLintOverrides:
     rule_i18n_missing_param_type: LintSeverity | None
     template_variables: Mapping[str, object]
     variable_owners: Mapping[str, type]
-    rule_unknown_alpine_variable: LintSeverity | None
-    alpine_variables: Mapping[str, object]
-    alpine_variable_owners: Mapping[str, type]
+    rule_unknown_vue_variable: LintSeverity | None
+    vue_variables: Mapping[str, object]
+    vue_variable_owners: Mapping[str, type]
     rule_unknown_component_js_variable: LintSeverity | None
     component_js_globals: Mapping[str, object]
     component_js_global_owners: Mapping[str, type]
+    rule_unknown_component_js_member: LintSeverity | None = None
+    rule_vue_python_variable: LintSeverity | None = None
+    rule_alpine_attribute: LintSeverity | None = None
+    rule_alpine_cloak: LintSeverity | None = None
+    rule_invalid_attribute_value: LintSeverity | None = None
+    rule_i18n_cross_language_fallback: LintSeverity | None = None
 
 
 def _application_lint_info(citry: Citry) -> TemplateLintInfo:
@@ -308,22 +362,28 @@ def _application_lint_info(citry: Citry) -> TemplateLintInfo:
     }
     for name, annotation in citry.settings.lint.template_variables.items():
         variables[name] = _annotation_variable_info(name, annotation, source="application")
-    alpine_variables = {
-        name: _annotation_alpine_variable_info(name, annotation, source="application")
-        for name, annotation in citry.settings.lint.alpine_variables.items()
+    vue_variables = {
+        name: _annotation_vue_variable_info(name, annotation, source="application")
+        for name, annotation in citry.settings.lint.vue_variables.items()
     }
     component_js_globals = {
-        name: _annotation_alpine_variable_info(name, annotation, source="application")
+        name: _annotation_vue_variable_info(name, annotation, source="application")
         for name, annotation in citry.settings.lint.component_js_globals.items()
     }
     return TemplateLintInfo(
         rule_unknown_template_variable=citry.settings.lint.rule_unknown_template_variable,
         template_variables=tuple(variables[name] for name in sorted(variables)),
         rule_i18n_missing_param_type=citry.settings.lint.rule_i18n_missing_param_type,
-        rule_unknown_alpine_variable=citry.settings.lint.rule_unknown_alpine_variable,
-        alpine_variables=tuple(alpine_variables[name] for name in sorted(alpine_variables)),
+        rule_unknown_vue_variable=citry.settings.lint.rule_unknown_vue_variable,
+        vue_variables=tuple(vue_variables[name] for name in sorted(vue_variables)),
         rule_unknown_component_js_variable=citry.settings.lint.rule_unknown_component_js_variable,
         component_js_globals=tuple(component_js_globals[name] for name in sorted(component_js_globals)),
+        rule_unknown_component_js_member=citry.settings.lint.rule_unknown_component_js_member,
+        rule_vue_python_variable=citry.settings.lint.rule_vue_python_variable,
+        rule_alpine_attribute=citry.settings.lint.rule_alpine_attribute,
+        rule_alpine_cloak=citry.settings.lint.rule_alpine_cloak,
+        rule_invalid_attribute_value=citry.settings.lint.rule_invalid_attribute_value,
+        rule_i18n_cross_language_fallback=citry.settings.lint.rule_i18n_cross_language_fallback,
     )
 
 
@@ -347,12 +407,12 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
     variables.update((item.name, item) for item in application.template_variables)
     for name, annotation in overrides.template_variables.items():
         variables[name] = _annotation_variable_info(name, annotation, source="component")
-    alpine_variables = {item.name: item for item in application.alpine_variables}
-    for name, annotation in overrides.alpine_variables.items():
-        alpine_variables[name] = _annotation_alpine_variable_info(name, annotation, source="component")
+    vue_variables = {item.name: item for item in application.vue_variables}
+    for name, annotation in overrides.vue_variables.items():
+        vue_variables[name] = _annotation_vue_variable_info(name, annotation, source="component")
     component_js_globals = {item.name: item for item in application.component_js_globals}
     for name, annotation in overrides.component_js_globals.items():
-        component_js_globals[name] = _annotation_alpine_variable_info(name, annotation, source="component")
+        component_js_globals[name] = _annotation_vue_variable_info(name, annotation, source="component")
     return TemplateLintInfo(
         rule_unknown_template_variable=(
             overrides.rule_unknown_template_variable
@@ -365,12 +425,12 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
             if overrides.rule_i18n_missing_param_type is not None
             else application.rule_i18n_missing_param_type
         ),
-        rule_unknown_alpine_variable=(
-            overrides.rule_unknown_alpine_variable
-            if overrides.rule_unknown_alpine_variable is not None
-            else application.rule_unknown_alpine_variable
+        rule_unknown_vue_variable=(
+            overrides.rule_unknown_vue_variable
+            if overrides.rule_unknown_vue_variable is not None
+            else application.rule_unknown_vue_variable
         ),
-        alpine_variables=tuple(alpine_variables[name] for name in sorted(alpine_variables)),
+        vue_variables=tuple(vue_variables[name] for name in sorted(vue_variables)),
         rule_unknown_component_js_variable=(
             overrides.rule_unknown_component_js_variable
             if overrides.rule_unknown_component_js_variable is not None
@@ -378,6 +438,34 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
         ),
         component_js_globals=tuple(component_js_globals[name] for name in sorted(component_js_globals)),
         allows_extra_variables=allows_extra_variables,
+        rule_unknown_component_js_member=(
+            overrides.rule_unknown_component_js_member
+            if overrides.rule_unknown_component_js_member is not None
+            else application.rule_unknown_component_js_member
+        ),
+        rule_vue_python_variable=(
+            overrides.rule_vue_python_variable
+            if overrides.rule_vue_python_variable is not None
+            else application.rule_vue_python_variable
+        ),
+        rule_alpine_attribute=(
+            overrides.rule_alpine_attribute
+            if overrides.rule_alpine_attribute is not None
+            else application.rule_alpine_attribute
+        ),
+        rule_alpine_cloak=(
+            overrides.rule_alpine_cloak if overrides.rule_alpine_cloak is not None else application.rule_alpine_cloak
+        ),
+        rule_invalid_attribute_value=(
+            overrides.rule_invalid_attribute_value
+            if overrides.rule_invalid_attribute_value is not None
+            else application.rule_invalid_attribute_value
+        ),
+        rule_i18n_cross_language_fallback=(
+            overrides.rule_i18n_cross_language_fallback
+            if overrides.rule_i18n_cross_language_fallback is not None
+            else application.rule_i18n_cross_language_fallback
+        ),
     )
 
 
@@ -392,10 +480,16 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
     i18n_missing_param_rule: LintSeverity | None = None
     variables: dict[str, object] = {}
     variable_owners: dict[str, type] = {}
-    alpine_rule: LintSeverity | None = None
-    alpine_variables: dict[str, object] = {}
-    alpine_variable_owners: dict[str, type] = {}
+    vue_rule: LintSeverity | None = None
+    vue_variables: dict[str, object] = {}
+    vue_variable_owners: dict[str, type] = {}
     component_js_rule: LintSeverity | None = None
+    component_js_member_rule: LintSeverity | None = None
+    vue_python_variable_rule: LintSeverity | None = None
+    alpine_attribute_rule: LintSeverity | None = None
+    alpine_cloak_rule: LintSeverity | None = None
+    attribute_value_rule: LintSeverity | None = None
+    cross_language_fallback_rule: LintSeverity | None = None
     component_js_globals: dict[str, object] = {}
     component_js_global_owners: dict[str, type] = {}
     declarations = _active_nested_class_declarations(component_class, "Lint")
@@ -413,14 +507,25 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             "rule_unknown_template_variable",
             "rule_i18n_missing_param_type",
             "template_variables",
-            "rule_unknown_alpine_variable",
-            "alpine_variables",
+            "rule_unknown_vue_variable",
+            "vue_variables",
             "rule_unknown_component_js_variable",
             "component_js_globals",
+            "rule_unknown_component_js_member",
+            "rule_vue_python_variable",
+            "rule_alpine_attribute",
+            "rule_alpine_cloak",
+            "rule_invalid_attribute_value",
+            "rule_i18n_cross_language_fallback",
         }
         if unknown:
             rendered = ", ".join(sorted(unknown))
             msg = f"Component {component_class.__name__}.Lint has unknown setting(s): {rendered}"
+            # A component written for citry 0.5.1 may still use the Alpine
+            # setting names; point its author at the Vue replacement.
+            hint = _replaced_lint_settings_hint(unknown)
+            if hint is not None:
+                msg = f"{msg}. {hint}"
             raise ValueError(msg)
         if "rule_unknown_template_variable" in public_values:
             candidate_rule = public_values["rule_unknown_template_variable"]
@@ -440,15 +545,15 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
                 )
                 raise ValueError(msg)
             i18n_missing_param_rule = cast("LintSeverity", candidate_rule)
-        if "rule_unknown_alpine_variable" in public_values:
-            candidate_rule = public_values["rule_unknown_alpine_variable"]
+        if "rule_unknown_vue_variable" in public_values:
+            candidate_rule = public_values["rule_unknown_vue_variable"]
             if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
                 msg = (
-                    f"Component {component_class.__name__}.Lint.rule_unknown_alpine_variable "
+                    f"Component {component_class.__name__}.Lint.rule_unknown_vue_variable "
                     "must be 'ignore', 'warning', or 'error'"
                 )
                 raise ValueError(msg)
-            alpine_rule = cast("LintSeverity", candidate_rule)
+            vue_rule = cast("LintSeverity", candidate_rule)
         if "rule_unknown_component_js_variable" in public_values:
             candidate_rule = public_values["rule_unknown_component_js_variable"]
             if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
@@ -458,6 +563,60 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
                 )
                 raise ValueError(msg)
             component_js_rule = cast("LintSeverity", candidate_rule)
+        if "rule_unknown_component_js_member" in public_values:
+            candidate_rule = public_values["rule_unknown_component_js_member"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_unknown_component_js_member "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            component_js_member_rule = cast("LintSeverity", candidate_rule)
+        if "rule_vue_python_variable" in public_values:
+            candidate_rule = public_values["rule_vue_python_variable"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_vue_python_variable "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            vue_python_variable_rule = cast("LintSeverity", candidate_rule)
+        if "rule_alpine_attribute" in public_values:
+            candidate_rule = public_values["rule_alpine_attribute"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_alpine_attribute "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            alpine_attribute_rule = cast("LintSeverity", candidate_rule)
+        if "rule_alpine_cloak" in public_values:
+            candidate_rule = public_values["rule_alpine_cloak"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_alpine_cloak "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            alpine_cloak_rule = cast("LintSeverity", candidate_rule)
+        if "rule_invalid_attribute_value" in public_values:
+            candidate_rule = public_values["rule_invalid_attribute_value"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_invalid_attribute_value "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            attribute_value_rule = cast("LintSeverity", candidate_rule)
+        if "rule_i18n_cross_language_fallback" in public_values:
+            candidate_rule = public_values["rule_i18n_cross_language_fallback"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_i18n_cross_language_fallback "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            cross_language_fallback_rule = cast("LintSeverity", candidate_rule)
         if "template_variables" in public_values:
             candidate_variables = public_values["template_variables"]
             try:
@@ -470,16 +629,16 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             variables.update(validated.template_variables)
             owner = public_owners["template_variables"]
             variable_owners.update(dict.fromkeys(validated.template_variables, owner))
-        if "alpine_variables" in public_values:
-            candidate_variables = public_values["alpine_variables"]
+        if "vue_variables" in public_values:
+            candidate_variables = public_values["vue_variables"]
             try:
-                validated = LintSettings(alpine_variables=cast("Mapping[str, object]", candidate_variables))
+                validated = LintSettings(vue_variables=cast("Mapping[str, object]", candidate_variables))
             except TypeError as err:
-                msg = f"Component {component_class.__name__}.Lint.alpine_variables must be a mapping"
+                msg = f"Component {component_class.__name__}.Lint.vue_variables must be a mapping"
                 raise TypeError(msg) from err
-            alpine_variables.update(validated.alpine_variables)
-            owner = public_owners["alpine_variables"]
-            alpine_variable_owners.update(dict.fromkeys(validated.alpine_variables, owner))
+            vue_variables.update(validated.vue_variables)
+            owner = public_owners["vue_variables"]
+            vue_variable_owners.update(dict.fromkeys(validated.vue_variables, owner))
         if "component_js_globals" in public_values:
             candidate_variables = public_values["component_js_globals"]
             try:
@@ -495,12 +654,18 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         i18n_missing_param_rule,
         variables,
         variable_owners,
-        alpine_rule,
-        alpine_variables,
-        alpine_variable_owners,
+        vue_rule,
+        vue_variables,
+        vue_variable_owners,
         component_js_rule,
         component_js_globals,
         component_js_global_owners,
+        component_js_member_rule,
+        vue_python_variable_rule,
+        alpine_attribute_rule,
+        alpine_cloak_rule,
+        attribute_value_rule,
+        cross_language_fallback_rule,
     )
 
 
@@ -509,9 +674,9 @@ def _component_lint_variable_owners(component_class: type) -> Mapping[str, type]
     return _component_lint_overrides(component_class).variable_owners
 
 
-def _component_alpine_variable_owners(component_class: type) -> Mapping[str, type]:
-    """Return the nested class that supplied each effective Alpine variable."""
-    return _component_lint_overrides(component_class).alpine_variable_owners
+def _component_vue_variable_owners(component_class: type) -> Mapping[str, type]:
+    """Return the nested class that supplied each effective Vue variable."""
+    return _component_lint_overrides(component_class).vue_variable_owners
 
 
 def _component_js_global_owners(component_class: type) -> Mapping[str, type]:
@@ -549,13 +714,13 @@ def _annotation_variable_info(
     )
 
 
-def _annotation_alpine_variable_info(
+def _annotation_vue_variable_info(
     name: str,
     annotation: object,
     *,
     source: VariableSource,
-) -> AlpineVariableInfo:
-    """Detach an Alpine analysis-only annotation and optional description."""
+) -> VueVariableInfo:
+    """Detach an Vue analysis-only annotation and optional description."""
     value = annotation
     description: str | None = None
     try:
@@ -570,7 +735,7 @@ def _annotation_alpine_variable_info(
         if len(metadata) == 1 and type(metadata[0]) is str and metadata[0]:
             description = metadata[0]
     type_display = _normalize_type_display(_format_annotation(value))
-    return AlpineVariableInfo(
+    return VueVariableInfo(
         name=name,
         type_display=type_display,
         type_fidelity="normalized" if type_display is not None else "unavailable",

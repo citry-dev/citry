@@ -364,7 +364,13 @@ class CPopover(LibraryComponent):
           let active = true;
           let controlled = false;
           let logicalOpen = false;
-          let internalOpen = initialHandoff?.open ?? defaults.open;
+          // A server re-render hands the previous run's open state to this one, so
+          // a popover that was open before the re-render is still open after it.
+          // When the server's `open` input changed, the popover follows the server
+          // instead.
+          let internalOpen = initialHandoff && initialHandoff.serverOpen === defaults.open
+            ? initialHandoff.open
+            : defaults.open;
           let onOpenChange = null;
           let animation = null;
           let generation = 0;
@@ -795,7 +801,7 @@ class CPopover(LibraryComponent):
 
           return () => {
             active = false;
-            surface[handoffKey] = { open: logicalOpen };
+            surface[handoffKey] = { open: logicalOpen, serverOpen: defaults.open };
             host.removeEventListener("click", onHostClick, true);
             surface.removeEventListener("toggle", onToggle);
             for (const task of scheduledTasks) {

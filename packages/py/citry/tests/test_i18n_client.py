@@ -6,19 +6,22 @@ import base64
 import gzip
 import hashlib
 import json
-import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, InMemoryCache
+from citry._vue.capture import render_prepared_direct
+from citry._vue.events import default_events_producer
 from citry.ext.i18n.usage import CLIENT_CONTEXT_KEY, EXTRA_KEY
 from citry.util.routing import RouteHeaders, RouteRequest, match_route
 
-_MANIFEST = re.compile(
-    r'<script type="application/json" data-citry-i18n>(.*?)</script>',
-    re.DOTALL,
-)
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from citry.citry_element import CitryElement
+    from citry.citry_render import CitryRender
 
 
 def _app() -> Citry:
@@ -32,10 +35,39 @@ def _app() -> Citry:
     )
 
 
-def _manifest(html: str) -> dict[str, object]:
-    match = _MANIFEST.search(html)
-    assert match is not None
-    return json.loads(match.group(1))
+def _prepared_manifest(
+    component: CitryElement,
+    *,
+    provides: Mapping[str, object] | None = None,
+) -> tuple[CitryRender, dict[str, object]]:
+    """Prepare a manifest from the same producer used by Vue serialization."""
+    app = component.comp_cls.citry
+    rendered = render_prepared_direct(component, provides=provides)
+    manifest = default_events_producer(app).prepare_from_render(
+        rendered,
+        citry=app,
+        app_id="i18n-unit",
+        revision=0,
+    )
+
+    return rendered, manifest
+
+
+def _prepared_i18n(
+    component: CitryElement,
+    *,
+    provides: Mapping[str, object] | None = None,
+) -> tuple[CitryRender, dict[str, object]]:
+    """Read the extension payload from the same prepared producer used by Vue."""
+    rendered, manifest = _prepared_manifest(component, provides=provides)
+    extensions = manifest["extensions"]
+    assert type(extensions) is dict
+    extension = extensions["i18n"]
+    assert type(extension) is dict
+    assert extension["schemaVersion"] == 1
+    payload = extension["payload"]
+    assert type(payload) is dict
+    return rendered, payload
 
 
 def test_plain_server_translation_does_not_ship_the_browser_runtime() -> None:
@@ -58,18 +90,21 @@ def test_javascript_delivery_policy_sees_client_i18n_and_can_omit_it() -> None:
 
     class Page(Component):
         citry = app
-        template = '<c-i18n c-client="True" tag="main"><output x-text="$i18n.tr(\'title\')"></output></c-i18n>'
+        template = (
+            '<c-i18n c-client="True" tag="main"><output v-text="$i18n.tr(\'title\')">Static fallback</output></c-i18n>'
+        )
         messages = "title = Client title"
 
     rendered = Page().render()
-    with pytest.raises(ValueError, match=r"x-init|x-text"):
+    with pytest.raises(ValueError, match="browser activation attribute 'v-text' requires JavaScript"):
         rendered.serialize(deps_strategy="ignore", security_javascript="forbid")
 
     with pytest.warns(RuntimeWarning, match="static fallback"):
         omitted = rendered.serialize(security_javascript="omit")
     assert "data-citry-i18n" not in omitted
     assert "opt-in browser i18n runtime" not in omitted
-    assert "x-text" in omitted
+    assert "v-text" in omitted
+    assert ">Static fallback</output>" in omitted
 
 
 def test_client_provider_emits_only_literal_client_roots() -> None:
@@ -80,7 +115,7 @@ def test_client_provider_emits_only_literal_client_roots() -> None:
         template = """
             <c-i18n c-client="True" tag="main">
                 <h1>{{ tr("server-only") }}</h1>
-                <output x-text="$i18n.tr('client-title')"></output>
+                <output v-text="$i18n.tr('client-title')"></output>
             </c-i18n>
         """
         messages = """
@@ -88,7 +123,7 @@ def test_client_provider_emits_only_literal_client_roots() -> None:
             client-title = Client title
         """
 
-    manifest = _manifest(Page().render().serialize())
+    _rendered, manifest = _prepared_i18n(Page())
     assert set(manifest["parsers"]) == {"en-US", "cs-CZ"}
     assert manifest["parsers"]["en-US"]["schema_version"] == 1
     assert manifest["parsers"]["en-US"]["number"] == {}
@@ -112,14 +147,14 @@ def test_large_catalog_browser_payload_contains_only_the_requested_roots() -> No
         citry = app
         template = """
             <c-i18n c-client="True" tag="main">
-                <output x-text="$i18n.tr('catalog-message-0000')"></output>
-                <output x-text="$i18n.tr('catalog-message-0999')"></output>
-                <output x-text="$i18n.tr('catalog-message-1999')"></output>
+                <output v-text="$i18n.tr('catalog-message-0000')"></output>
+                <output v-text="$i18n.tr('catalog-message-0999')"></output>
+                <output v-text="$i18n.tr('catalog-message-1999')"></output>
             </c-i18n>
         """
         messages = all_messages
 
-    manifest = _manifest(Page().render().serialize())
+    _rendered, manifest = _prepared_i18n(Page())
     requirement = manifest["requirements"][0]
     assert requirement["messages"] == [
         "catalog-message-0000",
@@ -159,7 +194,7 @@ def test_one_hundred_message_partition_stays_within_the_release_budget() -> None
     payload = json.dumps(artifact, ensure_ascii=False, separators=(",", ":")).encode()
 
     assert len(gzip.compress(payload, mtime=0)) <= 15 * 1024
-    runtime = Path(__file__).parents[1] / "citry/ext/i18n/client/citry-i18n.js"
+    runtime = Path(__file__).parents[1] / "citry/ext/i18n/client/vue-plugin.source.js"
     combined = runtime.read_bytes() + b"\n" + payload
     assert len(gzip.compress(combined, mtime=0)) <= 35 * 1024
 
@@ -180,7 +215,7 @@ def test_mounted_i18n_runtime_integrity_matches_route_body() -> None:
         citry = app
         template = """
             <c-i18n c-client="True" tag="main">
-                <output x-text="$i18n.tr('client-title')"></output>
+                <output v-text="$i18n.tr('client-title')"></output>
             </c-i18n>
         """
         messages = "client-title = Client title"
@@ -204,7 +239,7 @@ def test_literal_client_root_includes_all_message_attributes() -> None:
         citry = app
         template = """
             <c-i18n c-client="True" tag="main">
-                <output x-text="$i18n.tr('client-title', {}, { attr: 'aria-label' })"></output>
+                <output v-text="$i18n.tr('client-title', {}, { attr: 'aria-label' })"></output>
             </c-i18n>
         """
         messages = """
@@ -212,7 +247,8 @@ def test_literal_client_root_includes_all_message_attributes() -> None:
                 .aria-label = Accessible client title
         """
 
-    requirement = _manifest(Page().render().serialize())["requirements"][0]
+    _rendered, manifest = _prepared_i18n(Page())
+    requirement = manifest["requirements"][0]
     messages = requirement["artifacts"]["en-US"]["messages"]
 
     assert set(messages) == {"client-title", "client-title.aria-label"}
@@ -225,7 +261,7 @@ def test_unknown_literal_client_root_fails_before_html_is_emitted() -> None:
         citry = app
         template = """
             <c-i18n c-client="True" tag="main">
-                <output x-text="$i18n.tr('missing-title')"></output>
+                <output v-text="$i18n.tr('missing-title')"></output>
             </c-i18n>
         """
 
@@ -241,13 +277,13 @@ def test_mounted_document_inlines_only_the_current_locale_partition() -> None:
         citry = app
         template = """
             <c-i18n c-client="True" tag="main">
-                <output x-text="$i18n.tr('client-title')"></output>
+                <output v-text="$i18n.tr('client-title')"></output>
             </c-i18n>
         """
         messages = "client-title = Client title"
 
     html = Page().render().serialize()
-    manifest = _manifest(html)
+    _rendered, manifest = _prepared_i18n(Page())
     requirement = manifest["requirements"][0]
 
     assert set(requirement["artifacts"]) == {"en-US"}
@@ -265,7 +301,7 @@ def test_fragment_attaches_literal_client_roots_to_its_external_provider() -> No
 
     class Fragment(Component):
         citry = app
-        template = "<output x-text=\"$i18n.tr('fragment-title')\"></output>"
+        template = "<output v-text=\"$i18n.tr('fragment-title')\"></output>"
         messages = "fragment-title = Fragment title"
 
     rendered_page = Page().render()
@@ -275,17 +311,19 @@ def test_fragment_attaches_literal_client_roots_to_its_external_provider() -> No
     assert len(provider_records) == 1
     provider_record = provider_records[0]
 
-    fragment = Fragment().render(
+    _fragment, prepared = _prepared_manifest(
+        Fragment(),
         provides={
             "citry_i18n": provider_record.provider.context,
             CLIENT_CONTEXT_KEY: provider_record.render_id,
-        }
+        },
     )
-    manifest = _manifest(fragment.serialize(deps_strategy="fragment"))
+    extension = prepared["extensions"]["i18n"]
+    manifest = extension["payload"]
 
     assert manifest["providers"] == []
-    assert manifest["requirements"][0]["provider"] == provider_record.render_id
-    assert manifest["requirements"][0]["owner"] in fragment.context.extra[EXTRA_KEY]
+    assert manifest["requirements"][0]["provider"] == {"serverProviderId": provider_record.render_id}
+    assert manifest["requirements"][0]["owner"] == prepared["rootId"]
     assert manifest["requirements"][0]["messages"] == ["fragment-title"]
 
 
@@ -294,19 +332,19 @@ def test_browser_requirements_remain_partitioned_by_logical_render_owner() -> No
 
     class First(Component):
         citry = app
-        template = "<output x-text=\"$i18n.tr('first-title')\"></output>"
+        template = "<output v-text=\"$i18n.tr('first-title')\"></output>"
         messages = "first-title = First"
 
     class Second(Component):
         citry = app
-        template = "<output x-text=\"$i18n.tr('second-title')\"></output>"
+        template = "<output v-text=\"$i18n.tr('second-title')\"></output>"
         messages = "second-title = Second"
 
     class Page(Component):
         citry = app
         template = '<c-i18n c-client="True" tag="main"><c-First /><c-Second /></c-i18n>'
 
-    manifest = _manifest(Page().render().serialize())
+    _rendered, manifest = _prepared_i18n(Page())
     requirements = manifest["requirements"]
 
     assert len(requirements) == 2
@@ -328,7 +366,7 @@ def test_fragment_server_only_barrier_does_not_leak_client_roots_to_external_pro
 
     class ClientCopy(Component):
         citry = app
-        template = "<output x-text=\"$i18n.tr('blocked-title')\"></output>"
+        template = "<output v-text=\"$i18n.tr('blocked-title')\"></output>"
         messages = "blocked-title = Blocked title"
 
     class Fragment(Component):
@@ -339,14 +377,64 @@ def test_fragment_server_only_barrier_does_not_leak_client_roots_to_external_pro
     provider_record = next(
         record for record in rendered_page.context.extra[EXTRA_KEY].values() if record.provider is not None
     )
-    fragment = Fragment().render(
+    _fragment, manifest = _prepared_i18n(
+        Fragment(),
         provides={
             "citry_i18n": provider_record.provider.context,
             CLIENT_CONTEXT_KEY: provider_record.render_id,
-        }
+        },
     )
 
-    assert "data-citry-i18n" not in fragment.serialize(deps_strategy="fragment")
+    assert manifest["barriers"]
+    assert all("blocked-title" not in json.dumps(requirement) for requirement in manifest["requirements"])
+
+
+def test_cached_fragment_rebuilds_prepared_provider_barrier_ancestry() -> None:
+    app = Citry(
+        cache=InMemoryCache(),
+        extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US", "cs-CZ")}},
+    )
+    renders = 0
+
+    class Page(Component):
+        citry = app
+        template = '<c-i18n c-client="True" tag="main"></c-i18n>'
+
+    class ClientCopy(Component):
+        citry = app
+        template = "<output v-text=\"$i18n.tr('blocked-title')\"></output>"
+        messages = "blocked-title = Blocked title"
+
+    class Fragment(Component):
+        citry = app
+        template = '<c-i18n tag="section"><c-client-copy /></c-i18n>'
+
+        class Cache:
+            enabled = True
+
+        def template_data(self, kwargs, slots):
+            nonlocal renders
+            renders += 1
+            return {}
+
+    rendered_page = Page().render()
+    provider_record = next(
+        record for record in rendered_page.context.extra[EXTRA_KEY].values() if record.provider is not None
+    )
+    provides = {
+        "citry_i18n": provider_record.provider.context,
+        CLIENT_CONTEXT_KEY: provider_record.render_id,
+    }
+
+    manifests = [_prepared_i18n(Fragment(), provides=provides)[1] for _ in range(2)]
+
+    assert renders == 1
+    assert all(manifest["barriers"] for manifest in manifests)
+    assert all(
+        "blocked-title" not in json.dumps(requirement)
+        for manifest in manifests
+        for requirement in manifest["requirements"]
+    )
 
 
 def test_message_route_returns_an_exact_partition_and_rejects_stale_requests() -> None:

@@ -7,16 +7,18 @@ from typing import Literal
 
 from citry_core.template_formatter import python_expression_provider
 
-SERVER_VERSION = "0.1.7"
+SERVER_VERSION = "0.2.0"
 PROTOCOL_VERSION = 1
 CATALOG_SCHEMA_VERSION = 1
-MINIMUM_CITRY_VERSION = (0, 5, 1)
+MINIMUM_CITRY_VERSION = (0, 6, 0)
 MINIMUM_CITRY_SERIES = MINIMUM_CITRY_VERSION[:2]
 BROWSER_PROJECTION_METHOD = "citry/browserProjection"
 HTML_PROJECTION_METHOD = "citry/htmlProjection"
 FORMAT_TEMPLATES_METHOD = "citry/formatTemplates"
 FORMAT_COMPONENT_ASSETS_METHOD = "citry/formatComponentAssets"
 FORMAT_EMBEDDED_METHOD = "citry/formatEmbedded"
+# The server asks a client that offers it to run TypeScript over projection files.
+TYPE_CHECK_METHOD = "citry/typeCheck"
 EMBEDDED_FORMATTING_VERSION = 1
 PYTHON_EXPRESSION_PROVIDER = python_expression_provider()
 
@@ -70,6 +72,7 @@ __all__ = [
     "PROTOCOL_VERSION",
     "PYTHON_EXPRESSION_PROVIDER",
     "SERVER_VERSION",
+    "TYPE_CHECK_METHOD",
     "AnalysisMode",
     "EmbeddedFormattingCapability",
     "ProjectStatus",

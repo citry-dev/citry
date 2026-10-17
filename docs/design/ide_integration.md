@@ -17,6 +17,17 @@ first, so this document builds on that skeleton and grafts the strongest
 elements of the platform-first and ecosystem-first drafts onto it; section 11
 records every contested decision and why it was resolved the way it was.
 
+**Vue runtime (0.6.0):** browser expressions are Vue expressions. The
+lint settings are `LintSettings.rule_unknown_vue_variable` and
+`vue_variables`, reported as `citry.vue.unknown-variable`, and
+`rule_alpine_attribute` / `rule_alpine_cloak` report leftover `x-*`
+attributes (`citry.template.alpine-attribute`,
+`citry.template.alpine-cloak`). `rule_invalid_attribute_value` reports a
+static HTML attribute value outside the keywords the HTML Standard allows
+(`citry.template.invalid-attribute-value`). Steps below that describe Alpine attributes,
+magics, and scope record the earlier Alpine design; where they conflict with
+the Vue runtime, [`vue.md`](vue.md) and the code win.
+
 Related docs: the standing editor-experience decisions this design builds on
 are in [`source_languages.md`](source_languages.md) (no highlight-only
 stopgap, the `*_lang` attributes, the staged extension-grammar-server path).
@@ -1280,17 +1291,28 @@ degradation contract in section 3.4.1.
    roles, all three assets, extensions, and shared asset ownership in the LSP
    instead of reducing them to the first editor feature set. Add conservative
    per-field declaration provenance to `FieldInfo`, including the distinct
-   authored owners of C3-composed fields, and join it to exact annotated Python
-   assignments for component-input and static fill-slot definitions. Local,
+   authored owners of fields a schema class inherits from its own bases, and
+   join it to exact annotated Python assignments for component-input and
+   static fill-slot definitions. Local,
    generated, unreadable, invalid, and ambiguous declarations produce no field
    target. Open files use synchronized editor text and closed files use the
    current disk AST; v1 does not claim generation freshness without a source
    fingerprint. Effective schema construction snapshots each field's authored
    owner across both eager annotations on Python 3.10 through 3.13 and deferred
-   annotations on Python 3.14. C3-composed `TemplateData` and `Kwargs` therefore
-   retain every distinct source owner without asking the LSP process to evaluate
+   annotations on Python 3.14. A `TemplateData` or `Kwargs` class that inherits
+   fields, such as `class TemplateData(Parent.TemplateData):`, therefore keeps
+   every distinct source owner without asking the LSP process to evaluate
    project annotations. The unreleased catalog and client protocols remain
-   version 1.
+   version 1. Like the runtime, the LSP uses only the
+   first nested data class it finds in the order Python searches the
+   component's base classes, and reaches a parent's fields only through that
+   class's own bases. When the open editor text declares a different `JsData`
+   or `CssData` class than the loaded catalog, the LSP uses that class and the
+   bases it can find in open files or in the same module. If it cannot find a
+   base, it keeps every catalog field. If the editor text does not parse, it
+   gives no JS or CSS data roots for that component. For `TemplateData`, the
+   editor text can add names to the unknown-variable check but cannot remove
+   a field the catalog still lists.
 10. **Join `TemplateData` to template expressions.** Implemented 2026-08-06.
     For an AST-proven inline declaration or a registry-owned template file,
     intersect the `TemplateData` fields of every effective consumer of that
@@ -1709,11 +1731,11 @@ degradation contract in section 3.4.1.
     its Alpine magics and `$component` context, while ordinary JavaScript
     remains provider-owned. Generated projection ranges, stale
     document versions, invalid source, ambiguous ownership, unsupported data
-    shapes, and partial provenance degrade to no mapped result. This slice
-    does not claim a standalone JavaScript diagnostic service. Citry owns its
+    shapes, and partial provenance degrade to no mapped result. Citry owns its
     JSON-wire warning, Alpine and component-initializer namespace rules,
-    literal server-event contract, and static child-prop contract; ordinary
-    JavaScript diagnostics remain provider-owned.
+    literal server-event contract, and static child-prop contract. Step 25
+    adds TypeScript's own type errors on top of these; other JavaScript
+    warnings remain provider-owned.
 
     **Accepted browser-intelligence expansion.** User testing after the first
     Step 20 delivery established that browser expressions need the same strict
@@ -1745,15 +1767,49 @@ degradation contract in section 3.4.1.
     globals. Invalid severities or JavaScript identifiers are rejected when
     settings are constructed. Invalid or unsupported initializer source
     produces no partial namespace diagnostic and leaves ordinary JavaScript
-    diagnostics to the installed provider.
+    diagnostics to the installed provider. The rule for a
+    `component.<name>` or `this.<name>` read that the instance lacks,
+    `citry.component-js.unknown-member`, takes its severity from the matching
+    `rule_unknown_component_js_member` setting in the same two places; when
+    one JavaScript file serves several components, the strictest owner's
+    severity applies.
+
+    `citry.vue.python-variable` reports a Vue expression that reads a name an
+    enclosing `c-for` loop or `c-fill` binding introduces in Python. Vue
+    evaluates the expression later in the browser against component state, so
+    the read never sees the loop value. The rule is skipped when a Vue `v-for`
+    or slot alias rebinds the name. Each read gets one finding: when a closed
+    namespace with an active `citry.vue.unknown-variable` rule proves the name
+    missing, that rule reports the read as an error with its `python` message
+    variant, and this rule stays quiet. This rule reports the rest, which is an
+    open namespace, an ignored unknown-variable rule, or a component whose
+    browser names also include the name, because a Python binding with that
+    name means the author most likely wanted the loop value. When a reporting
+    component's browser names include the name, Vue shows that value without
+    an error, so the rule uses its `browser` or `browser-attribute` message
+    variant, which names both the browser value and the Python variable. It
+    takes its severity from `rule_vue_python_variable` (default `"warning"`)
+    in the same two places.
 
     `$component` exposes the complete runtime callback context, including
     `id`, `els`, typed `data`, initial `scope`, read-only `props`, Events
     `state`, `loading`, `error`, `effect`, `reactive`, `graph`,
     `provide`/`inject`/`unprovide`, `sendEvent`, and `onEvent`. Callback and
-    configuration-object forms use separate contextual overloads, and the
-    callback result is `void | (() => void)` because a returned function is
-    cleanup while async initialization is unsupported. Direct synchronous
+    configuration-object forms share one generic signature, like Vue's
+    `defineComponent()`, so TypeScript infers each Options section and types
+    `this` as the full instance, including `$emit` from the `emits` option.
+    `$el` is typed from the template's top-level node (`Node` for several
+    nodes or an unreadable template), and a listener on a child component tag
+    types `$event` from the child's `emits`. The analyzer reports `emits`
+    separately from the instance names, so an `emits` it cannot read leaves
+    the other names typed. When it can read `emits`, Citry reports a literal
+    event name that `emits` does not declare as
+    `citry.browser.undeclared-emit` (an `$emit` call) or
+    `citry.browser.undeclared-component-event` (a listener on a child tag).
+    An `emits` built from a variable, a spread, a computed key, or a mixin
+    turns both checks off for that component.
+    An initializer may return a cleanup
+    function, or a Promise that resolves to one. Direct synchronous
     initialization writes such as `scope.name = value`, `scope["name"] =
     value`, and a static `Object.assign(scope, {...})` add proven variables to
     the component's Alpine subtree. Conditional writes are optional; computed
@@ -1808,9 +1864,9 @@ degradation contract in section 3.4.1.
     owners are omitted. The shared checker and LSP report
     `citry.component-js.unknown-data-member` only when every consumer's `JsData`
     schema or inferred `js_data()` return shape is closed. Open, unavailable,
-    and stale source contracts produce no unknown-member error. General
-    JavaScript diagnostics are not forwarded into embedded source by this
-    integration; Citry publishes its own cross-language findings there.
+    and stale source contracts produce no unknown-member error. Step 25
+    forwards TypeScript's type errors into embedded source; Citry's own
+    cross-language findings win where both describe the same mistake.
     Literal server-event completion works from an empty or partial string in
     `sendEvent`, `$sendEvent`, `$loading`, and `$error`, using the same handler
     contract as diagnostics and navigation.
@@ -1958,6 +2014,105 @@ degradation contract in section 3.4.1.
     does not intercept typing or reverse document changes because those events
     cannot prove whether an f-string edit came from Pylance or was authored
     deliberately. Editors without Pylance need no setting.
+
+25. **Report TypeScript's errors in component JavaScript and templates.**
+    Implemented 2026-10-01. Once completion and hover typed `this`, template
+    names, `$el`, and `$emit`, the types caught real mistakes (a method
+    assigned a boolean, an `$emit` payload that fails its validator, a wrong
+    argument count, `this.$el.fooBar`) but no one saw them: VS Code does not
+    forward diagnostics from Citry's generated projection files, and `citry
+    check` did not run TypeScript.
+
+    *Prior art.* The language server already runs an outside type checker:
+    `semantic.semantic_diagnostics` sends Python expression copies to the
+    pinned `ty` server, maps findings through the copies, keeps only those
+    wholly inside authored text, and publishes them as `citry.python.*` with
+    the source `Citry (ty)`. The server also already asks the VS Code client
+    to run a VS Code provider for it: `citry/formatEmbedded` hands embedded
+    JavaScript and CSS to the installed formatter and validates the answer.
+    `engine.browser_projection` built one projection per cursor position; the
+    VS Code client's `BrowserScriptFiles` writes projections as real files so
+    VS Code's TypeScript server types them. Tests already ran the repository's
+    `tsc` over projections to prove the types. No code ran TypeScript
+    diagnostics or found a `tsc` outside tests.
+
+    *Design.* `engine.type_check_projections` builds one file per template
+    region, declaring the shared names and the owning component's instance
+    once and wrapping each Vue expression in its own function with its own
+    `v-for` aliases and `$event`, plus one file per component JavaScript
+    region. Both reuse the helpers of the interactive projection, so the check
+    and a hover see the same types. The language server then runs TypeScript
+    one of two ways. A client that sends
+    `initializationOptions.typeCheckClient = {"version": 1}` receives a
+    `citry/typeCheck` request with the files; the VS Code extension writes
+    them beside its completion projections (the server starts each with a `//
+    @ts-check` line, which turns checking on for that file), asks VS Code's
+    TypeScript server through the `typescript.tsserverRequest` command for
+    `syntacticDiagnosticsSync` and `semanticDiagnosticsSync`, and returns the
+    raw diagnostics. Any other client gets the server's own run of the
+    project's `tsc` (the nearest `node_modules/.bin/tsc`, then `PATH`). Either
+    way `typescript.map_type_check_findings` keeps errors of the reported
+    kinds (type mismatch, unknown member, call arity, and unknown names
+    outside templates; syntax errors only for JavaScript in a Python string),
+    maps both ends of each finding back through the recorded pieces of
+    authored text, drops anything in generated text, and drops a finding that
+    overlaps a Citry finding for the same mistake. The server publishes
+    Citry's findings first and adds TypeScript's, with the source `Citry (ts)`
+    and codes `citry.typescript.ts<number>`, when the check answers. When it
+    refreshes several documents, every document's own findings go out before
+    any TypeScript check starts. A change to a template or component
+    JavaScript file also re-checks that component's other open assets, because
+    each is typed from the other. `initializationOptions.typeCheck = false`
+    (VS Code: `citry.typeCheck`) turns it off. `citry check --types` loads the
+    same project facts, checks every workspace document in one `tsc` run, and
+    reports the same findings with file, line, and column.
+
+    The projections were changed so ordinary code produces no findings.
+    Unproven values (`JsonWireType` unknowns, dynamic props, injections,
+    server-event results, open instance names) render as `any`, so TypeScript
+    does not report reading them. `js_data()` literal values widen to their
+    base type. Strict mode stays off, matching the VS Code projection folder's
+    `jsconfig.json`. A native listener's `$event` is the named DOM event with
+    `target` open, and a Citry `@c-*` binding on a child tag reads the child's
+    emitted value. `citry_lsp/citry-dom.d.ts` types a selector query and an
+    unknown `window` member as `any`. A component without an `inject` option
+    injects nothing, so a misspelled `this.<name>` is an error rather than
+    `unknown`. Minified files are not checked.
+
+    *Alternatives rejected.* Running TypeScript only in the VS Code extension
+    would leave other editors and `citry check` with a second, separate
+    implementation of the filter and mapping. Running `tsc` only from the
+    server would require Node.js and TypeScript in every VS Code user's
+    environment, although VS Code ships a TypeScript server. Letting VS Code's
+    TypeScript extension publish the projection files' own diagnostics would
+    put generated file names in the Problems panel and cannot filter or
+    de-duplicate them. Filtering TypeScript findings by message text (for
+    example, "on type 'unknown'") breaks when VS Code shows TypeScript in
+    another language, so false positives are fixed in the projection types
+    instead.
+
+    *Error modes.* A client answer of `null` (VS Code's extension logs once to
+    its output channel when TypeScript does not answer), a timeout (30 s), or
+    an invalid answer (logged as a warning) keeps the previous TypeScript
+    findings on lines the edit did not touch; the server never fails Citry's
+    own diagnostics because of it. A missing Node.js or `tsc` logs a warning
+    in the editor and is looked for again every minute, and makes `citry check
+    --types` exit with status 2 and name what to install. A `tsc` failure logs
+    each distinct message once. A cancelled check kills its `tsc`. An
+    unchanged document is not checked again after a hover or completion. An
+    invalid `typeCheck` option, or a `typeCheckClient` without an integer
+    version, is rejected at initialization; a `typeCheckClient` version this
+    server does not know makes the server run `tsc` itself.
+
+    *What would falsify it.* A false positive on authored code that runs
+    correctly in the browser, found in the example apps or `citry_ui`, means a
+    projection type is wrong. At the time of writing the example apps and
+    starters report nothing; `citry_ui` reports 23 findings, each a TypeScript
+    DOM typing a JSDoc cast would settle (element expando properties,
+    `children` typed `Element`, `getRootNode()` typed `Node`). A mapped range
+    that does not cover the text TypeScript meant, or a finding that
+    TypeScript reports only in VS Code or only in `tsc`, would mean the two
+    runners disagree.
 
 Step 5 selected the companion `citry_lsp` distribution. It exposes the
 `citry-lsp` console command, declares Citry 0.4.0 through 0.4.x, catalog v1,

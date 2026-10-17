@@ -2062,6 +2062,7 @@ def test_correlated_rerender_effective_disabled_emits_one_forced_close_and_resto
 def test_correlated_rerender_preserves_open_tree_and_focus_across_non_open_configuration_changes(
     page: Any,
     serve_citry_ui_live: Any,
+    send_event: Any,
     config_case: str,
 ) -> None:
     app, html = _configuration_handoff_page(config_case)
@@ -2083,7 +2084,16 @@ def test_correlated_rerender_preserves_open_tree_and_focus_across_non_open_confi
     page.wait_for_function("document.querySelectorAll('#configuration-menu [role=menu]:popover-open').length === 2")
     page.get_by_role("menuitem", name="First leaf").focus()
 
-    page.locator(".change-menu-configuration").evaluate("element => element.click()")
+    # The open menus and the focus are already in place before the click, so
+    # waiting for them alone can pass before the server's re-render arrives.
+    # The menu copies its new settings onto the surface in a Vue effect that
+    # runs while the re-render is applied, so once the call has finished every
+    # setting below is in place. The loop setting is never written to the page,
+    # so this wait is the only thing that proves it changed before ArrowUp.
+    send_event(
+        lambda: page.locator(".change-menu-configuration").evaluate("element => element.click()"),
+        handler="change",
+    )
     page.wait_for_function("document.querySelectorAll('#configuration-menu [role=menu]:popover-open').length === 2")
     page.wait_for_function(
         "[...document.querySelectorAll('[role=menuitem]')].some(item => "
@@ -2099,7 +2109,7 @@ def test_correlated_rerender_preserves_open_tree_and_focus_across_non_open_confi
             "elements => elements.every(element => element.dataset.size === 'lg')"
         )
     elif config_case == "placement":
-        assert surface.get_attribute("data-placement") == "top-end"
+        page.wait_for_function("document.querySelector('#configuration-menu').dataset.placement === 'top-end'")
     elif config_case == "match_width":
         assert surface.get_attribute("data-match-width") == ""
     elif config_case == "loop":
@@ -2142,4 +2152,312 @@ def test_correlated_rerender_distinguishes_retained_anonymous_commands_and_recov
     assert page.get_by_role("menuitemradio", name="List layout").evaluate(
         "element => element === document.activeElement"
     )
+    assert errors == []
+
+
+def _close_animation_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(ComponentLibrary("citry-ui-menu-close-animation-e2e", _MENU_COMPONENTS))
+
+    class Page(Component):
+        citry = app
+        js = """
+          $component({
+            data() {
+              window.__menuOpenChanges = [];
+              return { size: "md" };
+            },
+            methods: {
+              // Closing changes a prop bound to the menu, so the menu updates
+              // while its own close animation is still playing.
+              onOpenChange(open, detail) {
+                window.__menuOpenChanges.push({ open, reason: detail.reason });
+                if (!open) this.size = "lg";
+              },
+            },
+          });
+        """
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <c-css />
+              <style>
+                #animated-menu {
+                  --cui-menu-duration: 10s;
+                }
+              </style>
+            </head>
+            <body>
+              <c-CMenu
+                id="animated-menu"
+                :size="size"
+                :onOpenChange="onOpenChange"
+              >
+                <c-fill name="activator" data="{ activator_attrs }">
+                  <button type="button" c-bind="activator_attrs">Animated menu</button>
+                </c-fill>
+                <c-fill name="default">
+                  <c-CMenuItem value="one">One</c-CMenuItem>
+                </c-fill>
+              </c-CMenu>
+              <c-js />
+            </body>
+          </html>
+        """
+
+    return str(Page())
+
+
+def test_update_during_close_keeps_the_close_animation_and_reports_one_close(page, settle_timers):
+    """A prop change made while the menu closes lets the close animation finish and reports the close once."""
+    page.set_content(_close_animation_page(), wait_until="load")
+    page.wait_for_function("document.querySelector('#animated-menu')?.hasAttribute('data-citry-menu-initialized')")
+    page.get_by_role("button", name="Animated menu").click()
+    page.wait_for_function("document.querySelector('#animated-menu').matches(':popover-open')")
+
+    page.keyboard.press("Escape")
+    # The close callback changed the bound size. Once the menu shows it, and
+    # the zero-delay reconcile that update schedules has run, the update has
+    # been handled while the 10 s close animation is still playing.
+    page.wait_for_function("document.querySelector('#animated-menu').dataset.size === 'lg'")
+    settle_timers()
+    still_closing = page.evaluate(
+        """() => {
+          const surface = document.querySelector('#animated-menu');
+          return {
+            showing: surface.matches(':popover-open'),
+            exiting: surface.hasAttribute('data-citry-menu-exiting'),
+            animations: surface.getAnimations().filter(animation => animation.playState === 'running').length,
+          };
+        }"""
+    )
+    assert still_closing == {"showing": True, "exiting": True, "animations": 1}
+
+    page.evaluate("document.querySelector('#animated-menu').getAnimations().forEach(animation => animation.finish())")
+    page.wait_for_function("!document.querySelector('#animated-menu').matches(':popover-open')")
+    assert page.evaluate("window.__menuOpenChanges") == [
+        {"open": True, "reason": "trigger"},
+        {"open": False, "reason": "escape"},
+    ]
+
+
+def _author_disabled_page(activator: str, *, start_disabled: bool) -> tuple[Citry, str]:
+    """Return a page whose server events change the Menu's and the author's trigger `disabled`."""
+    app = Citry(secret="citry-ui-menu-author-disabled", autodiscover=False)  # noqa: S106
+    app.set_mounted_prefix("/citry")
+    app.register_library(ComponentLibrary("citry-ui-menu-author-disabled", _MENU_COMPONENTS))
+    # The ways an author can write the activator's `disabled`: not at all,
+    # bound to server data, as a literal attribute that never changes, or bound
+    # to browser data that page code changes without a server event.
+    activator_disabled = {
+        "none": "",
+        "bound": 'c-disabled="author_disabled"',
+        "literal": "disabled",
+        "client": ':disabled="clientDisabled"',
+    }[activator]
+
+    class AuthorDisabledMenu(Component):
+        citry = app
+
+        class Kwargs:
+            menu_disabled: bool = start_disabled
+            author_disabled: bool = False
+
+        class State(Kwargs):
+            pass
+
+        class Slots:
+            pass
+
+        class Events:
+            def toggle_menu(self, state):
+                state.menu_disabled = not state.menu_disabled
+                return AuthorDisabledMenu(menu_disabled=state.menu_disabled, author_disabled=state.author_disabled)
+
+            def toggle_author(self, state):
+                state.author_disabled = not state.author_disabled
+                return AuthorDisabledMenu(menu_disabled=state.menu_disabled, author_disabled=state.author_disabled)
+
+            def toggle_both(self, state):
+                state.menu_disabled = not state.menu_disabled
+                state.author_disabled = not state.author_disabled
+                return AuthorDisabledMenu(menu_disabled=state.menu_disabled, author_disabled=state.author_disabled)
+
+        template = (
+            """
+          <section>
+            <button
+              class="toggle-menu"
+              type="button"
+              @c-click="toggle_menu"
+            >Toggle Menu disabled</button>
+            <button
+              class="toggle-author"
+              type="button"
+              @c-click="toggle_author"
+            >Toggle author disabled</button>
+            <button
+              class="toggle-both"
+              type="button"
+              @c-click="toggle_both"
+            >Toggle both</button>
+            <button
+              class="client-toggle"
+              type="button"
+              @click="clientDisabled = !clientDisabled"
+            >Toggle browser disabled</button>
+            <c-CMenu
+              #c-key="'author-disabled-menu'"
+              id="author-disabled-menu"
+              c-disabled="menu_disabled"
+            >
+              <c-fill
+                name="activator"
+                data="{ activator_attrs }"
+              >
+                <button
+                  type="button"
+                  __ACTIVATOR_DISABLED__
+                  c-bind="activator_attrs"
+                >Author disabled trigger</button>
+              </c-fill>
+              <c-fill name="default">
+                <c-CMenuItem value="first">First command</c-CMenuItem>
+              </c-fill>
+            </c-CMenu>
+          </section>
+        """
+        ).replace("__ACTIVATOR_DISABLED__", activator_disabled)
+        js = """
+          $component({data() { return {clientDisabled: false}; }});
+        """
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, bool]:
+            del slots
+            return {"menu_disabled": kwargs.menu_disabled, "author_disabled": kwargs.author_disabled}
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <c-css />
+            </head>
+            <body>
+              <c-author-disabled-menu />
+              <c-js />
+            </body>
+          </html>
+        """
+
+    return app, str(Page())
+
+
+@pytest.mark.parametrize(
+    ("activator", "menu_disabled", "steps", "expected"),
+    [
+        # The Menu alone disables its trigger, then enables it again.
+        pytest.param("none", False, ["toggle_menu", "toggle_menu"], [False, True, False], id="menu-re-enable"),
+        # The author's own binding disables and re-enables the trigger.
+        pytest.param("bound", False, ["toggle_author", "toggle_author"], [False, True, False], id="author-binding"),
+        # The author's literal `disabled` outlasts the Menu's disable and re-enable.
+        pytest.param("literal", False, ["toggle_menu", "toggle_menu"], [True, True, True], id="literal-after-toggle"),
+        # The same holds when the Menu starts disabled and the server enables it.
+        pytest.param("literal", True, ["toggle_menu", "toggle_author"], [True, True, True], id="literal-from-start"),
+        # One render disables both; the author's disable outlasts the Menu's.
+        pytest.param(
+            "bound",
+            False,
+            ["toggle_both", "toggle_menu", "toggle_author"],
+            [False, True, True, False],
+            id="author-and-menu-together",
+        ),
+        # Page code disables the trigger while the Menu already has it
+        # disabled, so the DOM does not change; the author's disable must
+        # still outlast the Menu's re-enable.
+        pytest.param(
+            "client",
+            False,
+            ["toggle_menu", "client_toggle", "toggle_menu", "client_toggle"],
+            [False, True, True, True, False],
+            id="client-binding-under-menu-disable",
+        ),
+        # Page code sets the attribute while the Menu already has the trigger
+        # disabled. The DOM does not change, but the write still queues a
+        # mutation record, so the author's disable outlasts the re-enable.
+        pytest.param(
+            "none",
+            False,
+            ["toggle_menu", "page_set_attribute", "toggle_menu"],
+            [False, True, True, True],
+            id="page-set-attribute-under-menu-disable",
+        ),
+        # Page code adds the attribute with `toggleAttribute` before the Menu
+        # disables the trigger; it outlasts the Menu's disable and re-enable.
+        pytest.param(
+            "none",
+            False,
+            ["page_toggle_attribute", "toggle_menu", "toggle_menu"],
+            [False, True, True, True],
+            id="page-toggle-attribute-before-menu-disable",
+        ),
+    ],
+)
+def test_server_rerender_keeps_the_authors_trigger_disabled(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    settle_timers: Any,
+    activator: str,
+    menu_disabled: bool,
+    steps: list[str],
+    expected: list[bool],
+) -> None:
+    """The trigger is disabled exactly when the Menu or the author disables it, across server re-renders."""
+    app, html = _author_disabled_page(activator, start_disabled=menu_disabled)
+    base = serve_citry_ui_live(app, html)
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(base + "/")
+    wait_for_citry_ready()
+    page.wait_for_function(
+        "document.querySelector('#author-disabled-menu')?.hasAttribute('data-citry-menu-initialized')"
+    )
+    trigger = page.get_by_role("button", name="Author disabled trigger")
+
+    def disabled_after_settle() -> bool:
+        # The Menu writes the trigger's `disabled` from its reconcile, which
+        # may run on a zero-delay timer after the re-render.
+        settle_timers()
+        return bool(trigger.evaluate("element => element.disabled"))
+
+    observed = [disabled_after_settle()]
+    for step in steps:
+        selector = "." + step.replace("_", "-")
+        # Click through the DOM: a disabled trigger does not block these buttons,
+        # but a Playwright click would wait for actionability on overlays.
+        if step.startswith("page_"):
+            # Page code writes the attribute directly, as a script outside Vue
+            # would; the settle below lets the Menu's observer see it.
+            write = {
+                "page_set_attribute": "element => element.setAttribute('disabled', '')",
+                "page_toggle_attribute": "element => element.toggleAttribute('disabled', true)",
+            }[step]
+            trigger.evaluate(write)
+        elif step.startswith("client_"):
+            # A browser-only change sends no event; Vue applies it before
+            # `evaluate` resolves, and the settle below lets the Menu reconcile.
+            page.locator(selector).evaluate("element => element.click()")
+        else:
+            send_event(
+                lambda selector=selector: page.locator(selector).evaluate("element => element.click()"),
+                handler=step,
+            )
+        observed.append(disabled_after_settle())
+    assert observed == expected
     assert errors == []

@@ -156,6 +156,6 @@ Before adding private data or write operations:
   updates; and
 - run Django through a production WSGI or ASGI server.
 
-Read the [Django integration guide](https://citry.dev/web-frameworks/#django),
+Read the [Django integration guide](https://citry.dev/advanced/web-frameworks/#django),
 [Events guide](https://citry.dev/events/), and
 [security guide](https://citry.dev/security/) before extending the starter.

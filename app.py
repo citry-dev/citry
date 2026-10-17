@@ -1,7 +1,20 @@
+"""
+Local demo of Citry's server and browser translation, plus one Citry Event, also an editor fixture.
+
+Run ``python app.py`` to serve the page on http://127.0.0.1:8000/, where the
+Like button calls Python, or ``python app.py --html`` to print the page.
+Set ``CITRY_SECRET`` to keep signed State valid across restarts.
+"""
+
+import os
+import secrets
 import sys
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Any
+from wsgiref.simple_server import make_server
 
 from i18n_demo_messages import i18n_demo_library
 
@@ -17,6 +30,7 @@ from citry import (
     PercentInput,
     SlotInput,
 )
+from citry.contrib.wsgi import wsgi_app
 from citry.ext.i18n import make_context
 from citry_ui import __citry_library__
 
@@ -40,6 +54,10 @@ formats = FormatRegistry(
 
 app = Citry(
     autodiscover=False,
+    # ProductCard's State travels through the browser in a signed token.
+    # This local demo falls back to a fresh secret per process, so a page
+    # left open across a restart needs a reload before Like works again.
+    secret=os.environ.get("CITRY_SECRET") or secrets.token_urlsafe(32),
     extensions_defaults={
         "i18n": {
             "source_locale": "en-US",
@@ -63,6 +81,21 @@ app = Citry(
 )
 app.register_library(__citry_library__)
 app.register_library(i18n_demo_library)
+
+
+@dataclass(frozen=True)
+class Product:
+    id: int
+    name: str
+    tags: tuple[str, ...]
+
+
+# The product catalog stands in for a database: the page and the Like
+# handler both read the product from here.
+AURORA_LAMP_ID = 7
+PRODUCTS = {
+    AURORA_LAMP_ID: Product(AURORA_LAMP_ID, "Aurora Lamp", ("new", "sale")),
+}
 
 
 class AccountSameFileMessages(Component):
@@ -122,17 +155,11 @@ class AccountDashboard(Component):
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002 - Citry supplies both declared schemas.
     ) -> dict[str, object]:
-        parsed_amount = self.i18n.parse.number(
-            kwargs.localized_amount,
-            format="editable-number",
-        )
         return {
             "accountName": kwargs.name,
             "balanceText": str(kwargs.balance),
-            "completionText": str(kwargs.completion),
             "lazyMessage": "demo-account-lazy-detail",
             "localizedAmount": kwargs.localized_amount,
-            "parseState": parsed_amount.state,
         }
 
     template = """
@@ -145,15 +172,6 @@ class AccountDashboard(Component):
               attr='aria-label',
               name=name,
             )"
-            x-data="{
-              'accountName': accountName,
-              'balance': balanceText,
-              'completion': completionText,
-              'lazyMessage': lazyMessage,
-              'lazyText': '',
-              'localizedAmount': localizedAmount,
-              'parseState': parseState,
-            }"
           >
             <p class="i18n-demo__eyebrow">
               {{ tr("demo-account-kicker") }}
@@ -200,34 +218,32 @@ class AccountDashboard(Component):
             <section class="i18n-demo__browser">
               <h2>{{ tr("demo-account-browser-heading") }}</h2>
               <p
-                x-text="$i18n.tr(
+                v-text="$i18n.tr(
                   'demo-account-live-status',
                   { name: accountName },
                 )"
               ></p>
               <output
-                x-text="$i18n.format.currency(
-                  balance,
+                v-text="$i18n.format.currency(
+                  balanceText,
                   'USD',
                   { format: 'account-balance' },
                 )"
               ></output>
               <label>
                 <span>{{ tr("demo-account-number-input-label") }}</span>
-                <input
-                  type="text"
-                  x-model="localizedAmount"
-                  @input="parseState = $i18n.parse.number(
-                    localizedAmount,
-                    { format: 'editable-number' },
-                  ).state"
-                />
+                <input type="text" v-model="localizedAmount"/>
               </label>
-              <p x-text="parseState"></p>
+              <p
+                v-text="$i18n.parse.number(
+                  localizedAmount,
+                  { format: 'editable-number' },
+                ).state"
+              ></p>
               <button type="button" @click="lazyText = $i18n.tr(lazyMessage)">
-                <span x-text="$i18n.tr('demo-account-load-detail')"></span>
+                <span v-text="$i18n.tr('demo-account-load-detail')"></span>
               </button>
-              <p x-text="lazyText"></p>
+              <p v-text="lazyText"></p>
             </section>
           </section>
         </div>
@@ -235,12 +251,27 @@ class AccountDashboard(Component):
     """
 
     js = """
-      $component(({ effect, els, i18n }) => {
-        effect(() => {
-          els[0].dataset.browserStatus = i18n.tr(
-            "demo-account-js-status",
-          );
-        });
+      $component({
+        data() {
+          // Browser-only text; the js_data() keys are already reactive
+          // members, so the template reads them without copying.
+          return { lazyText: "" };
+        },
+        onServerRender({ component }) {
+          // component.$i18n is the nearest client provider above this
+          // component, which DemoPage supplies. The <c-i18n client> in this
+          // template serves only the Vue expressions inside it.
+          const i18n = component.$i18n;
+          if (!i18n) return;
+          // Citry stops effects created during the callback before each
+          // rerun and on unmount, so this one re-translates on locale
+          // changes without piling up.
+          Citry.vue.watchEffect(() => {
+            component.$el.dataset.browserStatus = i18n.tr(
+              "demo-account-js-status",
+            );
+          });
+        },
       });
     """
 
@@ -346,27 +377,46 @@ class AccountDashboard(Component):
     """
 
 
-def render_demo(*, locale: str = "en-US") -> str:
-    """Render the fixture with an explicit locale context at the root."""
-    context = make_context(app, locale=locale)
-    return (
-        AccountDashboard()
-        .render(
-            provides={"citry_i18n": context},
-        )
-        .serialize()
-    )
+class Tag(Component):
+    """Show one product tag; the parent decides whether it is highlighted."""
+
+    citry = app
+
+    class Kwargs:
+        label: str
+
+    class Slots:
+        pass
+
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,  # noqa: ARG002 - Citry supplies both declared schemas.
+    ) -> dict[str, object]:
+        return {"label": kwargs.label}
+
+    template = """
+      <span class="tag" :class="{ 'tag--active': highlight }">
+        {{ label }}
+      </span>
+    """
+
+    js = """
+      $component({
+        props: {
+          highlight: Boolean,
+        },
+      });
+    """
 
 
-if __name__ == "__main__":
-    sys.stdout.write(render_demo())
-    sys.stdout.write("\n")
-
-
+# ProductCard is also the VS Code formatting fixture: its template, JS, and
+# CSS are deliberately untidy so the editor test can prove they get formatted.
 class ProductCard(Component):
     citry = app
 
     class Kwargs:
+        product_id: int
         tags: list[str]
         likes: int = 0
         accent: str = "#175cd3"
@@ -380,9 +430,15 @@ class ProductCard(Component):
 
     class Events:
         def like(self, state: "ProductCard.State") -> "ProductCard":
+            # The event render is a fresh tree without the caller's slot
+            # fill, so reload the product and pass the body again.
+            product = PRODUCTS[state.product_id]
             return ProductCard(
+                product_id=product.id,
                 tags=state.tags,
                 likes=state.likes + 1,
+                accent=state.accent,
+                slots={"body": product.name},
             )
 
     def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
@@ -398,17 +454,18 @@ class ProductCard(Component):
         return {"accent": kwargs.accent}
 
     template = """
-      <article class="card" x-data="{ open: false }">
+      <article class="card" :class="{ 'card--open': open }">
       <c-slot name="body" />
-      <c-for each="tag in tags"> <c-Tag c-label="tag" $c-props="{ highlight: open }" @click="open = !open" /> </c-for>
+      <c-for each="tag in tags"> <c-Tag #c-key="tag" c-label="tag" :highlight="open" @click="open = !open" /> </c-for>
       <c-empty> <p>{{ tr("product-card-no-tags") }}</p> </c-empty>
-      <button type="button" @c-click="like"> Like <span x-text="likes">{{ likes }}</span> </button>
+      <button type="button" @c-click="like"> Like <span>{{ likes }}</span> </button>
       <c-slot name="footer">No footer yet</c-slot>
       </article>
     """
 
     js = """
-      $component(({ els, data }) => {const cardEl = els[0]; animateLikes(cardEl, data.likes); });
+      $component({ data() { return { open: false }; },
+        onServerRender({ component }) {component.$el.dataset.likes = String(component.likes); } });
     """
 
     css = """
@@ -419,3 +476,105 @@ class ProductCard(Component):
     messages = """
       product-card-no-tags = No tags yet.
     """
+
+
+class DemoPage(Component):
+    """Serve the i18n dashboard and the product card as one document."""
+
+    citry = app
+
+    class Kwargs:
+        pass
+
+    class Slots:
+        pass
+
+    def template_data(
+        self,
+        kwargs: Kwargs,  # noqa: ARG002 - Citry supplies both declared schemas.
+        slots: Slots,  # noqa: ARG002 - Citry supplies both declared schemas.
+    ) -> dict[str, object]:
+        product = PRODUCTS[AURORA_LAMP_ID]
+        return {
+            "product_id": product.id,
+            "product_name": product.name,
+            "product_tags": list(product.tags),
+        }
+
+    # AccountDashboard's JavaScript reads the client provider above the
+    # component, so this page wraps it in one. The dashboard's own provider
+    # inherits this one's locale.
+    template = """
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8"/>
+          <title>{{ site_name }} demo</title>
+          <c-css/>
+        </head>
+        <body>
+          <c-i18n tag="div" client>
+            <c-AccountDashboard/>
+            <c-ProductCard c-product_id="product_id" c-tags="product_tags">
+              <c-fill name="body">{{ product_name }}</c-fill>
+            </c-ProductCard>
+          </c-i18n>
+          <c-js/>
+        </body>
+      </html>
+    """
+
+
+def render_demo(*, locale: str = "en-US") -> str:
+    """Render the demo page with an explicit locale context at the root."""
+    context = make_context(app, locale=locale)
+    return (
+        DemoPage()
+        .render(
+            provides={"citry_i18n": context},
+        )
+        .serialize()
+    )
+
+
+CITRY_PREFIX = "/citry"
+citry_routes = wsgi_app(app)
+app.set_mounted_prefix(CITRY_PREFIX)
+# Initialize at import so a WSGI server that imports `application` gets a
+# ready app too, not only `python app.py`.
+app.initialize()
+
+
+def application(
+    environ: dict[str, Any],
+    start_response: Callable[[str, list[tuple[str, str]]], object],
+) -> Iterable[bytes]:
+    """Serve the demo page at / and Citry's event routes under /citry."""
+    path = environ.get("PATH_INFO", "")
+    # Clicking Like posts to Citry's event route, so hand that prefix to
+    # the Citry sub-application with the prefix moved into SCRIPT_NAME.
+    if path == CITRY_PREFIX or path.startswith(CITRY_PREFIX + "/"):
+        mounted = dict(environ)
+        mounted["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + CITRY_PREFIX
+        mounted["PATH_INFO"] = path[len(CITRY_PREFIX) :]
+        return citry_routes(mounted, start_response)
+    if path == "/":
+        start_response("200 OK", [("Content-Type", "text/html; charset=utf-8")])
+        return [render_demo().encode()]
+    start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
+    return [b"Not Found"]
+
+
+def main(argv: list[str]) -> None:
+    """Print the page with --html, or serve it on http://127.0.0.1:8000/."""
+    if "--html" in argv:
+        sys.stdout.write(render_demo())
+        sys.stdout.write("\n")
+        return
+    with make_server("127.0.0.1", 8000, application) as server:
+        sys.stdout.write("Serving the demo on http://127.0.0.1:8000/\n")
+        server.serve_forever()
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

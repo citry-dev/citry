@@ -79,12 +79,17 @@ def _fill_scope_page() -> tuple[Citry, str]:
     return app, str(Page())
 
 
-def test_tour_fill_reads_and_writes_the_page_vue_data(page: Any, serve_citry_ui_live: Any) -> None:
+def test_tour_fill_reads_and_writes_the_page_vue_data(
+    page: Any, serve_citry_ui_live: Any, wait_for_citry_ready: Any
+) -> None:
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(f"pageerror: {error}"))
     page.on("console", lambda message: faults.append(message.text) if message.type == "error" else None)
     app, html = _fill_scope_page()
     page.goto(serve_citry_ui_live(app, html) + "/")
+    # The labels below are already in the server HTML, so they cannot show that Vue has
+    # mounted; wait for the app before reading client state or clicking.
+    wait_for_citry_ready()
 
     # A step's content renders only while the tour is open.
     page.locator("#start").click()

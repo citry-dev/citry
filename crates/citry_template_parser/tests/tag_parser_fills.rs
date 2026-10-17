@@ -1168,4 +1168,172 @@ mod tests {
             result.err()
         );
     }
+
+    #[test]
+    fn test_vue_slot_template_in_component_body_is_rejected() {
+        // Each Vue slot spelling names the `<c-fill>` to write instead.
+        let cases = [
+            (
+                "<c-card><template #title>x</template></c-card>",
+                r#"Vue slot syntax '<template #title>' does not fill a slot of <c-card>; use '<c-fill name="title">' instead."#,
+            ),
+            (
+                "<c-card><template v-slot:title>x</template></c-card>",
+                r#"'<template v-slot:title>' does not fill a slot of <c-card>; use '<c-fill name="title">'"#,
+            ),
+            (
+                "<c-card><template v-slot>x</template></c-card>",
+                r#"'<template v-slot>' does not fill a slot of <c-card>; use '<c-fill name="default">'"#,
+            ),
+            (
+                "<c-card><template v-slot.foo>x</template></c-card>",
+                r#"'<template v-slot.foo>' does not fill a slot of <c-card>; use '<c-fill name="default">'"#,
+            ),
+            (
+                "<c-card><template #default>x</template></c-card>",
+                r#"'<template #default>' does not fill a slot of <c-card>; use '<c-fill name="default">'"#,
+            ),
+            (
+                "<c-card><template #[name]>x</template></c-card>",
+                r#"use '<c-fill c-name="...">' with the slot name as a Python expression instead."#,
+            ),
+            (
+                "<c-card><template #[a.b]>x</template></c-card>",
+                r#"use '<c-fill c-name="...">' with the slot name as a Python expression"#,
+            ),
+            // Every letter case is rejected: any spelling is a mistake here.
+            (
+                "<c-card><template V-SLOT:title>x</template></c-card>",
+                r#"'<template V-SLOT:title>' does not fill a slot of <c-card>; use '<c-fill name="title">'"#,
+            ),
+            (
+                "<c-card><template v-Slot:title>x</template></c-card>",
+                r#"'<template v-Slot:title>' does not fill a slot of <c-card>"#,
+            ),
+            (
+                "<c-card><TEMPLATE #title>x</TEMPLATE></c-card>",
+                r#"'<TEMPLATE #title>' does not fill a slot of <c-card>"#,
+            ),
+            // Vue slot props point at the fill's `data` attribute.
+            (
+                r#"<c-card><template #item="{ row }">x</template></c-card>"#,
+                r#"use '<c-fill name="item">' instead. Read the slot's data with the fill's 'data="..."' attribute."#,
+            ),
+            (
+                r#"<c-card><template c-v-slot:title="x">x</template></c-card>"#,
+                r#"'<template c-v-slot:title>' does not fill a slot of <c-card>; use '<c-fill name="title">' instead."#,
+            ),
+            // Slot syntax on an element other than `<template>` is the same mistake.
+            (
+                "<c-card><div #title>x</div></c-card>",
+                r#"Vue slot syntax '<div #title>' does not fill a slot of <c-card>; use '<c-fill name="title">' instead."#,
+            ),
+            (
+                r#"<c-card><span v-slot:title="{ a }">x</span></c-card>"#,
+                r#"'<span v-slot:title>' does not fill a slot of <c-card>"#,
+            ),
+            (
+                r#"<c-card><c-element is="div" #title>x</c-element></c-card>"#,
+                r#"'<c-element #title>' does not fill a slot of <c-card>"#,
+            ),
+            // `<c-provide>` and `<c-cache>` render their body in place, so
+            // the template still lands in the outer component's body.
+            (
+                r#"<c-card><c-provide key="k"><template #title>x</template></c-provide></c-card>"#,
+                "does not fill a slot of <c-card>",
+            ),
+            (
+                r#"<c-card><c-cache key="k"><template #title>x</template></c-cache></c-card>"#,
+                "does not fill a slot of <c-card>",
+            ),
+            // `<c-mark>` renders its own boundary.
+            (
+                r#"<my-widget><c-mark name="m"><template #title>x</template></c-mark></my-widget>"#,
+                "does not fill a slot of <c-mark>",
+            ),
+            // Control flow renders its content in place, so the `<template>`
+            // still lands directly in the component body.
+            (
+                r#"<c-card><c-if cond="x"><template #title>x</template></c-if></c-card>"#,
+                "does not fill a slot of <c-card>",
+            ),
+            (
+                r#"<c-card><c-for each="i in xs"><template #title>x</template></c-for></c-card>"#,
+                "does not fill a slot of <c-card>",
+            ),
+            (
+                r#"<c-component is="card"><template #title>x</template></c-component>"#,
+                "does not fill a slot of <c-component>",
+            ),
+            (
+                r#"<c-outer><c-fill name="body"><c-card><template #title>x</template></c-card></c-fill></c-outer>"#,
+                "does not fill a slot of <c-card>",
+            ),
+        ];
+        for (input, message) in cases {
+            assert_parse_error(input, message);
+        }
+    }
+
+    #[test]
+    fn test_vue_slot_template_c_form_has_no_slot_props_hint() {
+        // A `c-` form's value is a Python expression, not Vue slot props.
+        let error = parse_template(
+            r#"<c-card><template c-v-slot:title="x">x</template></c-card>"#,
+            None,
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(!error.contains("Read the slot's data"), "{error}");
+    }
+
+    #[test]
+    fn test_vue_slot_template_reports_the_attribute_position() {
+        let error = parse_template(
+            "<c-card>\n  <template #title>x</template>\n</c-card>",
+            None,
+            None,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(error.contains("--> 2:13"), "{error}");
+    }
+
+    #[test]
+    fn test_vue_slot_template_outside_citry_component_body_parses() {
+        let inputs = [
+            // A `<template>` without slot syntax is ordinary default-slot content.
+            "<c-card><template>plain</template></c-card>",
+            "<c-card><template #c-ignore>x</template></c-card>",
+            // `v-slots` names another directive.
+            "<c-card><template v-slots>x</template></c-card>",
+            // `<c-element>` and a non-`c-` tag may be Vue components that a
+            // plugin registers.
+            r#"<c-element is="my-widget"><template #header>x</template></c-element>"#,
+            "<my-widget><template #header>x</template></my-widget>",
+            "<c-card><my-widget><template #header>x</template></my-widget></c-card>",
+            // `<c-provide>` passes its body to the tag around it, here a
+            // possible plugin Vue component.
+            r#"<my-widget><c-provide key="k"><template #header>H</template></c-provide></my-widget>"#,
+            r#"<c-provide key="k"><template #header>H</template></c-provide>"#,
+            // Slot syntax on other elements outside a Citry component tag is
+            // left to Vue.
+            "<div><span #title>x</span></div>",
+            "<my-widget><div #title>x</div></my-widget>",
+            // The root of a template, a fill, or a slot fallback can reach a
+            // Vue component through a transparent component, such as
+            // `<c-provide>`, that the parser cannot see.
+            "<template #title>T</template>",
+            r#"<c-card><c-fill name="body"><template #title>x</template></c-fill></c-card>"#,
+            r#"<c-slot name="s"><template #title>x</template></c-slot>"#,
+            // Under a plain element, Vue decides what the slot syntax means.
+            "<div><template #title>T</template></div>",
+            "<c-card><div><template #title>x</template></div></c-card>",
+        ];
+        for input in inputs {
+            let result = parse_template(input, None, None);
+            assert!(result.is_ok(), "{input}: {:?}", result.err());
+        }
+    }
 }

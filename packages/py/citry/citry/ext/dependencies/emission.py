@@ -18,16 +18,17 @@ Design: docs/design/dependencies.md section 7.
 
 from __future__ import annotations
 
-import base64
 import json
 import re
+from copy import copy
 from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal
 
-from citry._owned_resource import _OwnedResource
+from citry._owned_resource import OWNED_ASSET_CROSSORIGIN, _OwnedResource
 from citry.assets import HasHtml
+from citry.citry_render import CitryRender, selected_render_ids
 from citry.ext.dependencies.routes import RUNTIME_PATH, runtime_url, script_url
 from citry.ext.dependencies.scripts import (
     cache_asset,
@@ -40,9 +41,7 @@ from citry.ext.dependencies.scripts import (
     uses_component,
 )
 from citry.ext.dependencies.types import Dependency, Script, Style
-from citry.ownership_manifest import EXTRA_KEY as OWNERSHIP_MANIFEST_KEY
-from citry.ownership_manifest import OwnershipManifestArtifact
-from citry.util.html import Markup
+from citry.util.html import Markup, script_json
 
 if TYPE_CHECKING:
     from citry._javascript_policy import _JavascriptPolicy
@@ -54,14 +53,13 @@ if TYPE_CHECKING:
     from citry.extension import OnSerializeContext
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
 
-# One per-instance client call: initialize `$component` after seeding, or only
-# seed the instance's Alpine scope. The explicit mode keeps script arrival
-# order from changing semantics.
-_CallMode: TypeAlias = Literal["init", "seed"]
-_ComponentCall: TypeAlias = tuple[str, str, "str | None", _CallMode]
-
 # The key under which the extension keeps its records in CitryContext.extra.
 EXTRA_KEY = "dependencies"
+VUE_RUNTIME_EMITTED_KEY = "vue_runtime_emitted"
+VUE_RUNTIME_REQUIRED_KEY = "vue_runtime_required"
+_VUE_RUNTIME_SCRIPT_KEY = "_citry_vue_managed_runtime_script"
+VUE_FRAGMENT_MOUNT_KEY = "vue_fragment_mount"
+VUE_DEPENDENCIES_PREPARED_KEY = "vue_dependencies_prepared"
 
 # The Placeholder keys the <c-js> / <c-css> built-ins render. The serializer
 # makes each occurrence unique by appending a counter and private
@@ -92,20 +90,50 @@ class OnDependenciesContext:
     """The root render's ``CitryContext``. Its ``extra`` carries everything
     that bubbled up during the render, so an extension can read back what its
     render-time hooks collected."""
+    selected_render: CitryRender
+    """The exact render selected for serialization and asset filtering."""
     strategy: str
     """The ``serialize(deps_strategy=...)`` value this emission runs under
     (``"document"``, ``"simple"``, or ``"fragment"``)."""
-    before_manifest: list[Dependency]
-    """Entries rendered as tags immediately before the ``data-citry`` page
-    manifest tag (mutable). For anything that must already be in the DOM when
-    the client-side manager processes the manifest, e.g. the events
-    extension's own manifest tag. Only the strategies that emit the page
-    manifest render these (``"document"`` and ``"fragment"``); under
-    ``"simple"`` they are not emitted."""
+    early_scripts: list[Dependency]
+    """Scripts that must run before the other dependency scripts (mutable).
+    Static output writes them as tags ahead of the dependency scripts; under
+    ``simple`` they are emitted with the other direct dependency tags. On an
+    interactive page the Vue app loads them after the Vue runtime and ahead
+    of ``scripts``, in list order, under the same rules as any entry in
+    ``scripts``. When the page loads, these scripts run before Citry creates
+    the page's first Vue app, so one of them can call ``Citry.vue.use()`` to
+    install a Vue plugin for that app."""
     _security_csp: SecurityCspMode = "off"
     """The effective call-local CSP mode used by built-in dependency producers."""
     _security_javascript: SecurityJavascriptMode = "allow"
     """The effective call-local JavaScript delivery mode."""
+
+    # Hidden from type checkers: a class-level __getattr__ would make mypy
+    # accept any misspelled field instead of reporting it.
+    if not TYPE_CHECKING:
+
+        def __getattr__(self, name: str) -> Any:
+            # Python calls this only for a name the instance lacks. A hook
+            # written against citry 0.5.x reads the old field name; say which
+            # field replaced it rather than leave a bare AttributeError.
+            replacement = _REPLACED_DEPENDENCY_FIELDS.get(name)
+            if replacement is not None:
+                msg = (
+                    f"OnDependenciesContext has no field {name!r}; use {replacement!r} instead "
+                    "(see the citry 0.6.0 upgrade guide)."
+                )
+                raise AttributeError(msg, name=name, obj=self)
+            msg = f"{type(self).__name__!r} object has no attribute {name!r}"
+            raise AttributeError(msg, name=name, obj=self)
+
+
+# Context field names from citry 0.5.x mapped to the field that took over
+# their job. They are not aliases; the map only lets the error name the
+# replacement for an extension hook that still uses the old name.
+_REPLACED_DEPENDENCY_FIELDS: dict[str, str] = {
+    "before_manifest": "early_scripts",
+}
 
 
 @dataclass(eq=False)
@@ -127,7 +155,6 @@ def emit_dependencies(
     security_csp: SecurityCspMode = "off",
     javascript_policy: _JavascriptPolicy | None = None,
     security_javascript: SecurityJavascriptMode = "allow",
-    ownership_artifact: OwnershipManifestArtifact | None = None,
 ) -> str:
     """
     The extension's ``on_serialize`` implementation: place the collected
@@ -142,16 +169,17 @@ def emit_dependencies(
 
     # Collected as an insertion-ordered set (a dict) so the bubble-up merge
     # dedupes on insert instead of accumulating one copy per ancestor.
-    records: list[DependencyRecord] = list(ctx.context.extra.get(EXTRA_KEY, {}))
-    ownership = ownership_artifact or ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
-    scope_seed_instances = ownership.scope_seed_instances if isinstance(ownership, OwnershipManifestArtifact) else ()
+    selected_ids = selected_render_ids(ctx.selected_render)
+    records: list[DependencyRecord] = [
+        record for record in ctx.context.extra.get(EXTRA_KEY, {}) if record.component_id in selected_ids
+    ]
 
     # "ignore": no tags inserted and no dependency hooks invoked. The policy
     # still inventories reached declarations because ignore cannot hide a
     # JavaScript requirement from forbid.
     if ctx.deps_strategy == "ignore":
         if javascript_policy is not None:
-            _inspect_ignored_records(citry, records, scope_seed_instances, javascript_policy)
+            _inspect_ignored_records(citry, records, javascript_policy)
         return _blank(ctx.html, all_placeholder_texts)
 
     if security_javascript in {"omit", "forbid"}:
@@ -164,15 +192,16 @@ def emit_dependencies(
             all_placeholder_texts,
             js_placeholders,
             css_placeholders,
-            scope_seed_instances=scope_seed_instances,
             script_security=script_security,
             security_csp=security_csp,
             javascript_policy=javascript_policy,
             security_javascript=security_javascript,
         )
 
-    # "fragment": nothing is inlined; the output carries a pre-loader plus a
-    # manifest of URLs for the client-side manager to fetch (section 8).
+    # "fragment": nothing is inlined. A static fragment carries ordinary
+    # <link>/<script> tags that reference cached URLs; an interactive one
+    # carries a runtime loader plus one JSON descriptor that tells the Vue
+    # runtime which assets to load before it mounts the fragment.
     if ctx.deps_strategy == "fragment":
         return _emit_fragment(
             citry,
@@ -185,10 +214,10 @@ def emit_dependencies(
             security_javascript=security_javascript,
         )
 
-    # "document" includes the client-side manager and everything that needs
-    # it (the JS-variables scripts, the per-instance component calls, the
-    # manifest). "simple" is the no-JS-runtime mode: component and
-    # Dependencies tags only, so per-instance JS does not run there.
+    # "document" includes the Vue runtime when the page needs one, along with
+    # the JS-variables scripts that depend on it; component calls go through
+    # the Vue serialization plan. "simple" is the no-JS-runtime mode:
+    # component and Dependencies tags only, so per-instance JS does not run.
     # CSS variables are pure CSS (a stylesheet plus a root-element marker)
     # and work under both.
     with_client_js = ctx.deps_strategy == "document"
@@ -196,76 +225,65 @@ def emit_dependencies(
         citry,
         records,
         with_client_js=with_client_js,
+        prepared_vue=ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True,
         script_security=script_security,
-        scope_seed_instances=scope_seed_instances,
     )
-    scripts, styles, calls = resolved.scripts, resolved.styles, resolved.calls
+    scripts, styles = resolved.scripts, resolved.styles
+
+    # Prepared Vue tracks only stylesheet elements emitted for this app. The
+    # URL alone is not ownership: authored markup may intentionally use the
+    # same href, so give each engine-emitted initial sheet an app-local marker.
+    vue_style_app_id = ctx.context.extra.get("_vue_style_app_id")
+    if isinstance(vue_style_app_id, str):
+        for style in styles:
+            if "data-citry-css-url" in style.attrs:
+                style.attrs["data-citry-vue-style-app"] = vue_style_app_id
 
     # The extension-owned custom hook: other extensions adjust the lists in
     # place (docs/design/extensions.md section 9.2). The hook sees the
-    # component-derived entries (possibly none); the runtime and the manifest
-    # are appended after it, so URLs an extension adds here are still marked
-    # as loaded.
-    hook_ctx = OnDependenciesContext(
-        citry=citry,
-        scripts=scripts,
-        styles=styles,
-        context=ctx.context,
-        strategy=ctx.deps_strategy,
-        before_manifest=[],
-        _security_csp=security_csp,
-        _security_javascript=security_javascript,
-    )
-    citry.extensions.emit("on_dependencies", hook_ctx)
-    scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
-    _validate_hook_nonces(script_security, scripts, styles, before_manifest)
-    graph_revision: str | None = None
-    if isinstance(ownership, OwnershipManifestArtifact):
-        graph_revision = ownership.revision
-        before_manifest.insert(
-            0,
-            Script(
-                kind="core",
-                content=ownership.json(),
-                attrs={"type": "application/json", "data-citry-graph": True},
-            ),
+    # component-derived entries (possibly none). The runtime is added after
+    # the hook runs, so the hook cannot move or drop it. A prepared Vue page
+    # skips the hook here, because its assets are delivered by the Vue app.
+    if ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True:
+        scripts, styles, early_scripts = [], [], []
+    else:
+        hook_ctx = OnDependenciesContext(
+            citry=citry,
+            scripts=scripts,
+            styles=styles,
+            context=ctx.context,
+            selected_render=ctx.selected_render,
+            strategy=ctx.deps_strategy,
+            early_scripts=[],
+            _security_csp=security_csp,
+            _security_javascript=security_javascript,
         )
+        citry.extensions.emit("on_dependencies", hook_ctx)
+        scripts, styles, early_scripts = hook_ctx.scripts, hook_ctx.styles, hook_ctx.early_scripts
+        _validate_hook_nonces(script_security, scripts, styles, early_scripts)
 
-    # The client runtime and the page manifest ride along when the page either
-    # runs per-instance JS (a component registered a `$component` callback,
-    # so `calls` is non-empty) OR carries mounted component assets a later
-    # fragment must dedup against (the `mark_*_urls`, only filled when mounted)
-    # OR an extension contributed tags that must precede the manifest (the
-    # events manifest tag). The manifest's `markLoaded` tells the client which
-    # cache URLs this page already has, so a fragment inserted later does not
-    # fetch them again. A page with none of the three stays as lean as
-    # "simple". The `before_manifest` entries sit between the runtime and the
-    # manifest tag, so they are already parsed when the manager processes the
-    # manifest (the events boot-order rule, docs/design/events.md 5.2).
+    # An actual Vue serialization plan requests its runtime here so it appears
+    # before component Options. Static dependency hooks remain direct tags,
+    # which the browser loads on its own without any Citry runtime.
     core_scripts: list[Dependency] = []
-    if with_client_js and (calls or resolved.mark_js_urls or resolved.mark_css_urls or before_manifest):
-        mark_js = [*(script.url for script in scripts if script.url), *resolved.mark_js_urls]
-        mark_css = [*(style.url for style in styles if style.url), *resolved.mark_css_urls]
-        manifest = _build_manifest(
-            mark_js=mark_js,
-            mark_css=mark_css,
-            fetch_js=[],
-            fetch_css=[],
-            calls=calls,
-            css_instances=resolved.css_instances,
-            graph_revision=graph_revision,
-            alpine_runtime="csp" if security_csp == "strict" else "standard",
-        )
-        core_scripts = [
-            _runtime_script(citry, alpine_runtime="csp" if security_csp == "strict" else "standard"),
-            *before_manifest,
-            manifest,
-        ]
+    managed_runtime: Script | None = None
+    vue_runtime_required = with_client_js and ctx.context.extra.get(VUE_RUNTIME_REQUIRED_KEY) is True
+    if vue_runtime_required:
+        managed_runtime = _runtime_script(citry)
+        core_scripts.append(managed_runtime)
+        ctx.context.extra[VUE_RUNTIME_EMITTED_KEY] = True
+    elif resolved.has_component_calls:
+        raise RuntimeError("Component JavaScript calls require a native Vue serialization plan.")
+    core_scripts.extend(early_scripts)
 
     if javascript_policy is not None:
         core_scripts = javascript_policy.process_dependencies(core_scripts, position="managed runtime")
         scripts = javascript_policy.process_dependencies(scripts, position="page")
         styles = javascript_policy.process_dependencies(styles, position="stylesheet")
+    if managed_runtime is not None and any(script is managed_runtime for script in core_scripts):
+        ctx.context.extra[_VUE_RUNTIME_SCRIPT_KEY] = managed_runtime
+    else:
+        ctx.context.extra.pop(_VUE_RUNTIME_SCRIPT_KEY, None)
 
     js_html = "".join(
         str(script.render()) if script_security is None else script_security.render(script)
@@ -288,11 +306,9 @@ def emit_dependencies(
 def _inspect_ignored_records(
     citry: Citry,
     records: list[DependencyRecord],
-    scope_seed_instances: tuple[tuple[str, str], ...],
     javascript_policy: _JavascriptPolicy,
 ) -> None:
     """Inventory reached declarations without invoking ignored dependency hooks."""
-    scope_seed_ids = {render_id for _class_id, render_id in scope_seed_instances}
     seen_classes: set[type[Component]] = set()
     for record in dict.fromkeys(records):
         comp_cls = record.component_class or citry.get_component_by_class_id(record.class_id)
@@ -311,12 +327,6 @@ def _inspect_ignored_records(
                     key=("dependencies-js", comp_cls.class_id),
                 )
             _inspect_ignored_css(comp_cls, javascript_policy)
-        if record.js_vars_hash is not None and (uses_component(comp_cls) or record.component_id in scope_seed_ids):
-            javascript_policy.add_requirement(
-                "active js_data() scope seeding requires the Citry browser manager",
-                component=comp_cls.__name__,
-                key=("js-data", record.component_id, record.js_vars_hash),
-            )
 
 
 def _inspect_ignored_css(comp_cls: type[Component], javascript_policy: _JavascriptPolicy) -> None:
@@ -349,7 +359,6 @@ def _emit_without_javascript(
     js_placeholders: list[tuple[int, str]],
     css_placeholders: list[tuple[int, str]],
     *,
-    scope_seed_instances: tuple[tuple[str, str], ...],
     script_security: _ScriptSecurityMaterializer | None,
     security_csp: SecurityCspMode,
     javascript_policy: _JavascriptPolicy,
@@ -362,28 +371,28 @@ def _emit_without_javascript(
         with_client_js=True,
         as_urls=False,
         script_security=script_security,
-        scope_seed_instances=scope_seed_instances,
     )
     hook_ctx = OnDependenciesContext(
         citry=citry,
         scripts=resolved.scripts,
         styles=resolved.styles,
         context=ctx.context,
+        selected_render=ctx.selected_render,
         strategy=ctx.deps_strategy,
-        before_manifest=[],
+        early_scripts=[],
         _security_csp=security_csp,
         _security_javascript=security_javascript,
     )
     citry.extensions.emit("on_dependencies", hook_ctx)
-    _validate_hook_nonces(script_security, hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest)
+    _validate_hook_nonces(script_security, hook_ctx.scripts, hook_ctx.styles, hook_ctx.early_scripts)
     scripts = javascript_policy.process_dependencies(hook_ctx.scripts, position="page")
-    before_manifest = javascript_policy.process_dependencies(
-        hook_ctx.before_manifest,
-        position="before-manifest",
+    early_scripts = javascript_policy.process_dependencies(
+        hook_ctx.early_scripts,
+        position="early_scripts",
     )
     styles = javascript_policy.process_dependencies(hook_ctx.styles, position="stylesheet")
 
-    retained = [*before_manifest, *scripts]
+    retained = [*early_scripts, *scripts]
     js_html = "".join(_render_dependency(dep, script_security) for dep in retained)
     css_html = "".join(_render_dependency(dep, script_security) for dep in styles)
     return _place_dependency_html(
@@ -417,9 +426,19 @@ def _place_dependency_html(
     css_html: str,
 ) -> str:
     """Place already-rendered dependency tags using the established strategy."""
-    if ctx.deps_position in ("prepend", "append"):
+    # A native Vue plan has already moved the logical mount point into the
+    # document shell, and its runtime must execute while that document is
+    # still open.  Keep ordinary dependency calls' explicit prepend/append
+    # contract, but place this Vue-owned batch with the normal head/body
+    # rules.  Otherwise ``deps_position='append'`` would put the runtime
+    # after ``</html>`` before VueSerializationPlan.finalize adds its own
+    # definitions and bootstrap.
+    position = ctx.deps_position
+    if position in ("prepend", "append") and ctx.context.extra.get(VUE_RUNTIME_REQUIRED_KEY) is True:
+        position = "smart"
+    if position in ("prepend", "append"):
         html = _blank(ctx.html, all_placeholder_texts)
-        if ctx.deps_position == "prepend":
+        if position == "prepend":
             return js_html + css_html + html
         return html + js_html + css_html
 
@@ -442,22 +461,7 @@ class _Resolved:
 
     scripts: list[Dependency]
     styles: list[Dependency]
-    calls: list[_ComponentCall]
-    # Cache URLs of the inlined component/variables scripts (only filled when
-    # a web integration is mounted): a document page marks these as loaded so
-    # a fragment inserted later does not fetch them again.
-    mark_js_urls: list[str]
-    mark_css_urls: list[str]
-    # (class_id, component_id) of instances whose class has Component.css but
-    # no component call. Nothing else registers such an instance with the
-    # client-side manager, so the manifest declares it present and the manager
-    # can count the class's live instances for Component.css cleanup
-    # (docs/design/dependencies.md 8.4).
-    css_instances: list[tuple[str, str]]
-    # Fragment fetch descriptors are deduplicated across component instances,
-    # but adoption still needs to know which incoming branches requested one.
-    # Identity keys distinguish a hook-created equal descriptor from the
-    # component-owned object it happens to duplicate.
+    has_component_calls: bool
     script_owners: dict[int, set[str]]
     style_owners: dict[int, set[str]]
 
@@ -467,34 +471,31 @@ def _resolve_records(
     records: list[DependencyRecord],
     *,
     with_client_js: bool,
+    prepared_vue: bool = False,
     as_urls: bool = False,
     attach_owned_resources: bool = False,
     script_security: _ScriptSecurityMaterializer | None = None,
-    scope_seed_instances: tuple[tuple[str, str], ...] = (),
+    allow_prerendered: bool = False,
 ) -> _Resolved:
     """
-    Turn the collected records into the ``scripts`` / ``styles`` lists plus
-    the per-instance component calls for the client-side manager.
+    Turn the collected records into the ``scripts`` / ``styles`` lists and
+    report whether a native component callback requires a Vue plan.
 
     Per record: the class's ``Dependencies`` entries, its own
     ``Component.js``/``css`` (read through the cache), and the variables
-    script/stylesheet for the instance's hashed ``js_data()``/``css_data()``.
+    stylesheet for the instance's hashed ``css_data()``.
     ``Component.on_dependencies`` may adjust each record's lists. The final
     order is: core entries first, then all ``Dependencies`` entries, then all
     component scripts (a vendored lib from a ``Dependencies`` class loads
     before the component code that uses it), de-duplicated keeping the first
     occurrence.
 
-    With ``with_client_js`` off (the "simple" strategy), the JS variables
-    scripts and the component calls are skipped: both need the client-side
-    manager, which only the "document" strategy includes.
+    With ``with_client_js`` off (the "simple" strategy), JavaScript variables
+    are skipped because they require the native Vue app.
 
-    With ``as_urls`` on (the "fragment" strategy), component and variables
-    scripts become url-based entries pointing at the cache endpoints instead
-    of carrying their content, so the client-side manager fetches each once
-    per page no matter how many fragments use it. ``attach_owned_resources``
-    also binds each JavaScript URL to the exact currently cached response bytes
-    for integrity-mode serialization.
+    With ``as_urls`` on, component and variables assets become URL entries.
+    ``attach_owned_resources`` binds JavaScript URLs to exact cached response
+    bytes for integrity-mode serialization.
     """
     mounted = citry.mounted_prefix is not None
 
@@ -511,12 +512,7 @@ def _resolve_records(
     extra_css: list[Dependency] = []
     component_js: list[Dependency] = []
     component_css: list[Dependency] = []
-    calls: list[_ComponentCall] = []
-    called_ids: set[str] = set()
-    scope_seed_by_id = {render_id: class_id for class_id, render_id in scope_seed_instances}
-    mark_js_urls: list[str] = []
-    mark_css_urls: list[str] = []
-    css_instances: list[tuple[str, str]] = []
+    has_component_calls = False
     script_owner_groups: dict[Dependency, set[str]] = {}
     style_owner_groups: dict[Dependency, set[str]] = {}
 
@@ -524,11 +520,8 @@ def _resolve_records(
     # identical for every instance of the class, so resolve them once per class
     # and reuse them: a page commonly renders many instances of the same
     # component. Only the per-instance variables scripts and the client-side
-    # call below differ between instances. Cached as (scripts, styles,
-    # mark_js_url, mark_css_url, uses_component, css_only_presence).
-    class_deps: dict[
-        type[Component], tuple[list[Dependency], list[Dependency], str | None, str | None, bool, bool]
-    ] = {}
+    # call below differ between instances.
+    class_deps: dict[type[Component], tuple[list[Dependency], list[Dependency], bool]] = {}
 
     for record in records:
         # A render can be serialized after hot replacement installed a new
@@ -536,32 +529,31 @@ def _resolve_records(
         # rendered this record; the fallback keeps manually constructed and
         # older records compatible.
         comp_cls = record.component_class or citry.get_component_by_class_id(record.class_id)
-        expected_seed_class = scope_seed_by_id.get(record.component_id)
-        if expected_seed_class is not None and expected_seed_class != record.class_id:
-            msg = f"Scope-seed instance {record.component_id!r} changed component class during serialization."
-            raise RuntimeError(msg)
-
         cached = class_deps.get(comp_cls)
         if cached is None:
             scripts: list[Dependency] = []
             styles: list[Dependency] = []
-            mark_js: str | None = None
-            mark_css: str | None = None
 
             deps = comp_cls.get_dependencies()
             for entry in deps.js:
-                scripts.append(_entry_to_script(entry, comp_cls, fragment=as_urls))
+                scripts.append(_entry_to_script(entry, comp_cls, fragment=as_urls and not allow_prerendered))
             for media_type, entries in deps.css.items():
                 for entry in entries:
-                    styles.append(_entry_to_style(entry, media_type, comp_cls, fragment=as_urls))
+                    styles.append(
+                        _entry_to_style(entry, media_type, comp_cls, fragment=as_urls and not allow_prerendered)
+                    )
 
             # The class's own JS/CSS: inlined content for a page, a cache URL for
             # a fragment (the endpoint serves what the cache write here stores).
-            # Either way the Component.css sheet is tagged with its class id
-            # (data-citry-css-class), which is how the client-side manager's
-            # cleanup finds the sheet when the class's last instance leaves the
-            # page (docs/design/dependencies.md 8.4).
-            css_class_attr: dict[str, str | bool] = {"data-citry-css-class": comp_cls.class_id}
+            # Static output tags the Component.css sheet with its class id
+            # (data-citry-css-class) so a page, host library, or test can tell
+            # which component a sheet belongs to. Prepared Vue assets record
+            # their owners in the Vue app's asset list (the occurrence IDs that
+            # use each sheet) instead. Omitting the class marker there lets
+            # related components share one byte-identical sheet (for example
+            # CSlider/CRangeSlider) without conflicting attributes on the same
+            # prepared asset.
+            css_class_attr: dict[str, str | bool] = {} if prepared_vue else {"data-citry-css-class": comp_cls.class_id}
             if as_urls:
                 if has_component_asset("js", comp_cls):
                     cache_component_js(comp_cls)
@@ -593,79 +585,42 @@ def _resolve_records(
                 comp_js = get_component_script("js", comp_cls)
                 if comp_js is not None:
                     scripts.append(comp_js)
-                    if mounted:
-                        mark_js = script_url(comp_cls, "js")
                 comp_css = get_component_script("css", comp_cls)
                 if comp_css is not None:
-                    if mounted:
+                    if mounted and not prepared_vue:
                         # A document inlines this sheet but tells the runtime
                         # that its fragment URL is loaded. Store the URL on the
                         # style so the runtime can clear both when it removes
                         # the sheet.
-                        mark_css = script_url(comp_cls, "css")
-                        css_class_attr["data-citry-css-url"] = mark_css
+                        css_class_attr["data-citry-css-url"] = script_url(comp_cls, "css")
                     styles.append(replace(comp_css, attrs={**comp_css.attrs, **css_class_attr}))
 
+            # Some of these objects outlive this serialization: the class keeps
+            # one Component.js/css object for every render, and a Script or Style
+            # listed in Dependencies is the object the class itself declares.
+            # Hooks may edit an entry's attrs in place (the documented way to add an attribute),
+            # so hand them copies made for this serialization alone; otherwise
+            # one render's edit would appear in every later render.
             cached = (
-                scripts,
-                styles,
-                mark_js,
-                mark_css,
+                [_copy_for_hooks(script) for script in scripts],
+                [_copy_for_hooks(style) for style in styles],
                 with_client_js and uses_component(comp_cls),
-                # An instance of a class with Component.css but no $component
-                # callback appears in the manifest's presence record; see
-                # _Resolved.css_instances.
-                with_client_js and has_component_asset("css", comp_cls) and not uses_component(comp_cls),
             )
             class_deps[comp_cls] = cached
 
-        cls_scripts, cls_styles, cls_mark_js, cls_mark_css, cls_uses_oncomp, cls_css_presence = cached
-        call_mode: _CallMode | None = None
-        if cls_uses_oncomp:
-            call_mode = "init"
-        elif with_client_js and record.component_id in scope_seed_by_id:
-            call_mode = "seed"
-        # Copy the class lists so the per-instance scripts below (and any
-        # on_dependencies edit) never mutate the cached entry.
+        cls_scripts, cls_styles, cls_uses_oncomp = cached
+        has_component_calls = has_component_calls or cls_uses_oncomp
+        # Copy the class lists so adding this instance's variables sheet, or a
+        # hook adding or removing entries, leaves the per-class lists intact.
+        # The entries themselves are shared by every instance in this
+        # serialization.
         instance_scripts: list[Dependency] = list(cls_scripts)
         instance_styles: list[Dependency] = list(cls_styles)
-        if cls_mark_js is not None:
-            mark_js_urls.append(cls_mark_js)
-        if cls_mark_css is not None:
-            mark_css_urls.append(cls_mark_css)
 
-        # The variables scripts generated for this instance's data hashes.
-        # Unlike class scripts these cannot be rebuilt on a cache miss (the
-        # data existed only during the render). Legacy fragment output retains
-        # its URL on a miss; integrity mode fails because it cannot prove bytes.
-        # A shared cache backend prevents the miss across processes.
-        if call_mode is not None and record.js_vars_hash is not None:
-            if as_urls:
-                if attach_owned_resources:
-                    resource = _cached_js_resource(comp_cls, record.js_vars_hash)
-                    if resource is None:
-                        msg = (
-                            f"Cannot prove the response bytes for JavaScript data {record.js_vars_hash!r} "
-                            f"of {comp_cls.class_id!r}."
-                        )
-                        raise RuntimeError(msg)
-                    instance_scripts.append(
-                        _owned_script(resource, kind="variables", origin_class_id=comp_cls.class_id)
-                    )
-                else:
-                    instance_scripts.append(
-                        Script(
-                            url=script_url(comp_cls, "js", record.js_vars_hash),
-                            kind="variables",
-                            origin_class_id=comp_cls.class_id,
-                        )
-                    )
-            else:
-                vars_js = get_script("js", comp_cls, record.js_vars_hash)
-                if vars_js is not None:
-                    instance_scripts.append(vars_js)
-                    if mounted:
-                        mark_js_urls.append(script_url(comp_cls, "js", record.js_vars_hash))
+        # The css_data() stylesheet generated for this instance's data hash.
+        # Unlike class scripts it cannot be rebuilt on a cache miss (the data
+        # existed only during the render), so a URL served by another process
+        # needs a shared cache backend.
         if record.css_vars_hash is not None:
             if as_urls:
                 instance_styles.append(
@@ -678,15 +633,13 @@ def _resolve_records(
             else:
                 vars_css = get_script("css", comp_cls, record.css_vars_hash)
                 if vars_css is not None:
-                    instance_styles.append(vars_css)
                     if mounted:
-                        mark_css_urls.append(script_url(comp_cls, "css", record.css_vars_hash))
-
-        if call_mode is not None:
-            calls.append((record.class_id, record.component_id, record.js_vars_hash, call_mode))
-            called_ids.add(record.component_id)
-        if cls_css_presence and call_mode is None:
-            css_instances.append((record.class_id, record.component_id))
+                        variables_url = script_url(comp_cls, "css", record.css_vars_hash)
+                        vars_css = replace(
+                            vars_css,
+                            attrs={**vars_css.attrs, "data-citry-css-url": variables_url},
+                        )
+                    instance_styles.append(vars_css)
 
         # Per-component hook: adjust this instance's lists before they join
         # the page-wide ones.
@@ -705,39 +658,51 @@ def _resolve_records(
             _bucket(style, core_css, extra_css, component_css)
             style_owner_groups.setdefault(style, set()).add(record.component_id)
 
-    # A component with direct Alpine expressions needs a lifecycle and an
-    # empty seed call even when it declares no assets and returns no JsData.
-    # Such an instance has no dependency record, so add it from the settled
-    # ownership artifact after record-backed calls have claimed their hashes.
-    if with_client_js:
-        for class_id, component_id in scope_seed_instances:
-            if component_id in called_ids:
-                continue
-            calls.append((class_id, component_id, None, "seed"))
-            called_ids.add(component_id)
+    all_styles = [*core_css, *extra_css, *component_css]
+    # Equal stylesheets (same URL or same inline content) are emitted once, so
+    # every declaration of one sheet must agree on its attributes. The one
+    # exception is the class ownership markers: two components whose `css` is
+    # byte-identical share one sheet, and that sheet lists both owners.
+    style_attrs: dict[Dependency, dict[str, str | bool]] = {}
+    for style in all_styles:
+        prior_attrs = style_attrs.get(style)
+        if prior_attrs is None:
+            style_attrs[style] = dict(style.attrs)
+            continue
+        merged_attrs = _merge_shared_style_attrs(prior_attrs, style.attrs)
+        if merged_attrs is None:
+            identity = style.url if style.url is not None else "inline stylesheet content"
+            raise ValueError(
+                f"The same stylesheet {identity!r} was declared with conflicting attributes; "
+                "use distinct stylesheet URLs until attribute-specific stylesheet ownership is supported."
+            )
+        style_attrs[style] = merged_attrs
 
     deduped_scripts = list(dict.fromkeys([*core_js, *extra_js, *component_js]))
-    deduped_styles = list(dict.fromkeys([*core_css, *extra_css, *component_css]))
+    # Keep the first-seen object for each sheet, but give it the merged
+    # attributes. `replace` builds a new object so the per-class lists cached
+    # above (and any cache-backed Style) keep their own attributes.
+    deduped_styles = [
+        style if style_attrs[style] == style.attrs else replace(style, attrs=style_attrs[style])
+        for style in dict.fromkeys(all_styles)
+    ]
 
     return _Resolved(
         scripts=deduped_scripts,
         styles=deduped_styles,
-        calls=calls,
-        mark_js_urls=list(dict.fromkeys(mark_js_urls)),
-        mark_css_urls=list(dict.fromkeys(mark_css_urls)),
-        css_instances=css_instances,
-        script_owners={id(dependency): set(script_owner_groups[dependency]) for dependency in deduped_scripts},
-        style_owners={id(dependency): set(style_owner_groups[dependency]) for dependency in deduped_styles},
+        has_component_calls=has_component_calls,
+        script_owners={id(item): set(script_owner_groups[item]) for item in deduped_scripts},
+        style_owners={id(item): set(style_owner_groups[item]) for item in deduped_styles},
     )
 
 
-# ----- The client runtime and the page manifest -----
+# ----- The client runtime and the Vue fragment descriptor -----
 
 
 @cache
 def _runtime_js() -> str:
-    """The client-side dependency manager's source (shipped as package data)."""
-    return (Path(__file__).parent / "client" / "citry.js").read_text(encoding="utf8")
+    """The generated Vue interactive runtime shipped to browsers."""
+    return (Path(__file__).parents[2] / "_vue" / "runtime.js").read_text(encoding="utf8")
 
 
 def _runtime_resource(citry: Citry) -> _OwnedResource:
@@ -762,31 +727,28 @@ def _owned_script(
     return script
 
 
-def _cached_js_resource(comp_cls: type[Component], variables_hash: str | None = None) -> _OwnedResource | None:
-    dependency = (
-        get_component_script("js", comp_cls) if variables_hash is None else get_script("js", comp_cls, variables_hash)
-    )
+def _cached_js_resource(comp_cls: type[Component]) -> _OwnedResource | None:
+    dependency = get_component_script("js", comp_cls)
     if dependency is None:
         return None
     if not isinstance(dependency, Script) or dependency.content is None:
         msg = f"Cached JavaScript for component {comp_cls.class_id!r} is not an inline Script."
         raise TypeError(msg)
     return _OwnedResource(
-        url=script_url(comp_cls, "js", variables_hash),
+        url=script_url(comp_cls, "js"),
         content=dependency.content,
         content_type="text/javascript",
     )
 
 
-def _runtime_script(citry: Citry, *, alpine_runtime: Literal["standard", "csp"] = "standard") -> Script:
+def _runtime_script(citry: Citry) -> Script:
     # A mounted web integration serves the runtime at a URL (cacheable by the
     # browser); without one, the runtime is inlined so the zero-configuration
     # document flow still works end to end. wrap=False: the runtime is
     # already a self-contained immediately-invoked function.
-    attrs: dict[str, str | bool] | None = {"data-citry-alpine-runtime": "csp"} if alpine_runtime == "csp" else None
     if citry.mounted_prefix is not None:
-        return _owned_script(_runtime_resource(citry), kind="core", attrs=attrs)
-    return Script(kind="core", content=_runtime_js(), wrap=False, attrs={} if attrs is None else attrs)
+        return _owned_script(_runtime_resource(citry), kind="core")
+    return Script(kind="core", content=_runtime_js(), wrap=False)
 
 
 def _preloader_script(
@@ -803,12 +765,16 @@ def _preloader_script(
     integrity_line = ""
     if script_security is not None and script_security.integrity_enabled:
         integrity = script_security.owned_integrity(resource)
-        integrity_line = f"  s.integrity = {json.dumps(integrity)};\n"
+        # The browser checks integrity only on a CORS response, and Citry's
+        # runtime route sends the header that allows one.
+        integrity_line = (
+            f"  s.integrity = {json.dumps(integrity)};\n  s.crossOrigin = {json.dumps(OWNED_ASSET_CROSSORIGIN)};\n"
+        )
     nonce_line = ""
     if script_security is not None and script_security.csp_nonce is not None:
         nonce_line = f"  s.nonce = {json.dumps(script_security.csp_nonce)};\n"
     content = (
-        "if (!globalThis.Citry || !globalThis.Citry.manager) {\n"
+        "if (!globalThis.Citry || !globalThis.Citry.fragments) {\n"
         '  var s = document.createElement("script");\n'
         f"  s.src = {url_literal};\n"
         f"{integrity_line}"
@@ -820,91 +786,14 @@ def _preloader_script(
     return Script(kind="core", content=content, wrap=True)
 
 
-def _b64(text: str) -> str:
-    return base64.b64encode(text.encode()).decode()
-
-
-def _build_manifest(
-    *,
-    mark_js: list[str],
-    mark_css: list[str],
-    fetch_js: list[Dependency],
-    fetch_css: list[Dependency],
-    calls: list[_ComponentCall],
-    css_instances: list[tuple[str, str]],
-    graph_revision: str | None = None,
-    fetch_js_owners: dict[int, set[str]] | None = None,
-    fetch_css_owners: dict[int, set[str]] | None = None,
-    before_manifest: list[Dependency] | None = None,
-    transactional: bool = False,
-    script_security: _ScriptSecurityMaterializer | None = None,
-    alpine_runtime: Literal["standard", "csp"] = "standard",
-) -> Script:
-    """
-    The page manifest: a ``<script type="application/json" data-citry>`` tag
-    the client runtime watches for and processes.
-
-    Carries which URLs are already on this page (so a fragment inserted later
-    does not fetch them again), which tags to fetch (filled by fragments,
-    empty for a document), which component instances to call, and which
-    instances are present for CSS only (a ``Component.css`` instance with no
-    ``$component`` callback, counted live for the per-class CSS cleanup).
-    String fields ride as base64, so no value can break out of the script tag.
-    """
-
-    def encode_fetch(
-        dependencies: list[Dependency],
-        owners_by_identity: dict[int, set[str]] | None,
-        *,
-        kind: Literal["js", "css"],
-    ) -> list[str] | list[list[str | list[str] | None]]:
-        if not transactional:
-            return [_b64(json.dumps(_dependency_descriptor(dep, script_security, kind=kind))) for dep in dependencies]
-
-        # A global hook can append an object equal to a component dependency.
-        # Keep the first descriptor position, union component owners, and let
-        # one truly global occurrence make the deduplicated entry global.
-        grouped: dict[Dependency, tuple[Dependency, set[str], bool]] = {}
-        for dependency in dependencies:
-            owners = None if owners_by_identity is None else owners_by_identity.get(id(dependency))
-            current = grouped.get(dependency)
-            if current is None:
-                grouped[dependency] = (dependency, set(owners or ()), owners is None)
-                continue
-            current[1].update(owners or ())
-            if owners is None and not current[2]:
-                grouped[dependency] = (current[0], current[1], True)
-
-        encoded: list[list[str | list[str] | None]] = []
-        for dependency, owners, global_dependency in grouped.values():
-            encoded_owners = None if global_dependency else [_b64(owner) for owner in sorted(owners)]
-            descriptor = _dependency_descriptor(dependency, script_security, kind=kind)
-            encoded.append([_b64(json.dumps(descriptor)), encoded_owners])
-        return encoded
-
-    manifest = {
-        "markLoaded": {
-            "js": [_b64(url) for url in dict.fromkeys(mark_js)],
-            "css": [_b64(url) for url in dict.fromkeys(mark_css)],
-        },
-        "fetch": {
-            "js": encode_fetch(fetch_js, fetch_js_owners, kind="js"),
-            "css": encode_fetch(fetch_css, fetch_css_owners, kind="css"),
-        },
-        "calls": [
-            [_b64(class_id), _b64(component_id), None if vars_hash is None else _b64(vars_hash), mode]
-            for class_id, component_id, vars_hash, mode in calls
-        ],
-        "cssInstances": [[_b64(class_id), _b64(component_id)] for class_id, component_id in css_instances],
-        "graph": graph_revision,
-        "alpineRuntime": alpine_runtime,
-    }
-    if transactional:
-        manifest["beforeManifest"] = [
-            _b64(json.dumps(_dependency_descriptor(dependency, script_security, kind="before")))
-            for dependency in before_manifest or []
-        ]
-    return Script(kind="core", content=json.dumps(manifest), attrs={"type": "application/json", "data-citry": True})
+def _vue_fragment_manifest(vue_mount: dict[str, object]) -> Script:
+    # Page data inside the descriptor may contain "</script>" or "<!--", so
+    # the JSON is escaped the same way as a document app's configuration.
+    return Script(
+        kind="core",
+        content=script_json({"vue": vue_mount}),
+        attrs={"type": "application/json", "data-citry-vue-fragment": True},
+    )
 
 
 def _emit_fragment(
@@ -919,15 +808,8 @@ def _emit_fragment(
     security_javascript: SecurityJavascriptMode,
 ) -> str:
     """
-    The "fragment" strategy: content followed by the pre-loader and a
-    fetch-manifest, nothing inlined.
-
-    The fragment references its scripts by URL (the cache endpoints), so the
-    client-side manager fetches each dependency once per page however many
-    fragments need it; local-file ``Dependencies`` entries, which have no
-    URL, ride as inline tag descriptors. Requires a mounted web integration
-    (the URLs must point somewhere), and, with multiple worker processes, a
-    shared cache backend (docs/design/dependencies.md section 8.3).
+    Emit direct dependency tags for static fragments, or a native Vue loader
+    and one structured descriptor for interactive fragments.
     """
     fragment_needs_mount_msg = (
         "serialize(deps_strategy='fragment') needs a mounted web integration:"
@@ -935,9 +817,10 @@ def _emit_fragment(
         " citry.contrib.fastapi.mount(app, citry_instance)), or use"
         " set_mounted_prefix() in processes that only render."
     )
-    ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
-    scope_seed_instances = ownership.scope_seed_instances if isinstance(ownership, OwnershipManifestArtifact) else ()
-    if records or scope_seed_instances:
+    vue_mount = ctx.context.extra.pop(VUE_FRAGMENT_MOUNT_KEY, None)
+    if vue_mount is not None:
+        records = []
+    if records:
         if citry.mounted_prefix is None:
             raise RuntimeError(fragment_needs_mount_msg)
         resolved = _resolve_records(
@@ -947,101 +830,84 @@ def _emit_fragment(
             as_urls=True,
             attach_owned_resources=script_security is not None and script_security.integrity_enabled,
             script_security=script_security,
-            scope_seed_instances=scope_seed_instances,
+            allow_prerendered=vue_mount is None,
         )
     else:
         resolved = _Resolved(
             scripts=[],
             styles=[],
-            calls=[],
-            mark_js_urls=[],
-            mark_css_urls=[],
-            css_instances=[],
+            has_component_calls=False,
             script_owners={},
             style_owners={},
         )
     scripts, styles = resolved.scripts, resolved.styles
 
-    hook_ctx = OnDependenciesContext(
-        citry=citry,
-        scripts=scripts,
-        styles=styles,
-        context=ctx.context,
-        strategy="fragment",
-        before_manifest=[],
-        _security_csp=security_csp,
-        _security_javascript=security_javascript,
-    )
-    citry.extensions.emit("on_dependencies", hook_ctx)
-    scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
-    _validate_hook_nonces(script_security, scripts, styles, before_manifest)
-    graph_revision: str | None = None
-    ownership_tag: Dependency | None = None
-    if isinstance(ownership, OwnershipManifestArtifact):
-        graph_revision = ownership.revision
-        ownership_tag = Script(
-            kind="core",
-            content=ownership.json(),
-            attrs={"type": "application/json", "data-citry-graph": True},
+    if ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True:
+        scripts, styles, early_scripts = [], [], []
+    else:
+        hook_ctx = OnDependenciesContext(
+            citry=citry,
+            scripts=scripts,
+            styles=styles,
+            context=ctx.context,
+            selected_render=ctx.selected_render,
+            strategy="fragment",
+            early_scripts=[],
+            _security_csp=security_csp,
+            _security_javascript=security_javascript,
         )
-
-    framework_manifests: list[Dependency] = []
-    staged_before_manifest: list[Dependency] = []
-    for dependency in before_manifest:
-        if (
-            graph_revision is not None
-            and isinstance(dependency, Script)
-            and dependency.attrs.get("type") == "application/json"
-            and (dependency.attrs.get("data-citry-events") is True or dependency.attrs.get("data-citry-i18n") is True)
-        ):
-            framework_manifests.append(dependency)
-        elif graph_revision is not None:
-            staged_before_manifest.append(dependency)
-        else:
-            framework_manifests.append(dependency)
-    if ownership_tag is not None:
-        framework_manifests.insert(0, ownership_tag)
+        citry.extensions.emit("on_dependencies", hook_ctx)
+        scripts, styles, early_scripts = hook_ctx.scripts, hook_ctx.styles, hook_ctx.early_scripts
+        _validate_hook_nonces(script_security, scripts, styles, early_scripts)
+    # An interactive fragment's dependencies are prepared by the code that
+    # builds its Vue payload, which sets VUE_DEPENDENCIES_PREPARED_KEY and
+    # puts the early_scripts entries first in its script list, so the hook
+    # above never ran for it.
+    if vue_mount is not None and early_scripts:
+        raise AssertionError("an interactive fragment ran the dependency hooks outside the Vue producer")
 
     if javascript_policy is not None:
         scripts = javascript_policy.process_dependencies(scripts, position="fragment fetch")
         styles = javascript_policy.process_dependencies(styles, position="fragment stylesheet")
-        framework_manifests = javascript_policy.process_dependencies(
-            framework_manifests,
-            position="fragment framework",
-        )
-        staged_before_manifest = javascript_policy.process_dependencies(
-            staged_before_manifest,
-            position="fragment before-manifest",
+        early_scripts = javascript_policy.process_dependencies(
+            early_scripts,
+            position="fragment early_scripts",
         )
 
+    # Static fragments have no Vue application. Emit their already-resolved
+    # dependencies as ordinary tags: stylesheets remain useful after
+    # insertion, and an integrating fragment library keeps its normal script
+    # execution semantics.
+    if vue_mount is None:
+        if resolved.has_component_calls:
+            raise RuntimeError("A static fragment cannot carry component runtime state.")
+
+        def render_dependency(dependency: Dependency, *, style: bool = False) -> str:
+            if script_security is None:
+                return str(dependency.render())
+            return script_security.render_style(dependency) if style else script_security.render(dependency)
+
+        html = _blank(ctx.html, placeholder_texts)
+        css_html = "".join(render_dependency(dependency, style=True) for dependency in styles)
+        early_html = "".join(render_dependency(dependency) for dependency in early_scripts)
+        script_html = "".join(render_dependency(dependency) for dependency in scripts)
+        return html + css_html + early_html + script_html
+
     # A fragment that carries nothing at all has nothing to load, so it needs
-    # no pre-loader or manifest (and no mounted integration).
-    if not scripts and not styles and not resolved.calls and not resolved.css_instances and not before_manifest:
+    # no runtime loader, no Vue descriptor, and no mounted integration.
+    if not scripts and not styles and not resolved.has_component_calls and not early_scripts and vue_mount is None:
         return _blank(ctx.html, placeholder_texts)
     if citry.mounted_prefix is None:
         raise RuntimeError(fragment_needs_mount_msg)
 
     html = _blank(ctx.html, placeholder_texts)
-    # Ownership and Events manifests stay inert top-level JSON. Every other
-    # graph-backed hook entry is a descriptor inside the dependency manifest,
-    # so an ignored incoming branch cannot execute it during fragment parsing.
+    # The Vue fragment descriptor is inert top-level JSON, so a fragment
+    # branch that the inserting library ignores cannot run anything while it
+    # is parsed; the Vue runtime reads the descriptor and loads the assets.
     if script_security is None:
-        manifest = _build_manifest(
-            mark_js=[],
-            mark_css=[],
-            fetch_js=scripts,
-            fetch_css=styles,
-            calls=resolved.calls,
-            css_instances=resolved.css_instances,
-            graph_revision=graph_revision,
-            fetch_js_owners=resolved.script_owners,
-            fetch_css_owners=resolved.style_owners,
-            before_manifest=staged_before_manifest,
-            transactional=graph_revision is not None,
-            alpine_runtime="standard",
-        )
-        before_html = "".join(str(dep.render()) for dep in framework_manifests)
-        return html + str(_preloader_script(citry, None).render()) + before_html + str(manifest.render())
+        manifest = _vue_fragment_manifest(vue_mount)
+        early_html = "".join(str(dep.render()) for dep in early_scripts)
+        return html + str(_preloader_script(citry, None).render()) + early_html + str(manifest.render())
     if security_csp == "strict":
         preloader_html = ""
     else:
@@ -1058,70 +924,91 @@ def _emit_fragment(
         preloader_html = script_security.render(preloader)
         if script_security.integrity_enabled:
             script_security.record_owned_dynamic(runtime_resource)
-    before_html = "".join(script_security.render(dep) for dep in framework_manifests)
-    manifest = _build_manifest(
-        mark_js=[],
-        mark_css=[],
-        fetch_js=scripts,
-        fetch_css=styles,
-        calls=resolved.calls,
-        css_instances=resolved.css_instances,
-        graph_revision=graph_revision,
-        fetch_js_owners=resolved.script_owners,
-        fetch_css_owners=resolved.style_owners,
-        before_manifest=staged_before_manifest,
-        transactional=graph_revision is not None,
-        script_security=script_security,
-        alpine_runtime="csp" if security_csp == "strict" else "standard",
-    )
+    early_html = "".join(script_security.render(dep) for dep in early_scripts)
+    manifest = _vue_fragment_manifest(vue_mount)
     if javascript_policy is not None:
         retained_manifest = javascript_policy.process_dependencies(
             [manifest],
             position="fragment manifest",
         )
         if not retained_manifest:
-            return html + preloader_html + before_html
+            return html + preloader_html + early_html
         if not isinstance(retained_manifest[0], Script):
             raise RuntimeError("The JavaScript inventory changed the structured fragment manifest type.")
         manifest = retained_manifest[0]
-    return html + preloader_html + before_html + script_security.render(manifest)
-
-
-def _dependency_descriptor(
-    dependency: Dependency,
-    script_security: _ScriptSecurityMaterializer | None,
-    *,
-    kind: Literal["js", "css", "before"],
-) -> dict[str, str | dict[str, str | bool]]:
-    if script_security is not None and kind == "js":
-        return script_security.descriptor(dependency)
-    if script_security is not None and kind == "css":
-        return script_security.style_descriptor(dependency)
-    if script_security is not None and isinstance(dependency, Script):
-        return script_security.descriptor(dependency)
-    if script_security is not None and isinstance(dependency, Style):
-        return script_security.style_descriptor(dependency)
-    descriptor = dependency.render_json()
-    rejects_opaque = descriptor.get("tag") == "script" or (
-        descriptor.get("tag") == "style" and script_security is not None and script_security.csp_nonce is not None
-    )
-    if script_security is not None and rejects_opaque:
-        msg = "Executable before-manifest dependency descriptors must use structured Script or Style objects."
-        raise TypeError(msg)
-    return descriptor
+    return html + preloader_html + early_html + script_security.render(manifest)
 
 
 def _validate_hook_nonces(
     script_security: _ScriptSecurityMaterializer | None,
     scripts: list[Dependency],
     styles: list[Dependency],
-    before_manifest: list[Dependency],
+    early_scripts: list[Dependency],
 ) -> None:
     """Check every global-hook contribution before later equality deduplication."""
     if script_security is None or script_security.csp_nonce is None:
         return
-    for dependency in [*scripts, *styles, *before_manifest]:
+    for dependency in [*scripts, *styles, *early_scripts]:
         script_security.validate_declared_nonce(dependency)
+
+
+# Attributes that name the component class (and its fragment URL) a static
+# `Component.css` sheet belongs to. They describe who uses a sheet, not how the
+# browser applies it, so a sheet shared by several classes lists every owner.
+_STYLE_OWNER_ATTRS = ("data-citry-css-class", "data-citry-css-url")
+
+
+def _merge_shared_style_attrs(
+    first: dict[str, str | bool],
+    other: dict[str, str | bool],
+) -> dict[str, str | bool] | None:
+    """
+    Combine the attributes of two declarations of one emitted stylesheet.
+
+    Every attribute other than the class ownership markers must match, because
+    the browser applies it (``media``, for example). Each ownership marker
+    becomes a space-separated list of the owners in first-seen order, which a
+    ``[data-citry-css-class~="Name_abc123"]`` selector still finds. Returns
+    ``None`` when the declarations disagree on any other attribute.
+    """
+    applied_first = {key: value for key, value in first.items() if key not in _STYLE_OWNER_ATTRS}
+    applied_other = {key: value for key, value in other.items() if key not in _STYLE_OWNER_ATTRS}
+    if applied_first != applied_other:
+        return None
+
+    merged = dict(first)
+    for key in _STYLE_OWNER_ATTRS:
+        added = other.get(key)
+        if added is None:
+            continue
+        existing = merged.get(key)
+        # Citry writes these markers as strings; a boolean here came from
+        # user code and has no owner list to extend, so only an exact match
+        # can share the sheet.
+        if isinstance(existing, bool) or isinstance(added, bool):
+            if existing != added and existing is not None:
+                return None
+            merged[key] = added
+            continue
+        owners = existing.split() if existing else []
+        for token in added.split():
+            if token not in owners:
+                owners.append(token)
+        merged[key] = " ".join(owners)
+    return merged
+
+
+def _copy_for_hooks(dependency: Dependency) -> Dependency:
+    """
+    Copy one dependency so a hook's in-place edits stay in this serialization.
+
+    ``copy`` keeps every field, including a Script's attached response bytes,
+    which ``dataclasses.replace`` would drop. ``attrs`` gets its own dict
+    because it is the field hooks edit in place.
+    """
+    copied = copy(dependency)
+    copied.attrs = dict(dependency.attrs)
+    return copied
 
 
 def _bucket(dep: Dependency, core: list[Dependency], extra: list[Dependency], component: list[Dependency]) -> None:
@@ -1286,6 +1173,7 @@ def _fill_placeholders(html: str, placeholders: list[tuple[int, str]], content: 
 
 
 _HEAD_OR_BODY_END_RE = re.compile(r"</(?:head|body)\s*>")
+_BODY_END_RE = re.compile(r"</body\s*>")
 
 
 def _insert_default(html: str, content: str, kind: str) -> str:
@@ -1297,13 +1185,20 @@ def _insert_default(html: str, content: str, kind: str) -> str:
     docs/design/dependencies.md section 7.3).
     """
     target = None
-    for match in _HEAD_OR_BODY_END_RE.finditer(html):
-        is_head = match[0][2:6] == "head"
-        if kind == "css" and is_head:
-            target = match.start()
-            break
-        if kind == "js" and not is_head:
-            target = match.start()  # keep the last </body>
+    if kind == "js":
+        # Search back from the end for the last </body>; scanning the whole
+        # page forward costs about a millisecond on a hydrated page.
+        end = len(html)
+        while (start := html.rfind("</body", 0, end)) >= 0:
+            if _BODY_END_RE.match(html, start) is not None:
+                target = start
+                break
+            end = start
+    else:
+        for match in _HEAD_OR_BODY_END_RE.finditer(html):
+            if match[0][2:6] == "head":
+                target = match.start()
+                break
     if target is not None:
         return html[:target] + content + html[target:]
     return content + html if kind == "css" else html + content

@@ -253,6 +253,7 @@ class CDrawer(LibraryComponent):
       };
       globalThis[modalRuntimeKey] = modalRuntime;
       modalRuntime.drawerControllers ??= new WeakMap();
+      const drawerHandoffKey = Symbol.for("citry-ui:drawer-handoff");
 
       $component({
         props: {
@@ -283,7 +284,25 @@ class CDrawer(LibraryComponent):
             scroll: ["body", "drawer"],
           };
           const invalidEpisodes = new Set();
-          let internalOpen = defaults.open;
+          // A server re-render runs this callback again on the same drawer. The
+          // previous run's cleanup leaves an open drawer open and stores its open
+          // state, with the server's `open` input it rendered with, on the drawer.
+          // A kept drawer keeps its own state while that input is unchanged, so a
+          // drawer the user opened or closed stays that way; a changed input wins.
+          const handoff = drawer[drawerHandoffKey] ?? null;
+          delete drawer[drawerHandoffKey];
+          // The template renders the drawer's `open` attribute from the server's
+          // `open` input, so Vue removes it when a server re-render changes that
+          // input to false. That leaves a modal drawer in the top layer, still
+          // blocking the page, with `drawer.open` reading false. Put the attribute
+          // back so the takeover below sees the open drawer and the effect closes
+          // it through the ordinary close path, which releases the scroll lock.
+          let modalShowing = false;
+          try { modalShowing = drawer.matches(":modal"); } catch { modalShowing = false; }
+          if (modalShowing && !drawer.open) drawer.setAttribute("open", "");
+          if (handoff?.timer) clearTimeout(handoff.timer);
+          const sameServerOpen = Boolean(handoff) && handoff.serverOpen === defaults.open;
+          let internalOpen = sameServerOpen ? handoff.open : defaults.open;
           let controlled = false;
           let appliedOpen = false;
           let suppressedControlledOpen = false;
@@ -482,6 +501,10 @@ class CDrawer(LibraryComponent):
           const closeDescendants = () => {
             for (const candidate of [...modalRuntime.dialogs].reverse()) {
               if (candidate === drawer || !drawer.contains(candidate) || !candidate.open) continue;
+              // A drawer handed over to its next run has no listener to hear
+              // this close. Its next run sees this closed ancestor and closes
+              // and reports it; a drawer the page removed closes on its own.
+              if (candidate[drawerHandoffKey]?.open) continue;
               const controller = modalRuntime.drawerControllers.get(candidate);
               if (controller) controller.forceClose("ancestor", drawer);
               else candidate.close();
@@ -742,6 +765,42 @@ class CDrawer(LibraryComponent):
           });
           validateStructure();
 
+          // Take over a drawer the previous run left open, without closing and
+          // reopening it: the modal state, scroll lock, and focus stay as they are.
+          // The effect below then keeps it open, or closes it when the server's
+          // `open` input changed to false.
+          //
+          // A server re-render runs an enclosing dialog's callback first, and that
+          // run may close it. An enclosing drawer leaves this handed-over drawer
+          // to this run, and an enclosing CDialog cannot reach it. Taking it over
+          // open would leave a modal drawer inside a closed dialog: invisible, yet
+          // blocking the page. Close it instead and report the close as
+          // "ancestor" once the callback is known.
+          let ancestorClose = null;
+          if (handoff?.open && drawer.open) {
+            for (let node = composedParent(host); node; node = composedParent(node)) {
+              if (!(node instanceof HTMLDialogElement)) continue;
+              let modal = false;
+              try { modal = node.matches(":modal"); } catch { modal = false; }
+              if (!node.open && !modal) ancestorClose = node;
+              break;
+            }
+          }
+          if (ancestorClose) {
+            expectedNativeClose = true;
+            drawer.close();
+            unlockScroll();
+            internalOpen = false;
+            suppressedControlledOpen = props.open === true;
+          } else if (handoff?.open && drawer.open) {
+            appliedOpen = true;
+            previousFocus = handoff.previousFocus;
+            drawer.setAttribute("data-open", "");
+            updateActivators(true);
+            lockScroll();
+            startEligibilityWatch();
+          }
+
           effect(() => {
             const suppliedOpen = props.open;
             let nextOpen = internalOpen;
@@ -787,6 +846,7 @@ class CDrawer(LibraryComponent):
               if (nextOpen) pendingOpenSource = null;
             }
           });
+          if (ancestorClose) notify(false, "ancestor", ancestorClose, "", true);
           if (structureValid) host.setAttribute("data-citry-drawer-initialized", "");
 
           return () => {
@@ -802,13 +862,35 @@ class CDrawer(LibraryComponent):
             drawer.removeEventListener("submit", onSubmit);
             drawer.removeEventListener("close", onNativeClose);
             modalRuntime.drawerControllers.delete(drawer);
-            closeDescendants();
-            expectedNativeClose = drawer.open;
-            if (drawer.open) drawer.close();
-            appliedOpen = false;
-            updateActivators(false);
-            unlockScroll();
-            restoreFocus(true);
+            const closeNow = () => {
+              closeDescendants();
+              expectedNativeClose = drawer.open;
+              if (drawer.open) drawer.close();
+              drawer.removeAttribute("data-open");
+              appliedOpen = false;
+              updateActivators(false);
+              unlockScroll();
+              restoreFocus(true);
+            };
+            const record = { open: appliedOpen && drawer.open, serverOpen: defaults.open, previousFocus, timer: null };
+            drawer[drawerHandoffKey] = record;
+            if (record.open && host.isConnected && drawer.isConnected) {
+              // Leave the open drawer open for the next run to take over. The
+              // runtime runs this cleanup before Vue patches the page, so by the
+              // next task a drawer the page removed is disconnected: close it then,
+              // without telling `onOpenChange`, because the owner removed it. A
+              // drawer no run takes over within a second closes the same way.
+              const abort = () => {
+                if (drawer[drawerHandoffKey] !== record) return;
+                delete drawer[drawerHandoffKey];
+                clearTimeout(record.timer);
+                closeNow();
+              };
+              setTimeout(() => { if (!drawer.isConnected) abort(); }, 0);
+              record.timer = setTimeout(abort, 1000);
+            } else {
+              closeNow();
+            }
             disposed = true;
             host.removeAttribute("data-citry-drawer-initialized");
           };

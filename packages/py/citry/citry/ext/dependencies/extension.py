@@ -22,9 +22,7 @@ from citry.assets import HasHtml, dedupe, module_dir, resolve_asset_file
 from citry.ext.dependencies.emission import EXTRA_KEY, emit_dependencies
 from citry.ext.dependencies.scripts import (
     _cache_component_css_vars_capture,
-    _cache_component_js_vars_capture,
     _css_vars_capture,
-    _js_vars_capture,
     _VariablesScriptCapture,
     evict_component_script_keys,
     evict_component_scripts,
@@ -53,7 +51,6 @@ if TYPE_CHECKING:
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
     from citry.component import Component
-    from citry.ownership_manifest import OwnershipManifestArtifact
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
     from citry.util.routing import URLRoute
 
@@ -71,9 +68,9 @@ class CitryDependencies:
     - ``Script``/``Style`` objects - unchanged
     - Pre-rendered tags (`__html__`) - unchanged
 
-    The entry's type is what tells the emission step what
-    to do with it (inline the file content, emit a ``src``/``href`` tag, or
-    output the tag verbatim; see ``emission.py``).
+    The entry's type tells Citry what to do with it when it writes the
+    page: inline the file content, emit a ``src``/``href`` tag, or output
+    the tag verbatim.
 
     Attributes:
         js: JS entries, base classes' entries first, then the class's own,
@@ -97,14 +94,16 @@ class CitryDependencies:
         return CitryDependencies(js=js, css=css)
 
     def __bool__(self) -> bool:
-        return bool(self.js) or bool(self.css)
+        # A media type with no entries emits nothing, so it must not make the
+        # set count as present: an empty declaration behaves like no
+        # declaration everywhere this truth value is checked.
+        return bool(self.js) or any(self.css.values())
 
 
 @dataclass(frozen=True, slots=True)
 class _DependencyCacheCapture:
     """Detached-value inputs needed to rebuild one dependency record."""
 
-    js: _VariablesScriptCapture | None = None
     css: _VariablesScriptCapture | None = None
 
 
@@ -166,16 +165,18 @@ class DependenciesExtension(Extension):
     """
     The built-in extension owning the ``Dependencies`` secondary-asset class.
 
-    The loading half reads each component or reusable definition base's
-    preserved ``Dependencies`` declaration, resolves and merges declarations
-    lazily in :meth:`resolve`, and drops a class's derived state when its files
-    are reset or its final registry alias is removed.
+    The first time
+    [`resolve()`][citry.ext.dependencies.DependenciesExtension.resolve] is
+    called for a class, the extension reads its ``Dependencies``
+    declaration, merges it with its bases' declarations, and caches the
+    result. It drops that result when the class's files are reset or its
+    last registered name is removed.
 
-    The emission half (docs/design/dependencies.md): records each component
-    render (``on_component_data``), bubbles the records up as nested renders
-    are consumed (``on_render_context_merge``), and at serialize time turns them into
-    ``<script>``/``<style>``/``<link>`` tags placed into the page
-    (``on_serialize``, implemented in ``emission.py``).
+    During a render, the extension records each component render
+    (``on_component_data``) and passes the records up to the parent as
+    nested renders finish (``on_render_context_merge``). When the page is
+    serialized (``on_serialize``), it turns the records into
+    ``<script>``/``<style>``/``<link>`` tags placed into the page.
     """
 
     name = "dependencies"
@@ -210,16 +211,13 @@ class DependenciesExtension(Extension):
             not has_component_asset("js", comp_cls)
             and not has_component_asset("css", comp_cls)
             and not comp_cls.get_dependencies()
-            and not ctx.js_data
         ):
             return
         # Per-render variables: hash each data method's result and cache the
         # generated script/stylesheet under the hash, so identical data is
         # delivered to the browser once (docs/design/dependencies.md
         # section 5).
-        js_capture = _cache_component_js_vars_capture(comp_cls, ctx.js_data) if ctx.js_data else None
         css_capture = _cache_component_css_vars_capture(comp_cls, ctx.css_data) if ctx.css_data else None
-        js_vars_hash = None if js_capture is None else js_capture.variables_hash
         css_vars_hash = None if css_capture is None else css_capture.variables_hash
         if css_vars_hash is not None:
             # The instance's root elements get the matching marker attribute,
@@ -234,11 +232,11 @@ class DependenciesExtension(Extension):
             DependencyRecord(
                 class_id=comp_cls.class_id,
                 component_id=ctx.component.id,
-                js_vars_hash=js_vars_hash,
+                js_vars_hash=None,
                 css_vars_hash=css_vars_hash,
                 component_class=comp_cls,
             )
-        ] = _DependencyCacheCapture(js=js_capture, css=css_capture)
+        ] = _DependencyCacheCapture(css=css_capture)
 
     def on_render_context_merge(self, ctx: OnRenderContextMergeContext) -> None:
         # A nested render was consumed by an enclosing one: its records join the
@@ -263,7 +261,6 @@ class DependenciesExtension(Extension):
                     "class_id": record.class_id,
                     "css": _capture_to_wire(capture.css),
                     "instance": local_by_id[record.component_id],
-                    "js": _capture_to_wire(capture.js),
                 }
                 for record, capture in records.items()
                 if record.component_id in ctx.selected_render_ids
@@ -284,7 +281,7 @@ class DependenciesExtension(Extension):
         seen_instances: set[int] = set()
         for index, raw in enumerate(ctx.payload["records"]):
             path = f"dependencies.records[{index}]"
-            if type(raw) is not dict or set(raw) != {"class_id", "css", "instance", "js"}:
+            if type(raw) is not dict or set(raw) != {"class_id", "css", "instance"}:
                 raise CacheArtifactError(f"{path} has an invalid field set.")
             item = raw
             instance = item["instance"]
@@ -300,17 +297,9 @@ class DependenciesExtension(Extension):
                 component_class = ctx.citry.get_component_by_class_id(class_id)
             except KeyError as err:
                 raise CacheArtifactError(f"{path}.class_id has no current registered component.") from err
-            js_capture = _capture_from_wire(item["js"], path=f"{path}.js", class_id=class_id, kind="js")
-            css_capture = _capture_from_wire(item["css"], path=f"{path}.css", class_id=class_id, kind="css")
+            css_capture = _capture_from_wire(item["css"], path=f"{path}.css", class_id=class_id)
             if css_capture is not None and not has_component_asset("css", component_class):
                 raise CacheArtifactError(f"{path}.css is incompatible with the current component CSS.")
-            if js_capture is not None:
-                writes.append(
-                    RenderCacheWrite(
-                        key=gen_cache_key(class_id, "js", js_capture.variables_hash),
-                        value=js_capture.cache_value,
-                    )
-                )
             if css_capture is not None:
                 writes.append(
                     RenderCacheWrite(
@@ -322,11 +311,11 @@ class DependenciesExtension(Extension):
             record = DependencyRecord(
                 class_id=class_id,
                 component_id=ctx.instance_ids[instance],
-                js_vars_hash=None if js_capture is None else js_capture.variables_hash,
+                js_vars_hash=None,
                 css_vars_hash=None if css_capture is None else css_capture.variables_hash,
                 component_class=component_class,
             )
-            records[record] = _DependencyCacheCapture(js=js_capture, css=css_capture)
+            records[record] = _DependencyCacheCapture(css=css_capture)
         return StagedRenderCacheContribution(
             extra_items=((EXTRA_KEY, records),) if records else (),
             cache_writes=tuple(writes),
@@ -345,7 +334,6 @@ class DependenciesExtension(Extension):
         security_csp: SecurityCspMode,
         javascript_policy: _JavascriptPolicy | None,
         security_javascript: SecurityJavascriptMode,
-        ownership_artifact: OwnershipManifestArtifact | None,
     ) -> str | None:
         if type(self).on_serialize is not DependenciesExtension.on_serialize:
             return self.on_serialize(ctx)
@@ -356,7 +344,6 @@ class DependenciesExtension(Extension):
             security_csp=security_csp,
             javascript_policy=javascript_policy,
             security_javascript=security_javascript,
-            ownership_artifact=ownership_artifact,
         )
 
     # ----- HTTP routes (docs/design/dependencies.md section 9) -----
@@ -378,7 +365,7 @@ class DependenciesExtension(Extension):
         Merge order is **bases first, own entries last**: list order becomes
         document order at emission and CSS breaks equal-specificity ties by
         document order, so the more specialized class's styles must come later
-        to win (docs/design/asset_loading.md section 7.3).
+        to win.
 
         ``Component.Dependencies.extend`` picks the bases:
 
@@ -485,6 +472,10 @@ class DependenciesExtension(Extension):
             media_type: dedupe(entry for raw in raw_entries for entry in _resolve_entry(raw, comp_cls, source_class))
             for media_type, raw_entries in css_entries.items()
         }
+        # `css = []` (or a media type mapped to an empty list) declares nothing,
+        # so drop the empty media types: the result then equals the one for an
+        # absent `css`, and callers testing `dependencies.css` see no entries.
+        css = {media_type: entries for media_type, entries in css.items() if entries}
         return CitryDependencies(js=js, css=css)
 
 
@@ -669,7 +660,6 @@ def _capture_from_wire(
     *,
     path: str,
     class_id: str,
-    kind: str,
 ) -> _VariablesScriptCapture | None:
     from citry.ext.cache.errors import CacheArtifactError  # noqa: PLC0415
 
@@ -682,7 +672,7 @@ def _capture_from_wire(
         raise CacheArtifactError(f"{path} fields must be exact strings.")
     source = cast("str", raw["source"])
     try:
-        rebuilt = _js_vars_capture(class_id, source) if kind == "js" else _css_vars_capture(class_id, source)
+        rebuilt = _css_vars_capture(class_id, source)
     except (TypeError, ValueError) as err:
         raise CacheArtifactError(f"{path}.source is invalid: {err}") from err
     if rebuilt.variables_hash != raw["hash"] or rebuilt.cache_value != raw["value"]:

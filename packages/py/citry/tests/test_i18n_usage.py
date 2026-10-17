@@ -49,17 +49,17 @@ def test_records_template_data_and_composite_template_calls_without_values() -> 
             {{ prepared }}
             {{ "<" + tr("first-message") + ">" + tr("second-message") }}
             {{ amount }} {{ parsed }}
-            <span x-text="$i18n.tr('browser-message')"></span>
+            <span v-text="$i18n.tr('browser-message')"></span>
         """
         js = """
             const i18n = unrelated;
             i18n.tr("not-a-component-call");
-            $component(({ i18n: localeService }) => {
-                localeService.tr("component-browser-message");
-                localeService.bind({
+            $component(({ component }) => {
+                component.$i18n.tr("component-browser-message");
+                component.$i18n.bind({
                     message: "bound-browser-message",
                     output: "label",
-                    onChange: applyMessage,
+                    onChange: () => {},
                 });
             });
         """
@@ -94,6 +94,68 @@ def test_records_template_data_and_composite_template_calls_without_values() -> 
     assert record.server_usage.parsers == (ProfileUse("number", "measurement"),)
     assert "Ada" not in repr(record)
     assert "12.5" not in repr(record)
+
+
+def test_component_js_preloads_calls_through_a_variable_holding_the_service() -> None:
+    app = configured_app()
+
+    class Toast(Component):
+        citry = app
+
+        template = """
+            <div></div>
+        """
+        js = """
+            $component({
+                onServerRender({ component }) {
+                    const i18n = component.$i18n;
+                    if (!i18n) return;
+                    i18n.tr("alias-message");
+                    const binding = i18n.bind({
+                        message: "alias-bound-message",
+                        onChange: () => {},
+                    });
+                    let kept = component.$i18n;
+                    kept?.tr("unassigned-let-message");
+                    let changed = component.$i18n;
+                    changed = other;
+                    changed.tr("reassigned-message");
+                    const { tr } = component.$i18n;
+                    tr("destructured-message");
+                    const copy = i18n;
+                    copy.tr("copied-message");
+                    return () => binding.dispose();
+                },
+                methods: {
+                    label() {
+                        const service = this.$i18n;
+                        return service.tr("method-alias-message");
+                    },
+                },
+            });
+        """
+        messages = """
+            alias-message = Alias
+            alias-bound-message = Alias bound
+            unassigned-let-message = Unassigned let
+            reassigned-message = Reassigned
+            destructured-message = Destructured
+            copied-message = Copied
+            method-alias-message = Method alias
+        """
+
+    rendered = Toast().render()
+    record = next(iter(rendered.context.extra[EXTRA_KEY].values()))
+
+    # Only variables proven to hold the service count; a reassigned `let`,
+    # destructuring, and a copy of the variable are not followed. The
+    # extension collects `tr()` calls before `bind()` calls.
+    assert record.client_outputs == (
+        MessageOutputUse("alias-message", None),
+        MessageOutputUse("unassigned-let-message", None),
+        MessageOutputUse("method-alias-message", None),
+        MessageOutputUse("alias-bound-message", None),
+    )
 
 
 def test_nested_component_usage_merges_into_the_root_render() -> None:
@@ -155,7 +217,7 @@ def test_render_cache_replays_usage_with_the_fresh_component_id() -> None:
             calls += 1
             return super().template_data(kwargs, slots)
 
-        template = '{{ tr("cached-message") }}<span x-text="$i18n.tr(\'cached-client\')"></span>'
+        template = '{{ tr("cached-message") }}<span v-text="$i18n.tr(\'cached-client\')"></span>'
         messages = """
             cached-message = Cached
             cached-client = Cached client
@@ -184,6 +246,9 @@ def test_render_cache_remaps_translation_binding_records_and_html_markers() -> N
 
         class Cache:
             enabled = True
+
+            def vary(self, kwargs, slots):
+                return self.component.i18n.context.identity
 
         def template_data(self, kwargs, slots):
             nonlocal calls

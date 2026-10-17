@@ -68,6 +68,7 @@ class CDateRangeOpenChangeDetail(TypedDict):
         "native",
         "ancestor",
         "modal",
+        "disabled",
     ]
     controlled: bool
     forced: bool
@@ -663,7 +664,11 @@ class CDateRange(LibraryComponent):
           const initialValue = defaults.value ? { ...defaults.value } : null;
           let draftStart = null;
           let previewEnd = null;
-          let internalOpen = false;
+          // A server re-render that keeps this picker keeps its Vue instance, and
+          // with it the popup's open state, so a popup that was open before the
+          // re-render stays open. The picker has no server `open` input, so there
+          // is no server value for it to follow.
+          let internalOpen = scope.dateRangeOpen === true;
           let controlledValue = false;
           let controlledOpen = false;
           let nativeInvalid = false;
@@ -849,6 +854,10 @@ class CDateRange(LibraryComponent):
           const unsubscribe = i18n?.subscribe(() => { if (ready) render(); });
 
           effect(() => {
+            // Read before this update changes it: a server re-render keeps this
+            // picker's Vue instance, so on the new run's first update this is the
+            // open state the previous run left.
+            const wasOpen = scope.dateRangeOpen === true;
             configuration = resolveConfiguration();
             const requestedValue = props.value;
             if (requestedValue === undefined) { controlledValue = false; resolver.clear('value'); }
@@ -859,6 +868,14 @@ class CDateRange(LibraryComponent):
             if (requestedOpen === undefined || requestedOpen === null) { if (controlledOpen) internalOpen = scope.dateRangeOpen; controlledOpen = false; resolver.clear('open'); }
             else if (typeof requestedOpen === 'boolean') { const opening = !scope.dateRangeOpen && requestedOpen; controlledOpen = true; internalOpen = requestedOpen; scope.dateRangeOpen = requestedOpen; resolver.clear('open'); if (opening) { draftStart = null; previewEnd = null; scope.dateRangeCalendarValue = null; focusCalendar(); } }
             else { resolver.report('open', requestedOpen); if (controlledOpen) internalOpen = scope.dateRangeOpen; controlledOpen = false; }
+            // A disabled picker cannot stay open, so disabling an open popup closes
+            // it, as CMenu does. The owner did not ask for that close, so it is
+            // reported once, when the popup was open before this update.
+            if (configuration.disabled && scope.dateRangeOpen) {
+              internalOpen = false;
+              scope.dateRangeOpen = false;
+              if (wasOpen) resolver.callback('onOpenChange')?.(false, openDetail('disabled', null, true));
+            }
             ready = true; render();
           });
           mutations.start(() => render());

@@ -625,11 +625,22 @@ def test_focus_presence_animation_rapid_reversal_and_form_continuity(disclosure_
     note.fill("edited")
     note.focus()
 
-    trigger.evaluate("element => element.click()")
-    assert trigger.get_attribute("aria-expanded") == "false"
-    assert panel.get_attribute("aria-hidden") == "true"
-    assert panel.evaluate("element => element.inert && !element.hidden")
-    assert trigger.evaluate("element => element === document.activeElement")
+    # The closing animation keeps the panel in the page only briefly, and a
+    # slow runner can finish it between separate checks. Read the state in the
+    # same task as the click, before any animation frame can run.
+    closing = trigger.evaluate(
+        """(element, panel) => {
+          element.click();
+          return {
+            expanded: element.getAttribute('aria-expanded'),
+            ariaHidden: panel.getAttribute('aria-hidden'),
+            inertAndShown: panel.inert && !panel.hidden,
+            focused: element === document.activeElement,
+          };
+        }""",
+        panel.element_handle(),
+    )
+    assert closing == {"expanded": "false", "ariaHidden": "true", "inertAndShown": True, "focused": True}
     page.wait_for_function("document.querySelector('#guide > [data-citry-disclosure-panel]').hidden")
     assert panel.evaluate("element => element.hidden")
     assert panel.evaluate("element => element.style.blockSize === '' && element.style.overflow === ''")

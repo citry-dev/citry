@@ -207,7 +207,9 @@ control.
 ## 14. Server rerender, fragments, morphing, and cleanup
 
 Canonical value, open state, active option, focus, and composition ownership
-must survive compatible morphs by public identity. Structural option changes
+must survive compatible morphs by public identity; the picker has no server
+`open` input. A render that disables an open picker closes it and reports one
+forced close with reason `disabled`. Structural option changes
 come from a server rerender. Locale fragments register beneath their logical
 provider before activation. Every listener, effect, reset entry, observer,
 Popover callback, i18n subscription, and generated binding is released.

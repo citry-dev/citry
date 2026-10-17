@@ -111,7 +111,7 @@ The sample contacts live in memory and reset whenever the server restarts. A
 real application also needs persistent storage and, if users can sign in,
 authentication and authorization. Protect any request that changes data and
 uses cookies against CSRF. If several server processes can render components,
-configure a [Citry cache](https://citry.dev/advanced/cache-backends/) they all
+configure a [Citry cache](https://citry.dev/performance/cache-backends/) they all
 share.
 
 Keep HTMX pinned and review upgrades before deploying them. Test your Content

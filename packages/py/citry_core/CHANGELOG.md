@@ -1,5 +1,31 @@
 # Release notes
 
+## Unreleased
+
+### Removed
+
+- **Breaking:** `citry_core.template_parser.analyze_component_members()` and
+  `citry_core.html_transform.scan_alpine_html()` are removed, with no
+  replacement. Citry 0.6.0 no longer calls them, so this affects only code
+  that imported them directly.
+
+### Added
+
+- `BUILD_PROFILE` reports whether the native extension is a debug or a
+  release build.
+- Citry 0.6.0 uses new helpers that you can also call:
+  `template_parser.analyze_browser_binding_pattern()` and, in
+  `html_transform`, `browser_fragment_matches_elements()`,
+  `browser_fragment_matches_nodes()`, `scan_output_html()`,
+  `static_html_node_count()`, and `validate_html_fragment_boundary()`.
+
+### Changed
+
+- `CompiledCatalog.browser_artifact_json()` now includes
+  `bundle_directions`, the writing direction of each locale whose messages
+  it contains, and raises `I18nCompileError` for a locale whose direction
+  cannot be determined.
+
 ## v1.7.1
 
 _11 Sep 2026_

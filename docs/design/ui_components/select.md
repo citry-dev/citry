@@ -129,7 +129,7 @@ Listbox and hidden native Select.
 | `form` | `str | None` | `None` | structural | explicit native form owner |
 | `id` | `str | None` | Field ID/generated | structural | relationship identity |
 | `value` | `str | None` | `None` | initial state | selected value; must match an Option |
-| `open` | `bool` | `False` | initial state | initial popup request subject to eligibility |
+| `open` | `bool` | `False` | server state | popup request subject to eligibility; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state |
 | `required`, `disabled`, `readonly`, `invalid` | `bool | None` | Field/Form fallback | reactive fallback | semantics, interaction, proxy validity, Field state |
 | `loop` | `bool` | `False` | reactive fallback | arrow navigation wrapping |
 | `placement` | `bottom-start | bottom-end | top-start | top-end` | `bottom-start` | reactive fallback | logical preferred popup placement |
@@ -170,7 +170,7 @@ ephemeral.
 | outside pointer/focus | unchanged | request close | outside target keeps focus; one request per physical gesture |
 | owner value/open update | apply without callback | reconcile | no native events |
 | native Form reset | request server value, close | controlled axes reassert | value/open callbacks for changed uncontrolled axes; no native input/change |
-| effective disabled/readonly | preserve value | forced close | forced notice only when visible state changed; focus follows Field/form policy |
+| effective disabled/readonly | preserve value | forced close | one forced notice with reason `ancestor` only when the popup was showing, including when the same server render also changes `open`; focus follows Field/form policy |
 | selected Option removed by morph | request `null` | close if open and collection no longer represents value | one structure value request |
 | ancestor/modal safety close | preserve value | force closed and suppress until a fresh edge | forced open callback with public reason `ancestor` |
 
