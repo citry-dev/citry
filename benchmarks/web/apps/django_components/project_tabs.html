@@ -1,0 +1,21 @@
+{% load component_tags %}
+<div id="project-tabs" x-data="{ activeTab: 'outputs' }">
+<div role="tablist">
+<button type="button" role="tab" data-tab-target="project-info" @click="activeTab = 'project-info'">Project Info</button>
+<button type="button" role="tab" data-tab-target="notes-1" @click="activeTab = 'notes-1'">Notes 1</button>
+<button type="button" role="tab" data-tab-target="notes-2" @click="activeTab = 'notes-2'">Notes 2</button>
+<button type="button" role="tab" data-tab-target="notes-3" @click="activeTab = 'notes-3'">Notes 3</button>
+<button type="button" role="tab" data-tab-target="outputs" @click="activeTab = 'outputs'">Outputs</button>
+</div>
+{% component "project_info" state=state / %}
+{% for tab in state.note_tabs %}
+{% component "note_panel" tab=tab / %}
+{% endfor %}
+<section id="outputs" data-tab-panel="outputs" x-show="activeTab === 'outputs'">
+<h2>Outputs</h2>
+{% for phase in state.phase_groups %}
+{% component "phase_group" state=state phase=phase csrf=csrf / %}
+{% endfor %}
+</section>
+</div>
+

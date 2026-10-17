@@ -1,0 +1,204 @@
+<section id="board" data-revision="{{ revision }}" data-session="{{ session }}" data-operation="{{ operation }}" data-visible-count="{{ visible_count }}" data-total-count="{{ total_count }}" data-project-id="{{ project.id }}">
+<nav id="project-navbar" aria-label="Project navigation">Project workspace</nav>
+<aside id="project-sidebar">
+<h2>Phases</h2>
+<nav aria-label="Project phases">
+{% for phase in phase_groups %}
+<a href="#phase-{{ phase.id }}">{{ phase.title }}</a>
+{% endfor %}
+</nav>
+<h2>Bookmarks</h2>
+{% for bookmark in bookmarks %}
+<a data-bookmark-id="{{ bookmark.id }}" data-bookmark-name="{{ bookmark.text }}" href="{{ bookmark.url }}">
+<span class="bookmark-name">{{ bookmark.text }}</span>
+</a>
+{% endfor %}
+</aside>
+<header id="project-header">
+<p id="project-organization">{{ project.organization }}</p>
+<h1 id="board-title">{{ title }}</h1>
+<p>
+<span id="project-start-date">{{ project.start_date }}</span> – <span id="project-end-date">{{ project.end_date }}</span> · <span id="project-status">{{ project.status }}</span>
+</p>
+</header>
+<div class="toolbar">
+<form hx-post="/action" hx-target="#board" hx-swap="outerHTML">
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf }}">
+<input type="hidden" name="session" value="{{ session }}">
+<input type="hidden" name="action" value="filter">
+<input type="hidden" name="operation" value="manual">
+<label for="query">Filter outputs</label>
+<input id="query" name="query" value="{{ query }}">
+<button data-bench-action="filter" type="submit">Filter</button>
+</form>
+<form hx-post="/action" hx-target="#board" hx-swap="outerHTML" novalidate>
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf }}">
+<input type="hidden" name="session" value="{{ session }}">
+<input type="hidden" name="action" value="save">
+<input type="hidden" name="operation" value="manual">
+<label for="title-input">Project title</label>
+<input id="title-input" name="title" value="{{ title_input }}">
+<button data-bench-action="save" type="submit">Save</button>
+</form>
+</div>
+<p id="form-error" role="alert">{{ error }}</p>
+<p id="form-notice" role="status">{{ notice }}</p>
+<div class="toolbar">
+{% for action,label in action_buttons %}
+<form hx-post="/action" hx-target="#board" hx-swap="outerHTML">
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf }}">
+<input type="hidden" name="session" value="{{ session }}">
+<input type="hidden" name="action" value="{{ action }}">
+<input type="hidden" name="operation" value="manual">
+<button data-bench-action="{{ action }}" type="submit">{{ label }}</button>
+</form>
+{% endfor %}
+</div>
+<p>
+<span id="visible-count">{{ visible_count }}</span> visible outputs</p>
+<div id="project-tabs" x-data="{ activeTab: 'outputs' }">
+<div role="tablist">
+{% for tab_id,tab_label in tab_buttons %}
+<button type="button" role="tab" data-tab-target="{{ tab_id }}" @click="activeTab = '{{ tab_id }}'" :aria-selected="activeTab === '{{ tab_id }}'">{{ tab_label }}</button>
+{% endfor %}
+</div>
+<section id="project-info" data-tab-panel="project-info" x-show="activeTab === 'project-info'">
+<h2>Project Info</h2>
+<table>
+<tbody>
+<tr>
+<th>Organization</th>
+<td>{{ project.organization }}</td>
+</tr>
+<tr>
+<th>Status</th>
+<td>{{ project.status }}</td>
+</tr>
+<tr>
+<th>Duration</th>
+<td>{{ project.start_date }} – {{ project.end_date }}</td>
+</tr>
+</tbody>
+</table>
+<section id="project-tags" data-project-tags>
+<h3>Tags</h3>
+{% if project_tags %}{% for tag in project_tags %}
+<span class="project-tag">{{ tag }}</span>
+{% endfor %}{% else %}
+<p>No project tags</p>
+{% endif %}
+</section>
+<section id="project-status-updates" data-project-status-updates>
+<h3>Status updates</h3>
+{% if status_updates %}{% for update in status_updates %}
+<p>{{ update }}</p>
+{% endfor %}{% else %}
+<p>No status updates</p>
+{% endif %}
+</section>
+<section id="project-team">
+<h3>Team</h3>
+{% for role in roles %}
+<article data-role-id="{{ role.id }}">
+<span class="role-name">{{ role.name }}</span> <span class="user-name">{{ role.user_name }}</span>
+</article>
+{% endfor %}
+</section>
+<section id="project-contacts" data-project-contacts>
+<h3>Contacts</h3>
+{% if contacts %}{% for contact in contacts %}
+<p>{{ contact.name }}</p>
+{% endfor %}{% else %}
+<p>No contacts</p>
+{% endif %}
+</section>
+</section>
+{% for note_tab in note_tabs %}
+<section id="{{ note_tab.id }}" data-tab-panel="{{ note_tab.id }}" x-show="activeTab === '{{ note_tab.id }}'">
+<h2>{{ note_tab.title }}</h2>
+{% for note in note_tab.notes %}
+<article data-note-id="{{ note.id }}">
+<p class="note-text">{{ note.text }}</p>
+<details>
+<summary>Comments</summary>
+{% for comment in note.comments %}
+<article data-comment-id="{{ comment.id }}">
+<span class="comment-author">{{ comment.author }}</span>
+<p class="comment-text">{{ comment.text }}</p>
+</article>
+{% endfor %}
+</details>
+</article>
+{% endfor %}
+</section>
+{% endfor %}
+<section id="outputs" data-tab-panel="outputs" x-show="activeTab === 'outputs'">
+<h2>Outputs</h2>
+<div id="phase-groups">
+{% for phase in phase_groups %}
+<section id="phase-{{ phase.id }}" data-phase-id="{{ phase.id }}" data-phase-expanded="true" x-data="{ open: true }">
+<button type="button" @click="open = !open" :aria-expanded="open">
+<h3 class="phase-title">{{ phase.title }}</h3>
+</button>
+<div x-show="open">
+{% if phase.outputs %}{% for row in phase.outputs %}
+<article id="{{ row.element_id }}" data-row-id="{{ row.id }}" {% if row.source_id %}data-source-id="{{ row.source_id }}"{% endif %} data-selected="{% if row.id == selected %}true{% else %}false{% endif %}" data-output-expanded="true" x-data="{ open: true }">
+<header>
+<span class="row-title">{{ row.title }}</span> <span class="row-status">{{ row.status }}</span> <span data-output-badge="{{ row.status }}">
+{{ row.badge }}
+</span>
+</header>
+<form class="output-form" hx-post="/action" hx-target="#board" hx-swap="outerHTML">
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf }}">
+<input type="hidden" name="session" value="{{ session }}">
+<input type="hidden" name="action" value="select">
+<input type="hidden" name="operation" value="manual">
+<input type="hidden" name="row_id" value="{{ row.id }}">
+<label>Description <textarea data-output-description>{{ row.description }}</textarea>
+</label>
+<label>
+<input type="checkbox" data-output-completed {% if row.completed %}checked{% endif %}> Completed</label>
+<button type="submit" data-bench-action="{{ row.select_action }}">Select</button>
+</form>
+<button type="button" @click="open = !open" :aria-expanded="open">Output details</button>
+<div class="output-panel" x-show="open">
+<section class="dependencies">
+<h4>Dependencies</h4>
+{% if row.dependencies %}{% for dep in row.dependencies %}
+<article data-dependency-id="{{ dep.id }}" data-dependency-title="{{ dep.title }}" data-dependency-completed="{% if dep.completed %}true{% else %}false{% endif %}">
+<span class="dependency-title">{{ dep.title }}</span>
+{% if not dep.completed %}
+<strong>Missing</strong>
+{% endif %}
+</article>
+{% endfor %}{% else %}
+<p>No dependencies</p>
+{% endif %}
+</section>
+<section class="attachments">
+<h4>Attachments</h4>
+{% if row.attachments %}{% for attachment in row.attachments %}
+<article data-attachment-id="{{ attachment.id }}" data-attachment-name="{{ attachment.name }}">
+<a class="attachment-name" href="{{ attachment.url }}">{{ attachment.name }}</a>
+<div>
+{% for tag in attachment.tags %}
+<span class="attachment-tag" data-attachment-tag="{{ tag }}">{{ tag }}</span>
+{% endfor %}
+</div>
+</article>
+{% endfor %}{% else %}
+<p>No attachments</p>
+{% endif %}
+</section>
+</div>
+</article>
+{% endfor %}{% else %}
+<p>No outputs</p>
+{% endif %}
+</div>
+</section>
+{% endfor %}
+</div>
+</section>
+</div>
+</section>

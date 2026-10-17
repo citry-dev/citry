@@ -1,0 +1,16 @@
+<div id="project-tabs">
+<div role="tablist">
+<button type="button" data-tab-target="project-info" @click="activeTab = 'project-info'">Project Info</button>
+<button type="button" data-tab-target="notes-1" @click="activeTab = 'notes-1'">Notes 1</button>
+<button type="button" data-tab-target="notes-2" @click="activeTab = 'notes-2'">Notes 2</button>
+<button type="button" data-tab-target="notes-3" @click="activeTab = 'notes-3'">Notes 3</button>
+<button type="button" data-tab-target="outputs" @click="activeTab = 'outputs'">Outputs</button>
+</div>
+<c-ProjectInfo c-state="state" />
+<c-NotePanel c-for="tab in state['note_tabs']" #c-key="tab['id']" c-tab="tab" />
+<section id="outputs" data-tab-panel="outputs" v-show="activeTab === 'outputs'">
+<h2>Outputs</h2>
+<c-PhaseGroup c-for="phase in state['phase_groups']" #c-key="phase['id']" c-phase="phase" />
+</section>
+</div>
+

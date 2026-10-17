@@ -1,0 +1,5 @@
+.venv/
+generated/
+board_app/static/
+board_app/__tetracache__/
+__pycache__/

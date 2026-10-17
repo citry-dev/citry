@@ -1,0 +1,69 @@
+{
+  "checked_on": "2026-09-10",
+  "selected_version": "0.8.5",
+  "selection": "Unmodified published release with working built-in component packaging; chosen before timing comparisons",
+  "distributions": {
+    "0.8.5": [
+      {
+        "url": "https://files.pythonhosted.org/packages/1c/e2/6c66a57779c7df25d5439c0534a4f2a58a252305f6798e009d58a19cda7b/tetra-0.8.5-py3-none-any.whl",
+        "sha256": "93d225acef420790c0b8deef7a02421e9a5a288a0e5432a6f589119f3c891b90",
+        "filename": "tetra-0.8.5-py3-none-any.whl"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/07/e6/2b1bae50630b742f600bcc245a89fd126f8ef398589b56529721ece73dc8/tetra-0.8.5.tar.gz",
+        "sha256": "79ae0e4e65c7246d1054ca88c4b35db80a5753c3c6984bc880b7696794fb5a42",
+        "filename": "tetra-0.8.5.tar.gz"
+      }
+    ],
+    "0.9.2": [
+      {
+        "url": "https://files.pythonhosted.org/packages/f6/02/19d70abe47e1ca4c3e8aeacdb1adac3019678a8e6de5374668006dbcb4e8/tetra-0.9.2-py3-none-any.whl",
+        "sha256": "b21d745bda8b55bc6831ee564efc3b261150196ec978ad7f0b9e530f6fae7ca2",
+        "filename": "tetra-0.9.2-py3-none-any.whl"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/33/7b/2af3d722e3effb1331b59d67985799caacfa6d1dd8f118a91ef1261f43c2/tetra-0.9.2.tar.gz",
+        "sha256": "b9a4a95dcb5159ec15339a87a4034125411a6b52a59ec50fb17878d2225359ab",
+        "filename": "tetra-0.9.2.tar.gz"
+      }
+    ]
+  },
+  "browser_assets": {
+    "tetra/js/tetra.js": {
+      "bytes": 37921,
+      "sha256": "ee0de429a4e13c196a3cd5b274c31c68fd8f439b190e2b92f5dba2adf74d9d6a",
+      "source": "tetra==0.8.5 wheel"
+    },
+    "tetra/js/alpinejs.cdn.min.js": {
+      "bytes": 45779,
+      "sha256": "7d46982d2b663a41a5c3c36fb58a27e5cb4de5bb25b0175372f96fd65bfa0c08",
+      "source": "tetra==0.8.5 wheel"
+    },
+    "tetra/js/alpinejs.morph.cdn.min.js": {
+      "bytes": 5294,
+      "sha256": "c9ce1062b913984da8f4f6018f1b3078df59dbc3d0dcf4a8ce6b2ecdde12a39c",
+      "source": "tetra==0.8.5 wheel"
+    },
+    "tetra/css/tetra.css": {
+      "bytes": 140,
+      "sha256": "b1a3df19f19028627c35725b4a51cfed969df33844b09377c929cb8eec1f847f",
+      "source": "tetra==0.8.5 wheel"
+    },
+    "tetra/js/alpinejs.cdn.js": {
+      "bytes": 111482,
+      "sha256": "efd5539d04cd2b6b17e7de0aad5f9e5898ba80708a83bc5a13a294fd78d7529e",
+      "source": "tetra==0.8.5 wheel"
+    },
+    "tetra/js/alpinejs.morph.cdn.js": {
+      "bytes": 13722,
+      "sha256": "2c2c069c6261613f3f762bf3c76652718caacf913e5a5d7e88a4adbd7759ccb6",
+      "source": "tetra==0.8.5 wheel"
+    }
+  },
+  "rejected_configuration": {
+    "asset": "tetra/js/alpinejs.cdn.min.js",
+    "error": "ReferenceError: c is not defined at line 6:1",
+    "cause": "Standalone c expression follows the bundled IIFE",
+    "disposition": "Use unchanged stock script tag and unminified shipped assets"
+  }
+}

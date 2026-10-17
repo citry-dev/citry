@@ -399,7 +399,7 @@ anything. The rule is now:
   because its 275 KB of copy is now in the host, and renders about 12 ms
   slower (three html5ever parses of that block).
 
-The benchmark adapter (`benchmarks/web/apps/citry_vue/adapter.toml`)
+The benchmark app (`benchmarks/web/apps/citry/adapter.toml`)
 declares no minimum hydration size, because every board size arrives as
 server HTML. Warm in-process render and serialize times before and after
 the change are in

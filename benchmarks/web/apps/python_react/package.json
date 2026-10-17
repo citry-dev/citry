@@ -1,0 +1,9 @@
+{
+  "name": "python-react-benchmark",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  }
+}
