@@ -231,14 +231,14 @@ def _code_literal_problems(codes: set[str], prefixes: tuple[str, ...]) -> list[s
             if any(part in {"tests", "out", "__pycache__"} for part in path.parts) or path.name == "corpus.rs":
                 continue
             source = path.read_text(encoding="utf-8")
+            # Forward slashes keep the report the same on Windows, macOS, and Linux.
+            display = path.relative_to(ROOT).as_posix()
             for match in code_re.finditer(source):
                 code = match.group("code")
                 if code in codes:
                     if not has_binding:
                         continue
-                    problems.append(
-                        f"{path.relative_to(ROOT)} duplicates catalog code {code!r}; use the generated binding"
-                    )
+                    problems.append(f"{display} duplicates catalog code {code!r}; use the generated binding")
                 elif not any(code.startswith(prefix) for prefix in prefixes):
-                    problems.append(f"{path.relative_to(ROOT)} uses uncataloged diagnostic code {code!r}")
+                    problems.append(f"{display} uses uncataloged diagnostic code {code!r}")
     return problems

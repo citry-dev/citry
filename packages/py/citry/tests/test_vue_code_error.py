@@ -12,7 +12,8 @@ and component tags, whether or not the page starts Vue. Every test calls
 from __future__ import annotations
 
 import traceback
-from enum import StrEnum
+from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -135,7 +136,9 @@ class TestHtmlElement:
         assert f"c-bind on <div> sets {key!r}" in str(_render_error(page))
 
     def test_str_enum_key_is_checked_like_its_text(self) -> None:
-        class Name(StrEnum):
+        # `StrEnum` needs Python 3.11. A `str` mixin enum member holds the same
+        # text, which is all this check reads.
+        class Name(str, Enum):
             CLICK = "@click"
 
         page = _page('<div c-bind="attrs">x</div>', {"attrs": {Name.CLICK: "go()"}}, vue=False)
@@ -299,7 +302,7 @@ class TestOtherRenderPaths:
             error = _render_error(page)
             assert expected in str(error)
             raised_in = traceback.extract_tb(error.__traceback__)
-            assert any(frame.filename.endswith("i18n/bindings.py") for frame in raised_in)
+            assert any(Path(frame.filename).parts[-2:] == ("i18n", "bindings.py") for frame in raised_in)
 
 
 class TestExtensionHook:
