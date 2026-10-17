@@ -1,19 +1,19 @@
 """
-An HTML fragment: a component rendered on its own and loaded into a page over the
-wire, used as a live docs example.
+A widget that the page loads as an HTML fragment, used as a live docs
+example.
 
-The widget ships class-level JS and CSS. When the page fetches and inserts the
-fragment, citry's client runtime loads those on demand from the static dep files
-the build wrote (see build._pre_render_examples / static_deps.export_fragment_deps).
-Kept to class-level js/css (no js_data/css_data), so the fragment references only
-the two class-level dep URLs.
+The server renders the widget on its own. When the page inserts that
+HTML, Citry's browser runtime fetches the widget's JavaScript and CSS
+and starts it. The widget keeps its JavaScript and CSS on the class,
+without ``js_data()`` or ``css_data()``, so every render of it shares
+the same two files.
 """
 
 from citry import Component
 
 
 class FragmentWidget(Component):
-    """A small self-contained widget, rendered and loaded as an HTML fragment."""
+    """A small widget, rendered and loaded as an HTML fragment."""
 
     class Kwargs:
         pass
@@ -23,9 +23,27 @@ class FragmentWidget(Component):
 
     template = """
       <div class="frag-widget">
-        <strong class="frag-widget__title">Loaded over the wire</strong>
-        <p>This widget's HTML, CSS, and JS arrived as an HTML fragment.</p>
+        <strong class="frag-widget__title">
+          Loaded over the wire
+          <span v-if="scriptRan">(JS ran)</span>
+        </strong>
+        <p>
+          This widget's HTML, CSS, and JS arrived as an HTML fragment.
+        </p>
       </div>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { scriptRan: false };
+        },
+        mounted() {
+          // The label appears only once the widget's own script has
+          // run in the page that inserted the fragment.
+          this.scriptRan = true;
+        },
+      });
     """
 
     css = """
@@ -41,16 +59,8 @@ class FragmentWidget(Component):
       }
     """
 
-    js = """
-      $component(({ els }) => {
-        // Proof the fragment's own JS ran after it was inserted.
-        els[0].dataset.ready = "1";
-        els[0].querySelector(".frag-widget__title").textContent += " (JS ran)";
-      });
-    """
 
-
-# Variant name -> the component class rendered as a fragment. The build
-# instantiates and pre-renders each below examples/fragments/demo/<variant>/,
-# and writes its dep files.
+# The docs build renders each component listed here as a separate HTML
+# fragment, at examples/fragments/demo/<name>/, for the page to fetch,
+# and writes the component's JavaScript and CSS files beside it.
 FRAGMENTS = {"widget": FragmentWidget}

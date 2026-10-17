@@ -19,10 +19,15 @@ class ControlFlowPage(Component):
           <meta charset="utf-8" />
           <title>Control flow example</title>
           <c-css />
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              font-family: system-ui, sans-serif;
+            }
+          </style>
         </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
+        <body>
           <c-TaskList
             title="Today"
             c-tasks="[

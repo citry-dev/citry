@@ -1,4 +1,4 @@
-"""A button that reads its look from a provided theme, used as a live docs example."""
+"""A button that reads its look from a provided theme."""
 
 from typing import Any
 
@@ -6,13 +6,28 @@ from citry import Component
 
 
 class ThemedButton(Component):
-    """A button with no theme prop: it injects the nearest provided theme instead."""
+    """A button with no theme prop.
+
+    It injects the nearest provided theme instead.
+    """
 
     class Kwargs:
         text: str
 
     class Slots:
         pass
+
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots: Slots,
+    ) -> dict[str, Any]:
+        theme = self.inject("theme")
+        return {
+            "text": kwargs.text,
+            "label": theme.label,
+            "style": f"background: {theme.accent};",
+        }
 
     template = """
       <button class="themed-btn" c-style="style">
@@ -32,11 +47,3 @@ class ThemedButton(Component):
         cursor: pointer;
       }
     """
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
-        theme = self.inject("theme")
-        return {
-            "text": kwargs.text,
-            "label": theme.label,
-            "style": "background: " + theme.accent + ";",
-        }

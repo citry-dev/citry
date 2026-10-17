@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from lxml import html as lxml_html
+
 from docs_site._internal.pipeline import render_page
 from docs_site._internal.reference import extract_symbol
 
@@ -60,10 +62,19 @@ def test_docstring_directive_renders_a_class() -> None:
 
 
 def test_docstring_directive_renders_members_recursively() -> None:
-    # A class plus its members each become a doc-object block. Match the wrapper
-    # class exactly so the doc-object-name span (added for the TOC) is not counted.
+    data = extract_symbol("citry.OnSerializeContext")
+    assert data is not None
+
     html = render_page('<c-docstring path="citry.OnSerializeContext" />').html
-    assert html.count('class="doc-object"') == 7  # the class + its 6 attributes
+    document = lxml_html.document_fromstring(html)
+    object_names = [
+        element.xpath('normalize-space(string(.//span[contains(@class, "doc-object-name")]))')
+        for element in document.xpath('//div[contains(concat(" ", normalize-space(@class), " "), " doc-object ")]')
+    ]
+    expected_names = {data.name, *(member.name for member in data.members)}
+
+    assert len(object_names) == len(expected_names)
+    assert set(object_names) == expected_names
 
 
 def test_docstring_directive_unknown_symbol() -> None:

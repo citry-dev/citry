@@ -5,17 +5,20 @@ description: Define named locale-sensitive formats once and use them from Python
 
 # Format values
 
-A formatter turns a canonical application value into text for one locale. The
-same amount may use different digits, decimal separators, currency placement,
-or date order in different locales.
+The same number or date is written differently in each language. One
+amount may be `€1,234.50` in American English and `1 234,50 €` in
+Czech, with different digits, separators, currency placement, or date
+order elsewhere.
 
-Citry keeps those choices in named profiles. Application code asks for a name
-such as `account-balance`; it does not repeat low-level formatter options at
-every call site.
+Citry formats values for the current locale through format profiles. A
+format profile is a named set of formatting options, such as
+`account-balance` for currency amounts. You define each profile once,
+then refer to it by name in Python, templates, and browser code.
 
-## Define a format registry
+## Define named formats
 
-Pass one `FormatRegistry` in the i18n engine settings:
+Create a `FormatRegistry` with your profiles, grouped by kind, and pass
+it in the i18n settings:
 
 ```python
 from citry import (
@@ -24,12 +27,8 @@ from citry import (
     DateFormat,
     DateTimeFormat,
     FormatRegistry,
-    ListFormat,
     NumberFormat,
     PercentFormat,
-    RelativeTimeFormat,
-    TimeFormat,
-    UnitFormat,
 )
 
 formats = FormatRegistry(
@@ -45,23 +44,11 @@ formats = FormatRegistry(
     date={
         "invoice-date": DateFormat(length="long"),
     },
-    time={
-        "appointment-time": TimeFormat(length="short"),
-    },
     datetime={
         "appointment": DateTimeFormat(
             length="medium",
             time_zone_name="short",
         ),
-    },
-    relative_time={
-        "activity-age": RelativeTimeFormat(unit="day"),
-    },
-    list={
-        "people": ListFormat(kind="and", length="wide"),
-    },
-    unit={
-        "distance": UnitFormat(width="long"),
     },
 )
 
@@ -76,47 +63,27 @@ app = Citry(
 )
 ```
 
-Profile names are application-defined. They must use ASCII letters, digits,
-`-`, or `_`. An unknown profile or a profile stored under the wrong category
-raises an error.
+Each kind has its own profile class:
 
-The registry accepts new names under the supported categories. It is not a
-plugin registry for arbitrary formatter implementations. The profile types
-are closed so the Rust server and browser can apply the same semantic rule.
+| Kind | Profile class | Options |
+|---|---|---|
+| `number` | `NumberFormat` | `input` |
+| `percent` | `PercentFormat` | `input` |
+| `currency` | `CurrencyFormat` | none |
+| `date` | `DateFormat` | `fields`, `length`, `input` |
+| `time` | `TimeFormat` | `length`, `input` |
+| `datetime` | `DateTimeFormat` | `length`, `time_zone_name`, `input` |
+| `relative_time` | `RelativeTimeFormat` | `unit` |
+| `list` | `ListFormat` | `kind`, `length` |
+| `unit` | `UnitFormat` | `width` |
 
-## Choose the date fields a profile displays
+All of these classes are importable from `citry`. The `input` option
+says how to read what users type; see
+[Parse localized input](/i18n/parsing/).
 
-`DateFormat.fields` defaults to `"year_month_day"`. Use a narrower closed field
-set when an interface needs a calendar heading, weekday, day number, or another
-partial display without copying browser-specific formatter options:
+## Format a value
 
-```python
-calendar_formats = FormatRegistry(
-    date={
-        "calendar-heading": DateFormat(fields="year_month", length="long"),
-        "calendar-weekday": DateFormat(fields="weekday", length="medium"),
-        "calendar-day": DateFormat(fields="day", length="short"),
-        "calendar-date-label": DateFormat(
-            fields="year_month_day_weekday",
-            length="long",
-        ),
-    },
-)
-```
-
-The supported values are `year`, `month`, `day`, `weekday`, `year_month`,
-`month_day`, `day_weekday`, `month_day_weekday`, `year_month_day`, and
-`year_month_day_weekday`. They describe calendar fields, not a fixed word order;
-ICU4X and the browser still choose locale-appropriate order, names, digits, and
-punctuation.
-
-Parsing remains a complete date job. A profile with `input=DateInput(...)` must
-keep `fields="year_month_day"`; display-only partial profiles do not claim that
-Citry can parse a partial date.
-
-## Use profiles from a component
-
-Use `self.i18n.format` in Python:
+In component Python code, use `self.i18n.format`:
 
 ```citry
 from decimal import Decimal
@@ -139,41 +106,45 @@ class AccountBalance(Component):
     """
 ```
 
-Templates receive the shorter `fmt` facade:
+In a template, use `fmt`:
 
 ```citry-html
 <data>{{ fmt.number(total, format="measurement") }}</data>
 ```
 
-Outside a component, use the service bound to an explicit locale context:
+Outside a component, use a service for an explicit
+[locale context](/i18n/locale-context/):
 
 ```python
+i18n = app.extensions.get_extension("i18n")
 formatted = i18n.for_context(context).format.number(
     Decimal("1234.50"),
     format="measurement",
 )
 ```
 
-## Choose the correct value type
+## Pass the right value
 
-| Operation | Application value | Important rule |
+Each kind accepts a specific Python value:
+
+| Operation | Value | Rule |
 |---|---|---|
-| `number` | exact `int` or finite `Decimal` | Preserves exact decimal digits |
-| `percent` | exact `int` or finite `Decimal` | The value is a ratio; `0.125` means 12.5% |
-| `currency` | exact number plus a currency code | The code is three uppercase ASCII letters such as `EUR` |
-| `date` | exact Python `date` | Uses the locale's selected calendar and profile length |
-| `time` | zone-free Python `time` | Represents wall-clock fields, not an instant |
-| `datetime` | aware Python `datetime` | Converts the instant into the context's explicit time zone |
-| `relative_time` | exact number plus `unit="day"` | The current checked profile supports relative days |
-| `list` | list or tuple of non-empty strings | Formats a conjunction or disjunction and isolates every item |
-| `unit` | exact number plus a unit identifier | The unit stays explicit application data |
+| `number` | `int` or finite `Decimal` | Keeps every decimal digit |
+| `percent` | `int` or finite `Decimal` | A ratio: `0.125` means 12.5% |
+| `currency` | `int` or `Decimal`, plus a currency code | A code of three uppercase letters, such as `EUR` |
+| `date` | `date` | Uses the locale's calendar |
+| `time` | `time` without a time zone | A time on the clock, not a moment |
+| `datetime` | `datetime` with a time zone | Shown in the context's time zone |
+| `relative_time` | `int` or `Decimal`, plus `unit="day"` | Days are the only unit |
+| `list` | list or tuple of non-empty strings | Joins items with "and" or "or" |
+| `unit` | `int` or `Decimal`, plus a unit name | You always pass the unit |
 
-Citry rejects floats for exact numeric profiles. Convert application amounts to
-`Decimal` before formatting when decimal precision matters.
+Floats are rejected with `TypeError`, because they cannot hold every
+decimal amount exactly. Convert amounts to `Decimal` first.
 
-## Keep percent values in one domain
+## Use ratios for percent
 
-Percent formatting uses ratio values:
+A percent profile takes the ratio, not the number of percent:
 
 ```python
 from decimal import Decimal
@@ -184,20 +155,27 @@ label = self.i18n.format.percent(
 )
 ```
 
-The same `Decimal("0.125")` means 12.5 percent in every locale. The formatter
-chooses the digits, decimal separator, spacing, and percent sign.
+`Decimal("0.125")` means 12.5% in every locale. The locale decides the
+digits, the decimal separator, the spacing, and the percent sign.
+Reading the value back with the same profile returns the ratio again.
 
-Parsing with the same profile returns the ratio again. See
-[Parse localized input](/i18n/parsing/).
+## Format dates and times
 
-## Keep date, time, and datetime distinct
+Citry keeps three kinds apart:
 
-A date has calendar fields but no clock. A time has wall-clock fields but no
-date or zone. A datetime formatter receives an aware instant and converts it
-to the time zone in the context:
+- a `date` is a calendar day, with no clock time;
+- a `time` is a clock time, with no date or time zone;
+- a `datetime` is an exact moment, which Citry shows in the context's
+  time zone.
+
+Formatting a `datetime` therefore needs a context with a time zone:
 
 ```python
-context = i18n.make_context(
+from citry.ext.i18n import make_context
+
+i18n = app.extensions.get_extension("i18n")
+context = make_context(
+    app,
     locale="cs-CZ",
     time_zone="Europe/Prague",
 )
@@ -209,17 +187,54 @@ text = formatter.datetime(
 )
 ```
 
-Calling `datetime()` without a context time zone is an error. Calling `time()`
-with a zone-aware Python `time` is also an error, because a zone offset can
-depend on the missing date.
+`datetime()` raises `ValueError` when the context has no time zone.
+`time()` raises `ValueError` for a `time` that carries a time zone,
+because the offset of a zone can depend on the date, which a `time`
+does not have.
 
-## Use the same names in the browser
+## Show part of a date
 
-A client-enabled provider exposes the registry through `$i18n.format`:
+By default a date profile shows year, month, and day. Set `fields` for
+a calendar heading, a weekday name, or another partial date:
+
+```python
+calendar_formats = FormatRegistry(
+    date={
+        "calendar-heading": DateFormat(
+            fields="year_month",
+            length="long",
+        ),
+        "calendar-weekday": DateFormat(
+            fields="weekday",
+            length="medium",
+        ),
+        "calendar-day": DateFormat(fields="day", length="short"),
+        "calendar-date-label": DateFormat(
+            fields="year_month_day_weekday",
+            length="long",
+        ),
+    },
+)
+```
+
+The values are `year`, `month`, `day`, `weekday`, `year_month`,
+`month_day`, `day_weekday`, `month_day_weekday`, `year_month_day`, and
+`year_month_day_weekday`. They choose which parts appear, not their
+order; the locale still decides the order, names, digits, and
+punctuation.
+
+A profile that also reads user input (`input=DateInput(...)`) must keep
+the default `fields="year_month_day"`, because Citry only reads complete
+dates.
+
+## Format in the browser { #format-values-in-the-browser }
+
+Inside a [browser i18n provider](/i18n/browser/), `$i18n.format` uses
+the same profile names:
 
 ```citry-html
 <output
-  x-text="$i18n.format.currency(
+  v-text="$i18n.format.currency(
     '1234.50',
     'EUR',
     { format: 'account-balance' },
@@ -227,12 +242,32 @@ A client-enabled provider exposes the registry through `$i18n.format`:
 ></output>
 ```
 
-Browser exact decimal values use strings or safe exact integers. Date
-formatting takes `{ year, month, day }`; time formatting takes wall-clock
-fields; datetime formatting takes a JavaScript `Date` instant and the context's
-time zone.
+In the browser, pass exact decimals as strings, or as integers small
+enough for JavaScript to hold exactly. Pass a date as
+`{ year, month, day }`, a time as its clock fields, and a moment as a
+JavaScript `Date`, which is shown in the context's time zone.
 
-The server uses ICU4X and the browser uses `Intl`. Both consume the same named
-profile and semantic input. Browser implementations may use different current
-locale data for presentational details, so do not compare localized output as
-an application identifier.
+## Less common cases
+
+### Name and kind errors
+
+A profile name may contain ASCII letters, digits, `-`, and `_`. Any
+other name raises `ValueError` when you create the registry. A profile
+of the wrong class for its kind, such as a `PercentFormat` under
+`number`, raises `TypeError` there too. Calling a profile name that does
+not exist raises `ValueError`.
+
+### Built-in kinds only
+
+You can add any number of profiles under the kinds above, but you cannot
+add a new kind or plug in your own formatter. The server and the browser
+must apply the same rules, and that is only possible for the built-in
+kinds.
+
+### Browser output differs
+
+The server formats with ICU4X, the locale library Citry uses, and the
+browser with its built-in `Intl`
+API. Both apply the same profile, but a browser may have newer or older
+locale data, so small details such as spacing can differ. Do not compare
+formatted text to identify a value.

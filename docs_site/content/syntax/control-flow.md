@@ -5,27 +5,28 @@ description: Show, skip, and repeat template content with Citry's if, elif, else
 
 # Conditions and loops
 
-Citry can show content when a Python expression is true and repeat content for
-every item in an iterable. Each tool has two forms:
+A template often shows a part only in some cases, such as admin tools for an
+admin, or repeats a part for every item, such as one row per book. Citry
+decides both in Python while it renders the page.
 
-- Put a shorthand attribute on one HTML or component tag.
-- Use a built-in tag around a larger piece of markup.
+Each has two forms:
 
-Choose the form that keeps the resulting HTML easiest to see.
+- An attribute, such as `c-if` or `c-for`, on the one tag it controls.
+- A tag, such as `<c-if>` or `<c-for>`, around a larger block.
 
-## Show one element conditionally
+## `c-if`, `c-elif`, `c-else` { #add-a-condition }
 
-Put `c-if` directly on the element you want to show:
+Put `c-if` on the element:
 
 ```citry-html
 <p c-if="account.is_active">Your account is active.</p>
 ```
 
-Citry evaluates the value as a Python expression. When it is truthy, the
-entire `<p>` renders. When it is falsy, nothing from that element renders.
+The value is a Python expression. When it is true, the whole `<p>` renders.
+When it is false, nothing from it renders. Conditions follow Python's rules,
+so an empty list counts as false.
 
-Add adjacent `c-elif` and `c-else` elements when there are several possible
-results:
+For several cases, add `c-elif` and `c-else` on the elements right after it:
 
 ```citry-html
 <p c-if="role == 'admin'">Administrator tools</p>
@@ -33,13 +34,13 @@ results:
 <p c-else>Reader account</p>
 ```
 
-Citry renders the first truthy branch and skips the rest. Conditions use
-normal Python truthiness: a non-empty list is truthy and an empty list is
-falsy. `c-else` is bare and must not have a value.
+Citry renders the first branch whose condition is true and skips the rest.
+`c-else` takes no value.
 
-## Wrap several elements in a condition
+## `<c-if>` blocks { #wrap-several-elements }
 
-Use the tag form when one branch contains several elements:
+When a branch holds several elements, use the tag form. Write the condition
+in `cond`, without `{{ }}`:
 
 ```citry-html
 <c-if cond="account.is_active">
@@ -51,30 +52,12 @@ Use the tag form when one branch contains several elements:
 </c-else>
 ```
 
-The condition belongs in `cond="..."` without `{{ }}`. `<c-elif>` also takes
-a `cond` attribute; `<c-else>` does not.
+`<c-elif>` also takes `cond`. `<c-else>` takes nothing.
 
-For compatibility, the tag form treats a bare `cond` or `cond=""` as `True`.
-Prefer an explicit expression so the intent is visible. The shorthand `c-if`
-and `c-elif` forms require a non-empty expression value.
+## `c-for` and `c-empty` { #repeat-an-element }
 
-Every `elif` and `else` branch must immediately follow the branch before it.
-Formatting whitespace and template comments between branches are fine:
-
-```citry-html
-<p c-if="ready">Ready</p>
-{# Explain why the fallback exists. #}
-<p c-else>Still working</p>
-```
-
-Template comments do not render, so neither they nor the formatting whitespace
-around them becomes part of a branch. Text, an HTML comment, an expression, or
-another element between branches does produce content, so it breaks the chain
-and is an error. The same rule applies between `for` and `empty` branches.
-
-## Repeat one element
-
-Put `c-for` on the element you want to repeat:
+Put `c-for` on the element to repeat. Add a `c-empty` element right after it
+for the case when there are no items:
 
 ```citry-html
 <ul>
@@ -83,12 +66,10 @@ Put `c-for` on the element you want to repeat:
 </ul>
 ```
 
-The first `<li>` renders once for each book. The adjacent `c-empty` element
-renders only when the loop produces no rows. `c-empty` is bare and must not
-have a value.
+`c-empty` takes no value.
 
-The loop name is available everywhere on the repeated element, including its
-other attributes:
+The loop name works anywhere on the repeated element, including its other
+attributes:
 
 ```citry-html
 <li
@@ -99,9 +80,10 @@ other attributes:
 </li>
 ```
 
-## Repeat a larger block
+## `<c-for>` blocks { #repeat-a-larger-block }
 
-Use `<c-for>` when each item needs several sibling elements:
+When each item needs several elements, use `<c-for>` and write the loop in
+`each`, without `{{ }}`:
 
 ```citry-html
 <c-for each="book in books">
@@ -113,11 +95,10 @@ Use `<c-for>` when each item needs several sibling elements:
 </c-empty>
 ```
 
-Put the loop clause in `each="..."`, again without `{{ }}`.
+## `<c-for>` unpack and filter { #unpack-and-filter-values }
 
-## Unpack and filter values
-
-The loop clause uses Python comprehension syntax. You can unpack each item:
+The loop is written like the `for` part of a Python list comprehension. You
+can unpack each item:
 
 ```citry-html
 <c-for each="name, score in scores.items()">
@@ -125,7 +106,7 @@ The loop clause uses Python comprehension syntax. You can unpack each item:
 </c-for>
 ```
 
-You can also filter rows:
+Skip items with `if`:
 
 ```citry-html
 <c-for each="book in books if book.is_available">
@@ -133,7 +114,7 @@ You can also filter rows:
 </c-for>
 ```
 
-Multiple `for` clauses work too:
+Loop over nested lists with several `for` parts:
 
 ```citry-html
 <c-for
@@ -143,12 +124,13 @@ Multiple `for` clauses work too:
 </c-for>
 ```
 
-`c-empty` renders when the complete comprehension produces no rows, including
-when a filter removes every item.
+`c-empty` renders when no items are left, including when `if` skipped all of
+them.
 
-The names you bind exist only inside the loop. Citry does not provide a
-special `loop` object, so there is no `loop.index` or `loop.first`. Prepare an
-index in Python, then unpack it in the template:
+## `<c-for>` indices
+
+There is no `loop.index` or `loop.first`. Pair items with numbers in Python,
+then unpack them in the loop:
 
 ```citry-html
 <!-- indexed_books = list(enumerate(books, start=1)) -->
@@ -157,15 +139,9 @@ index in Python, then unpack it in the template:
 </p>
 ```
 
-Loop targets must be unique and may not replace a name that is already
-visible. If the template already has a `book` variable, bind this loop to a
-different name. This is rejected even when the iterable is empty.
+## Combine `c-if` and `c-for`
 
-Async comprehensions are not supported.
-
-## Combine a condition and a loop carefully
-
-You may put `c-if` and `c-for` on the same element:
+`c-if` and `c-for` can share an element:
 
 ```citry-html
 <p c-if="show_books" c-for="book in books">
@@ -173,12 +149,12 @@ You may put `c-if` and `c-for` on the same element:
 </p>
 ```
 
-The condition is outside the loop. Citry checks `show_books` once, before it
-starts iterating, so the condition cannot use `book`.
+The condition wraps the loop. Citry checks `show_books` once, before the
+loop, so the condition cannot read `book`. To skip single items, filter in
+the loop with `if`.
 
-An adjacent `c-empty` cannot attach to this combined shorthand because the
-outer condition separates it from the loop. When you need both a condition
-and an empty state, make the order visible with nested tags:
+A `c-empty` cannot follow this combined element. When you need a condition,
+a loop, and an empty message, nest the tags:
 
 ```citry-html
 <c-if cond="show_books">
@@ -189,6 +165,33 @@ and an empty state, make the order visible with nested tags:
 </c-if>
 ```
 
+## `c-elif`/`c-else` order { #keep-branches-next-to-each-other }
+
+Each `elif`, `else`, or `empty` branch must come right after the branch
+before it. Whitespace and [template comments](/syntax/comments/) between
+them are fine, because they render nothing:
+
+```citry-html
+<p c-if="ready">Ready</p>
+{# Explain why the fallback exists. #}
+<p c-else>Still working</p>
+```
+
+Anything that renders breaks the chain and is an error: text, an HTML
+comment, an expression, or another element.
+
+## Less common rules
+
+- The names a loop creates exist only inside the loop.
+- A loop name must not reuse a name the template already has. If the
+  template has a `book` variable, name the loop variable something else.
+  Citry rejects the clash even when the list is empty.
+- Each name in one loop must be different, so `x, x in pairs` is an error.
+- Async comprehensions are not supported.
+- The tag form treats a bare `cond` or `cond=""` as `True`, for
+  compatibility. Write an explicit expression instead. The `c-if` and
+  `c-elif` attributes always need a value.
+
 Read [Expressions](/syntax/expressions/) for the Python you can use in a
-condition or loop clause. Read [Attributes](/syntax/dynamic-attributes/) for
-the other dynamic attributes you can put on a repeated element.
+condition or loop, and [Attributes](/syntax/attributes/) for the
+other attributes you can put on a repeated element.

@@ -40,7 +40,8 @@ def test_index_has_symbols_and_members() -> None:
     assert index["c-component"] == "/reference/builtins/#c-component"
     assert index["$component"] == "/reference/browser-apis/#component"
     assert index["$state"] == "/reference/browser-apis/#state"
-    assert index["Citry.events.send"] == ("/reference/browser-apis/#citry-events-send")
+    assert index["Citry.vue"] == "/reference/browser-apis/#citry-vue"
+    assert index["onServerRender"] == "/reference/browser-apis/#on-server-render"
 
 
 def test_ambiguous_generated_short_name_requires_a_qualified_key() -> None:

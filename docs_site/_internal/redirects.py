@@ -4,17 +4,23 @@ Redirect stubs for pages that have moved.
 When a page's URL changes, a link or bookmark to the old address should still
 land the visitor on the new page. For each moved URL this writes a tiny HTML
 page at the old path that forwards to the new one three ways at once: a
-``<meta http-equiv="refresh">`` (works without JavaScript, for crawlers and
-assistive tools), a ``location.replace()`` script (faster in a browser, and it
-replaces history so the back button skips the dead URL), and a
+``location.replace()`` script (faster in a browser, and it replaces history so
+the back button skips the dead URL), a ``<meta http-equiv="refresh">`` (works
+without JavaScript, for crawlers and assistive tools), and a
 ``<link rel="canonical">`` plus ``noindex`` so search engines treat the new URL
 as the real one and keep the stub itself out of results.
+
+The script carries the visitor's query string and ``#fragment`` over to the new
+page, so a link to a section of the old page still lands on that section. The
+meta refresh and the fallback link carry a fixed URL written at build time, so
+without JavaScript the query string and fragment are dropped and the visitor
+arrives at the top of the new page.
 
 The forwarding href is written relative to the stub, so it keeps working when
 the site is deployed under a subpath; the canonical stays absolute.
 
-The map stays empty until a published URL moves or merges. Add the old and new
-clean paths together when that happens.
+Add the old and new clean paths to ``redirects.yml`` together when a published
+URL moves or merges.
 """
 
 from __future__ import annotations
@@ -103,18 +109,20 @@ def validate_redirect_routes(
             raise DocsConfigError(f"redirect destination is not in current navigation: {new}")
 
 
+# The script comes first, so a browser with JavaScript starts the navigation
+# that keeps the query and fragment before it reads the meta refresh.
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Redirecting...</title>
 <link rel="canonical" href="{canonical}">
+<script>window.location.replace({href_json} + window.location.search + window.location.hash);</script>
 <meta http-equiv="refresh" content="0; url={href}">
 <meta name="robots" content="noindex,follow">
 </head>
 <body>
 <p>This page has moved. <a href="{href}">Continue to the new page</a>.</p>
-<script>window.location.replace({href_json});</script>
 </body>
 </html>
 """
@@ -134,7 +142,8 @@ def emit_redirects(output_dir: Path, *, site_url: str, redirects: dict[str, str]
             _TEMPLATE.format(
                 canonical=escape(f"{site_url}{new}", quote=True),
                 href=escape(href, quote=True),
-                href_json=json.dumps(href),
+                # Escape "<" so no path could ever close the <script> early.
+                href_json=json.dumps(href).replace("<", "\\u003c"),
             ),
             encoding="utf-8",
         )

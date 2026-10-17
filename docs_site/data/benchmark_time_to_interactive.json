@@ -1,0 +1,428 @@
+{
+  "generated_by": "docs_site/scripts/benchmark_data.py",
+  "source": {
+    "report_id": "full-20260928-93925ce8fff0",
+    "report_status": "partial",
+    "composed_at": "2026-09-28T00:30:01.805213+00:00",
+    "recomposed_at": "2026-09-28T09:46:49.145361+00:00",
+    "citry_configuration": "Citry + Vue is the public app benchmarks/web/apps/citry_vue with default settings, run from release wheels (BUILD_PROFILE release) built from the working tree on 2026-09-28. The app's repeated output component asks Citry to render it with Vue (simple=\"vue\"). With the defaults ssr=True and ssr_element_threshold=0 the server writes the full page at both 140 and 1,400 outputs, and Vue adopts that HTML in the browser (hydrates it) instead of rebuilding it. The run uses no research flags, server wrappers or browser startup flags, and the page does not stream.",
+    "scenario": "project_board (canonical-project-v1)",
+    "outputs": 1400,
+    "observations_per_framework_and_load": 1,
+    "citry_build": {
+      "citry": "citry-0.5.1-py3-none-any.whl",
+      "citry-core": "citry_core-1.7.1-cp312-cp312-macosx_11_0_arm64.whl",
+      "source_commit": "181416a00de2ad6196ad79793ae4520c9059b54c",
+      "source_had_uncommitted_changes": true
+    },
+    "host": {
+      "machine": "arm64",
+      "processor": "arm",
+      "release": "25.6.0",
+      "system": "Darwin",
+      "version": "Darwin Kernel Version 25.6.0: Fri Jul 31 19:11:03 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T8132"
+    },
+    "browser": "chromium 151.0.7922.34",
+    "network": "loopback",
+    "cache": "cold-context",
+    "compression": "identity"
+  },
+  "loads": [
+    {
+      "id": "first",
+      "page_load": 1,
+      "frameworks": [
+        {
+          "key": "citry_vue",
+          "name": "Citry",
+          "group": null,
+          "total_ms": 359.2,
+          "phases_ms": {
+            "browser_before": 0.5,
+            "server": 160.8,
+            "exchange_residual": 0.8,
+            "response_receive": 7.8,
+            "browser_after": 173.4,
+            "layout_wait": 15.9
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "django_htmx_alpine",
+          "name": "Django + HTMX + Alpine",
+          "group": "Django libraries",
+          "total_ms": 334.9,
+          "phases_ms": {
+            "browser_before": 0.5,
+            "server": 58.1,
+            "exchange_residual": 0.8,
+            "response_receive": 1.2,
+            "browser_after": 260.2,
+            "layout_wait": 14.1
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "django_rusty_templates",
+          "name": "Rusty + HTMX + Alpine",
+          "group": "Django libraries",
+          "total_ms": 313.3,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 22.5,
+            "exchange_residual": 0.9,
+            "response_receive": 0.8,
+            "browser_after": 266.3,
+            "layout_wait": 22.2
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "jinja_htmx_alpine",
+          "name": "Jinja + HTMX + Alpine",
+          "group": "Django libraries",
+          "total_ms": 315.2,
+          "phases_ms": {
+            "browser_before": 0.7,
+            "server": 24.4,
+            "exchange_residual": 0.5,
+            "response_receive": 0.5,
+            "browser_after": 264.2,
+            "layout_wait": 24.9
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "tetra",
+          "name": "Tetra",
+          "group": "Django libraries",
+          "total_ms": 316.1,
+          "phases_ms": {
+            "browser_before": 1.0,
+            "server": 107.2,
+            "exchange_residual": 3.7,
+            "response_receive": 0.8,
+            "browser_after": 198.8,
+            "layout_wait": 4.6
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "unicorn",
+          "name": "django-unicorn",
+          "group": "Django libraries",
+          "total_ms": 517.2,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 109.7,
+            "exchange_residual": 0.9,
+            "response_receive": 0.4,
+            "browser_after": 389.4,
+            "layout_wait": 16.2
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "django_components",
+          "name": "django-components",
+          "group": "Django libraries",
+          "total_ms": 463.7,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 192.1,
+            "exchange_residual": 0.8,
+            "response_receive": 0.8,
+            "browser_after": 259.9,
+            "layout_wait": 9.5
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "fasthtml",
+          "name": "FastHTML",
+          "group": "Other Python libraries",
+          "total_ms": 634,
+          "phases_ms": {
+            "browser_before": 0.7,
+            "server": 361.1,
+            "exchange_residual": 0.3,
+            "response_receive": 8.5,
+            "browser_after": 248.5,
+            "layout_wait": 14.9
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "reactpy",
+          "name": "ReactPy",
+          "group": "Other Python libraries",
+          "total_ms": 825.2,
+          "phases_ms": {
+            "browser_before": 0.5,
+            "server": 1.5,
+            "exchange_residual": 0.4,
+            "response_receive": 0.1,
+            "browser_after": 789.5,
+            "layout_wait": 33.2
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "reflex",
+          "name": "Reflex",
+          "group": "Other Python libraries",
+          "total_ms": 396.4,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 8.4,
+            "exchange_residual": 0.4,
+            "response_receive": 1.1,
+            "browser_after": 359.0,
+            "layout_wait": 26.9
+          },
+          "measured_in_run": "20260924T111719Z-latency-whole-article-static-bindings-68f1ce81",
+          "retained": true
+        },
+        {
+          "key": "next",
+          "name": "Next.js",
+          "group": "JavaScript SSR",
+          "total_ms": 337.3,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 78.0,
+            "exchange_residual": 0.4,
+            "response_receive": 7.2,
+            "browser_after": 234.2,
+            "layout_wait": 16.9
+          },
+          "measured_in_run": "20260928T002042Z-16fd1835",
+          "retained": false
+        },
+        {
+          "key": "nuxt",
+          "name": "Nuxt",
+          "group": "JavaScript SSR",
+          "total_ms": 269.8,
+          "phases_ms": {
+            "browser_before": 0.5,
+            "server": 81.4,
+            "exchange_residual": 3.0,
+            "response_receive": 7.1,
+            "browser_after": 169.0,
+            "layout_wait": 8.8
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        }
+      ]
+    },
+    {
+      "id": "second",
+      "page_load": 2,
+      "frameworks": [
+        {
+          "key": "citry_vue",
+          "name": "Citry",
+          "group": null,
+          "total_ms": 304.1,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 113.1,
+            "exchange_residual": 0.9,
+            "response_receive": 7.8,
+            "browser_after": 165.9,
+            "layout_wait": 15.8
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "django_htmx_alpine",
+          "name": "Django + HTMX + Alpine",
+          "group": "Django libraries",
+          "total_ms": 329,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 51.3,
+            "exchange_residual": 0.8,
+            "response_receive": 1.0,
+            "browser_after": 262.5,
+            "layout_wait": 12.8
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "django_rusty_templates",
+          "name": "Rusty + HTMX + Alpine",
+          "group": "Django libraries",
+          "total_ms": 293.9,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 16.6,
+            "exchange_residual": 0.9,
+            "response_receive": 0.9,
+            "browser_after": 260.0,
+            "layout_wait": 14.9
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "jinja_htmx_alpine",
+          "name": "Jinja + HTMX + Alpine",
+          "group": "Django libraries",
+          "total_ms": 295.1,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 20.8,
+            "exchange_residual": 0.5,
+            "response_receive": 0.5,
+            "browser_after": 261.7,
+            "layout_wait": 11.0
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "tetra",
+          "name": "Tetra",
+          "group": "Django libraries",
+          "total_ms": 317.6,
+          "phases_ms": {
+            "browser_before": 0.7,
+            "server": 113.0,
+            "exchange_residual": 0.8,
+            "response_receive": 1.0,
+            "browser_after": 193.2,
+            "layout_wait": 8.9
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "unicorn",
+          "name": "django-unicorn",
+          "group": "Django libraries",
+          "total_ms": 491.3,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 99.3,
+            "exchange_residual": 0.9,
+            "response_receive": 0.4,
+            "browser_after": 383.2,
+            "layout_wait": 6.9
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "django_components",
+          "name": "django-components",
+          "group": "Django libraries",
+          "total_ms": 471,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 194.0,
+            "exchange_residual": 0.8,
+            "response_receive": 1.0,
+            "browser_after": 260.5,
+            "layout_wait": 14.1
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "fasthtml",
+          "name": "FastHTML",
+          "group": "Other Python libraries",
+          "total_ms": 637.7,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 363.5,
+            "exchange_residual": 0.3,
+            "response_receive": 8.7,
+            "browser_after": 248.1,
+            "layout_wait": 16.5
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "reactpy",
+          "name": "ReactPy",
+          "group": "Other Python libraries",
+          "total_ms": 844,
+          "phases_ms": {
+            "browser_before": 0.7,
+            "server": 5.6,
+            "exchange_residual": 0.4,
+            "response_receive": 0.2,
+            "browser_after": 804.0,
+            "layout_wait": 33.1
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        },
+        {
+          "key": "reflex",
+          "name": "Reflex",
+          "group": "Other Python libraries",
+          "total_ms": 392,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 0.5,
+            "exchange_residual": 0.3,
+            "response_receive": 0.2,
+            "browser_after": 360.0,
+            "layout_wait": 30.4
+          },
+          "measured_in_run": "20260924T111719Z-latency-whole-article-static-bindings-68f1ce81",
+          "retained": true
+        },
+        {
+          "key": "next",
+          "name": "Next.js",
+          "group": "JavaScript SSR",
+          "total_ms": 320.8,
+          "phases_ms": {
+            "browser_before": 0.5,
+            "server": 49.6,
+            "exchange_residual": 0.3,
+            "response_receive": 7.2,
+            "browser_after": 236.7,
+            "layout_wait": 26.5
+          },
+          "measured_in_run": "20260928T002042Z-16fd1835",
+          "retained": false
+        },
+        {
+          "key": "nuxt",
+          "name": "Nuxt",
+          "group": "JavaScript SSR",
+          "total_ms": 211.3,
+          "phases_ms": {
+            "browser_before": 0.6,
+            "server": 21.8,
+            "exchange_residual": 3.0,
+            "response_receive": 7.1,
+            "browser_after": 157.9,
+            "layout_wait": 20.9
+          },
+          "measured_in_run": "20260927T232351Z-6a10df61",
+          "retained": false
+        }
+      ]
+    }
+  ]
+}

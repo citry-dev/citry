@@ -26,6 +26,14 @@ from citry.component_like import _resolve_component_like
 from citry.ext.events import EventRequest, EventsDispatcher, TransportContext
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
 
+# This file ships with the docs, while runtime.json may still pin a Citry
+# release that predates per-engine renderer selection. Fall back to a plain
+# dispatcher there so the pinned runtime keeps running every other feature.
+try:
+    from citry.ext.events.renderers import dispatcher_for
+except ImportError:
+    dispatcher_for = None
+
 PLAYGROUND_FILENAME = "<playground>"
 PLAYGROUND_MODULE_NAME = "__playground__"
 MAX_STREAM_CHARS = 65_536
@@ -37,6 +45,11 @@ MAX_ASSET_BYTES = 1024 * 1024
 MAX_ASSET_BATCH_BYTES = 4 * 1024 * 1024
 MAX_CATALOG_BYTES = 256 * 1024
 PLAYGROUND_EVENT_PATH = "/playground/events"
+# The Citry client sends these headers so the server can answer an event with
+# a Render action for the component on screen. The preview is untrusted code,
+# so no other header it forwards (cookies, CSRF, auth) may reach the dispatcher.
+FORWARDED_EVENT_HEADERS = ("X-Citry-Vue-App", "X-Citry-Vue-Occurrence", "X-Citry-Vue-Revision")
+MAX_EVENT_HEADER_CHARS = 256
 PLAYGROUND_ASSET_PREFIX = "/__citry_playground__"
 SUPPORTED_EVENT_ACTIONS = frozenset({"data", "event", "render", "state"})
 _ALLOWED_ASSET_ROUTES = frozenset(
@@ -46,6 +59,8 @@ _ALLOWED_ASSET_ROUTES = frozenset(
         ("asset/{file_name}", "citry_asset"),
         ("citry.js", "citry_client_runtime"),
         ("ext/events/runtime.js", "citry_events_runtime"),
+        ("ext/events/definitions/{digest}.js", "citry_vue_definition"),
+        ("ext/events/assets/{digest}.css", "citry_vue_style_asset"),
     }
 )
 _ALLOWED_ASSET_CONTENT_TYPES = frozenset({"text/css", "text/javascript"})
@@ -58,7 +73,6 @@ class _RuntimeState:
 
 
 _runtime_state = _RuntimeState()
-_dispatcher = EventsDispatcher()
 
 # The default Citry engine belongs only to this disposable Worker. Give it a
 # per-Worker secret so visitor components can use ordinary signed State without
@@ -420,7 +434,22 @@ def _apply_playground_event_policy(envelope: object, response: object) -> dict[s
     return response
 
 
-def dispatch_event_json(envelope_json: str, run_id: int) -> str:
+def _forwarded_event_headers(headers_json: str) -> list[tuple[str, str]]:
+    """Keep the Vue request headers the preview forwarded and nothing else."""
+    raw = json.loads(headers_json)
+    if not isinstance(raw, dict):
+        raise TypeError("Playground event headers must be a JSON object.")
+    forwarded: list[tuple[str, str]] = []
+    for name in FORWARDED_EVENT_HEADERS:
+        value = raw.get(name)
+        # A missing header leaves the dispatcher to report which one the
+        # server needed; a malformed one is dropped, with the same result.
+        if isinstance(value, str) and 0 < len(value) <= MAX_EVENT_HEADER_CHARS:
+            forwarded.append((name, value))
+    return forwarded
+
+
+def dispatch_event_json(envelope_json: str, run_id: int, headers_json: str = "{}") -> str:
     """Dispatch one browser Events envelope against the displayed module."""
     if _runtime_state.namespace is None or _runtime_state.run_id != run_id:
         raise RuntimeError("This event belongs to a preview that is no longer active. Run the module again.")
@@ -428,7 +457,7 @@ def dispatch_event_json(envelope_json: str, run_id: int) -> str:
     envelope = json.loads(envelope_json)
     body = envelope_json.encode("utf-8")
     content_type = "application/citry-events+json"
-    headers = RouteHeaders([("Content-Type", content_type)])
+    headers = RouteHeaders([("Content-Type", content_type), *_forwarded_event_headers(headers_json)])
     request = EventRequest(
         method="POST",
         path=PLAYGROUND_EVENT_PATH,
@@ -445,7 +474,10 @@ def dispatch_event_json(envelope_json: str, run_id: int) -> str:
     # Reassert the host-owned prefix before fragment serialization in case the
     # visitor changed the default engine while handling an earlier event.
     citry.set_mounted_prefix(PLAYGROUND_ASSET_PREFIX)
-    response = _dispatcher.dispatch(envelope, context, request=request)
+    # Use the engine's own route dispatcher so a Render action is encoded for
+    # the Vue renderer the browser advertises, exactly as a served app would.
+    dispatcher = EventsDispatcher() if dispatcher_for is None else dispatcher_for(citry)
+    response = dispatcher.dispatch(envelope, context, request=request)
     return json.dumps(_apply_playground_event_policy(envelope, response), allow_nan=False)
 
 

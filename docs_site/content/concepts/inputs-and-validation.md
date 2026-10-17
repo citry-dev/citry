@@ -5,17 +5,17 @@ description: Declare component inputs and choose when Citry should validate thei
 
 # Inputs and validation
 
-A component becomes easier to use when it says what people may pass to it.
-Citry can check keyword arguments and slot names, fill in defaults, and reject
-missing or unexpected values before the component body renders.
+Declare the inputs a component accepts, and Citry stops a misspelled name or
+a missing value with an error before the component renders. The declaration
+also fills in defaults and tells readers, editors, and type checkers how to
+use the component.
 
-Start with plain nested classes for a clear component interface. Add a
-validating model when values also cross an untrusted boundary or must obey
-runtime type rules.
+Plain nested classes check input names. Add a validating model such as
+Pydantic when the values themselves must be checked too.
 
-## Declare keyword inputs
+## `Kwargs` keyword inputs
 
-Add [`Kwargs`][citry.Component.Kwargs] to a
+Add a nested [`Kwargs`][citry.Component.Kwargs] class to a
 [`Component`][citry.Component] and list each accepted name:
 
 ```citry
@@ -34,13 +34,12 @@ class Button(Component):
     """
 ```
 
-`label` is required because it has no default. `variant` is optional and uses
-`"primary"` when the template or Python code leaves it out. The default
-[`template_data()`][citry.Component.template_data] exposes both fields to
-the template, so this component does not need its own data method.
+`label` is required because it has no default. `variant` is optional and is
+`"primary"` when a template or Python code leaves it out. The template can read both by
+name.
 
-Leaving `Kwargs` off means the component accepts any keyword name. Use an
-empty declaration when accepting no inputs is part of the contract:
+Without a `Kwargs` class, a component accepts any keyword name. To accept no
+inputs at all, declare an empty class:
 
 ```citry
 from citry import Component
@@ -55,12 +54,11 @@ class Divider(Component):
     """
 ```
 
-## Know when Citry checks the inputs
+## Find input errors
 
-Citry checks a statically written component tag when its parent template is
-first compiled. The child must already be registered so Citry knows its
-contract. A misspelled name or missing required input then raises a
-`SyntaxError` during that first render:
+A mistake in a `<c-*>` tag written in a template raises `SyntaxError` the
+first time that template renders. This covers a misspelled name and a
+missing required input:
 
 ```citry-html
 <!-- Wrong: "lable" is not a Button input. -->
@@ -70,45 +68,41 @@ contract. A misspelled name or missing required input then raises a
 <c-button label="Save" />
 ```
 
-Inputs passed from Python are checked when the element renders, not when you
-call the class. Calling `Button(...)` only composes a
-[`CitryElement`][citry.CitryElement]:
+Citry can check the tag this early only if the child component is already
+registered, which means its module has been imported. See
+[Registration](/concepts/registration/).
+
+Inputs passed from Python are checked when the component renders, not when
+you call the class:
 
 ```python
+# Calling the class only records the inputs.
 button = Button(lable="Save")
 
-# Rendering finalizes the inputs and raises TypeError.
+# Rendering checks them and raises TypeError.
 button.render()
 ```
 
-Values added through a dynamic spread such as `c-bind` cannot all be known
-when the parent template is compiled. Citry checks the completed child inputs
-when that child renders.
+Inputs added with a `c-bind` spread are also checked when the child renders,
+because their names are known only then.
 
-This difference matters when you handle errors: a static template mistake
-belongs to the parent's compile step, while a direct Python or dynamic input
-mistake belongs to the child render.
+## Typed `Kwargs` checks
 
-## Choose name checks or value checks
-
-A plain nested `Kwargs` class becomes a slotted dataclass. It checks required,
-default, and unexpected field names, but its annotations do not validate
-runtime value types:
+A plain `Kwargs` class checks that required names are present and unknown
+names are absent. Its type annotations are not checked when the page runs:
 
 ```python
-# The name is valid, so a plain schema accepts this value.
+# The name is valid, so a plain Kwargs class accepts 42.
 button = Button(label=42)
 html = str(button)
 ```
 
-Use annotations to help readers, editors, and type checkers. Do not rely on a
-plain annotation to validate data from a form, request, database, or another
-untrusted source.
+The annotations still help readers, editors, and type checkers. Do not rely
+on them to check data from a form, request, database, or other untrusted
+source.
 
-For runtime value validation, inherit from a supported validating model such
-as [Pydantic](https://docs.pydantic.dev/){: target="_blank" rel="noopener"}.
-This example also asks Pydantic to reject unexpected fields from direct
-Python calls:
+To check values, base `Kwargs` on a validating model such as
+[Pydantic](https://docs.pydantic.dev/){: target="_blank" rel="noopener"}:
 
 ```citry
 from citry import Component
@@ -127,18 +121,17 @@ class AgeBadge(Component):
 ```
 
 Now `AgeBadge(age="unknown").render()` raises Pydantic's validation error.
-Citry delegates value rules to the model, so its coercion and strictness
-settings decide which values pass.
+The model's own settings decide which values pass. Here,
+`extra="forbid"` also makes Pydantic reject unknown names passed from
+Python.
 
-You may also use an explicitly decorated dataclass or a `NamedTuple` when you
-want its construction model. Like Citry's plain dataclass form, these do not
-turn annotations into runtime value validators by themselves.
+You can also use a `@dataclass` or a `NamedTuple` as `Kwargs`. Like a plain
+class, these check names but not value types.
 
-## Give each render a fresh mutable default
+## `field()` defaults
 
 A list, dictionary, or set written directly as a default would be shared by
-every instance. The generated dataclass rejects that declaration when Citry
-defines the component:
+every render, so Citry rejects it when Python defines the class:
 
 ```citry
 from citry import Component
@@ -151,7 +144,7 @@ class TodoList(Component):
 
 Use
 [`field()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.field){: target="_blank" rel="noopener"}
-to make a fresh value for each render:
+to create a new value for each render:
 
 ```citry
 from dataclasses import field
@@ -168,13 +161,15 @@ class TodoList(Component):
     """
 ```
 
-A default applies only when the input is absent. Passing `None` keeps `None`;
-it does not select the default factory.
+A default applies only when the input is left out. Passing `None` gives the
+component `None`, not the default.
 
-## Declare the content a component accepts
+## `Slots` and `SlotInput`
 
-Use [`Slots`][citry.Component.Slots] for places where someone can insert
-content. Annotate each field with [`SlotInput`][citry.SlotInput]:
+A slot is a place in the component's template where each use of the component can insert
+its own content. List the accepted slots in a nested
+[`Slots`][citry.Component.Slots] class, and annotate each one with
+[`SlotInput`][citry.SlotInput]:
 
 ```citry
 from citry import Component, SlotInput
@@ -193,40 +188,23 @@ class Panel(Component):
     """
 ```
 
-The default slot is required by this declaration. `actions` is optional
-because it permits and defaults to `None`. A missing required slot or an
-unexpected slot name follows the same compile-time and render-time checks as
-keyword inputs.
+The `default` slot is required. `actions` is optional because it defaults to
+`None`. A missing required slot or an unknown slot name is reported at the
+same points as a wrong keyword input. A slot can also pass data to its
+fill with `SlotInput[...]`; see
+[Slots](/concepts/slots/#pass-data-from-the-component-to-the-fill).
 
-Use `SlotInput[SomeData]` when a slot exposes named values to its fill. The
-complete rules, including fallback content and the separate `required`
-attribute on `<c-slot>`, are in [Slots](/concepts/slots/).
+## `TemplateData`, `JsData`, `CssData`
 
-## Check data returned by component methods
-
-Input schemas check what enters a component. Data schemas can check the shape
-of what its methods return:
+Input schemas check what goes into a component. Three more nested classes
+check what its data methods return:
 
 - [`TemplateData`][citry.Component.TemplateData] checks
-  `template_data()`;
+  [`template_data()`][citry.Component.template_data];
 - [`JsData`][citry.Component.JsData] checks
   [`js_data()`][citry.Component.js_data]; and
 - [`CssData`][citry.Component.CssData] checks
   [`css_data()`][citry.Component.css_data].
-
-These declarations catch a missing or unexpected returned field during the
-render. Plain schemas still check field names, not the runtime type of each
-value. Citry uses the constructed schema instance as the normalized result, so
-declared defaults are filled and validating schema libraries such as Pydantic
-can coerce values before templates and extensions receive them.
-
-When you use `JsData`, the returned names and values become a strict-JSON
-payload for that rendered component. Citry seeds its top-level keys into the
-component's Alpine scope and also passes a fresh instance-local graph to the
-component's [`$component()`][$component] callback when one exists. A component
-with Alpine expressions does not need `$component()` only to copy data into
-scope. When a render has neither Alpine expressions nor `$component()`, Citry
-does not send the payload.
 
 ```citry
 from citry import Component
@@ -245,29 +223,21 @@ class Counter(Component):
         slots,
     ) -> JsData:
         return self.JsData(initial_count=kwargs.initial_count)
-
-    template = """
-      <button class="counter" x-text="initial_count">Count</button>
-    """
-
-    js = """
-      $component(({ data }) => {
-        const initialCount = data.initial_count;
-        console.log(initialCount);
-      });
-    """
 ```
 
-Python writes the payload key `initial_count`, and the Alpine expression reads
-that exact key directly. Component JavaScript can still assign it to a
-`camelCase` local when useful. See
-[Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for delivery
-and CSS custom properties.
+A missing or unexpected field raises an error during the render. As with
+`Kwargs`, a plain class checks names and a validating model also checks
+values. Citry passes the checked result on, with defaults filled in and any
+conversions the model made.
 
-## Extend a plain schema in a subclass
+[Component options](/vue/component-options/#seed-browser-data-from-python)
+shows how the browser reads `js_data()`.
 
-A plain nested declaration adds its fields to declarations inherited from
-parent components:
+## `Kwargs` in subclasses
+
+A subclass uses its parent's `Kwargs` until it declares its own. To add
+inputs, name the parent's class as a base, so the subclass keeps the
+parent's fields and defaults:
 
 ```citry
 from citry import Component
@@ -283,7 +253,7 @@ class Button(Component):
 
 
 class IconButton(Button):
-    class Kwargs:
+    class Kwargs(Button.Kwargs):
         icon: str
 
     template = """
@@ -291,18 +261,19 @@ class IconButton(Button):
     """
 ```
 
-`IconButton.Kwargs` contains both `label` and `icon`. With multiple component
-bases, Citry follows their normal Python method resolution order.
+`IconButton` accepts both `label` and `icon`. A plain `class Kwargs:` in
+the subclass would replace the parent's fields instead, like any nested
+Python class, and Citry warns when that leaves out a parent field.
+`Slots`, `TemplateData`, `JsData`, and `CssData` follow the same rule.
 
-The same composition rule applies to plain `Slots`, `TemplateData`, `JsData`,
-and `CssData` declarations. Assign a schema attribute to `None` when a
-subclass should stop inheriting that schema:
+To stop a subclass from checking inputs, set its `Kwargs` to `None`:
 
 ```python
 class FreeFormButton(Button):
     Kwargs = None
 ```
 
-`FreeFormButton` now accepts keyword names without a `Kwargs` schema. See
-[Subclassing](/advanced/subclassing/) for how schemas, templates, JavaScript,
-and CSS interact across a component hierarchy.
+`FreeFormButton` accepts any keyword name.
+[Subclass components](/advanced/subclassing/) covers replacing inputs,
+combining two parents, and how templates, JavaScript, and CSS carry over
+to a subclass.

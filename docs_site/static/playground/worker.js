@@ -1,4 +1,4 @@
-import { resolvePackageUrls } from "./runtime_packages.js";
+import { resolvePackageUrls, validatePyodideManifest } from "./runtime_packages.js";
 
 // The Worker keeps Pyodide and the rendered module's Citry instance off the UI
 // thread. The parent identifies every message by Worker generation and run ID.
@@ -36,16 +36,22 @@ async function initialize(data) {
       fetchText("./executor.py"),
     ]);
     const runtime = JSON.parse(runtimeText);
-    if (runtime.schema_version !== 1 || runtime.protocol_version !== 1 || !Array.isArray(runtime.packages)) {
+    if (
+      runtime.schema_version !== 1
+      || runtime.protocol_version !== 1
+      || !["published", "workspace"].includes(runtime.source)
+      || !Array.isArray(runtime.packages)
+    ) {
       throw new Error("The playground runtime configuration is invalid.");
     }
+    validatePyodideManifest(runtime.pyodide);
 
     send({ type: "phase", phase: "Starting Python" });
     const { loadPyodide } = await import(runtime.pyodide.module_url);
     pyodide = await loadPyodide({ indexURL: runtime.pyodide.index_url });
 
     send({ type: "phase", phase: `Installing Citry ${runtime.citry.version}` });
-    await pyodide.loadPackage(await resolvePackageUrls(runtime.packages));
+    await pyodide.loadPackage(await resolvePackageUrls(runtime.packages, { pyodide: runtime.pyodide }));
     // executor.py installs the stable functions used by later run and event messages.
     pyodide.runPython(executorSource);
     send({ type: "phase", phase: "Verifying installed versions" });
@@ -82,6 +88,7 @@ json.dumps(versions)
         `Citry ${runtime.citry.version}`,
         runtime.citry.ui_version ? `Citry UI ${runtime.citry.ui_version}` : "",
       ].filter(Boolean).join(", "),
+      source: runtime.source,
     });
   } catch (error) {
     send({
@@ -142,8 +149,11 @@ function dispatchEvent(data) {
     }
     pyodide.globals.set("__citry_playground_event_envelope", envelopeJson);
     pyodide.globals.set("__citry_playground_event_run_id", data.runId);
+    // The executor accepts only the Vue request headers; see _forwarded_event_headers.
+    pyodide.globals.set("__citry_playground_event_headers", JSON.stringify(data.headers ?? {}));
     const serialized = pyodide.runPython(
-      "dispatch_event_json(__citry_playground_event_envelope, __citry_playground_event_run_id)",
+      "dispatch_event_json(__citry_playground_event_envelope, __citry_playground_event_run_id,"
+        + " __citry_playground_event_headers)",
     );
     if (new TextEncoder().encode(serialized).byteLength > MAX_RESULT_BYTES) {
       throw new Error("The event response exceeds the 2 MiB playground limit.");
@@ -167,6 +177,7 @@ function dispatchEvent(data) {
     try {
       pyodide.globals.delete("__citry_playground_event_envelope");
       pyodide.globals.delete("__citry_playground_event_run_id");
+      pyodide.globals.delete("__citry_playground_event_headers");
     } catch {
       // A failed interpreter may no longer expose its globals proxy.
     }

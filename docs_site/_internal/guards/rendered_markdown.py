@@ -9,7 +9,8 @@ The usual cause is a raw HTML wrapper without ``markdown="1"``. python-markdown
 treats such a block as opaque, so a nested ``markdown="1"`` never fires and
 every heading, bullet, and link inside it reaches the reader as source. The page
 still builds, links inside it silently stop being links, and no other guard
-notices, which is why this one exists.
+notices, which is why this one exists. It also reads the HTML a page ships for
+Vue to build in the browser, such as the landing page's content.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
+from docs_site._internal.guards.site_index import source_line, source_markdown
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -41,6 +43,9 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         detail = "; ".join(repr(line) for line in shown)
         if extra > 0:
             detail += f"; and {extra} more line(s)"
+        # Point at the Markdown the author edits; the leaked text is copied
+        # verbatim from it, so its first line locates the unrendered block.
+        source = source_markdown(page, ctx.content_dir)
         yield GuardResult.error(
             guard="rendered_markdown",
             message=(
@@ -48,5 +53,6 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
                 'A wrapper element around this content is missing markdown="1", '
                 "so the markdown pass skipped everything inside it."
             ),
-            source=page.label,
+            source=str(source) if source is not None else page.label,
+            line=source_line(source, shown[0]) if source is not None else None,
         )

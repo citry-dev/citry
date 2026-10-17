@@ -950,7 +950,7 @@ class LandingRecipeBank(Component):
 
 @cache
 def _render_recipe_bank() -> Markup:
-    rendered = str(LandingRecipeBank())
+    rendered = LandingRecipeBank().render().serialize(security_javascript="omit")
     rendered = re.sub(r"<script\b[^>]*>.*?</script>", "", rendered, flags=re.IGNORECASE | re.DOTALL)
     rendered = re.sub(r"<!--citry:.*?-->", "", rendered, flags=re.DOTALL)
     rendered = re.sub(r'\sdata-cid(?:-[^\s=>]+)?(?:="[^"]*")?', "", rendered)
@@ -958,11 +958,9 @@ def _render_recipe_bank() -> Markup:
 
 
 @cache
-def _render_recipe_payload() -> Markup:
+def _render_recipe_payload() -> str:
     """Encode recipe HTML so the surrounding Markdown pass cannot parse it."""
-    payload = json.dumps(str(_render_recipe_bank()), ensure_ascii=True)
-    payload = payload.replace("<", r"\u003c").replace("&", r"\u0026")
-    return Markup(payload)  # noqa: S704 - JSON with every HTML opener escaped above
+    return json.dumps(str(_render_recipe_bank()), ensure_ascii=True)
 
 
 class LandingComposerMarkup(Component):
@@ -987,7 +985,7 @@ class LandingComposerMarkup(Component):
         <div class="landing-composer__bar">
           <div class="landing-composer__bar-copy">
             <h3 id="landing-composer-palette-title">Citry UI components</h3>
-            <p>Drag a component onto the canvas and watch it arrive ready to use.</p>
+            <p>Drag a component onto the canvas and watch it arrive ready to preview.</p>
           </div>
           <button type="button" class="landing-composer__reset" data-composer-reset>Reset</button>
         </div>
@@ -1038,7 +1036,7 @@ class LandingComposerMarkup(Component):
           </section>
         </div>
 
-        <script type="application/json" data-composer-recipe-bank>{{ recipe_payload }}</script>
+        <div hidden data-composer-recipe-bank>{{ recipe_payload }}</div>
       </div>
     """
 

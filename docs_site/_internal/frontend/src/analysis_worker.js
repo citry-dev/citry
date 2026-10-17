@@ -1,4 +1,4 @@
-import { resolvePackageUrl } from "./runtime_packages.js";
+import { resolvePackageUrl, validatePyodideManifest } from "./runtime_packages.js";
 
 // This Worker proves browser-native Citry analysis without sharing mutable
 // state with visitor code in the disposable execution Worker.
@@ -70,6 +70,7 @@ async function initialize() {
     if (runtime.schema_version !== 1 || !Array.isArray(runtime.packages)) {
       throw new Error("The playground runtime configuration is invalid.");
     }
+    validatePyodideManifest(runtime.pyodide);
     const corePackage = runtime.packages.filter((packageInfo) => packageInfo?.name === "citry-core");
     if (corePackage.length !== 1 || corePackage[0].version !== runtime.citry?.core_version) {
       throw new Error("The playground runtime must contain one matching citry-core package.");
@@ -77,7 +78,7 @@ async function initialize() {
 
     const { loadPyodide } = await import(runtime.pyodide.module_url);
     pyodide = await loadPyodide({ indexURL: runtime.pyodide.index_url });
-    await pyodide.loadPackage(await resolvePackageUrl(corePackage[0]));
+    await pyodide.loadPackage(await resolvePackageUrl(corePackage[0], { pyodide: runtime.pyodide }));
     pyodide.FS.writeFile("/citry_portable_ide.py", portableSource);
     pyodide.runPython("import sys\n'/' not in sys.path and sys.path.insert(0, '/')\nimport citry_portable_ide");
     pyodide.runPython(adapterSource);

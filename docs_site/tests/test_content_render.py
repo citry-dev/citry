@@ -35,6 +35,125 @@ def test_indented_code_with_citry_syntax_renders_as_literal_code() -> None:
     assert "hi" in html
 
 
+def _note(body: str) -> str:
+    """Render one admonition whose body is the given indented lines."""
+    return render_page(f"!!! note\n{body}\n", wrap_in_layout=False).html
+
+
+def test_inline_code_in_an_admonition_is_shown_verbatim() -> None:
+    # An admonition body is indented like code but is prose, so its inline
+    # code must be protected exactly as in a top-level paragraph.
+    html = _note("    Use `<span/>`, `<div>` and `<c-raw>` with <b>bold</b>.")
+
+    assert "<code>&lt;span/&gt;</code>" in html
+    assert "<code>&lt;div&gt;</code>" in html
+    assert "<code>&lt;c-raw&gt;</code>" in html
+    assert "<b>bold</b>" in html
+
+
+def test_inline_code_in_a_list_continuation_is_shown_verbatim() -> None:
+    html = render_page("- item\n    more `<span/>` text\n", wrap_in_layout=False).html
+
+    assert "<code>&lt;span/&gt;</code>" in html
+
+
+def _code_texts(html: str) -> list[str]:
+    """Return the text of every inline ``<code>`` element, whitespace collapsed."""
+    return [
+        " ".join(html_module.unescape(code).split()) for code in re.findall(r"<code>(.*?)</code>", html, re.DOTALL)
+    ]
+
+
+def test_inline_code_wrapped_across_lines_in_a_paragraph_is_shown_verbatim() -> None:
+    # Markdown lets a code span continue on the next line of its paragraph and
+    # shows the line break as a space; protecting each line on its own would
+    # hand citry half a tag.
+    html = render_page('Wrap `<c-Button\n@click="go">` here.\n', wrap_in_layout=False).html
+
+    assert _code_texts(html) == ['<c-Button @click="go">']
+
+
+def test_inline_code_wrapped_across_lines_in_admonition_and_list_bodies() -> None:
+    in_note = _note('    Wrap `<c-Button\n    @click="go">` here.')
+    in_list = render_page('- Wrap `<c-Button\n  @click="go">` here.\n', wrap_in_layout=False).html
+    deeper = render_page('Wrap `<c-Button\n        @click="go">` here.\n', wrap_in_layout=False).html
+
+    for html in (in_note, in_list, deeper):
+        assert _code_texts(html) == ['<c-Button @click="go">']
+
+
+def test_inline_code_closes_only_at_a_backtick_run_of_the_same_length() -> None:
+    # A shorter run inside a double-backtick span is code text, not a closer.
+    assert protect_fences("A ``x ` <c-y/>`` z") == "A <c-raw>``x ` <c-y/>``</c-raw> z"
+    # An unmatched run is literal and does not swallow the span after it.
+    assert protect_fences("A ``` b `{{ c }}` d") == "A ``` b <c-raw>`{{ c }}`</c-raw> d"
+
+
+def test_inline_code_does_not_cross_a_paragraph_or_block_boundary() -> None:
+    # A blank line, a heading, the next list item, and an admonition body's
+    # end each close the paragraph, so neither backtick has a partner.
+    for source in ("`{{ a\n\nb }}`", "`{{ a\n# b }}`", "- `{{ a\n- b }}`", "!!! note\n    `{{ a\nb }}`"):
+        assert protect_fences(source) == source, source
+    # A fence also ends the paragraph; only the fence itself is wrapped.
+    assert protect_fences("`{{ a\n```\nb }}`") == "`{{ a\n<c-raw>\n```\nb }}`\n</c-raw>"
+
+
+def test_block_like_lines_inside_a_paragraph_continue_its_code_span() -> None:
+    # Markdown starts a list, table, or admonition only after a blank line, so
+    # inside a paragraph these lines are more of its text.
+    for marker in ("- b", "1. b", "| b", "!!! note b"):
+        html = render_page(f"Para `<c-a\n{marker}/>` z\n", wrap_in_layout=False).html
+        assert _code_texts(html) == [f"<c-a {marker}/>"], marker
+
+
+def test_paragraph_that_starts_with_an_inline_tag_still_protects_its_code() -> None:
+    # Only a block-level tag or a comment makes a raw HTML block; <b> starts
+    # an ordinary paragraph whose code spans Markdown still reads.
+    html = render_page('<b>Note:</b> `<c-Button\n@click="go">`\n', wrap_in_layout=False).html
+
+    assert _code_texts(html) == ['<c-Button @click="go">']
+
+
+def test_lazy_continuation_line_keeps_the_list_item_open() -> None:
+    # The second line is indented less than the item body, which Markdown
+    # still reads as the item's text, so the fence after it is in the item.
+    source = '1. Install:\n  more\n\n    ```html\n    <c-if cond="x">{{ y }}</c-if>\n    ```\n'
+
+    assert "<c-raw>\n    ```html" in protect_fences(source)
+
+
+def test_backtick_in_a_raw_html_block_does_not_pair_with_a_later_line() -> None:
+    # Markdown passes a block that starts with a comment or a block-level tag
+    # through as raw HTML, so its backticks open no code span and the <h1>
+    # must still render.
+    source = "<!-- `\n-->\n<h1>Title</h1>\n`\n"
+
+    assert protect_fences(source) == source
+    assert "<h1>Title</h1>" in render_page(source, wrap_in_layout=False).html
+
+
+def test_backslash_escaped_backtick_does_not_open_a_span() -> None:
+    assert protect_fences("A \\` b `{{ c }}`") == "A \\` b <c-raw>`{{ c }}`</c-raw>"
+
+
+def test_code_nested_in_an_admonition_stays_literal() -> None:
+    indented = _note('    Text.\n\n        <c-if cond="x">{{ y }}</c-if>')
+    fenced = _note('    ```html\n    <c-if cond="x">{{ y }}</c-if>\n    ```')
+
+    for html in (indented, fenced):
+        text = html_module.unescape(re.sub(r"<[^>]+>", "", html))
+        assert '<c-if cond="x">{{ y }}</c-if>' in text
+
+
+def test_horizontal_rule_does_not_hide_the_indented_code_after_it() -> None:
+    # `* * *` looks like a list item but is a rule, so the next indented
+    # block is still top-level code and must stay literal.
+    html = render_page('Para.\n\n* * *\n\n    <c-if cond="x">{{ y }}</c-if>\n', wrap_in_layout=False).html
+
+    text = html_module.unescape(re.sub(r"<[^>]+>", "", html))
+    assert '<c-if cond="x">{{ y }}</c-if>' in text
+
+
 def test_events_bindings_in_code_are_armored_then_restored() -> None:
     source = '```html\n<button @c-click="save" :c-query="refresh">Save</button>\n```'
     protected = protect_fences(source)

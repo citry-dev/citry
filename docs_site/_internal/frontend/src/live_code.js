@@ -1,5 +1,7 @@
 // Narrative pages load this small activator first. The CodeMirror and Pyodide
 // coordinator is fetched only after a visitor chooses Try live.
+await (globalThis.__citryDocsReady || Promise.resolve());
+
 const blocks = [...document.querySelectorAll("[data-citry-live-code]")];
 // A page permits one active editor, but retains unsaved source per code block
 // while the visitor moves between examples.

@@ -58,3 +58,23 @@ def test_minify_preserves_citry_ownership_caps(tmp_path: Path) -> None:
     assert start in out
     assert end in out
     assert out.index(start) < out.index(end)
+
+
+def test_minify_leaves_a_hydrating_page_as_written(tmp_path: Path) -> None:
+    # Vue compares the served text with its own render, so the whitespace
+    # inside a hydrating host must reach the browser unchanged.
+    hydrating = (
+        '<!DOCTYPE html><html><body><div id="citry-vue-1"><p> spaced   text </p></div>'
+        '<script type="application/json" data-citry-vue-document="1">'
+        '{"host":"#citry-vue-1","hydrate":true,"manifest":{}}</script>'
+        "</body></html>"
+    )
+    mounting = hydrating.replace('"hydrate":true,', "")
+    (tmp_path / "hydrating.html").write_text(hydrating, encoding="utf-8")
+    (tmp_path / "mounting.html").write_text(mounting, encoding="utf-8")
+
+    outcome = minify_site(tmp_path)
+
+    assert (outcome.files, outcome.hydrating) == (1, 1)
+    assert (tmp_path / "hydrating.html").read_text(encoding="utf-8") == hydrating
+    assert "spaced text" in (tmp_path / "mounting.html").read_text(encoding="utf-8")

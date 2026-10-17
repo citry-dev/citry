@@ -5,23 +5,23 @@ description: Configure supported locales and pass one explicit locale context th
 
 # Locales and context
 
-Every localized result depends on a locale context. It contains the selected
-locale, fallback chain, writing direction, optional time zone, and the
-revisions of the catalog and formatter data used by the render.
+Each request may need a different language, and sometimes a different
+time zone. You choose them per request, then pass that choice into the
+render so every component uses it.
 
-You normally create the context once from request data and provide it to the
-root component.
+Citry carries the choice in a locale context: a read-only value that
+holds the selected locale, its fallback languages, the writing
+direction, an optional time zone, and the version of the translations it
+was built from. A locale is a language code with an optional region,
+such as `cs-CZ`.
 
-When registered components declare `I18n.messages_locale`, Citry can also make
-a source-mode context without engine settings. It infers the default from the
-unique application source locale, or from the unique library source locale
-when the application owns no messages. Configure the locale graph below when
-users need selectable translations, when source ownership is ambiguous, or
-when the application needs explicit fallback policy.
+This page shows how to configure the locales your application supports,
+create a context for each request, and pass it to the render. It then
+covers changing the language for one part of the page.
 
-## Configure the locale graph
+## Configure locales
 
-The engine configuration accepts these fields:
+List the locales in the engine's i18n settings:
 
 ```python
 from citry import Citry
@@ -41,50 +41,25 @@ app = Citry(
 )
 ```
 
-`source_locale` names the language used by application source messages.
-`default_locale` is used when `make_context()` receives no locale. It defaults
-to `source_locale` and must appear in `locales`.
+- `source_locale` is the language your application's own messages are
+  written in.
+- `default_locale` is used when a request does not choose a locale. It
+  defaults to `source_locale` and must be listed in `locales`.
+- `locales` lists, in order, the locales users may select. The source
+  locale may be left out if it only serves as a fallback.
+- `fallbacks` says which locales to try, in order, when a message has no
+  translation in a given locale. After them, Citry tries the source
+  locale of whichever package defined the message.
+- `catalogs` lists the packages that hold translations. See
+  [Organize catalogs](/i18n/catalogs/).
 
-`locales` is an ordered sequence of locales that users may select. A source
-locale may be fallback-only, but every default locale must be selectable.
+Citry checks the settings when it creates the engine. A fallback that
+names an unknown locale, or fallbacks that form a loop, raise
+an error.
 
-`fallbacks` maps one known locale to an ordered sequence of other known
-locales. Citry rejects unknown nodes and cycles when it creates the engine.
-After those configured fallbacks, each message may use the source locale of
-the catalog package that owns it.
+## Create a context
 
-`catalogs` is an ordered sequence of import-package names. See
-[Organize catalogs](/i18n/catalogs/) for the package layout and precedence
-rules.
-
-## Citry canonicalizes locale names
-
-Locale names use Unicode BCP 47 spelling. Citry canonicalizes configured and
-requested names through the same Rust implementation. For example, `EN-us`
-becomes `en-US` and a recognized deprecated language alias becomes its current
-form.
-
-Two inputs that become the same canonical locale are a configuration error.
-Catalog directory names are stricter: they must already use the canonical
-spelling so a package has one stable resource path for each locale.
-
-Unicode extensions may select data such as a numbering system or calendar.
-The complete tag must be one of the configured `locales` or an inferred
-source-mode locale before it can be selected:
-
-```python
-from citry.ext.i18n import make_context
-
-
-context = make_context(app, locale="hi-IN-u-nu-deva")
-```
-
-The complete canonical locale remains part of the context. Citry does not
-silently reduce it to only its language and region.
-
-## Create a context from request data
-
-Pass the same application that owns the components:
+Call `make_context()` with the same engine that owns the components:
 
 ```python
 from citry.ext.i18n import make_context
@@ -97,29 +72,34 @@ context = make_context(
 )
 ```
 
-An unknown or empty locale raises an error. An invalid IANA time-zone name also
-raises an error. Omitting `locale` selects the configured `default_locale` or
-the inferred source-mode default; omitting `time_zone` creates a zone-free
-context.
+Leave out `locale` to use the default locale. Leave out `time_zone` when
+the page shows no times that depend on a zone.
 
-`make_context()` returns a new immutable value. It does not change the engine's
-default context and does not affect another request.
+`make_context()` raises `ValueError` for an empty locale, a locale that
+is not in `locales`, or an unknown time-zone name. Validate or map user
+input before passing it, or catch the error and fall back to the
+default.
 
-## Provide the context at the render root
+Each call returns a new value. It does not change the engine's default
+or affect any other request.
 
-Pass the exact context through Citry's ordinary root-provide channel:
+## Pass the context
+
+Provide the context under the key `citry_i18n` when you render the page:
 
 ```python
-rendered = Page().render(
+page = Page()
+rendered = page.render(
     provides={"citry_i18n": context},
 )
 ```
 
-Every descendant rendered along that tree sees the context through
-`self.i18n.context`, template `tr()` and `fmt`, and the built-in i18n
-components.
+Every component in that render then translates and formats with it:
+template `tr()` and `fmt`, Python code through `self.i18n`, and the
+built-in i18n components.
 
-A separate `render()` call creates a separate root:
+A component that calls `render()` itself, inside a data method, starts a
+new render that does not see the page's context. Pass the context again:
 
 ```citry
 class Summary(Component):
@@ -127,19 +107,19 @@ class Summary(Component):
 
     def template_data(self, kwargs, slots):
         context = self.i18n.context
-        standalone = Detail().render(
+        detail = Detail()
+        rendered = detail.render(
             provides={"citry_i18n": context},
         )
-        return {"standalone": standalone}
+        return {"detail": rendered}
 ```
 
-Passing the context again is intentional. The output of `Detail().render()`
-depends on the arguments visible at that call, not on where the function
-happened to run.
+This keeps each render's output determined by what you pass to it. See
+[Provide and inject](/concepts/provide-and-inject/) for the general rule.
 
-## Override one subtree
+## Switch one part
 
-`<c-i18n>` provides another context to its descendants:
+Wrap part of a template in `<c-i18n>` to give it a different locale:
 
 ```citry-html
 <main>
@@ -151,23 +131,28 @@ happened to run.
 </main>
 ```
 
-With `tag="aside"`, Citry emits a real element with the selected `lang` and
-derived `dir` attributes. Without `tag`, a server-only provider is transparent
-and adds no HTML wrapper.
+With `tag="aside"`, Citry renders an `<aside>` element with the matching
+`lang` and `dir` attributes, here `lang="ar-EG" dir="rtl"`. Without
+`tag`, `<c-i18n>` adds no HTML of its own.
 
-The provider accepts `locale`, `direction`, and `time_zone` overrides. Omitted
-fields inherit. When the locale changes and direction is omitted, Citry derives
-the new direction from the locale.
+`<c-i18n>` also accepts `direction` (`ltr` or `rtl`) and `time_zone`.
+Anything you leave out is inherited from the surrounding context. When
+you change the locale but not the direction, Citry picks the direction
+that suits the new locale.
 
-Client-enabled providers need a real `tag` because the browser uses that
-element as the subtree boundary. See [Browser i18n](/i18n/browser/).
+A locale outside `locales`, any other `direction`, or an unknown time
+zone raises `ValueError` during the render.
 
-## Use the context outside a component
+To let this part of the page switch language in the browser, add
+`client` and keep `tag`. See [Browser i18n](/i18n/browser/).
 
-Inside components, use `self.i18n`. Outside components, use
-`i18n.for_context(context)`:
+## Translate in any code
+
+Code outside a component, such as an email builder or a view function,
+gets the same operations from the extension:
 
 ```python
+i18n = app.extensions.get_extension("i18n")
 service = i18n.for_context(context)
 
 heading = service.tr("my-app-account-title")
@@ -178,14 +163,13 @@ amount = service.format.currency(
 )
 ```
 
-The service exposes `context`, `tr()`, `resolve()`, `format`, and `parse`. Every
-operation uses the same explicit context.
+The service has `context`, `tr()`, `resolve()`, `format`, and `parse`,
+and every operation uses the context you passed.
 
-## Use context identity in a cache key
+## Cache per context
 
-Localized output must not share a cache entry with output produced under a
-different context. Pass the context's plain immutable identity through Cache's
-ordinary `vary()` contract:
+A cached render must not be reused for a different language. Return the
+context's `identity` from the cache's `vary()` method:
 
 ```citry
 class LocalizedCard(Component):
@@ -196,5 +180,47 @@ class LocalizedCard(Component):
             return self.component.i18n.context.identity
 ```
 
-Cache and i18n remain separate extensions. The cache receives an ordinary
-public value and does not need an i18n-specific option.
+The identity is a plain value that changes whenever anything in the
+context would change the output. See
+[Production and deployment](/i18n/production/#cache-translated-output-safely)
+for a cache key that combines it with other inputs.
+
+## Less common cases
+
+### Locale spellings
+
+Citry converts locale names to one standard spelling (BCP 47) before it
+compares them. For example, `EN-us` becomes `en-US`, and an outdated
+language code becomes its current form. Two entries in `locales` that
+turn out to be the same locale are a configuration error.
+
+Folder names inside a catalog package are stricter: they must already
+use the standard spelling, such as `en-US`.
+
+### Extra locale options
+
+A locale can carry Unicode options that pick a numbering system or
+calendar, such as `hi-IN-u-nu-deva` for Hindi with Devanagari digits.
+That exact name must be listed in `locales` before a request can select
+it:
+
+```python
+context = make_context(app, locale="hi-IN-u-nu-deva")
+```
+
+The context keeps the full name. Citry does not shorten it to the
+language and region.
+
+### No i18n settings
+
+When components declare `I18n.messages_locale` and the engine has no
+i18n settings, `make_context()` still works. Citry infers the default
+locale: the one source locale used by the application's own components,
+or, if the application has no messages of its own, the one source locale
+used by component libraries. If there is more than one candidate, Citry
+raises an error. Configure the settings above to choose explicitly.
+
+Without settings, a request may select any locale that a registered
+component's messages are written in. When the engine has neither i18n
+settings nor component messages, `make_context()` raises
+`I18nNotConfiguredError`.

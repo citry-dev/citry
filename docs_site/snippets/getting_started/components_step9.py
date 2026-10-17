@@ -19,11 +19,15 @@ class ChoiceButton(Component):
         pass
 
     template = """
-      <button class="choice-button" type="button">
+      <button
+        class="choice-button"
+        type="button"
+        @click="$emit('select')"
+      >
         Choose
         <span
           class="choice-button__label"
-          x-text="clientProps.label"
+          v-text="label"
         ></span>
       </button>
     """
@@ -33,9 +37,7 @@ class ChoiceButton(Component):
         props: {
           label: { type: String, required: true },
         },
-        init: ({ props, scope }) => {
-          scope.clientProps = props;
-        },
+        emits: ['select'],
       });
     """
 
@@ -57,30 +59,12 @@ class ChoicePicker(Component):
             # Tell the client to dispatch a custom browser event
             # with the loaded choices.
             return actions.Dispatch(
-                "choice-picker:loaded",
+                "ChoicePicker:loaded",
                 {"choices": choices},
             )
 
     template = """
-      <section
-        class="choice-picker"
-        x-data="{
-          choices: [],
-          choice: '',
-          setNextChoice() {
-            const choices = this.choices;
-            const oldChoiceIndex = choices.indexOf(this.choice);
-            const nextChoiceIndex =
-              (oldChoiceIndex + 1) % choices.length;
-            this.choice = choices[nextChoiceIndex];
-          },
-          loadChoices(newChoices) {
-            this.choices = newChoices;
-            this.choice = newChoices[0];
-          },
-        }"
-        @choice-picker:loaded="loadChoices($event.detail.choices)"
-      >
+      <section class="choice-picker">
         {# New in this step: ask Python for the choices. #}
         <button
           type="button"
@@ -89,27 +73,54 @@ class ChoicePicker(Component):
         >
           Load choices
         </button>
-        <span x-show="$loading('load_choices')">Loading...</span>
+        <span v-show="$loading('load_choices')">Loading...</span>
 
-        <p x-show="choices.length === 0">
+        <p v-show="choices.length === 0">
           No choices loaded yet.
         </p>
-        <div x-show="choices.length > 0">
+        <div v-show="choices.length > 0">
           <p>
             Current choice:
             <output
               class="choice-picker__value"
-              x-text="choice"
+              v-text="choice"
             ></output>
           </p>
 
           {# New in this step: cycle through the loaded choices. #}
           <c-ChoiceButton
-            $c-props="{ label: choice }"
-            @click="setNextChoice"
+            :label="choice"
+            @select="setNextChoice"
           />
         </div>
       </section>
+    """
+
+    js = """
+      $component({
+        data() {
+          return { choices: [], choice: '' };
+        },
+        methods: {
+          setNextChoice() {
+            const oldChoiceIndex = this.choices.indexOf(this.choice);
+            this.choice = this.choices[
+              (oldChoiceIndex + 1) % this.choices.length
+            ];
+          },
+          loadChoices(newChoices) {
+            this.choices = newChoices;
+            this.choice = newChoices[0];
+          },
+        },
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('ChoicePicker:loaded', (detail) => {
+            component.loadChoices(detail.choices);
+          });
+        },
+      });
     """
 
 

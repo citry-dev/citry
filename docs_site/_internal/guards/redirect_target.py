@@ -3,8 +3,7 @@ Check that every redirect stub points at a page that exists.
 
 A redirect stub (a ``<meta http-equiv="refresh">`` page from ``redirects.py``)
 forwards an old URL to a new one. If the target does not resolve in the built
-site, the redirect lands on a 404, so an unresolvable target is an error. Citry
-emits no redirect stubs yet, so this is a no-op until the first page moves.
+site, the redirect lands on a 404, so an unresolvable target is an error.
 """
 
 from __future__ import annotations

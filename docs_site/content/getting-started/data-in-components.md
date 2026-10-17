@@ -5,8 +5,10 @@ description: Give a Citry component typed Python options, show them in its HTML,
 
 # Use data in components
 
-Your first Card accepted one color and a place for content. Now you will build
-a reading list whose heading, books, and item count all come from Python.
+Most components show data that comes from Python: a title, a list of
+records, a count. In this step you build a reading list whose heading, books,
+and book count all come from Python, and you learn how to show, repeat, and
+hide parts of the HTML based on that data.
 
 If you have not built a component yet, start with
 [Your first component](/getting-started/your-first-component/).
@@ -19,10 +21,6 @@ Save this as `reading_list.py`:
   path="docs_site/live_snippets/reading_list.py"
   title="Reading list with Python data"
 />
-
-The final `reading_list` line gives **Try live** the value to preview. Python
-ignores that bare expression when you run the file normally; the `__main__`
-block prints the same component in your terminal.
 
 Run it:
 
@@ -42,10 +40,13 @@ The result contains this list:
 </ul>
 ```
 
-Citry adds some attributes of its own, so the complete HTML will be a little
+Citry adds some attributes of its own, so the complete HTML is a little
 longer.
 
-## Component inputs
+The file's last line, a bare `reading_list`, is what the **Try live** button
+shows. Python ignores it when you run the file.
+
+## Declare the options
 
 `Kwargs` lists the named options people can give your component:
 
@@ -57,15 +58,15 @@ class Kwargs:
     show_count: bool = True
 ```
 
-`books` has no default, so it is required. The other options already have
-useful values. This works without mentioning them:
+`books` has no default, so it is required. The other options have defaults,
+so this works:
 
 ```python
 ReadingList(books=["The Dispossessed"])
 ```
 
 It uses “Reading list” as the heading and shows the count. Pass
-`show_count=False` when you do not want the count:
+`show_count=False` to hide the count:
 
 ```python
 ReadingList(
@@ -74,13 +75,14 @@ ReadingList(
 )
 ```
 
-## Template variables
+## Compute new values
 
-A `Kwargs` field is available to the template under the same name. That is why
-`{{ heading }}` inserts the heading and `books` is ready for the loop.
+By default, the template can use each `Kwargs` field by its own name. That is
+how `{{ heading }}` inserts the heading.
 
-Use [`template_data()`][citry.Component.template_data] when the template needs
-a new value that Python must work out. Here it adds `total`:
+When the template needs a value that Python must compute, define
+[`template_data()`][citry.Component.template_data]. Here it adds `total`, the
+number of books:
 
 ```python
 def template_data(
@@ -97,19 +99,15 @@ def template_data(
     }
 ```
 
-The method returns every name this template uses.
+Once you define `template_data()`, the template sees only the names it
+returns. That is why it returns the `Kwargs` fields too.
 
-!!! note
-
-    For a component that only needs its `Kwargs` fields, leave the `template_data()` out and Citry supplies those fields automatically. Like we did in [Your first component](/getting-started/your-first-component#create-the-card).
-
-## Template syntax
+## Show data in the HTML
 
 The template uses four small tools:
 
 - `c-if="show_count and total > 0"` leaves the count out when you hide it or
-  when the list is empty. The value can be any Python expression, not only one
-  name.
+  when the list is empty. The value can be any Python expression.
 - `{{ "book" if total == 1 else "books" }}` chooses the singular or plural
   word with a Python expression inside `{{ }}`.
 - `c-for="book in books"` makes one `<li>` for every title.
@@ -122,34 +120,40 @@ If `books` is empty, the `c-empty` item appears instead:
 <li>Your list is empty.</li>
 ```
 
-The [Control flow](/syntax/control-flow/) and [Dynamic
-attributes](/syntax/dynamic-attributes/) pages cover the other forms once you
+[Conditions and loops](/syntax/control-flow/) and
+[Attributes](/syntax/attributes/) cover the other forms when you
 need them.
 
-## Input validation
+## Catch wrong options
 
-If you leave out `books`, Citry tells you that the required option is missing
-when the component renders:
+If you leave out `books`, Citry reports the missing option when the component
+renders:
 
 ```python
-print(ReadingList())
+reading_list = ReadingList()
+print(reading_list)
 # TypeError: ReadingList.Kwargs.__init__() missing ... 'books'
 ```
 
 A misspelled option is also rejected:
 
 ```python
-print(ReadingList(books=[], heding="Typo"))
-# TypeError: ReadingList.Kwargs got unexpected keyword 'heding'
+reading_list = ReadingList(books=[], heding="Typo")
+print(reading_list)
+# TypeError: ReadingList.Kwargs.__init__() got an unexpected
+# keyword argument 'heding'. Did you mean 'heading'?
 ```
 
-The annotations help your editor and type checker, but they do not check the
-value's type while the program runs. Validate values from forms, APIs, or other
-untrusted sources before passing them to the component. [Typing and
-validation](/concepts/inputs-and-validation/) explains the available choices.
+!!! note "Type annotations do not check values at runtime"
+
+    The type annotations help your editor and type checker, but Citry does
+    not check value types while the program runs. Validate values from
+    forms, APIs, or other sources you do not control before you pass them
+    in. [Inputs and validation](/concepts/inputs-and-validation/) explains
+    the choices.
 
 ## Next steps
 
-You now have a component that turns Python data into useful HTML. Next,
+You now have a component that turns Python data into HTML. Next,
 [build a complete page from components](/getting-started/build-page/)
-and add a small render test.
+and add a small render check.

@@ -4,7 +4,10 @@ from citry import Component
 
 
 class ErrorFallbackPage(Component):
-    """Two FlakyWidgets, each in its own boundary: one healthy, one failing."""
+    """Two FlakyWidgets, each in its own boundary.
+
+    One widget renders cleanly and the other fails.
+    """
 
     class Kwargs:
         pass
@@ -19,10 +22,15 @@ class ErrorFallbackPage(Component):
           <meta charset="utf-8" />
           <title>Error fallback example</title>
           <c-css />
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              font-family: system-ui, sans-serif;
+            }
+          </style>
         </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
+        <body>
           <h2 style="margin: 0 0 1rem;">Both boundaries rendered</h2>
           <div
             style="display: flex; gap: 1rem; align-items: flex-start;"

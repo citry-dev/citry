@@ -18,7 +18,7 @@
  * Spec: docs_site/design/DESIGN_spike_11.md section 8; main doc 11.1.G.2/G.5.
  */
 
-(function () {
+(globalThis.__citryDocsReady || Promise.resolve()).then(function () {
   'use strict';
 
   var isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || '');
@@ -539,4 +539,4 @@
     input.value = initialQuery;
     openModal();
   }
-})();
+});

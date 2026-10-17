@@ -9,8 +9,10 @@ site, so the whole suite pays the parse cost a single time.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
@@ -41,6 +43,22 @@ _MARKDOWN_LEAK_PATTERNS = (
     re.compile(r"^#{1,6}\s+\S"),
     re.compile(r"^\[[^\]]+\]\([^)\s]+\)"),
 )
+
+# A page that Vue builds in the browser ships its static HTML inside the JSON
+# data block that configures the Citry app, not in <body>. The guards read that
+# HTML too, or they would pass a page whose visible content they never saw.
+_PREPARED_CONFIGURATION_XPATH = '//script[@type="application/json"][@data-citry-vue-document]'
+
+# Markup the markdown pass leaves behind when it wraps raw HTML in paragraphs:
+# an empty paragraph, or a paragraph opened right before a block element's
+# opening or closing tag.
+# A browser renders each as a visible gap or moves the content that follows.
+_STRAY_MARKUP_PATTERNS = (
+    re.compile(r"<p>\s*</p>"),
+    re.compile(r"<p>\s*<(?:div|section|template)\b"),
+    re.compile(r"<p>\s*</(?:div|section|template)>"),
+)
+_SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.DOTALL | re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -116,6 +134,10 @@ class PageRecord:
     # Inline CSS where a custom property lost the space before the next value,
     # which makes the browser discard the whole declaration.
     glued_css_vars: list[str] = field(default_factory=list)
+    # Markup that the markdown pass wrapped in paragraphs or left unconsumed.
+    stray_markup: list[str] = field(default_factory=list)
+    # Static HTML fragments shipped inside a prepared Vue app's start script.
+    prepared_html: list[str] = field(default_factory=list)
 
     @property
     def h1_count(self) -> int:
@@ -167,9 +189,34 @@ class SiteIndex:
             return record  # unparseable; nothing more to extract
 
         self._extract(dom, record)
-        self._find_markdown_leaks(dom, record)
+        self._find_markdown_leaks(dom.xpath("//body"), record)
         self._find_glued_css_vars(dom, record)
+        # A shell holds Citry's HTML for a part Vue builds in the browser,
+        # written from component templates rather than Markdown, so an empty
+        # element there is not a stray paragraph. Markdown inside it is raw
+        # HTML the page also ships for Vue, which is checked below.
+        served = _SCRIPT_RE.sub("", text)
+        outside_shells = _without_shell_contents(served)
+        self._find_stray_markup(outside_shells, record)
+        # Raw HTML a page ships for Vue is checked like its body. The server
+        # usually also writes it into the body, which the checks above
+        # already read; checking it twice would count its headings twice.
+        for fragment_html in _prepared_html(dom):
+            record.prepared_html.append(fragment_html)
+            if fragment_html in outside_shells:
+                continue
+            if fragment_html not in served:
+                fragment = lxml.html.fragment_fromstring(fragment_html, create_parent="div")
+                self._extract(fragment, record, seen_ids={})
+                self._find_markdown_leaks([fragment], record)
+            self._find_stray_markup(fragment_html, record)
         return record
+
+    @staticmethod
+    def _find_stray_markup(html: str, record: PageRecord) -> None:
+        """Collect markup that the markdown pass wrapped in stray paragraphs."""
+        for pattern in _STRAY_MARKUP_PATTERNS:
+            record.stray_markup.extend(match.group().strip() for match in pattern.finditer(html))
 
     @staticmethod
     def _find_glued_css_vars(dom: lxml.html.HtmlElement, record: PageRecord) -> None:
@@ -180,7 +227,7 @@ class SiteIndex:
                 record.glued_css_vars.append(css[match.start() : match.end() + 12])
 
     @staticmethod
-    def _find_markdown_leaks(dom: lxml.html.HtmlElement, record: PageRecord) -> None:
+    def _find_markdown_leaks(roots: list[lxml.html.HtmlElement], record: PageRecord) -> None:
         """
         Collect visible text that is still Markdown source rather than HTML.
 
@@ -192,19 +239,25 @@ class SiteIndex:
         Only text a reader actually sees counts: anything inside code, script,
         style, or a text area is quoted on purpose.
         """
-        nodes = dom.xpath(
-            "//body//text()[not(ancestor::pre) and not(ancestor::code)"
-            " and not(ancestor::script) and not(ancestor::style)"
-            " and not(ancestor::textarea)]",
-        )
+        nodes = [
+            node
+            for root in roots
+            for node in root.xpath(
+                ".//text()[not(ancestor::pre) and not(ancestor::code)"
+                " and not(ancestor::script) and not(ancestor::style)"
+                " and not(ancestor::textarea)]",
+            )
+        ]
         for node in nodes:
             for raw in str(node).split("\n"):
                 line = raw.strip()
                 if any(pattern.match(line) for pattern in _MARKDOWN_LEAK_PATTERNS):
                     record.markdown_leaks.append(line)
 
-    def _extract(self, dom: lxml.html.HtmlElement, record: PageRecord) -> None:
-        seen_ids: dict[str, int] = {}
+    def _extract(
+        self, dom: lxml.html.HtmlElement, record: PageRecord, *, seen_ids: dict[str, int] | None = None
+    ) -> None:
+        seen_ids = {} if seen_ids is None else seen_ids
         for el in dom.iter():
             tag = el.tag
             if not isinstance(tag, str):
@@ -245,7 +298,7 @@ class SiteIndex:
             elif tag == "meta":
                 self._read_meta(el, record)
 
-        record.duplicate_ids = [i for i, n in seen_ids.items() if n > 1]
+        record.duplicate_ids.extend(i for i, n in seen_ids.items() if n > 1 and i not in record.duplicate_ids)
 
     @staticmethod
     def _read_meta(el: lxml.html.HtmlElement, record: PageRecord) -> None:
@@ -339,3 +392,100 @@ def _rel_to_url(rel: PurePosixPath) -> str:
     if s.endswith(".html"):
         return "/" + s[: -len(".html")] + "/"
     return "/" + s
+
+
+_VOID_TAGS = frozenset(
+    ("area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr")
+)
+
+
+class _ShellContents(HTMLParser):
+    """Find the contents of each element marked ``data-allow-mismatch="children"``, as offsets."""
+
+    def __init__(self, html: str) -> None:
+        super().__init__(convert_charrefs=False)
+        self.line_starts = [0, *(match.end() for match in re.finditer("\n", html))]
+        self.ranges: list[tuple[int, int]] = []
+        self.depth = 0
+        self.start = 0
+
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self.line_starts[line - 1] + column
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _VOID_TAGS:
+            return
+        if self.depth:
+            self.depth += 1
+        elif ("data-allow-mismatch", "children") in attrs:
+            self.depth = 1
+            self.start = self._offset() + len(self.get_starttag_text() or "")
+
+    def handle_endtag(self, tag: str) -> None:
+        if self.depth and tag not in _VOID_TAGS:
+            self.depth -= 1
+            if not self.depth:
+                self.ranges.append((self.start, self._offset()))
+
+
+def _without_shell_contents(html: str) -> str:
+    """Return the page HTML with the contents of each Vue shell element removed."""
+    if 'data-allow-mismatch="children"' not in html:
+        return html
+    finder = _ShellContents(html)
+    finder.feed(html)
+    finder.close()
+    output, position = [], 0
+    for start, end in finder.ranges:
+        output.append(html[position:start])
+        position = end
+    output.append(html[position:])
+    return "".join(output)
+
+
+def _prepared_html(dom: lxml.html.HtmlElement) -> list[str]:
+    """Return the static HTML fragments a prepared Vue app carries, in page order."""
+    fragments: list[str] = []
+    for script in dom.xpath(_PREPARED_CONFIGURATION_XPATH):
+        try:
+            transport = json.loads(script.text or "")
+        except ValueError:
+            # Not a configuration this reader understands; it contributes no HTML.
+            continue
+        manifest = transport.get("manifest") if isinstance(transport, dict) else None
+        occurrences = manifest.get("occurrences") if isinstance(manifest, dict) else None
+        for occurrence in occurrences if isinstance(occurrences, list) else ():
+            prepared = occurrence.get("preparedData") if isinstance(occurrence, dict) else None
+            opaque = prepared.get("opaqueHtml") if isinstance(prepared, dict) else None
+            for record in opaque.values() if isinstance(opaque, dict) else ():
+                html = record.get("html") if isinstance(record, dict) else None
+                if isinstance(html, str) and html.strip():
+                    fragments.append(html)
+    return fragments
+
+
+def source_markdown(page: PageRecord, content_dir: Path) -> Path | None:
+    """Return the Markdown file a built page came from, when one exists."""
+    parts = page.rel_path.parts
+    if not parts or not parts[-1].endswith(".html"):
+        return None
+    if parts[-1] == "index.html":
+        stem = parts[:-1]
+        candidates = [content_dir.joinpath(*stem, "index.md")]
+        if stem:
+            candidates.append(content_dir.joinpath(*stem[:-1], f"{stem[-1]}.md"))
+    else:
+        candidates = [content_dir.joinpath(*parts[:-1], parts[-1].removesuffix(".html") + ".md")]
+    return next((candidate for candidate in candidates if candidate.is_file()), None)
+
+
+def source_line(path: Path, text: str) -> int | None:
+    """Return the 1-based line of the first source line that contains ``text``."""
+    needle = text.strip()
+    if not needle:
+        return None
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if needle in line:
+            return number
+    return None

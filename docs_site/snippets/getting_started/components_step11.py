@@ -1,7 +1,7 @@
+from citry_setup import citry_app
+
 from citry import Component
 from citry.ext.events import EventError, actions
-
-from citry_setup import citry_app
 
 
 # New in this step: describe the named values sent by the form.
@@ -29,16 +29,12 @@ class SignupForm(Component):
                     fields={"email": "Use an @example.com address."},
                 )
             return actions.Dispatch(
-                "signup:sent",
+                "SignupForm:sent",
                 {"email": email},
             )
 
     template = """
-      <section
-        class="signup-form"
-        x-data="{ acceptedEmail: '' }"
-        @signup:sent="acceptedEmail = $event.detail.email"
-      >
+      <section class="signup-form">
         <form @c-submit.prevent="submit">
           <label>
             Work email
@@ -51,22 +47,39 @@ class SignupForm(Component):
             <span
               class="signup-form__error"
               role="alert"
-              x-show="$error('submit')?.fieldErrors?.email"
-              x-text="$error('submit')?.fieldErrors?.email || ''"
+              v-show="$error('submit')?.fieldErrors?.email"
+              v-text="$error('submit')?.fieldErrors?.email || ''"
             ></span>
           </label>
           <button
             type="submit"
             :disabled="$loading('submit')"
-            x-text="$loading('submit') ? 'Sending' : 'Send request'"
+            v-text="$loading('submit') ? 'Sending' : 'Send request'"
           >
             Send request
           </button>
         </form>
-        <p role="status" x-show="acceptedEmail">
-          Accepted <output x-text="acceptedEmail"></output>.
+        <p role="status" v-show="acceptedEmail">
+          Accepted <output v-text="acceptedEmail"></output>.
         </p>
       </section>
+    """
+
+    js = """
+      $component({
+        data() {
+          // Nothing is accepted until Python answers.
+          return { acceptedEmail: '' };
+        },
+        onServerRender({ component, onEvent }) {
+          // Citry removes this listener before onServerRender
+          // runs again and when the component unmounts.
+          onEvent('SignupForm:sent', (detail) => {
+            // Show the email that Python sent with the event.
+            component.acceptedEmail = detail.email;
+          });
+        },
+      });
     """
 
 

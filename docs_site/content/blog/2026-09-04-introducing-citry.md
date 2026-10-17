@@ -7,6 +7,14 @@ author_url: /community/people/
 tags: Project updates
 ---
 
+*Editor's note, September 28, 2026: this post describes Citry as it was when
+it was published. Starting with Citry 0.6.0, components use Vue for browser
+behavior instead of Alpine.js, so the Alpine.js parts of the examples below,
+such as `x-data`, `x-show`, `x-text`, and the handlers that change their
+values, do not run. To write the same components today, follow
+[Add browser behavior](/getting-started/browser-interactivity/) and
+[Call Python from a click](/getting-started/call-python/).*
+
 ## Citry is here
 
 Hi, I'm Juro, the maintainer of [django-components](https://github.com/django-components/django-components){: target="\_blank" rel="noopener"}.
@@ -26,7 +34,7 @@ It comes with
 a [UI library](/ui-library/),
 [editor support](/ide/vscode/),
 
-Citry works with any Python web framework - Django, FastAPI, Flask, even plain WSGI/ASGI. See [integrations](/web-frameworks/).
+Citry works with any Python web framework - Django, FastAPI, Flask, even plain WSGI/ASGI. See [integrations](/advanced/web-frameworks/).
 
 You can try it without installing anything in the [playground](/playground/).
 
@@ -220,7 +228,7 @@ walks through those pieces and serving the page.
 
 Here, `@c-click` sends the click to Python, and the returned action gives the
 browser the message to display. Citry integrates with [Django, FastAPI,
-Flask, Starlette, ASGI, and WSGI](/web-frameworks/), so you can use this with the backend you
+Flask, Starlette, ASGI, and WSGI](/advanced/web-frameworks/), so you can use this with the backend you
 already have.
 
 ## Catch mistakes while you build
@@ -299,13 +307,13 @@ Alongside the core framework, there's already quite a bit to try:
 - [Examples](/examples/) and the
   [getting-started tutorial](/getting-started/installation/) take you from
   rendering a component to handling server interactions.
-- [Integrations](/web-frameworks/) connect Citry to Python web frameworks,
+- [Integrations](/advanced/web-frameworks/) connect Citry to Python web frameworks,
   and [community extensions](/community/extensions/) add other ways to use it
   in an existing project.
 
 There are also features I haven't tried to squeeze into this introduction,
 like [translations with Fluent](/i18n/),
-[caching](/advanced/caching/), or
+[caching](/performance/caching/), or
 [HTML fragments](/advanced/html-fragments/).
 
 ## Start gradually in an existing Django project
@@ -345,7 +353,7 @@ When you are ready to port components, follow the
 It covers the template, Python, asset, extension, and testing changes and
 includes a checklist you can give to a coding agent.
 
-This is different from Citry's own [Django integration](/web-frameworks/#django), which handles serving components and event routes.
+This is different from Citry's own [Django integration](/advanced/web-frameworks/#django), which handles serving components and event routes.
 
 ## What comes next
 

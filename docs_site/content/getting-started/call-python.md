@@ -5,160 +5,115 @@ description: Send a click to a Python event handler and show its answer without 
 
 # Call Python from a click
 
-Your FastAPI app can render the page. Now you will add a button that reaches a
-Python handler through Citry's mounted routes. Python will load the choice
-picker's options without reloading the page.
+Some clicks need the server: load records from a database, save a change,
+check a permission. In this step a "Load choices" button runs a Python
+method, and the picker shows the choices Python sends back, without
+reloading the page.
 
-Start with [Serve the page with FastAPI](/getting-started/fastapi/) if the app
-is not already running.
+A Python method that the browser can call this way is an **event handler**.
+You put event handlers in a nested `class Events` on the component.
 
-## Build the page
+## Replace the components
 
 Replace `components.py` with this version:
 
-Look for the `New in this step` comments. This version:
-
-- adds the database stand-in `load_choices_from_database()`
-- adds the Python handler `ChoicePicker.Events.load_choices()`
-- changes the picker so it starts empty and
-fills itself from the handler's browser event.
-
 <c-include-file path="docs_site/snippets/getting_started/components_step9.py" language="citry" />
 
-Keep `citry_setup.py` and `app.py` unchanged. Uvicorn should reload the app
-after you save the file.
+Keep `citry_setup.py` and `app.py` as they are. Open
+`http://127.0.0.1:8000/` and click “Load choices.”
 
-Open `http://127.0.0.1:8000/` and click “Load choices.” The empty picker fills
-with the two choices. Its existing child button can then move between them in
-the browser.
-
-## Send the click to Python
-
-This is the line that turns an ordinary button into a server-handled action:
+## Send clicks to Python
 
 ```citry-html
-<button type="button" @c-click="load_choices">
-  Load choices
-</button>
+<button type="button" @c-click="load_choices">Load choices</button>
 ```
 
-The Alpine `@click` from the previous lesson runs JavaScript in the browser.
-Citry uses the `@c-*` prefix for events that are meant to be [handled by the server](/events/bindings/).
+Vue's `@click` runs code in the browser. Citry's `@c-click` sends the click
+to the server and runs the event handler with that name,
+`ChoicePicker.Events.load_choices`. Other browser events work the same way
+with an `@c-` prefix, as [Bind events in templates](/events/bindings/) shows.
 
-When you click on the button with `@c-click`:
+!!! warning "Check permissions in every event handler"
 
-1. Alpine detects the `click` event and hands it over to Citry JS client.
-2. Citry JS client sends request to the server (the FastAPI app). The payload includes which component (`ChoicePicker`) and which event was triggered (`load_choices`).
-3. On the server, the routes that were installed when we mounted Citry onto FastAPI will pick up this request (`/citry/...`).
-4. Citry's routing passes the request and event data to `load_choices()` event handler on the `ChoicePicker` component.
+    Anyone can send a request to an event handler, just as they can to any
+    route, so treat everything it receives as untrusted. Check who the
+    user is and what they may do inside the handler.
 
-Because the page and Citry routes share the application, this request stays on the same origin.
+## Send the result back
 
-!!! warning
-
-    **DO NOT** blindly trust data in event handlers - anyone can send events. Your application still
-    needs to authenticate people and check their permissions inside handlers. See
-    [Security](/security/) for the complete trust boundaries.
-
-## Server event handlers
-
-The handler lives in the component's nested [`Events`][citry.Component.Events] class:
+The handler loads the choices and returns a browser event that carries them:
 
 ```python
 class Events:
     def load_choices(self):
         choices = load_choices_from_database()
         return actions.Dispatch(
-            "choice-picker:loaded",
+            "ChoicePicker:loaded",
             {"choices": choices},
         )
 ```
 
-Public methods in `Events` are handlers the browser can call. Here,
-`load_choices` matches the name on the button.
+[`actions.Dispatch`][citry.ext.events.actions.Dispatch] tells the browser to
+fire an event with that name, and attach the dictionary as the event's
+`detail`. The dictionary must be JSON-serializable. Start the name with the
+component's name, as in `ChoicePicker:loaded`, so it does not clash with
+events from other components.
 
-The small function above the components stands in for your application's data
-access:
+## Listen for the result
 
-```python
-def load_choices_from_database() -> list[str]:
-    return ["Ocean", "Forest"]
-```
+The component listens for that event in its JavaScript:
 
-The page starts without those choices. This function runs only after the
-button calls the handler. In a real application, this is where you might query
-a database or call another Python service.
-
-## Handler response
-
-The handler returns an
-[`actions.Dispatch(...)`][citry.ext.events.actions.Dispatch] action:
-
-```python
-return actions.Dispatch(
-    "choice-picker:loaded",
-    {"choices": choices},
-)
-```
-
-This tells the browser to [fire an event](https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Events){: target="_blank" rel="noopener"} named `choice-picker:loaded`. The
-second argument becomes that event's [`detail`](https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent/detail){: target="_blank" rel="noopener"}, so the returned list is
-available as `$event.detail.choices`. Values in `detail` must be
-JSON-serializable because they travel from Python to browser code.
-
-!!! note
-
-    `@c-click` is a convenience over [`sendEvent()`][$sendEvent]: as such, it starts the handler but does not expose the
-    handler's Promise result.
-
-    That is why this example returns [`Dispatch`][citry.ext.events.actions.Dispatch] (to trigger a browser event) rather
-    than [`actions.Data`][citry.ext.events.actions.Data] which would have returned data from a Promise.
-
-    Component JavaScript can
-    use `sendEvent()` when it owns the call and needs Data as a one-off return
-    value.
-
-The picker defines a small Alpine method for storing the result:
-
-```javascript
-loadChoices(newChoices) {
-  this.choices = newChoices;
-  this.choice = newChoices[0];
+```js
+onServerRender({ component, onEvent }) {
+  // Citry removes this listener before onServerRender
+  // runs again and when the component unmounts.
+  onEvent('ChoicePicker:loaded', (detail) => {
+    component.loadChoices(detail.choices);
+  });
 }
 ```
 
-Its listener calls that method when the matching event arrives:
+[`onServerRender`][onServerRender] is a `$component` option. Citry runs it
+when the component first appears on the page, and again each time Python
+sends new HTML for the component. It receives [`onEvent`][onEvent], which
+listens only for events dispatched by this component's own Python handlers, and passes your
+callback the event's `detail`.
 
-```citry-html
-@choice-picker:loaded="loadChoices($event.detail.choices)"
+`loadChoices` stores the list and selects the first choice:
+
+```js
+$component({
+  data() {
+    return { choices: [], choice: '' };
+  },
+  methods: {
+    loadChoices(newChoices) {
+      this.choices = newChoices;
+      this.choice = newChoices[0];
+    },
+  },
+});
 ```
 
-The existing `$c-props` connection then passes that selected
-label to `ChoiceButton`. No HTML needs to be replaced.
+From there, the browser does the rest, as in the earlier steps: the
+`<c-ChoiceButton>` child shows the current choice through `:label`, and its
+`select` event moves to the next choice. Python does not render new HTML.
 
-!!! note
+!!! note "Other ways to get a result back"
 
-    When the server returns `Dispatch` action, the browser
-    fires a bubbling DOM event from that component's first live root.
+    `@c-click` does not give your JavaScript the handler's return value.
+    When component code needs a value back, call
+    [`$sendEvent`][$sendEvent] and return
+    [`actions.Data`][citry.ext.events.actions.Data] from the handler.
 
-    Here, the first root is the same element that carries
-    `@choice-picker:loaded`, so the listener receives the event.
+    The dispatched event also bubbles up the page from the component's
+    first element, so page scripts outside the component can listen for
+    it. Event names that start with `citry:` are reserved for Citry's own
+    events, and `actions.Dispatch` rejects them.
 
-    Placement matters for an ordinary `@event` listener. The first root or one of
-    its ancestors can hear the bubbling event. A descendant **CANNOT**, because DOM
-    events do not bubble downward. If a component has several roots, a listener on
-    another root will not hear it either.
+## Show progress
 
-    For a multi-root component, prefer [`$onEvent`][$onEvent] in an
-    Alpine expression or the `onEvent` function in [`$component`][$component].
-    Both listen for server events targeting the current component instance. Their callbacks
-    receive `detail` directly, without `$event.detail`. See [event
-    actions](/events/actions/#choose-where-to-listen-for-dispatch) for the complete
-    delivery rules.
-
-## Loading state
-
-The full button also uses the Citry-specific Alpine magic [`$loading('load_choices')`][$loading]:
+`$loading('load_choices')` is true while the call is running:
 
 ```citry-html
 <button
@@ -168,62 +123,12 @@ The full button also uses the Citry-specific Alpine magic [`$loading('load_choic
 >
   Load choices
 </button>
-<span x-show="$loading('load_choices')">
-  Loading...
-</span>
+<span v-show="$loading('load_choices')">Loading...</span>
 ```
 
-`$loading('load_choices')` is true while that handler call is in progress.
-During a slower real query, the button becomes disabled and the loading message
-appears. Both return to normal when the call finishes.
-
-## Process response
-
-After Python supplies the list, another Alpine method finds the next choice:
-
-```javascript
-setNextChoice() {
-  const choices = this.choices;
-  const oldChoiceIndex = choices.indexOf(this.choice);
-  const nextChoiceIndex =
-    (oldChoiceIndex + 1) % choices.length;
-  this.choice = choices[nextChoiceIndex];
-}
-```
-
-The child button calls that method with an ordinary browser click:
-
-```citry-html
-<c-ChoiceButton
-  $c-props="{ label: choice }"
-  @click="setNextChoice"
-/>
-```
-
-This uses Alpine's `@click`, so moving from “Ocean” to “Forest” does not make
-another server call. The page now uses Python when it needs data and browser
-code when the interaction can stay local.
-
-## Each server call starts fresh
-
-This first handler is stateless. Each click calls
-`load_choices_from_database()` again and returns the same set. Python does not
-remember that the page loaded it before. Alpine can still move between those
-choices in the browser.
-
-Here, stateless means the component has no Citry State carried from one call to
-the next. A real handler can still read persistent application data from a
-database, session, or another service.
-
-That makes this pattern a good fit for refreshing a result or asking the
-server for the latest version of some data. The next lesson adds State so
-Python can continue from an earlier call.
-
-Continue with [event bindings](/events/bindings/) for loading and errors, or
-[event actions](/events/actions/) for the other ways a handler can update the
-page.
+While this component's `load_choices` call runs, the button is disabled
+and the “Loading...” text shows.
 
 ## Next steps
 
-The browser can now reach Python and receive a result. Next, [keep a value
-between calls](/getting-started/state/).
+Next, [keep values between Python calls](/getting-started/state/).

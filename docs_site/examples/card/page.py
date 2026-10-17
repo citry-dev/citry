@@ -22,8 +22,15 @@ class CardPage(Component):
           <meta charset="utf-8" />
           <title>Card example</title>
           <c-css />
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              color-scheme: light dark;
+            }
+          </style>
         </head>
-        <body style="margin: 0; padding: 1.5rem; color-scheme: light dark;">
+        <body>
           <c-Card accent="#8250df">
             <h2 class="demo-card__title">Welcome</h2>
             <p class="demo-card__body">

@@ -24,14 +24,14 @@ class Welcome(Component):
     template = """
       <div
         class="card"
-        x-bind:title="count + ' new messages'"
+        :title="count + ' new messages'"
       >
         <h1>{{ title }}</h1>
         <p>You have {{ count }} new messages.</p>
       </div>
     """
 
-    # Top-level js_data values are Alpine variables.
+    # Top-level js_data values are reactive Vue members.
     def js_data(
         self,
         kwargs: Kwargs,

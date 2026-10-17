@@ -1,10 +1,13 @@
-"""Standalone page showing provide/inject: buttons styled by an ancestor theme."""
+"""Standalone page showing buttons styled by an ancestor theme."""
 
 from citry import Component
 
 
 class ProvideInjectPage(Component):
-    """A full page wrapping ThemedButtons in themes they inject, never receive as props."""
+    """A full page wrapping ThemedButtons in provided themes.
+
+    The buttons inject their theme and never receive it as a prop.
+    """
 
     class Kwargs:
         pass
@@ -19,10 +22,15 @@ class ProvideInjectPage(Component):
           <meta charset="utf-8" />
           <title>Provide / inject example</title>
           <c-css />
+          <style>
+            body {
+              margin: 0;
+              padding: 1.5rem;
+              font-family: system-ui, sans-serif;
+            }
+          </style>
         </head>
-        <body
-          style="margin: 0; padding: 1.5rem; font-family: system-ui, sans-serif;"
-        >
+        <body>
           <c-provide
             key="theme"
             accent="#2563eb"

@@ -111,7 +111,7 @@ export class CitryBrowserSession {
         state.resolveReady();
         state.resolveReady = null;
         state.rejectReady = null;
-        this.onReady(data.runtime || "Citry runtime ready");
+        this.onReady(data.runtime || "Citry runtime ready", data.source || "");
       } else if (data.type === "executing" && data.runId === this.activeRunId) {
         this.armExecutionTimeout(state, data.runId);
         this.onPhase("Running Python");
@@ -204,7 +204,7 @@ export class CitryBrowserSession {
     }
   }
 
-  async dispatchEvent(runId, envelope) {
+  async dispatchEvent(runId, envelope, headers = {}) {
     if (!Number.isSafeInteger(runId) || runId <= 0 || !envelope || typeof envelope !== "object") {
       throw new Error("The preview sent an invalid event request.");
     }
@@ -241,6 +241,7 @@ export class CitryBrowserSession {
         runId,
         eventId,
         envelope,
+        headers,
       });
     });
   }

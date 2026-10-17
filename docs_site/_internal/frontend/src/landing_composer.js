@@ -13,6 +13,8 @@ const ID_REFERENCE_ATTRIBUTES = [
 ];
 const INTERACTIVE_SELECTOR = "a[href], button, input, select, textarea, [tabindex], [contenteditable]";
 
+await (globalThis.__citryDocsReady || Promise.resolve());
+
 function accepts(drop, kind) {
   return drop.dataset.composerAccepts?.split(/\s+/).includes(kind) ?? false;
 }
@@ -87,7 +89,7 @@ function rewriteIdentifiers(container, prefix) {
 }
 
 function readRecipeTemplates(root) {
-  const bank = root.querySelector("script[data-composer-recipe-bank]");
+  const bank = root.querySelector("[data-composer-recipe-bank]");
   if (!bank) return new Map();
   const parser = document.createElement("template");
   parser.innerHTML = JSON.parse(bank.textContent);

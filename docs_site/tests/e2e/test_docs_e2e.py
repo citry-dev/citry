@@ -20,8 +20,14 @@ from docs_site._internal.config import config
 from docs_site._internal.site_nav import load_site_nav
 
 pytest.importorskip("pytest_playwright")
+from playwright.sync_api import expect
 
 pytestmark = pytest.mark.e2e
+
+# Resolve repository files (pnpm's node_modules, the docs static assets) from this
+# file rather than the working directory, which differs when pytest runs from a subfolder.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_AXE_PATH = _REPO_ROOT / "node_modules" / "axe-core" / "axe.min.js"
 
 
 def _failed_requests(page: Any, url: str) -> list[str]:
@@ -124,6 +130,24 @@ def test_pages_load_with_no_broken_assets(page: Any, docs_site_url: str) -> None
     ):
         bad = _failed_requests(page, docs_site_url + path)
         assert bad == [], f"{path} loaded with failed requests: {bad}"
+
+
+def test_youtube_player_is_created_only_after_activation(page: Any, docs_site_url: str) -> None:
+    youtube_requests: list[str] = []
+    page.on(
+        "request",
+        lambda request: youtube_requests.append(request.url) if "youtube" in request.url else None,
+    )
+    page.goto(docs_site_url + "/", wait_until="networkidle")
+
+    player = page.locator(".youtube-video")
+    assert player.locator("iframe").count() == 0
+    assert not youtube_requests
+
+    player.locator("[data-youtube-load]").click()
+    iframe = player.locator("iframe")
+    iframe.wait_for(state="attached")
+    assert iframe.get_attribute("src") == "https://www.youtube-nocookie.com/embed/d3nPqvDdNB0"
 
 
 def test_reference_page_has_a_populated_toc(page: Any, docs_site_url: str) -> None:
@@ -291,7 +315,7 @@ def test_ui_preview_frame_resizes_only_from_its_own_window(
                 + 'sandbox="allow-scripts" srcdoc="<p>Preview</p>"></iframe>';
         }"""
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/site.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "site.js"))
     frame = page.locator("[data-ui-preview-frame]")
     frame_element = frame.element_handle()
     assert frame_element is not None
@@ -371,7 +395,7 @@ def test_search_prefixes_a_result_route_that_matches_the_deployment_base(page: A
         "<div data-search-empty></div><div data-search-noresults hidden></div>"
         "<div data-search-error hidden></div></div></div></div></body>"
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/search.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "search.js"))
 
     page.locator("[data-search-open]").click()
     page.locator(".djc-search__input").fill("docs")
@@ -394,7 +418,7 @@ def test_google_search_fallback_scopes_to_the_public_site_path(page: Any, docs_s
         "<div data-search-noresults hidden></div><div data-search-error hidden></div>"
         "</div></div></div></body>"
     )
-    page.add_script_tag(path=str(Path("docs_site/static/js/search.js").resolve()))
+    page.add_script_tag(path=str(_REPO_ROOT / "docs_site" / "static" / "js" / "search.js"))
 
     page.locator("[data-search-open]").click()
     page.locator(".djc-search__input").fill("components")
@@ -513,10 +537,23 @@ def test_internal_page_link_brings_active_sidebar_item_clearly_into_view(
     assert_active_link_is_clear(first_path)
 
 
+def _review_marked_page_path() -> str:
+    """Return a page whose own sidebar group still has an entry marked for review."""
+    # Which pages still need review changes as the maintainer reviews them, so
+    # the test finds one from the nav instead of naming a page. Opening the
+    # marked page itself keeps its group expanded, so the link is visible.
+    for area in load_site_nav(config).areas:
+        for group in area.groups:
+            for item in group.items:
+                if item.needs_review:
+                    return item.path
+    pytest.skip("no navigation entry is marked for review")
+
+
 def test_navigation_status_badges_and_review_hint_render(page: Any, docs_site_url: str) -> None:
-    # Open a page in a group containing review-marked entries. On /docs/ that
-    # group is collapsed, so its links are intentionally not visible.
-    page.goto(docs_site_url + "/syntax/control-flow/")
+    # Open a review-marked page. On /docs/ its group is collapsed, so its
+    # links are intentionally not visible there.
+    page.goto(docs_site_url + _review_marked_page_path())
 
     alpha_badge = page.locator('.djc-header__nav a[href="/ui-library/"] .djc-nav-badge')
     assert alpha_badge.inner_text() == "ALPHA"
@@ -547,7 +584,7 @@ def test_active_header_underline_excludes_status_badge(page: Any, docs_site_url:
 
 def test_navigation_review_hint_stays_inside_resized_sidebar(page: Any, docs_site_url: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.goto(docs_site_url + "/syntax/control-flow/")
+    page.goto(docs_site_url + _review_marked_page_path())
 
     sidebar = page.locator("#djc-sidebar")
     sidebar.evaluate(
@@ -783,9 +820,11 @@ def test_example_recipe_renders_its_live_demo(
 def test_tabs_ui_preview_is_keyboard_operable_at_a_narrow_viewport(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     page.set_viewport_size({"width": 360, "height": 760})
     page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
     demo = demos.nth(1)
     frame_element = demo.locator("[data-ui-preview-frame]")
@@ -811,9 +850,11 @@ def test_tabs_ui_preview_is_keyboard_operable_at_a_narrow_viewport(
 def test_tabs_ui_sampler_and_configurator_are_result_first_and_reactive(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 13
@@ -864,26 +905,24 @@ def test_tabs_ui_sampler_and_configurator_are_result_first_and_reactive(
 
     page.locator('.djc-header__actions [data-theme-value="light"]').first.click()
     page.wait_for_function("document.documentElement.getAttribute('data-theme') === 'light'")
-    page.wait_for_timeout(50)
     code_background = page.locator(".prose pre").first.evaluate("element => getComputedStyle(element).backgroundColor")
     preview_background = (
         demos.nth(0)
         .locator(".citry-ui-demo__preview")
         .evaluate("element => getComputedStyle(element).backgroundColor")
     )
-    frame_background = sampler.locator("body").evaluate("element => getComputedStyle(element).backgroundColor")
     assert preview_background == code_background
-    assert frame_background == code_background
+    # The docs page tells the preview frame about the new theme with a
+    # message, which the frame handles a little later, so wait for its color.
+    expect(sampler.locator("body")).to_have_css("background-color", code_background)
 
     page.locator('.djc-header__actions [data-theme-value="dark"]').first.click()
     page.wait_for_function("document.documentElement.getAttribute('data-theme') === 'dark'")
-    page.wait_for_timeout(50)
     dark_code_background = page.locator(".prose pre").first.evaluate(
         "element => getComputedStyle(element).backgroundColor"
     )
-    dark_frame_background = sampler.locator("body").evaluate("element => getComputedStyle(element).backgroundColor")
     assert dark_code_background != code_background
-    assert dark_frame_background == dark_code_background
+    expect(sampler.locator("body")).to_have_css("background-color", dark_code_background)
 
     page_font_size = float(page.locator("body").evaluate("element => parseFloat(getComputedStyle(element).fontSize)"))
     preview_font_size = float(
@@ -895,6 +934,7 @@ def test_tabs_ui_sampler_and_configurator_are_result_first_and_reactive(
 def test_tabs_ui_focused_examples_cover_remaining_public_behaviors(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -903,6 +943,7 @@ def test_tabs_ui_focused_examples_cover_remaining_public_behaviors(
     )
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     density_demo = demos.nth(4)
@@ -996,6 +1037,7 @@ def test_tabs_ui_focused_examples_cover_remaining_public_behaviors(
 def test_dialog_ui_examples_are_result_first_reactive_and_operable(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1003,6 +1045,7 @@ def test_dialog_ui_examples_are_result_first_reactive_and_operable(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/dialog/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 11
@@ -1019,9 +1062,12 @@ def test_dialog_ui_examples_are_result_first_reactive_and_operable(
     controls = configurator_demo.locator("[data-ui-preview-controls] form")
     configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
     configured_dialog = configurator.locator('[data-citry-ui-part="dialog"]')
+    # Each control change sends every current value to the frame, so the
+    # Size and Scroll messages also carry the unchecked dismissal setting,
+    # and the waits below prove it has reached the Dialog.
+    controls.get_by_label("Allow passive dismissal").uncheck()
     controls.get_by_label("Size").select_option("lg")
     controls.get_by_label("Scroll").select_option("dialog")
-    controls.get_by_label("Allow passive dismissal").uncheck()
     _wait_for_attribute(configured_dialog, "data-size", "lg")
     _wait_for_attribute(configured_dialog, "data-scroll", "dialog")
     configurator.get_by_role("button", name="Preview configuration").click()
@@ -1036,8 +1082,10 @@ def test_dialog_ui_examples_are_result_first_reactive_and_operable(
 def test_dialog_ui_focused_examples_cover_control_focus_forms_and_nesting(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     page.goto(docs_site_url + "/ui-library/components/dialog/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     controlled = demos.nth(3).frame_locator("[data-ui-preview-frame]")
@@ -1082,6 +1130,7 @@ def test_dialog_ui_focused_examples_cover_control_focus_forms_and_nesting(
 def test_combobox_ui_examples_are_result_first_reactive_and_operable(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1089,6 +1138,7 @@ def test_combobox_ui_examples_are_result_first_reactive_and_operable(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/combobox/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -1104,11 +1154,15 @@ def test_combobox_ui_examples_are_result_first_reactive_and_operable(
     controls = configurator_demo.locator("[data-ui-preview-controls] form")
     configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
     configured = configurator.locator("[data-citry-combobox-root]")
-    controls.get_by_label("Variant").select_option("filled")
-    controls.get_by_label("Size").select_option("lg")
-    controls.get_by_label("Local filter").select_option("starts_with")
+    # Each control change sends every current value to the frame. Changing
+    # the checkboxes first means the Variant and Size messages carry them,
+    # so once data-size reads "lg" the combobox already has "Highlight
+    # first match" applied when focus opens the list.
     controls.get_by_label("Open on focus").check()
     controls.get_by_label("Highlight first match").check()
+    controls.get_by_label("Local filter").select_option("starts_with")
+    controls.get_by_label("Variant").select_option("filled")
+    controls.get_by_label("Size").select_option("lg")
     _wait_for_attribute(configured, "data-variant", "filled")
     _wait_for_attribute(configured, "data-size", "lg")
     configured.get_by_role("combobox").focus()
@@ -1144,6 +1198,7 @@ def test_combobox_ui_examples_are_result_first_reactive_and_operable(
 def test_table_ui_examples_cover_semantics_footer_overflow_theme_and_environment(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1151,6 +1206,7 @@ def test_table_ui_examples_cover_semantics_footer_overflow_theme_and_environment
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/table/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -1206,6 +1262,7 @@ def test_table_ui_examples_cover_semantics_footer_overflow_theme_and_environment
 def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1213,6 +1270,7 @@ def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/textarea/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 11
@@ -1229,9 +1287,10 @@ def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
     configured = configurator.get_by_label("Understory survey")
     controls.get_by_label("Visible rows").select_option("7")
     controls.get_by_label("Resize").select_option("both")
-    page.wait_for_timeout(0)
-    assert configured.evaluate("element => element.rows") == 7
+    # The Resize message also carries the row count, so once the textarea
+    # shows the new resize value it has the new rows too.
     _wait_for_attribute(configured, "data-resize", "both")
+    assert configured.evaluate("element => element.rows") == 7
 
     form_demo = demos.nth(6)
     form_demo.scroll_into_view_if_needed()
@@ -1270,6 +1329,7 @@ def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
 def test_native_select_ui_examples_cover_groups_control_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1277,6 +1337,7 @@ def test_native_select_ui_examples_cover_groups_control_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/native-select/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 10
@@ -1321,6 +1382,7 @@ def test_native_select_ui_examples_cover_groups_control_and_theme(
 def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1328,6 +1390,7 @@ def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/checkbox/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 10
@@ -1352,11 +1415,12 @@ def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
     controls.get_by_label("Variant").select_option("outline")
     controls.get_by_label("Size").select_option("lg")
     controls.get_by_label("Indeterminate").check()
-    page.wait_for_timeout(0)
     configured_root = configured.locator("xpath=..")
+    # The Indeterminate message carries every control value, so once it
+    # has arrived the variant and size have too.
+    _wait_for_attribute(configured_root, "data-indeterminate", "")
     assert configured_root.get_attribute("data-variant") == "outline"
     assert configured_root.get_attribute("data-size") == "lg"
-    _wait_for_attribute(configured_root, "data-indeterminate", "")
     assert configured.evaluate("element => element.indeterminate") is True
 
     form = demos.nth(3).frame_locator("[data-ui-preview-frame]")
@@ -1456,6 +1520,7 @@ def test_recent_batch_ui_previews_render_in_the_public_docs_host(
 def test_cascader_docs_preview_uses_fit_based_columns_and_visually_closes(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1463,6 +1528,7 @@ def test_cascader_docs_preview_uses_fit_based_columns_and_visually_closes(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/cascader/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     frame_selector = 'iframe[src$="/cascader/_previews/at-a-glance/"]'
     page.locator(frame_selector).wait_for(state="attached")
     preview = page.frame_locator(frame_selector)
@@ -1512,6 +1578,7 @@ def test_cascader_docs_preview_uses_fit_based_columns_and_visually_closes(
 def test_infinite_scroll_docs_preview_remains_available_after_repeated_loads(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1519,6 +1586,7 @@ def test_infinite_scroll_docs_preview_remains_available_after_repeated_loads(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/infinite-scroll/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     frame_selector = 'iframe[src$="/infinite-scroll/_previews/automatic/"]'
     frame_element = page.locator(frame_selector)
     frame_element.wait_for(state="attached")
@@ -1541,6 +1609,7 @@ def test_infinite_scroll_docs_preview_remains_available_after_repeated_loads(
 def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1548,6 +1617,7 @@ def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/popover/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     moon = demos.nth(1).frame_locator("[data-ui-preview-frame]")
@@ -1574,8 +1644,10 @@ def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
     placement = placement_demo.frame_locator("[data-ui-preview-frame]")
     placement.get_by_role("button", name="Position orbital summary").click()
     positioned = placement.get_by_role("dialog", name="Orbital summary")
-    assert positioned.get_attribute("data-placement") == "top-end"
-    assert positioned.get_attribute("data-match-width") == ""
+    # The control values reach the frame as messages, which can land after
+    # the click, so wait for the popover to reflect them.
+    _wait_for_attribute(positioned, "data-placement", "top-end")
+    _wait_for_attribute(positioned, "data-match-width", "")
 
     nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
     nested.get_by_role("button", name="Inspect Saturn").click()
@@ -1596,6 +1668,7 @@ def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
 def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1603,6 +1676,7 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/drawer/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
@@ -1629,15 +1703,17 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
     configured = configuration_demo.frame_locator("[data-ui-preview-frame]")
     configured.get_by_role("button", name="Preview geometry").click()
     configured_drawer = configured.get_by_role("dialog", name="Configurable archive")
-    assert configured_drawer.get_attribute("data-placement") == "block-start"
-    assert configured_drawer.get_attribute("data-size") == "lg"
-    assert configured_drawer.get_attribute("data-scroll") == "drawer"
+    # The control values reach the frame as messages, which can land after
+    # the click, so wait for the drawer to reflect them.
+    _wait_for_attribute(configured_drawer, "data-placement", "block-start")
+    _wait_for_attribute(configured_drawer, "data-size", "lg")
+    _wait_for_attribute(configured_drawer, "data-scroll", "drawer")
 
     controlled = demos.nth(4).frame_locator("[data-ui-preview-frame]")
     controlled.get_by_label("Accept requests").uncheck()
     controlled.get_by_role("button", name="Controlled archive").click()
     assert controlled.get_by_role("dialog", name="Controlled archive").is_hidden()
-    assert "trigger: open" in controlled.locator("output").inner_text()
+    expect(controlled.locator("output")).to_contain_text("trigger: open")
     controlled.get_by_label("Accept requests").check()
     controlled.get_by_role("button", name="Controlled archive").click()
     controlled.get_by_role("dialog", name="Controlled archive").wait_for(state="visible")
@@ -1645,7 +1721,9 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
     native_form = demos.nth(6).frame_locator("[data-ui-preview-frame]")
     native_form.get_by_role("button", name="Choose a chart").click()
     native_form.get_by_role("button", name="Intensity chart").click()
-    assert native_form.locator("output").inner_text() == "Selected: intensity"
+    # The form closes the drawer, and the browser fires the dialog's `close`
+    # event, which writes this text, in a later task than the click.
+    expect(native_form.locator("output")).to_have_text("Selected: intensity")
 
     nested = demos.nth(7).frame_locator("[data-ui-preview-frame]")
     nested.get_by_role("button", name="Open archive tools").click()
@@ -1678,6 +1756,7 @@ def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
 def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1685,6 +1764,7 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/menu/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
@@ -1713,11 +1793,19 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
 
     controlled_demo = demos.nth(3)
     controlled_controls = controlled_demo.locator("[data-ui-preview-controls] form")
-    controlled_controls.get_by_label("Decline visibility requests").check()
     controlled = controlled_demo.frame_locator("[data-ui-preview-frame]")
+    controlled_menu = controlled.locator('[role="menu"]')
+    # The decline setting shows nowhere on the page, so a Size change after
+    # it sends a message that carries both; once the menu shows the new
+    # size, the setting has arrived and the click can be judged.
+    controlled_controls.get_by_label("Decline visibility requests").check()
+    controlled_controls.get_by_label("Size").select_option("lg")
+    _wait_for_attribute(controlled_menu, "data-size", "lg")
     controlled.get_by_role("button", name="Controlled grimoire").click()
     assert controlled.locator('[role="menu"]:popover-open').count() == 0
     controlled_controls.get_by_label("Decline visibility requests").uncheck()
+    controlled_controls.get_by_label("Size").select_option("sm")
+    _wait_for_attribute(controlled_menu, "data-size", "sm")
     controlled.get_by_role("button", name="Controlled grimoire").click()
     controlled.locator('[role="menu"]:popover-open').wait_for(state="visible")
 
@@ -1740,9 +1828,11 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     placement.get_by_role("button", name="A deliberately wide enchanted-volume trigger").click()
     placed_surface = placement.locator('[role="menu"]:popover-open')
     placed_surface.wait_for(state="visible")
-    assert placed_surface.get_attribute("data-placement") == "top-end"
-    assert placed_surface.get_attribute("data-match-width") == ""
-    assert placement.locator(".archive-placement-demo").get_attribute("dir") == "rtl"
+    # The control values reach the frame as messages, which can land after
+    # the click, so wait for the menu to reflect them.
+    _wait_for_attribute(placed_surface, "data-placement", "top-end")
+    _wait_for_attribute(placed_surface, "data-match-width", "")
+    _wait_for_attribute(placement.locator(".archive-placement-demo"), "dir", "rtl")
 
     theme = demos.nth(11).frame_locator("[data-ui-preview-frame]")
     theme.get_by_role("button", name="Moon archive").click()
@@ -1772,12 +1862,10 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
     lifecycle.locator('[role="menu"]').first.wait_for(state="hidden")
     lifecycle.get_by_role("button", name="Close vault").click()
     assert lifecycle.locator('[role="menu"]:popover-open').count() == 0
-
-    axe_path = Path("node_modules/axe-core/axe.min.js").resolve()
-    assert axe_path.is_file(), "run `pnpm install` before Citry UI axe tests"
+    assert _AXE_PATH.is_file(), "run `pnpm install` before Citry UI axe tests"
     for index in range(13):
         frame = demos.nth(index).locator("[data-ui-preview-frame]").element_handle().content_frame()
-        frame.add_script_tag(path=str(axe_path))
+        frame.add_script_tag(path=str(_AXE_PATH))
         violations = frame.evaluate(
             """async () => {
               const result = await axe.run(document, { resultTypes: ['violations'] });
@@ -1795,6 +1883,7 @@ def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
 def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1802,6 +1891,7 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/toast/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
@@ -1821,13 +1911,15 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
     action = demos.nth(4).frame_locator("[data-ui-preview-frame]")
     action.get_by_role("button", name="Show persistent action").click()
     action.get_by_role("button", name="Retry").click()
-    assert action.get_by_text("Retry requested", exact=True).is_visible()
-    assert action.locator('[data-citry-toast-id="offline"]').count() == 1
+    expect(action.get_by_text("Retry requested", exact=True)).to_be_visible()
+    expect(action.locator('[data-citry-toast-id="offline"]')).to_have_count(1)
 
     limited_frame = page.locator('iframe[src="/ui-library/components/toast/_previews/visible-limit/"]')
     limited_frame.scroll_into_view_if_needed()
     limited = page.frame_locator('iframe[src="/ui-library/components/toast/_previews/visible-limit/"]')
-    assert limited.locator('[data-citry-ui-part="toast"]').count() == 2
+    # The frame loads lazily once it scrolls into view, and its script renders
+    # the toasts after that, so wait for them rather than counting at once.
+    expect(limited.locator('[data-citry-ui-part="toast"]')).to_have_count(2)
     dismiss_first = limited.locator('[data-citry-toast-id="queue-1"] [data-citry-toast-dismiss]')
     dismiss_label = dismiss_first.get_attribute("aria-label")
     assert dismiss_label is not None
@@ -1837,6 +1929,9 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
     limited.locator('[data-citry-toast-id="queue-3"]').wait_for(state="visible")
 
     focus = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    # F6 only reaches a toast the region's script has already rendered, and this
+    # frame may still be starting when the earlier checks finish.
+    focus.locator('[data-citry-toast-initialized] [data-citry-toast-id="f6"]').wait_for(state="visible")
     focus.get_by_role("button", name="Focus before F6").focus()
     focus.locator("body").press("F6")
     assert focus.locator('[data-citry-toast-id="f6"]').evaluate("element => element === document.activeElement")
@@ -1869,6 +1964,7 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
 def test_breadcrumbs_ui_examples_cover_semantics_overflow_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1876,6 +1972,7 @@ def test_breadcrumbs_ui_examples_cover_semantics_overflow_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/breadcrumbs/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -1917,6 +2014,7 @@ def test_breadcrumbs_ui_examples_cover_semantics_overflow_and_theme(
 def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1924,6 +2022,7 @@ def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/tooltip/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
@@ -1943,7 +2042,9 @@ def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
     placement_demo.locator("[data-ui-preview-controls] form").get_by_label("Placement").select_option("bottom-end")
     placement = placement_demo.frame_locator("[data-ui-preview-frame]")
     placement.get_by_role("button", name="Place orbital note").focus()
-    assert placement.get_by_role("tooltip").get_attribute("data-placement") == "bottom-end"
+    # The placement reaches the frame as a message, which can land after
+    # the focus, so wait for the tooltip to reflect it.
+    _wait_for_attribute(placement.get_by_role("tooltip"), "data-placement", "bottom-end")
 
     theme = demos.nth(8).frame_locator("[data-ui-preview-frame]")
     theme.get_by_role("button", name="Auroral oval").focus()
@@ -1960,6 +2061,7 @@ def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
 def test_alert_ui_examples_cover_intent_actions_configuration_and_theme(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -1967,6 +2069,7 @@ def test_alert_ui_examples_cover_intent_actions_configuration_and_theme(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/alert/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 10
@@ -2029,6 +2132,7 @@ def test_alert_ui_examples_cover_intent_actions_configuration_and_theme(
 def test_accordion_ui_examples_cover_expansion_nesting_and_configuration(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -2036,6 +2140,7 @@ def test_accordion_ui_examples_cover_expansion_nesting_and_configuration(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/accordion/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -2077,6 +2182,7 @@ def test_accordion_ui_examples_cover_expansion_nesting_and_configuration(
 def test_disclosure_ui_examples_cover_expansion_composition_and_forms(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -2084,6 +2190,7 @@ def test_disclosure_ui_examples_cover_expansion_composition_and_forms(
         lambda message: console_errors.append(message.text) if message.type == "error" else None,
     )
     page.goto(docs_site_url + "/ui-library/components/disclosure/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 9
@@ -2196,6 +2303,7 @@ def test_disclosure_ui_examples_cover_expansion_composition_and_forms(
 def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     console_errors: list[str] = []
     page.on(
@@ -2204,6 +2312,7 @@ def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
     )
     page.set_viewport_size({"width": 360, "height": 760})
     page.goto(docs_site_url + "/ui-library/components/button/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
     demos = page.locator("[data-citry-ui-demo]")
 
     assert demos.count() == 11
@@ -2260,9 +2369,11 @@ def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
 def test_button_ui_native_form_and_theme_examples_exercise_public_contracts(
     page: Any,
     docs_site_url: str,
+    wait_for_ui_previews_ready: Any,
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(docs_site_url + "/ui-library/components/button/", wait_until="networkidle")
+    wait_for_ui_previews_ready()
 
     form_demo = page.locator('[data-citry-ui-demo]:has(iframe[src$="/_previews/native-forms/"])')
     form_demo.scroll_into_view_if_needed()
@@ -2292,11 +2403,14 @@ def test_button_ui_native_form_and_theme_examples_exercise_public_contracts(
 def test_form_submission_example_receives_the_native_submit_event(
     page: Any,
     docs_site_url: str,
+    wait_for_preview_ready: Any,
 ) -> None:
     page.goto(docs_site_url + "/examples/form-submission/")
     card = page.locator(".example-card").first
     card.get_by_role("tab", name="Live demo").click()
     frame_element = card.locator('iframe[src="/examples/form-submission/demo/"]')
+    # Vue handles the submit; before it mounts, Submit would post the form natively.
+    wait_for_preview_ready(frame_element)
     assert set(frame_element.get_attribute("sandbox").split()) == {
         "allow-forms",
         "allow-same-origin",
@@ -2402,6 +2516,10 @@ def test_tabs_example_supports_keyboard_navigation(page: Any, docs_site_url: str
     assert tabs.first.get_attribute("aria-selected") == "true"
 
 
+# The widget's own script adds "(JS ran)" to its title once Vue mounts it.
+_FRAGMENT_SCRIPT_RAN = "document.querySelector('.frag-widget__title')?.textContent.includes('(JS ran)')"
+
+
 def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> None:
     # The whole static-fragment path: the page loads the runtime from /citry/,
     # a click fetches the pre-rendered fragment, the runtime loads the component's
@@ -2446,7 +2564,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert reset.is_hidden()
     assert page.locator(".frag-widget").count() == 0
     pending[0].continue_()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     # The component's CSS loaded too (the widget got its purple border).
     widget = page.locator(".frag-widget")
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"  # #8250df
@@ -2467,7 +2585,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert page.evaluate("window.fragmentFetchCount") == fetch_count
     assert len(pending) == 1
     assert widget.evaluate("(el, original) => el === original", original_widget)
-    assert widget.get_attribute("data-ready") == "1"
+    assert page.evaluate(_FRAGMENT_SCRIPT_RAN)
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"
 
     # A document reload makes the static fragment safe to insert again.
@@ -2479,7 +2597,7 @@ def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> Non
     assert reset.is_hidden()
     assert widget.count() == 0
     load.click()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     assert widget.count() == 1
     assert widget.evaluate("el => getComputedStyle(el).borderTopColor") == "rgb(130, 80, 223)"
     assert errors == []
@@ -2513,7 +2631,7 @@ def test_fragment_fetch_failure_allows_retry(page: Any, docs_site_url: str, fail
     assert page.locator("#frag-target").inner_html() == ""
 
     load.click()
-    page.wait_for_function("document.querySelector('.frag-widget')?.dataset.ready === '1'")
+    page.wait_for_function(_FRAGMENT_SCRIPT_RAN)
     assert page.locator(".frag-widget").count() == 1
     assert load.is_disabled()
     assert page.locator("#frag-reset").is_visible()

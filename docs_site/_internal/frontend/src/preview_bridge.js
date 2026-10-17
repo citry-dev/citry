@@ -4,6 +4,21 @@ const PROTOCOL_VERSION = 1;
 const MAX_MESSAGE_BYTES = 8 * 1024;
 const MAX_EVENT_ENVELOPE_BYTES = 1024 * 1024;
 const MAX_EVENT_RESULT_BYTES = 2 * 1024 * 1024;
+// The only request headers a preview may forward with an event: the server
+// reads them to answer with a Render action for the component on screen.
+const FORWARDED_EVENT_HEADERS = new Set(["X-Citry-Vue-App", "X-Citry-Vue-Occurrence", "X-Citry-Vue-Revision"]);
+const MAX_EVENT_HEADER_VALUE_LENGTH = 256;
+
+// A preview is untrusted page code, so accept only the known header names with
+// short string values. An absent object comes from an older Citry runtime.
+function validEventHeaders(headers) {
+  if (headers === undefined) return true;
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return false;
+  return Object.entries(headers).every(
+    ([name, value]) =>
+      FORWARDED_EVENT_HEADERS.has(name) && typeof value === "string" && value.length <= MAX_EVENT_HEADER_VALUE_LENGTH,
+  );
+}
 const MAX_ASSET_PATHS = 32;
 const MAX_ASSET_REQUEST_BYTES = 32 * 1024;
 const MAX_ASSET_RESULT_BYTES = 4 * 1024 * 1024;
@@ -146,6 +161,7 @@ export class PreviewBridge {
         || !data.envelope
         || typeof data.envelope !== "object"
         || byteLength(data.envelope) > MAX_EVENT_ENVELOPE_BYTES
+        || !validEventHeaders(data.headers)
       ) return;
       void this.forwardEvent(state, data);
       return;
@@ -194,7 +210,7 @@ export class PreviewBridge {
 
   async forwardEvent(state, data) {
     try {
-      const result = await this.onEvent(data.envelope, { runId: state.runId });
+      const result = await this.onEvent(data.envelope, { runId: state.runId, headers: { ...data.headers } });
       if (state !== this.displayState || !state.port || byteLength(result) > MAX_EVENT_RESULT_BYTES) {
         throw new Error("The event response is no longer valid for this preview.");
       }

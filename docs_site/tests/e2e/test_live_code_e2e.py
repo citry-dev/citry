@@ -2,27 +2,32 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import pytest
+from pygments.lexers import get_lexer_by_name
 
 pytest.importorskip("pytest_playwright")
 from playwright.sync_api import expect
 
+from docs_site._internal.code_display import display_code
+
 pytestmark = pytest.mark.e2e
+
+# The site displays these Citry sources with the citry lexer's blank-line rule.
+_CITRY_LEXER = get_lexer_by_name("citry")
 
 _WELCOME_SOURCE = Path(__file__).parents[2] / "live_snippets" / "welcome.py"
 _ACTIVE_PREVIEW = ".citry-live-code__preview:not(.citry-playground__preview--candidate)"
-_RUNTIME_PATH = Path(__file__).parents[2] / "static" / "playground" / "runtime.json"
-_RUNTIME = json.loads(_RUNTIME_PATH.read_text(encoding="utf-8"))
-_CITRY_VERSION = _RUNTIME["citry"]["version"]
 
 
+# Clicks through the client code of the workspace welcome snippet.
+@pytest.mark.workspace_citry
 def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
     page: Any,
     docs_site_url: str,
+    wait_for_preview_ready: Any,
 ) -> None:
     requests: list[str] = []
     page.on("request", lambda request: requests.append(request.url))
@@ -31,7 +36,8 @@ def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
     root = page.locator("[data-citry-live-code]")
     static_source = root.locator("[data-live-static] .highlight")
     expect(root).to_be_visible()
-    assert static_source.text_content() == _WELCOME_SOURCE.read_text(encoding="utf-8")
+    # The static block shows the source with each run of blank lines shortened.
+    assert static_source.text_content() == display_code(_WELCOME_SOURCE.read_text(encoding="utf-8"), _CITRY_LEXER).text
     assert root.locator(".cm-editor").count() == 0
     assert root.locator("iframe").count() == 0
     assert not any("live_code_runtime.js" in url for url in requests)
@@ -69,6 +75,8 @@ def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
         "width": "1px",
     }
     root.locator('[data-live-tab="result"]').click()
+    # The card is on screen before Vue attaches its click handler.
+    wait_for_preview_ready(root.locator(_ACTIVE_PREVIEW))
     card.locator("button").click()
     expect(card.locator("output")).to_have_text("1", timeout=10_000)
 
@@ -210,15 +218,19 @@ def test_incomplete_inline_example_can_be_edited_into_a_renderable_module(
     expect(root.locator("[data-live-python-diagnostic]")).to_be_hidden()
 
 
+# Clicks through the client code of the workspace lesson snippets.
+@pytest.mark.workspace_citry
 def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     page: Any,
     docs_site_url: str,
+    playground_runtime: dict[str, Any],
+    wait_for_preview_ready: Any,
 ) -> None:
     page.goto(docs_site_url + "/getting-started/browser-interactivity/", wait_until="domcontentloaded")
     runtime_version = page.evaluate(
         "async () => (await (await fetch('/static/playground/runtime.json')).json()).citry.version"
     )
-    assert runtime_version == _CITRY_VERSION
+    assert runtime_version == playground_runtime["citry"]["version"]
     examples = page.locator("[data-citry-live-code]")
     expect(examples).to_have_count(1)
 
@@ -233,6 +245,8 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     counters.locator('[data-live-tab="result"]').click()
     expect(ada).to_contain_text("Ada")
     expect(grace).to_contain_text("Grace")
+    # The counters are on screen before Vue attaches their click handlers.
+    wait_for_preview_ready(counters.locator(_ACTIVE_PREVIEW))
     ada.click()
     expect(ada).to_contain_text("clicked 1 times")
     expect(grace).to_contain_text("clicked 0 times")
@@ -246,6 +260,7 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     choice = connected_preview.locator(".choice-picker__value")
     expect(choice).to_have_text("Ocean")
     connected.locator('[data-live-tab="result"]').click()
+    wait_for_preview_ready(connected.locator(_ACTIVE_PREVIEW))
     connected_preview.locator(".choice-button").click()
     expect(choice).to_have_text("Forest")
 
@@ -285,6 +300,11 @@ def test_inline_runtime_activation_failure_keeps_source_and_retries(page: Any, d
 def test_rapid_activation_restores_the_superseded_block(page: Any, docs_site_url: str) -> None:
     page.goto(docs_site_url + "/__tests__/live-code-multiple/", wait_until="domcontentloaded")
     blocks = page.locator("[data-citry-live-code]")
+    # The page script shows each Try live button only once it has attached the
+    # button's click handler, and it may run after `domcontentloaded`. The
+    # clicks below bypass Playwright's visibility wait, so wait here first.
+    for index in range(blocks.count()):
+        expect(blocks.nth(index).locator("[data-live-activate]")).to_be_visible()
 
     page.evaluate(
         """() => {

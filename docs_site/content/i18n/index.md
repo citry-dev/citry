@@ -5,55 +5,30 @@ description: Translate component text, format locale-sensitive values, and pass 
 
 # Internationalization
 
-Internationalization covers more than replacing one sentence with another.
-Citry's built-in i18n extension coordinates:
+Internationalization (i18n) lets one application show its pages in
+several languages. Citry's built-in i18n extension handles the parts
+that differ between languages:
 
-- translated messages and accessible labels;
-- locale fallback;
-- `lang`, left-to-right, and right-to-left output;
-- numbers, percentages, currencies, dates, times, lists, and units;
-- strict parsing of localized form input; and
-- optional browser-owned translations inside one subtree.
+- translated text, including accessible labels such as `aria-label`;
+- numbers, currencies, dates, times, lists, and units written the way
+  each language writes them;
+- reading numbers and dates that users type into forms;
+- the `lang` and `dir` attributes, including right-to-left languages
+  such as Arabic.
 
-The extension has three modes:
+This page walks through the basic setup: write text as messages, add the
+languages users can choose, and pick a language for each request. The
+other pages in this section cover each part in depth.
 
-- with no settings and no message assets, it is dormant;
-- a registered component `messages` or `messages_file` asset activates
-  server-side source mode; and
-- engine settings activate selectable locales, catalog packages, named
-  formats, parsing, and optional browser switching.
+## Write messages
 
-Source mode needs no application settings and adds no browser code. It exists
-so a reusable component can translate its own defaults through the ordinary
-`tr()` API without forcing every application to configure i18n.
+A message is a piece of user-visible text with a stable ID. Write
+messages in the component's `messages` block, using
+[Fluent](https://projectfluent.org/), a translation format designed so
+translators can handle each language's grammar. Call a message from the
+template with `tr()`:
 
-## Configure the locales your application supports
-
-Give the built-in extension a source locale and an ordered set of selectable
-locales:
-
-```python
-from citry import Citry
-
-app = Citry(
-    extensions_defaults={
-        "i18n": {
-            "source_locale": "en-US",
-            "default_locale": "en-US",
-            "locales": ("en-US", "cs-CZ", "ar-EG"),
-        },
-    },
-)
-```
-
-Citry checks the complete configuration when it creates the engine. Invalid
-locale names, duplicate canonical names, an unknown default locale, and cycles
-in the fallback graph are errors.
-
-## Write source messages beside the component
-
-The `messages` asset contains Fluent source for the component. Keep it below
-the template, JavaScript, and CSS:
+In these examples, `app` is your `Citry` engine:
 
 ```citry
 from citry import Component
@@ -80,22 +55,53 @@ class AccountCard(Component):
     """
 ```
 
-`messages_locale` says which language the component's defining Fluent source
-is written in. Defining a message asset makes the engine-wide registered source
-catalog available: another registered component may call this public message
-ID even when `AccountCard` is not rendered.
+`messages_locale` says which language the messages are written in. Here
+it is `en-US`, a locale: a language code with an optional region.
 
-`tr()` always returns text, so the template escapes it normally. Citry reads
-the message ID, variables, and `@param` types and checks literal calls against
-that interface.
+The `@param` comment declares the type of each variable the message
+uses. Citry checks `tr()` calls against it, so a missing or wrongly
+typed argument is reported.
 
-The inline block is the defining source. Put translator-owned locales in a
-[catalog package](/i18n/catalogs/).
+`tr()` returns plain text, and the template escapes it like any other
+value.
 
-## Pass the locale into the render
+This works without any i18n settings and adds no browser code. Any registered component can call
+`my-app-account-greeting`, even when `AccountCard` is not on the page.
+[Write messages](/i18n/messages/) covers the Fluent syntax.
 
-For selectable locales, create a context from an explicit request value, then
-provide that context to the root render:
+## Add languages
+
+To offer more than the source language, list the locales in the
+engine's i18n settings:
+
+```python
+from citry import Citry
+
+app = Citry(
+    extensions_defaults={
+        "i18n": {
+            "source_locale": "en-US",
+            "default_locale": "en-US",
+            "locales": ("en-US", "cs-CZ", "ar-EG"),
+        },
+    },
+)
+```
+
+Citry checks these settings when it creates the engine. An invalid
+locale name, two names for the same locale, or a default locale missing
+from `locales` raises an error.
+
+The translations themselves go in a catalog package: a Python package of
+Fluent files, one folder per locale. See
+[Organize catalogs](/i18n/catalogs/).
+
+## Choose the language
+
+Read the locale from the request, such as a URL parameter or a cookie.
+Build a locale context from it, then pass the context to the root
+render. A locale context is a read-only value that holds the selected
+locale and everything derived from it, such as the writing direction:
 
 ```python
 from citry.ext.i18n import make_context
@@ -104,68 +110,70 @@ from citry.ext.i18n import make_context
 def render_account_page(locale: str):
     context = make_context(app, locale=locale)
 
-    return AccountPage().render(
+    account_page = AccountPage()
+    return account_page.render(
         provides={"citry_i18n": context},
     )
 ```
 
-This rule keeps each render predictable. A component rendered separately
-inside `template_data()` starts another tree and does not silently take the
-caller's locale. Pass the context to that render when it should use the same
-locale.
+Every component in that render uses the context. A component that
+calls `render()` itself must pass it again. Nothing changes for
+other requests, because Citry keeps no global "current locale".
 
-Inside a component, use `self.i18n`. Outside a component, create a service for
-one explicit context:
+Inside a component, Python code reads the same context through
+`self.i18n`, for example `self.i18n.tr(...)`.
+[Locales and context](/i18n/locale-context/) covers time zones, a
+different language for one part of the page, and use outside a
+component.
 
-```python
-i18n = app.extensions.get_extension("i18n")
-service = i18n.for_context(context)
-text = service.tr("my-app-account-greeting", name="Ada")
-```
+## Switch in the browser
 
-Neither call changes process-wide or task-wide state.
-
-## Choose server-owned or browser-owned text
-
-Use server rendering by default:
+By default, text is translated on the server and arrives as ordinary
+HTML:
 
 ```citry-html
 <h1>{{ tr("my-app-account-title") }}</h1>
 ```
 
-The result is ordinary HTML. If the browser later switches locale, it does not
-know that this text came from `tr()` and does not rewrite it.
+To switch the whole page to another language, send the new locale with
+the next request, for example in the URL, and render the page again.
 
-Use `$i18n` only for a control that genuinely needs to change in place:
+When a small part of the page must change language without a reload,
+wrap it in `<c-i18n client>` and translate with `$i18n` in Vue
+expressions:
 
 ```citry-html
 <c-i18n tag="section" client>
-  <h1 x-text="$i18n.tr('my-app-account-title')"></h1>
-  <button @click="$i18n.switchLocale('cs-CZ')">Čeština</button>
+  <h1 v-text="$i18n.tr('my-app-account-title')"></h1>
+  <button @click="$i18n.switchLocale('cs-CZ')">
+    Čeština
+  </button>
 </c-i18n>
 ```
 
-For a page-wide language change, send the new locale as a URL, form, cookie, or
-other explicit request input and render the page again. This updates all
-server-owned content and avoids making initial page interactivity wait for a
-large number of Alpine expressions.
+The switch changes only the Vue-owned text inside that element.
+Text rendered on the server with `tr()` stays in its original language. [Browser i18n](/i18n/browser/) explains when to use
+each option.
 
-## Continue by user need
+## Continue by task
 
-- [Locales and context](/i18n/locale-context/) explains configuration,
-  canonical locale names, fallback, and subtree providers.
-- [Write messages](/i18n/messages/) covers Fluent syntax and typed variables.
-- [Organize catalogs](/i18n/catalogs/) covers application-wide translations
-  and installable catalog packages.
-- [Rich messages](/i18n/rich-messages/) shows how translators can position
-  application-owned links and inline components without writing HTML.
+- [Locales and context](/i18n/locale-context/): configure locales,
+  fallback languages, and time zones, and change the language of one
+  part of the page.
+- [Write messages](/i18n/messages/): Fluent syntax, plural forms, typed
+  variables, and labels such as `aria-label`.
+- [Organize catalogs](/i18n/catalogs/): store translations and shared
+  messages in installable packages.
+- [Rich messages](/i18n/rich-messages/): let translators place a link or
+  a small component inside a sentence without writing HTML.
 - [Format values](/i18n/formatting/) and
-  [parse localized input](/i18n/parsing/) cover locale-sensitive data.
-- [Browser i18n](/i18n/browser/) explains `$i18n`, loading, and subtree
-  switching.
-- [Language direction and accessibility](/i18n/direction-and-bidi/) covers
-  `lang`, `dir`, fallback language, and bidirectional text.
-- [Translation workflow](/i18n/workflow/) covers project checks and catalog
-  commands.
-- [Production and deployment](/i18n/production/) covers compiled catalog
-  packages, browser partitions, and cache identity.
+  [Parse localized input](/i18n/parsing/): numbers, currencies, dates,
+  and times.
+- [Browser i18n](/i18n/browser/): translate and switch languages in the
+  browser.
+- [Language direction and accessibility](/i18n/direction-and-bidi/):
+  `lang`, `dir`, and mixed left-to-right and right-to-left text.
+- [Translation workflow and tooling](/i18n/workflow/): checks, coverage
+  reports, and catalog commands.
+- [Production and deployment](/i18n/production/): compile catalogs,
+  package them, and cache translated output.
