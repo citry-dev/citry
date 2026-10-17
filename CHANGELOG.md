@@ -173,6 +173,8 @@ walks through every step.
   when the handler returns nothing, returns data, or renders only a
   `<c-mark>` region, instead of keeping the old values until the component
   renders again.
+- On Python 3.10, an i18n catalog package without `__init__.py` now loads
+  instead of failing with a `TypeError`.
 - Events handlers declared with `PUT`, `DELETE`, or another non-POST
   method now work, and each still rejects other methods and checks CSRF.
 - `GET` Events calls reject arguments with unpaired surrogates instead of

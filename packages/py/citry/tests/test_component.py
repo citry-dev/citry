@@ -976,7 +976,10 @@ class TestSubclassTypedInputs:
         class MutableFields:
             mutable_value: str = "mutable"
 
-        with pytest.raises(ValueError, match=r"Kwargs cannot mix frozen and non-frozen dataclass bases"):
+        expected = (
+            r"Kwargs cannot mix frozen and non-frozen dataclass bases: FrozenFields is frozen and MutableFields is not"
+        )
+        with pytest.raises(ValueError, match=expected):
 
             class Card(Component):
                 citry = c

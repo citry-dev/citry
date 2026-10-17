@@ -560,13 +560,14 @@ def _inherited_default(user_cls: type, field_name: str) -> object:
     return MISSING
 
 
-def _dataclass_bases_frozen(user_cls: type) -> bool:
-    """Whether a dataclass base is frozen, which a generated subclass must match."""
+def _dataclass_base_frozen_flags(user_cls: type) -> dict[type, bool]:
+    """Return each dataclass in the MRO with its frozen flag, in MRO order."""
+    flags: dict[type, bool] = {}
     for klass in _static_class_mro(user_cls):
         params = _static_class_dict(klass).get("__dataclass_params__")
         if params is not None:
-            return bool(getattr(params, "frozen", False))
-    return False
+            flags[klass] = bool(getattr(params, "frozen", False))
+    return flags
 
 
 def _convert_to_slotted_dataclass(
@@ -581,8 +582,14 @@ def _convert_to_slotted_dataclass(
     Fields that a dataclass base already declares (such as a parent
     component's generated class named as a base) come from that base with
     their defaults. The authored class's own annotations, and those of its
-    plain bases, become the new fields. The generated class is frozen when a
-    dataclass base is frozen, because a dataclass cannot unfreeze its base.
+    plain bases, become the new fields. The generated class is frozen when
+    its dataclass bases are frozen.
+
+    Raises:
+        ValueError: The dataclass bases mix frozen and non-frozen, so no
+            generated class can inherit from all of them, or the dataclass
+            cannot be generated for another reason.
+
     """
     # Plain classes that a dataclass base already covers reach the new class
     # through dataclass inheritance with their defaults intact. Collecting
@@ -649,7 +656,13 @@ def _convert_to_slotted_dataclass(
     if const_defaults or inherited_consts:
         shell_namespace[_CONST_SCHEMA_DEFAULTS_ATTR] = const_defaults
 
-    frozen = _dataclass_bases_frozen(user_cls)
+    base_flags = _dataclass_base_frozen_flags(user_cls)
+    # Python 3.13 and later reject a frozen dataclass over a non-frozen
+    # dataclass base, and 3.10 to 3.12 accept one, so check the bases here and
+    # fail the same way on every version.
+    if len(set(base_flags.values())) > 1:
+        raise _mixed_frozen_error(owner, name, user_cls, base_flags)
+    frozen = all(base_flags.values()) and bool(base_flags)
     class_name = _safe_class_text(user_cls, "__name__") or "Schema"
 
     def generate(*, kw_only: bool) -> type:
@@ -675,19 +688,36 @@ def _convert_to_slotted_dataclass(
         raise _conversion_error(owner, name, user_cls, error) from error
 
 
-def _conversion_error(owner: type | None, name: str | None, user_cls: type, error: TypeError) -> ValueError:
+def _error_prefix(owner: type | None, name: str | None, user_cls: type) -> tuple[str, str]:
+    """Name the component and declaration that an error message refers to."""
     component_name = _safe_class_text(owner, "__name__") if owner is not None else None
     declaration = name or _safe_class_text(user_cls, "__name__") or "Schema"
     prefix = f"Component {component_name}: " if component_name else ""
-    message = str(error)
-    if "cannot inherit frozen dataclass" in message or "cannot inherit non-frozen dataclass" in message:
-        msg = (
-            f"{prefix}{declaration} cannot mix frozen and non-frozen dataclass bases ({message})."
-            " Make every dataclass base frozen, or none of them."
-        )
-    else:
-        msg = f"{prefix}could not generate a dataclass for {declaration}: {message}."
-    return ValueError(msg)
+    return prefix, declaration
+
+
+def _mixed_frozen_error(
+    owner: type | None,
+    name: str | None,
+    user_cls: type,
+    base_flags: dict[type, bool],
+) -> ValueError:
+    prefix, declaration = _error_prefix(owner, name, user_cls)
+    # Name one base of each kind so the author knows which classes to change.
+    frozen_base = next(klass for klass, frozen in base_flags.items() if frozen)
+    mutable_base = next(klass for klass, frozen in base_flags.items() if not frozen)
+    frozen_name = _safe_class_text(frozen_base, "__name__") or "a base"
+    mutable_name = _safe_class_text(mutable_base, "__name__") or "another base"
+    return ValueError(
+        f"{prefix}{declaration} cannot mix frozen and non-frozen dataclass bases:"
+        f" {frozen_name} is frozen and {mutable_name} is not."
+        " Make every dataclass base frozen, or none of them."
+    )
+
+
+def _conversion_error(owner: type | None, name: str | None, user_cls: type, error: TypeError) -> ValueError:
+    prefix, declaration = _error_prefix(owner, name, user_cls)
+    return ValueError(f"{prefix}could not generate a dataclass for {declaration}: {error}.")
 
 
 __all__ = ["NestedSchemaReplacedWarning"]
