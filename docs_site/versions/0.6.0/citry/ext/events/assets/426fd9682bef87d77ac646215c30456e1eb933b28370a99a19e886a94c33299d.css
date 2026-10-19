@@ -1,0 +1,36 @@
+
+:where(.controlled-dialog) {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  max-width: 42rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#bae6fd, #0369a1);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.controlled-dialog h2, .controlled-dialog p) {
+  margin: 0;
+}
+
+:where(.controlled-dialog > p:first-child) {
+  color: light-dark(#0369a1, #7dd3fc);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.controlled-dialog__toggle) {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+:where(.controlled-dialog__status) {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-size: 0.875rem;
+}

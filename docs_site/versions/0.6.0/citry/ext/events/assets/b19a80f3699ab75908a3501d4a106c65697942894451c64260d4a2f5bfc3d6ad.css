@@ -1,0 +1,21 @@
+
+:where(.moon-inspector) {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  max-inline-size: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.moon-inspector h2, .moon-inspector p) {
+  margin: 0;
+}
+
+:where(.moon-inspector > p) {
+  color: light-dark(#4338ca, #a5b4fc);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

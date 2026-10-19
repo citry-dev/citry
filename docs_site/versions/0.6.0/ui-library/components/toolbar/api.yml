@@ -1,0 +1,83 @@
+schema_version: 1
+family: toolbar
+
+components:
+  - CToolbar
+
+inputs:
+  - id: ctoolbar-server-inputs
+    component: CToolbar
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the accessible Toolbar name.}
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CToolbarOrientation]}, default: {kind: literal, value: horizontal}, effect: Selects layout and arrow-key axis.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: true}, effect: Wraps arrow movement at the first and last available controls.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CToolbarVariant]}, default: {kind: literal, value: plain}, effect: Selects the Toolbar surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CToolbarSize]}, default: {kind: literal, value: md}, effect: Selects Toolbar gap padding and minimum height.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted root attributes without replacing Toolbar semantics focus visibility reflections children or runtime markers.}
+  - id: ctoolbar-client-inputs
+    component: CToolbar
+    channel: client
+    column_widths: [fit, 13rem, 12rem, auto]
+    entries:
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CToolbarOrientation]}, omitted: Uses the server value., effect: Reactively changes layout ARIA orientation and arrow-key axis.}
+      - {id: loop, name: loop, type: bool, omitted: Uses the server value., effect: Reactively enables or disables arrow-key wrapping.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CToolbarVariant]}, omitted: Uses the server value., effect: Reactively changes the surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CToolbarSize]}, omitted: Uses the server value., effect: Reactively changes Toolbar geometry.}
+
+slots:
+  - id: ctoolbar-slots
+    component: CToolbar
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CToolbarDefaultSlotData]}, fallback: None. Settled enhanced content requires at least three owned Buttons or links.}
+
+events: []
+methods: []
+
+css:
+  - id: ctoolbar-css-variables
+    component: CToolbar
+    entries:
+      - {id: cui-toolbar-gap, name: --cui-toolbar-gap, type: length, purpose: Gap between Toolbar children., default: 'sm: 0.375rem; md: 0.5rem; lg: 0.625rem'}
+      - {id: cui-toolbar-padding, name: --cui-toolbar-padding, type: length, purpose: Toolbar inner padding., default: 'sm: 0.25rem; md: 0.375rem; lg: 0.5rem'}
+      - {id: cui-toolbar-min-height, name: --cui-toolbar-min-height, type: length, purpose: Minimum logical Toolbar height., default: 'sm: 2.25rem; md: 2.75rem; lg: 3.25rem'}
+      - {id: cui-toolbar-radius, name: --cui-toolbar-radius, type: length, purpose: Toolbar corner radius., default: 0.75rem}
+      - {id: cui-toolbar-background, name: --cui-toolbar-background, type: color, purpose: Toolbar surface color., default: 'plain and outline: transparent; soft: a 7 percent CanvasText mix over Canvas'}
+      - {id: cui-toolbar-foreground, name: --cui-toolbar-foreground, type: color, purpose: Inherited Toolbar foreground., default: CanvasText}
+      - {id: cui-toolbar-border-color, name: --cui-toolbar-border-color, type: color, purpose: Outline Toolbar border., default: a 16 percent CanvasText mix}
+      - {id: cui-toolbar-focus-color, name: --cui-toolbar-focus-color, type: color, purpose: Focus outline color for owned controls., default: Highlight}
+
+attributes:
+  - id: ctoolbar-attributes
+    component: CToolbar
+    entries:
+      - {id: role, name: role, element: Root, type: toolbar, meaning: Exposes one named Toolbar composite.}
+      - {id: aria-label, name: aria-label, element: Root, type: string, meaning: Supplies the required accessible name.}
+      - {id: aria-orientation, name: aria-orientation, element: Root, type: 'horizontal | vertical', meaning: Mirrors the effective navigation axis.}
+      - {id: data-orientation, name: data-orientation, element: Root, type: 'horizontal | vertical', meaning: Mirrors effective orientation.}
+      - {id: data-loop, name: data-loop, element: Root, type: present-or-absent, meaning: Present when arrow navigation wraps.}
+      - {id: data-variant, name: data-variant, element: Root, type: 'plain | soft | outline', meaning: Mirrors effective variant.}
+      - {id: data-size, name: data-size, element: Root, type: 'sm | md | lg', meaning: Mirrors effective size.}
+      - {id: tabindex, name: tabindex, element: Owned Button or link, type: '0 | -1', meaning: Exactly one available control participates in the page Tab order.}
+
+selectors:
+  - id: ctoolbar-selectors
+    component: CToolbar
+    entries:
+      - {id: data-citry-ui-part-toolbar, selector: '[data-citry-ui-part="toolbar"]', element: Root div, purpose: Stable Toolbar root and attrs destination.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-ctoolbar-orientation, name: CToolbarOrientation, definition: 'Literal["horizontal", "vertical"]'}
+      - {id: input-type-aliases-ctoolbar-variant, name: CToolbarVariant, definition: 'Literal["plain", "soft", "outline"]'}
+      - {id: input-type-aliases-ctoolbar-size, name: CToolbarSize, definition: 'Literal["sm", "md", "lg"]'}
+  - {id: ctoolbar-default-slot-data, kind: record, name: CToolbarDefaultSlotData, entries: []}
+
+translations: []

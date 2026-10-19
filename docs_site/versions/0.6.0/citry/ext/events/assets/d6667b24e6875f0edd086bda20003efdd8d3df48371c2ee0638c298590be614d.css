@@ -1,0 +1,15 @@
+
+:where(.progress-intents) {
+  max-inline-size: 32rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.progress-intents > div) {
+  display: grid;
+  gap: 0.3rem;
+}
+
+:where(.progress-intents span) {
+  font-size: 0.8rem;
+}

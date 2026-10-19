@@ -1,0 +1,3 @@
+
+:where(.rating-demo-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));gap:1.25rem}
+:where(.rating-demo-grid article){display:grid;align-content:start;gap:.75rem}:where(.rating-demo-grid h3){margin:0}

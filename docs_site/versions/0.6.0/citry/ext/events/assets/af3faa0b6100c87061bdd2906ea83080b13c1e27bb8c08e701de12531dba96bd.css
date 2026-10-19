@@ -1,0 +1,15 @@
+
+:where(.live-tooltip) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  min-block-size: 11rem;
+  padding-block: 2rem;
+}
+
+:where(.live-tooltip label) {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+}

@@ -1,0 +1,18 @@
+
+:where(.tags-input-morph) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 40rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.tags-input-morph__controls) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.tags-input-morph p) {
+  margin: 0;
+}

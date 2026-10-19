@@ -1,0 +1,4 @@
+
+:where(.radio-described) {
+  max-inline-size: 34rem;
+}

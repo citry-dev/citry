@@ -1,0 +1,3 @@
+
+:where(.slider-example-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1.5rem}
+:where(.slider-example-grid article){display:grid;gap:.75rem}:where(.slider-example-grid h3){margin:0}

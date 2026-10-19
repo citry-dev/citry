@@ -1,0 +1,14 @@
+
+:where(.image-basic) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-basic article) { display: grid; gap: 0.5rem; }
+:where(.image-basic h3, .image-basic p) { margin: 0; }
+:where(.image-basic p) { grid-column: 1 / -1; }
+:where(.image-basic [data-citry-ui-part="image-root"]) {
+  inline-size: 100%;
+}

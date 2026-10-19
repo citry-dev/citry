@@ -1,0 +1,322 @@
+
+@layer citry-ui.theme {
+  :where(.cui-command-palette-host) {
+    display: contents;
+  }
+
+  :where(.cui-command-palette [hidden]) {
+    display: none !important;
+  }
+
+  :where(.cui-command-palette) {
+    --_cui-command-palette-backdrop: var(
+      --cui-command-palette-backdrop,
+      color-mix(in srgb, CanvasText 48%, transparent)
+    );
+    --_cui-command-palette-background: var(--cui-command-palette-background, Canvas);
+    --_cui-command-palette-foreground: var(--cui-command-palette-foreground, CanvasText);
+    --_cui-command-palette-muted: var(
+      --cui-command-palette-muted,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-command-palette-border-color: var(
+      --cui-command-palette-border-color,
+      color-mix(in srgb, CanvasText 22%, transparent)
+    );
+    --_cui-command-palette-active-background: var(
+      --cui-command-palette-active-background,
+      color-mix(in srgb, Highlight 15%, Canvas)
+    );
+    --_cui-command-palette-active-foreground: var(
+      --cui-command-palette-active-foreground,
+      CanvasText
+    );
+    --_cui-command-palette-danger: var(
+      --cui-command-palette-danger,
+      light-dark(#b42318, #f97066)
+    );
+    --_cui-command-palette-radius: var(--cui-command-palette-radius, 0.875rem);
+    --_cui-command-palette-shadow: var(
+      --cui-command-palette-shadow,
+      0 1.5rem 4rem color-mix(in srgb, CanvasText 28%, transparent)
+    );
+    --_cui-command-palette-inline-size: var(
+      --cui-command-palette-inline-size,
+      36rem
+    );
+    --_cui-command-palette-max-block-size: var(
+      --cui-command-palette-max-block-size,
+      calc(100dvb - 2rem)
+    );
+    --_cui-command-palette-padding: var(--cui-command-palette-padding, 0.75rem);
+    --_cui-command-palette-gap: var(--cui-command-palette-gap, 0.5rem);
+    --_cui-command-palette-input-block-size: var(
+      --cui-command-palette-input-block-size,
+      2.75rem
+    );
+    --_cui-command-palette-row-min-block-size: var(
+      --cui-command-palette-row-min-block-size,
+      2.75rem
+    );
+    --_cui-command-palette-row-padding-inline: var(
+      --cui-command-palette-row-padding-inline,
+      0.75rem
+    );
+    --_cui-command-palette-group-gap: var(--cui-command-palette-group-gap, 0.5rem);
+    --_cui-command-palette-focus-ring: var(--cui-command-palette-focus-ring, Highlight);
+    background: transparent;
+    border: 0;
+    color: var(--_cui-command-palette-foreground);
+    inline-size: min(var(--_cui-command-palette-inline-size), calc(100vi - 2rem));
+    margin: auto;
+    max-block-size: var(--_cui-command-palette-max-block-size);
+    max-inline-size: calc(100vi - 2rem);
+    padding: 0;
+  }
+
+  :where(.cui-command-palette[data-size="sm"]) {
+    --_cui-command-palette-inline-size: var(--cui-command-palette-inline-size, 28rem);
+    --_cui-command-palette-input-block-size: var(
+      --cui-command-palette-input-block-size,
+      2.5rem
+    );
+  }
+
+  :where(.cui-command-palette[data-size="lg"]) {
+    --_cui-command-palette-inline-size: var(--cui-command-palette-inline-size, 44rem);
+    --_cui-command-palette-input-block-size: var(
+      --cui-command-palette-input-block-size,
+      3rem
+    );
+    --_cui-command-palette-row-min-block-size: var(
+      --cui-command-palette-row-min-block-size,
+      3rem
+    );
+  }
+
+  :where(.cui-command-palette)::backdrop {
+    background: var(--_cui-command-palette-backdrop);
+  }
+
+  :where(.cui-command-palette__surface) {
+    background: var(--_cui-command-palette-background);
+    border: 1px solid var(--_cui-command-palette-border-color);
+    border-radius: var(--_cui-command-palette-radius);
+    box-shadow: var(--_cui-command-palette-shadow);
+    display: grid;
+    gap: var(--_cui-command-palette-gap);
+    max-block-size: inherit;
+    min-inline-size: 0;
+    overflow: hidden;
+    padding: var(--_cui-command-palette-padding);
+  }
+
+  :where(.cui-command-palette__header) {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="command-palette-title"]) {
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 650;
+    margin: 0;
+    min-inline-size: 0;
+  }
+
+  :where([data-citry-ui-part="command-palette-close"]) {
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    flex: none;
+    font: inherit;
+    inline-size: 2.75rem;
+    justify-content: center;
+    min-block-size: 2.75rem;
+    padding: 0;
+  }
+
+  :where([data-citry-ui-part="command-palette-close"]:hover) {
+    background: var(--_cui-command-palette-active-background);
+  }
+
+  :where([data-citry-ui-part="command-palette-close"]:focus-visible) {
+    outline: 2px solid var(--_cui-command-palette-focus-ring);
+    outline-offset: 2px;
+  }
+
+  :where([data-citry-ui-part="command-palette-search"]) {
+    display: block;
+  }
+
+  :where([data-citry-ui-part="command-palette-input"]) {
+    appearance: none;
+    background: var(--_cui-command-palette-background);
+    block-size: var(--_cui-command-palette-input-block-size);
+    border: 1px solid var(--_cui-command-palette-border-color);
+    border-radius: 0.625rem;
+    color: inherit;
+    font: inherit;
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-inline: 0.75rem;
+  }
+
+  :where([data-citry-ui-part="command-palette-input"]:focus-visible) {
+    border-color: var(--_cui-command-palette-focus-ring);
+    outline: 2px solid var(--_cui-command-palette-focus-ring);
+    outline-offset: 1px;
+  }
+
+  :where([data-citry-ui-part="command-palette-listbox"]) {
+    display: grid;
+    gap: 0.25rem;
+    max-block-size: min(26rem, calc(100dvb - 10rem));
+    min-block-size: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  :where([data-citry-ui-part="command-palette-command"]) {
+    align-items: center;
+    border-radius: 0.625rem;
+    color: inherit;
+    cursor: default;
+    display: grid;
+    gap: 0.125rem var(--_cui-command-palette-gap);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-block-size: var(--_cui-command-palette-row-min-block-size);
+    padding-block: 0.375rem;
+    padding-inline: var(--_cui-command-palette-row-padding-inline);
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-active]) {
+    background: var(--_cui-command-palette-active-background);
+    color: var(--_cui-command-palette-active-foreground);
+    outline: 1px solid color-mix(in srgb, var(--_cui-command-palette-focus-ring) 55%, transparent);
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-disabled]) {
+    cursor: not-allowed;
+    opacity: 0.52;
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-intent="danger"]:not([data-disabled])) {
+    color: var(--_cui-command-palette-danger);
+  }
+
+  :where(.cui-command-palette__description) {
+    color: var(--_cui-command-palette-muted);
+    font-size: 0.875em;
+    grid-column: 2;
+  }
+
+  :where(.cui-command-palette__shortcut) {
+    color: var(--_cui-command-palette-muted);
+    font: inherit;
+    font-size: 0.8125em;
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    margin-inline-start: auto;
+    white-space: nowrap;
+  }
+
+  :where([data-citry-ui-part="command-palette-item-start"]) {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  :where([data-citry-ui-part="command-palette-item-end"]) {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  :where([data-citry-ui-part="command-palette-group"]) {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  :where([data-citry-ui-part="command-palette-group"] + [data-citry-ui-part="command-palette-group"]) {
+    margin-block-start: var(--_cui-command-palette-group-gap);
+  }
+
+  :where([data-citry-ui-part="command-palette-group-label"]) {
+    color: var(--_cui-command-palette-muted);
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    padding-block: 0.375rem 0.125rem;
+    padding-inline: var(--_cui-command-palette-row-padding-inline);
+    text-transform: uppercase;
+  }
+
+  :where([data-citry-ui-part="command-palette-separator"]) {
+    border: 0;
+    border-block-start: 1px solid var(--_cui-command-palette-border-color);
+    margin: 0.25rem var(--_cui-command-palette-row-padding-inline);
+  }
+
+  :where([data-citry-ui-part="command-palette-empty"]) {
+    color: var(--_cui-command-palette-muted);
+    padding: 1.5rem var(--_cui-command-palette-row-padding-inline);
+    text-align: center;
+  }
+
+  :where(.cui-command-palette__visually-hidden) {
+    block-size: 1px;
+    clip-path: inset(50%);
+    inline-size: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+  }
+
+  :where(.cui-command-palette[data-disabled]) {
+    opacity: 0.65;
+  }
+}
+
+@media (pointer: coarse) {
+  :where(.cui-command-palette) {
+    --_cui-command-palette-row-min-block-size: max(
+      var(--cui-command-palette-row-min-block-size, 2.75rem),
+      44px
+    );
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :where([data-citry-ui-part="command-palette-command"]) {
+    transition: background-color 100ms ease, color 100ms ease;
+  }
+}
+
+@media (forced-colors: active) {
+  :where(.cui-command-palette__surface),
+  :where([data-citry-ui-part="command-palette-input"]) {
+    border-color: CanvasText;
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-active]) {
+    outline: 2px solid Highlight;
+  }
+
+  :where([data-citry-ui-part="command-palette-command"][data-disabled]) {
+    color: GrayText;
+    opacity: 1;
+  }
+}
+
+@media print {
+  :where(.cui-command-palette) {
+    display: none !important;
+  }
+}

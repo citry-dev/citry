@@ -1,0 +1,6 @@
+
+:where(.lunar-pages) {
+  --cui-pagination-current-background: light-dark(#6d28d9, #c4b5fd);
+  --cui-pagination-current-foreground: light-dark(white, #2e1065);
+  --cui-pagination-radius: 999px;
+}

@@ -1,0 +1,6 @@
+
+:where(.placement-preview) {
+  display: grid;
+  place-items: center;
+  min-block-size: 22rem;
+}

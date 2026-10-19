@@ -1,0 +1,14 @@
+
+:where(.archive-keyboard-demo) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  min-block-size: 20rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.archive-keyboard-demo) {
+  --cui-menu-max-block-size: 13rem;
+}

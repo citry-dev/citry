@@ -1,0 +1,40 @@
+
+:where(.icon-scale) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 1rem;
+  max-width: 64rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.icon-scale article) {
+  padding: 1rem;
+  border: 1px solid light-dark(#d4ddce, #40533e);
+  border-radius: 0.75rem;
+  background: Canvas;
+}
+
+:where(.icon-scale h2) {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+:where(.icon-scale p) {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  margin: 0.6rem 0;
+}
+
+:where(.icon-scale__spring) {
+  color: #16a34a;
+}
+
+:where(.icon-scale__summer) {
+  color: #15803d;
+}
+
+:where(.icon-scale__autumn) {
+  color: #c2410c;
+}

@@ -1,0 +1,10 @@
+
+:where(.spinner-sizes) {
+  min-block-size: 4rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.spinner-sizes span) {
+  font-size: 0.72rem;
+}

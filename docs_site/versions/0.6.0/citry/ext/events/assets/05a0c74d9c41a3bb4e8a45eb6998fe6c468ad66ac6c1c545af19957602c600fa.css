@@ -1,0 +1,14 @@
+
+:where(.archive-content-demo) {
+  min-block-size: 15rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.archive-content-demo kbd) {
+  padding: 0.1rem 0.35rem;
+  border: 1px solid color-mix(in srgb, CanvasText 20%, transparent);
+  border-radius: 0.3rem;
+  font: inherit;
+  font-size: 0.75rem;
+}

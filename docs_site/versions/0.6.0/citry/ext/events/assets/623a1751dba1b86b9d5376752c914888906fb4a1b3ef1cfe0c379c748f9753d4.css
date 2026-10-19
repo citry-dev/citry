@@ -1,0 +1,12 @@
+
+:where(.radio-controlled) {
+  display: grid;
+  gap: 0.75rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.radio-controlled output) {
+  color: light-dark(#3f6212, #bef264);
+  font-size: 0.8rem;
+}

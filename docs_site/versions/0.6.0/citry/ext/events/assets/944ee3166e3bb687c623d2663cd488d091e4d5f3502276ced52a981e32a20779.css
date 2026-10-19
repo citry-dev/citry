@@ -1,0 +1,10 @@
+
+:where(.archive-size-demo) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 1rem;
+  min-block-size: 17rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

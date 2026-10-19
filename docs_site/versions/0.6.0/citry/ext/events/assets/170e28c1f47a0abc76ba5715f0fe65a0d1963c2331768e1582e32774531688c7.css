@@ -1,0 +1,41 @@
+
+:where(.icon-catalog) {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 72rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.icon-catalog h2) {
+  margin: 0 0 0.6rem;
+  color: light-dark(#285c36, #8bdd9f);
+  font-size: 0.875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+:where(.icon-catalog ul) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(.icon-catalog li) {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid light-dark(#d9e2d4, #38513a);
+  border-radius: 0.5rem;
+  background: Canvas;
+}
+
+:where(.icon-catalog code) {
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}

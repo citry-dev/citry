@@ -1,0 +1,11 @@
+
+:where(.controlled-disclosure) { display: grid; gap: 0.75rem; }
+:where(.controlled-disclosure__controls) { display: flex; flex-wrap: wrap; }
+:where(.controlled-disclosure__controls > button) {
+  min-block-size: 2rem;
+  padding-inline: 0.75rem;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+}

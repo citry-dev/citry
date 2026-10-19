@@ -1,0 +1,59 @@
+
+:where(.tabs-sampler) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  max-width: 64rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.tabs-sampler__card) {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid;
+  border-radius: 0.875rem;
+  box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 10%);
+}
+
+:where(.tabs-sampler__card--cosmic) {
+  --cui-tabs-accent: light-dark(#5b21b6, #ddd6fe);
+  --cui-tabs-focus-color: light-dark(#6d28d9, #c4b5fd);
+  --cui-tabs-active-background: light-dark(#ffffffb8, #2e1065b8);
+  border-color: light-dark(#c4b5fd, #6d28d9);
+  background: Canvas;
+}
+
+:where(.tabs-sampler__card--greenhouse) {
+  --cui-tabs-accent: light-dark(#0f766e, #5eead4);
+  --cui-tabs-focus-color: light-dark(#0d9488, #2dd4bf);
+  --cui-tabs-active-background: light-dark(#f0fdf4cc, #042f2ecc);
+  border-color: light-dark(#5eead4, #0f766e);
+  background: Canvas;
+}
+
+:where(.tabs-sampler__card header) {
+  margin-block-end: 1rem;
+}
+
+:where(.tabs-sampler__card h2, .tabs-sampler__card p) {
+  margin-block: 0;
+}
+
+:where(.tabs-sampler__eyebrow) {
+  color: var(--cui-tabs-accent, LinkText);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+:where(.tabs-sampler__metric) {
+  display: grid;
+  gap: 0.25rem;
+}
+
+:where(.tabs-sampler__metric span) {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}

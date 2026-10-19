@@ -1,0 +1,18 @@
+
+:where(.badge-basic) {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 24rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.badge-basic p) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+  padding-block-end: 0.5rem;
+  border-block-end: 1px solid light-dark(#d8d2c6, #4f4a42);
+}

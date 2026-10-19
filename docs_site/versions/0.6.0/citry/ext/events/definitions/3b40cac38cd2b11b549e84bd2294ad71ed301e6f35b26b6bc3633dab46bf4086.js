@@ -1,0 +1,154 @@
+(function(Vue){
+const { resolveDirective: _resolveDirective, withDirectives: _withDirectives, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, mergeProps: _mergeProps, openBlock: _openBlock, createElementBlock: _createElementBlock } = Vue
+
+function render(_ctx, _cache, $props, $setup, $data, $options) {
+  const _directive_citry_vue_owned = _resolveDirective("citry-vue-owned")
+  
+  return (_openBlock(), _createElementBlock("div", _mergeProps({ class: "cui-slider" }, _ctx.$citryPrepared.citryAttrs0), [
+    _createElementVNode("span", _mergeProps({ class: "cui-slider__visually-hidden" }, _ctx.$citryPrepared.citryAttrs1), _toDisplayString(_ctx.$citryPrepared.citryText0), 17 /* TEXT, FULL_PROPS */),
+    _createElementVNode("span", _mergeProps({ class: "cui-slider__visually-hidden" }, _ctx.$citryPrepared.citryAttrs2), _toDisplayString(_ctx.$citryPrepared.citryText1), 17 /* TEXT, FULL_PROPS */),
+    _withDirectives(_createElementVNode("input", _mergeProps({
+      type: "range",
+      "data-citry-ui-part": "native-input"
+    }, _ctx.$citryPrepared.citryAttrs3), null, 16 /* FULL_PROPS */), [
+      [_directive_citry_vue_owned, ['checked','value']]
+    ]),
+    _withDirectives(_createElementVNode("input", _mergeProps({
+      type: "range",
+      "data-thumb": "upper",
+      "data-citry-ui-part": "native-input"
+    }, _ctx.$citryPrepared.citryAttrs4), null, 16 /* FULL_PROPS */), [
+      [_directive_citry_vue_owned, ['checked','value']]
+    ]),
+    _withDirectives(_createElementVNode("input", _mergeProps({
+      type: "hidden",
+      "data-thumb": "single-or-lower",
+      "data-citry-ui-part": "readonly-transport"
+    }, _ctx.$citryPrepared.citryAttrs5), null, 16 /* FULL_PROPS */), [
+      [_directive_citry_vue_owned, 'value']
+    ]),
+    _withDirectives(_createElementVNode("input", _mergeProps({
+      type: "hidden",
+      "data-thumb": "upper",
+      "data-citry-ui-part": "readonly-transport"
+    }, _ctx.$citryPrepared.citryAttrs6), null, 16 /* FULL_PROPS */), [
+      [_directive_citry_vue_owned, 'value']
+    ]),
+    _createElementVNode("div", {
+      hidden: "",
+      "data-citry-ui-part": "control"
+    }, [
+      _createElementVNode("div", { "data-citry-ui-part": "track" }, [
+        _createElementVNode("span", { "data-citry-ui-part": "fill" }),
+        _createElementVNode("button", _mergeProps({
+          type: "button",
+          role: "slider",
+          "data-citry-ui-part": "thumb"
+        }, _ctx.$citryPrepared.citryAttrs7), [
+          _createElementVNode("span", { "data-citry-ui-part": "value" }, _toDisplayString(_ctx.$citryPrepared.citryText2), 1 /* TEXT */)
+        ], 16 /* FULL_PROPS */),
+        _createElementVNode("button", _mergeProps({
+          type: "button",
+          role: "slider",
+          "data-citry-ui-part": "thumb"
+        }, _ctx.$citryPrepared.citryAttrs8), [
+          _createElementVNode("span", { "data-citry-ui-part": "value" }, _toDisplayString(_ctx.$citryPrepared.citryText3), 1 /* TEXT */)
+        ], 16 /* FULL_PROPS */)
+      ])
+    ])
+  ], 16 /* FULL_PROPS */))
+}
+window.__citryRuntimeDefinitions=window.__citryRuntimeDefinitions||{};
+window.__citryRuntimeDefinitions["bd2fb7ac8dc68c978dd3f3a33f84f11a0a18fd8806ce452ca27a756063a8502c"]={render:render,target:"ordinary-vnodes/1",helperContract:"b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5",directiveSignature:[],replacementSites:[],localCallRuns:[],localCalls:[],dynamicElements:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+})(window.__citryRuntime.compilerRuntime.runtimeForDynamicElements([]));
+
+(function(Vue){
+const { createElementVNode: _createElementVNode, renderSlot: _renderSlot, mergeProps: _mergeProps, openBlock: _openBlock, createElementBlock: _createElementBlock, createCommentVNode: _createCommentVNode } = Vue
+
+function render(_ctx, _cache, $props, $setup, $data, $options) {
+  return (_openBlock(), _createElementBlock("div", _mergeProps({
+    class: "cui-field",
+    "data-citry-field-root": "",
+    "data-citry-ui-part": "field"
+  }, _ctx.$citryPrepared.citryAttrs0), [
+    _createElementVNode("label", _mergeProps({ "data-citry-ui-part": "label" }, _ctx.$citryPrepared.citryAttrs1), [
+      (_ctx.$citryPrepared.selectedSlots['citrySlote2526e6f745e4169'] === 'supplied')
+        ? _renderSlot(_ctx.$slots, "citrySlote2526e6f745e4169", { key: 0 })
+        : _createCommentVNode("v-if", true),
+      _createElementVNode("span", _mergeProps({
+        class: "cui-field__required",
+        "aria-hidden": "true",
+        "data-citry-ui-part": "required-indicator"
+      }, _ctx.$citryPrepared.citryAttrs2), " * ", 16 /* FULL_PROPS */)
+    ], 16 /* FULL_PROPS */),
+    _createElementVNode("div", { "data-citry-ui-part": "control" }, [
+      (_ctx.$citryPrepared.selectedSlots['citrySlot6f90e269deb4619c'] === 'supplied')
+        ? _renderSlot(_ctx.$slots, "citrySlot6f90e269deb4619c", { key: 1 })
+        : _createCommentVNode("v-if", true)
+    ]),
+    _createElementVNode("div", _mergeProps({
+      "aria-live": "polite",
+      "data-citry-ui-part": "error"
+    }, _ctx.$citryPrepared.citryAttrs3), null, 16 /* FULL_PROPS */)
+  ], 16 /* FULL_PROPS */))
+}
+window.__citryRuntimeDefinitions=window.__citryRuntimeDefinitions||{};
+window.__citryRuntimeDefinitions["16855a0653b93f5f61718859e64fd873868d1b391d34238f9b2730faa47cc86c"]={render:render,target:"ordinary-vnodes/1",helperContract:"b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5",directiveSignature:[],replacementSites:[],localCallRuns:[],localCalls:[],dynamicElements:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+})(window.__citryRuntime.compilerRuntime.runtimeForDynamicElements([]));
+
+(function(Vue){
+const { resolveComponent: _resolveComponent, withModifiers: _withModifiers, toDisplayString: _toDisplayString, createElementVNode: _createElementVNode, openBlock: _openBlock, createElementBlock: _createElementBlock, createBlock: _createBlock, createTextVNode: _createTextVNode, withCtx: _withCtx } = Vue
+
+function render(_ctx, _cache, $props, $setup, $data, $options) {
+  const _component_citry_c_range_slider_57248115 = _resolveComponent("citry-c-range-slider-57248115")
+  const _component_citry_c_field_862570d8 = _resolveComponent("citry-c-field-862570d8")
+  
+  return (_openBlock(), _createElementBlock("form", {
+    onSubmit: _withModifiers($event => (_ctx.result=JSON.stringify(Array.from(new window.FormData($event.target).entries()))), ["prevent"]),
+    class: "slider-example-stack"
+  }, [
+    (_openBlock(), _createBlock(_component_citry_c_field_862570d8, {
+      "citry-id": _ctx.$citryPrepared.calls.citryCall435c2a3cacf0bd05.id,
+      key: _ctx.$citryPrepared.calls.citryCall435c2a3cacf0bd05.key
+    }, {
+      ['citrySlote2526e6f745e4169']: _withCtx(() => [
+        _createTextVNode("Budget")
+      ]),
+      ['citrySlot6f90e269deb4619c']: _withCtx(() => [
+        (_openBlock(), _createBlock(_component_citry_c_range_slider_57248115, {
+          "citry-id": _ctx.$citryPrepared.calls.citryCall04c21a2a894a9b77.id,
+          key: _ctx.$citryPrepared.calls.citryCall04c21a2a894a9b77.key
+        }, null, 8 /* PROPS */, ["citry-id"]))
+      ]),
+      _: 2 /* DYNAMIC */
+    }, 1032 /* PROPS, DYNAMIC_SLOTS */, ["citry-id"])),
+    _createElementVNode("div", null, [
+      _createElementVNode("button", { type: "submit" }, "Submit"),
+      _createTextVNode(),
+      _createElementVNode("button", { type: "reset" }, "Reset")
+    ]),
+    _createElementVNode("output", {
+      textContent: _toDisplayString(_ctx.result)
+    }, "Submit to inspect values", 8 /* PROPS */, ["textContent"])
+  ], 40 /* PROPS, NEED_HYDRATION */, ["onSubmit"]))
+}
+window.__citryRuntimeDefinitions=window.__citryRuntimeDefinitions||{};
+window.__citryRuntimeDefinitions["08ee6d0112a7bedfa3b2302d220b92f837ddf61897cd02b01b5e9effdae8d25f"]={render:render,target:"ordinary-vnodes/1",helperContract:"b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5",directiveSignature:[],replacementSites:[],localCallRuns:[],localCalls:[{"localId":"citryCall04c21a2a894a9b77","typeKey":"CRangeSlider_7baa97","componentTag":"citry-c-range-slider-57248115","bindings":[]},{"localId":"citryCall435c2a3cacf0bd05","typeKey":"CField_81c723","componentTag":"citry-c-field-862570d8","bindings":[],"fills":[{"name":"citrySlot6f90e269deb4619c","localDescendants":["citryCall04c21a2a894a9b77"],"localDescendantRuns":[],"slotOutlets":[]},{"name":"citrySlote2526e6f745e4169","localDescendants":[],"localDescendantRuns":[],"slotOutlets":[]}]}],dynamicElements:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+})(window.__citryRuntime.compilerRuntime.runtimeForDynamicElements([]));
+
+(function(Vue){
+const { resolveComponent: _resolveComponent, openBlock: _openBlock, createElementBlock: _createElementBlock, createBlock: _createBlock } = Vue
+
+function render(_ctx, _cache, $props, $setup, $data, $options) {
+  const _component_citry_slider_form_f9effcd3 = _resolveComponent("citry-slider-form-f9effcd3")
+  
+  return (_openBlock(), _createElementBlock("main", null, [
+    (_openBlock(), _createBlock(_component_citry_slider_form_f9effcd3, {
+      "citry-id": _ctx.$citryPrepared.calls.citryCall2c84bdf4b28e6fdb.id,
+      key: _ctx.$citryPrepared.calls.citryCall2c84bdf4b28e6fdb.key
+    }, null, 8 /* PROPS */, ["citry-id"]))
+  ]))
+}
+window.__citryRuntimeDefinitions=window.__citryRuntimeDefinitions||{};
+window.__citryRuntimeDefinitions["1dc906422b03ac65c85ef8d013e599d0e06ace22e644d7e92e8d42c1b1c640fe"]={render:render,target:"ordinary-vnodes/1",helperContract:"b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5",directiveSignature:[],replacementSites:[],localCallRuns:[],localCalls:[{"localId":"citryCall2c84bdf4b28e6fdb","typeKey":"SliderForm_238a25","componentTag":"citry-slider-form-f9effcd3","bindings":[]}],dynamicElements:[],opaqueHtmlSites:[],runtimeEventSites:[]};
+})(window.__citryRuntime.compilerRuntime.runtimeForDynamicElements([]));

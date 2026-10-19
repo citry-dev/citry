@@ -1,0 +1,35 @@
+
+:where(.tabs-configurator) {
+  max-width: 64rem;
+  padding: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--cui-tabs-accent) 54%, transparent);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 10%);
+}
+
+:where(.tabs-configurator > header) {
+  margin-block-end: 1rem;
+}
+
+:where(.tabs-configurator h2, .tabs-configurator h3, .tabs-configurator p) {
+  margin-block: 0 0.5rem;
+}
+
+:where(.tabs-configurator__eyebrow) {
+  color: var(--cui-tabs-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.tabs-configurator__stage) {
+  min-width: 0;
+}
+
+:where(.tabs-configurator__status) {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}

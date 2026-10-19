@@ -1,0 +1,6 @@
+
+:where(.ocean-sidebar) {
+  --cui-sidebar-background: light-dark(#eff8ff, #102a43);
+  --cui-sidebar-border-color: light-dark(#84caff, #2e90fa);
+  --cui-sidebar-width: 18rem;
+}

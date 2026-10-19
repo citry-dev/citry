@@ -1,0 +1,33 @@
+
+:where(.flow-glance) {
+  max-inline-size: 34rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#d7c8b4, #6f6357);
+  border-radius: 0.85rem;
+  background: light-dark(#fffaf2, #241f1a);
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.flow-glance h2, .flow-glance p) {
+  margin: 0;
+}
+
+:where(.flow-glance h2) {
+  font-size: 1.05rem;
+}
+
+:where(.flow-glance__eyebrow) {
+  color: light-dark(#8a4b2b, #f0aa7d);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.flow-glance__tag) {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: light-dark(#ead8bd, #4a3d31);
+  font-size: 0.78rem;
+}

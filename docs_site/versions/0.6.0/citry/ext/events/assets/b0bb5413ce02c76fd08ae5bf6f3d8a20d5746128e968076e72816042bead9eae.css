@@ -1,0 +1,18 @@
+
+:where(.alert-actions-demo) {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 52rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.alert-actions-demo > button) {
+  justify-self: start;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid light-dark(#8da1bb, #687b97);
+  border-radius: 0.5rem;
+  background: Canvas;
+  color: CanvasText;
+  cursor: pointer;
+}

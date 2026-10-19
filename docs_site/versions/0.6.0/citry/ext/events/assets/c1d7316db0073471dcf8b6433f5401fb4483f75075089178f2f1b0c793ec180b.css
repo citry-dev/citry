@@ -1,0 +1,8 @@
+
+:where(.archive-choice-demo) {
+  display: grid;
+  gap: 1rem;
+  min-block-size: 17rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

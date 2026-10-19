@@ -1,0 +1,13 @@
+
+:where(.spinner-controlled) {
+  display: grid;
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.spinner-controlled label) {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+}

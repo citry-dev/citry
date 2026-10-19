@@ -1,0 +1,36 @@
+
+:where(.checkbox-form-demo) {
+  display: grid;
+  gap: 1rem;
+  max-width: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.checkbox-form-demo fieldset) {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid light-dark(#bfd1ba, #415943);
+  border-radius: 0.75rem;
+}
+
+:where(.checkbox-form-demo legend) {
+  padding-inline: 0.35rem;
+  font-weight: 700;
+}
+
+:where(.checkbox-form-demo__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.checkbox-form-demo output) {
+  padding: 0.75rem;
+  border-radius: 0.625rem;
+  background: light-dark(#f1f7ef, #18271a);
+  font-family: ui-monospace, monospace;
+  font-size: 0.875rem;
+}

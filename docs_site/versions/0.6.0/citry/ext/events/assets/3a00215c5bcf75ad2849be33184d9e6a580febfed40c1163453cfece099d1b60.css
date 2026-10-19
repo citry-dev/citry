@@ -1,0 +1,9 @@
+
+:where(.skeleton-lichen) {
+  --cui-skeleton-background: light-dark(#c9dfc8, #36513c);
+  --cui-skeleton-highlight: light-dark(rgb(255 255 255 / 70%), rgb(190 239 200 / 28%));
+  --cui-skeleton-radius: 1rem;
+  display: grid;
+  max-inline-size: 24rem;
+  gap: 1rem;
+}

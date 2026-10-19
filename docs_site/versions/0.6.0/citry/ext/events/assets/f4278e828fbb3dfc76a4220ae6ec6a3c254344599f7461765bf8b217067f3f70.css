@@ -1,0 +1,12 @@
+
+:where(.shore-layout) {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 58rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#b9d8df, #315967);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

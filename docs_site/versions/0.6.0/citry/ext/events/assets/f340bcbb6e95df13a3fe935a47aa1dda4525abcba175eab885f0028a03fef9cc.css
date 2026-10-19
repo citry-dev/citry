@@ -1,0 +1,69 @@
+
+:where(.scroll-area-customization) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.scroll-area-brand) {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 1rem;
+}
+
+:where(.scroll-area-brand h3) {
+  margin: 0;
+}
+
+:where(.scroll-area-brand--orchard) {
+  background: #f5f0df;
+  color: #203422;
+  --cui-scroll-area-max-block-size: 10rem;
+  --cui-scroll-area-background: #fffdf5;
+  --cui-scroll-area-foreground: #203422;
+  --cui-scroll-area-border-color: #78916d;
+  --cui-scroll-area-focus-color: #315f37;
+  --cui-scroll-area-radius: 1rem;
+}
+
+:where(.scroll-area-brand--harbor) {
+  background: #102b38;
+  color: #eefaff;
+  --cui-scroll-area-max-block-size: 10rem;
+  --cui-scroll-area-background: #173c4c;
+  --cui-scroll-area-foreground: #eefaff;
+  --cui-scroll-area-border-color: #72b5ce;
+  --cui-scroll-area-focus-color: #c6ecff;
+  --cui-scroll-area-scrollbar-color: #9eddf4 #173c4c;
+}
+
+.scroll-area-brand
+.brand-scroll[data-citry-ui-part="scroll-area"] {
+  border-width: 2px;
+}
+
+:where(.scroll-area-customization__notes) {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+:where(.scroll-area-customization__notes p) {
+  margin: 0;
+}
+
+@media (forced-colors: active) {
+  :where(.scroll-area-brand) {
+    border: 1px solid CanvasText;
+  }
+}
+
+@media print {
+  :where(.scroll-area-brand) {
+    background: transparent;
+    color: black;
+  }
+}

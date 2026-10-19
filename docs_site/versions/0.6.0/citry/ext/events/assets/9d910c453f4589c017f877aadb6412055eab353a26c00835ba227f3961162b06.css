@@ -1,0 +1,12 @@
+
+:where(.avatar-name-list) {
+  display: grid;
+  gap: 0.75rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.avatar-name-list > div) {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}

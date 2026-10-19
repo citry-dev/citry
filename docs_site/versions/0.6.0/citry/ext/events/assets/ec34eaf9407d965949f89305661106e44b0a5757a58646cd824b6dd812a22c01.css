@@ -1,0 +1,41 @@
+
+:where(.transient-report) {
+  max-width: 42rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#c7c9e8, #45486f);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.transient-report header) {
+  margin-block-end: 1rem;
+}
+
+:where(.transient-report h2, .transient-report p) {
+  margin-block: 0;
+}
+
+:where(.transient-report header p) {
+  color: light-dark(#5b4bc4, #a9a2ff);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.transient-report__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+}
+
+:where(.transient-report output) {
+  display: block;
+  margin-block-start: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: light-dark(#f3f1ff, #25243d);
+  overflow-wrap: anywhere;
+}

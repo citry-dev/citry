@@ -1,0 +1,11 @@
+
+:where(.image-delivery) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-delivery article, .image-delivery aside) { display: grid; gap: 0.5rem; align-content: start; }
+:where(.image-delivery h3, .image-delivery p, .image-delivery ul) { margin: 0; }
+:where(.image-delivery [data-citry-ui-part="image-root"]) { inline-size: 100%; }

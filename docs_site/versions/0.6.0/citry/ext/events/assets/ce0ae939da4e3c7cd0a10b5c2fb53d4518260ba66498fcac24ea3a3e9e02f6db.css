@@ -1,0 +1,22 @@
+
+:where(.table-appearance) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  max-width: 72rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.table-appearance article) {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid light-dark(#dbeafe, #1e3a8a);
+  border-radius: 0.875rem;
+  background: Canvas;
+}
+
+:where(.table-appearance h2) {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+}

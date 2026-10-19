@@ -1,0 +1,13 @@
+
+:where(.progress-range) {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 32rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.progress-range h2) {
+  margin: 0;
+  font-size: 0.95rem;
+}

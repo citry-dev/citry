@@ -1,0 +1,18 @@
+
+:where(.archive-menu-demo) {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  min-block-size: 17rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.archive-menu-demo > p) {
+  margin: 0;
+  color: light-dark(#7a4b18, #e8bd76);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

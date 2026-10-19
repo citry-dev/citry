@@ -1,0 +1,24 @@
+
+:where(.avatar-party) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+:where(.avatar-party__member) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+:where(.avatar-party__group) {
+  display: flex;
+  padding-inline-start: 0.5rem;
+}
+
+:where(.avatar-party__group [data-citry-ui-part="avatar"]) {
+  margin-inline-start: -0.5rem;
+  border-color: Canvas;
+  border-width: 2px;
+}

@@ -1,0 +1,22 @@
+
+:where(.shore-values) {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 42rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#b9d8df, #315967);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.shore-values__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.shore-values__actions button) {
+  min-height: 2.5rem;
+}

@@ -1,0 +1,19 @@
+
+:where(.split-button-variants) {
+  display: grid;
+  gap: 1.5rem;
+  min-block-size: 20rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.split-button-variants__subject) {
+  inline-size: min(100%, 30rem);
+}
+
+:where(.split-button-variants__matrix) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: start;
+}

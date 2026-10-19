@@ -1,0 +1,13 @@
+
+:where(.custom-timeline) { --cui-timeline-current-color:#7c3aed; }
+:where(.custom-timeline .avatar) {
+  display:grid;
+  inline-size:100%;
+  block-size:100%;
+  place-items:center;
+  border-radius:50%;
+  background:currentcolor;
+  color:Canvas;
+  font-size:.65rem;
+  font-weight:800;
+}

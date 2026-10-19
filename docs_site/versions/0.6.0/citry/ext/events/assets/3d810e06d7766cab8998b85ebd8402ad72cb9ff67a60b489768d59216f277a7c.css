@@ -1,0 +1,15 @@
+
+:where(.progress-busy) {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 34rem;
+  padding: 1rem;
+  border: 1px solid light-dark(#b5d0d9, #436571);
+  border-radius: 0.75rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.progress-busy h2, .progress-busy p) {
+  margin: 0;
+}

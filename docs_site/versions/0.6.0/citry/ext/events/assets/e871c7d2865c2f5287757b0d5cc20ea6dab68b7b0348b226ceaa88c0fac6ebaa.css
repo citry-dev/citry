@@ -1,0 +1,36 @@
+
+:where(.dialog-scroll-demo) {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  max-width: 46rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#bae6fd, #0369a1);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.dialog-scroll-demo h2, .dialog-scroll-demo p) {
+  margin: 0;
+}
+
+:where(.dialog-scroll-demo > p) {
+  color: light-dark(#0369a1, #7dd3fc);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.dialog-scroll-demo__entry) {
+  display: grid;
+  gap: 0.25rem;
+  padding-block: 0.75rem;
+  border-block-end: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+
+:where(.dialog-scroll-demo__entry span) {
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}

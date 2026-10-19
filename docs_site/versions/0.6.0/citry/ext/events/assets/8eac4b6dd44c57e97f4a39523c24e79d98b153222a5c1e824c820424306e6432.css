@@ -1,0 +1,22 @@
+
+:where(.split-button-layer-demo) {
+  display: grid;
+  gap: 1rem;
+  justify-items: start;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.split-button-layer-demo h2) { margin: 0; }
+:where(.split-button-layer-demo__clip) {
+  overflow: hidden;
+  inline-size: min(100%, 24rem);
+  block-size: 7rem;
+  padding: 2rem;
+  border: 1px solid color-mix(in srgb, CanvasText 30%, transparent);
+  border-radius: 0.75rem;
+}
+:where(.split-button-layer-demo__shadow-host) {
+  display: block;
+  padding: 0.75rem;
+  border: 1px dashed GrayText;
+}

@@ -1,0 +1,16 @@
+
+:where(.environment-list) {
+  --cui-virtual-list-border: 2px solid #7c3aed;
+  --cui-virtual-list-radius: 1rem;
+  --cui-virtual-list-background: light-dark(#faf5ff, #2e1065);
+  --cui-virtual-list-item-background: light-dark(#fff, #1e1b4b);
+}
+:where(.environment-list [data-citry-ui-part="item"]) {
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:1rem;
+  padding:0.875rem 1rem;
+  margin:0.5rem;
+  border-radius:0.625rem;
+}
+:where(.environment-list [data-citry-ui-part="item"] span) { color:GrayText; }

@@ -1,0 +1,331 @@
+---
+title: Bind events in templates
+url: https://citry.dev/v/0.6.0/events/bindings/
+description: "Call Citry event handlers from HTML, bind controls to State, and show loading or error feedback with Vue."
+---
+# Bind events in templates
+
+To run Python when the user clicks, types, or submits, add an attribute to
+the element. Use `@c-*` to call a handler when something happens on an
+element, such as a click or a keypress. Use `:c-*` to keep a form control in
+sync with a [`State`](/v/0.6.0/reference/component/#citry-component-state) field. Vue helpers such as
+`$loading()` and `$error()` show what a call is doing.
+
+A misspelled handler name, an unknown State field, or modifiers that cannot
+be combined raise an error on the component's first render.
+
+## `@c-<event>` handlers
+
+`@c-<event>="handler"` calls the handler when the element receives that DOM
+event:
+
+| Syntax | Result |
+|---|---|
+| `@c-click="save"` | Call `save` when the element is clicked. Any DOM event name works, including your own custom events. |
+| `@c-click="rate({stars: 5})"` | Pass arguments as one object. The handler receives it as `data`. |
+| `@c-submit.prevent="submit"` | Collect the form's named controls and call `submit` instead of submitting the page. |
+
+Modifiers after the event name control which events send a call, and when:
+
+| Modifier | Use |
+|---|---|
+| `.prevent` | Call `preventDefault()` on the event first. |
+| `.stop` | Stop the event from bubbling to ancestors. |
+| `.self` | Send only when the event happened on this element, not on a child. |
+| `.once` | Send at most once. |
+| `.enter` / `.escape` | Send only when the key pressed was Enter / Escape. Use on `keydown`, `keyup`, or `keypress`. |
+| `.debounce` | Wait until events stop for a moment, then send once. |
+| `.throttle` | Send at most once per interval. |
+
+`.debounce` and `.throttle` wait 250 ms by default. Add a duration to change
+it, as in `@c-input.debounce.300ms="search"` or `.throttle.1s`.
+
+Citry listens on the element that has the attribute. An event that does not
+bubble, such as `focus`, reaches only that element, so a binding on an
+ancestor does not see it. Use a bubbling event such as `focusin` there
+instead.
+
+On a child component tag, `@c-select="save"` calls the parent's `save`
+handler when the child emits `select` through Vue. To let the child call
+something from its own template, pass a callback through a Vue prop instead.
+See [Listen to child events](/v/0.6.0/vue/props-and-events/#listen-to-child-events).
+
+## `$state`, `$loading`, `$error` { #read-call-state-from-vue }
+
+These helpers work in the template and, through `this`, in the component's
+JavaScript:
+
+| Helper | Use |
+|---|---|
+| [`$state`](/v/0.6.0/reference/browser-apis/#state) | Read State, or replace a field the browser may change. The change is sent with the next call from this component, unless that call uses GET (see [Event routes](/v/0.6.0/events/routes/)). |
+| [`$loading()`](/v/0.6.0/reference/browser-apis/#loading) | True while any call from this component is waiting or running. |
+| [`$loading('save')`](/v/0.6.0/reference/browser-apis/#loading) | The same, for the `save` handler only. |
+| [`$error()`](/v/0.6.0/reference/browser-apis/#error) | The newest error from any of this component's handlers, or `null`. |
+| [`$error('save')`](/v/0.6.0/reference/browser-apis/#error) | The last error from `save`, or `null`. |
+| [`$sendEvent(name, args?)`](/v/0.6.0/reference/browser-apis/#send-event) | Call a handler and get a Promise for its result. |
+
+A successful call clears its handler's error. A retry keeps showing the old
+error until the new call finishes. Passing an unknown handler name to
+`$loading` or `$error` raises an error.
+
+Use `$sendEvent` when your JavaScript needs the handler's return value. An
+`@c-*` attribute does not give you one:
+
+
+```javascript
+$component({
+  data() {
+    return { result: null };
+  },
+  methods: {
+    async refresh() {
+      this.result = await this.$sendEvent("refresh");
+    },
+  },
+});
+```
+
+
+When a call made with `$sendEvent` fails, its Promise rejects. Catch it with
+`try`/`catch` or `.catch(...)`. When the server returns an error for an
+`@c-*` call, the error goes to `$error()` and nothing else happens.
+
+## `$state` local changes { #keep-rapid-local-changes-in-the-browser }
+
+Not every click needs Python. [`$state`](/v/0.6.0/reference/browser-apis/#state) is a Vue object holding the
+component's State. A plain Vue click handler can change it without a request,
+and the next server call sends the latest value along:
+
+
+```citry-html
+<button @click="$state.count++">+1</button>
+<span v-text="$state.count">{{ count }}</span>
+<button @c-click="save">Save</button>
+```
+
+
+The `+1` button is ordinary Vue and makes no request. Save calls the `save`
+handler, which receives the updated `count` in `state`.
+
+## `:c-<field>` bindings { #bind-controls-to-state }
+
+`:c-<field>` connects a form control to the State field of the same name:
+
+| Syntax | Result |
+|---|---|
+| `:c-query` | Show the `query` field in this control. |
+| `:c-query="refresh"` | Also write each edit to `query` and call `refresh`. |
+| `:c-query.lazy="refresh"` | Send when the user finishes editing (on `change`), not on every keystroke. |
+| `:c-query.debounce.300ms="refresh"` | Send once, after 300 ms without edits. |
+| `:c-query.throttle.1s="refresh"` | Send at most once per second. |
+| `:c-query.on:keyup.enter="refresh"` | Send on `keyup`, only for the Enter key. |
+
+A binding without a handler is **one-way**: Citry shows the field's value in
+the control but never reads the control back. A binding with a handler is
+**two-way**: each edit updates the field and calls the handler with the new
+State. Only two-way bindings take the timing modifiers. A binding takes at
+most one `.on:<event>`, and cannot combine `.lazy` with `.on:<event>`;
+either mistake fails when the template loads.
+
+Put the binding on a control inside the component that declares the State. A
+`:c-*` binding on a child component tag is an error.
+
+### Python field types
+
+The browser sends the control's value as JSON, and the server checks it
+against the field's type **without converting it**. Declare the field to
+match the control:
+
+| Control | Value sent | Declare the field as |
+|---|---|---|
+| Checkbox, radio | whether it is checked | `bool` |
+| `<input type="number">`, `<input type="range">` | a number | `int` or `float` |
+| `<select multiple>` | the selected option values, in page order | `list[str]` |
+| Other text-like inputs, a single `<select>`, `<textarea>` | the text | `str` |
+| A custom element | its `value` property, which must be JSON | the matching type |
+
+An empty or half-typed number input has no number, so it sends its text. A
+field declared `int` rejects that. Accept both and convert in the handler:
+
+
+```python
+class State:
+    amount: int | str = ""
+
+
+class Events:
+    def save(self, state):
+        amount = int(state.amount or 0)
+```
+
+
+For `<select multiple>`, give the field an empty list as its default:
+
+
+```python
+from dataclasses import field
+
+
+class State:
+    tags: list[str] = field(default_factory=list)
+```
+
+
+### Elements you can bind { #which-elements-you-can-bind }
+
+A binding reads and writes a control's value, so the element must have one:
+
+| Element or input type | One-way | Two-way |
+|---|---:|---:|
+| `<input>` of type `text`, `search`, `tel`, `url`, `email`, `password`, `date`, `month`, `week`, `time`, `datetime-local`, `number`, `range`, `color`, `checkbox`, `radio` | Yes | Yes |
+| `<input type="hidden">` | Yes | No: the user cannot edit it. |
+| `<input type="file">` | No | No: files cannot go into State. Use an upload endpoint. |
+| `<input>` of type `submit`, `image`, `reset`, `button` | No | No: these are buttons, not values. |
+| `<textarea>`, `<select>` | Yes | Yes |
+| A custom element with a `value` property | Yes | Yes, with `.on:<event>` |
+| Any other element, such as `<div>` or `<span>` | No | No |
+
+An `<input>` without a `type` counts as `text`. To react to something
+happening on an element without a value, use an `@c-*` event binding:
+
+
+```citry-html
+{# ❌ A <div> has no value to bind #}
+<div :c-query.on:click="refresh"></div>
+
+{# ✅ Listen for the event instead #}
+<div @c-click="refresh"></div>
+```
+
+
+### `.lazy` and `.on:<event>`
+
+A two-way binding sends on one DOM event. `.lazy` switches to the event that
+fires when the user finishes editing, and `.on:<event>` names the event
+yourself:
+
+| Control | Default event | With `.lazy` |
+|---|---|---|
+| Text-like inputs, number, range, `<textarea>` | `input` | `change` |
+| Checkbox, radio, `<select>` | `change` | Not allowed: these already send on `change` |
+| A custom element | You must set `.on:<event>` | Not allowed |
+
+`.enter` and `.escape` need the binding to send on a keyboard event, so
+pair them with `.on:keydown` or `.on:keyup`. With the default event, or
+an `.on:` event other than `keydown`, `keyup`, or `keypress`, the
+template fails to load.
+
+### What the control shows
+
+Citry writes the field into every bound control, and again after each
+response that changes State. This is how a one-way binding shows the
+server's value:
+
+| Control | Written as |
+|---|---|
+| Checkbox, radio | checked when the value is truthy |
+| `<select multiple>` | options whose value is in the list are selected; anything that is not a list clears the selection |
+| Other inputs, `<textarea>`, a single `<select>` | the value as text; `None` becomes empty |
+| A custom element | the value as is; `None` becomes `null` |
+
+## `@c-poll` on a timer { #call-a-handler-on-a-timer }
+
+`@c-poll.<seconds>s` calls a handler repeatedly, for example to refresh a
+status. The first call happens after one full interval:
+
+
+```citry-html
+<output @c-poll.30s="refresh({projectId})">
+  Waiting for an update
+</output>
+```
+
+
+Citry skips a tick while the previous poll is still waiting or running. Polls
+stop while the browser tab is hidden. When the tab is shown again, the timer
+starts a new full interval, without making up for missed calls. The timer
+also stops when the element is removed, and starts over when a re-render
+replaces it.
+
+## Fix binding problems
+
+### `.debounce` on components
+
+`.debounce`, `.throttle`, and `@c-poll` work only on HTML elements. On a
+child component tag they raise `TypeError` when the page renders. A
+`c-bind` spread can add `@c-poll` to an element, but only with a plain
+handler name such as `"refresh"`, without arguments.
+
+### `.once` is used up early
+
+`.once` removes the listener after the first event, even when another
+modifier stops that event from sending. With `@c-keydown.enter.once`,
+pressing any other key first means a later Enter sends nothing.
+
+### How modifiers match
+
+`.prevent` has an effect only when the event can be cancelled.
+
+`.enter` and `.escape` work only on `keydown`, `keyup`, and `keypress`,
+written in lowercase. On any other event the template fails to load,
+because that event has no key to check:
+
+
+```citry-html
+{# Fails: a click has no key #}
+<input @c-click.enter="search" />
+
+{# Works: send when Enter is pressed #}
+<input @c-keydown.enter="search" />
+```
+
+
+A `:c-*` binding checks the key of its update event, so the same rule
+applies to that event:
+
+
+```citry-html
+{# Fails: the default update event, input, has no key #}
+<input :c-query.enter="search" />
+
+{# Works: update query and send when Enter is pressed #}
+<input :c-query.on:keydown.enter="search" />
+```
+
+
+A binding takes one key filter, and an element takes one `@c-*` binding
+per event. Unlike a Vue listener, `@c-keydown.enter.escape` does not mean
+"either key", so it fails when the template loads, as does a second
+`@c-keydown` on the same element. Call the handler from a Vue listener
+instead:
+
+
+```citry-html
+{# Fails: two key filters on one binding #}
+<input @c-keydown.enter.escape="search" />
+
+{# Works: Vue runs the listener for Enter or Escape #}
+<input @keydown.enter.escape="$sendEvent('search')" />
+
+{# Works: a different handler for each key #}
+<input
+  @keydown.enter="$sendEvent('search')"
+  @keydown.escape="$sendEvent('clear')"
+/>
+```
+
+
+### `:type` stops a binding
+
+If Vue later changes `:type` to a type that cannot be bound, the binding
+stops and the browser console says why. It works again once the type
+changes back.
+
+### Custom element `value`
+
+Citry reads and writes a custom element's `value` property as is, so
+numbers, lists, and objects arrive unchanged. If reading `value` throws,
+returns `undefined`, or returns something that is not JSON, Citry
+leaves State unchanged, sends nothing, and reports the problem in the
+browser console. The element may be defined after Citry starts: Citry
+waits for it and then applies the current State value.

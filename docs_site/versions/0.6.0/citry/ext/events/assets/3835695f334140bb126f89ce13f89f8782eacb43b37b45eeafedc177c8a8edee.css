@@ -1,0 +1,6 @@
+
+:where(.breadcrumb-overflow) {
+  inline-size: min(100%, 22rem);
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+}

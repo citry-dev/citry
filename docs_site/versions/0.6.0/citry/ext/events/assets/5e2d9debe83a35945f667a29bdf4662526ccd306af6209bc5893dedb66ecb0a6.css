@@ -1,0 +1,36 @@
+
+:where(.form-configurator) {
+  max-width: 42rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#c7c9e8, #45486f);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.form-configurator header) {
+  margin-block-end: 1rem;
+}
+
+:where(.form-configurator h2, .form-configurator p) {
+  margin-block: 0;
+}
+
+:where(.form-configurator header p) {
+  color: light-dark(#5b4bc4, #a9a2ff);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+:where(.form-configurator__form [data-citry-ui-part="button"]) {
+  justify-self: start;
+}
+
+:where(.form-configurator__status) {
+  margin-block-start: 0.85rem;
+  color: color-mix(in srgb, currentColor 68%, transparent);
+  font-size: 0.8125rem;
+}

@@ -1,0 +1,17 @@
+
+:where(.checkbox-field-states) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1.25rem;
+  max-width: 62rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.checkbox-field-states > [data-citry-ui-part="field"]) {
+  align-content: start;
+  padding: 1rem;
+  border: 1px solid light-dark(#c5d5c1, #3e5541);
+  border-radius: 0.75rem;
+  background: Canvas;
+}

@@ -1,0 +1,13 @@
+
+:where(.skeleton-motion) {
+  display: grid;
+  gap: 0.75rem;
+}
+
+:where(.skeleton-motion > div) {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  font: 0.75rem ui-sans-serif, system-ui, sans-serif;
+}

@@ -1,0 +1,15 @@
+
+:where(.split-button-controlled) {
+  display: grid;
+  gap: 0.85rem;
+  justify-items: start;
+  min-block-size: 17rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.split-button-controlled [role="group"]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

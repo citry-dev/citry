@@ -1,0 +1,12 @@
+
+:where(.spinner-inline) {
+  max-inline-size: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.spinner-inline p) {
+  margin-block-end: 0;
+  color: light-dark(#57566f, #c8c6df);
+  font-size: 0.8rem;
+}

@@ -1,0 +1,13 @@
+
+:where(.image-priority) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 46rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-priority article) { display: grid; gap: 0.5rem; }
+:where(.image-priority h3, .image-priority p) { margin: 0; }
+:where(.image-priority__eyebrow) { color: GrayText; font-weight: 700; }
+:where(.image-priority__spacer) { block-size: 70vh; border-block: 1px dashed GrayText; }
+:where(.image-priority [data-citry-ui-part="image-root"]) { inline-size: 100%; }

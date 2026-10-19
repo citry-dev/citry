@@ -1,0 +1,17 @@
+
+:where(.habitat-summary) {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 36rem;
+  padding: 1rem;
+  border: 1px solid light-dark(#b8d0b9, #3b5a41);
+  border-radius: 0.875rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.habitat-summary__children) {
+  display: grid;
+  gap: 0.7rem;
+  padding-inline-start: 1.75rem;
+}

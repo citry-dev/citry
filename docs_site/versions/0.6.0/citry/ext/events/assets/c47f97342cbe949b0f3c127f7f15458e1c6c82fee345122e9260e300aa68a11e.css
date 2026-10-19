@@ -1,0 +1,8 @@
+
+:where(.toast-theme) { color-scheme:light dark; min-block-size:16rem; padding:1rem; }
+:where(.polar-toast) {
+  --cui-toast-background: light-dark(#eef8fb, #102a34);
+  --cui-toast-foreground: light-dark(#17343e, #e6f7fb);
+  --cui-toast-border-color: light-dark(#76b7c7, #5ea5b6);
+  --cui-toast-radius: 1.25rem;
+}

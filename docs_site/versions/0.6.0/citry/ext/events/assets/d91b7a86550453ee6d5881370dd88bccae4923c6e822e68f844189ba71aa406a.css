@@ -1,0 +1,5 @@
+
+:where(.spinner-basic) {
+  padding: 1.25rem;
+  color: CanvasText;
+}

@@ -1,0 +1,10 @@
+
+:where(.survey-totals) {
+  max-width: 44rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.survey-totals [data-citry-ui-part="footer-cell"]) {
+  color: light-dark(#1e3a8a, #bfdbfe);
+}

@@ -1,0 +1,30 @@
+
+:where(.card-semantics) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1.25rem;
+  max-width: 68rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.card-semantics h2, .card-semantics h3) {
+  margin-block-start: 0;
+}
+
+:where(.card-semantics h2) {
+  font-size: 1rem;
+}
+
+:where(.card-semantics h3) {
+  margin-block-end: 0;
+  font-size: 0.95rem;
+}
+
+:where(.card-semantics ul) {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

@@ -1,0 +1,34 @@
+
+:where(.context-menu-choices) {
+  display: grid;
+  gap: 0.875rem;
+  justify-items: start;
+  min-block-size: 24rem;
+  max-inline-size: 22rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.context-menu-choices h3) {
+  margin: 0;
+}
+
+:where(.context-menu-choices__card) {
+  display: grid;
+  gap: 0.25rem;
+  inline-size: min(18rem, 100%);
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, CanvasText 24%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, Highlight 8%, Canvas);
+}
+
+:where(.context-menu-choices__card:focus-visible) {
+  outline: 2px solid Highlight;
+  outline-offset: 2px;
+}
+
+:where(.context-menu-choices__peer) {
+  padding: 0.75rem;
+  border: 1px dashed color-mix(in srgb, CanvasText 24%, transparent);
+}

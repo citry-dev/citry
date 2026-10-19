@@ -1,0 +1,12 @@
+
+:where(.switch-controlled) {
+  display: grid;
+  gap: 0.7rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.switch-controlled output) {
+  color: light-dark(#3f6212, #bef264);
+  font-size: 0.82rem;
+}

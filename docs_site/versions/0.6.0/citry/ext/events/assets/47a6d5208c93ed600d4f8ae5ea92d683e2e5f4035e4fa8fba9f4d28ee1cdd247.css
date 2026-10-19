@@ -1,0 +1,11 @@
+
+:where(.card-nested) {
+  max-width: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.card-nested h2) {
+  margin: 0;
+  font-size: 1.05rem;
+}

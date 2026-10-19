@@ -1,0 +1,18 @@
+
+:where(.forest-report) {
+  display: grid;
+  gap: 1rem;
+  max-width: 40rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.forest-report__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+:where(.forest-report output) {
+  white-space: pre-wrap;
+}

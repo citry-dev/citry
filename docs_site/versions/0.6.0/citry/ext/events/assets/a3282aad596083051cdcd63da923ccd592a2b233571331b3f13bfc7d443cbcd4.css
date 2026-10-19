@@ -1,0 +1,22 @@
+
+:where(.custom-popovers) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  min-block-size: 12rem;
+  padding-block: 2rem;
+}
+
+:where(.aurora-popover) {
+  --cui-popover-background: light-dark(#ecfdf5, #052e2b);
+  --cui-popover-foreground: light-dark(#064e3b, #d1fae5);
+  --cui-popover-border-color: light-dark(#6ee7b7, #34d399);
+  --cui-popover-radius: 1.25rem;
+}
+
+:where(.lunar-popover) {
+  --cui-popover-background: light-dark(#f8fafc, #172033);
+  --cui-popover-foreground: light-dark(#1e293b, #f1f5f9);
+  --cui-popover-border-color: light-dark(#94a3b8, #64748b);
+  --cui-popover-shadow: 0 1.25rem 2.75rem rgb(15 23 42 / 30%);
+}

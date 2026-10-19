@@ -1,0 +1,22 @@
+
+:where(.badge-counts) {
+  display: grid;
+  gap: 0.375rem;
+  max-inline-size: 22rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.badge-counts a) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.6rem;
+  color: CanvasText;
+  text-decoration: none;
+}
+
+:where(.badge-counts a:hover) {
+  background: light-dark(#ece6da, #322d27);
+}

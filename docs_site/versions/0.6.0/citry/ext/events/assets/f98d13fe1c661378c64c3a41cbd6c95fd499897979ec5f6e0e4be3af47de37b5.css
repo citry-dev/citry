@@ -1,0 +1,8 @@
+
+:where(.command-palette-records) {
+  display: grid;
+  gap: 0.75rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.command-palette-records h2, .command-palette-records p) { margin: 0; }

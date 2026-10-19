@@ -1,0 +1,7 @@
+
+:where(.switch-form) {
+  display: grid;
+  gap: 1rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

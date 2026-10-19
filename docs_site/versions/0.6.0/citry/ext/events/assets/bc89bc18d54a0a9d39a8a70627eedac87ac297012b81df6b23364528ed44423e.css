@@ -1,0 +1,30 @@
+
+:where(.scroll-area-focus) {
+  display: grid;
+  gap: 0.75rem;
+  max-inline-size: 38rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.scroll-area-focus p, .scroll-area-focus output) {
+  margin: 0;
+}
+
+:where(.scroll-area-focus__timeline) {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 1rem 1rem 1rem 2.5rem;
+}
+
+:where(.scroll-area-focus__timeline li) {
+  display: grid;
+  grid-template-columns: 4rem 1fr;
+  gap: 0.375rem 0.75rem;
+  align-items: center;
+}
+
+:where(.scroll-area-focus__timeline li > :not(strong)) {
+  grid-column: 2;
+}

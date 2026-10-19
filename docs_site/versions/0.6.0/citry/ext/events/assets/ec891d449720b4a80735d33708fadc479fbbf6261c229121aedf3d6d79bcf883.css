@@ -1,0 +1,13 @@
+
+:where(.archive-placement-demo) {
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+  min-block-size: 21rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.archive-placement-demo__wide) {
+  inline-size: min(34rem, 150dvi);
+}

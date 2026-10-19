@@ -1,0 +1,146 @@
+schema_version: 1
+family: rating
+
+components:
+  - CRating
+
+inputs:
+  - id: crating-server-inputs
+    component: CRating
+    channel: server
+    column_widths: [fit, 17rem, 13rem, auto]
+    entries:
+      - {id: value, name: value, type: {display: 'CRatingExact | None', interfaces: [CRatingExact]}, default: {kind: literal, value: null}, effect: Sets the initial exact score; zero and None mean unrated.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the progressive native radio Form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates every radio and readonly transport with an external Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the first radio ID and bases later radio root and transport IDs.}
+      - {id: max, name: max, type: int, default: {kind: literal, value: 5}, effect: Sets one through twenty visual stars and the maximum score.}
+      - {id: precision, name: precision, type: {display: CRatingExact, interfaces: [CRatingExact]}, default: {kind: literal, value: 1}, effect: Sets a positive exact selectable interval that divides one.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native required radio-group validity outside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks focus mutation and Form submission outside Field.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Preserves focus and exact submission while blocking mutation outside Field.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Reflects application invalid state outside Field.}
+      - {id: allow-clear, name: allow_clear, type: bool, default: {kind: literal, value: false}, effect: Lets a repeat click on the committed choice return to unrated.}
+      - {id: label, name: label, type: 'str | None', default: {kind: literal, value: null}, effect: Names a standalone radiogroup; use the Field label slot inside Field.}
+      - {id: value-label, name: value_label, type: "str containing '{value}' and '{max}'", default: {kind: literal, value: '{value} out of {max}'}, effect: Overrides the catalog-backed accessible choice-name pattern.}
+      - {id: variant, name: variant, type: {display: '"solid" | "subtle"', interfaces: [CRatingVariant]}, default: {kind: literal, value: solid}, effect: Selects active-star treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CRatingSize]}, default: {kind: literal, value: md}, effect: Selects coordinated symbol sizing.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the documented root and merges with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the documented root and merges with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed radiogroup attributes without replacing owned state or identity.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed attributes to every native radio.}
+
+  - id: crating-client-inputs
+    component: CRating
+    channel: client
+    entries:
+      - {id: value, name: value, type: 'canonical decimal string | null', omitted: Releases control to the last uncontrolled value., effect: Controls the exact score or unrated state.}
+      - {id: required, name: required, type: boolean, omitted: Uses server or Field state., effect: Controls standalone required validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses server or owner state., effect: Controls mutation and Form participation.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses server or owner state., effect: Controls focusable nonmutable submission.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses server or Field state., effect: Controls application invalid state.}
+      - {id: allow-clear, name: allowClear, type: boolean, omitted: Uses the server value., effect: Controls repeat-click clearing.}
+      - {id: variant, name: variant, type: {display: CRatingVariant, interfaces: [CRatingVariant]}, omitted: Uses the server value., effect: Controls active-star treatment.}
+      - {id: size, name: size, type: {display: CRatingSize, interfaces: [CRatingSize]}, omitted: Uses the server value., effect: Controls coordinated sizing.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic value callback., effect: Receives each user selection clear or reset request.}
+      - {id: on-hover-change, name: onHoverChange, type: function, omitted: No hover-preview callback., effect: Receives pointer preview changes without committing.}
+
+slots: []
+
+events:
+  - id: crating-events
+    component: CRating
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: {display: '(value: string | null, detail: CRatingValueChangeDetail) => void', interfaces: [CRatingValueChangeDetail]}
+        trigger: A user selects or clears a value or resets the owning Form.
+        detail: {display: '{value, previousValue, controlled, source, sourceEvent}', interfaces: [CRatingValueChangeDetail]}
+        behavior: Uncontrolled native and visual state commit before notification; controlled state is request-only.
+      - id: on-hover-change
+        name: onHoverChange
+        signature: {display: '(value: string | null, detail: CRatingHoverChangeDetail) => void', interfaces: [CRatingHoverChangeDetail]}
+        trigger: Pointer preview enters a new exact choice or leaves the choices layer.
+        detail: {display: '{value, previousValue, sourceEvent}', interfaces: [CRatingHoverChangeDetail]}
+        behavior: Updates preview only and never changes FormData.
+
+methods: []
+
+css:
+  - id: crating-css-variables
+    component: CRating
+    entries:
+      - {id: empty-color, name: --cui-rating-empty-color, type: color, purpose: Empty-star color., default: Mixed CanvasText.}
+      - {id: fill-color, name: --cui-rating-fill-color, type: color, purpose: Committed active-star color., default: Amber.}
+      - {id: hover-color, name: --cui-rating-hover-color, type: color, purpose: Pointer-preview color., default: Brighter amber.}
+      - {id: focus-color, name: --cui-rating-focus-color, type: color, purpose: Keyboard focus outline., default: Highlight}
+      - {id: gap, name: --cui-rating-gap, type: length, purpose: Space between stars., default: 0.25rem}
+      - {id: symbol-size, name: --cui-rating-symbol-size, type: length, purpose: Star size., default: 1.5rem}
+      - {id: control-size, name: --cui-rating-control-size, type: length, purpose: Minimum pointer-target block size., default: 2.75rem}
+      - {id: disabled-opacity, name: --cui-rating-disabled-opacity, type: number, purpose: Disabled treatment opacity., default: '0.52'}
+
+attributes:
+  - id: crating-root-attributes
+    component: CRating
+    entries:
+      - {id: data-hovering, name: data-hovering, element: Root div, type: present | absent, meaning: Marks an active pointer preview.}
+      - {id: data-required, name: data-required, element: Root div, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Root div, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Root div, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Root div, type: present | absent, meaning: Mirrors application invalid state.}
+      - {id: data-variant, name: data-variant, element: Root div, type: {display: CRatingVariant, interfaces: [CRatingVariant]}, meaning: Mirrors active-star treatment.}
+      - {id: data-size, name: data-size, element: Root div, type: {display: CRatingSize, interfaces: [CRatingSize]}, meaning: Mirrors coordinated sizing.}
+  - id: crating-choice-attributes
+    component: CRating
+    entries:
+      - {id: data-checked, name: data-checked, element: Choice label, type: present | absent, meaning: Marks the committed exact choice.}
+      - {id: data-highlighted, name: data-highlighted, element: Choice label, type: present | absent, meaning: Marks choices included in pointer preview.}
+
+selectors:
+  - id: crating-selectors
+    component: CRating
+    entries:
+      - {id: rating, selector: '[data-citry-ui-part="rating"]', element: Root div, purpose: State reflections and root customization destination.}
+      - {id: visual, selector: '[data-citry-ui-part="visual"]', element: Decorative visual span, purpose: Contains empty and clipped active stars.}
+      - {id: empty, selector: '[data-citry-ui-part="empty"]', element: Empty-star span, purpose: Displays the unfilled scale.}
+      - {id: fill, selector: '[data-citry-ui-part="fill"]', element: Clipped active-star span, purpose: Displays preview or committed fill.}
+      - {id: symbol, selector: '[data-citry-ui-part="symbol"]', element: Decorative star span, purpose: Repeated fixed visual symbol.}
+      - {id: choices, selector: '[data-citry-ui-part="choices"]', element: Choice layer span, purpose: Owns bounded exact hit targets and radios.}
+      - {id: choice, selector: '[data-citry-ui-part="choice"]', element: Choice label, purpose: Exact pointer hit target and state hook.}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Native radio input, purpose: Keyboard semantics Form value and input_attrs destination.}
+      - {id: choice-label, selector: '[data-citry-ui-part="choice-label"]', element: Visually hidden span, purpose: Supplies the localized native radio accessible name.}
+      - {id: readonly-value, selector: '[data-citry-ui-part="readonly-value"]', element: Visually hidden span, purpose: Announces the readonly exact value.}
+      - {id: readonly-transport, selector: '[data-citry-ui-part="readonly-transport"]', element: Hidden input, purpose: Submits a named readonly value.}
+
+interfaces:
+  - id: crating-aliases
+    kind: aliases
+    entries:
+      - {id: exact, name: CRatingExact, definition: 'int | Decimal | str'}
+      - {id: variant, name: CRatingVariant, definition: 'Literal["solid", "subtle"]'}
+      - {id: size, name: CRatingSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: change-source, name: CRatingChangeSource, definition: 'Literal["pointer", "keyboard", "reset"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - id: crating-value-change-detail
+    kind: record
+    name: CRatingValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'string | null', meaning: Requested exact canonical score or unrated state.}
+      - {id: previous-value, name: previousValue, type: 'string | null', meaning: Effective score before the request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns committed state.}
+      - {id: source, name: source, type: {display: CRatingChangeSource, interfaces: [CRatingChangeSource]}, meaning: Pointer keyboard or reset cause.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native interaction event when one exists.}
+  - id: crating-hover-change-detail
+    kind: record
+    name: CRatingHoverChangeDetail
+    entries:
+      - {id: value, name: value, type: 'string | null', meaning: Current exact preview or null after leaving.}
+      - {id: previous-value, name: previousValue, type: 'string | null', meaning: Preview before the pointer transition.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native pointer event.}
+
+translations:
+  - id: crating-translations
+    component: CRating
+    entries:
+      - {id: value, key: citry-ui-rating-value, purpose: Names every exact radio choice and the readonly current value., variables: 'value: str; max: str', override: '`value_label`', updates: '`i18n.bind()` formats the values and updates the native label text.'}

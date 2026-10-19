@@ -1,0 +1,653 @@
+(function() {
+
+const modalRuntimeKey = Symbol.for("citry-ui:dialog-runtime");
+const modalRuntime = globalThis[modalRuntimeKey] ?? {
+  dialogs: [], overflow: "", paddingInlineEnd: "",
+};
+globalThis[modalRuntimeKey] = modalRuntime;
+modalRuntime.drawerControllers ??= new WeakMap();
+const drawerHandoffKey = Symbol.for("citry-ui:drawer-handoff");
+
+__citryRuntime.registerTypeOptions.bind(null, "CDrawer_01cc33", "e1e1497245abd32af57d553e52568d8a238b7c9314199f7b93b54829241d4516")({
+  props: {
+    open: {}, dismissible: {}, closeOnEscape: {}, closeOnOutside: {},
+    initialFocus: {}, placement: {}, size: {}, scroll: {}, onOpenChange: {},
+  },
+  onServerRender: ({component}) => {
+    const host = component.$el;
+    const data = component;
+    const defaults = component.serverDefaults;
+    const props = component.$props;
+    const effect = Citry.vue.watchEffect;
+    const nearestHost = (element) => element?.closest?.("[data-citry-drawer-host]") ?? null;
+    const drawer = [...host.querySelectorAll('[data-citry-ui-part="drawer"]')]
+      .find((candidate) => nearestHost(candidate) === host);
+    const surface = drawer?.querySelector(':scope > [data-citry-ui-part="surface"]');
+    const title = surface?.querySelector('[data-citry-ui-part="title"]');
+    const closeButton = surface?.querySelector('[data-citry-drawer-built-in-close]');
+    if (!(drawer instanceof HTMLDialogElement) || !surface || !title || !closeButton) {
+      console.error("[citry-ui] CDrawer could not resolve its owned anatomy.", host);
+      return;
+    }
+
+    const allowed = {
+      initialFocus: ["auto", "title"],
+      placement: ["inline-start", "inline-end", "block-start", "block-end"],
+      size: ["sm", "md", "lg", "full"],
+      scroll: ["body", "drawer"],
+    };
+    const invalidEpisodes = new Set();
+    // A server re-render runs this callback again on the same drawer. The
+    // previous run's cleanup leaves an open drawer open and stores its open
+    // state, with the server's `open` input it rendered with, on the drawer.
+    // A kept drawer keeps its own state while that input is unchanged, so a
+    // drawer the user opened or closed stays that way; a changed input wins.
+    const handoff = drawer[drawerHandoffKey] ?? null;
+    delete drawer[drawerHandoffKey];
+    // The template renders the drawer's `open` attribute from the server's
+    // `open` input, so Vue removes it when a server re-render changes that
+    // input to false. That leaves a modal drawer in the top layer, still
+    // blocking the page, with `drawer.open` reading false. Put the attribute
+    // back so the takeover below sees the open drawer and the effect closes
+    // it through the ordinary close path, which releases the scroll lock.
+    let modalShowing = false;
+    try { modalShowing = drawer.matches(":modal"); } catch { modalShowing = false; }
+    if (modalShowing && !drawer.open) drawer.setAttribute("open", "");
+    if (handoff?.timer) clearTimeout(handoff.timer);
+    const sameServerOpen = Boolean(handoff) && handoff.serverOpen === defaults.open;
+    let internalOpen = sameServerOpen ? handoff.open : defaults.open;
+    let controlled = false;
+    let appliedOpen = false;
+    let suppressedControlledOpen = false;
+    let pendingReturnValue = "";
+    let pendingOpenSource = null;
+    let expectedNativeClose = false;
+    let pendingNativeUserClose = false;
+    let pointerStartedOutside = false;
+    let previousFocus = null;
+    let onOpenChange = null;
+    let structureValid = false;
+    let structureEpisode = false;
+    let disposed = false;
+    let generation = 0;
+    let eligibilitySource = null;
+    let configuration = {
+      dismissible: defaults.dismissible,
+      closeOnEscape: defaults.closeOnEscape,
+      closeOnOutside: defaults.closeOnOutside,
+      initialFocus: defaults.initialFocus,
+      placement: defaults.placement,
+      size: defaults.size,
+      scroll: defaults.scroll,
+    };
+
+    const deepActiveElement = () => {
+      let active = drawer.ownerDocument.activeElement;
+      while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+      return active;
+    };
+    const composedParent = (node) => {
+      if (node?.parentNode) return node.parentNode;
+      const root = node?.getRootNode?.();
+      return root instanceof ShadowRoot ? root.host : null;
+    };
+    const composedContains = (ancestor, node) => {
+      for (let current = node; current; current = composedParent(current)) {
+        if (current === ancestor) return true;
+      }
+      return false;
+    };
+    const openRoots = () => {
+      const roots = [drawer.ownerDocument];
+      for (let index = 0; index < roots.length; index += 1) {
+        const root = roots[index];
+        for (const element of root.querySelectorAll("*")) {
+          if (element.shadowRoot) roots.push(element.shadowRoot);
+        }
+      }
+      return roots;
+    };
+    const mayOpen = () => {
+      if (!host.isConnected || !drawer.isConnected || !structureValid) return false;
+      if (drawer.hidden || drawer.inert) return false;
+      if (drawer.open) {
+        const drawerStyle = getComputedStyle(drawer);
+        if (drawerStyle.display === "none" || drawerStyle.visibility === "hidden") return false;
+      }
+      for (let node = host; node; node = composedParent(node)) {
+        if (node instanceof HTMLElement) {
+          const style = getComputedStyle(node);
+          if (node.hidden || node.inert || style.display === "none" || style.visibility === "hidden") {
+            return false;
+          }
+          if (node instanceof HTMLDialogElement && node !== drawer && !node.open) return false;
+          if (node.hasAttribute("popover") && !node.matches(":popover-open")) return false;
+        }
+      }
+      const modals = openRoots().flatMap((root) => [...root.querySelectorAll("dialog:modal")]);
+      return modals.every((modal) => modal === drawer || composedContains(modal, host));
+    };
+    const isFocusable = (element) => element instanceof HTMLElement
+      && element.isConnected
+      && !element.hidden
+      && !element.matches(":disabled,[inert]")
+      && !element.closest("[inert]")
+      && element.getClientRects().length > 0
+      && getComputedStyle(element).visibility !== "hidden";
+    const focusableElements = () => [...drawer.querySelectorAll(
+      'a[href],area[href],button:not(:disabled),input:not(:disabled):not([type="hidden"]),'
+        + 'select:not(:disabled),textarea:not(:disabled),iframe,object,embed,audio[controls],'
+        + 'video[controls],summary,[contenteditable]:not([contenteditable="false"]),'
+        + '[tabindex]:not([tabindex="-1"]):not([inert])',
+    )].filter((element) => isFocusable(element) && element.closest("dialog") === drawer)
+      .filter((element, _index, elements) => {
+        if (!(element instanceof HTMLInputElement) || element.type !== "radio" || !element.name) {
+          return true;
+        }
+        const group = elements.filter((candidate) => candidate instanceof HTMLInputElement
+          && candidate.type === "radio" && candidate.name === element.name
+          && candidate.form === element.form);
+        const checked = group.find((candidate) => candidate.checked);
+        return checked ? element === checked : element === group[0];
+      })
+      .map((element, index) => ({ element, index, tabIndex: element.tabIndex }))
+      .filter(({ tabIndex }) => tabIndex >= 0)
+      .sort((left, right) => {
+        if (left.tabIndex > 0 && right.tabIndex === 0) return -1;
+        if (left.tabIndex === 0 && right.tabIndex > 0) return 1;
+        if (left.tabIndex > 0 && right.tabIndex > 0 && left.tabIndex !== right.tabIndex) {
+          return left.tabIndex - right.tabIndex;
+        }
+        return left.index - right.index;
+      }).map(({ element }) => element);
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      let shown;
+      try { shown = JSON.stringify(value) ?? String(value); } catch { shown = String(value); }
+      console.error(
+        `[citry-ui] CDrawer ${name} received invalid client value ${shown}; using its fallback.`,
+        drawer,
+      );
+    };
+    const resolveBoolean = (name) => {
+      const value = props[name] === undefined ? defaults[name] : props[name];
+      if (typeof value === "boolean") { invalidEpisodes.delete(name); return value; }
+      reportInvalid(name, value);
+      return defaults[name];
+    };
+    const resolveEnum = (name) => {
+      const value = props[name] === undefined ? defaults[name] : props[name];
+      if (allowed[name].includes(value)) { invalidEpisodes.delete(name); return value; }
+      reportInvalid(name, value);
+      return defaults[name];
+    };
+    const resolveCallback = () => {
+      const value = props.onOpenChange;
+      if (value === undefined || value === null || typeof value === "function") {
+        invalidEpisodes.delete("onOpenChange");
+        return value ?? null;
+      }
+      reportInvalid("onOpenChange", value);
+      return null;
+    };
+    const ownedActivators = () => [...host.querySelectorAll("[data-citry-drawer-trigger]")]
+      .filter((element) => nearestHost(element) === host && !drawer.contains(element));
+    const updateActivators = (open) => {
+      for (const activator of ownedActivators()) {
+        activator.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+    };
+    const interactiveSelector = 'button,a[href],input,select,textarea,[tabindex],'
+      + '[contenteditable]:not([contenteditable="false"])';
+    const hasInteractiveDescendant = (element) => Boolean(element.querySelector(interactiveSelector));
+    const validateStructure = () => {
+      const activators = ownedActivators();
+      const outsideInteractive = [...host.querySelectorAll(interactiveSelector)]
+        .filter((element) => !drawer.contains(element));
+      const activatorValid = !data.hasActivator || (
+        activators.length === 1
+        && activators[0] instanceof HTMLButtonElement
+        && activators[0].type === "button"
+        && outsideInteractive.length === 1
+        && outsideInteractive[0] === activators[0]
+      );
+      const contentValid = !hasInteractiveDescendant(title)
+        && ![...surface.querySelectorAll('[data-citry-ui-part="description"]')]
+          .some(hasInteractiveDescendant)
+        && ![...closeButton.children].some((child) => child.matches?.(interactiveSelector)
+          || child.querySelector?.(interactiveSelector));
+      const valid = activatorValid && contentValid;
+      if (!valid && !structureEpisode) {
+        structureEpisode = true;
+        console.error("[citry-ui] CDrawer settled anatomy is invalid; failing closed.", host);
+      } else if (valid) {
+        structureEpisode = false;
+      }
+      structureValid = valid;
+      return valid;
+    };
+    const lockScroll = () => {
+      if (modalRuntime.dialogs.includes(drawer)) return;
+      if (modalRuntime.dialogs.length === 0) {
+        const root = drawer.ownerDocument.documentElement;
+        modalRuntime.overflow = root.style.overflow;
+        modalRuntime.paddingInlineEnd = root.style.paddingInlineEnd;
+        const view = drawer.ownerDocument.defaultView;
+        const scrollbarWidth = Math.max(0, view.innerWidth - root.clientWidth);
+        const currentPadding = Number.parseFloat(view.getComputedStyle(root).paddingInlineEnd) || 0;
+        root.style.overflow = "hidden";
+        if (scrollbarWidth > 0) root.style.paddingInlineEnd = `${currentPadding + scrollbarWidth}px`;
+      }
+      modalRuntime.dialogs.push(drawer);
+    };
+    const unlockScroll = () => {
+      const index = modalRuntime.dialogs.indexOf(drawer);
+      if (index === -1) return;
+      modalRuntime.dialogs.splice(index, 1);
+      if (modalRuntime.dialogs.length === 0) {
+        const root = drawer.ownerDocument.documentElement;
+        root.style.overflow = modalRuntime.overflow;
+        root.style.paddingInlineEnd = modalRuntime.paddingInlineEnd;
+      }
+    };
+    const closeDescendants = () => {
+      for (const candidate of [...modalRuntime.dialogs].reverse()) {
+        if (candidate === drawer || !drawer.contains(candidate) || !candidate.open) continue;
+        // A drawer handed over to its next run has no listener to hear
+        // this close. Its next run sees this closed ancestor and closes
+        // and reports it; a drawer the page removed closes on its own.
+        if (candidate[drawerHandoffKey]?.open) continue;
+        const controller = modalRuntime.drawerControllers.get(candidate);
+        if (controller) controller.forceClose("ancestor", drawer);
+        else candidate.close();
+      }
+    };
+    const stopEligibilityWatch = () => eligibilityObserver.disconnect();
+    const forceClose = (reason, source) => {
+      const wasOpen = appliedOpen || drawer.open;
+      suppressedControlledOpen = controlled && props.open === true;
+      internalOpen = false;
+      normalizeClosed();
+      if (wasOpen) notify(false, reason, source, "", true);
+      restoreFocus();
+    };
+    modalRuntime.drawerControllers.set(drawer, { forceClose });
+    const reconcileEligibility = (records) => {
+      if (!appliedOpen) return;
+      if (!drawer.open) { onNativeClose(); return; }
+      if (mayOpen()) return;
+      eligibilitySource = records.find((record) => record.target instanceof Element)?.target ?? host;
+      forceClose("ancestor", eligibilitySource);
+    };
+    const eligibilityObserver = new MutationObserver(reconcileEligibility);
+    const startEligibilityWatch = () => {
+      eligibilityObserver.disconnect();
+      const observed = new Set();
+      for (let node = host; node; node = composedParent(node)) {
+        if (node instanceof Element && !observed.has(node)) {
+          observed.add(node);
+          eligibilityObserver.observe(node, {
+            attributes: true,
+            attributeFilter: ["class", "hidden", "inert", "open", "style"],
+          });
+        }
+        if (node?.parentNode && !observed.has(node.parentNode)) {
+          observed.add(node.parentNode);
+          eligibilityObserver.observe(node.parentNode, { childList: true });
+        }
+      }
+      eligibilityObserver.observe(drawer, {
+        attributes: true,
+        attributeFilter: ["class", "hidden", "inert", "open", "style"],
+      });
+    };
+    const normalizeClosed = () => {
+      stopEligibilityWatch();
+      closeDescendants();
+      expectedNativeClose = drawer.open;
+      if (drawer.open) drawer.close();
+      drawer.removeAttribute("data-open");
+      appliedOpen = false;
+      updateActivators(false);
+      unlockScroll();
+    };
+    const restoreFocus = (immediate = false) => {
+      const token = generation;
+      const restore = () => {
+        if ((!immediate && disposed) || token !== generation) return;
+        const active = deepActiveElement();
+        const browserNeedsTarget = active === drawer.ownerDocument.body
+          || active === drawer
+          || composedContains(drawer, active);
+        if (
+          browserNeedsTarget
+          && previousFocus?.isConnected
+          && active !== previousFocus
+          && isFocusable(previousFocus)
+        ) {
+          previousFocus.focus({ preventScroll: true });
+        }
+      };
+      if (immediate) restore();
+      else queueMicrotask(restore);
+    };
+    const applyOpen = (nextOpen, source = null, returnValue = "") => {
+      if (!nextOpen) closeDescendants();
+      if (nextOpen === appliedOpen && drawer.open === nextOpen) return;
+      generation += 1;
+      if (nextOpen) {
+        if (!mayOpen()) {
+          if (controlled) suppressedControlledOpen = props.open === true;
+          else internalOpen = false;
+          normalizeClosed();
+          return;
+        }
+        previousFocus = source instanceof HTMLElement ? source : deepActiveElement();
+        drawer.returnValue = "";
+        if (drawer.open) drawer.removeAttribute("open");
+        try { drawer.showModal(); } catch (error) {
+          console.error("[citry-ui] CDrawer could not enter modal state:", error, drawer);
+          normalizeClosed();
+          return;
+        }
+        appliedOpen = true;
+        drawer.setAttribute("data-open", "");
+        updateActivators(true);
+        lockScroll();
+        startEligibilityWatch();
+        const token = generation;
+        queueMicrotask(() => {
+          if (
+            !disposed && token === generation
+            && configuration.initialFocus === "title" && isFocusable(title)
+          ) {
+            title.focus({ preventScroll: true });
+          }
+        });
+        return;
+      }
+      expectedNativeClose = drawer.open;
+      stopEligibilityWatch();
+      if (drawer.open) drawer.close(returnValue);
+      drawer.removeAttribute("data-open");
+      appliedOpen = false;
+      updateActivators(false);
+      unlockScroll();
+      restoreFocus();
+    };
+    const notify = (nextOpen, reason, source, returnValue = "", forced = false) => onOpenChange?.(nextOpen, {
+      reason, controlled, forced, source, returnValue,
+    });
+    const requestOpen = (nextOpen, reason, source, returnValue = "") => {
+      if (nextOpen === appliedOpen) return;
+      if (controlled) {
+        pendingReturnValue = nextOpen ? "" : returnValue;
+        if (nextOpen && source instanceof HTMLElement) pendingOpenSource = source;
+        notify(nextOpen, reason, source, returnValue);
+        return;
+      }
+      internalOpen = nextOpen;
+      applyOpen(nextOpen, source, returnValue);
+      if (appliedOpen === nextOpen) notify(nextOpen, reason, source, returnValue);
+    };
+    const eventIsOutside = (event) => {
+      if (event.target !== drawer) return false;
+      const rect = surface.getBoundingClientRect();
+      return event.clientX < rect.left || event.clientX > rect.right
+        || event.clientY < rect.top || event.clientY > rect.bottom;
+    };
+    const onHostClick = (event) => {
+      const trigger = event.target.closest?.("[data-citry-drawer-trigger]");
+      if (trigger && nearestHost(trigger) === host) { requestOpen(true, "trigger", trigger); return; }
+      const close = event.target.closest?.("[data-citry-drawer-close]");
+      if (!close || nearestHost(close) !== host || !drawer.contains(close)) return;
+      const builtIn = close.hasAttribute("data-citry-drawer-built-in-close");
+      if (builtIn && !configuration.dismissible) return;
+      requestOpen(false, builtIn ? "close-button" : "action", close,
+        close instanceof HTMLButtonElement ? close.value : "");
+    };
+    const onCancel = (event) => {
+      event.preventDefault();
+      if (configuration.dismissible && configuration.closeOnEscape) requestOpen(false, "escape", drawer);
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== "Tab" || event.target.closest?.("dialog") !== drawer) return;
+      const focusable = focusableElements();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        (configuration.initialFocus === "title" ? title : drawer).focus({ preventScroll: true });
+        return;
+      }
+      const active = deepActiveElement();
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (active === first || active === drawer || active === title)) {
+        event.preventDefault(); last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault(); first.focus({ preventScroll: true });
+      }
+    };
+    const rememberNativeDialogSubmission = (target) => {
+      if (controlled || target.closest?.("[data-citry-drawer-close]")) return;
+      const submitter = target.closest?.("button,input");
+      if (!(submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement)
+        || submitter.form?.closest("dialog") !== drawer) return;
+      const isSubmit = submitter instanceof HTMLButtonElement
+        ? submitter.type === "submit"
+        : submitter.type === "submit" || submitter.type === "image";
+      const method = submitter.hasAttribute("formmethod")
+        ? submitter.getAttribute("formmethod")
+        : submitter.form.getAttribute("method") ?? "get";
+      if (isSubmit && method.toLowerCase() === "dialog") pendingNativeUserClose = true;
+    };
+    const onPointerDown = (event) => {
+      pointerStartedOutside = eventIsOutside(event);
+      rememberNativeDialogSubmission(event.target);
+    };
+    const onPointerCancel = () => { pointerStartedOutside = false; };
+    const onDrawerClick = (event) => {
+      rememberNativeDialogSubmission(event.target);
+      const close = pointerStartedOutside && eventIsOutside(event);
+      pointerStartedOutside = false;
+      if (close && configuration.dismissible && configuration.closeOnOutside) {
+        requestOpen(false, "outside", drawer);
+      }
+    };
+    const onSubmit = (event) => {
+      const form = event.target;
+      if (event.defaultPrevented || !(form instanceof HTMLFormElement)
+        || form.closest("dialog") !== drawer) return;
+      const submitter = event.submitter;
+      const overridden = (submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement)
+        && submitter.hasAttribute("formmethod");
+      if ((overridden ? submitter.formMethod : form.method).toLowerCase() !== "dialog") return;
+      if (!controlled) {
+        pendingNativeUserClose = true;
+        return;
+      }
+      event.preventDefault();
+      requestOpen(false, "native", submitter ?? form,
+        submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement
+          ? submitter.value : "");
+    };
+    const onNativeClose = () => {
+      if (expectedNativeClose) { expectedNativeClose = false; return; }
+      if (!appliedOpen) return;
+      closeDescendants();
+      suppressedControlledOpen = controlled && props.open === true;
+      appliedOpen = false;
+      internalOpen = false;
+      drawer.removeAttribute("data-open");
+      updateActivators(false);
+      unlockScroll();
+      stopEligibilityWatch();
+      let closedAncestor = null;
+      for (let node = composedParent(host); node; node = composedParent(node)) {
+        if (node instanceof HTMLDialogElement && !node.open) { closedAncestor = node; break; }
+      }
+      const forced = closedAncestor !== null || !pendingNativeUserClose;
+      pendingNativeUserClose = false;
+      notify(false, closedAncestor ? "ancestor" : "native", closedAncestor ?? drawer,
+        drawer.returnValue, forced);
+      restoreFocus();
+    };
+    const reconcileStructure = () => {
+      if (validateStructure()) {
+        host.setAttribute("data-citry-drawer-initialized", "");
+      } else {
+        host.removeAttribute("data-citry-drawer-initialized");
+        if (appliedOpen || drawer.open) {
+          forceClose("ancestor", host);
+        }
+      }
+    };
+
+    host.addEventListener("click", onHostClick);
+    drawer.addEventListener("cancel", onCancel);
+    drawer.addEventListener("keydown", onKeyDown);
+    drawer.addEventListener("pointerdown", onPointerDown, true);
+    drawer.addEventListener("pointercancel", onPointerCancel);
+    drawer.addEventListener("click", onDrawerClick);
+    drawer.addEventListener("submit", onSubmit);
+    drawer.addEventListener("close", onNativeClose);
+    const structureObserver = new MutationObserver(reconcileStructure);
+    structureObserver.observe(host, {
+      subtree: true, childList: true, attributes: true,
+      attributeFilter: ["contenteditable", "href", "role", "tabindex", "type"],
+    });
+    validateStructure();
+
+    // Take over a drawer the previous run left open, without closing and
+    // reopening it: the modal state, scroll lock, and focus stay as they are.
+    // The effect below then keeps it open, or closes it when the server's
+    // `open` input changed to false.
+    //
+    // A server re-render runs an enclosing dialog's callback first, and that
+    // run may close it. An enclosing drawer leaves this handed-over drawer
+    // to this run, and an enclosing CDialog cannot reach it. Taking it over
+    // open would leave a modal drawer inside a closed dialog: invisible, yet
+    // blocking the page. Close it instead and report the close as
+    // "ancestor" once the callback is known.
+    let ancestorClose = null;
+    if (handoff?.open && drawer.open) {
+      for (let node = composedParent(host); node; node = composedParent(node)) {
+        if (!(node instanceof HTMLDialogElement)) continue;
+        let modal = false;
+        try { modal = node.matches(":modal"); } catch { modal = false; }
+        if (!node.open && !modal) ancestorClose = node;
+        break;
+      }
+    }
+    if (ancestorClose) {
+      expectedNativeClose = true;
+      drawer.close();
+      unlockScroll();
+      internalOpen = false;
+      suppressedControlledOpen = props.open === true;
+    } else if (handoff?.open && drawer.open) {
+      appliedOpen = true;
+      previousFocus = handoff.previousFocus;
+      drawer.setAttribute("data-open", "");
+      updateActivators(true);
+      lockScroll();
+      startEligibilityWatch();
+    }
+
+    effect(() => {
+      const suppliedOpen = props.open;
+      let nextOpen = internalOpen;
+      if (suppliedOpen === undefined || suppliedOpen === null) {
+        suppressedControlledOpen = false;
+        pendingReturnValue = "";
+        if (controlled) internalOpen = appliedOpen;
+        controlled = false;
+        nextOpen = internalOpen;
+        invalidEpisodes.delete("open");
+      } else if (typeof suppliedOpen === "boolean") {
+        controlled = true;
+        if (!suppliedOpen) suppressedControlledOpen = false;
+        nextOpen = suppressedControlledOpen ? false : suppliedOpen;
+        invalidEpisodes.delete("open");
+      } else {
+        suppressedControlledOpen = false;
+        pendingReturnValue = "";
+        reportInvalid("open", suppliedOpen);
+        if (controlled) internalOpen = appliedOpen;
+        controlled = false;
+        nextOpen = internalOpen;
+      }
+      configuration = {
+        dismissible: resolveBoolean("dismissible"),
+        closeOnEscape: resolveBoolean("closeOnEscape"),
+        closeOnOutside: resolveBoolean("closeOnOutside"),
+        initialFocus: resolveEnum("initialFocus"),
+        placement: resolveEnum("placement"),
+        size: resolveEnum("size"),
+        scroll: resolveEnum("scroll"),
+      };
+      onOpenChange = resolveCallback();
+      closeButton.hidden = !configuration.dismissible;
+      if (configuration.initialFocus === "title") title.setAttribute("tabindex", "-1");
+      else title.removeAttribute("tabindex");
+      drawer.dataset.placement = configuration.placement;
+      drawer.dataset.size = configuration.size;
+      drawer.dataset.scroll = configuration.scroll;
+      applyOpen(nextOpen, nextOpen ? pendingOpenSource : null, nextOpen ? "" : pendingReturnValue);
+      if (appliedOpen === nextOpen) {
+        pendingReturnValue = "";
+        if (nextOpen) pendingOpenSource = null;
+      }
+    });
+    if (ancestorClose) notify(false, "ancestor", ancestorClose, "", true);
+    if (structureValid) host.setAttribute("data-citry-drawer-initialized", "");
+
+    return () => {
+      generation += 1;
+      structureObserver.disconnect();
+      eligibilityObserver.disconnect();
+      host.removeEventListener("click", onHostClick);
+      drawer.removeEventListener("cancel", onCancel);
+      drawer.removeEventListener("keydown", onKeyDown);
+      drawer.removeEventListener("pointerdown", onPointerDown, true);
+      drawer.removeEventListener("pointercancel", onPointerCancel);
+      drawer.removeEventListener("click", onDrawerClick);
+      drawer.removeEventListener("submit", onSubmit);
+      drawer.removeEventListener("close", onNativeClose);
+      modalRuntime.drawerControllers.delete(drawer);
+      const closeNow = () => {
+        closeDescendants();
+        expectedNativeClose = drawer.open;
+        if (drawer.open) drawer.close();
+        drawer.removeAttribute("data-open");
+        appliedOpen = false;
+        updateActivators(false);
+        unlockScroll();
+        restoreFocus(true);
+      };
+      const record = { open: appliedOpen && drawer.open, serverOpen: defaults.open, previousFocus, timer: null };
+      drawer[drawerHandoffKey] = record;
+      if (record.open && host.isConnected && drawer.isConnected) {
+        // Leave the open drawer open for the next run to take over. The
+        // runtime runs this cleanup before Vue patches the page, so by the
+        // next task a drawer the page removed is disconnected: close it then,
+        // without telling `onOpenChange`, because the owner removed it. A
+        // drawer no run takes over within a second closes the same way.
+        const abort = () => {
+          if (drawer[drawerHandoffKey] !== record) return;
+          delete drawer[drawerHandoffKey];
+          clearTimeout(record.timer);
+          closeNow();
+        };
+        setTimeout(() => { if (!drawer.isConnected) abort(); }, 0);
+        record.timer = setTimeout(abort, 1000);
+      } else {
+        closeNow();
+      }
+      disposed = true;
+      host.removeAttribute("data-citry-drawer-initialized");
+    };
+  },
+});
+
+})();

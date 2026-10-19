@@ -1,0 +1,5 @@
+
+:where(.nested-popovers) {
+  min-block-size: 14rem;
+  padding-block: 3rem;
+}

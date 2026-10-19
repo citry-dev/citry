@@ -1,0 +1,23 @@
+
+:where(.table-glance) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  max-width: 72rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.table-glance article) {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid light-dark(#bfdbfe, #1e3a8a);
+  border-radius: 0.875rem;
+  background: Canvas;
+}
+
+:where(.table-glance h2) {
+  margin: 0 0 0.75rem;
+  color: light-dark(#1d4ed8, #93c5fd);
+  font-size: 1rem;
+}

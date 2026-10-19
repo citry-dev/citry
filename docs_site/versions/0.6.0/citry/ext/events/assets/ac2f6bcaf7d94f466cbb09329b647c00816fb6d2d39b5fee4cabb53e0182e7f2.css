@@ -1,0 +1,1 @@
+:where(.date-input-demo-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:1rem}:where(.date-input-demo-grid>div){display:grid;gap:.5rem}

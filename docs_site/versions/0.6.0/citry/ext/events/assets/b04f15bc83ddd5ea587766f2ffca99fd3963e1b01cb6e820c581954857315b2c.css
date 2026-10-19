@@ -1,0 +1,22 @@
+
+:where(.checkbox-labels) {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 32rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.checkbox-labels > *) {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid light-dark(#c7d7c5, #3c5541);
+  border-radius: 0.75rem;
+}
+
+:where(.checkbox-labels__row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}

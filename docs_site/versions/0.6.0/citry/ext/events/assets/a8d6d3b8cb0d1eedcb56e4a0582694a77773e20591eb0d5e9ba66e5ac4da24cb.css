@@ -1,0 +1,11 @@
+
+:where(.image-reactive) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 44rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+:where(.image-reactive__controls) { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+:where(.image-reactive p) { margin: 0; }
+:where(.image-reactive [data-citry-ui-part="image-root"]) { inline-size: 100%; }

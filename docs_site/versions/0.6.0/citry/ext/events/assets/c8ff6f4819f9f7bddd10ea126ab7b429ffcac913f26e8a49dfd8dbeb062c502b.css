@@ -1,0 +1,5 @@
+
+:where(.drawer-example) { display:grid; gap:.75rem; justify-items:start; padding:1.5rem; }
+:where(.drawer-example p) { margin:0; color:color-mix(in srgb, CanvasText 68%, transparent); }
+:where(.cui-drawer__body label, .cui-drawer__body textarea) { display:block; inline-size:100%; }
+:where(.cui-drawer__body textarea) { box-sizing:border-box; margin-block-start:.4rem; padding:.75rem; }

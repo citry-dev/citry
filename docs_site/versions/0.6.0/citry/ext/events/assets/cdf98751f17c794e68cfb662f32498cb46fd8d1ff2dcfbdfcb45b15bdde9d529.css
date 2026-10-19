@@ -1,0 +1,19 @@
+
+:where(.avatar-variants) {
+  display: grid;
+  gap: 0.8rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.avatar-variants > div) {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+:where(.avatar-variants strong) {
+  inline-size: 4.5rem;
+  color: light-dark(#315546, #b7ddc8);
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}

@@ -1,0 +1,18 @@
+
+:where(.flow-nested) {
+  max-inline-size: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.flow-nested__row) {
+  padding: 0.8rem;
+  border-block-end: 1px solid light-dark(#d6c4ad, #5f5247);
+}
+
+:where(.flow-nested__cone) {
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: light-dark(#ead7bd, #4b3b30);
+  font-size: 0.75rem;
+}

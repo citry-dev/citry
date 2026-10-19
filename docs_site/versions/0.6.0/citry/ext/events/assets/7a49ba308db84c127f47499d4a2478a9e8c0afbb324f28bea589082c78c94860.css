@@ -1,0 +1,8 @@
+
+:where(.basic-alerts) {
+  display: grid;
+  gap: 0.875rem;
+  max-width: 46rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

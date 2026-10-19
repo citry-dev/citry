@@ -1,0 +1,347 @@
+---
+title: Migrate from Component.View
+url: https://citry.dev/v/0.6.0/guides/migrate-from-component-view/
+description: "Port django-components Component.View handlers to typed Citry Events, then split HTTP verbs into named interactions."
+---
+# Migrate from Component.View
+
+Your django-components components handle requests with a nested
+`class View`, through methods such as `get()` and `post()`, and you want
+those forms and fragment loaders to keep working in Citry. You can move them
+in two steps: first keep the verb methods as they are, then give each user
+action its own named method.
+
+Most of the shape carries over. The component still owns its request
+handling, and a plain HTML form can still post to the component's own URL.
+What changes most is the method body. In Citry, a **handler** is a public
+method in the component's nested `class Events`, and the browser calls it by
+name (see [Server events](/v/0.6.0/events/)). A handler does not read `request.POST`
+or build an `HttpResponse`. It receives the form fields as a typed object,
+and what it returns decides what the page does next.
+
+The Citry examples assume the `citry_app` instance configured in
+[Server events](/v/0.6.0/events/#configure-a-signing-secret-before-using-state)
+and these imports:
+
+
+```python
+from typing import Any
+
+from citry import Component
+from citry.ext.events import ViewEvents, actions, event, get_event_url
+```
+
+
+## Syntax mapping
+
+| Component.View | Citry |
+|---|---|
+| `class View: def post(...)` | First step: `class Events(ViewEvents): def post(...)` |
+| Several operations inside one `post()` | One named handler per operation |
+| `request.POST.get("name")` | A `data` parameter with a typed class |
+| `request.user` | `request.native.user`, or a value your `_context` method loads once per call |
+| `HttpResponse` with component HTML | Return the component |
+| `HttpResponseRedirect(url)` | Return `actions.Redirect(url)` |
+| `get_component_url(...)` | `self.events.url(name)` or `get_event_url(...)` |
+| Handwritten fetch or htmx swap | `@c-*` attribute plus `actions.Render(target=...)` |
+| Full-page reload after a change | Re-render one part of the page, or redirect |
+
+The sections below show the common rows in context.
+
+## Fix dynamic attributes
+
+When you copy a template over, check its attributes first. Citry treats an
+ordinary HTML attribute value as a literal string, so the Django spelling
+leaves the braces in the page:
+
+
+```citry-html
+<!-- Wrong in a Citry template: the href contains literal braces. -->
+<a href="{{ detail_url }}">Details</a>
+```
+
+
+Prefix the attribute with `c-`, and Citry evaluates its value as a Python
+expression:
+
+
+```citry-html
+<!-- Right: detail_url is evaluated during the component render. -->
+<a c-href="detail_url">Details</a>
+```
+
+
+The same applies to `action`, `src`, `class`, and any other attribute. Text
+between tags still uses `{{ expression }}`. See
+[Attributes](/v/0.6.0/syntax/attributes/#c-dynamic-attributes).
+
+## Port a verb method
+
+A typical `Component.View` form reads the host request and builds the HTTP
+response itself:
+
+
+```citry
+class ContactForm(Component):
+    class View:
+        def post(self, request):
+            name = request.POST.get("name", "stranger")
+            return ThankYouMessage.render_to_response(
+                kwargs={"name": name},
+            )
+```
+
+
+For the first step, make the nested class `class Events(ViewEvents)`.
+`ViewEvents` keeps the verb names: `post` still answers POST requests, at a
+URL that ends with the ID Citry gives the component class, so the form does
+not need to name a handler. The `data` parameter receives the form fields,
+checked against `ContactIn`:
+
+
+```citry
+class ThankYouMessage(Component):
+    citry = citry_app
+
+    class Kwargs:
+        name: str
+
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
+        return {"name": kwargs.name}
+
+    template = """
+      <p id="thank-you">
+        Thank you, {{ name }}!
+      </p>
+    """
+
+
+class ContactIn:
+    name: str = "stranger"
+
+
+class ContactForm(Component):
+    citry = citry_app
+
+    class Events(ViewEvents):
+        def post(self, data: ContactIn):
+            return ThankYouMessage(name=data.name)
+
+    def template_data(self, kwargs, slots) -> dict[str, Any]:
+        # The verb route ends at the component's class id.
+        class_id = type(self).class_id
+        submit_url = self.citry.build_url(f"ext/events/e/{class_id}")
+        return {"submit_url": submit_url}
+
+    template = """
+      <form method="post" c-action="submit_url">
+        <input name="name">
+        <button type="submit">Send</button>
+      </form>
+    """
+
+
+```
+
+
+Citry has no public builder for the verb URL, so `template_data()` builds it
+with `self.citry.build_url(...)`; see [Build the verb URL](#build-the-verb-url).
+The handler returns `ThankYouMessage`, and Citry sends its rendered HTML as
+the whole response to the form post.
+
+Only the URL carries over unchanged. Update each method body by hand:
+
+- Replace `request.POST` and `request.GET` parsing with a typed `data` class.
+  See [Handle and validate forms](/v/0.6.0/events/forms/).
+- For facts such as the current user or a header, add a `request`
+  parameter. It is Citry's request object, which looks the same under every
+  web framework, and `request.native` is the Django request itself. A
+  `_context` method on `class Events` can load shared values such as the
+  user once; see [Authorize every event](/v/0.6.0/security/#authorize-every-event).
+- Return a component, `actions.Render`, `actions.Redirect`, or a `dict`
+  instead of building a response. See [Event actions](/v/0.6.0/events/actions/).
+- Leave `state` out of verb methods. State is the set of values Citry keeps
+  for a component between calls. When a verb method declares it,
+  Citry raises `ValueError` when the class is defined. Values that must survive between calls belong in a
+  named handler, as described in [Event state](/v/0.6.0/events/state/).
+
+!!! warning "Add the CSRF token to every plain form"
+
+    The forms on this page leave out the CSRF token to stay short. Django's
+    CSRF middleware still applies to Citry's routes, so a real form needs
+    `{% csrf_token %}` or the equivalent `csrfmiddlewaretoken` field. See
+    [Protect against CSRF](/v/0.6.0/security/#protect-event-posts-from-csrf).
+
+## Name each operation
+
+Once the form works, rename its operation after what the user does. One
+`submit` handler can serve both the Citry browser code and a plain form post:
+
+
+```citry
+class NamedContactForm(Component):
+    citry = citry_app
+
+    class Events:
+        def submit(self, data: ContactIn):
+            message = ThankYouMessage(name=data.name)
+            return actions.Render(message, target="mark:result")
+
+    def template_data(self, kwargs, slots) -> dict[str, Any]:
+        return {"submit_url": self.events.url("submit")}
+
+    template = """
+      <form
+        method="post"
+        c-action="submit_url"
+        @c-submit.prevent="submit"
+      >
+        <input name="name">
+        <button type="submit">Send</button>
+      </form>
+      <c-mark name="result" />
+    """
+
+
+```
+
+
+`@c-submit.prevent="submit"` is an event binding: an `@c-<event>` attribute
+calls the handler when that browser event fires (see
+[Bind events in templates](/v/0.6.0/events/bindings/)). With JavaScript, the browser
+sends the form fields to `submit` without leaving the page. The handler
+returns `actions.Render` with `target="mark:result"`, which puts the thank-you
+message into the `<c-mark name="result">` region and leaves the rest of the
+form alone.
+
+Without JavaScript, the browser posts to `submit_url` instead, and Citry
+turns the same return value into an HTML response.
+
+`self.events.url("submit")` builds that URL while the component renders.
+Outside the component, use `get_event_url(NamedContactForm, "submit")`. Both
+accept `query=` and `fragment=`.
+
+## Split query branches
+
+A `get()` that branches on `?type=preview` or `?type=details` hides several
+operations behind one URL:
+
+
+```citry
+class FragmentLoader(Component):
+    class View:
+        def get(self, request):
+            kind = request.GET.get("type")
+            if kind == "preview":
+                return render_preview()
+            if kind == "details":
+                return render_details()
+            return render_page()
+```
+
+
+Declare one handler per operation instead. `@event(methods=("GET",))` lets a
+handler answer GET requests:
+
+
+```citry
+class LoadedFragment(Component):
+    citry = citry_app
+
+    class Kwargs:
+        kind: str
+
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
+        return {"kind": kwargs.kind}
+
+    template = """
+      <section class="loaded-fragment">
+        Loaded {{ kind }}
+      </section>
+    """
+
+
+class FragmentLoader(Component):
+    citry = citry_app
+
+    class Events:
+        @event(methods=("GET",))
+        def preview(self):
+            fragment = LoadedFragment(kind="preview")
+            return actions.Render(
+                fragment,
+                target="mark:fragment-target",
+            )
+
+        @event(methods=("GET",))
+        def details(self):
+            fragment = LoadedFragment(kind="details")
+            return actions.Render(
+                fragment,
+                target="mark:fragment-target",
+            )
+
+    template = """
+      <nav>
+        <button @c-click="preview">Preview</button>
+        <button @c-click="details">Details</button>
+      </nav>
+      <c-mark name="fragment-target" />
+    """
+
+
+```
+
+
+Each handler now has its own URL, allowed HTTP methods, input type, and entry
+in Citry's [OpenAPI export](/v/0.6.0/events/routes/#expose-a-read-only-get-endpoint).
+The component a handler returns brings its own JavaScript, CSS, and event
+bindings with it, so there is no htmx or fetch code to wire it up.
+
+## Plan for differences
+
+### Authorize every record
+
+As with a Django view, this stays your job. Citry does not turn an id in the request into a model instance, and it does
+not let form data choose which method runs. Each handler declares its name
+and input type. Load records from the validated ids inside the handler, and
+check the current user's permission there, every time. See
+[Authorize every event](/v/0.6.0/security/#authorize-every-event).
+
+### Retire ViewEvents later
+
+`ViewEvents` lets you port a component that has one method per HTTP verb
+without renaming anything. Add
+named handlers next to the verb methods as you go. When the last verb method
+is gone, change the base back to a plain `class Events`.
+
+### Build the verb URL
+
+The verb URL has no builder function, so the first example builds it with
+`self.citry.build_url(...)`. `self.events.url("post")` builds a different
+URL: the one for the handler named `post`.
+
+## Finish the port
+
+Before shipping a migrated component, check that:
+
+- each handler is named after one user action;
+- request fields arrive through a typed `data` class;
+- every record lookup checks the current user's permission;
+- plain forms that must work without JavaScript have `method="post"`, a
+  `c-action` URL, and a CSRF token;
+- each `actions.Render` targets the smallest part of the page that changes;
+  and
+- only named handlers use State, and it holds only what the next call needs.
+
+The [Events migration parity matrix](/v/0.6.0/guides/events-migration-parity/)
+compares the rest of Component.View's behavior with Citry. The
+[Server events](/v/0.6.0/events/) guides cover the full API.
