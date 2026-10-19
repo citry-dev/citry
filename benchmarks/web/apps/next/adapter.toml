@@ -1,0 +1,11 @@
+[app]
+name = "next"
+runtime = "node"
+node = ".toolchain/node-v22.22.0-darwin-arm64/bin/node"
+rendering = "hybrid"
+update_payload = "delta"
+timing_boundary = "first-chunk"
+launch = ["{node}", "server.mjs", "{port}"]
+health = "/health"
+build = [["{python}", "build.py"]]
+source_exclude = [".next", ".toolchain", "generated", "node_modules"]

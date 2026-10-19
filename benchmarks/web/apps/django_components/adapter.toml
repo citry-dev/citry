@@ -1,0 +1,4 @@
+[app]
+name = "django_components"
+launch = ["{python}", "-m", "uvicorn", "app:application", "--host", "127.0.0.1", "--port", "{port}"]
+health = "/health"

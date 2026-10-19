@@ -1,0 +1,56 @@
+<section id="outputs" data-tab-panel="outputs" x-show="activeTab === 'outputs'">
+<h2>Outputs</h2>
+{% for phase in phase_groups %}
+<section id="phase-{{ phase.id }}" data-phase-id="{{ phase.id }}" data-phase-expanded="true" x-data="{ open: true }">
+<button type="button" @click="open=!open">
+<h3 class="phase-title">{{ phase.title }}</h3>
+</button>
+<div x-show="open">
+{% for row in phase.outputs %}
+<article id="{{ row.element_id }}" data-row-id="{{ row.id }}" {% if row.source_id %}data-source-id="{{ row.source_id }}"{% endif %} data-selected="{% if row.selected %}true{% else %}false{% endif %}" data-output-expanded="true" x-data="{ open: true }">
+<header>
+<span class="row-title">{{ row.title }}</span>
+<span class="row-status">{{ row.status }}</span>
+<span data-output-badge="{{ row.status }}">{{ row.badge }}</span>
+</header>
+<form class="output-form" unicorn:submit.prevent="act('select', {{ row.id }})">
+<label>Description <textarea data-output-description>{{ row.description }}</textarea>
+</label>
+<label>
+<input type="checkbox" data-output-completed {% if row.completed %}checked{% endif %}> Completed</label>
+<button data-bench-action="{{ row.select_action }}">Select</button>
+</form>
+<button type="button" @click="open=!open">Output details</button>
+<div x-show="open">
+<section>
+<h4>Dependencies</h4>
+{% for dep in row.dependencies %}
+<article data-dependency-id="{{ dep.id }}" data-dependency-title="{{ dep.title }}" data-dependency-completed="{% if dep.completed %}true{% else %}false{% endif %}">
+<span class="dependency-title">{{ dep.title }}</span>
+</article>
+{% empty %}
+<p>No dependencies</p>
+{% endfor %}
+</section>
+<section>
+<h4>Attachments</h4>
+{% for attachment in row.attachments %}
+<article data-attachment-id="{{ attachment.id }}" data-attachment-name="{{ attachment.name }}">
+<a class="attachment-name" href="{{ attachment.url }}">{{ attachment.name }}</a>
+{% for tag in attachment.tags %}
+<span data-attachment-tag="{{ tag }}">{{ tag }}</span>
+{% endfor %}
+</article>
+{% empty %}
+<p>No attachments</p>
+{% endfor %}
+</section>
+</div>
+</article>
+{% empty %}
+<p>No outputs</p>
+{% endfor %}
+</div>
+</section>
+{% endfor %}
+</section>

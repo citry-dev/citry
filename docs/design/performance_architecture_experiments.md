@@ -166,7 +166,7 @@ requirements; model Events transport separately from Vue bindings/state.
 
 | Proposal | Status / evidence / next check |
 |---|---|
-| Component-scoped HTML/Vue boundaries | Correctness proof passed; synthetic browser prototype measured. `ProjectTabs` provides child state; class-local state may mean ~1,400 roots. See [`app.py`](../../benchmarks/web/apps/citry_vue/app.py#L94) and [`project_output.html`](../../benchmarks/web/apps/citry_vue/project_output.html#L17). |
+| Component-scoped HTML/Vue boundaries | Correctness proof passed; synthetic browser prototype measured. `ProjectTabs` provides child state; class-local state may mean ~1,400 roots. See [`app.py`](../../benchmarks/web/apps/citry/app.py#L94) and [`project_output.html`](../../benchmarks/web/apps/citry/project_output.html#L17). |
 | Teleport controls into HTML hosts | Synthetic variant measured. Real-Page trial not timed: the native and Python compiler allowlists reject `Teleport`, and the current exact-source SSR emitter writes literal tags rather than hydration source/target anchors. Supporting it needs a new authenticated compiler/producer contract; no performance verdict. See [feasibility source review](../../.benchmarks/research/vue-architecture-experiments/islands_teleport_next.md#teleport-feasibility-outcome). |
 | Static detail subtree in Vue | Synthetic `createStaticVNode` measured, inconclusive: at 1,400 rows both static and dynamic were 19.2 ms; static fixture HTML was 781,250 bytes. |
 | G1: direct escaped leaf HTML | Rejected and removed from the leaf producer/evaluator: the prototype was 10.9% slower at 140 and 23.8% slower at 1,400. |

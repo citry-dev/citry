@@ -61,7 +61,7 @@ DEFAULT_CORPUS = ROOT / ".vue-render-parity"
 # without browser tests (the selection CI's pytest job uses), then the
 # benchmark board app's server tests when this checkout has them. The board
 # configures Django for its whole process, so it runs on its own.
-BOARD_APP_TESTS = ROOT / "benchmarks/web/apps/citry_vue/test_app.py"
+BOARD_APP_TESTS = ROOT / "benchmarks/web/apps/citry/test_app.py"
 DEFAULT_RUNS = [
     ["-m", "not e2e", "-n", "4", "--dist", "loadfile"],
     *([[str(BOARD_APP_TESTS.relative_to(ROOT))]] if BOARD_APP_TESTS.is_file() else []),

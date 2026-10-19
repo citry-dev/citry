@@ -1,0 +1,20 @@
+{% for tab in note_tabs %}
+<section id="{{ tab.id }}" data-tab-panel="{{ tab.id }}" x-show="activeTab === '{{ tab.id }}'">
+<h2>{{ tab.title }}</h2>
+{% for note in tab.notes %}
+<article data-note-id="{{ note.id }}">
+<p class="note-text">{{ note.text }}</p>
+<details>
+<summary>Comments</summary>
+{% for comment in note.comments %}
+<article data-comment-id="{{ comment.id }}">
+<span class="comment-author">{{ comment.author }}</span>
+<p class="comment-text">{{ comment.text }}</p>
+</article>
+{% endfor %}
+</details>
+</article>
+{% endfor %}
+</section>
+{% endfor %}
+

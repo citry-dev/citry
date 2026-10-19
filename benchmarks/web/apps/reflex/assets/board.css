@@ -1,0 +1,11 @@
+body { font: 16px system-ui, sans-serif; margin: 2rem auto; max-width: 960px; color: #172033; }
+button, input { font: inherit; padding: .4rem .6rem; }
+button { cursor: pointer; }
+form { display: inline-flex; gap: .5rem; margin: .3rem 0; align-items: center; }
+.toolbar { display: flex; flex-wrap: wrap; gap: .8rem; }
+ul { list-style: none; padding: 0; }
+li { display: flex; align-items: center; gap: 1rem; padding: .3rem; border-bottom: 1px solid #ccd3de; }
+li[data-selected="true"] { background: #d9ebff; }
+.row-title { flex: 1; }
+#form-error { color: #a01919; }
+[x-cloak] { display: none !important; }
