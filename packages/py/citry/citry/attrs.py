@@ -359,8 +359,10 @@ def _underlying(value: Any) -> Any:
 
 # Splits a class string on runs of whitespace.
 _whitespace_re = re.compile(r"\s+")
-# Matches CSS comments `/* ... */`.
-_style_comment_re = re.compile(r"/\*.*?\*/", re.DOTALL)
+# Matches CSS comments `/* ... */`, and before them quoted strings and
+# backslash escapes, which Vue's `parseStringStyle` keeps whole so that
+# comment-like text inside them stays.
+_style_comment_re = re.compile(r"\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*'|\\.|/\*.*?\*/", re.DOTALL)
 # Splits CSS declarations on `;`, but not inside parentheses,
 # so `url(data:image/png;base64,...)` stays in one piece.
 _style_delimiter_re = re.compile(r";(?![^(]*\))", re.DOTALL)
@@ -513,7 +515,8 @@ def parse_string_style(css_text: str) -> dict[str, Any]:
     """
     Parse an inline CSS string into a property dict.
 
-    Strips ``/* ... */`` comments. Declarations split on ``;`` except inside
+    Strips ``/* ... */`` comments, except inside quoted strings or after a
+    backslash. Declarations split on ``;`` except inside
     parentheses, so ``url(data:image/png;base64,...)`` survives. A
     declaration without a ``:`` is dropped.
 
@@ -526,7 +529,7 @@ def parse_string_style(css_text: str) -> dict[str, Any]:
     # regex passes below get a real str; the slices they produce are then
     # plain str too.
     css_text = _underlying(css_text)
-    css_text = _style_comment_re.sub("", css_text)
+    css_text = _style_comment_re.sub(lambda match: "" if match.group().startswith("/*") else match.group(), css_text)
 
     res: dict[str, Any] = {}
     for declaration in _style_delimiter_re.split(css_text):

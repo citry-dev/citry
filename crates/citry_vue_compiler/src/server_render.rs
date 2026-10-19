@@ -1269,13 +1269,14 @@ fn strict_equal(left: &Val<'_>, right: &Val<'_>) -> Option<bool> {
 // ---------------------------------------------------------------------------
 
 /// Vue's `isSpecialBooleanAttr`: attributes Vue writes as `""` or removes.
-const SPECIAL_BOOLEAN_ATTRIBUTES: [&str; 7] = [
+const SPECIAL_BOOLEAN_ATTRIBUTES: [&str; 8] = [
     "itemscope",
     "allowfullscreen",
     "formnovalidate",
     "ismap",
     "nomodule",
     "novalidate",
+    "playsinline",
     "readonly",
 ];
 
@@ -1514,24 +1515,59 @@ fn style_entries<'a>(
     Ok(Some(output))
 }
 
+/// Remove `/* ... */` comments from a style string the way Vue's
+/// `styleCommentRE` does: quoted strings and backslash escapes are matched
+/// first and kept whole, so comment-like text inside them stays.
+fn strip_style_comments(text: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut index = 0;
+    while let Some(first) = text[index..].chars().next() {
+        let rest = &text[index..];
+        if rest.starts_with("/*") {
+            // An unclosed comment is not matched, so its text stays.
+            if let Some(end) = rest[2..].find("*/") {
+                index += 2 + end + 2;
+                continue;
+            }
+        } else if let Some(length) = kept_style_token_length(rest) {
+            output.push_str(&rest[..length]);
+            index += length;
+            continue;
+        }
+        output.push(first);
+        index += first.len_utf8();
+    }
+    output
+}
+
+/// The length of the quoted string or backslash escape at the start of
+/// `rest`, matching `"(?:[^"\\]|\\[^])*"`, the single-quote form, or `\\[^]`.
+fn kept_style_token_length(rest: &str) -> Option<usize> {
+    let mut chars = rest.char_indices();
+    let (_, first) = chars.next()?;
+    match first {
+        '\\' => chars.next().map(|(at, escaped)| at + escaped.len_utf8()),
+        '"' | '\'' => {
+            while let Some((at, ch)) = chars.next() {
+                if ch == first {
+                    return Some(at + 1);
+                }
+                // A trailing backslash leaves the string unclosed, so the
+                // whole alternative fails and the quote is plain text.
+                if ch == '\\' {
+                    chars.next()?;
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 /// Vue's `parseStringStyle`: split a style string into declarations,
 /// ignoring comments and semicolons inside parentheses.
 fn parse_string_style(text: &str) -> Vec<(Cow<'static, str>, Val<'static>)> {
-    // Comments are removed first, as `/\/\*[^]*?\*\//g` does.
-    let mut without_comments = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(start) = rest.find("/*") {
-        without_comments.push_str(&rest[..start]);
-        match rest[start + 2..].find("*/") {
-            Some(end) => rest = &rest[start + 2 + end + 2..],
-            None => {
-                // An unclosed comment is not matched, so it stays.
-                without_comments.push_str(&rest[start..]);
-                rest = "";
-            }
-        }
-    }
-    without_comments.push_str(rest);
+    let without_comments = strip_style_comments(text);
     let mut output: Vec<(Cow<'static, str>, Val<'static>)> = Vec::new();
     // `;(?![^(]*\))`: a semicolon splits unless a `)` follows before any `(`.
     let bytes = without_comments.as_bytes();
@@ -3618,8 +3654,8 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        HydrationRender, RenderRequest, ServerRenderProgram, Val, client_attribute, parser_moves,
-        read_program, render_for_hydration,
+        HydrationRender, RenderRequest, ServerRenderProgram, Val, client_attribute,
+        parse_string_style, parser_moves, read_program, render_for_hydration,
     };
     use crate::{CompileRequest, compile};
 
@@ -4050,6 +4086,16 @@ mod tests {
             client_attribute("form", "novalidate", &Val::Bool(false)),
             Ok(None)
         );
+        // `playsinline` is a special boolean attribute since Vue 3.5.44, so
+        // `false` removes it instead of writing the text "false".
+        assert_eq!(
+            client_attribute("video", "playsinline", &Val::Bool(true)),
+            Ok(Some(String::new()))
+        );
+        assert_eq!(
+            client_attribute("video", "playsinline", &Val::Bool(false)),
+            Ok(None)
+        );
         assert_eq!(
             client_attribute("input", "disabled", &text("false")),
             Ok(Some(String::new()))
@@ -4439,6 +4485,59 @@ mod tests {
             declines(&partial),
             [("browser-value", "class", Some("main"))]
         );
+    }
+
+    #[test]
+    fn string_styles_drop_comments_but_keep_quoted_and_escaped_text() {
+        // Each expected result is what `parseStringStyle` in `@vue/shared`
+        // 3.5.44 returns for the same text.
+        let cases: [(&str, &[(&str, &str)]); 10] = [
+            (
+                "color: red /* c */; margin: 0",
+                &[("color", "red"), ("margin", "0")],
+            ),
+            (
+                r#"content: "/* keep */"; color: red"#,
+                &[("content", r#""/* keep */""#), ("color", "red")],
+            ),
+            (
+                "background: url('a/*b*/c.png'); color: red",
+                &[("background", "url('a/*b*/c.png')"), ("color", "red")],
+            ),
+            (
+                r#"content: "\"/* x */"; color: blue"#,
+                &[("content", r#""\"/* x */""#), ("color", "blue")],
+            ),
+            (
+                r#"font-family: \/* odd */; color: red"#,
+                &[("font-family", r#"\/* odd */"#), ("color", "red")],
+            ),
+            (
+                r#"content: "unclosed /* gone */; color: red"#,
+                &[("content", r#""unclosed"#), ("color", "red")],
+            ),
+            ("a: 1 /* open", &[("a", "1 /* open")]),
+            (
+                r#"content: 'it\'s /* in */'; b: 2"#,
+                &[("content", r#"'it\'s /* in */'"#), ("b", "2")],
+            ),
+            (r#"x: "é/*ü*/"; y: 3"#, &[("x", r#""é/*ü*/""#), ("y", "3")]),
+            (r#"z: "trail\"#, &[("z", r#""trail\"#)]),
+        ];
+        for (text, expected) in cases {
+            let parsed: Vec<(String, String)> = parse_string_style(text)
+                .into_iter()
+                .map(|(key, value)| match value {
+                    Val::Str(value) => (key.into_owned(), value.into_owned()),
+                    _ => panic!("{text}: a string style holds only strings"),
+                })
+                .collect();
+            let expected: Vec<(String, String)> = expected
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect();
+            assert_eq!(parsed, expected, "{text}");
+        }
     }
 
     #[test]

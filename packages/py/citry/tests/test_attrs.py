@@ -326,6 +326,23 @@ class TestParseStringStyle:
             "background-color": "blue",
         }
 
+    @pytest.mark.parametrize(
+        ("css_text", "expected"),
+        [
+            # Each expected result is what `parseStringStyle` in Vue 3.5.44's
+            # `@vue/shared` returns for the same text.
+            ('content: "/* keep */"; color: red', {"content": '"/* keep */"', "color": "red"}),
+            ("background: url('a/*b*/c.png'); color: red", {"background": "url('a/*b*/c.png')", "color": "red"}),
+            ("content: 'it\\'s /* in */'; b: 2", {"content": "'it\\'s /* in */'", "b": "2"}),
+            ("font-family: \\/* odd */; color: red", {"font-family": "\\/* odd */", "color": "red"}),
+            # An unclosed quote does not protect what follows it.
+            ('content: "unclosed /* gone */; color: red', {"content": '"unclosed', "color": "red"}),
+            ("a: 1 /* open", {"a": "1 /* open"}),
+        ],
+    )
+    def test_comment_like_text_in_quotes_and_escapes_is_kept(self, css_text, expected):
+        assert parse_string_style(css_text) == expected
+
     def test_with_whitespace(self):
         assert parse_string_style("  color: red;  background-color: blue;  ") == {
             "color": "red",

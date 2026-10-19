@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { VUE_VERSION } from "./build-support.mjs";
 
 const require = createRequire(import.meta.url);
 const packages = {
@@ -16,7 +17,8 @@ const packages = {
   "@babel/parser": ["typings/babel-parser.d.ts"],
   csstype: ["index.d.ts"],
 };
-const expectedVueVersion = "3.5.42";
+// The runtime bundle and these declarations must come from the same Vue.
+const expectedVueVersion = VUE_VERSION;
 const outputRoot = resolve(import.meta.dirname, "../../py/citry_lsp/citry_lsp/types/node_modules");
 const checking = process.argv.includes("--check");
 

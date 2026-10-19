@@ -15,7 +15,7 @@ the results:
 2. This script reads each page's render functions into Rust programs and
    runs them with `citry_core._rust.vue._render_for_hydration`, the call the
    server makes, with the page-size threshold at 0.
-3. `render.mjs` renders the same page with Vue 3.5.42's `renderToString`
+3. `render.mjs` renders the same page with the pinned Vue's `renderToString`
    from the client package's `node_modules`, running each definition's
    browser JavaScript.
 4. The two HTML strings are compared token by token (see `compare`).

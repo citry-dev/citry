@@ -72,7 +72,7 @@ const vnodeProps = (props) => {
   return prepared;
 };
 
-// The keys `hydrateElement` in runtime-core 3.5.42 patches on an element
+// The keys `hydrateElement` in the pinned runtime-core patches on an element
 // instead of trusting the server's attributes: listeners (never written by
 // the server renderer), `value`-like keys on input and option, `.prop`
 // keys, every key of a custom element, and the keys listed as dynamic.

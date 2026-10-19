@@ -135,7 +135,7 @@ the browser needs one, return it from `js_data()` too.
 
 ## Which Vue version
 
-Citry ships Vue 3.5.42. Each Citry release bundles one fixed Vue version,
+Citry ships Vue 3.5.44. Each Citry release bundles one fixed Vue version,
 and you cannot swap in another. To check the version a page runs, enter
 `Citry.vue.version` in the browser console.
 
