@@ -23,7 +23,7 @@ from pygls.client import JsonRPCClient
 from citry._source_lines import line_break_count, source_lines
 from citry_lsp.uri import canonical_document_uri, file_uri_path
 
-TY_VERSION = "0.0.78"
+TY_VERSION = "0.0.89"
 _REQUEST_TIMEOUT_SECONDS = 5.0
 # VS Code gives the language server 1.5s to stop before terminating it. Keep
 # the complete graceful -> client stop -> terminate -> kill escalation below
