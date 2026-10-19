@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-19
 
 - The extension now works with citry-lsp 0.2.x, the language server for
   Citry 0.6.0 projects, as well as citry-lsp 0.1.x for Citry 0.5.x

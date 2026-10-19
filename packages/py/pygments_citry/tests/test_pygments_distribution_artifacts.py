@@ -23,11 +23,13 @@ from scripts.verify_pygments_citry_distribution import (  # noqa: E402
     verify_wheel,
 )
 
+RELEASE_VERSION = distribution_verifier.package_version()
+
 
 def _write_wheel(path: Path, *, extra: str | None = None) -> None:
-    dist_info = "pygments_citry-0.2.0.dist-info"
+    dist_info = f"pygments_citry-{RELEASE_VERSION}.dist-info"
     metadata = (
-        "Metadata-Version: 2.4\nName: pygments-citry\nVersion: 0.2.0\nRequires-Python: <4.0,>=3.10\n"
+        f"Metadata-Version: 2.4\nName: pygments-citry\nVersion: {RELEASE_VERSION}\nRequires-Python: <4.0,>=3.10\n"
         + "".join(
             f"Requires-Dist: {requirement}\n" for requirement in sorted(distribution_verifier.EXPECTED_REQUIRES_DIST)
         )
@@ -62,9 +64,9 @@ def _write_wheel(path: Path, *, extra: str | None = None) -> None:
 
 
 def test_release_inventory_is_one_universal_wheel_and_one_sdist() -> None:
-    assert expected_release_filenames("0.2.0") == {
-        "pygments_citry-0.2.0-py3-none-any.whl",
-        "pygments_citry-0.2.0.tar.gz",
+    assert expected_release_filenames(RELEASE_VERSION) == {
+        f"pygments_citry-{RELEASE_VERSION}-py3-none-any.whl",
+        f"pygments_citry-{RELEASE_VERSION}.tar.gz",
     }
 
 
@@ -73,7 +75,7 @@ def test_sdist_rebuild_resolves_input_before_switching_workdir(
     tmp_path: Path,
 ) -> None:
     checkout = tmp_path / "checkout"
-    sdist = checkout / "dist" / "pygments_citry-0.2.0.tar.gz"
+    sdist = checkout / "dist" / f"pygments_citry-{RELEASE_VERSION}.tar.gz"
     sdist.parent.mkdir(parents=True)
     sdist.write_bytes(b"sdist")
     outside = tmp_path / "outside"
@@ -103,22 +105,22 @@ def test_wheel_verifier_rejects_payload_outside_the_closed_package(
         "source_inventory",
         lambda: {"__init__.py": distribution_verifier.sha256_bytes(b"value = 1\n")},
     )
-    valid = tmp_path / "pygments_citry-0.2.0-py3-none-any.whl"
+    valid = tmp_path / f"pygments_citry-{RELEASE_VERSION}-py3-none-any.whl"
     _write_wheel(valid)
-    assert verify_wheel(valid, version="0.2.0")["name"] == valid.name
+    assert verify_wheel(valid, version=RELEASE_VERSION)["name"] == valid.name
 
     invalid = tmp_path / "invalid" / valid.name
     invalid.parent.mkdir()
     _write_wheel(invalid, extra="installer_hook.py")
     with pytest.raises(DistributionVerificationError, match=r"unexpected=.*installer_hook\.py"):
-        verify_wheel(invalid, version="0.2.0")
+        verify_wheel(invalid, version=RELEASE_VERSION)
 
 
 def test_staged_bundle_requires_the_recorded_bytes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    wheel = bundle / "pygments_citry-0.2.0-py3-none-any.whl"
-    sdist = bundle / "pygments_citry-0.2.0.tar.gz"
+    wheel = bundle / f"pygments_citry-{RELEASE_VERSION}-py3-none-any.whl"
+    sdist = bundle / f"pygments_citry-{RELEASE_VERSION}.tar.gz"
     wheel.write_bytes(b"wheel")
     sdist.write_bytes(b"sdist")
     report = distribution_verifier._release_report(wheel, sdist)
@@ -140,7 +142,7 @@ def test_promotion_checks_github_digest_before_safe_extraction(
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.writestr("release-inventory.json", "{}\n")
     digest = f"sha256:{hashlib.sha256(archive.read_bytes()).hexdigest()}"
-    expected = {"version": "0.2.0", "artifacts": []}
+    expected = {"version": RELEASE_VERSION, "artifacts": []}
     monkeypatch.setattr(distribution_verifier, "verify_staged_bundle", lambda _directory: expected)
 
     assert (
