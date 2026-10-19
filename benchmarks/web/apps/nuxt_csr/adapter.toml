@@ -1,0 +1,9 @@
+[app]
+name = "nuxt_csr"
+runtime = "node"
+node = ".toolchain/node-v22.22.0-darwin-arm64/bin/node"
+rendering = "browser"
+launch = ["{node}", "server.mjs", "{port}"]
+health = "/health"
+build = [["{python}", "build.py"]]
+source_exclude = [".nuxt", ".output", ".toolchain", "generated", "node_modules"]

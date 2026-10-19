@@ -1,0 +1,13 @@
+{
+  "name": "nuxt-project-board-benchmark",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "test": "node --test server/utils/benchmark-timing.test.mjs"
+  },
+  "dependencies": {
+    "nuxt": "4.5.2",
+    "vue": "3.5.42"
+  }
+}

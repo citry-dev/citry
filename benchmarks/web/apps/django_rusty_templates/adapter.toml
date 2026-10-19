@@ -1,0 +1,5 @@
+[app]
+name = "django_rusty_templates"
+launch = ["{python}", "-m", "uvicorn", "app:application", "--host", "127.0.0.1", "--port", "{port}"]
+health = "/health"
+allow_dependency_build = true

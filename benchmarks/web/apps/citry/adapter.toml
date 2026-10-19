@@ -1,0 +1,7 @@
+[app]
+name = "citry"
+rendering = "hybrid"
+update_payload = "json"
+launch = ["{python}", "-m", "uvicorn", "app:application", "--host", "127.0.0.1", "--port", "{port}"]
+health = "/health"
+local_wheels = ["citry", "citry-core"]

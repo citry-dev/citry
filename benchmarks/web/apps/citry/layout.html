@@ -1,0 +1,13 @@
+<c-RenderContextProvider c-context="context">
+<div>
+<nav id="project-navbar" aria-label="Project navigation">Project workspace</nav>
+<aside id="project-sidebar">
+<c-slot name="sidebar" />
+</aside>
+<main>
+<c-slot name="header" />
+<c-slot name="content" />
+</main>
+</div>
+</c-RenderContextProvider>
+
