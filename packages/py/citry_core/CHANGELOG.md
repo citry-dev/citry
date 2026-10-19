@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased
+## v1.8.0
 
 ### Removed
 

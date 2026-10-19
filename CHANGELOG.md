@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased
+## v0.6.0
 
 Citry 0.6.0 replaces Alpine with Vue. Most Python components, templates,
 `c-*` attributes, slots, and Events handlers keep working, but browser code
