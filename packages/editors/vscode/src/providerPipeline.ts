@@ -61,6 +61,95 @@ export function linearlyMappedProjectionPosition(
 	return textPositionAt(source, virtualOffset);
 }
 
+export interface ProtocolRange {
+	start: ProtocolPosition;
+	end: ProtocolPosition;
+}
+
+/**
+ * One piece of a projection whose virtual text differs from the authored text.
+ *
+ * A projection is the virtual document the language server builds from one
+ * embedded region so the editor's own language provider can answer for it.
+ *
+ * The language server removes a Python literal's indentation and decodes its
+ * escapes before handing component JavaScript to the editor's JavaScript
+ * provider, so one constant offset cannot map a result back. Each segment is
+ * either a run of unchanged characters on one line (same width on both sides)
+ * or one changed piece (a line break with the indentation it dropped, or one
+ * escape) that only maps at its two ends.
+ */
+export interface ProjectionSegment {
+	sourceRange: ProtocolRange;
+	virtualRange: ProtocolRange;
+}
+
+const comparePositions = (left: ProtocolPosition, right: ProtocolPosition): number =>
+	left.line - right.line || left.character - right.character;
+
+const isLinearSegment = (segment: ProjectionSegment): boolean =>
+	segment.sourceRange.start.line === segment.sourceRange.end.line &&
+	segment.virtualRange.start.line === segment.virtualRange.end.line &&
+	segment.sourceRange.end.character - segment.sourceRange.start.character ===
+		segment.virtualRange.end.character - segment.virtualRange.start.character;
+
+/**
+ * Map one position across a segmented projection.
+ *
+ * `edge` settles a position shared by two segments. A range start takes the
+ * segment that begins there, so a result at the start of a dedented virtual
+ * line lands after the authored indentation; a range end takes the segment
+ * that ends there. A position inside a changed piece has no authored
+ * equivalent and maps to undefined.
+ */
+export function mapSegmentedPosition(
+	position: ProtocolPosition,
+	segments: readonly ProjectionSegment[],
+	from: "sourceRange" | "virtualRange",
+	edge: "start" | "end",
+): ProtocolPosition | undefined {
+	const to = from === "virtualRange" ? "sourceRange" : "virtualRange";
+	const containing = segments.filter(
+		(segment) =>
+			comparePositions(segment[from].start, position) <= 0 && comparePositions(position, segment[from].end) <= 0,
+	);
+	const preferred =
+		containing.find((segment) => comparePositions(segment[from][edge], position) === 0) ?? containing[0];
+	if (preferred === undefined) {
+		return undefined;
+	}
+	if (isLinearSegment(preferred)) {
+		return {
+			line: preferred[to].start.line,
+			character: preferred[to].start.character + position.character - preferred[from].start.character,
+		};
+	}
+	if (comparePositions(position, preferred[from].start) === 0) {
+		return { ...preferred[to].start };
+	}
+	if (comparePositions(position, preferred[from].end) === 0) {
+		return { ...preferred[to].end };
+	}
+	return undefined;
+}
+
+/** Map a provider result range back to authored source through segments. */
+export function mapSegmentedRange(
+	range: ProtocolRange,
+	segments: readonly ProjectionSegment[],
+): ProtocolRange | undefined {
+	const start = mapSegmentedPosition(range.start, segments, "virtualRange", "start");
+	// An empty range is one cursor, so both ends share the start mapping.
+	const end =
+		comparePositions(range.start, range.end) === 0
+			? start
+			: mapSegmentedPosition(range.end, segments, "virtualRange", "end");
+	if (start === undefined || end === undefined || comparePositions(start, end) > 0) {
+		return undefined;
+	}
+	return { start, end };
+}
+
 function textOffsetAt(source: string, position: ProtocolPosition): number {
 	let line = 0;
 	let offset = 0;

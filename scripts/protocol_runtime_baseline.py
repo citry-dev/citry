@@ -29,21 +29,15 @@ SCOPE = (
     "package.json",
     "packages/js/citry-client",
     "packages/protocol",
-    "packages/py/citry/citry/ext/dependencies/client/citry.js",
     "packages/py/citry/citry/ext/events",
-    "packages/py/citry/citry/ownership_manifest.py",
     "packages/py/citry/citry",
     "packages/py/citry/LICENSE",
     "packages/py/citry/pyproject.toml",
-    "packages/py/citry/tests/e2e/test_client_graph_corpus_e2e.py",
     "packages/py/citry/tests/e2e/test_events_applier_e2e.py",
     "packages/py/citry/tests/e2e/test_events_transport_e2e.py",
-    "packages/py/citry/tests/test_client_graph_conformance.py",
-    "packages/py/citry/tests/test_client_graph_protocol_package.py",
     "packages/py/citry/tests/test_distribution_artifacts.py",
     "packages/py/citry/tests/test_events_conformance.py",
     "packages/py/citry/tests/test_events_protocol_package.py",
-    "packages/py/citry/tests/test_ownership_manifest.py",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
     "scripts/check.py",
@@ -51,16 +45,12 @@ SCOPE = (
     "scripts/verify_citry_distribution.py",
 )
 SCHEMAS = (
-    "packages/protocol/client_graph/v1/manifest.schema.json",
     "packages/protocol/events/v1/call.schema.json",
     "packages/protocol/events/v1/descriptor.schema.json",
     "packages/protocol/events/v1/manifest.schema.json",
     "packages/protocol/events/v1/result.schema.json",
 )
-BUNDLES = (
-    "packages/py/citry/citry/ext/dependencies/client/citry.js",
-    "packages/py/citry/citry/ext/events/client/citry-events.js",
-)
+BUNDLES = ("packages/py/citry/citry/_vue/runtime.js",)
 
 
 def _run(*args: str, check: bool = True) -> bytes:
@@ -235,7 +225,6 @@ def main() -> int:
             for path in SCHEMAS
         },
         "testTrees": {
-            "clientGraph": _tree_digest("packages/protocol/client_graph/v1/tests"),
             "events": _tree_digest("packages/protocol/events/v1/tests"),
         },
         "bundles": {

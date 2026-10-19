@@ -11,7 +11,7 @@ inputs:
     column_widths: [fit, 12rem, 8rem, auto]
     entries:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets native identity and title/description/activator relationships.}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets server-visible initial state; valid client `open` controls later state.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible open state. A server re-render that changes it opens or closes the drawer. A re-render that leaves it unchanged keeps the current state. A valid client `open` input controls later state.}
       - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Shows the built-in close Button and permits passive dismissal.}
       - {id: close-on-escape, name: close_on_escape, type: bool, default: {kind: literal, value: true}, effect: Permits Escape/platform cancel when dismissible.}
       - {id: close-on-outside, name: close_on_outside, type: bool, default: {kind: literal, value: true}, effect: Permits a press beginning and ending on the backdrop when dismissible.}

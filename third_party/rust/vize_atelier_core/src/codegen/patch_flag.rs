@@ -266,13 +266,13 @@ fn calculate_element_patch_info_inner(
                                     let n = m.content;
                                     n == "capture" || n == "once" || n == "passive"
                                 });
-                                // Check for key modifiers (will use withKeys)
-                                let has_key_modifier = dir.modifiers.iter().any(|m| {
-                                    let n = m.content;
-                                    matches!(n, "enter" | "tab" | "delete" | "esc" | "space" | "up" | "down")
-                                        || n.chars().all(|c| c.is_ascii_digit()) // numeric keycodes
-                                        || !matches!(n, "capture" | "once" | "passive" | "stop" | "prevent" | "self" | "ctrl" | "shift" | "alt" | "meta" | "left" | "middle" | "right" | "exact")
-                                });
+                                // Citry: Vue drops key modifiers on a click, so only
+                                // `.native` is checked here. Vue keeps the click fast
+                                // path for `.native` too; this copy sets
+                                // NEED_HYDRATION to match `vize_s1_to_s2`, and Citry's
+                                // parser rejects `@click.native` before it gets here.
+                                let has_native_modifier =
+                                    dir.modifiers.iter().any(|m| m.content == "native");
 
                                 // Events that don't need NEED_HYDRATION:
                                 // - Basic click/dblclick without special modifiers
@@ -284,7 +284,7 @@ fn calculate_element_patch_info_inner(
                                 // (not dblclick or other mouse events).
                                 let is_simple_click = actual_event == "click"
                                     && !has_option_modifier
-                                    && !has_key_modifier
+                                    && !has_native_modifier
                                     && !has_right_modifier
                                     && !has_middle_modifier;
                                 let is_component_event = el.tag_type == ElementType::Component;

@@ -31,23 +31,33 @@
 				{
 					"begin": "\\G",
 					"end": ">",
-					"endCaptures": { "0": { "name": "punctuation.definition.tag.end.citry" } },
+					"endCaptures": {
+						"0": { "name": "punctuation.definition.tag.end.citry" }
+					},
 					"patterns": [{ "include": "#common-tag-content" }]
 				}
 			]
 		},
 		"template-comment": {
 			"begin": "\\{#",
-			"beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.citry" } },
+			"beginCaptures": {
+				"0": { "name": "punctuation.definition.comment.begin.citry" }
+			},
 			"end": "#\\}",
-			"endCaptures": { "0": { "name": "punctuation.definition.comment.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.comment.end.citry" }
+			},
 			"name": "comment.block.citry"
 		},
 		"interpolation": {
 			"begin": "\\{\\{",
-			"beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.citry" } },
+			"beginCaptures": {
+				"0": { "name": "punctuation.section.embedded.begin.citry" }
+			},
 			"end": "\\}\\}",
-			"endCaptures": { "0": { "name": "punctuation.section.embedded.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.section.embedded.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.python.citry",
 			"name": "meta.interpolation.citry",
 			"patterns": [
@@ -59,9 +69,13 @@
 		},
 		"python-curly": {
 			"begin": "\\{",
-			"beginCaptures": { "0": { "name": "punctuation.section.braces.begin.python" } },
+			"beginCaptures": {
+				"0": { "name": "punctuation.section.braces.begin.python" }
+			},
 			"end": "\\}",
-			"endCaptures": { "0": { "name": "punctuation.section.braces.end.python" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.section.braces.end.python" }
+			},
 			"patterns": [
 				{ "include": "#python-comment-before-interpolation-end" },
 				{ "include": "#python-curly" },
@@ -74,9 +88,7 @@
 				{
 					"captures": {
 						"1": { "name": "punctuation.separator.period.python" },
-						"3": {
-							"name": "entity.name.function.member.python entity.name.function.python"
-						}
+						"3": { "name": "entity.name.function.member.python entity.name.function.python" }
 					},
 					"match": "(\\.)(\\s*)((?!(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\\b)[A-Za-z_]\\w*)(?=\\s*\\()",
 					"name": "meta.function-call.member.python"
@@ -97,7 +109,9 @@
 				"3": { "name": "entity.name.tag.citry" }
 			},
 			"end": "(/?>)",
-			"endCaptures": { "1": { "name": "punctuation.definition.tag.end.citry" } },
+			"endCaptures": {
+				"1": { "name": "punctuation.definition.tag.end.citry" }
+			},
 			"name": "meta.tag.condition.citry",
 			"patterns": [{ "include": "#condition-attribute" }, { "include": "#common-tag-content" }]
 		},
@@ -108,7 +122,9 @@
 				"3": { "name": "entity.name.tag.citry" }
 			},
 			"end": "(/?>)",
-			"endCaptures": { "1": { "name": "punctuation.definition.tag.end.citry" } },
+			"endCaptures": {
+				"1": { "name": "punctuation.definition.tag.end.citry" }
+			},
 			"name": "meta.tag.for.citry",
 			"patterns": [{ "include": "#each-attribute" }, { "include": "#common-tag-content" }]
 		},
@@ -119,7 +135,9 @@
 				"3": { "name": "entity.name.tag.citry" }
 			},
 			"end": "(/?>)",
-			"endCaptures": { "1": { "name": "punctuation.definition.tag.end.citry" } },
+			"endCaptures": {
+				"1": { "name": "punctuation.definition.tag.end.citry" }
+			},
 			"name": "meta.tag.component.citry",
 			"patterns": [{ "include": "#common-tag-content" }]
 		},
@@ -138,7 +156,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "\"",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.python.citry",
 			"patterns": [
 				{ "include": "#python-comment-before-double-quote" },
@@ -154,7 +174,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "'",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.python.citry",
 			"patterns": [
 				{ "include": "#python-comment-before-single-quote" },
@@ -184,7 +206,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "\"",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.python.citry",
 			"patterns": [
 				{ "include": "#python-comment-before-double-quote" },
@@ -200,7 +224,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "'",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.python.citry",
 			"patterns": [
 				{ "include": "#python-comment-before-single-quote" },
@@ -242,7 +268,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "\"",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.citry-html.citry",
 			"patterns": [{ "include": "text.html.citry" }]
 		},
@@ -254,7 +282,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "'",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.citry-html.citry",
 			"patterns": [{ "include": "text.html.citry" }]
 		},
@@ -266,14 +296,16 @@
 			]
 		},
 		"python-attribute-double": {
-			"begin": "((?:c-[^\\s=/>]+|#c-key))(\\s*)(=)(\\s*)(\")",
+			"begin": "((?:c-(?!\\$c-props(?:[\\s=/>]|$))[^\\s=/>]+|#c-key))(\\s*)(=)(\\s*)(\")",
 			"beginCaptures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "\"",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.python.citry",
 			"patterns": [
 				{ "include": "#python-comment-before-double-quote" },
@@ -282,14 +314,16 @@
 			]
 		},
 		"python-attribute-single": {
-			"begin": "((?:c-[^\\s=/>]+|#c-key))(\\s*)(=)(\\s*)(')",
+			"begin": "((?:c-(?!\\$c-props(?:[\\s=/>]|$))[^\\s=/>]+|#c-key))(\\s*)(=)(\\s*)(')",
 			"beginCaptures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "'",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.python.citry",
 			"patterns": [
 				{ "include": "#python-comment-before-single-quote" },
@@ -306,7 +340,7 @@
 					"patterns": [{ "include": "#python-callable" }, { "include": "source.python" }]
 				}
 			},
-			"match": "((?:c-[^\\s=/>]+|#c-key))(\\s*)(=)(\\s*)([^\\s>]+)"
+			"match": "((?:c-(?!\\$c-props(?:[\\s=/>]|$))[^\\s=/>]+|#c-key))(\\s*)(=)(\\s*)([^\\s>]+)"
 		},
 		"event-attribute": {
 			"patterns": [
@@ -323,7 +357,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "\"",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"name": "meta.attribute.event.citry",
 			"patterns": [{ "include": "#handler-call" }]
 		},
@@ -335,7 +371,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "'",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"name": "meta.attribute.event.citry",
 			"patterns": [{ "include": "#handler-call" }]
 		},
@@ -350,14 +388,20 @@
 		"handler-call": {
 			"patterns": [
 				{
-					"captures": { "2": { "name": "entity.name.function.handler.citry" } },
+					"captures": {
+						"2": { "name": "entity.name.function.handler.citry" }
+					},
 					"match": "(\\G\\s*)([A-Za-z_][\\w.]*)"
 				},
 				{
 					"begin": "\\(",
-					"beginCaptures": { "0": { "name": "punctuation.section.arguments.begin.citry" } },
+					"beginCaptures": {
+						"0": { "name": "punctuation.section.arguments.begin.citry" }
+					},
 					"end": "\\)",
-					"endCaptures": { "0": { "name": "punctuation.section.arguments.end.citry" } },
+					"endCaptures": {
+						"0": { "name": "punctuation.section.arguments.end.citry" }
+					},
 					"contentName": "meta.embedded.inline.javascript.citry",
 					"patterns": [{ "include": "#javascript-parentheses" }, { "include": "source.js" }]
 				}
@@ -365,9 +409,13 @@
 		},
 		"javascript-parentheses": {
 			"begin": "\\(",
-			"beginCaptures": { "0": { "name": "punctuation.section.group.begin.js" } },
+			"beginCaptures": {
+				"0": { "name": "punctuation.section.group.begin.js" }
+			},
 			"end": "\\)",
-			"endCaptures": { "0": { "name": "punctuation.section.group.end.js" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.section.group.end.js" }
+			},
 			"patterns": [{ "include": "#javascript-parentheses" }, { "include": "source.js" }]
 		},
 		"state-handler-attribute": {
@@ -385,7 +433,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "\"",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "entity.name.function.handler.citry",
 			"name": "meta.attribute.state-handler.citry"
 		},
@@ -397,7 +447,9 @@
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "'",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "entity.name.function.handler.citry",
 			"name": "meta.attribute.state-handler.citry"
 		},
@@ -417,26 +469,30 @@
 			]
 		},
 		"javascript-attribute-double": {
-			"begin": "((?:\\$c-props|\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)(\")",
+			"begin": "((?:\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|#(?!c-)[^\\s=/>]+|v-[^\\s=/>]+))(\\s*)(=)(\\s*)(\")",
 			"beginCaptures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "\"",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.javascript.citry",
 			"patterns": [{ "include": "#javascript-comment-before-double-quote" }, { "include": "source.js" }]
 		},
 		"javascript-attribute-single": {
-			"begin": "((?:\\$c-props|\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)(')",
+			"begin": "((?:\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|#(?!c-)[^\\s=/>]+|v-[^\\s=/>]+))(\\s*)(=)(\\s*)(')",
 			"beginCaptures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
 				"5": { "name": "punctuation.definition.string.begin.citry" }
 			},
 			"end": "'",
-			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+			"endCaptures": {
+				"0": { "name": "punctuation.definition.string.end.citry" }
+			},
 			"contentName": "meta.embedded.inline.javascript.citry",
 			"patterns": [{ "include": "#javascript-comment-before-single-quote" }, { "include": "source.js" }]
 		},
@@ -446,7 +502,7 @@
 				"3": { "name": "punctuation.separator.key-value.citry" },
 				"5": { "name": "meta.embedded.inline.javascript.citry" }
 			},
-			"match": "((?:\\$c-props|\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)([^\\s>]+)"
+			"match": "((?:\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|#(?!c-)[^\\s=/>]+|v-[^\\s=/>]+))(\\s*)(=)(\\s*)([^\\s>]+)"
 		},
 		"python-comment-before-interpolation-end": {
 			"begin": "#",
@@ -458,11 +514,7 @@
 			"end": "(?=\")|$",
 			"name": "comment.line.number-sign.python"
 		},
-		"python-comment-before-single-quote": {
-			"begin": "#",
-			"end": "(?=')|$",
-			"name": "comment.line.number-sign.python"
-		},
+		"python-comment-before-single-quote": { "begin": "#", "end": "(?=')|$", "name": "comment.line.number-sign.python" },
 		"javascript-comment-before-double-quote": {
 			"begin": "//",
 			"end": "(?=\")|$",
@@ -483,7 +535,9 @@
 						"5": { "name": "punctuation.definition.string.begin.citry" }
 					},
 					"end": "\"",
-					"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+					"endCaptures": {
+						"0": { "name": "punctuation.definition.string.end.citry" }
+					},
 					"contentName": "string.quoted.double.citry"
 				},
 				{
@@ -494,7 +548,9 @@
 						"5": { "name": "punctuation.definition.string.begin.citry" }
 					},
 					"end": "'",
-					"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
+					"endCaptures": {
+						"0": { "name": "punctuation.definition.string.end.citry" }
+					},
 					"contentName": "string.quoted.single.citry"
 				},
 				{

@@ -38,7 +38,9 @@ class TestFlaskMount:
 
         status, body = _wsgi_get(host.wsgi_app, "/citry/citry.js")
         assert status == "200 OK"
-        assert b"client-side dependency manager" in body
+        from citry.ext.dependencies.emission import _runtime_js
+
+        assert body.decode("utf-8") == _runtime_js()
 
     def test_other_paths_still_reach_the_host(self):
         from citry.contrib.flask import mount
@@ -49,6 +51,42 @@ class TestFlaskMount:
         assert _wsgi_get(host.wsgi_app, "/somewhere")[1] == b"host:/somewhere"
         # A prefix-lookalike path is not citry's.
         assert _wsgi_get(host.wsgi_app, "/citryx")[1] == b"host:/citryx"
+
+    def test_trailing_slash_prefix_serves_the_same_paths(self):
+        from citry.contrib.flask import mount
+
+        c = Citry()
+        host = _FakeWsgiHost()
+        mount(host, c, prefix="/citry/")
+        assert c.mounted_prefix == "/citry"
+        status, body = _wsgi_get(host.wsgi_app, "/citry/citry.js")
+        assert status == "200 OK"
+        assert not body.startswith(b"host:")
+        assert _wsgi_get(host.wsgi_app, "/somewhere")[1] == b"host:/somewhere"
+
+    def test_invalid_prefix_leaves_the_app_unchanged(self):
+        from citry.contrib.flask import mount
+
+        c = Citry()
+        host = _FakeWsgiHost()
+        original = host.wsgi_app
+        with pytest.raises(ValueError, match="must start with '/'"):
+            mount(host, c, prefix="citry")
+        # Nothing was half-mounted: the host keeps its own entry point.
+        assert host.wsgi_app is original
+        assert c.mounted_prefix is None
+
+    def test_root_prefix_is_rejected_and_leaves_the_app_unchanged(self):
+        # A root mount would take every request away from the Flask app.
+        from citry.contrib.flask import mount
+
+        c = Citry()
+        host = _FakeWsgiHost()
+        original = host.wsgi_app
+        with pytest.raises(ValueError, match="needs a prefix below the root"):
+            mount(host, c, prefix="/")
+        assert host.wsgi_app is original
+        assert c.mounted_prefix is None
 
 
 class TestDjangoAdapter:

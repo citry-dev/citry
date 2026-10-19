@@ -211,7 +211,7 @@ def _element_of(tag_name: str, attrs: list[tuple[str, str | None]]) -> _Element:
             static_type = value
         elif name in ("c-type", ":type", "c-bind"):
             # Defer a Python-resolved c-type/spread to the final-attrs hook and
-            # an Alpine bind to the live browser classifier. A literal binding
+            # a Vue :type bind to the live browser classifier. A literal binding
             # is already compiled by then, so both later phases explicitly
             # decode and revalidate its internal spec.
             dynamic = True

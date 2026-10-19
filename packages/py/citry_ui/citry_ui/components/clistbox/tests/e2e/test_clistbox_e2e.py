@@ -121,8 +121,9 @@ def _load(page: Any) -> list[str]:
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.set_content(_page(), wait_until="load")
-    page.wait_for_selector(".brand-listbox[data-citry-listbox-initialized]")
-    page.wait_for_selector(".multiple-listbox[data-citry-listbox-initialized]")
+    # Each of the four listboxes initializes on its own zero-delay timer, and
+    # the tests read the locked and right-to-left ones too, so wait for all.
+    page.wait_for_function("document.querySelectorAll('[data-citry-listbox-initialized]').length === 4")
     return errors
 
 
@@ -142,8 +143,9 @@ def test_controlled_single_rejection_acceptance_release_and_configuration(page: 
     page.wait_for_function(
         "document.querySelector('.brand-listbox [data-value=grace]').getAttribute('aria-selected') === 'true'"
     )
-    page.evaluate("window.__listboxState.value = undefined")
-    page.wait_for_timeout(20)
+    # Releasing control reaches the listbox through a Vue update, so wait for
+    # that update to finish before clicking.
+    page.evaluate("() => { window.__listboxState.value = undefined; return Citry.vue.nextTick(); }")
     _option(page, ".brand-listbox", "margaret").click()
     assert _option(page, ".brand-listbox", "margaret").get_attribute("aria-selected") == "true"
 

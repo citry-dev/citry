@@ -1229,9 +1229,41 @@ class CMenu(LibraryComponent):
           const primaryTransactions = new Set();
           let refreshNativeDisabledObserver = () => {};
           const disabledElement = controllerOptions.disabledElement ?? trigger;
+          // The trigger's `disabled` as the author's markup or page code left it.
+          // The previous run's cleanup put that value back before Vue applied
+          // this render, so a `disabled` the component set for an earlier render
+          // is never read here as the author's.
+          let authorTriggerDisabled = trigger.disabled;
+          // The last `disabled` this run wrote, so the cleanup can tell whether
+          // anything else changed the trigger since.
+          let writtenTriggerDisabled = null;
+          // While the server disables the Menu, a disabled trigger may only be
+          // the server value the author forwards through `activator_disabled`,
+          // so it does not count as the author's own disable.
           let authorDirectDisabled = externalActivation || controllerOptions.ownsTriggerDisabled
             ? false
-            : trigger.disabled && !data.disabled;
+            : authorTriggerDisabled && !data.disabled;
+          // Page code and Vue write the author's `disabled`; the Menu writes the
+          // server's. The observer below tells them apart by the values this run
+          // wrote, in order. The Menu writes only a changed value, so each of its
+          // writes queues exactly one record. A redundant `disabled = true` or
+          // `setAttribute("disabled", "")` from page code also queues a record,
+          // so it is seen even while the Menu already disables the trigger.
+          // `toggleAttribute("disabled", true)` on an already disabled trigger
+          // queues none, so that one write is not seen. When no other Menu
+          // observes this root, writes made before this run registers its
+          // observer produce no record.
+          const ownDisabledWrites = [];
+          const recordsAuthorDisabled = !externalActivation && !controllerOptions.ownsTriggerDisabled;
+          // Write the trigger's `disabled` as the Menu's own value.
+          const writeOwnTriggerDisabled = (value) => {
+            // Without an observer on the trigger's root no record will arrive,
+            // and a queued value would later be matched against an author write.
+            if (recordsAuthorDisabled && anchoredLayerRuntime.menuDisabledObservers?.get(trigger.getRootNode())) {
+              ownDisabledWrites.push(value);
+            }
+            trigger.disabled = value;
+          };
           let committedEffectiveDisabled = externalActivation
             ? Boolean(controllerOptions.ownerDisabled?.())
             : trigger.matches(":disabled");
@@ -1262,9 +1294,11 @@ class CMenu(LibraryComponent):
           let retainedOpenSubmenuPaths = retainedRuntimeState && sameServerOpen
             ? [...(runtimeState.openSubmenuPaths ?? [])]
             : [];
+          // A menu that was showing when this render disabled it closes and
+          // reports the close, whether or not the same render also changed the
+          // server's `open` input: the disable is what closes it.
           let pendingDisabledHandoff = Boolean(
             retainedRuntimeState
-            && sameServerOpen
             && runtimeState.open
             && !runtimeState.effectiveDisabled
           );
@@ -1627,8 +1661,9 @@ class CMenu(LibraryComponent):
             }
             const desiredDisabled = configuration.disabled || authorDirectDisabled;
             if (trigger.disabled !== desiredDisabled) {
-              trigger.disabled = desiredDisabled;
+              writeOwnTriggerDisabled(desiredDisabled);
             }
+            writtenTriggerDisabled = desiredDisabled;
           };
           const focusFallback = () => {
             const preferred = controllerOptions.focusReturnTarget?.()
@@ -1728,6 +1763,15 @@ class CMenu(LibraryComponent):
           };
           const applyRootOpen = (nextOpen, context = {}) => {
             if (nextOpen === logicalOpen) {
+              // The previous run leaves an open menu showing so this run can take
+              // it over. When this run starts closed because the server's `open`
+              // input changed, nothing else hides it. A context menu manages its
+              // own handoff, so this applies to a plain menu only. A menu that
+              // this run is closing also still shows while its close animation
+              // plays; `finishExit` hides that one, so leave it alone.
+              if (!nextOpen && !externalActivation && !exitAnimation && surface.matches(":popover-open")) {
+                normalizeRootClosed("ancestor", surface);
+              }
               return;
             }
             generation += 1;
@@ -2806,15 +2850,33 @@ class CMenu(LibraryComponent):
           });
 
           const reconcileNativeDisabled = (records = []) => {
-            if (
-              !externalActivation
-              &&
-              !controllerOptions.ownsTriggerDisabled
-              &&
-              records.some((record) => record.type === "attributes" && record.target === trigger)
-              && trigger.disabled !== (configuration.disabled || authorDirectDisabled)
-            ) {
-              authorDirectDisabled = trigger.disabled;
+            if (recordsAuthorDisabled) {
+              const triggerRecords = records.filter((record) => (
+                record.type === "attributes" && record.target === trigger
+              ));
+              const ownWrites = ownDisabledWrites;
+              let authorValue = null;
+              triggerRecords.forEach((record, index) => {
+                // A record holds only the value before its write; the value
+                // after it is the next record's old value, or the trigger's
+                // current value for the last record.
+                const before = record.oldValue !== null;
+                const after = index + 1 < triggerRecords.length
+                  ? triggerRecords[index + 1].oldValue !== null
+                  : trigger.hasAttribute("disabled");
+                if (ownWrites.length > 0 && before !== after && ownWrites[0] === after) {
+                  ownWrites.shift();
+                } else {
+                  authorValue = after;
+                }
+              });
+              if (authorValue !== null) {
+                // Page code or Vue wrote the trigger's `disabled`; that is now
+                // the author's value, for this run and for the cleanup to put
+                // back.
+                authorDirectDisabled = authorValue;
+                authorTriggerDisabled = authorValue;
+              }
             }
             updateTrigger();
             const effectiveDisabled = effectiveOwnerDisabled();
@@ -2859,6 +2921,7 @@ class CMenu(LibraryComponent):
                 subtree: true,
                 childList: true,
                 attributes: true,
+                attributeOldValue: true,
                 attributeFilter: ["disabled"],
               });
               manager = { entries, observer };
@@ -2884,6 +2947,13 @@ class CMenu(LibraryComponent):
               return;
             }
             unregisterNativeDisabled();
+            // Records for writes made under an old root may never arrive, so a
+            // queued write could later be matched against an author write. The
+            // first registration keeps the queue: an observer another Menu
+            // already runs on this root still delivers those records.
+            if (nativeDisabledRoot !== null) {
+              ownDisabledWrites.length = 0;
+            }
             nativeDisabledRoot = nextRoot;
             unregisterNativeDisabled = registerNativeDisabled();
           };
@@ -2944,6 +3014,25 @@ class CMenu(LibraryComponent):
             // this cleanup runs.
             runtimeState.effectiveDisabled = committedEffectiveDisabled;
             unregisterNativeDisabled();
+            // Put back the author's `disabled` before Vue applies the next render.
+            // Vue writes the attribute only when the author's binding changes, so
+            // without this a value the component set would outlive the render
+            // and the next run would read it as the author's. Leave the trigger
+            // alone when something other than this run changed it since its last
+            // write, because that value is newer than anything recorded here.
+            if (
+              !externalActivation
+              && !controllerOptions.ownsTriggerDisabled
+              && writtenTriggerDisabled !== null
+              && trigger.disabled === writtenTriggerDisabled
+              && trigger.disabled !== authorTriggerDisabled
+            ) {
+              // This run no longer listens. If another Menu keeps the observer
+              // running, the next run receives this record and reads it as the
+              // author's value, which is right, because this write puts the
+              // author's value back.
+              trigger.disabled = authorTriggerDisabled;
+            }
             structureObserver.disconnect();
             host.removeEventListener("click", onClick, true);
             host.removeEventListener("keydown", onKeydown, true);

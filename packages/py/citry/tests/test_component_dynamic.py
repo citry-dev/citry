@@ -7,11 +7,13 @@ The static-`is` forms compile away (covered by the Rust compiler tests in
 here exercise them end to end plus the full runtime (dynamic) paths.
 """
 
-# ruff: noqa: ANN
+import re
 
 import pytest
 
 from citry import Citry, Component, Const, Extension
+from citry._vue.capture import render_prepared_direct
+from citry._vue.direct_capture import assemble_typed_render
 from citry.component_registry import AlreadyRegistered, NotRegistered
 
 
@@ -35,6 +37,14 @@ def _make_card(c):
             return {"title": kwargs.get("title", "untitled")}
 
     return Card
+
+
+def _assemble_prepared(component):
+    return assemble_typed_render(
+        render_prepared_direct(component),
+        revision=0,
+        tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+    )
 
 
 class TestDynamicComponent:
@@ -554,7 +564,7 @@ class TestDynamicElement:
 
         assert str(Page()) == '<div data-cid-c1="">child</div>'
 
-    def test_void_element_stays_compact(self):
+    def test_void_element_is_typed_as_void_and_uses_balanced_compiler_alias(self):
         c = Citry()
 
         class Page(Component):
@@ -564,7 +574,16 @@ class TestDynamicElement:
             def template_data(self, kwargs, slots):
                 return {"tag": "br"}
 
-        assert str(Page()) == '<br class="x" data-cid-c1=""/>'
+        assembly = _assemble_prepared(Page())
+        root = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[root.definition_id]
+        dynamic = compile_input.dynamic_elements[0]
+        alias = dynamic["alias"]
+
+        assert dynamic["tag"] == "br"
+        assert f"<{alias} " in compile_input.template
+        assert f"</{alias}>" in compile_input.template
+        assert "<br" not in compile_input.template
 
     def test_void_element_identity_is_ascii_case_insensitive(self):
         c = Citry()
@@ -576,7 +595,41 @@ class TestDynamicElement:
             def template_data(self, kwargs, slots):
                 return {"tag": "BR"}
 
-        assert str(Page()) == '<BR class="x" data-cid-c1=""/>'
+        assembly = _assemble_prepared(Page())
+        root = assembly.view.occurrences[0]
+        dynamic = assembly.compile_inputs[root.definition_id].dynamic_elements[0]
+
+        assert dynamic["tag"] == "BR"
+
+    @pytest.mark.parametrize(
+        ("static_template", "dynamic_template", "expected"),
+        [
+            ('<c-element is="br" />', "<c-element c-is=\"'br'\" />", "<br/>"),
+            (
+                '<c-element is="img" class="a" />',
+                '<c-element c-is="\'img\'" class="a" />',
+                '<img class="a"/>',
+            ),
+            ('<c-element is="div" />', "<c-element c-is=\"'div'\" />", "<div></div>"),
+            (
+                '<c-element is="div">hi</c-element>',
+                "<c-element c-is=\"'div'\">hi</c-element>",
+                "<div>hi</div>",
+            ),
+        ],
+    )
+    def test_static_and_dynamic_is_write_the_same_tag(self, static_template, dynamic_template, expected):
+        # A void tag stays compact and a non-void one gets a closing tag,
+        # whichever way the template names the element.
+        for template in (static_template, dynamic_template):
+            c = Citry()
+
+            class Page(Component):
+                citry = c
+
+            Page.template = template
+            # The component id differs between the two renders, so drop it.
+            assert re.sub(r' data-cid-\w+=""', "", str(Page())) == expected, template
 
     def test_void_element_with_body_raises(self):
         c = Citry()
@@ -677,9 +730,9 @@ class TestDynamicElement:
 
     @pytest.mark.parametrize(
         ("value", "rendered"),
-        [(None, None), (False, "False"), (0, "0"), ("", ""), ("a<b>&", "a&lt;b&gt;&amp;")],
+        [(None, None), (False, "False"), (0, "0"), ("", ""), ("a<b>&", "a<b>&")],
     )
-    def test_private_element_metadata_materializes_after_input_hooks(self, value, rendered):
+    def test_element_key_stays_out_of_component_kwargs_and_enters_prepared_binding(self, value, rendered):
         captured = []
 
         class Capture(Extension):
@@ -687,7 +740,7 @@ class TestDynamicElement:
 
             def on_component_input(self, ctx):
                 if getattr(type(ctx.component), "name", None) == "element":
-                    captured.append((ctx.component._element_morph_metadata, dict(ctx.kwargs)))
+                    captured.append(dict(ctx.kwargs))
 
         c = Citry(extensions=[Capture])
 
@@ -697,29 +750,55 @@ class TestDynamicElement:
                 <c-element
                     c-is="'hr'"
                     #c-key="key_value"
-                    #c-ignore
                 />
             """
 
             def template_data(self, kwargs, slots):
                 return {"key_value": kwargs["key_value"]}
 
-        component_render = Page(key_value=value).render()
-        invocation = next(
-            item
-            for item in component_render.context.ownership.snapshot().component_invocations
-            if item.authored_tag == "element"
+        component_render = render_prepared_direct(Page(key_value=value))
+        assembly = assemble_typed_render(
+            component_render,
+            revision=0,
+            tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
         )
-        assert invocation.morph_key is None
-        assert invocation.morph_mode is None
+        occurrence = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[occurrence.definition_id]
+        expected_key = None if rendered is None else rendered
 
-        html = component_render.serialize().strip()
-        key_html = "" if rendered is None else f' data-citry-key=":{rendered}"'
-        assert html == f'<hr{key_html} data-citry-morph="ignore" data-cid-c1=""/>'
-        assert "data-citry-graph" not in html
-        assert captured[0][0].key == (None if value is None else str(value))
-        assert captured[0][0].morph_mode == "ignore"
-        assert set(captured[0][1]) == {"is"}
+        assert captured == [{"is": "hr"}]
+        assert compile_input.dynamic_elements[0]["tag"] == "hr"
+        assert len(compile_input.element_bindings) == 1
+        key_binding = compile_input.element_bindings[0]["keyBindingKey"]
+        if expected_key is None:
+            assert key_binding is None
+        else:
+            assert occurrence.prepared_data[key_binding] == expected_key
+            assert f':key="$citryPrepared.{key_binding}"' in compile_input.template
+            assert f':key="{expected_key}"' not in compile_input.template
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            "<c-element c-is=\"'hr'\" #c-ignore />",
+            '<c-element is="div" #c-ignore>x</c-element>',
+        ],
+    )
+    def test_element_rejects_c_ignore_in_both_forms(self, template):
+        # The static form compiles to a plain tag, so the template is
+        # rejected when it loads, before either form picks its tag.
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+
+        Page.template = template
+
+        with pytest.raises(
+            SyntaxError,
+            match=r"'#c-ignore' is not supported on '<c-element>' .*Write the element as a plain HTML tag",
+        ):
+            str(Page())
 
     def test_private_key_only_keeps_nonconflicting_ordinary_attrs(self):
         c = Citry()
@@ -734,10 +813,13 @@ class TestDynamicElement:
                 />
             """
 
-        html = str(Page()).strip()
-        assert 'title="ordinary"' in html
-        assert 'data-citry-key=":row"' in html
-        assert "data-citry-morph" not in html
+        assembly = _assemble_prepared(Page())
+        occurrence = assembly.view.occurrences[0]
+        compile_input = assembly.compile_inputs[occurrence.definition_id]
+
+        assert occurrence.prepared_data["citryAttrs0"] == {"title": "ordinary"}
+        assert occurrence.prepared_data["citryKey0"] == "row"
+        assert ':key="$citryPrepared.citryKey0"' in compile_input.template
 
     def test_private_key_rejects_an_ordinary_attribute_before_attrs_hook(self):
         c = Citry()
@@ -753,25 +835,7 @@ class TestDynamicElement:
             """
 
         with pytest.raises(ValueError, match=r"data-citry-key.*#c-key metadata"):
-            str(Page())
-
-    def test_private_morph_rejects_extension_injection_after_attrs_hook(self):
-        class Inject(Extension):
-            name = "metadata_fixture"
-
-            def on_attrs_resolved(self, ctx):
-                ctx.attrs["data-citry-morph"] = "replace"
-
-        c = Citry(extensions=[Inject])
-
-        class Page(Component):
-            citry = c
-            template = """
-                <c-element c-is="'hr'" #c-ignore />
-            """
-
-        with pytest.raises(ValueError, match=r"data-citry-morph.*#c-ignore metadata"):
-            str(Page())
+            render_prepared_direct(Page())
 
 
 class TestAttributeParity:

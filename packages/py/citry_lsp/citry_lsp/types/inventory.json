@@ -1,0 +1,106 @@
+{
+  "vue": "3.5.42",
+  "packages": [
+    {
+      "name": "vue",
+      "version": "3.5.42",
+      "files": [
+        "LICENSE",
+        "dist/vue.d.mts",
+        "dist/vue.d.ts",
+        "package.json"
+      ],
+      "sha256": "f6b7133aff439fedb365af35dcba9667c700cd8e44e21a59d7d74cc281b202ed"
+    },
+    {
+      "name": "@vue/shared",
+      "version": "3.5.42",
+      "files": [
+        "LICENSE",
+        "dist/shared.d.ts",
+        "package.json"
+      ],
+      "sha256": "ebd869bd32801a6122ba9d141d539a58d09552b28a901d795bfee598a17cbf4a"
+    },
+    {
+      "name": "@vue/compiler-core",
+      "version": "3.5.42",
+      "files": [
+        "LICENSE",
+        "dist/compiler-core.d.ts",
+        "package.json"
+      ],
+      "sha256": "15b3f8449e49b7e4bcaf073323cebc97a79a531f6874307c02e49bbd7cfb4bdc"
+    },
+    {
+      "name": "@vue/compiler-dom",
+      "version": "3.5.42",
+      "files": [
+        "LICENSE",
+        "dist/compiler-dom.d.ts",
+        "package.json"
+      ],
+      "sha256": "ceb826c3b65943ba59b2b0bf0098ce714a27f0f695204e9b3d1b5b31a5a0b5b7"
+    },
+    {
+      "name": "@vue/reactivity",
+      "version": "3.5.42",
+      "files": [
+        "LICENSE",
+        "dist/reactivity.d.ts",
+        "package.json"
+      ],
+      "sha256": "86aa06c6b5f69b9a8a4a972ca3fe2d151fe2b4f19859f2a4c9572b3cc7be102c"
+    },
+    {
+      "name": "@vue/runtime-core",
+      "version": "3.5.42",
+      "files": [
+        "LICENSE",
+        "dist/runtime-core.d.ts",
+        "package.json"
+      ],
+      "sha256": "21aa819bf6e97ee94d60dc322353effe20a7a21c509676ec1719bcf792440e9b"
+    },
+    {
+      "name": "@vue/runtime-dom",
+      "version": "3.5.42",
+      "files": [
+        "LICENSE",
+        "dist/runtime-dom.d.ts",
+        "package.json"
+      ],
+      "sha256": "aebb40d6a3e39bfc0822242436ea009ab6d2787fb315e8a3f4e41281981508c3"
+    },
+    {
+      "name": "@babel/types",
+      "version": "7.29.8",
+      "files": [
+        "LICENSE",
+        "lib/index.d.ts",
+        "package.json"
+      ],
+      "sha256": "25b2317b0cb160f7b20ce3ff7bed61fdf81e1aa5e5da190614bd6743178507eb"
+    },
+    {
+      "name": "@babel/parser",
+      "version": "7.29.8",
+      "files": [
+        "LICENSE",
+        "package.json",
+        "typings/babel-parser.d.ts"
+      ],
+      "sha256": "3d59c10d316b93cff8ccd90d29c20c444fd87dfc3f1eb386410753dbe159c986"
+    },
+    {
+      "name": "csstype",
+      "version": "3.2.3",
+      "files": [
+        "LICENSE",
+        "index.d.ts",
+        "package.json"
+      ],
+      "sha256": "c70b09c99fe2802e887bd34fe29008f5ca057246199b0656849a6eff3b05b66f"
+    }
+  ]
+}

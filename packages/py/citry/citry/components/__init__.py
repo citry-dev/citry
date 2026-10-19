@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 from citry.components.dynamic import make_dynamic_component, make_dynamic_element
 from citry.components.error_fallback import make_error_fallback_component
 from citry.components.js_css import make_css_component, make_js_component
+from citry.components.mark import make_mark_component
 from citry.components.provide import make_provide_component
 from citry.ext.cache.components import make_cache_component
 from citry.ext.i18n.components import make_i18n_component, make_trans_component
@@ -51,6 +52,7 @@ def make_builtin_components(citry_instance: Citry) -> None:
     make_error_fallback_component(citry_instance)
     make_js_component(citry_instance)
     make_css_component(citry_instance)
+    make_mark_component(citry_instance)
     make_i18n_component(citry_instance)
     make_trans_component(citry_instance)
     citry_instance._template_root_class = make_template_root_component(citry_instance)

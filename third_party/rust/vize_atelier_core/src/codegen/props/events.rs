@@ -77,6 +77,18 @@ pub fn von_event_key_for(
     name
 }
 
+/// Citry: whether a static event name is a keyboard event, where Vue keeps
+/// key modifiers. Vue's compiler-dom lowercases the handler key and compares
+/// it with `onkeyup`, `onkeydown`, and `onkeypress`, so `key-down` counts and
+/// an element's case-preserving `on:keyDown` key does not.
+pub(crate) fn is_keyboard_event_name(event: &str, on_plain_element: bool) -> bool {
+    let key = von_event_key_for(event, on_plain_element, core::iter::empty::<&str>());
+    matches!(
+        key.to_ascii_lowercase().as_str(),
+        "onkeyup" | "onkeydown" | "onkeypress"
+    )
+}
+
 /// Get the event key for a v-on directive (e.g., "onClick", "onClickOnce").
 ///
 /// Delegates to [`von_event_key_for`] so the merge key includes the
@@ -169,13 +181,17 @@ pub(crate) fn generate_merged_event_handlers(
 
 /// Generate just the handler value part of a v-on directive (without the key name)
 pub(super) fn generate_von_handler_value(ctx: &mut CodegenContext, dir: &DirectiveNode<'_>) {
-    // Classify modifiers (same logic as in generate_directive_prop_with_static)
-    let event_name = if let Some(ExpressionNode::Simple(exp)) = &dir.arg {
-        exp.content
-    } else {
-        ""
+    // Classify modifiers the way `resolveModifiers` in Vue's compiler-dom does.
+    // Citry: a key modifier is kept only for a keyboard event or a dynamic
+    // event name; Vue drops it on any other static event, which has no key.
+    let static_event = match &dir.arg {
+        Some(ExpressionNode::Simple(exp)) if exp.is_static => Some(exp.content),
+        _ => None,
     };
-    let is_keyboard_event = matches!(event_name, "keydown" | "keyup" | "keypress");
+    let is_keyboard_event = static_event.is_some_and(|event| {
+        is_keyboard_event_name(event, ctx.props_is_plain_element && dir.raw_name.is_some())
+    });
+    let keeps_key_modifiers = static_event.is_none() || is_keyboard_event;
 
     let mut system_modifiers: Vec<&str> = Vec::new();
     let mut key_modifiers: Vec<&str> = Vec::new();
@@ -184,6 +200,12 @@ pub(super) fn generate_von_handler_value(ctx: &mut CodegenContext, dir: &Directi
         let mod_name = modifier.content;
         match mod_name {
             "capture" | "once" | "passive" | "native" => {}
+            // A dynamic event name may turn out to be a keyboard or a mouse
+            // event, so Vue checks `left`/`right` both ways.
+            "left" | "right" if static_event.is_none() => {
+                key_modifiers.push(mod_name);
+                system_modifiers.push(mod_name);
+            }
             "left" | "right" => {
                 if is_keyboard_event {
                     key_modifiers.push(mod_name);
@@ -195,9 +217,6 @@ pub(super) fn generate_von_handler_value(ctx: &mut CodegenContext, dir: &Directi
             | "exact" => {
                 system_modifiers.push(mod_name);
             }
-            "enter" | "tab" | "delete" | "esc" | "space" | "up" | "down" => {
-                key_modifiers.push(mod_name);
-            }
             _ => {
                 key_modifiers.push(mod_name);
             }
@@ -205,7 +224,7 @@ pub(super) fn generate_von_handler_value(ctx: &mut CodegenContext, dir: &Directi
     }
 
     let has_system_mods = !system_modifiers.is_empty();
-    let has_key_mods = !key_modifiers.is_empty();
+    let has_key_mods = keeps_key_modifiers && !key_modifiers.is_empty();
     let needs_cache = needs_von_handler_cache(ctx, dir);
 
     if needs_cache {

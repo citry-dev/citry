@@ -3,8 +3,10 @@
 # ruff: noqa: ANN, D101, D102, D106, ARG002, PLC0415
 
 import time
+from collections import UserDict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import field
+from types import MappingProxyType
 
 import pytest
 
@@ -20,10 +22,13 @@ from citry import (
     ForeignSpanSet,
     I18n,
     LintSettings,
+    Markup,
     Slot,
     TemplateNamespaceContribution,
 )
 from citry import Citry as _Citry
+from citry._vue.capture import render_prepared_direct
+from citry._vue.direct_capture import assemble_typed_render
 from citry.ext.events.openapi import OpenApiCommand
 from citry.ext.i18n.commands import I18N_COMMANDS
 
@@ -611,7 +616,7 @@ class TestRenderHooks:
             name = "e"
 
             def on_component_rendered(self, ctx):
-                return "<wrapped/>"
+                return Markup("<wrapped/>")
 
         app = _Citry(extensions=[E])
 
@@ -681,6 +686,454 @@ class TestRenderHooks:
 
         with pytest.raises(ValueError, match="boom"):
             str(Card())
+
+
+class TestHookReturnedContent:
+    """
+    Content that ``on_component_rendered`` or ``on_slot_rendered`` returns
+    follows the rule of a ``{{ ... }}`` value: a plain str is text, Markup
+    and other ``__html__`` objects are HTML, on static and interactive pages.
+    """
+
+    USER_INPUT = "<script>alert(1)</script> & <b>bold</b>"
+    ESCAPED = "&lt;script&gt;alert(1)&lt;/script&gt; &amp; &lt;b&gt;bold&lt;/b&gt;"
+
+    def _page(self, hook, value, *, interactive, document):
+        class Replace(Extension):
+            name = "replace"
+
+            def on_component_rendered(self, ctx):
+                if hook == "component" and type(ctx.component).__name__ == "Replaced":
+                    return value
+                return None
+
+            def on_slot_rendered(self, ctx):
+                if hook == "slot" and type(ctx.component).__name__ == "Holder":
+                    return value
+                return None
+
+        app = _Citry(extensions=[Replace], autodiscover=False)
+
+        class Replaced(Component):
+            citry = app
+            template = "<p>unused</p>"
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot>fallback</c-slot></section>"
+
+        # A component with a Vue listener makes the page interactive.
+        class Counter(Component):
+            citry = app
+            template = '<button @click="count += 1">{{ count }}</button>'
+
+            def template_data(self, kwargs, slots):
+                return {"count": 0}
+
+        body = "<c-Replaced /><c-Holder>fill</c-Holder>"
+        if interactive:
+            body += "<c-Counter />"
+        if document:
+            template = f"<!doctype html><html><head></head><body>{body}</body></html>"
+        else:
+            template = f"<div>{body}</div>"
+
+        class Page(Component):
+            citry = app
+
+        Page.template = template
+        return Page
+
+    PAGES = pytest.mark.parametrize(
+        ("interactive", "document"),
+        [(False, False), (True, True), (True, False)],
+        ids=["static", "interactive-document", "interactive-fragment"],
+    )
+    HOOKS = pytest.mark.parametrize("hook", ["component", "slot"])
+
+    @PAGES
+    @HOOKS
+    def test_plain_str_is_escaped(self, hook, interactive, document):
+        # An interactive page used to fail with "unsupported typed part str",
+        # and a static page inserted the string as HTML.
+        html = str(self._page(hook, self.USER_INPUT, interactive=interactive, document=document)())
+        assert self.ESCAPED in html
+        assert "<script>alert(1)" not in html
+        assert "<b>bold</b>" not in html
+
+    @PAGES
+    @HOOKS
+    def test_markup_is_inserted_as_html(self, hook, interactive, document):
+        html = str(self._page(hook, Markup("<b>bold</b>"), interactive=interactive, document=document)())
+        assert ">bold</b>" in html
+        assert "&lt;b&gt;" not in html
+
+    @PAGES
+    @HOOKS
+    def test_html_protocol_object_is_inserted_as_html(self, hook, interactive, document):
+        class Trusted:
+            def __html__(self):
+                return "<em>trusted</em>"
+
+        html = str(self._page(hook, Trusted(), interactive=interactive, document=document)())
+        assert ">trusted</em>" in html
+
+    @HOOKS
+    def test_empty_str_renders_nothing(self, hook):
+        html = str(self._page(hook, "", interactive=False, document=False)())
+        replaced = "unused" if hook == "component" else "fill"
+        assert replaced not in html
+
+    @PAGES
+    def test_unsupported_component_hook_value_is_rejected(self, interactive, document):
+        # The error names the extension, and the component path says where.
+        msg = (
+            r"An error occurred while rendering components Page > Replaced:\n"
+            r"on_component_rendered of extension 'replace' returned a value of type int for component Replaced"
+        )
+        with pytest.raises(TypeError, match=msg):
+            str(self._page("component", 42, interactive=interactive, document=document)())
+
+    @PAGES
+    def test_unsupported_slot_hook_value_is_rejected(self, interactive, document):
+        # On a page Vue renders, the error still names the hook, the
+        # extension, and the slot.
+        msg = "on_slot_rendered of extension 'replace' returned a value of type int for slot 'default' of Holder"
+        with pytest.raises(TypeError, match=msg):
+            str(self._page("slot", 42, interactive=interactive, document=document)())
+
+    def test_unsupported_python_slot_hook_value_is_rejected(self):
+        # A slot filled from Python raises the same error while it renders,
+        # before serialize().
+        class Replace(Extension):
+            name = "replace"
+
+            def on_slot_rendered(self, ctx):
+                return 42
+
+        app = _Citry(extensions=[Replace], autodiscover=False)
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot /></section>"
+
+        with pytest.raises(TypeError, match="returned a value of type int for slot 'default' of Holder"):
+            str(Holder(slots={"default": "fill"}))
+
+    @HOOKS
+    def test_later_extension_receives_text_as_a_render(self, hook):
+        # An earlier extension's plain str is text: a later one that wraps
+        # str(...) of it in Markup still shows the tags as characters.
+        user_input = self.USER_INPUT
+
+        class First(Extension):
+            name = "first"
+
+            def on_component_rendered(self, ctx):
+                return user_input if hook == "component" else None
+
+            def on_slot_rendered(self, ctx):
+                return user_input if hook == "slot" else None
+
+        class Second(Extension):
+            name = "second"
+
+            def on_component_rendered(self, ctx):
+                if hook != "component" or ctx.render is None:
+                    return None
+                assert isinstance(ctx.render, CitryRender)
+                return Markup(f"<div>{ctx.render}</div>")  # noqa: S704 - render output is trusted HTML
+
+            def on_slot_rendered(self, ctx):
+                if hook != "slot":
+                    return None
+                assert isinstance(ctx.result, CitryRender)
+                return Markup(f"<div>{ctx.result}</div>")  # noqa: S704 - render output is trusted HTML
+
+        app = _Citry(extensions=[First, Second], autodiscover=False)
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot>fallback</c-slot></section>"
+
+        html = str(Holder(slots={"default": "fill"}))
+        assert self.ESCAPED in html
+        assert "<script>alert(1)" not in html
+
+    def test_python_slot_hook_plain_str_is_escaped(self):
+        # A slot filled from Python renders without the template fill path.
+        class Replace(Extension):
+            name = "replace"
+
+            def on_slot_rendered(self, ctx):
+                return "<i>x</i>"
+
+        app = _Citry(extensions=[Replace], autodiscover=False)
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot /></section>"
+
+        html = str(Holder(slots={"default": "fill"}))
+        assert "&lt;i&gt;x&lt;/i&gt;" in html
+        assert "<i>" not in html
+
+    @HOOKS
+    def test_plain_str_reaches_vue_as_text_data(self, hook):
+        # Vue renders a text interpolation of the raw value, the same text
+        # the server escaped, so hydration sees identical text.
+        page = self._page(hook, "<b>bold</b>", interactive=True, document=False)
+        assembly = assemble_typed_render(
+            render_prepared_direct(page()),
+            revision=0,
+            tag_for_type=lambda type_key: "x-" + type_key.lower().replace("_", "-"),
+        )
+        values = [value for item in assembly.view.occurrences for value in item.prepared_data.values()]
+        assert "<b>bold</b>" in values
+        assert all("opaqueHtml" not in item.prepared_data for item in assembly.view.occurrences)
+
+
+class TestHookReturnTypeChecks:
+    """
+    A hook whose return replaces a value is checked as soon as it returns.
+
+    A wrong type raises ``TypeError`` naming the hook and the extension,
+    before the next extension runs, so the next extension is never blamed
+    for a value it did not produce.
+    """
+
+    @staticmethod
+    def _chain(hook, first_value, calls):
+        # The first extension returns ``first_value``; the second records
+        # what it receives and keeps it.
+        def first(self, ctx):
+            return first_value
+
+        def second(self, ctx):
+            calls.append(ctx)
+
+        first_ext = type("First", (Extension,), {"name": "first", hook: first})
+        second_ext = type("Second", (Extension,), {"name": "second", hook: second})
+        return [first_ext, second_ext]
+
+    @pytest.mark.parametrize("hook", ["on_component_rendered", "on_slot_rendered"])
+    def test_bad_render_return_stops_before_next_extension(self, hook):
+        calls = []
+        app = _Citry(extensions=self._chain(hook, 5, calls), autodiscover=False)
+
+        class Holder(Component):
+            citry = app
+            template = "<section><c-slot>fallback</c-slot></section>"
+
+        target = "component Holder" if hook == "on_component_rendered" else "slot 'default' of Holder"
+        msg = f"{hook} of extension 'first' returned a value of type int for {target}, which Citry cannot put"
+        with pytest.raises(TypeError, match=msg) as info:
+            str(Holder())
+        assert calls == []
+        if hook == "on_component_rendered":
+            assert str(info.value).startswith("An error occurred while rendering components Holder:\n")
+
+    def test_bad_component_return_is_not_passed_on_as_the_render_error(self):
+        # Another extension that recovers from render errors must not get
+        # a chance to swallow the bad return: it never runs.
+        calls = []
+
+        class Recover(Extension):
+            name = "recover"
+
+            def on_component_rendered(self, ctx):
+                calls.append(ctx.error)
+                return Markup("<p>recovered</p>")
+
+        exts = [*self._chain("on_component_rendered", object(), [])[:1], Recover]
+        app = _Citry(extensions=exts, autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = "<p>card</p>"
+
+        with pytest.raises(TypeError, match="extension 'first' returned a value of type object for component Card"):
+            str(Card())
+        assert calls == []
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (Markup("<b>bold</b>"), ">bold</b>"),
+            ("<i>text</i>", "&lt;i&gt;text&lt;/i&gt;"),
+            ("own-render", "<p"),
+            (None, "<p"),
+        ],
+        ids=["markup", "str", "citry-render", "none"],
+    )
+    def test_valid_component_returns_pass_through_two_extensions(self, value, expected):
+        calls = []
+
+        def first(self, ctx):
+            # "own-render" stands for the CitryRender the hook received.
+            return ctx.render if value == "own-render" else value
+
+        def second(self, ctx):
+            calls.append(ctx.render)
+
+        exts = [
+            type("First", (Extension,), {"name": "first", "on_component_rendered": first}),
+            type("Second", (Extension,), {"name": "second", "on_component_rendered": second}),
+        ]
+        app = _Citry(extensions=exts, autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = "<p>card</p>"
+
+        html = str(Card())
+        # The second extension always receives a render, never a bare value.
+        assert len(calls) == 1
+        assert isinstance(calls[0], CitryRender)
+        assert expected in html
+        assert ("card" in html) == (expected == "<p")
+
+    @pytest.mark.parametrize(
+        ("hook", "target"),
+        [
+            ("on_template_loaded", "the template of Page"),
+            ("on_template_compiled", "a compiled template of Page"),
+            ("on_messages_loaded", "the messages of Page"),
+            ("on_js_loaded", "the JS of Page"),
+            ("on_css_loaded", "the CSS of Page"),
+            ("on_attrs_resolved", "<p> in Page"),
+            ("on_serialize", "the page's HTML"),
+        ],
+    )
+    def test_bad_value_return_stops_before_next_extension(self, hook, target):
+        calls = []
+        app = _Citry(
+            extensions=self._chain(hook, 5, calls),
+            autodiscover=False,
+            extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
+        )
+        msg = f"{hook} of extension 'first' returned a value of type int for {target}, which is not a "
+
+        # Every hook here runs when the page renders, not when the class is
+        # defined, so one render reaches each of them.
+        class Page(Component):
+            citry = app
+            template = """
+                <p c-class="'x'">{{ tr('hi') }}</p>
+            """
+            js = """
+                console.log(1)
+            """
+            css = """
+                p { color: red }
+            """
+            messages = """
+                hi = Hi
+            """
+
+        with pytest.raises(TypeError, match=msg):
+            str(Page())
+        assert calls == []
+
+    def test_bad_foreign_compiled_return_names_the_extension(self):
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                return ForeignSpanSet((ForeignSpan(0, len(ctx.content.encode())),))
+
+            def on_template_foreign_compiled(self, ctx):
+                ctx.mark_resolved(*ctx.claims)
+                return 5
+
+        app = _Citry(extensions=[Host], autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = "{% value %}"
+
+        msg = "on_template_foreign_compiled of extension 'host' returned a value of type int for a compiled template"
+        with pytest.raises(TypeError, match=msg):
+            str(Card())
+
+    @pytest.mark.parametrize("hook", ["on_template_compiled", "on_template_foreign_compiled"])
+    def test_node_list_hook_may_return_a_tuple(self, hook):
+        # A tuple of nodes is accepted and copied into a list, which later
+        # code may change in place.
+        received = []
+
+        class Host(Extension):
+            name = "host"
+
+            def on_template_foreign_spans(self, ctx):
+                if hook != "on_template_foreign_compiled":
+                    return None
+                start = ctx.content.encode().find(b"{% value %}")
+                return ForeignSpanSet((ForeignSpan(start, start + len(b"{% value %}")),))
+
+            def on_template_foreign_compiled(self, ctx):
+                from citry.nodes import ForeignNode
+
+                ctx.mark_resolved(*ctx.claims)
+                return tuple("HOST" if isinstance(item, ForeignNode) else item for item in ctx.nodes)
+
+            def on_template_compiled(self, ctx):
+                if hook == "on_template_compiled":
+                    return tuple(ctx.nodes)
+                return None
+
+        class Reader(Extension):
+            name = "reader"
+
+            def on_template_compiled(self, ctx):
+                received.append(ctx.nodes)
+
+        app = _Citry(extensions=[Host, Reader], autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = "A{% value %}B" if hook == "on_template_foreign_compiled" else "<p>card</p>"
+
+        html = str(Card())
+        assert "AHOSTB" in html if hook == "on_template_foreign_compiled" else ">card</p>" in html
+        assert received
+        assert all(type(nodes) is list for nodes in received)
+
+    @pytest.mark.parametrize("kind", ["mapping-proxy", "user-dict"])
+    def test_attrs_hook_may_return_any_mapping(self, kind):
+        # A read-only or dict-like mapping is copied into a dict before the
+        # next extension and the attribute formatter change it.
+        received = []
+
+        class AttrsDict(UserDict):
+            pass
+
+        class Replace(Extension):
+            name = "replace"
+
+            def on_attrs_resolved(self, ctx):
+                attrs = {**ctx.attrs, "data-x": "1"}
+                return MappingProxyType(attrs) if kind == "mapping-proxy" else AttrsDict(attrs)
+
+        class Reader(Extension):
+            name = "reader"
+
+            def on_attrs_resolved(self, ctx):
+                received.append(ctx.attrs)
+                ctx.attrs["data-y"] = "2"
+
+        app = _Citry(extensions=[Replace, Reader], autodiscover=False)
+
+        class Card(Component):
+            citry = app
+            template = """
+                <p c-class="'x'">card</p>
+            """
+
+        html = str(Card())
+        assert 'data-x="1"' in html
+        assert 'data-y="2"' in html
+        assert [type(attrs) for attrs in received] == [dict]
 
 
 class TestTemplateHooks:

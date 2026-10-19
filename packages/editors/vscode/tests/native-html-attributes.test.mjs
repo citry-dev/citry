@@ -71,7 +71,7 @@ test("projects a dynamic native attribute without moving source coordinates", ()
 	]);
 });
 
-test("projects Alpine bind shorthand to its native HTML attribute", () => {
+test("projects Vue bind shorthand to its native HTML attribute", () => {
 	const source = '<button :aria-expanded="open" :disabled="busy"></button>';
 	const projected = projectNativeHtmlAttributes(source);
 	const expandedStart = source.indexOf(":aria-expanded");
@@ -99,7 +99,7 @@ test("projects Alpine bind shorthand to its native HTML attribute", () => {
 	]);
 });
 
-test("keeps Citry state bindings out of Alpine native projection", () => {
+test("keeps Citry state bindings out of Vue native projection", () => {
 	const source = '<input :c-query.debounce.300ms="refresh" :C-query="value" />';
 	const projected = projectNativeHtmlAttributes(source);
 

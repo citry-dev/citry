@@ -14,7 +14,7 @@ inputs:
       - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native input with an external form.}
       - {id: format, name: format, type: {display: CColorPickerFormat, interfaces: [CColorPickerFormat]}, default: {kind: literal, value: hex}, effect: Chooses the editable HEX RGB or HSL representation.}
       - {id: swatches, name: swatches, type: 'Sequence[CColorSwatch]', default: {kind: literal, value: '()'}, effect: Adds unique named solid-color shortcuts.}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial popup visibility.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets popup visibility. A server re-render that changes it opens or closes the popup. A re-render that leaves it unchanged keeps the current state.}
       - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables focus mutation and form submission.}
       - {id: readonly, name: readonly, type: bool, default: {kind: literal, value: false}, effect: Prevents color mutation while retaining the value.}
       - {id: size, name: size, type: {display: CColorPickerSize, interfaces: [CColorPickerSize]}, default: {kind: literal, value: md}, effect: Selects trigger height.}
@@ -39,7 +39,7 @@ inputs:
       - {id: readonly, name: readonly, type: boolean, omitted: Uses the server value., effect: Reactively prevents mutation.}
       - {id: format, name: format, type: {display: CColorPickerFormat, interfaces: [CColorPickerFormat]}, omitted: Uses the server value., effect: Controls the editable representation.}
       - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic callback runs., effect: Receives valid color requests.}
-      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic callback runs., effect: Receives popup visibility requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic callback runs., effect: "Receives popup visibility requests and the close caused by disabling an open popup."}
 
 slots: []
 
@@ -48,7 +48,7 @@ events:
     component: CColorPicker
     entries:
       - {id: value, name: onValueChange, signature: {display: '(value: string, detail: CColorPickerValueChangeDetail) => void', interfaces: [CColorPickerValueChangeDetail]}, trigger: A valid area hue text swatch native or reset request occurs., detail: {display: '{value, previousValue, rgb, hsl, hsv, controlled, source, sourceEvent}', interfaces: [CColorPickerValueChangeDetail]}, behavior: Commits and dispatches native input and change only while uncontrolled.}
-      - {id: open, name: onOpenChange, signature: {display: '(open: boolean, detail: CColorPickerOpenChangeDetail) => void', interfaces: [CColorPickerOpenChangeDetail]}, trigger: The popup requests a visibility change., detail: {display: '{open, reason, sourceEvent}', interfaces: [CColorPickerOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
+      - {id: open, name: onOpenChange, signature: {display: '(open: boolean, detail: CColorPickerOpenChangeDetail) => void', interfaces: [CColorPickerOpenChangeDetail]}, trigger: "The popup requests a visibility change, or disabling closes an open popup.", detail: {display: '{open, reason, sourceEvent}', interfaces: [CColorPickerOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
 
 methods: []
 
@@ -102,7 +102,7 @@ interfaces:
       - {id: source, name: CColorPickerSource, definition: 'Literal["area", "hue", "text", "swatch", "native", "reset"]'}
       - {id: swatch, name: CColorSwatch, definition: 'CColorSwatch(value: str, label: str)'}
   - {id: ccolor-picker-value-detail, kind: record, name: CColorPickerValueChangeDetail, entries: [{id: value, name: value, type: str, meaning: Requested canonical HEX value.}, {id: previous, name: previousValue, type: str, meaning: Previous value.}, {id: rgb, name: rgb, type: 'dict[str, int]', meaning: Requested integer RGB channels.}, {id: hsl, name: hsl, type: 'dict[str, float]', meaning: Requested HSL channels.}, {id: hsv, name: hsv, type: 'dict[str, float]', meaning: Requested HSV channels.}, {id: controlled, name: controlled, type: bool, meaning: Whether client value owns state.}, {id: source, name: source, type: CColorPickerSource, meaning: Interaction source.}, {id: source-event, name: sourceEvent, type: object, meaning: Native Event.}]}
-  - {id: ccolor-picker-open-detail, kind: record, name: CColorPickerOpenChangeDetail, entries: [{id: open, name: open, type: bool, meaning: Requested popup state.}, {id: reason, name: reason, type: str, meaning: Trigger outside escape or selection reason.}, {id: source-event, name: sourceEvent, type: object, meaning: Native Event.}]}
+  - {id: ccolor-picker-open-detail, kind: record, name: CColorPickerOpenChangeDetail, entries: [{id: open, name: open, type: bool, meaning: Requested popup state.}, {id: reason, name: reason, type: str, meaning: Trigger outside escape selection or disabled reason.}, {id: source-event, name: sourceEvent, type: object, meaning: Native Event.}]}
 
 translations:
   - id: ccolor-picker-translations

@@ -41,6 +41,7 @@ MANIFESTS_DIR = TESTS_DIR / "manifests"
 ENVELOPE_REJECTION_CODES = {"protocol_mismatch", "payload_too_large"}
 BASELINE_SWAPS = {"replace", "inner", "append", "prepend", "remove", "none"}
 BASELINE_ACTIONS = {"render", "data", "state", "event", "redirect", "url"}
+BASELINE_RENDERERS = {"html-fragment/1"}
 
 # Matches one path segment of the dynamic-field grammar: `.key` or `[n]`.
 _SEGMENT_RE = re.compile(r"\.([A-Za-z0-9_]+)|\[([0-9]+)\]")
@@ -182,7 +183,7 @@ def _validate(value: Any, schema: dict[str, Any], root: dict[str, Any], path: st
         if "minLength" in schema and len(value) < schema["minLength"]:
             problems.append(f"{path}: shorter than minLength {schema['minLength']}")
         # JSON Schema patterns are unanchored: a match anywhere satisfies them.
-        if "pattern" in schema and re.search(schema["pattern"], value) is None:
+        if "pattern" in schema and not _pattern_matches(schema["pattern"], value):
             problems.append(f"{path}: does not match pattern {schema['pattern']!r}")
 
     if _has_type(value, "number") and "minimum" in schema and value < schema["minimum"]:
@@ -193,13 +194,35 @@ def _validate(value: Any, schema: dict[str, Any], root: dict[str, Any], path: st
     return problems
 
 
+def _pattern_matches(pattern: str, value: str) -> bool:
+    r"""
+    Search ``value`` with ECMA-262 end-of-input semantics for ``$``.
+
+    Python's ``$`` also matches before a final newline, so ``"render:a\n"``
+    would pass ``^render:[a-z0-9_-]+$``. JSON Schema regexes follow ECMA-262,
+    where ``$`` (without the multiline flag) matches only at the end, which
+    Python spells ``\Z``. Only a final ``$`` is an anchor; one inside a
+    character class is a literal and stays as it is.
+    """
+    if pattern.endswith("$") and not pattern.endswith("\\$"):
+        pattern = pattern[:-1] + r"\Z"
+    return re.search(pattern, value) is not None
+
+
+def _pattern(validator: Any, pattern: str, instance: Any, schema: dict[str, Any]) -> Any:  # noqa: ARG001 - jsonschema keyword signature
+    """The jsonschema ``pattern`` keyword with the same end-of-input rule as the built-in checker."""
+    if isinstance(instance, str) and not _pattern_matches(pattern, instance):
+        yield jsonschema.ValidationError(f"{instance!r} does not match {pattern!r}")
+
+
 def schema_errors(value: Any, schema: dict[str, Any]) -> list[str]:
     """Validate with the jsonschema package when available, else the built-in checker."""
     json_problems = _json_value_errors(value)
     if json_problems:
         return json_problems
     if jsonschema is not None:
-        validator = jsonschema.Draft202012Validator(schema)
+        validator_class = jsonschema.validators.extend(jsonschema.Draft202012Validator, {"pattern": _pattern})
+        validator = validator_class(schema)
         return [f"$.{'.'.join(str(p) for p in error.path)}: {error.message}" for error in validator.iter_errors(value)]
     return _validate(value, schema, schema, "$")
 
@@ -384,15 +407,17 @@ def check_exchange(
 
 
 def capability_errors(call: Any, result: Any) -> list[str]:
-    """Report result actions or render swaps outside the caller's advertised set."""
+    """Report result actions, swaps, or renderers outside the advertised set."""
     if not isinstance(call, dict) or not isinstance(result, dict):
         return []
     advertised = call.get("capabilities")
     capabilities = advertised if isinstance(advertised, dict) else {}
     raw_actions = capabilities.get("actions", BASELINE_ACTIONS)
     raw_swaps = capabilities.get("swaps", BASELINE_SWAPS)
+    raw_renderers = capabilities.get("renderers", BASELINE_RENDERERS)
     allowed_actions = set(raw_actions) if isinstance(raw_actions, list | set) else set()
     allowed_swaps = set(raw_swaps) if isinstance(raw_swaps, list | set) else set()
+    allowed_renderers = set(raw_renderers) if isinstance(raw_renderers, list | set) else set()
 
     problems: list[str] = []
     results = result.get("results")
@@ -411,6 +436,11 @@ def capability_errors(call: Any, result: Any) -> list[str]:
             if kind == "render" and action.get("swap") not in allowed_swaps:
                 problems.append(
                     f"results[{result_index}].actions[{action_index}] uses unadvertised swap {action.get('swap')!r}"
+                )
+            if kind == "render" and action.get("renderer", "html-fragment/1") not in allowed_renderers:
+                problems.append(
+                    f"results[{result_index}].actions[{action_index}] uses unadvertised renderer "
+                    f"{action.get('renderer', 'html-fragment/1')!r}"
                 )
     return problems
 

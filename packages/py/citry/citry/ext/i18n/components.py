@@ -54,8 +54,21 @@ def make_i18n_component(citry_instance: Citry) -> type[Component]:
 <c-element
   c-is="tag"
   c-bind="attrs"
-  x-init="$provide('citry_i18n', Citry.i18n.provider($el, $inject('citry_i18n', null)))"
 ><c-slot /></c-element>\
+"""
+        js = """
+$component({
+  mounted() {
+    this._citryI18nStop = this.$i18n.subscribe((context) => {
+      this.$el.setAttribute('lang', context.locale);
+      this.$el.setAttribute('dir', context.direction);
+    });
+  },
+  beforeUnmount() {
+    this._citryI18nStop?.();
+    this._citryI18nStop = null;
+  },
+});
 """
 
     class I18nBarrierHost(Component, _citry_internal=internal_token):
@@ -75,7 +88,10 @@ def make_i18n_component(citry_instance: Citry) -> type[Component]:
             }
 
         template = """\
-<c-element c-is="tag" c-bind="attrs" x-init="$unprovide('citry_i18n')"><c-slot /></c-element>\
+<c-element c-is="tag" c-bind="attrs"><c-slot /></c-element>\
+"""
+        js = """
+$component({});
 """
 
     class I18nElementHost(Component, _citry_internal=internal_token):
@@ -107,7 +123,17 @@ def make_i18n_component(citry_instance: Citry) -> type[Component]:
 """
 
     class I18nProvider(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
-        """Set locale context below this tag and optionally render a semantic host."""
+        """
+        Set the locale for the content inside this tag.
+
+        ``locale``, ``direction`` (``"ltr"`` or ``"rtl"``), ``time_zone``, and
+        ``context`` (a whole locale context) override the inherited values.
+        Add ``tag`` to wrap the content in that HTML element with ``lang`` and
+        ``dir`` set from the locale. The ``client`` attribute, which sends the
+        locale to browser code, requires ``tag``, and so does a ``<c-i18n>``
+        placed inside a ``client`` one; without it the tag raises
+        ``ValueError``.
+        """
 
         citry = citry_instance
         name = "i18n"
@@ -215,8 +241,10 @@ def make_i18n_component(citry_instance: Citry) -> type[Component]:
                 "tag": tag,
             }
 
-        # One dynamic call keeps the public slot in the checked ownership
-        # graph while the selected private host remains unavailable as a tag.
+        # One dynamic <c-component> call forwards this provider's public slot
+        # to the selected host, so Citry's checks still see which component
+        # owns the slot content, while the private host classes stay
+        # unavailable as tags.
         template = """\
 <c-component c-is="host" c-tag="tag" c-attrs="attrs" c-policy="policy"><c-slot /></c-component>\
 """
@@ -229,7 +257,17 @@ def make_trans_component(citry_instance: Citry) -> type[Component]:
     extension = cast("Any", citry_instance.extensions.get_extension("i18n"))
 
     class Trans(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
-        """Render escaped translated text with application-owned named fills."""
+        """
+        Render a translated message that contains HTML, such as a link or a component.
+
+        ``message`` (required) is the message id. ``values`` maps the
+        message's variables to values, and each ``<c-fill>``
+        supplies the HTML for the placeholder with the same name, so the
+        translator decides where the link goes. ``attr`` picks one
+        attribute of the message instead of its main text. Citry escapes
+        the translated text itself. Using one name both in ``values`` and as
+        a fill, or passing any other attribute, raises ``ValueError``.
+        """
 
         citry = citry_instance
         name = "trans"

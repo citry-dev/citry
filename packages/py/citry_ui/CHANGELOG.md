@@ -42,6 +42,53 @@
   offset restore causes when the area is moved to another place in the page
   before the next frame; the callback previously received that event with a
   `null` source target.
+- `CContextMenu` now calls `onOpenChange` when page code changes the menu's
+  markup while the menu is starting up, for example right after a server
+  re-render. Previously the callback was not called for that menu until its
+  props changed.
+- `CContextMenu` now calls `onOpenChange(false)` when a server re-render
+  changes the items of an open menu and closes it. Previously the menu
+  closed without the callback, so state that follows `onOpenChange` still
+  said the menu was open.
+- `CContextMenu` no longer keeps the page busy when page code changes its
+  markup into a form it cannot use. It now waits for the next change instead
+  of rewriting its markup on every timer tick, and logs a single console
+  error while the markup stays unusable.
+- An open `CDialog`, `CAlertDialog`, `CDrawer`, `CTour`, `CHoverCard`,
+  `CSelect`, `CMultiSelect`, `CCombobox`, `CCascader`, `CColorPicker`,
+  `CDatePicker`, `CDateRange`, or `CTimePicker` stays open when a server
+  event re-renders the component that contains it. Previously it closed
+  without calling `onOpenChange`, and a `CDrawer` or `CTour` the user had
+  closed could reopen.
+- When a server event changes the `open` input you pass to `CPopover`,
+  `CMenu`, `CHoverCard`, `CSelect`, `CMultiSelect`, or `CCommandPalette`,
+  the component now opens or closes to match; previously it could ignore the
+  change. In all of these, and in `CDialog`, `CAlertDialog`, `CDrawer`,
+  `CTour`, `CCombobox`, `CCascader`, and `CColorPicker`, a server event that
+  leaves `open` unchanged keeps the component open or closed as the user
+  left it.
+- `CDialog`, `CAlertDialog`, and `CCommandPalette` now call `onOpenChange`
+  with reason `"ancestor"` when an enclosing `CDrawer` closes them, as they
+  already did inside an enclosing dialog. Previously they reported
+  `"native"`.
+- The `CMenu` trigger and the `CTimePicker` control no longer stay disabled
+  after a server event disables and then re-enables them.
+- A `CDialog` or `CAlertDialog` that a server event removes while it is open
+  now returns focus to the element that opened it, if that element is still
+  on the page.
+- An open `CTour` keeps the step the user reached when a server event
+  re-renders the component that contains it, and moves to a new step when
+  the server changes `active`. Previously such a re-render sent the tour
+  back to the server's step. Its dialog also keeps the current step's title
+  and description as its accessible name after the user moves between steps.
+- `CHoverCard`, `CSelect`, `CMultiSelect`, `CCombobox`, `CCascader`,
+  `CColorPicker`, `CDatePicker`, `CDateRange`, and `CTimePicker` now close
+  when they are disabled while open, and call `onOpenChange(false)`. Some
+  stayed open and others closed without the callback. `CSelect` and
+  `CMultiSelect` report reason `"ancestor"`, as they already did when
+  disabled from the browser; the others report the new reason `"disabled"`,
+  as `CMenu` does. They report the close even when the same server event
+  also changes `open`.
 
 ## [0.2.2] - 2026-09-11
 

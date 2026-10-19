@@ -18,13 +18,15 @@ from weakref import WeakKeyDictionary
 
 from citry._nested_declarations import (
     _active_nested_class_declarations,
+    _ancestor_with_same_declaration,
     _compose_nested_declaration_class,
+    _nearest_data_shape_declaration,
 )
 from citry.ext.events._introspection import capture_handler_introspection, inspect_events
 from citry.ext.events.bindings import compile_template_bindings, rewrite_resolved_attrs
 from citry.ext.events.cache import export_events_cache, stage_events_cache
 from citry.ext.events.config import Events
-from citry.ext.events.emission import capture_instance, emit_events_dependencies, merge_instance_entries
+from citry.ext.events.emission import capture_instance, merge_instance_entries
 from citry.ext.events.handlers import (
     CONFIG_NAMES,
     collect_event_handlers,
@@ -36,14 +38,16 @@ from citry.ext.events.handlers import (
     validate_csrf_value,
     validate_handler_signature,
     validate_methods_value,
+    validate_route_methods,
     validate_timing_value,
     validate_topics_value,
 )
 from citry.ext.events.openapi import OpenApiCommand
-from citry.ext.events.routes import events_config_url, events_routes
+from citry.ext.events.routes import events_routes
 from citry.ext.events.state import (
     StateMeta,
     build_state_instance,
+    check_replaced_state,
     convert_state_class,
     resolve_state_meta,
     validate_state_class,
@@ -55,7 +59,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from citry.component import Component
-    from citry.ext.dependencies.emission import OnDependenciesContext
     from citry.extension import (
         ComponentIntrospectionContext,
         OnAttrsResolvedContext,
@@ -76,13 +79,6 @@ def _config_name_hint(name: str) -> str:
     close = get_close_matches(name, CONFIG_NAMES, n=1, cutoff=0.7)
     return f" Did you mean {close[0]!r}?" if close else ""
 
-
-# The URL builder rides the one class every component's Events config is
-# woven on (design events.md 3.8: component.events.url(...) during render).
-# The implementation lives with the routes it points at; attaching it here,
-# where the weaving is set up, keeps the config module a pure typing surface
-# and the woven class identical to the typed base.
-Events.url = events_config_url  # type: ignore[attr-defined]
 
 # The built-in defaults, the lowest of the three config levels (component
 # beats extensions_defaults["events"] beats these).
@@ -253,9 +249,8 @@ class EventsExtension(Extension):
         nested ``Events`` class, so they are rejected in
         ``extensions_defaults`` (an event handler cannot be defaulted
         globally), and on the component they must be plain methods defined
-        with ``def``, which is exactly what handler enumeration collects
-        (design ``events.md`` 3.1). A ``staticmethod`` or ``classmethod``
-        passes here so enumeration can reject it with its own pointed error;
+        with ``def``, which is exactly what handler enumeration collects.
+        A ``staticmethod`` or ``classmethod`` passes here so enumeration can reject it with its own pointed error;
         anything else (a ``property``, a ``functools.partial``, a plain
         value) fails here rather than sit on Events as silently neither
         handler nor config. Citry calls this at engine construction (for the
@@ -379,7 +374,6 @@ class EventsExtension(Extension):
         comp_cls = ctx.component_class
         compiled = compile_template_bindings(
             self.resolve(comp_cls),
-            comp_cls.class_id,
             comp_cls.__name__,
             ctx.nodes,
         )
@@ -409,9 +403,7 @@ class EventsExtension(Extension):
         # bindings) and for compiled State bindings that need final control/type
         # validation after dynamic attributes resolve.
         comp_cls = type(ctx.component)
-        return rewrite_resolved_attrs(
-            self.resolve(comp_cls), ctx.component._citry_class_id, comp_cls.__name__, ctx.tag_name, ctx.attrs
-        )
+        return rewrite_resolved_attrs(self.resolve(comp_cls), comp_cls.__name__, ctx.tag_name, ctx.attrs)
 
     def on_component_data(self, ctx: OnComponentDataContext) -> None:
         """
@@ -434,16 +426,6 @@ class EventsExtension(Extension):
 
     def stage_render_cache(self, ctx: OnRenderCacheStageContext) -> StagedRenderCacheContribution:
         return stage_events_cache(self, ctx)
-
-    def on_dependencies(self, ctx: OnDependenciesContext) -> None:
-        """
-        Add the Events runtime and instance data to serialized dependencies.
-
-        Args:
-            ctx: The dependencies context for the render being serialized.
-
-        """
-        emit_events_dependencies(self, ctx)
 
     def two_way_binding_targets(self, comp_cls: type[Component]) -> frozenset[str]:
         """
@@ -578,27 +560,28 @@ class EventsExtension(Extension):
         return _compose_nested_declaration_class(cls, "Events")
 
     def _effective_state(self, cls: type[Component]) -> tuple[type, StateMeta] | None:
-        """Build and convert the effective State declaration for this component."""
-        declarations = _active_nested_class_declarations(cls, "State")
-        if not declarations:
+        """
+        Build and convert the effective State declaration for this component.
+
+        State is a data shape, so the nearest declaration in C3 order applies
+        and is never combined with a parent's: ``class State(Parent.State):``
+        extends the parent's fields and settings, while a plain
+        ``class State:`` replaces them.
+        """
+        nearest = _nearest_data_shape_declaration(cls, "State")
+        if nearest is None or nearest.value is None:
             return None
-        first_owner = declarations[0].declaring_class
-        inherited = _component_events_info(first_owner)
-        if (
-            first_owner is not cls
-            and inherited is not None
-            and inherited.state_cls is not None
-            and inherited.state_meta is not None
-            and declarations == _active_nested_class_declarations(first_owner, "State")
-        ):
+        ancestor = _ancestor_with_same_declaration(cls, "State", nearest)
+        inherited = _component_events_info(ancestor) if ancestor is not None else None
+        if inherited is not None and inherited.state_cls is not None and inherited.state_meta is not None:
             return inherited.state_cls, inherited.state_meta
 
-        declaration = _compose_nested_declaration_class(cls, "State")
-        declaration = cast("type", declaration)
+        declaration = cast("type", nearest.value)
         comp_name = cls.__name__
         validate_state_class(comp_name, declaration)
         converted = convert_state_class(comp_name, declaration)
         meta = resolve_state_meta(comp_name, declaration, converted)
+        check_replaced_state(cls, nearest, converted)
         type.__setattr__(cls, "State", converted)
         return converted, meta
 
@@ -636,6 +619,10 @@ class EventsExtension(Extension):
             f"Component {comp_name}: Events._methods",
             self._resolve_config_value(raw_events, "_methods", defaults),
         )
+        # The component default (or the engine default it fell back to)
+        # applies to every handler without its own @event(methods=...), so a
+        # method the per-event route rejects would leave them all unreachable.
+        validate_route_methods(f"Component {comp_name}: Events._methods", methods)
         debounce = validate_timing_value(
             f"Component {comp_name}: Events._debounce",
             self._resolve_config_value(raw_events, "_debounce", defaults),

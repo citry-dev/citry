@@ -439,11 +439,11 @@ tags**. `docs_site/reference.yml` is the authoritative list. Scope is
   tags.
 - *Slice 3c (done):* `crossrefs.py` - `[text][symbol]` resolution wired into
   both the content pipeline and docstring rendering (`reference._md`), with
-  absolute reference URLs, the `[text][]` shorthand, member anchors, fenced-code
-  skipping, and degrade-to-text for unknown keys; plus the Sphinx v2
-  `objects.inv` written into the build so other sites can link in. (citry's
-  docstrings do not use bracket refs yet, but the feature is ready for when they
-  do.)
+  absolute reference URLs, the `[text][]` shorthand, and member anchors. On
+  content pages it skips fenced code and leaves an unknown key as literal
+  brackets; in docstrings it rewrites the whole text and renders an unknown
+  key as plain text. The build also writes a Sphinx v2 `objects.inv` so other
+  sites can link in.
 - *Slice 3e (done): authored browser API reference.*
   `/reference/browser-apis/` is the canonical Reference page for
   `$component`, Citry's eight Alpine magics, `Citry.alpine.beforeStart`, and
@@ -511,6 +511,11 @@ symbol resolves and every public export is on a page), and `redirect_target`
 That brings the suite to 16 guards; the only one still deferred is
 `anchor_alias`, which needs a legacy-anchor scheme citry has no use for yet (no
 symbol has been renamed). The suite passes clean, including under `--strict`.
+
+The `crossref` guard looks up every `[text][key]` cross-reference in the
+Markdown pages and in the docstrings the generated Reference pages render. The
+builder leaves an unknown key as literal brackets on a page and as plain text
+in a docstring, without any warning, so the guard reports it as an error.
 
 Social-card images are now generated too (`social_cards.py` + the `OgCard`
 component): for each indexable page the card is rendered to standalone HTML,
@@ -792,7 +797,7 @@ why. This phase is the deliberate authoring pass. Approach:
   reference for who each page is written to.
 - **Component reuse pages.** The Advanced authoring pass separates two reader
   jobs: `Component libraries` covers packaging and publishing reusable
-  components, while `Custom component values` explains the `ComponentLike`
+  components, while `Render custom values` explains the `ComponentLike`
   integration contract. Both keep implementation detail behind the task it
   helps the reader complete.
 - **Intent-driven and concise.** Every reader arrives with a reason. Lead them to

@@ -13,7 +13,7 @@ inputs:
       - {id: entries, name: entries, type: {display: 'Sequence[CCommandPaletteEntry]', interfaces: [CCommandPaletteEntry]}, default: {kind: required}, effect: 'Snapshots and validates ordered command, group, and separator records.'}
       - {id: label, name: label, type: non-whitespace str, default: {kind: required}, effect: Supplies the visible Dialog title and accessible name.}
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the Dialog identity and bases owned relationship IDs.}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Selects initial server and uncontrolled Dialog visibility.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible open state. A server re-render that changes it opens or closes the palette. A re-render that leaves it unchanged keeps the current state. A valid client `open` input controls later state.}
       - {id: query, name: query, type: str, default: {kind: literal, value: ''}, effect: Seeds the exact search text without server-side filtering.}
       - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables activation and force-closes an open palette.}
       - {id: loop, name: loop, type: bool, default: {kind: literal, value: true}, effect: Wraps active Arrow navigation at the first and last eligible command.}

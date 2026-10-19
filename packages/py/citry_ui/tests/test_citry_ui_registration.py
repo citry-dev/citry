@@ -6,10 +6,12 @@ import importlib.metadata
 import importlib.resources
 import inspect
 import json
+import pkgutil
 import re
 import subprocess
 import sys
 from dataclasses import fields
+from pathlib import Path
 from types import ModuleType
 from typing import get_type_hints
 
@@ -36,6 +38,8 @@ from citry import (
     LibraryInstallationStale,
     LibraryNotInstalled,
 )
+from citry._app_selection import CheckAppSelection
+from citry._checker import check_project
 from citry_ui import (
     CAccordion,
     CAccordionItem,
@@ -317,6 +321,61 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CInternalSplitterPanel",
         "CInternalSplitterHandle",
     )
+
+
+def _production_component_definitions() -> frozenset[type[LibraryComponent]]:
+    definitions: set[type[LibraryComponent]] = set()
+    # Quality test pages, docs snippets, and tests define demo components that are
+    # not part of the shipped library.
+    excluded_packages = {"quality", "snippets", "tests"}
+
+    for module_info in pkgutil.walk_packages(
+        citry_ui_components.__path__,
+        prefix=f"{citry_ui_components.__name__}.",
+    ):
+        if excluded_packages.intersection(module_info.name.split(".")):
+            continue
+        module = importlib.import_module(module_info.name)
+        # Count a class only in the module that defines it, so a re-export
+        # does not hide a component missing from the manifest.
+        definitions.update(
+            value
+            for value in vars(module).values()
+            if inspect.isclass(value)
+            and issubclass(value, LibraryComponent)
+            and value is not LibraryComponent
+            and value.__module__ == module.__name__
+        )
+
+    return frozenset(definitions)
+
+
+def test_every_production_component_is_in_the_manifest_and_installed():
+    """A component left out of the manifest would never be registered on an engine."""
+    discovered = _production_component_definitions()
+    declared = frozenset(COMPONENTS)
+
+    assert discovered == declared, (
+        "Every production LibraryComponent must be in the Citry UI manifest. "
+        f"Missing from manifest: {sorted(item.__name__ for item in discovered - declared)!r}; "
+        f"missing from discovery: {sorted(item.__name__ for item in declared - discovered)!r}"
+    )
+
+    # Registering the library must install exactly the components it
+    # declares, so the manifest is the full set.
+    installation = Citry(autodiscover=False).register_library(citry_ui)
+    assert frozenset(installation.definitions) == discovered
+
+
+def test_check_project_loads_the_whole_library():
+    """`citry check` must be able to analyze every Citry UI component without failing to load the app."""
+    engine = Citry(autodiscover=False)
+    engine.register_library(citry_ui)
+
+    report = check_project(CheckAppSelection(spec="citry-ui-check", engine=engine), Path.cwd())
+
+    # Findings may include errors; this test only proves the registry loads.
+    assert report.app_failure is None
 
 
 def test_library_publication_rejects_invalid_invocations_and_manifests():

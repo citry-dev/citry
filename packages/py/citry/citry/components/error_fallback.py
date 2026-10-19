@@ -49,7 +49,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from citry.component import Component
-from citry.util.html import escape
 
 if TYPE_CHECKING:
     from citry.citry import Citry
@@ -100,7 +99,15 @@ def make_error_fallback_component(citry_instance: Citry) -> type[Component]:
                 # narrows away the broader part type).
                 part = fallback_slot({"error": error}, provides=self._provides_inherited)
                 return cast("RenderReplacement", part)
-            return escape(fallback_text) if fallback_text is not None else ""
+            if fallback_text is None:
+                return ""
+            # on_render escapes a returned plain str, so the attribute text
+            # shows as written; a Markup value stays trusted HTML. Kwargs
+            # types are not enforced at runtime, so a number or other value
+            # becomes its text here rather than failing inside the boundary.
+            if isinstance(fallback_text, str) or hasattr(fallback_text, "__html__"):
+                return fallback_text
+            return str(fallback_text)
 
         template = """
           <c-slot />

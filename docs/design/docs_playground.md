@@ -312,7 +312,13 @@ preview Citry client
 ```
 
 The browser adapter constructs a synthetic `EventRequest` containing the path,
-method, headers, and body needed by Citry's event contract. Its
+method, headers, and body needed by Citry's event contract. The preview
+forwards only the `X-Citry-Vue-App`, `X-Citry-Vue-Occurrence`, and
+`X-Citry-Vue-Revision` headers from the request Citry gives its transport; the
+parent frame and the executor each drop any other header, so preview code
+cannot pass cookies, CSRF tokens, or credentials to the dispatcher. The server
+needs those three headers to answer with a Render action for the component on
+screen. Its
 `TransportContext` identifies `transport="playground"` and uses the current
 generation's Citry engine. It must not claim authentication, session,
 middleware, CSRF, upload, arbitrary route, or framework behavior that the

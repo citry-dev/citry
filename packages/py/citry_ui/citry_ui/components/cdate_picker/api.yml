@@ -63,7 +63,7 @@ inputs:
       - {id: variant, name: variant, type: {display: CDatePickerVariant, interfaces: [CDatePickerVariant]}, omitted: Uses the server input., effect: Controls field presentation.}
       - {id: size, name: size, type: {display: CDatePickerSize, interfaces: [CDatePickerSize]}, omitted: Uses the server input., effect: Controls coordinated sizing.}
       - {id: on-value-change, name: onValueChange, type: function, omitted: No semantic value callback., effect: Receives Calendar clear native and reset value requests.}
-      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic visibility callback., effect: Receives trigger selection dismissal reset and forced-close requests.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: No semantic visibility callback., effect: "Receives trigger, selection, dismissal, reset, and forced-close requests, including the close caused by disabling an open popup."}
 
 slots: []
 
@@ -150,7 +150,7 @@ interfaces:
     kind: record
     name: CDatePickerOpenChangeDetail
     entries:
-      - {id: reason, name: reason, type: trigger | selection | clear | reset | escape | outside | focus-outside | native | ancestor | modal, meaning: Exact request or forced-close cause.}
+      - {id: reason, name: reason, type: trigger | selection | clear | reset | escape | outside | focus-outside | native | ancestor | modal | disabled, meaning: Exact request or forced-close cause.}
       - {id: controlled, name: controlled, type: boolean, meaning: Whether client open owns ordinary visibility commits.}
       - {id: forced, name: forced, type: boolean, meaning: Whether ancestor or modal safety required closure.}
       - {id: source, name: source, type: 'object | null', meaning: Associated browser source when one exists.}

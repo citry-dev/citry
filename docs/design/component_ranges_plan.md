@@ -48,7 +48,7 @@ second representation of components.
   dependency calls. Both currently assume the whole incoming revision will be
   adopted.
 - `packages/py/citry/citry/ext/dependencies/emission.py:527`
-  (`_emit_fragment`) currently renders `before_manifest` dependencies as live
+  (`_emit_fragment`) currently renders `early_scripts` dependencies as live
   tags before the dependency manifest. That is unsafe for an incoming branch
   which an old `#c-ignore` barrier later excludes.
 - `packages/py/citry/citry/ext/cache/artifact.py:20` fixes the strict render
@@ -301,7 +301,7 @@ or invalid-base64 owner, a duplicate owner, or an owner render ID absent from
 the prepared graph. Owner arrays must already be sorted by decoded render ID;
 out-of-order input is rejected rather than canonicalized in the browser.
 
-Fragment `before_manifest` entries no longer render as live arbitrary tags.
+Fragment `early_scripts` entries no longer render as live arbitrary tags.
 The server keeps framework-owned ownership and Events
 `<script type="application/json">` manifests as the existing top-level inert
 tags, but encodes every other hook-added entry through `Dependency.render_json`
@@ -414,7 +414,7 @@ true:
   behavior for ordinary DOM and form controls;
 - ownership or Events state must be installed before the planner can compute
   matches, creating an unavoidable side effect from an excluded branch;
-- extension `before_manifest` hooks require parse-time execution rather than
+- extension `early_scripts` hooks require parse-time execution rather than
   post-plan activation;
 - a metadata-free component changes generated source or runtime behavior;
 - any JS/PHP/Go/Rust or PyO3 contract actually consumes the changed Python

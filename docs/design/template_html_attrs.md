@@ -129,7 +129,8 @@ Also relevant in `packages/py/citry/citry/`:
 
 - `util/html.py`: `escape` (markupsafe, escapes all five of `& < > ' "` so
   one escaping is safe in body and attribute position) and `Markup`
-  with `__html__` passthrough. The new code uses these, nothing new needed.
+  with `__html__` passthrough for body text. Attribute values use
+  `escape_attribute_value` instead, which escapes `Markup` too (section 3.1).
 - The static-attr path already normalizes `key=""` to the bare boolean form
   at compile time (`compiler.rs:456-460`), and `StaticHtmlAttr.resolve`
   returns `True` for value-less attributes (`nodes/__init__.py:405`). The
@@ -241,7 +242,7 @@ resolves to a Python object. What it means depends on the attribute:
 |---|---|
 | `True` | bare attribute: `disabled` |
 | `False` or `None` | attribute omitted entirely |
-| string / number / other | `key="value"`, value escaped via `escape()` (`Markup` / `__html__` objects pass through unescaped) |
+| string / number / other | `key="value"`, value escaped via `escape_attribute_value()`. A `Markup` / `__html__` object is escaped too: its HTML is first decoded with the browser's attribute rules (`decode_attribute_entities`), so `Markup("a &amp; b")` reads as `a & b` and a `"` in it cannot end the attribute. The Vue data path sends the same decoded text, so static and interactive pages agree |
 
 A value-less or empty dynamic attribute (`<div c-foo>`, `<div c-foo="">`) is
 a **parse error**: there is nothing to evaluate, and it is almost certainly
@@ -300,9 +301,16 @@ usual).
 | `c-c-c-foo="'bar'"` | `c-c-foo="bar"` (literal `c-c-foo`) |
 | `c-c-bind="'lit'"` | `c-bind="lit"` (literal `c-bind`, not a spread) |
 
-The common use is a framework "bridge" attribute: `c-:class="expr"` strips one
-`c-` and emits `:class="..."`, which Vue or Alpine then reads. Keys inside a
-`c-bind` mapping are always literal and never get this treatment.
+Keys inside a `c-bind` mapping are always literal and never get this treatment.
+
+Python data never sets a name that Vue reads as code. When the stripped name
+(or a `c-bind` key, or a name an `on_attrs_resolved` hook adds or changes)
+starts with `v-`, `:`, `.`, `^`, `@`, or `#` in any letter case, rendering
+raises `citry.VueCodeError`, on every page, whether or not it starts Vue. The
+`@c-*` and `:c-*` Events bindings are the exception. The rule is
+`is_vue_code_attr_name` and the message is `vue_code_error` (both in
+`citry.attrs`); every check calls them. `ElementAttrsNode` finds a `c-*` name
+once when it is built, and caches each `c-bind` key after its first check.
 
 ---
 
@@ -334,6 +342,15 @@ Resolution per key:
 - `class`, `style`: every contribution is kept, in order, and the list
   normalizes per section 3 at the end. Order is contribution order, so later
   entries override (style) or can disable (class dict) earlier ones.
+- a `class` or `style` written empty in the template (`<p class>` or
+  `<p style="">`, which compiles to `True`): it adds nothing when Python also
+  sets the attribute through `c-class`, `c-style`, or a `c-bind` key, even to
+  an empty value or `None`, so the element renders as if only the Python
+  value were there. When nothing from Python sets it, the element keeps the
+  empty attribute as written. The renderer carries it through the merge as a
+  private empty marker (`attrs.TEMPLATE_EMPTY_VALUE`), because a `True` from
+  Python data in `class` or `style` is a mistake and still raises
+  `TypeError`.
 - every other ordinary attribute key: last contribution wins.
 
 Attribute output order is **first-seen order of each key**, so adding a
@@ -507,7 +524,11 @@ context field (`extension.py:516`).
 
 The hook fires **after resolution, before formatting**: it sees the final
 merged dict (`class`/`style` already normalized to strings, booleans still
-`True`, omitted attributes already gone) and can rewrite any value. The two
+`True`, omitted attributes already gone) and can rewrite any value. A
+`class` or `style` that the template wrote empty and nothing else set
+reaches the hook as `True`, the value it compiled to; when the hook leaves
+that `True` in place, the element renders the empty attribute as written.
+`on_component_input` sees a dynamic `<c-element>`'s inputs the same way. The two
 alternative timings lose: a before-resolution hook would expose the
 internal per-source contribution list as public API for little gain (a
 post-processor wants the outcome, not the inputs), and an after-formatting
@@ -620,8 +641,7 @@ Phases 1 and 2 unblock the benchmark small-scenario port
   decision 5 keeps it out of scope here.
 - **Nested-template attribute values** (`c-foo="<span>...</span>"`):
   `TemplateHtmlAttr` resolves to rendered HTML; under the new node it is
-  escaped into the attribute value like any other string (`Markup` rules
-  apply). Behavior today is the same, just via flattened codegen.
+  escaped into the attribute value like any other string. Behavior today is the same, just via flattened codegen.
 
 ---
 

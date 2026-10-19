@@ -1,12 +1,22 @@
 # Design: the Events extension (`Component.Events`)
 
+**Vue cutover:** browser lifecycle, component targeting, native event handlers
+and prepared revisions follow [`vue.md`](vue.md). The Events wire contract,
+State and transport remain specified here and in the protocol package. The
+Alpine integration sections below are historical research, not the shipped
+browser contract; where they conflict with the current Vue v1 contract below,
+the current contract and [`vue.md`](vue.md) win.
+Migration qualification is recorded in [`vue.md`](vue.md).
+
 **Status (2026-07-26): Events v1 is implemented but not yet frozen or
 released as the v1 beta.** The exact current wire contract is
 [`packages/protocol/events/v1/spec.md`](../../packages/protocol/events/v1/spec.md);
-this document owns the product and implementation design behind it. The Alpine and
-frontend-boundary source of truth is now [`alpinejs.md`](alpinejs.md); this
-document remains normative for the Events protocol, State, actions,
-transport, and queue. The full
+this document owns the product and implementation design behind it. The current
+frontend-boundary source of truth is [`vue.md`](vue.md), and the shipped Vue v1
+browser contract above is normative for the public browser API. This document
+remains normative for the Events protocol, State, actions, transport, and the
+shipped serial queue; the Alpine-specific sections below preserve historical
+design research and do not describe the current runtime. The full
 section-by-section maintainer readthrough completed 2026-07-07 (three
 review rounds overall), and the client-model round (nested anchor
 continuity, targeted renders, the event queue, the `#c-*` channel) was
@@ -80,6 +90,40 @@ and 9; the migration verdicts it fulfills are in
 The focused implemented CSRF ownership and usage guide is
 [`security_csrf.md`](security_csrf.md).
 Operating rules: [`/CLAUDE.md`](../../CLAUDE.md).
+
+## Shipped Vue v1 browser contract
+
+The current Citry browser runtime is the prepared Vue runtime. It owns the
+mounted Citry Vue apps and the Events bridge; it does not load or emulate
+Alpine. This section records the v1 behavior that is easy to confuse with the
+older Alpine design retained later in this document for historical context.
+
+The v1 client serializes calls through one app-wide queue. Same-tick calls are
+not coalesced into one envelope, and `allowBatching` does not promise the old
+Alpine same-tick batching or dependency scheduler. A page must wait for the
+runtime and mounted app before calling `Citry.events`; no pre-runtime call
+queue is part of the shipped Vue contract. The public methods reject until the
+runtime exposes the namespace and a target is mounted.
+
+Vue v1 targets are bounded and explicit. `render:<render-id>` addresses one
+mounted component occurrence; an `Element` inside a mounted occurrence can be
+used by `Citry.events.send`; and `mark:<caller-render-id>:<name>` addresses a
+declared marker for a prepared render action. Render IDs and marker names are
+validated, and a global target lookup must resolve exactly one mounted app and
+occurrence. Zero matches and multiple matches reject. Arbitrary CSS selectors,
+document-shell elements (`html`, `head`, and `body`), and direct mutation of
+unmanaged DOM are outside Vue v1.
+
+`Citry.events.applyActions(actions)` uses the same action interpreter as a
+server response. With a mounted source it emits `citry:events:before`, then
+`citry:events:after` with `{ok: true|false}`, and emits `citry:events:error`
+or `citry:events:stale` for the corresponding failure before `after`. Its
+`detail.event` is `"__external__"` because the call has no server handler
+name; a `before` listener may cancel it. Actions without a mounted source
+retain their global-only behavior and do not acquire a component lifecycle.
+Accepted result preflight also accepts the dequeued State transaction before
+action interpretation begins, so a later action failure cannot restore a
+draft that the server has already consumed.
 
 ---
 
@@ -186,6 +230,9 @@ from citry.ext.events import actions
 
 class CartIn:
     product_id: int
+    # The render ID of the header's CartBadge. The page passes it to
+    # AddToCart as the badge_id kwarg, and the button sends it back.
+    badge_id: str
 
 class AddToCart(Component):
     class Events:
@@ -194,7 +241,7 @@ class AddToCart(Component):
             return [
                 actions.Render(
                     CartBadge(count=cart.count),
-                    target="#cart-badge",
+                    target=f"render:{data.badge_id}",
                 ),
                 actions.Dispatch(
                     "cart:updated",
@@ -202,20 +249,24 @@ class AddToCart(Component):
                 ),
             ]
 
+    def js_data(self, kwargs, slots):
+        return {"badge_id": kwargs["badge_id"]}
+
     template = """
-      <button @c-click="add({ product_id: 42 })">
+      <button @c-click="add({ product_id: 42, badge_id: badge_id })">
         Add to cart
       </button>
     """
 ```
 
-Any other component can react with one function call, no wiring:
-```html
-<div x-init="
-  $onEvent('cart:updated', () => {
-    $sendEvent('refresh');
-  })
-">...</div>
+Any other component with an Events declaration can react with one
+function call, no wiring:
+```js
+$component({
+  mounted() {
+    this.$onEvent("cart:updated", () => this.$sendEvent("refresh"));
+  },
+});
 ```
 
 **4. Every handler is a real, typed endpoint.** No second routing layer,
@@ -359,7 +410,7 @@ already built, and this design adds no core hooks:
 - **The client runtime baseline.** Before the Events decorator extends it in
   5.5, `Citry.manager` exposes seven public methods and `$component` callbacks
   receive exactly `{id, els, data}`
-  ([`citry.js:150`](../../packages/py/citry/citry/ext/dependencies/client/citry.js));
+  (the removed Alpine runtime's `citry.js:150`);
   fragments deliver assets and calls through inert base64-encoded JSON
   manifest tags picked up by a MutationObserver (`citry.js:201-213`).
   `$component(` is a cache-time regex rewrite to
@@ -842,9 +893,26 @@ nothing that looks like one.
 `class State:` on the component declares **exactly what round-trips**
 between the browser and the handlers. The extension rebuilds it as a
 non-frozen `dataclass(slots=True)` (the same treatment the core gives
-`Kwargs`, applied by the extension). A child `class State:` automatically adds
-to its parents' State fields in component C3 order; `State = None` resets the
-inherited State, and a nearer declaration can reopen the chain. Rules:
+`Kwargs`, applied by the extension). State is a data shape like `Kwargs`: the
+nearest declaration in the component's method resolution order applies. A
+subclass that declares nothing keeps its parent's State class and settings.
+`class State(Parent.State):` extends the parent's fields and keeps its
+settings (`_public`, `_model`, `_storage`, `_max_age`, `_max_bytes`), because
+they are class attributes inherited through the base. A plain `class State:`
+replaces the parent's State and starts from the default settings, including
+the default `_max_bytes`, which changes without a warning. Two checks
+guard that replacement at class definition:
+
+- If the parent's State sets `_storage = "server"` and the new class does not
+  set `_storage`, definition raises `ValueError`, since the values would move
+  into the signed page token where anyone can read them.
+- If the new class drops parent fields, or does not set a `_public`,
+  `_model`, or `_max_age` the parent set, Citry emits
+  `NestedSchemaReplacedWarning` once, naming what changed.
+
+`State = None` gives the component no State. Two bases with different State
+declarations and no State on the subclass fail at definition, the same as
+`Kwargs`. Rules:
 
 - State is deliberately **separate from `Kwargs`**. Kwargs and slots are
   render-time inputs and can hold anything: ORM instances, big structures,
@@ -940,7 +1008,7 @@ the contested calls are recorded in 14.1.11.
 | Parameter | What is injected |
 |---|---|
 | `data` | The user input, as **one schema object** (the whole wire `args` payload validated against the annotation). Omit it for handlers that take no input. |
-| `state` | The typed `State` instance, rebuilt from the verified token plus any pending two-way binding updates. Mutable; mutations travel back in the refreshed token. `None` when the component declares no State. |
+| `state` | The typed `State` instance, rebuilt from the verified token plus any pending two-way binding updates. Mutable; mutations travel back in the refreshed token, and changed public fields travel back as plain values too. `None` when the component declares no State. |
 | `context` | Whatever the `_context` hook returned for this call (3.6); `None` when no hook is configured. |
 | `request` | A small framework-neutral request (`method`, `headers`, `query`, `body`, `form`, `files`) plus `native`, the untouched host object. **Always populated**: HTTP fills everything; WebSocket fills headers and cookies from connect time; every transport that reaches the server has a real carrier (the postMessage transport arrives as the bridge's HTTP request). Only `native`'s type varies per adapter, and `event.transport` discriminates. |
 | `event` | Call metadata: `name`, `instance_id`, `transport`, and the raw args payload. |
@@ -1057,9 +1125,11 @@ anything when called:
 | `actions.Download(content, filename, content_type=...)` (v1.x) | none (escape) | A file download. Sugar over the raw-response escape below, so its handler uses `@event(bundle=False)`, runs through the per-event HTTP route, leaves State unchanged, and returns the download bare or as a list's only element. It cannot share a list or request with another result. The client accepts a successful attachment response for one call, buffers the blob, and starts the save only after the call survives timeout and supersession checks. |
 
 Every envelope-riding constructor also accepts the timing fields
-`delay` (seconds) and `wait` (4.3). `Render`'s `target` accepts a CSS
-selector string (all matches) and defaults to the calling instance
-(4.3). On an instance-less compatibility / no-JS HTTP request, a targetless
+`delay` (seconds) and `wait` (4.3). `Render`'s `target` accepts
+`"render:<id>"` for a mounted component occurrence or `"mark:<name>"` for a
+`<c-mark>` region of the handling component, and defaults to the calling
+instance. Any other target string is rejected when the action is
+constructed. On an instance-less compatibility / no-JS HTTP request, a targetless
 render instead supplies the whole response body; the internal compatibility
 translation consumes it before any action reaches a client.
 
@@ -1077,10 +1147,10 @@ Return-value rules, strict by design (ambiguity is refused, not guessed):
 
 | Return | Meaning |
 |---|---|
-| `None` | Acknowledged, no actions. If the handler mutated the state, the response still refreshes the client's token (the `state` action, 4.3). In debug mode the runtime logs a hint when state changed but nothing visible was returned. |
+| `None` | Acknowledged, no actions. If the handler mutated the state, the response still carries a `state` action (4.3) with the refreshed token and the public State values, so `$state` and State bindings show the change. In debug mode the runtime logs a hint when state changed but nothing visible was returned, because server-rendered content stays as it was. |
 | an action instance | That action. |
 | a `list` / `tuple` | Ordered actions; each element coerced by these same rules. Empty means acknowledged. |
-| a `CitryElement` / `CitryRender` | `Render` targeting the calling instance. The element can be any component; you are building a fresh tree, not resuming the old one. |
+| a `CitryElement` / `CitryRender` | `Render` targeting the calling instance. The element can be any component; you are building a fresh tree, not resuming the old one. A different component replaces the calling instance in the browser: local state in the replaced part is lost, and the props, listeners and `ref` that the parent's template put on the old component's tag do not reach the new one. The Vue browser runtime rejects a different component for the app's top-level component, whose component Vue fixes when it creates the app (see "A Render that replaces a component with a different component" in [vue.md](vue.md)). |
 | a `dict` | `Data` (the one scalar convenience: a dict cannot be mistaken for an action or an element, and it is the overwhelmingly common typed-endpoint return). |
 | anything else (`str`, numbers, custom objects) | A pointed error naming the fix. A string is ambiguous (HTML or JSON?) so it is never guessed: use `actions.Data(s)`, and HTML only ever comes from rendering a component. Custom classes either wrap in `Data(...)` or register a **result resolver** once (6.2), after which returning them bare works. |
 
@@ -1107,6 +1177,9 @@ from citry.ext.events import actions
 
 class CartIn:
     product_id: int
+    # The render ID of the header's CartBadge, sent by the browser call
+    # as in the add-to-cart example above.
+    badge_id: str
 
 class Events:
     def save(self, state: OrderState):
@@ -1121,7 +1194,7 @@ class Events:
         return [
             actions.Render(
                 CartBadge(count=cart.count),
-                target="#cart-badge",
+                target=f"render:{data.badge_id}",
             ),
             # dict coerces to Data -> resolves caller's promise
             {"count": cart.count},
@@ -1378,9 +1451,10 @@ colliding with component addressing:
 ```
 POST      ext/events/call               batch endpoint
                                         (envelope w/ calls[])
-GET       ext/events/runtime.js             events JS code
-GET       ext/events/runtime-csp.js         CSP-compatible events JS code
-GET|POST  ext/events/e/{class_id}/{event}   per-event dispatch
+GET       ext/events/runtime.js                         events JS code
+GET       ext/events/definitions/{digest}.js            prepared component definition
+GET       ext/events/assets/{digest}.css                 prepared component stylesheet
+declared  ext/events/e/{class_id}/{event}                per-event handler methods
 ```
 
 The per-event route (`ext/events/e/{class_id}/{event}`) is one fixed
@@ -1390,7 +1464,13 @@ the URL set once when `urlpatterns()` is built. `class_id` is used
 rather than the registered name because it always exists. The URL is
 authoritative: on the per-event route, a body naming a different
 component or event is rejected; the batch endpoint is where calls name
-their own targets.
+their own targets. The route admits the fixed method tuple
+`EVENT_ROUTE_METHODS` (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`,
+`OPTIONS`), because handlers can register after the host framework has
+mounted it. For those methods, the resolved event handler decides: a method
+the handler does not declare gets a `405` with the handler's own `Allow`
+header. A method outside the tuple gets the host adapter's `405` without
+reaching Events.
 
 Every handler therefore has a real URL that host middleware, rate
 limiters, access logs, curl, and OpenAPI all see:
@@ -1485,9 +1565,12 @@ is opaque, minted and verified by the same binding.
   multiplexing, harmless over HTTP).
 - `capabilities`: what the client runtime can apply, keyed `swaps` (swap
   strategies) and `actions` (action kinds). The server never emits a swap
-  or action outside the advertised set; it downgrades instead (`morph` to
-  `replace`). An absent field means the **protocol baseline**: one fixed
-  constant per protocol major, defined in the protocol package's spec and
+  or action outside the advertised set. For an `html-fragment/1` render it
+  downgrades instead (`morph` to `replace`); a `vue-prepared/1` render
+  always uses `morph`, and a client that advertises `vue-prepared/1`
+  without `morph` gets `handler_error` on any call that renders. An
+  absent field means the **protocol baseline**: one fixed constant per
+  protocol major, defined in the protocol package's spec and
   tests. For v1 that is every swap except `morph` plus all six v1
   action kinds, named `CAPABILITIES_BASELINE_V1`. The server therefore
   holds a single constant per major, not a table of runtime versions; the
@@ -1532,9 +1615,9 @@ is opaque, minted and verified by the same binding.
   response echoes the request's value. The browser implementation calls the
   same counter an epoch internally; `sendSequence` is the wire name.
   A response's instance-mutating actions (the self-targeted render,
-  the `state` token refresh) apply only when its epoch is **strictly
-  greater** than the anchor's highest-applied; otherwise they are
-  dropped, while its `data` still resolves the caller's own promise
+  the `state` refresh of the token and public values) apply only when
+  its epoch is **strictly greater** than the anchor's highest-applied;
+  otherwise they are dropped, while its `data` still resolves the caller's own promise
   and non-instance actions apply normally. Over HTTP's at-most-once
   delivery, dropping at equal-or-lower behaves exactly like dropping
   only the lower ones (a response's own epoch becomes the highest
@@ -1585,8 +1668,7 @@ the template.
           "target": "render:c9zk1q00",
           "swap": "morph",
           "html": "<button data-cid-c9zk1q00 ...>...</button>
-            <script type=\"application/json\" data-citry>...</script>
-            <script type=\"application/json\" data-citry-events>...</script>"
+            <script type=\"application/json\" data-citry>...</script>"
         },
         {
           "action": "data",
@@ -1621,29 +1703,23 @@ Streams and htmx out-of-band swaps are the same shape):
 
 | Action | Fields | Meaning |
 |---|---|---|
-| `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment (markup plus the inert `data-citry` and `data-citry-events` manifest tags), so the existing MutationObserver machinery loads assets and re-fires `$component` with zero new insertion mechanics. |
+| `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment. A `vue-prepared/1` render instead carries the prepared Vue payload, whose occurrences hold the Events descriptors and State tokens, and must use `swap: "morph"`. |
 | `data` | `value` | Resolve an imperative caller's promise with this JSON value. A declarative `@c-*` binding has no caller-owned promise and does not expose the value. At most one per result: a handler whose return would encode two `data` actions is an encode-time error naming the fix (two bare dicts in one list is semantically contradictory, which promise value wins?), unlike the trailing-after-redirect case, whose actions are individually valid and merely unreliable, so it warns. It carries no `wait` field; receiving one is a protocol validation error. |
-| `state` | `targetRenderId`, `stateToken` | Replace the stored state token for a rendered component occurrence whose handler mutated state without re-rendering; the server places it before the handler's own actions. (A `render` action needs no companion; the fresh fragment's manifest carries the new token.) Client rule, either carrier: the runtime applies a result's token refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token. |
+| `state` | `targetRenderId`, `stateToken`, `publicState` | Replace the stored state token and the public State values for a rendered component occurrence whose handler mutated state without re-rendering; the server places it before the handler's own actions. `publicState` holds every public field after the handler ran (never a field outside `_public`), and the browser writes it into `$state` under the reconcile rule of 5.5: a field with an unsent browser write keeps the browser's value. (A `render` action needs no companion; the fresh fragment's manifest carries the new token and values.) Client rule, either carrier: the runtime applies a result's State refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token and sees the fresh values. |
 | `event` | `eventName`, `detail`, `target` | Dispatch one bubbling DOM CustomEvent under the **exact given name** on the target instance's first live root, or on `document`. A multi-root or mirrored instance uses one canonical root deliberately: dispatching the same logical action on every root would duplicate document/global delivery and `onEvent` callbacks. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the caller's `callerRenderId`; only calls without a rendered caller produce a document-targeted dispatch. |
 | `redirect` | `url` | Navigate the page. |
 | `url` | `url`, `mode` | History push or replace without navigation. `PushUrl` and `ReplaceUrl` are its two producers; the client accepts only exact `push` or `replace` modes, preserves `history.state`, and skips invalid or browser-rejected updates without interrupting later actions. |
 
-Targets: a plain string is a **CSS selector** and applies to **all
-matches** (`querySelectorAll`, so comma unions work natively; the
-all-matches rule is the field's unanimous answer, per Turbo's `targets`,
-htmx's out-of-band selector swaps, and Datastar). A selector matching
-nothing logs a zero-match warning instead of silently doing nothing. The
-optional `render:<render id>` form targets a specific rendered component occurrence
-(the elements carrying its `data-cid-<id>` marker); it is what the
-runtime uses for self-renders, and `render:` is a reserved prefix. Its ID uses
-the case-safe `^[a-z0-9_-]+$` render-ID grammar, and the same constraint
-applies to `state.targetRenderId`. The
-client rejects an unsafe suffix before constructing a `data-cid-*` selector.
-A selector that targets a non-component region makes
-that region's structure part of the page's contract; prefer instance
-targets where possible. Swaps: `morph`
-(default when the client advertises it), `replace`, `inner`, `append`,
-`prepend`, `remove`, `none`.
+Targets in the shipped Vue v1 client are explicit rather than CSS selectors.
+`render:<render id>` targets one mounted component occurrence, and a prepared
+render may use `mark:<caller-render-id>:<name>` for one declared marker owned by
+that caller. `state.targetRenderId` uses the same safe render-ID grammar,
+`^[a-z0-9_-]+$`. The client rejects an unsafe or unknown target before it
+mutates the page, and a global lookup rejects both zero matches and multiple
+matches across mounted Vue apps. Arbitrary CSS selectors and document-shell
+targets are not part of the Vue v1 contract. Swaps supported by the prepared
+Vue target are `morph` and the explicitly validated prepared variants; the
+older selector-wide swap matrix below is historical Alpine design material.
 
 **Ordering is faithful, including `redirect`.** Actions apply strictly
 in list order; the framework never reorders or drops them. Other
@@ -1659,8 +1735,8 @@ dispatch fired just before a redirect reaches listeners on the outgoing
 page, which is usually not what a toast wants; the tool for that is the
 timing fields below.
 The dispatcher emits the same encode-time debug warning when a
-self-addressed action follows a selector-targeted render: the selector
-may resolve to a region that contains the caller, and that earlier
+self-addressed action follows a targeted render: the target may be a
+region that contains the caller, and that earlier
 render then retires the caller's anchor, so the later self-addressed
 action drops at apply time (per-action liveness, 5.5 machinery item
 4). The authoring note the docs teach for this class: dispatch before
@@ -1680,8 +1756,9 @@ when it is instance-mutating, re-runs the epoch comparison (4.2) at
 the moment it fires, never at response arrival: it applies to the DOM
 as it is then, which may have changed while the action waited, and an
 action fresh at arrival but stale by fire time drops instead of
-applying old state (the concrete case: a delayed token refresh firing
-after a newer response already landed).
+applying old state (the concrete case: a delayed State refresh firing
+after a newer response already landed, which would otherwise put an older
+token and older public values back).
 `data` is the exception to non-blocking scheduling: it settles the caller's
 promise in sequence and carries no `wait` field. Python rejects
 `Data(..., wait=False)` at construction, and the client rejects any Data wire
@@ -1731,15 +1808,15 @@ the per-field error map, surfaced client-side as
 
 ### 4.4 How the state token reaches the client
 
-Alongside the existing `data-citry` asset manifest, serialize emits a
-second inert JSON tag, `data-citry-events`, for every page or fragment
-containing an Events-declaring component:
+On an interactive page the server puts this manifest into the prepared Vue
+payload, not into a tag of its own: `build_events_manifest` builds it, and
+each prepared occurrence carries its instance record (descriptor, signed
+State token, public State). The browser reads it when the occurrence
+mounts. The manifest has this shape:
 
-```html
-<script type="application/json" data-citry-events>
+```json
   {
     "protocol": "citry-events/1",
-    "clientGraphRevision": null,
     "componentClasses": [
       {
         "componentClassId": "TodoList_a1b2c3",
@@ -1763,13 +1840,11 @@ containing an Events-declaring component:
       }
     ]
   }
-</script>
 ```
 
-Manifest entries are named JSON objects embedded directly in the inert script
-block. The server escapes `<` as `\u003c`, so application State cannot close
-the script tag. `clientGraphRevision` links the Events sidecar to the ownership
-graph from the same render, or is `null` when no graph was emitted.
+Manifest entries are named JSON objects. The server escapes `<` as
+`\u003c` wherever it writes them into the page, so application State cannot
+close a script tag.
 
 `componentClasses` carries handler names and browser hints. Each handler has
 `httpMethod`; the optional non-default hints are `usesState: true`,
@@ -1781,7 +1856,10 @@ read-only.
 
 `componentInstances` carries each occurrence's `renderId`, class reference,
 opaque `stateToken`, and `publicState`. `publicState` seeds one-way bindings
-and `$state` reads; non-public fields appear nowhere in it. A stateless record
+and `$state` reads; non-public fields appear nowhere in it. After a handler
+changes State without re-rendering the occurrence, the `state` action (4.3)
+carries the same two values, so the manifest and that action are the two
+places public State reaches the browser. A stateless record
 uses `stateToken: null` and an empty `publicState` object.
 
 The runtime rejects an out-of-model `$state` write before changing reactive
@@ -1805,7 +1883,12 @@ v2.
 
 ---
 
-## 5. The client API
+## 5. Historical Alpine client API and design record
+
+The following section records the former Alpine client design for migration
+history and prior-art context. It is not the shipped browser contract. Read
+the **Shipped Vue v1 browser contract** above for the current target, lifecycle,
+queue, and load-order rules.
 
 The pinned Alpine/Events bundles are served at the stable
 `ext/events/runtime.js` and `ext/events/runtime-csp.js` routes and injected
@@ -1872,8 +1955,8 @@ that event. The runtime listens on the HTML element carrying the binding, so a
 non-bubbling event reaches that element but does not reach a binding on an
 ancestor. Modifier capability follows the event instance for the same reason:
 a synthetic event named `scroll` may be cancelable even though the browser's
-native `scroll` event is not, and an arbitrarily named `KeyboardEvent` still
-has a `key`.
+native `scroll` event is not. Key filters are the one exception, below: they
+are judged by the event name when the template loads.
 
 The modifiers, exhaustively, for a binding on one HTML element. A component-
 boundary `@c-*` client binding follows 5.5's spike-proven `RootGroup` contract instead:
@@ -1887,7 +1970,7 @@ becoming once-per-root.
 | `.stop` | event bindings | `stopPropagation()`. |
 | `.self` | event bindings | Send only when `event.target` is the bound HTML element itself, ignoring events bubbling up from descendants. |
 | `.once` | event bindings | The HTML-element binding fires at most once per element lifetime. |
-| `.enter` / `.escape` | event bindings, two-way bindings | Send only when the concrete event's `key` is `Enter` / `Escape`. Event names are unrestricted: a native event without `key` simply does not match, while an arbitrarily named keyed event does. |
+| `.enter` / `.escape` | event bindings, two-way bindings | Send only when the concrete event's `key` is `Enter` / `Escape`. An event binding must name `keydown`, `keyup`, or `keypress`, in lowercase, exactly as written. Any other name, such as `@c-click.enter` or `@c-keyDown.enter`, is a template-load error, the same rule the template parser applies to a Vue listener such as `@click.enter`, because a native event by that name has no key and the binding would never send. The generated Vue listener keeps the key modifier, so Vue checks the key before `.prevent`, `.stop`, and `.self`; the browser client checks it again before it sends. A two-way binding checks the `key` of its update event, so the same rule applies to that event: its key filter needs `.on:keydown`, `.on:keyup`, or `.on:keypress`. A key filter on the default update event (`input` or `change`, table below) or on any other `.on:` name, such as `:c-q.enter` or `:c-q.on:change.enter`, is a template-load error that names the update event and the modifier to change. The browser client checks the update event's `key` before it sends; the control's `input` or `change` event still copies each edit into the browser's State field. |
 | `.debounce[.300ms]` | event bindings, two-way bindings | Hold until the trigger has been idle that long (bare `.debounce` is 250 ms); overrides the `_debounce` / `@event(debounce=...)` defaults (3.5). |
 | `.throttle[.1s]` | event bindings, two-way bindings | At most one send per window (bare `.throttle` is 250 ms); same override chain. |
 | `.lazy` | two-way bindings only | Use the control's committed-value event instead of its active event (table below); a template-load error elsewhere. |
@@ -2408,16 +2491,17 @@ one job: listening for those application events.
 
 **Escape hatches outside component JS: the `Citry.events` global.** For
 page scripts, other libraries, and tests, the same capabilities exist
-unscoped on `Citry.events` (calls made before the runtime loads are
-queued by the bootstrap stub, per Load ordering below):
+unscoped on `Citry.events` in the historical design recorded below. The
+shipped Vue v1 runtime exposes the namespace only after runtime startup and
+does not promise a pre-runtime call queue; see the contract above.
 
 | Method | What it does | Scoped counterpart |
 |---|---|---|
-| `Citry.events.send(target, name, args?, opts?)` | Send an event to any instance on the page. `target` is an instance id or an Element inside one; the runtime resolves the instance's registry entry (class, token, pending updates, epoch) and dispatches over the configured transport. Same promise contract as the scoped form. | `sendEvent(name, args?, opts?)` on the `$component` payload and `$sendEvent` in Alpine expressions: the same call with the instance pre-bound. |
+| `Citry.events.send(target, name, args?, opts?)` | Send an event to one mounted occurrence. `target` is a `render:<id>` (or bare render ID) or an `Element` inside that occurrence; the runtime resolves its class, token, pending updates and epoch. A global lookup must find exactly one occurrence across mounted apps. | `sendEvent(name, args?, opts?)` on the `$component` payload and `$sendEvent` on the native Vue component instance: the same call with the instance pre-bound. |
 | `Citry.events.on(name, fn)` | Listen for server-dispatched events (`Dispatch` actions) under their raw name, from any instance; returns the unsubscribe function. Sugar over `document.addEventListener` that unwraps `e.detail`. | `onEvent(name, fn)` / `$onEvent(name, fn)`: the same, filtered to events targeting that instance. |
 | `Citry.events.configure(opts)` | Set page-wide runtime defaults once, from the host page; fields below. | None page-wide; a one-off override rides `sendEvent`'s `opts` (e.g. a per-call `timeout`). |
-| `Citry.events.registerTransport(name, impl)` | Register a transport under a name: `impl` is `{send(envelope) -> Promise<resultEnvelope>, subscribe?}` (`subscribe` is the v2 push half, 6.1). The built-in fetch transport registers through this same function; selection is `configure({transport: name})`. | None (transports are page-level by nature). |
-| `Citry.events.applyActions(actions)` | The action interpreter as a public entry point: apply a result envelope's `actions` array to the page, firing the same lifecycle events (4.3). Exposed for tests, custom transports, and pages that override what an action does. | None. |
+| `Citry.events.registerTransport(name, impl)` | Register a transport under a name: `impl` is `{send(envelope, request) -> Promise<resultEnvelope>, subscribe?}`, where `request` is the `{url, method, headers, signal}` the built-in fetch transport would use, including the Vue app, occurrence and revision headers a Render action needs (`subscribe` is the v2 push half, 6.1). The built-in fetch transport is the default used while no transport named `fetch` is registered; selection is `configure({transport: name})`. | None (transports are page-level by nature). |
+| `Citry.events.applyActions(actions)` | The action interpreter as a public entry point: apply a result envelope's `actions` array. With a mounted target it fires the same `before`/`after`/`error`/`stale` lifecycle as a server call, using `event: "__external__"`; global-only actions retain their global behavior without a component lifecycle. | None. |
 
 What `configure` actually configures, field by field:
 
@@ -2433,11 +2517,16 @@ bubbling DOM CustomEvents, all under the reserved `citry:` prefix:
 
 | Event | Fires | Extra `detail` fields |
 |---|---|---|
-| `citry:events:before` | Just before a call is sent. Cancellable: `e.preventDefault()` stops the send and rejects the caller's promise. | none |
-| `citry:events:after` | When a call settles, success and failure alike (the stop-side counterpart to `before`). | `ok` (boolean) |
-| `citry:events:error` | When a call fails: a transport failure, an error result, or a timeout (5.6). | `error`: the `{status, code, message, fieldErrors?}` envelope (3.7) |
+| `citry:events:before` | Just before a call is sent, or before `Citry.events.applyActions` interprets actions for a mounted source. Cancellable: `e.preventDefault()` stops the send/application and rejects the caller's promise. | none |
+| `citry:events:after` | When a call or mounted-source `applyActions` settles, success and failure alike (the stop-side counterpart to `before`). | `ok` (boolean) |
+| `citry:events:error` | When a call or mounted-source `applyActions` fails: a transport failure, an error result, an interpreter error, or a timeout (5.6). | `error`: the `{status, code, message, fieldErrors?}` envelope (3.7) |
 | `citry:events:swapped` | After a `render` action has updated the DOM. | `els`: the swapped-in root elements |
 | `citry:events:stale` | Something was dropped or cancelled, and this is the one event that says so (research doc R3): every drop the runtime performs, of a response's application, of a queued call it cancels before sending, or of a one-shot send it drops at fire time (5.5 machinery item 5), fires it with a `reason` naming the cause. (The one cancel outside the claim is a send stopped by a `citry:events:before` listener's `preventDefault`: the page performed that cancel itself and already knows.) The reasons: `epoch` (an out-of-order response: its echoed epoch, 4.2, is not newer than what the anchor already applied, so its instance-mutating actions, the self-targeted render and the token refresh, drop rather than roll newer state back to older; the caller's promise still resolves with its `data` and all other actions apply), `retired` (the response's instance, or a single action's target, left the DOM, 5.5), `cancelled` (a send's dispatching element was dead when it was due to fire, at dequeue, 5.6, or at a one-shot closure's fire time, 5.5: never sent, promise rejected), `superseded` (a newer call superseded it under `@event(latest_wins=True)`, 3.5), `timeout` (a response arrived after its call timed out, 5.6), `version` (the version-skew prompt of 4.5 rides this same event under this reason; its default handling is the soft reload prompt). The `epoch` case in one line: a custom input sends on every keystroke through `sendEvent(..., {wait: false})`, you typed "ab" then "abc", "abc" answered first, and the slower "ab" response would overwrite newer results with older ones, so its application is dropped and this event fires instead. | `reason`, plus the dropped result's `event` name |
+
+For the Vue v1 mounted-source `applyActions` path, a delayed action that
+loses its source is also reported as `citry:events:stale` and followed by
+`citry:events:after` with `{ok: false}`. A `before` cancellation reports
+`after` without `error` or `stale`.
 
 **How each drop settles.** Every dropped or cancelled call still
 settles its caller's promise (the R3 contract, 14.3.6). The drop
@@ -2515,29 +2604,17 @@ document.addEventListener("MyCard:saved", (e) => {
 });
 ```
 
-**Load ordering.** Fragment script execution order is not guaranteed, so
-the extension injects a compact inline bootstrap stub through the manifest
-(inline manifest scripts run synchronously during processing). The stub
-defines a queueing `Citry.events`: early `send`, `configure`,
-`registerTransport`, `on`, and instance-listener calls are retained, while
-early `send` and `applyActions` return promises that settle after the full
-runtime arrives. It also registers a context decorator via a hook on
-the dependencies manager, `Citry.manager.decorateContext(fn)`, the hook
-through which the events runtime adds its members
-(`state` / `loading` / `error` / `sendEvent` / `onEvent`; the `props` member of 5.5 rides
-the `$component` registration itself, extended in citry.js) to
-every `$component` payload object (substrate item 12.5).
+**Load ordering.** The Vue v1 runtime is delivered by the prepared
+serialization/bootstrap contract and exposes `Citry.events` only after the
+runtime is ready. Calls made before that point are not a promised queueing
+surface: page code must wait for the runtime and the relevant mounted app.
+Once exposed, the bridge creates a per-app serial queue for sends and applies
+actions in list order. This avoids claiming the old Alpine bootstrap replay,
+same-tick batching, or pre-runtime `applyActions` promises that the Vue client
+does not implement.
 
-Bootstrap replay has one intentional exception to FIFO order: every queued
-`registerTransport` declaration is installed in a first pass, then all other
-queued calls replay in their original relative order. Thus an early
-`configure({transport: name})` or `send` can select a custom transport whose
-registration appeared later in parser execution. Transport declarations do
-not represent work and return no promise; declaration-first replay makes the
-load-order race deterministic. Queued `applyActions` retains normal FIFO
-position in the second pass and keeps its promise contract.
-
-The spike (13.2) pinned three boot-order rules that make this
+The following is historical Alpine load-order research; it does not describe
+the shipped Vue v1 runtime. The spike (13.2) pinned three boot-order rules that make this
 race-proof, because citry.js processes manifest tags DURING page parse
 (parser insertions are mutations, delivered mid-parse):
 
@@ -2550,9 +2627,13 @@ race-proof, because citry.js processes manifest tags DURING page parse
 - The serializer emits the `data-citry-events` tag BEFORE the
   `data-citry` tag, so whenever a call can fire, the events manifest is
   already parsed.
-- The context decorator drains any unprocessed events manifests before
-  decorating, covering the window where a tag is in the DOM but its
-  mutation record has not yet reached the observer.
+- The context decorator drains the Events runtime's pending manifest records
+  before decorating, covering the window where a tag is in the DOM but its
+  mutation record has not yet reached either permanent broker callback. The
+  same pending-only drain closes the boundary-initialization and pre-start
+  windows without rescanning the document. Runtime evaluation retains one
+  full-document catch-up for manifests parsed before a late Events provider,
+  and the explicit internal replay entry point retains its full scan.
 
 ### 5.3 DOM updates: morph by default
 
@@ -3077,9 +3158,10 @@ travel only when `save` is called, so the server sees the final count
 without a round trip per click. (The section 2 counter stays the
 canonical server-round-trip form; this is the local-first variant.)
 
-**Reconcile rule.** When a response arrives, the runtime updates
-`$state` in place: **server wins per field, except fields with a
-pending, not-yet-sent local write, which keep the local value** (they
+**Reconcile rule.** When a response arrives, whether it carries a new
+manifest or a `state` action, the runtime updates `$state` in place:
+**server wins per field, except fields with a pending, not-yet-sent
+local write, which keep the local value** (they
 are still queued and will reach the server on the next call). Combined
 with `@alpinejs/morph` preserving the living Alpine scope across morphs,
 a re-render never recreates the scope; `$state` object identity is
@@ -3229,11 +3311,11 @@ ones (or links keyed matches per the rule above), and no epoch
 comparison ties the apply to the target's past, because the target
 keeps no surviving counter. Continuity is owned by a region's own
 correlated self-renders, and by keyed matches, alone; a handler whose
-selector happens to resolve to its own region gets replace semantics,
+explicit target names its own region gets replace semantics,
 not the three-way split (self-continuity rides only the runtime's
 `render:` self-address). Races to one target from unrelated anchors (two
 different
-callers rendering into `#cart-badge`) stay last-write-wins in arrival
+callers rendering into the cart badge) stay last-write-wins in arrival
 order and are answered in userland by the ordering patterns the docs
 teach: render current truth, not deltas (a handler that renders truth
 leaves a briefly stale region that self-corrects on the next event),
@@ -3307,13 +3389,11 @@ option A mechanics):
    `retired`, 5.2) plus a debug log. That includes a self-addressed
    `event` action whose target id is dead, which drops rather than
    falling back to a document dispatch (that would change delivery
-   semantics silently). Liveness and its `retired` surface belong to
-instance-addressed work alone (the caller's anchor, `render:`
-   targets, the self-addressed defaults): a plain-selector target is
-   never live or dead, so a selector that stops matching, whatever
-   earlier action or host mutation removed its matches, surfaces only
-   4.3's zero-match warning, and one action never fires both
-   surfaces.
+   semantics silently). Every target is instance-addressed (the
+   caller's anchor, `render:` and `mark:` targets, the self-addressed
+   defaults), because `actions.Render` rejects any other target string
+   when the action is constructed, so this liveness rule covers every
+   action that names a target.
 5. **Recurring timers retire with their region, and never
    double-poll.** Retiring an anchor cancels the interval timers
    registered to it, or timers are keyed to the element with one timer
@@ -3930,7 +4010,7 @@ transports would both need belongs in the dispatcher, never duplicated):
 | Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
 | Action encoding | Return-value coercion, result resolvers, faithful ordering, and the render-to-fragment serialize. | The actions module (plan WP11); a `Render` re-enters the normal fragment serialize, so its HTML carries a fresh manifest. |
-| State re-sign | Changed State means a fresh token in the response: riding the render action's manifest when there is one, else as an explicit `state` action placed before the handler's actions (4.3). | Mint via plan WP8; the request's `sendSequence` echoes per result. |
+| State re-sign | Changed State means a fresh token and fresh public values in the response: riding the render action's manifest when there is one, else as an explicit `state` action placed before the handler's actions (4.3). | Mint via plan WP8; the request's `sendSequence` echoes per result. |
 | Error mapping | `EventError` and uncaught exceptions map to the fixed code-to-status table (3.7); tracebacks only in debug mode. | Message content is contract: tests assert the text, not just the exception type. |
 
 The "custom transport" story is honest and small: call the dispatcher
@@ -4161,13 +4241,13 @@ the class id against the route, rebuild `cls.State(**s)`, apply `stateUpdates`
 to `_model` fields (7.2), validate args, run `_context`, run guards, run the
 handler. After the handler, a mutated State is re-signed and returned
 (inside the fragment manifest when a render action exists, as a `state`
-action otherwise), so the client's stored token always reflects the
-latest state and the browser is never left holding stale client-side
-state.
+action otherwise, each carrying the public State values beside the
+token), so the client's stored token and its `$state` values always
+reflect the latest state.
 
-An optional server-side state store (the token becomes a random key into
-`Citry.cache`) ships in v1 as the opt-in `_storage = "server"`
-State meta. It exists for three cases. Two of them a signed
+An optional server-side state store (the token carries a random key, and
+the State lives in `Citry.cache` under `citry:state:<key>`) ships in v1 as
+the opt-in `_storage = "server"` State meta. It exists for three cases. Two of them a signed
 round-tripping token cannot serve: State too large to ship back and
 forth on every call, and State whose non-public values must not be readable
 in the page source at all (the token is signed against tampering, not
@@ -4404,7 +4484,8 @@ surprise. Concretely:
 
 - Handlers on a slotted component can freely return data, dispatch events,
   and surgically update regions inside it by rendering leaf components
-  into explicit targets (`Render(Badge(...), target="#badge")`).
+  into regions it declares with `<c-mark name="badge">`
+  (`Render(Badge(...), target="mark:badge")`).
 - A `render` action replaces the targeted subtree with exactly the tree
   the handler returned; nothing about the instance's original render is
   replayed. Fills are call-site content, so a handler that re-renders a

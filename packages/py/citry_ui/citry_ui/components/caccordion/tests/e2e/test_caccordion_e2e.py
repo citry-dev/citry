@@ -677,17 +677,30 @@ def test_opening_animation_starts_between_closed_and_natural_height(accordion_pa
     root = page.locator("#guide")
     floor_trigger = _direct_triggers(root).nth(1)
     floor_panel = root.locator(':scope > [data-value="floor"] > [data-citry-accordion-panel]')
-    root.evaluate("element => element.style.setProperty('--cui-accordion-duration', '1000ms')")
+    # A long duration keeps the animation running however slowly the runner
+    # reaches the measurement below.
+    root.evaluate("element => element.style.setProperty('--cui-accordion-duration', '10000ms')")
 
     floor_trigger.click()
-    page.wait_for_timeout(100)
+    # Sampling the panel after a fixed wall-clock sleep fails when a slow
+    # runner has not painted the first frame yet. Instead hold the panel's own
+    # opening animation 100 ms in and measure it there.
     geometry = floor_panel.evaluate(
-        """element => ({
-          height: element.getBoundingClientRect().height,
-          natural: element.scrollHeight,
-          overflow: getComputedStyle(element).overflow,
-        })"""
+        """element => {
+          const animations = element.getAnimations();
+          for (const animation of animations) {
+            animation.pause();
+            animation.currentTime = 100;
+          }
+          return {
+            animations: animations.length,
+            height: element.getBoundingClientRect().height,
+            natural: element.scrollHeight,
+            overflow: getComputedStyle(element).overflow,
+          };
+        }"""
     )
+    assert geometry["animations"] == 1
     assert 0 < geometry["height"] < geometry["natural"]
     assert geometry["overflow"] == "clip"
     assert errors == []

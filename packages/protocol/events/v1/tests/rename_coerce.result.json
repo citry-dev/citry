@@ -9,7 +9,11 @@
         {
           "action": "state",
           "targetRenderId": "c9zk1q00",
-          "stateToken": "cev1.eyJ2IjoxLCJjIjoiQ291bnRlcl9hMWIyYzMiLCJzIjp7ImNvdW50IjowLCJuYW1lIjoiVGFsbHkifX0.bm90LWEtcmVhbC1zaWduYXR1cmU"
+          "stateToken": "cev1.eyJ2IjoxLCJjIjoiQ291bnRlcl9hMWIyYzMiLCJzIjp7ImNvdW50IjowLCJuYW1lIjoiVGFsbHkifX0.bm90LWEtcmVhbC1zaWduYXR1cmU",
+          "publicState": {
+            "count": 0,
+            "name": "Tally"
+          }
         },
         {
           "action": "event",

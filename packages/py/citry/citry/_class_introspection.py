@@ -11,6 +11,24 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 
+# Counts authored attribute writes and deletions on component classes (those
+# built by ComponentMeta; plain mixin bases are not counted) after they are
+# defined. A cache derived from class declarations stores the count
+# it was built with, and rebuilds once the count moves, so an assignment such
+# as ``Card.on_render = ...`` after the first render is still seen.
+_component_declaration_writes = [0]
+
+
+def _component_declaration_generation() -> int:
+    """Return the current count of post-definition component class writes."""
+    return _component_declaration_writes[0]
+
+
+def _advance_component_declaration_generation() -> None:
+    """Record that some component class changed an authored declaration."""
+    _component_declaration_writes[0] += 1
+
+
 def _static_class_attribute(cls: type, name: str) -> object:
     """Read one type-owned descriptor without calling ``type(cls)`` hooks."""
     descriptor = type.__dict__.get(name)

@@ -64,6 +64,7 @@ class CDatePickerOpenChangeDetail(TypedDict):
         "native",
         "ancestor",
         "modal",
+        "disabled",
     ]
     controlled: bool
     forced: bool
@@ -605,7 +606,11 @@ class CDatePicker(LibraryComponent):
           const mutations = runtime.mutations(root);
           const owned = mutations.owned;
           let current = input.value || data.serverValue || null;
-          let internalOpen = false;
+          // A server re-render that keeps this picker keeps its Vue instance, and
+          // with it the popup's open state, so a popup that was open before the
+          // re-render stays open. The picker has no server `open` input, so there
+          // is no server value for it to follow.
+          let internalOpen = scope.datePickerOpen === true;
           let controlledValue = false;
           let controlledOpen = false;
           let visibleDate = current || undefined;
@@ -813,6 +818,10 @@ class CDatePicker(LibraryComponent):
           const unsubscribe = i18n?.subscribe(() => { if (ready) render(); });
 
           effect(() => {
+            // Read before this update changes it: a server re-render keeps this
+            // picker's Vue instance, so on the new run's first update this is the
+            // open state the previous run left.
+            const wasOpen = scope.datePickerOpen === true;
             reportFieldOwned();
             configuration = resolveConfiguration();
             const requestedValue = props.value;
@@ -828,6 +837,14 @@ class CDatePicker(LibraryComponent):
             else if (typeof requestedOpen === 'boolean') { const opening = !scope.datePickerOpen && requestedOpen; controlledOpen = true; internalOpen = requestedOpen; scope.datePickerOpen = requestedOpen; resolver.clear('open'); if (opening) focusCalendar(); }
             else { resolver.report('open', requestedOpen); if (controlledOpen) internalOpen = scope.datePickerOpen; controlledOpen = false; }
             if (current) { visibleDate = current; scope.datePickerVisibleDate = current; }
+            // A disabled picker cannot stay open, so disabling an open popup closes
+            // it, as CMenu does. The owner did not ask for that close, so it is
+            // reported once, when the popup was open before this update.
+            if (configuration.disabled && scope.datePickerOpen) {
+              internalOpen = false;
+              scope.datePickerOpen = false;
+              if (wasOpen) resolver.callback('onOpenChange')?.(false, openDetail('disabled', null, true));
+            }
             ready = true;
             render();
           });

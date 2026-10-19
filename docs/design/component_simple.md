@@ -1,12 +1,27 @@
 # Simple components
 
-Status: initial runtime integration on `perf/repeat-render-20260908`. The public
-flag, declaration checks and rendering paths are implemented on this experimental
-branch. Its first balanced large-page benchmark saves 26.63% in warmed time
-versus ordinary Citry; see the research log's "Simple API measurement: public
-declarations on the large page" section. Public documentation is written and the full repository gate passes.
-The handoff records browser and documentation checks. The earlier prototype
-results below describe separate experiments.
+Status: `needs_review: true`. `simple=True` keeps caller-owned HTML behavior.
+`simple="vue"` is a separate instance-free mode with its own Vue occurrence,
+identity and authored component assets. It currently accepts registered,
+nontransparent components with static data callbacks and templates that
+use plain values with the supported text, branch, loop and attribute operations,
+plus slot-free child calls (see "Child calls in a `simple="vue"` template"
+below); slots, component messages and instance behavior are unsupported.
+The callback runs once per occurrence, and unsupported input fails without
+retrying ordinary rendering. Engine state the class does not control
+(configured i18n, messages on another registered component, unknown extension
+lifecycle hooks, attribute hooks that could change the template's output) makes
+the call render as an ordinary component; Citry decides this before the render
+ID or any callback, so nothing runs twice. Citry computes the class checks once
+per class and reuses them until one of their inputs changes: a write to or
+deletion of an attribute on any `Component` subclass, a changed member on a
+plain (non-component) base class, a different extension set, a template or
+file reset or `Citry.clear()` (each advances the Cache extension's counter),
+a component registration or message reload (each advances the i18n
+extension's registry counter), any ABC registration such as
+`ComponentLike.register` (`abc.get_cache_token()`), or a newly loaded template
+object. This contract and its measurements need review before
+broader production claims.
 
 ## Why a component should be able to give up instance identity
 
@@ -470,3 +485,96 @@ preserving ownership identity, and did not meet their measured screen. They do
 not establish the performance of a retained-instance variant. The chosen
 direction follows the positive measurements from removing both the independent
 instance and its ownership boundary in iterations 63-66.
+
+## Child calls in a `simple="vue"` template
+
+A `simple="vue"` parent can call child components, and each child renders
+in its own mode. The parent's mode does not change how a child renders.
+
+### What a child call needs
+
+The instance-free parent never runs a template body node by node. Citry
+compiles the template once into a generated Python function (the
+evaluator) that records the row's values, plus one fixed Vue template that
+reads those values. Both are built from the template alone, so every row
+shares them. A child call needs things neither of them made:
+
+- somewhere to keep the child's inputs until the render loop renders the
+  child (an ordinary parent's body walk returns a `DeferredComponent`);
+- a place in the fixed Vue template for the child's component element,
+  whose tag comes from the serialization's tag mapping and whose
+  occurrence id differs per row;
+- a way for serialization to find the child inside the parent's record
+  (static HTML, hydration, dependency and Events collection all walk
+  `CitryRender.parts`, and the record kept its values in a leaf instead).
+
+### How calls work now
+
+1. **Compile.** `compile_leaf_program(..., allow_calls=True)`, used only by
+   the `simple="vue"` admission, turns a slot-free call with plain inputs
+   into a call operation. It records the call's byte position in the Vue
+   template and the elements open around it, and writes no element there.
+2. **Evaluate.** The evaluator computes each input with the same expression
+   subset as the rest of the template and records `(call, inputs, key)` per
+   data record. The read-set check requires exact dicts along each input's
+   path but leaves the passed value itself unchecked: the child's own
+   schema and template decide what it accepts, as they do for an ordinary
+   parent. Static inputs and literals are marked `Const`. Other expressions
+   are passed plain, because the instance-free variables carry no `Const`
+   marks. A number literal is accepted as an input or key, as the ordinary
+   call accepts it.
+3. **Defer.** `_defer_simple_vue_calls` builds the same `CitryElement` and
+   `_PreparedCallMetadata` that `ComponentNode.render` builds and stores a
+   `DeferredComponent` for each call in `PreparedLeafProgram.call_children`.
+   The render loop queues them right after the record, so children render
+   depth first, before the parent's later siblings, and their dependencies
+   merge into the context that received the parent's own dependency record.
+4. **Assemble.** When every call sits outside `c-if` and `c-for` and the
+   occurrence has no root markers, the assembler cuts the fixed template at
+   the call positions and writes each child's component element between
+   the pieces with the ordinary call code, so all rows share one definition.
+   Otherwise it materializes the row's typed parts with each child at its
+   call and builds the definition like an ordinary component's; the fixed
+   template cannot hold a call in an untaken branch (the browser requires
+   every declared call to have an entry) or in a Vue `v-for` (the native
+   compiler rejects it). A `c-for` whose whole body is one keyed call is
+   kept together as one browser loop over its children, as `ForNode.render`
+   keeps it for an ordinary parent.
+5. **Serialize.** Static output wraps such a record in a component frame
+   (`_simple_vue_record_frame`), so its children get placeholders and root
+   markers exactly as under an ordinary parent. Tree walks reach the
+   children through `simple_vue_called_components`.
+
+### Observable differences and error modes
+
+- An ordinary child's `parent` is the nearest ordinary component above
+  the `simple="vue"` parent (None at the root). Provided values are those
+  active at the parent's call site, which an ordinary parent would pass on
+  unchanged because `simple="vue"` cannot provide. Error paths insert the
+  skipped names from `_PreparedCallMetadata.simple_vue_callers`.
+- A call with a body or fills (even a whitespace-only body, which an
+  ordinary parent ignores), a `c-bind` spread, component-tag Vue bindings,
+  `#c-ignore`, or an input outside the expression subset rejects the class
+  before its data callback runs.
+- A child that renders into its caller's template (`simple=True`,
+  transparent, or a dynamic selector) raises a named `TypeError` when the
+  parent renders, after the parent's callbacks ran and before any child
+  rendered.
+- Engine state that sends the parent to the ordinary path (configured
+  i18n, an unknown lifecycle hook) renders the parent ordinarily; its
+  children then render as under any ordinary parent.
+- A repeated call without `#c-key` fails at serialization with the same
+  error as under an ordinary parent.
+
+### Measurements
+
+Warm in-process render + serialize medians at 1,400 rows, release build,
+on a shared, busy machine, on the benchmark-only board variant
+where each `ProjectOutput` row calls a `simple="vue"` `OutputDetails` and
+each phase group wraps its rows in an ordinary `PhaseOutputs` (a local,
+untracked benchmark copy of the public board): an ordinary `ProjectOutput`
+took about 400 to 460 ms; a `simple="vue"` one about 190 to 210 ms, and
+about 260 to 290 ms when `OutputDetails` is ordinary. The public board,
+which has no calls, stayed within measurement noise (paired runs at 140
+and 1,400 outputs). The HTML matches byte for byte at 1,400 rows for
+static output and for the hydrated host, once per-render ids are replaced.

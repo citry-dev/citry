@@ -14,7 +14,7 @@ from the root.
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, Markup
 from citry.extension import Extension
 
 PREFIX = "An error occurred while rendering components"
@@ -410,7 +410,7 @@ class TestErrorBubbling:
 
             def on_component_rendered(self, ctx):
                 if ctx.error is not None and type(ctx.component).__name__ == "Middle":
-                    return "<p>recovered</p>"
+                    return Markup("<p>recovered</p>")
                 return None
 
         c = Citry(extensions=[Boundary])
@@ -506,7 +506,7 @@ class TestErrorBubbling:
 
             def on_component_rendered(self, ctx):
                 if ctx.error is not None and type(ctx.component).__name__ == "Root":
-                    return "<p>recovered</p>"
+                    return Markup("<p>recovered</p>")
                 return None
 
         c = Citry(extensions=[Boundary])
@@ -541,7 +541,7 @@ class TestErrorBubbling:
 
             def on_component_rendered(self, ctx):
                 if ctx.error is not None and type(ctx.component).__name__ == "Middle":
-                    return "<p>recovered</p>"
+                    return Markup("<p>recovered</p>")
                 return None
 
         c = Citry(extensions=[Boundary])
@@ -585,7 +585,7 @@ class TestErrorBubbling:
 
             def on_component_rendered(self, ctx):
                 if ctx.error is not None and type(ctx.component).__name__ == "Middle":
-                    return "<p>recovered</p>"
+                    return Markup("<p>recovered</p>")
                 return None
 
         c = Citry(extensions=[BoomAtLeaf, Boundary])

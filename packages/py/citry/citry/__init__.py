@@ -14,6 +14,7 @@
 from markupsafe import Markup
 
 from citry._linting import TemplateLintInfo, TemplateVariableInfo
+from citry._nested_declarations import NestedSchemaReplacedWarning
 from citry.analysis import (
     LspPosition,
     LspRange,
@@ -43,6 +44,7 @@ from citry.analysis import (
     prepare_python_component_assets,
 )
 from citry.attrs import (
+    VueCodeError,
     format_attrs,
     merge_attrs,
     normalize_class,
@@ -195,7 +197,6 @@ from citry.nodes import (
     SlotNode,
     StaticHtmlAttr,
     TemplateHtmlAttr,
-    TemplateNode,
 )
 from citry.settings import (
     CitrySettings,
@@ -308,6 +309,7 @@ __all__ = [
     "LspRange",
     "Markup",
     "NestedClassDeclaration",
+    "NestedSchemaReplacedWarning",
     "Node",
     "NotRegistered",
     "NumberFormat",
@@ -382,7 +384,6 @@ __all__ = [
     "TemplateLintInfo",
     "TemplateNamespaceContext",
     "TemplateNamespaceContribution",
-    "TemplateNode",
     "TemplateVariableInfo",
     "TimeFormat",
     "TimeInput",
@@ -391,6 +392,7 @@ __all__ = [
     "URLRoute",
     "UnitFormat",
     "UnresolvedComponentReference",
+    "VueCodeError",
     "citry",
     "collect_compiled_body_fills",
     "const_value",

@@ -85,7 +85,7 @@ class CAlertDialogActionSlotData:
 
 
 class CAlertDialogOpenChangeDetail(TypedDict):
-    reason: Literal["trigger", "escape", "action", "native"]
+    reason: Literal["trigger", "escape", "action", "native", "ancestor"]
     controlled: bool
     source: object | None
     returnValue: str

@@ -37,6 +37,7 @@ class CHoverCardOpenChangeDetail(TypedDict):
         "native",
         "ancestor",
         "modal",
+        "disabled",
     ]
     controlled: bool
     forced: bool
@@ -384,7 +385,12 @@ class CHoverCard(LibraryComponent):
           let active = true;
           let controlled = false;
           let logicalOpen = false;
-          let internalOpen = initialHandoff?.open ?? data.open;
+          // A server re-render hands the previous run's open state to this one, so
+          // a card that was open before the re-render is still open after it. When
+          // the server's `open` input changed, the card follows the server instead.
+          const sameServerOpen = Boolean(initialHandoff) && initialHandoff.serverOpen === data.open;
+          let internalOpen = sameServerOpen ? initialHandoff.open : data.open;
+          let updated = false;
           let onOpenChange = null;
           let animation = null;
           let generation = 0;
@@ -879,6 +885,11 @@ class CHoverCard(LibraryComponent):
           surface.addEventListener("pointerenter", onSurfacePointerEnter);
           surface.addEventListener("pointerleave", onSurfacePointerLeave);
           surface.addEventListener("toggle", onToggle);
+          // The stylesheet hides the card until this mark is present. A server
+          // re-render hands an open card to this run and the effect below reopens
+          // it at once, so the mark must already be back or the reopen measures a
+          // hidden card, fails, and closes it without telling the owner.
+          host.setAttribute("data-citry-hover-card-initialized", "");
           effect(() => {
             const suppliedOpen = props.open;
             let nextOpen = internalOpen;
@@ -930,17 +941,35 @@ class CHoverCard(LibraryComponent):
             if (!nextOpen) {
               layerCoordinator.clearSuppression(layer);
             }
+            // On this run's first update the card was showing only if the previous
+            // run left it open. A render that disables a showing card closes it
+            // because of the disable, even when it also changes the server's
+            // `open` input, so that first update reports the close either way.
+            const firstUpdate = !updated;
+            const wasShowing = firstUpdate ? Boolean(initialHandoff?.open) : logicalOpen;
+            updated = true;
+            if (configuration.disabled && wasShowing && (nextOpen || firstUpdate)) {
+              // Disabling an open card hides it, as CMenu does. The owner did not
+              // ask for that close, so tell it once, and stop an uncontrolled card
+              // from coming back on its own when it is enabled again.
+              if (!controlled) {
+                internalOpen = false;
+              }
+              applyOpen(false, null);
+              notify(false, "disabled", null, true);
+              pendingRequest = null;
+              return;
+            }
             const context = pendingRequest?.nextOpen === nextOpen ? pendingRequest : null;
             applyOpen(nextOpen, context);
             if (context || nextOpen === logicalOpen) {
               pendingRequest = null;
             }
           });
-          host.setAttribute("data-citry-hover-card-initialized", "");
 
           return () => {
             active = false;
-            surface[handoffKey] = { open: logicalOpen };
+            surface[handoffKey] = { open: logicalOpen, serverOpen: data.open };
             trigger.removeEventListener("pointerenter", onTriggerPointerEnter);
             trigger.removeEventListener("pointerleave", onTriggerPointerLeave);
             trigger.removeEventListener("pointerdown", onTriggerPointerDown, true);

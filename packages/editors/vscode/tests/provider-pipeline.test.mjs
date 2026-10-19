@@ -5,6 +5,8 @@ import {
 	delegatedCompletionResolveCount,
 	linearlyMappedProjectionPosition,
 	mappedProjectionRange,
+	mapSegmentedPosition,
+	mapSegmentedRange,
 	ProviderTimeoutError,
 	prepareProjectionRangeMapper,
 	withTimeout,
@@ -41,7 +43,96 @@ test("provider deadlines return successful work and reject stalled work", async 
 	assert.equal(cancelled, true);
 });
 
+// Two lines of component JavaScript from a Python literal indented by six
+// spaces: the server removes the indentation, so each line starts at virtual
+// character 0, and the line break between them is one changed piece.
 const point = (line, character) => ({ line, character });
+const segment = (source, virtual) => ({
+	sourceRange: { start: point(...source[0]), end: point(...source[1]) },
+	virtualRange: { start: point(...virtual[0]), end: point(...virtual[1]) },
+});
+const dedented = [
+	segment(
+		[
+			[11, 6],
+			[11, 75],
+		],
+		[
+			[93, 0],
+			[93, 69],
+		],
+	),
+	segment(
+		[
+			[11, 75],
+			[12, 0],
+		],
+		[
+			[93, 69],
+			[94, 0],
+		],
+	),
+	segment(
+		[
+			[12, 6],
+			[12, 43],
+		],
+		[
+			[94, 0],
+			[94, 37],
+		],
+	),
+];
+
+test("maps a result on a dedented line back past the removed indentation", () => {
+	// `component.a` completion replaces the `a` at virtual 94:22.
+	assert.deepEqual(mapSegmentedRange({ start: point(94, 22), end: point(94, 23) }, dedented), {
+		start: point(12, 28),
+		end: point(12, 29),
+	});
+	// A range starting a virtual line starts after the authored indentation.
+	assert.deepEqual(mapSegmentedRange({ start: point(94, 0), end: point(94, 3) }, dedented), {
+		start: point(12, 6),
+		end: point(12, 9),
+	});
+	// A range ending at a virtual line start ends at the authored line start.
+	assert.deepEqual(mapSegmentedRange({ start: point(93, 60), end: point(94, 0) }, dedented), {
+		start: point(11, 66),
+		end: point(12, 0),
+	});
+	// An empty range stays one cursor.
+	assert.deepEqual(mapSegmentedRange({ start: point(94, 0), end: point(94, 0) }, dedented), {
+		start: point(12, 6),
+		end: point(12, 6),
+	});
+});
+
+test("maps authored cursors into a segmented projection and refuses removed text", () => {
+	assert.deepEqual(mapSegmentedPosition(point(12, 29), dedented, "sourceRange", "start"), point(94, 23));
+	// The removed indentation and text outside the projection have no virtual position.
+	assert.equal(mapSegmentedPosition(point(12, 3), dedented, "sourceRange", "start"), undefined);
+	assert.equal(mapSegmentedPosition(point(13, 0), dedented, "sourceRange", "start"), undefined);
+});
+
+test("a changed piece maps only at its two ends", () => {
+	// One escape: two authored characters decode to one virtual character.
+	const escaped = [
+		segment(
+			[
+				[4, 10],
+				[4, 12],
+			],
+			[
+				[7, 3],
+				[7, 4],
+			],
+		),
+	];
+	assert.deepEqual(mapSegmentedPosition(point(7, 3), escaped, "virtualRange", "start"), point(4, 10));
+	assert.deepEqual(mapSegmentedPosition(point(7, 4), escaped, "virtualRange", "end"), point(4, 12));
+	assert.equal(mapSegmentedPosition(point(4, 11), escaped, "sourceRange", "start"), undefined);
+});
+
 const range = (startLine, startCharacter, endLine, endCharacter) => ({
 	start: point(startLine, startCharacter),
 	end: point(endLine, endCharacter),

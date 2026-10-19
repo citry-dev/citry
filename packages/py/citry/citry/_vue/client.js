@@ -1,0 +1,4936 @@
+/* Experimental private Citry/Vue runtime. Not a public package API. */
+(function (global) {
+  "use strict";
+  const V = global.Vue;
+  if (!V) throw new Error("Vue runtime must load before Citry's private Vue client");
+  const citryNamespace = global.Citry === undefined ? {} : global.Citry;
+  if ((typeof citryNamespace !== "object" || citryNamespace === null) && typeof citryNamespace !== "function")
+    throw new TypeError("the global Citry namespace must be an object");
+  if (Object.prototype.hasOwnProperty.call(citryNamespace, "vue")) {
+    if (citryNamespace.vue !== V) throw new Error("the global Citry.vue namespace uses a different Vue runtime");
+  } else {
+    Object.defineProperty(citryNamespace, "vue", {value: V, enumerable: true, configurable: false, writable: false});
+  }
+  if (global.Citry === undefined) global.Citry = citryNamespace;
+  const HELPER_CONTRACT = "b103179315e9ac0096610edd010fca48bc708a210cc9a159d35dc92e398a91d5";
+  if (global.__citryRuntime) {
+    if (global.__citryRuntime.compilerRuntime?.helperContract !== HELPER_CONTRACT)
+      throw new Error("an incompatible Citry Vue runtime is already loaded");
+    return;
+  }
+
+  const apps = new Map();
+  // Vue plugins the page registered with `Citry.vue.use()`, in registration order. Citry installs
+  // each one on every Vue app it creates, because the page never gets to call `app.use` itself.
+  const pageVuePlugins = [];
+  // Becomes true when Citry creates its first Vue app on this page. A plugin registered after that
+  // would be missing from that app, so `Citry.vue.use()` refuses it from then on. Scripts the start
+  // loads before that moment (an extension's early_scripts, component JavaScript) may
+  // still register one.
+  let firstAppCreated = false;
+  // A Vue object that cannot take a new property (a frozen copy) goes without `use` rather than
+  // stopping the whole runtime from loading; the console says why a later call finds no function.
+  if (!Object.isExtensible(V) && !Object.prototype.hasOwnProperty.call(V, "use"))
+    console.error("[Citry] Citry.vue.use() is unavailable because the page's Vue runtime object cannot be extended");
+  else if (!Object.prototype.hasOwnProperty.call(V, "use")) {
+    Object.defineProperty(V, "use", {enumerable: false, configurable: false, writable: false,
+      value: function use(plugin, ...options) {
+        // Vue accepts the same two shapes in `app.use`; anything else would fail later, inside an app start.
+        if (typeof plugin !== "function" &&
+            !(plugin !== null && typeof plugin === "object" && typeof plugin.install === "function"))
+          throw new TypeError("Citry.vue.use() needs a Vue plugin: an object with an install(app) method, or a function");
+        if (firstAppCreated)
+          throw new Error("Citry.vue.use() was called after Citry created a Vue app on this page, so that app " +
+            "would run without the plugin. Call it from a script that runs before Citry creates its first app, " +
+            "such as a script loaded with `defer` in the page <head> or a script an extension adds to `ctx.early_scripts` for the page's first interactive render.");
+        // As with `app.use`, registering the same plugin again does nothing, even with other options.
+        if (pageVuePlugins.some(entry => entry.plugin === plugin)) return;
+        pageVuePlugins.push(Object.freeze({plugin, options}));
+      }});
+  }
+  // Ask at most once per page: a deploy tends to make every following call stale at once, and asking again
+  // after the user declined would nag. One page may run several apps, so the flag lives outside them.
+  let reloadPrompted = false;
+  function promptReload() {
+    if (reloadPrompted) return;
+    reloadPrompted = true;
+    if (global.confirm("This page and the server are running different versions of the app. Reload to get back in sync?"))
+      global.location.reload();
+  }
+  const registeredTypeOptions = new Map();
+  const browserPluginFactories = new Map();
+  const instanceRecords = new WeakMap();
+  const publicEventsConfig = Object.create(null);
+  const publicEventTransports = new Map();
+  const publicTargetMatches = target => {
+    const matches = [];
+    for (const app of apps.values()) {
+      const source = app.resolvePublicTarget?.(target);
+      if (source) matches.push({app, source});
+    }
+    return matches;
+  };
+  let publicSend = (target, name, args, opts) => {
+    const matches = publicTargetMatches(target);
+    if (matches.length === 0)
+      return Promise.reject(new Error("Citry.events.send found no current mounted prepared Vue component for its target."));
+    if (matches.length > 1)
+      return Promise.reject(new Error("Citry.events.send found multiple current mounted prepared Vue components for its target."));
+    return matches[0].app.publicSend?.(matches[0].source, name, args, opts);
+  };
+  let publicApplyActions = actions => {
+    let checked;
+    try {
+      checked = snapshotPublicActions(actions);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const targets = checked.map(action => {
+      if (!action || typeof action !== "object") return null;
+      if (action.action === "state") return `render:${action.targetRenderId}`;
+      return action.action === "render" || action.action === "event" ? action.target : null;
+    }).filter(target => typeof target === "string");
+    const owners = [];
+    for (const target of targets) {
+      // A marker is caller-relative: its first segment identifies the
+      // component whose render response owns the marker.
+      const marker = /^mark:([^:]+):/.exec(target);
+      const lookup = marker ? `render:${marker[1]}` : target;
+      const matches = publicTargetMatches(lookup);
+      if (matches.length === 0)
+        return Promise.reject(new Error(`Citry.events.applyActions target '${target}' is stale or retired.`));
+      if (matches.length > 1)
+        return Promise.reject(new Error(`Citry.events.applyActions target '${target}' matches multiple mounted prepared Vue components.`));
+      owners.push(matches[0]);
+    }
+    if (owners.length) {
+      const app = owners[0].app;
+      if (owners.some(owner => owner.app !== app))
+        return Promise.reject(new Error("Citry.events.applyActions cannot combine targets from different Vue apps."));
+      return app.publicApplyActions?.(checked, owners[0].source);
+    }
+    return applyPublicActionsWithoutApp(checked);
+  };
+  // `send` and `applyActions` return Promises, and callers await them, so a check inside the matched app that
+  // throws (an unknown handler, args that are not a plain object, a missing Events bridge) must arrive as a rejection
+  // the caller can catch, the same way `$sendEvent` reports it, rather than as an exception from the call.
+  const rejectOnThrow = call => {
+    try {
+      return Promise.resolve(call());
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  };
+  const publicEvents = {
+    send(target, name, args, opts) {
+      return rejectOnThrow(() => publicSend(target, name, args, opts));
+    },
+    on(name, callback) {
+      if (typeof name !== "string" || name.length === 0) throw new TypeError("Citry.events.on needs a non-empty event name");
+      if (typeof callback !== "function") throw new TypeError("Citry.events.on needs a callback function");
+      const listener = event => callback(event.detail);
+      document.addEventListener(name, listener);
+      return () => document.removeEventListener(name, listener);
+    },
+    configure(options = {}) {
+      plain(options, "Citry.events.configure options");
+      if (options.csrf !== undefined) plain(options.csrf, "Citry.events.configure csrf");
+      Object.assign(publicEventsConfig, options);
+      if (options.csrf !== undefined)
+        publicEventsConfig.csrf = {...options.csrf};
+    },
+    registerTransport(name, implementation) {
+      if (typeof name !== "string" || name.length === 0) throw new TypeError("Citry.events.registerTransport needs a non-empty name");
+      if (!implementation || typeof implementation.send !== "function")
+        throw new TypeError("Citry.events.registerTransport needs an implementation with send(envelope, request)");
+      publicEventTransports.set(name, implementation);
+    },
+    applyActions(actions) {
+      return rejectOnThrow(() => publicApplyActions(actions));
+    },
+  };
+  if (Object.prototype.hasOwnProperty.call(citryNamespace, "events") && citryNamespace.events !== undefined) {
+    if (!citryNamespace.events || typeof citryNamespace.events !== "object")
+      throw new TypeError("the global Citry.events namespace must be an object");
+    Object.assign(citryNamespace.events, publicEvents);
+  } else {
+    Object.defineProperty(citryNamespace, "events", {value: publicEvents, enumerable: true, configurable: true, writable: true});
+  }
+  const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const plain = (value, name) => {
+    if (!value || Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError(name + " must be a plain object");
+    return value;
+  };
+  const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const knownActionKinds = new Set(["render", "data", "state", "event", "redirect", "url"]);
+  const knownSwaps = new Set(["morph", "replace", "inner", "append", "prepend", "remove", "none"]);
+  const knownRenderers = new Set(["html-fragment/1", "vue-prepared/1"]);
+  const safeRenderId = value => typeof value === "string" && /^[a-z0-9_-]+$/.test(value);
+  const strictPublicJson = (value, path = "", ancestors = new Set()) => {
+    if (value === null || typeof value === "string" || typeof value === "boolean") return;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) throw new TypeError(`Citry.events.applyActions received non-finite JSON at ${path || "/"}`);
+      return;
+    }
+    if (typeof value !== "object") throw new TypeError(`Citry.events.applyActions received non-JSON data at ${path || "/"}`);
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null && !Array.isArray(value))
+      throw new TypeError(`Citry.events.applyActions received a non-JSON object at ${path || "/"}`);
+    if (Object.getOwnPropertySymbols(value).length)
+      throw new TypeError(`Citry.events.applyActions received symbol-keyed data at ${path || "/"}`);
+    if (ancestors.has(value)) throw new TypeError(`Citry.events.applyActions received cyclic data at ${path || "/"}`);
+    for (const name of Object.getOwnPropertyNames(value)) {
+      if (Array.isArray(value) && name === "length") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, name);
+      if (!descriptor?.enumerable || !("value" in descriptor))
+        throw new TypeError(`Citry.events.applyActions received accessor or non-enumerable data at ${path || "/"}`);
+    }
+    if (Array.isArray(value)) {
+      const names = Object.keys(value);
+      if (names.length !== value.length || names.some((name, index) => name !== String(index)))
+        throw new TypeError(`Citry.events.applyActions received a sparse or named array at ${path || "/"}`);
+    }
+    ancestors.add(value);
+    for (const [key, child] of Object.entries(value)) strictPublicJson(child, `${path}/${key}`, ancestors);
+    ancestors.delete(value);
+  };
+  // A <c-mark> name, the same rule the server and the protocol package apply.
+  const safeMarkName = value => /^[A-Za-z][A-Za-z0-9_-]*$/.test(value);
+  // The same target rules as the protocol package's checker, which normally runs instead of this
+  // one: a target names a component occurrence (`render:<id>`), and only a render action may name
+  // a marked region inside it (`mark:<callerRenderId>:<name>`). A CSS selector is not a target.
+  const publicTarget = (value, path, allowMarker) => {
+    if (typeof value !== "string" || value.length === 0)
+      throw new TypeError(`Citry.events.applyActions needs a non-empty target at ${path}`);
+    if (value.startsWith("render:")) {
+      if (!safeRenderId(value.slice(7)))
+        throw new TypeError(`Citry.events.applyActions needs a valid render target at ${path}`);
+      return;
+    }
+    if (allowMarker && value.startsWith("mark:")) {
+      const rest = value.slice(5), separator = rest.indexOf(":");
+      if (separator < 0 || !safeRenderId(rest.slice(0, separator)) || !safeMarkName(rest.slice(separator + 1)))
+        throw new TypeError(`Citry.events.applyActions needs mark:<callerRenderId>:<name> at ${path}`);
+      return;
+    }
+    throw new TypeError(allowMarker
+      ? `Citry.events.applyActions needs a render:<renderId> or mark:<callerRenderId>:<name> target at ${path}`
+      : `Citry.events.applyActions needs a render:<renderId> event target at ${path}`);
+  };
+  const publicTiming = (action, path) => {
+    if (has(action, "delay") && (typeof action.delay !== "number" || !Number.isFinite(action.delay) || action.delay < 0))
+      throw new TypeError(`Citry.events.applyActions needs a finite non-negative delay at ${path}/delay`);
+    if (has(action, "wait") && action.wait !== false)
+      throw new TypeError(`Citry.events.applyActions requires wait=false at ${path}/wait`);
+  };
+  const assertPublicActionList = actions => {
+    if (!Array.isArray(actions)) throw new TypeError("Citry.events.applyActions needs an action array");
+    strictPublicJson(actions);
+    let dataActions = 0;
+    for (let index = 0; index < actions.length; index += 1) {
+      const action = actions[index];
+      const path = `/actions/${index}`;
+      if (!action || Array.isArray(action) || (Object.getPrototypeOf(action) !== Object.prototype && Object.getPrototypeOf(action) !== null))
+        throw new TypeError(`Citry.events.applyActions received an invalid action at ${path}`);
+      if (typeof action.action !== "string" || !knownActionKinds.has(action.action))
+        throw new TypeError(`Citry.events.applyActions received an invalid action kind at ${path}`);
+      const required = {
+        render: ["target", "swap"],
+        data: ["value"],
+        state: ["targetRenderId", "stateToken", "publicState"],
+        event: ["eventName"],
+        redirect: ["url"],
+        url: ["url", "mode"],
+      }[action.action];
+      for (const name of required) if (!has(action, name)) throw new TypeError(`Citry.events.applyActions is missing ${path}/${name}`);
+      const fields = {
+        render: ["action", "target", "swap", "renderer", "html", "prepared", "delay", "wait"],
+        data: ["action", "value", "delay"],
+        state: ["action", "targetRenderId", "stateToken", "publicState", "delay", "wait"],
+        event: ["action", "eventName", "detail", "target", "delay", "wait"],
+        redirect: ["action", "url", "delay", "wait"],
+        url: ["action", "url", "mode", "delay", "wait"],
+      }[action.action];
+      for (const name of Object.keys(action)) if (!fields.includes(name)) throw new TypeError(`Citry.events.applyActions found an unknown field at ${path}/${name}`);
+      if (action.action === "render") {
+        publicTarget(action.target, `${path}/target`, true);
+        if (!knownSwaps.has(action.swap)) throw new TypeError(`Citry.events.applyActions received an invalid render swap at ${path}/swap`);
+        const renderer = has(action, "renderer") ? action.renderer : "html-fragment/1";
+        if (!knownRenderers.has(renderer)) throw new TypeError(`Citry.events.applyActions received an invalid renderer at ${path}/renderer`);
+        const content = renderer === "html-fragment/1" ? "html" : "prepared";
+        const other = content === "html" ? "prepared" : "html";
+        if (!has(action, content) || has(action, other)) throw new TypeError(`Citry.events.applyActions received invalid render content at ${path}`);
+        if (content === "html" && typeof action.html !== "string") throw new TypeError(`Citry.events.applyActions needs string HTML at ${path}/html`);
+        if (content === "prepared" && (!action.prepared || Array.isArray(action.prepared) || (Object.getPrototypeOf(action.prepared) !== Object.prototype && Object.getPrototypeOf(action.prepared) !== null)))
+          throw new TypeError(`Citry.events.applyActions needs prepared object data at ${path}/prepared`);
+        // Vue patches a prepared render into the component it already shows; it never inserts or removes one.
+        if (content === "prepared" && action.swap !== "morph")
+          throw new TypeError(`Citry.events.applyActions needs the morph swap for a vue-prepared/1 render at ${path}/swap`);
+      } else if (action.action === "data") {
+        dataActions += 1;
+      } else if (action.action === "state") {
+        if (typeof action.targetRenderId !== "string" || !safeRenderId(action.targetRenderId)) throw new TypeError(`Citry.events.applyActions needs a valid state target at ${path}/targetRenderId`);
+        if (typeof action.stateToken !== "string" || action.stateToken.length === 0) throw new TypeError(`Citry.events.applyActions needs a state token at ${path}/stateToken`);
+        if (!action.publicState || Array.isArray(action.publicState) || (Object.getPrototypeOf(action.publicState) !== Object.prototype && Object.getPrototypeOf(action.publicState) !== null))
+          throw new TypeError(`Citry.events.applyActions needs public State object data at ${path}/publicState`);
+      } else if (action.action === "event") {
+        if (typeof action.eventName !== "string" || action.eventName.length === 0 || action.eventName.startsWith("citry:")) throw new TypeError(`Citry.events.applyActions needs a public event name at ${path}/eventName`);
+        if (has(action, "target")) publicTarget(action.target, `${path}/target`, false);
+      } else if (action.action === "redirect") {
+        if (typeof action.url !== "string" || action.url.length === 0) throw new TypeError(`Citry.events.applyActions needs a redirect URL at ${path}/url`);
+      } else {
+        if (typeof action.url !== "string" || action.url.length === 0 || (action.mode !== "push" && action.mode !== "replace")) throw new TypeError(`Citry.events.applyActions needs a URL and mode at ${path}`);
+      }
+      publicTiming(action, path);
+    }
+    if (dataActions > 1) throw new TypeError("Citry.events.applyActions accepts at most one data action");
+    return actions;
+  };
+  const snapshotPublicActions = actions => {
+    const protocolValidator = global.CitryVueEvents?.assertValidActionList;
+    if (typeof protocolValidator === "function") protocolValidator(actions);
+    else assertPublicActionList(actions);
+    // The caller keeps its array and may change it while the actions run, so run a private copy.
+    return structuredClone(actions);
+  };
+  async function applyPublicActionsWithoutApp(actions) {
+    let data;
+    const apply = async action => {
+      if (!action || typeof action !== "object" || typeof action.action !== "string")
+        throw new TypeError("Citry.events.applyActions received an invalid action");
+      if (typeof action.delay === "number" && action.delay > 0)
+        await new Promise(resolve => setTimeout(resolve, action.delay * 1000));
+      if (action.action === "data") data = action.value;
+      else if (action.action === "redirect") global.location.assign(action.url);
+      else if (action.action === "url") global.history[action.mode === "push" ? "pushState" : "replaceState"](global.history.state, "", action.url);
+      else if (action.action === "event") {
+        if (action.target !== undefined) throw new Error("Citry.events.applyActions needs a mounted component for targeted Event actions.");
+        document.dispatchEvent(new CustomEvent(action.eventName, {detail: action.detail, bubbles: true}));
+      } else throw new Error("Citry.events.applyActions needs a mounted component for Render and State actions.");
+    };
+    for (const action of actions) {
+      if (action?.wait === false) void apply(action).catch(error => console.error("[Citry] applying a public action failed:", error));
+      else await apply(action);
+    }
+    return data;
+  }
+  const clone = value => structuredClone(value);
+  const freezeDetached = value => {
+    if (value && typeof value === "object" && !Object.isFrozen(value)) {
+      for (const child of Array.isArray(value) ? value : Object.values(value)) freezeDetached(child);
+      Object.freeze(value);
+    }
+    return value;
+  };
+  const detached = value => freezeDetached(clone(value));
+  // Freeze a JSON tree in place, without recursion so deep server data cannot overflow the stack.
+  // Every object that can end up inside a combined envelope is frozen all the way down, so a frozen
+  // object needs no second visit: that is what lets freezing a combined envelope skip the retained
+  // occurrences it shares with the app.
+  const deepFreeze = root => {
+    const pending = [root];
+    while (pending.length) {
+      const value = pending.pop();
+      if (!value || typeof value !== "object" || Object.isFrozen(value)) continue;
+      Object.freeze(value);
+      for (const key of Object.keys(value)) pending.push(value[key]);
+    }
+    return root;
+  };
+  // Combined envelopes that preflightResult checked in full and then froze, mapped to the definition
+  // declarations it accepted. A later step of the same transaction can rely on those checks without
+  // copying the envelope, because nothing can change it anymore. The checks that depend on live app
+  // state (definitions registered since, mounted components) run again before anything publishes.
+  const validatedEnvelopes = new WeakMap();
+  // Throw when a definition this envelope declares was registered after preflight with different
+  // metadata, for example by another transaction that loaded the same id and then failed.
+  function assertDeclaredDefinitionsCurrent(app, declared) {
+    for (const [id, definition] of declared) {
+      const current = app.definitions.get(id);
+      if (current && current !== definition && definitionMetadataKey(current) !== definitionMetadataKey(definition))
+        throw new Error("prepared definition metadata collision");
+    }
+  }
+  const RESERVED_TEMPLATE_CONTEXT_NAMES = new Set([
+    "$attrs", "$citryEvents", "$citryPrepared", "$data", "$el", "$emit", "$error", "$event", "$forceUpdate", "$loading",
+    "$nextTick", "$onEvent", "$options", "$parent", "$props", "$refs", "$root", "$sendEvent", "$slots", "$state", "$watch",
+  ]);
+  function templateContextNames(value, label) {
+    if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !/^\$[A-Za-z][A-Za-z0-9_]*$/.test(item) ||
+        RESERVED_TEMPLATE_CONTEXT_NAMES.has(item)) ||
+        new Set(value).size !== value.length || [...value].sort().some((item, index) => item !== value[index]))
+      throw new TypeError(label + " must be a sorted unique array of public $ names");
+    return Object.freeze([...value]);
+  }
+  function registerBrowserPlugin(name, schemaVersion, factory, contextNames = []) {
+    if (typeof name !== "string" || !/^[a-z][a-z0-9_]*$/.test(name) ||
+        !Number.isInteger(schemaVersion) || schemaVersion <= 0 || typeof factory !== "function")
+      throw new TypeError("invalid Citry browser plugin registration");
+    const normalizedNames = templateContextNames(contextNames, "browser plugin template context names");
+    const prior = browserPluginFactories.get(name);
+    if (prior && (prior.schemaVersion !== schemaVersion || prior.factory !== factory ||
+        JSON.stringify(prior.templateContextNames) !== JSON.stringify(normalizedNames)))
+      throw new Error("Citry browser plugin registration collision: " + name);
+    browserPluginFactories.set(name, Object.freeze({schemaVersion, factory, templateContextNames: normalizedNames}));
+  }
+  function extensionEntries(value) {
+    plain(value, "prepared extensions");
+    return Object.keys(value).sort().map(name => {
+      if (!/^[a-z][a-z0-9_]*$/.test(name)) throw new Error("invalid prepared extension name");
+      const item = plain(value[name], "prepared extension");
+      if (Object.keys(item).sort().join(",") !== "payload,schemaVersion,templateContextNames" ||
+          !Number.isInteger(item.schemaVersion) || item.schemaVersion <= 0)
+        throw new Error("invalid prepared extension wrapper");
+      plain(item.payload, "prepared extension payload");
+      return [name, {...item, templateContextNames: templateContextNames(item.templateContextNames, "extension template context names")}];
+    });
+  }
+  const ORDINARY_TARGET = "ordinary-vnodes/1";
+  // A component tag has no element of its own to time, so a timed binding there has nothing to run on.
+  const TIMED_COMPONENT_BINDING_ERROR = "A `.debounce` or `.throttle` `@c-*` binding, or `@c-poll`, cannot go on a " +
+    "component tag. Put it on an element inside the child component's template instead.";
+  const INPUT_MODEL_SITE = "__citryInputModelSite";
+  let nextInputModelIdentity = 0;
+  const inputModelObjectIds = new WeakMap();
+  const inputModelSymbolIds = (() => {
+    try {
+      const values = new WeakMap(), probe = Symbol();
+      values.set(probe, 0);
+      return values;
+    } catch {
+      return null;
+    }
+  })();
+  const inputModelFallbackSymbolIds = new WeakMap();
+  const inputModelIdentityId = (values, value) => {
+    let id = values.get(value);
+    if (id === undefined) values.set(value, id = ++nextInputModelIdentity);
+    return id;
+  };
+  const inputModelToken = (instance, value) => {
+    if (value === undefined) return ["undefined"];
+    if (value === null) return ["null"];
+    if (typeof value === "string") return ["string", value];
+    if (typeof value === "boolean") return ["boolean", value];
+    if (typeof value === "number") return ["number", Number.isNaN(value) ? "NaN" : String(value)];
+    if (typeof value === "bigint") return ["bigint", String(value)];
+    if (typeof value === "symbol") {
+      const registered = Symbol.keyFor(value);
+      if (registered !== undefined) return ["registered-symbol", registered];
+      if (inputModelSymbolIds) return ["symbol", inputModelIdentityId(inputModelSymbolIds, value)];
+      let fallback = inputModelFallbackSymbolIds.get(instance);
+      if (!fallback) inputModelFallbackSymbolIds.set(instance, fallback = new Map());
+      return ["symbol", inputModelIdentityId(fallback, value)];
+    }
+    return ["object", inputModelIdentityId(inputModelObjectIds, value)];
+  };
+  const inputModelKey = (instance, site, type, authoredKey) => {
+    return JSON.stringify([
+      "\u0000citry-input-model",
+      inputModelToken(instance, site),
+      inputModelToken(instance, type),
+      inputModelToken(instance, authoredKey),
+    ]);
+  };
+  const vnodeProps = props => {
+    if (props === null || props === undefined || !own(props, INPUT_MODEL_SITE)) return props;
+    const site = props[INPUT_MODEL_SITE];
+    if (typeof site !== "string" || site.length === 0) throw new Error("invalid input model lifecycle site");
+    const prepared = {...props};
+    delete prepared[INPUT_MODEL_SITE];
+    const instance = V.getCurrentInstance();
+    if (!instance) throw new Error("input model lifecycle key requires an active Vue render");
+    const type = prepared.type === null || prepared.type === undefined ? "text" : prepared.type;
+    prepared.key = inputModelKey(instance, site, type, prepared.key);
+    return prepared;
+  };
+  // Vue's patch flags for props the compiler found dynamic (runtime-core `PatchFlags`).
+  const PROPS_FLAG = 8, FULL_PROPS_FLAG = 16;
+  // Form controls whose `value` the user edits in place (a checkbox or radio input is excluded below).
+  const EDITABLE_VALUE_TAGS = new Set(["input", "select", "textarea"]);
+  // Where the winning `value` of a `mergeProps` result came from. Python-computed attributes reach
+  // an element as a spread of the occurrence's frozen prepared data. The producer rejects an authored
+  // `v-bind` object on such an element, so beside a frozen spread the other sources are the
+  // compiler's literal props: a `value` there is a template constant (an authored `:value` is caught
+  // earlier through `dynamicProps`).
+  const mergedValueSources = new WeakMap();
+  // Selects the user picked from since the page last wrote their value. Vue reuses `<option>`
+  // elements when the list changes, so an untouched select can end up on an option the server did
+  // not send; only a select the user changed keeps its pick. Text fields need no such check: only
+  // the user or the component's own script changes their value, and both must be kept.
+  const userEditedFields = new WeakSet();
+  // Test harnesses load the runtime with a minimal `document` that has no event support.
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    const markEdited = event => { if (event.target?.localName === "select") userEditedFields.add(event.target); };
+    document.addEventListener("input", markEdited, true);
+    document.addEventListener("change", markEdited, true);
+  }
+  // Runs after Vue patches a `<select>` whose `value` is compared by VNode value.
+  function restoreUneditedValue(vnode, oldVnode) {
+    const element = vnode.el, next = vnode.props[".value"];
+    // A changed value was just written by Vue, which replaces any draft, so the field starts clean.
+    if (!oldVnode.props || oldVnode.props[".value"] !== next) { userEditedFields.delete(element); return; }
+    if (!element || userEditedFields.has(element)) return;
+    const text = next === null || next === undefined ? "" : String(next);
+    if (element.value !== text) element.value = text;
+  }
+  // Where an element's `value` comes from: "browser" for an authored Vue binding (`:value`, or a
+  // spread of browser state), "server" for a value Python computed, "constant" for a template literal.
+  function valueSource(props, patchFlag, dynamicProps) {
+    if (Array.isArray(dynamicProps) && dynamicProps.includes("value")) return "browser";
+    if ((patchFlag & FULL_PROPS_FLAG) === 0) return "constant";
+    // A spread without an authored `:value`: prepared data is frozen before any render reads it,
+    // and Vue's reactive browser state never is.
+    if (Object.isFrozen(props)) return "server";
+    return mergedValueSources.get(props) || "browser";
+  }
+  // Ordinary VNodes carry no patch flags, so Vue compares every prop on each update. It skips a
+  // prop whose old and new VNode values are equal, except `value`: that one it writes whenever the
+  // element's live value differs, which replaces what the user typed. The `.value` spelling is the
+  // same DOM property, compared by VNode value like any other prop. So a constant or server value
+  // that did not change leaves the user's edit alone, and a changed one is still written.
+  function valueComparedByVNode(source) {
+    // An authored `:value` bound to browser state keeps Vue's rule and is written on every render,
+    // because the author chose a one-way binding from that state.
+    return source !== "browser";
+  }
+  // `authored` is the props object the compiled render passed, before `vnodeProps` copied it: the
+  // copy loses the frozen or merged identity that tells a server value apart.
+  function editableValueProps(type, props, authored, patchFlag, dynamicProps) {
+    if (typeof type !== "string" || !EDITABLE_VALUE_TAGS.has(type) || props === null || props === undefined ||
+        !own(props, "value"))
+      return props;
+    // A checkbox or radio value is not typed by the user, and Vue's v-model reads it from
+    // `vnode.props.value`, so it keeps its usual name.
+    if (type === "input" && (props.type === "checkbox" || props.type === "radio")) return props;
+    if (!valueComparedByVNode(valueSource(authored, patchFlag, dynamicProps))) return props;
+    const prepared = {};
+    for (const key of Object.keys(props)) if (key !== "value") prepared[key] = props[key];
+    // Vue writes `value` after the other props (a range input needs its min and max first), so
+    // the renamed key stays last.
+    prepared[".value"] = props.value;
+    if (type === "select") {
+      const hook = props.onVnodeUpdated;
+      prepared.onVnodeUpdated = hook === undefined ? restoreUneditedValue : [...[hook].flat(), restoreUneditedValue];
+    }
+    return prepared;
+  }
+  // An Events Render can replace a component with a different component (#164). The parent's compiled
+  // template still names the old one, so each Citry component VNode reads the component its occurrence
+  // has now. citryTypeInfo maps each registered Vue type to its app and stable type.
+  const citryTypeInfo = new WeakMap();
+  // Pages where no Render has replaced a component skip the lookup, so their renders cost one check.
+  let typeReplacementSeen = false;
+  function currentOccurrenceType(type, props) {
+    const info = citryTypeInfo.get(type);
+    const id = props?.["citry-id"] ?? props?.citryId;
+    if (!info || typeof id !== "string") return type;
+    const app = apps.get(info.appId);
+    const occurrence = app?.occurrences.get(id);
+    if (!occurrence || occurrence.typeKey === info.typeKey) return type;
+    // registerIncomingTypes staged the new type before the revision published the occurrence.
+    const replacement = app.types.get(occurrence.typeKey);
+    if (!replacement) throw new Error("replaced component type is not registered: " + occurrence.typeKey);
+    return replacement;
+  }
+  function compilerCreateVNode(type, props, children, patchFlag, dynamicProps) {
+    if (typeReplacementSeen && type !== null && typeof type === "object") {
+      const current = currentOccurrenceType(type, props);
+      // The parent's props, listeners and ref on this call were written for the old component. Passing
+      // them on would turn them into stray attributes on the new component's root, so the new component
+      // gets only its identity and starts from the Render's arguments alone.
+      if (current !== type) {
+        type = current;
+        props = {"citry-id": props["citry-id"] ?? props.citryId, key: props.key};
+      }
+    }
+    return V.createVNode(type, editableValueProps(type, vnodeProps(props), props, patchFlag, dynamicProps), children, 0,
+      dynamicProps);
+  }
+  const compilerRuntime = Object.create(V);
+  Object.defineProperty(compilerRuntime, "openBlock", {value: () => null, enumerable: true});
+  for (const name of ["createVNode", "createElementVNode", "createBlock", "createElementBlock"]) {
+    Object.defineProperty(compilerRuntime, name, {
+      value: (type, props, children, patchFlag, dynamicProps) =>
+        compilerCreateVNode(type, props, children, patchFlag, dynamicProps),
+      enumerable: true,
+    });
+  }
+  Object.defineProperty(compilerRuntime, "mergeProps", {
+    value: (...sources) => {
+      const merged = V.mergeProps(...sources);
+      if (own(merged, "value") && sources.some(source => source !== null && typeof source === "object" && Object.isFrozen(source))) {
+        // Vue lets the last source that has `value` win, so that source decides where it came from.
+        for (let index = sources.length - 1; index >= 0; index -= 1) {
+          const source = sources[index];
+          if (source === null || source === undefined || !own(source, "value")) continue;
+          mergedValueSources.set(merged, Object.isFrozen(source) ? "server" : "constant");
+          break;
+        }
+      }
+      return merged;
+    },
+    enumerable: true,
+  });
+  Object.defineProperty(compilerRuntime, "createTextVNode", {
+    value: text => V.createTextVNode(text),
+    enumerable: true,
+  });
+  for (const name of ["resolveDirective", "vModelCheckbox", "vModelDynamic", "vModelRadio", "vModelSelect", "vModelText"]) {
+    if (V[name] === undefined) throw new Error("Vue runtime lacks required compiler helper: " + name);
+    if (name === "resolveDirective") continue;
+    Object.defineProperty(compilerRuntime, name, {value: V[name], enumerable: true});
+  }
+  // Vue's production build returns nothing for a custom directive nobody registered, and the element
+  // then renders without it and without an error, so a misspelled or missing directive would only show
+  // up as behavior that never happens. Vue resolves directives while the component that uses them
+  // renders, after every plugin from `Citry.vue.use()` is installed, so a name that is still missing
+  // here is missing for good, and the error stops the app like any other render error.
+  Object.defineProperty(compilerRuntime, "resolveDirective", {
+    value: name => {
+      const directive = V.resolveDirective(name);
+      if (directive !== undefined) return directive;
+      // Name the component by its type key, as other render errors do. Vue copies the root
+      // component's options when the app is created, so the instance's record is the reliable way to it.
+      const instance = V.getCurrentInstance();
+      const record = instance && (instanceRecords.get(instance.proxy) || instanceRecords.get(instance.ctx));
+      const component = record?.app.occurrences.get(record.occurrenceId)?.typeKey || instance?.type?.name || "(unknown)";
+      throw new Error("Component " + component + " uses the directive 'v-" + name + "', but no directive " +
+        "named '" + name + "' is registered. Check the spelling, or register it: in the 'directives' option " +
+        "of the component's $component() call, or for every component with Citry.vue.use(plugin), where " +
+        "the plugin's install(app) calls app.directive(\"" + name + "\", ...).");
+    },
+    enumerable: true,
+  });
+  function runtimeForDynamicElements(entries) {
+    if (!Array.isArray(entries)) throw new TypeError("dynamicElements must be an array");
+    if (entries.length === 0) return compilerRuntime;
+    const aliases = new Map();
+    for (const entry of entries) {
+      plain(entry, "dynamic element entry");
+      if (Object.keys(entry).sort().join(",") !== "alias,sourceEnd,sourceStart,tag" ||
+          typeof entry.alias !== "string" || !/^citry-dynamic-[0-9a-f]{16}$/.test(entry.alias) ||
+          typeof entry.tag !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]*$/.test(entry.tag) ||
+          ["script", "style", "template"].includes(entry.tag.toLowerCase()) ||
+          !Number.isInteger(entry.sourceStart) || !Number.isInteger(entry.sourceEnd) ||
+          entry.sourceStart < 0 || entry.sourceEnd <= entry.sourceStart || aliases.has(entry.alias))
+        throw new TypeError("invalid dynamic element entry");
+      aliases.set(entry.alias, entry.tag);
+    }
+    const runtime = Object.create(compilerRuntime);
+    for (const name of ["createVNode", "createElementVNode", "createBlock", "createElementBlock"])
+      Object.defineProperty(runtime, name, {enumerable: true, value(type, props, children, patchFlag, dynamicProps) {
+        if (typeof type === "string" && type.startsWith("citry-dynamic-")) {
+          if (!aliases.has(type)) throw new Error("unknown prepared dynamic element alias: " + type);
+          type = aliases.get(type);
+        }
+        return compilerCreateVNode(type, props, children, patchFlag, dynamicProps);
+      }});
+    return Object.freeze(runtime);
+  }
+  Object.defineProperty(compilerRuntime, "runtimeForDynamicElements", {
+    value: runtimeForDynamicElements,
+    enumerable: false,
+  });
+  Object.defineProperty(compilerRuntime, "helperContract", {value: HELPER_CONTRACT, enumerable: true});
+
+  // An opaque HTML record is trusted HTML from Python and the number of top-level nodes it parses
+  // into inside a <template> element, which the server computed. `pinned: true` asks the browser to
+  // keep the block's first render for the life of the component (see opaqueHtmlComponent).
+  function checkOpaqueHtmlRecord(value) {
+    const record = plain(value, "opaque HTML record");
+    const keys = Object.keys(record).sort().join(",");
+    if ((keys !== "html,nodeCount" && keys !== "html,nodeCount,pinned") ||
+        (keys === "html,nodeCount,pinned" && record.pinned !== true) || typeof record.html !== "string" ||
+        !Number.isSafeInteger(record.nodeCount) || record.nodeCount < 0 ||
+        (record.html === "" && record.nodeCount !== 0))
+      throw new TypeError("invalid opaque HTML record");
+    return record;
+  }
+
+  const opaqueHtmlComponent = Object.freeze({
+    name: "CitryOpaqueHtml",
+    props: {record: {type: Object, required: true}},
+    setup(props) {
+      let cachedHtml;
+      let cachedVNode = null;
+      // Decided by the first record this instance renders. A pinned block hands its nodes to page
+      // code (a chart or map library, say) that changes them after mount, so Vue must never patch
+      // or replace them: returning the same vnode object makes Vue skip the block on every later
+      // render, whatever HTML the server sends then.
+      let pinned = null;
+      return () => {
+        const record = checkOpaqueHtmlRecord(props.record);
+        if (pinned === null) pinned = record.pinned === true;
+        if (cachedVNode && (pinned || cachedHtml === record.html)) return cachedVNode;
+        const key = record.html;
+        // The block renders inside a Fragment. A hydrated page carries the block between the
+        // Fragment's comments, and Vue adopts `nodeCount` nodes there without reading them; when
+        // Vue builds the page it inserts the parsed HTML and ignores the count. HTML that parses
+        // into no nodes renders an empty Fragment, because a static vnode needs at least one node.
+        const children = record.nodeCount === 0 ? [] : [V.createStaticVNode(record.html, record.nodeCount)];
+        const vnode = V.h(V.Fragment, {key}, children);
+        cachedHtml = record.html;
+        cachedVNode = vnode;
+        return cachedVNode;
+      };
+    },
+  });
+
+  function normalizeDirectiveSignature(value) {
+    if (!Array.isArray(value)) throw new TypeError("directiveSignature must be an array");
+    const result = value.map(item => {
+      plain(item, "directive signature entry");
+      if (typeof item.siteId !== "string" || typeof item.name !== "string" || (item.arg !== null && typeof item.arg !== "string") || !Array.isArray(item.modifiers) || item.modifiers.some(x => typeof x !== "string")) throw new TypeError("invalid directive signature entry");
+      const modifiers = [...item.modifiers];
+      if (new Set(modifiers).size !== modifiers.length || modifiers.some((x, i) => i && modifiers[i - 1] > x)) throw new Error("directive modifiers must be unique and sorted");
+      return Object.freeze({siteId: item.siteId, name: item.name, arg: item.arg, modifiers: Object.freeze(modifiers)});
+    });
+    const sites = new Set();
+    for (const item of result) { if (sites.has(item.siteId)) throw new Error("duplicate directive site"); sites.add(item.siteId); }
+    return Object.freeze(result);
+  }
+  const signatureKey = value => JSON.stringify(value);
+  // Slot outlet names come sorted and unique from the compiler; the order keeps definitions cache-stable.
+  function normalizeSlotNames(value, label) {
+    if (!Array.isArray(value) || value.some(name => typeof name !== "string" || name.length === 0) ||
+        signatureKey(value) !== signatureKey([...new Set(value)].sort()))
+      throw new TypeError("invalid " + label);
+    return Object.freeze([...value]);
+  }
+  function normalizeReplacementSites(value) {
+    if (!Array.isArray(value)) throw new TypeError("replacementSites must be an array");
+    let prior = "";
+    return Object.freeze(value.map(item => {
+      plain(item, "replacement site");
+      const key = item.replacementKey ?? item.key;
+      const descendants = item.localDescendants ?? [];
+      const descendantRuns = item.localDescendantRuns ?? [];
+      if (typeof item.siteId !== "string" || typeof key !== "string" ||
+          !Array.isArray(descendants) || descendants.some(id => typeof id !== "string") ||
+          signatureKey(descendants) !== signatureKey([...new Set(descendants)].sort()) ||
+          !Array.isArray(descendantRuns) || descendantRuns.some(id => typeof id !== "string") ||
+          new Set(descendantRuns).size !== descendantRuns.length || item.siteId <= prior)
+        throw new Error("replacement sites must be sorted and unique");
+      prior = item.siteId;
+      const slotOutlets = normalizeSlotNames(item.slotOutlets ?? [], "replacement site slot outlets");
+      return Object.freeze({siteId: item.siteId, key, localDescendants: Object.freeze([...descendants]), localDescendantRuns: Object.freeze([...descendantRuns]), slotOutlets});
+    }));
+  }
+
+  function normalizeLocalCallRuns(value) {
+    if (!Array.isArray(value)) throw new TypeError("localCallRuns must be an array");
+    const ids = new Set();
+    return Object.freeze(value.map(item => {
+      plain(item, "local call run");
+      const strings = ["runId", "typeKey", "componentTag", "collectionExpression", "idExpression", "keyExpression"];
+      const offsets = ["sourceStart", "sourceEnd", "loopSourceStart", "loopSourceEnd"];
+      if (Object.keys(item).length !== strings.length + offsets.length ||
+          [...strings, ...offsets].some(key => !own(item, key)) || strings.some(key => typeof item[key] !== "string") ||
+          offsets.some(key => !Number.isInteger(item[key]) || item[key] < 0) ||
+          item.sourceEnd < item.sourceStart || item.loopSourceEnd < item.loopSourceStart ||
+          ids.has(item.runId)) throw new TypeError("invalid local call run");
+      ids.add(item.runId);
+      return Object.freeze(Object.fromEntries([...strings, ...offsets].map(key => [key, item[key]])));
+    }));
+  }
+
+  function normalizeLocalCalls(value) {
+    if (!Array.isArray(value)) throw new TypeError("localCalls must be an array");
+    const ids = new Set();
+    return Object.freeze(value.map(item => {
+      plain(item, "local call declaration");
+      if (typeof item.localId !== "string" || typeof item.typeKey !== "string" ||
+          typeof item.componentTag !== "string" || !Array.isArray(item.bindings) ||
+          Object.keys(item).filter(key => key !== "fills").sort().join(",") !== "bindings,componentTag,localId,typeKey" ||
+          ids.has(item.localId)) throw new TypeError("invalid local call declaration");
+      // The fills written inside this call, which a replaced slot outlet of the called component
+      // leads to. A call without fills carries no key.
+      let priorFill = "";
+      const fills = Object.freeze((item.fills ?? []).map(fill => {
+        plain(fill, "local call fill");
+        if (Object.keys(fill).sort().join(",") !== "localDescendantRuns,localDescendants,name,slotOutlets" ||
+            typeof fill.name !== "string" || fill.name <= priorFill ||
+            !Array.isArray(fill.localDescendants) || fill.localDescendants.some(id => typeof id !== "string") ||
+            signatureKey(fill.localDescendants) !== signatureKey([...new Set(fill.localDescendants)].sort()) ||
+            !Array.isArray(fill.localDescendantRuns) || fill.localDescendantRuns.some(id => typeof id !== "string") ||
+            signatureKey(fill.localDescendantRuns) !== signatureKey([...new Set(fill.localDescendantRuns)].sort()))
+          throw new TypeError("invalid local call fill");
+        priorFill = fill.name;
+        return Object.freeze({name: fill.name, localDescendants: Object.freeze([...fill.localDescendants]),
+          localDescendantRuns: Object.freeze([...fill.localDescendantRuns]),
+          slotOutlets: normalizeSlotNames(fill.slotOutlets, "local call fill slot outlets")});
+      }));
+      if (own(item, "fills") && fills.length === 0) throw new TypeError("invalid local call declaration");
+      const bindings = Object.freeze(item.bindings.map(binding => {
+        plain(binding, "component call binding");
+        if (Object.keys(binding).sort().join(",") !== "kind,name,sourceEnd,sourceStart,value" ||
+            !["prop", "props-object", "events-object", "event", "ref-static", "ref-expression", "show", "condition", "model", "directive"].includes(binding.kind) ||
+            typeof binding.name !== "string" || typeof binding.value !== "string" ||
+            !Number.isInteger(binding.sourceStart) || !Number.isInteger(binding.sourceEnd) ||
+            binding.sourceStart < 0 || binding.sourceEnd <= binding.sourceStart)
+          throw new TypeError("invalid component call binding");
+        return Object.freeze({
+          kind: binding.kind,
+          name: binding.name,
+          value: binding.value,
+          sourceStart: binding.sourceStart,
+          sourceEnd: binding.sourceEnd,
+        });
+      }));
+      ids.add(item.localId);
+      return Object.freeze({localId: item.localId, typeKey: item.typeKey, componentTag: item.componentTag, bindings, fills});
+    }));
+  }
+
+  function normalizeDynamicElements(value) {
+    if (!Array.isArray(value)) throw new TypeError("dynamicElements must be an array");
+    const aliases = new Set();
+    return Object.freeze(value.map(item => {
+      plain(item, "dynamic element entry");
+      if (Object.keys(item).sort().join(",") !== "alias,sourceEnd,sourceStart,tag" ||
+          typeof item.alias !== "string" || !/^citry-dynamic-[0-9a-f]{16}$/.test(item.alias) ||
+          typeof item.tag !== "string" || !/^[A-Za-z][A-Za-z0-9_.-]*$/.test(item.tag) ||
+          ["script", "style", "template"].includes(item.tag.toLowerCase()) || aliases.has(item.alias) ||
+          !Number.isInteger(item.sourceStart) || !Number.isInteger(item.sourceEnd) ||
+          item.sourceStart < 0 || item.sourceEnd <= item.sourceStart)
+        throw new TypeError("invalid dynamic element entry");
+      aliases.add(item.alias);
+      return Object.freeze({
+        alias: item.alias,
+        tag: item.tag,
+        sourceStart: item.sourceStart,
+        sourceEnd: item.sourceEnd,
+      });
+    }));
+  }
+
+  function normalizeOpaqueHtmlSites(value) {
+    if (!Array.isArray(value)) throw new TypeError("opaqueHtmlSites must be an array");
+    const keys = new Set();
+    return Object.freeze(value.map(item => {
+      plain(item, "opaque HTML site");
+      if (Object.keys(item).sort().join(",") !== "key,origin,sourceEnd,sourceStart" ||
+          typeof item.key !== "string" || !/^citryOpaque[0-9A-Za-z]+$/.test(item.key) || keys.has(item.key) ||
+          !["raw", "markup"].includes(item.origin) || !Number.isInteger(item.sourceStart) ||
+          !Number.isInteger(item.sourceEnd) || item.sourceStart < 0 || item.sourceEnd <= item.sourceStart)
+        throw new TypeError("invalid opaque HTML site");
+      keys.add(item.key);
+      return Object.freeze({
+        key: item.key,
+        sourceStart: item.sourceStart,
+        sourceEnd: item.sourceEnd,
+        origin: item.origin,
+      });
+    }));
+  }
+  function normalizeRuntimeEventSites(value) {
+    if (!Array.isArray(value)) throw new TypeError("runtimeEventSites must be an array");
+    const seen = new Set(), seenRoutes = new Set();
+    return Object.freeze(value.map(site => {
+      plain(site, "runtime event site");
+      if (Object.keys(site).sort().join(",") !== "bindingKey,siteId,steps" ||
+          typeof site.siteId !== "string" || !/^citryDirective[0-9a-f]+D[0-9]+$/.test(site.siteId) ||
+          seen.has(site.siteId) ||
+          typeof site.bindingKey !== "string" || !/^citryRuntimeEvents[0-9A-Za-z]+$/.test(site.bindingKey) ||
+          !Array.isArray(site.steps)) throw new TypeError("runtime event site is invalid or duplicated");
+      seen.add(site.siteId);
+      const steps = site.steps.map(step => {
+        plain(step, "runtime event site step");
+        const keys = Object.keys(step).sort().join(",");
+        if (step.kind === "branch" && keys === "index,key,kind" && typeof step.key === "string" &&
+            /^citryIf[0-9]+$/.test(step.key) &&
+            Number.isSafeInteger(step.index) && step.index >= 0)
+          return Object.freeze({kind: step.kind, key: step.key, index: step.index});
+        if ((step.kind === "each" || step.kind === "empty") && keys === "key,kind" &&
+            typeof step.key === "string" && /^citryLoop[0-9]+$/.test(step.key))
+          return Object.freeze({kind: step.kind, key: step.key});
+        throw new TypeError("runtime event site step is invalid");
+      });
+      const routeKey = JSON.stringify([site.bindingKey,
+        steps.map(step => [step.kind, step.key, step.kind === "branch" ? step.index : null])]);
+      if (seenRoutes.has(routeKey)) throw new TypeError("runtime event site route and binding key are duplicated");
+      seenRoutes.add(routeKey);
+      return Object.freeze({siteId:site.siteId, bindingKey:site.bindingKey, steps:Object.freeze(steps)});
+    }));
+  }
+
+  function validateRuntimeEventSiteDeclarations(directiveSignature, runtimeEventSites) {
+    const runtimeDirectives = directiveSignature.filter(item => item.name === "v-citry-runtime-events");
+    if (runtimeDirectives.some(item => item.arg !== null || item.modifiers.length !== 0))
+      throw new Error("runtime event directive declaration has arguments or modifiers");
+    const directiveIds = new Set(runtimeDirectives.map(item => item.siteId));
+    const siteIds = new Set(runtimeEventSites.map(item => item.siteId));
+    if (directiveIds.size !== siteIds.size || [...directiveIds].some(id => !siteIds.has(id)))
+      throw new Error("runtime event sites do not exactly match runtime directive declarations");
+  }
+
+  function normalizeDefinitionAsset(asset) {
+    plain(asset, "prepared definition asset");
+    const keys = ["directiveSignature", "dynamicElements", "helperContract", "id", "localCallRuns",
+      "localCalls", "opaqueHtmlSites", "replacementSites", "runtimeEventSites", "sha256", "target", "url"];
+    if (Object.keys(asset).sort().join(",") !== [...keys].sort().join(",") ||
+        typeof asset.id !== "string" || typeof asset.url !== "string" ||
+        asset.target !== ORDINARY_TARGET || asset.helperContract !== HELPER_CONTRACT)
+      throw new Error("invalid prepared definition asset");
+    sriFromHex(asset.sha256);
+    const directiveSignature = normalizeDirectiveSignature(asset.directiveSignature);
+    const runtimeEventSites = normalizeRuntimeEventSites(asset.runtimeEventSites);
+    validateRuntimeEventSiteDeclarations(directiveSignature, runtimeEventSites);
+    return Object.freeze({
+      id: asset.id, url: asset.url, sha256: asset.sha256, target: asset.target,
+      helperContract: asset.helperContract,
+      dynamicElements: normalizeDynamicElements(asset.dynamicElements),
+      directiveSignature,
+      replacementSites: normalizeReplacementSites(asset.replacementSites),
+      localCalls: normalizeLocalCalls(asset.localCalls),
+      localCallRuns: normalizeLocalCallRuns(asset.localCallRuns),
+      opaqueHtmlSites: normalizeOpaqueHtmlSites(asset.opaqueHtmlSites),
+      runtimeEventSites,
+    });
+  }
+
+  function definitionMetadataKey(definition) {
+    return signatureKey({target: definition.target, helperContract: definition.helperContract,
+      dynamicElements: definition.dynamicElements, directiveSignature: definition.directiveSignature,
+      replacementSites: definition.replacementSites, localCalls: definition.localCalls,
+      localCallRuns: definition.localCallRuns, opaqueHtmlSites: definition.opaqueHtmlSites,
+      runtimeEventSites: definition.runtimeEventSites});
+  }
+
+  function validateRuntimeEventSpec(id, spec, occurrence) {
+    plain(spec, "runtime event binding");
+    const timing = value => value === null || Number.isSafeInteger(value) && value >= 0;
+    const descriptor = occurrence.eventContext?.descriptor;
+    if (!/^citryRuntimeEvent[0-9a-f]+$/.test(id) ||
+        Object.keys(spec).sort().join(",") !== "args,debounce,event,handler,id,key,once,prevent,self,stop,throttle" ||
+        spec.id !== id || typeof spec.event !== "string" || spec.event === "" ||
+        typeof spec.handler !== "string" || spec.handler === "" || spec.args !== null ||
+        ![spec.prevent, spec.stop, spec.self, spec.once].every(value => typeof value === "boolean") ||
+        spec.key !== null && (typeof spec.key !== "string" || spec.key === "") ||
+        !timing(spec.debounce) || !timing(spec.throttle) || !descriptor ||
+        !own(descriptor.eventHandlers, spec.handler))
+      throw new Error("runtime event binding is missing, stale, or invalid");
+  }
+
+  function validateRuntimePollSpec(id, spec, occurrence) {
+    plain(spec, "runtime poll binding");
+    const descriptor = occurrence.eventContext?.descriptor;
+    if (!/^citryRuntimePoll[0-9a-f]+$/.test(id) ||
+        Object.keys(spec).sort().join(",") !== "args,handler,id,interval" ||
+        spec.id !== id || typeof spec.handler !== "string" || spec.handler === "" ||
+        spec.args !== null || !Number.isSafeInteger(spec.interval) || spec.interval <= 0 ||
+        !descriptor || !own(descriptor.eventHandlers, spec.handler))
+      throw new Error("runtime poll binding is missing, stale, or invalid");
+  }
+
+  function validateOccurrenceRuntimeEvents(occurrence, definition) {
+    const referenced = new Set();
+    const visit = (site, index, scope) => {
+      if (index === site.steps.length) {
+        if (!own(scope, site.bindingKey) || typeof scope[site.bindingKey] !== "string")
+          throw new Error("runtime event site terminal is missing or invalid");
+        const ids = scope[site.bindingKey] === "" ? [] : scope[site.bindingKey].split(",");
+        if (new Set(ids).size !== ids.length || ids.some(id =>
+          !/^citryRuntime(?:Event|Poll)[0-9a-f]+$/.test(id)))
+          throw new Error("runtime event site references invalid or duplicate ids");
+        for (const id of ids) referenced.add(id);
+        return;
+      }
+      const step = site.steps[index];
+      if (step.kind === "branch") {
+        if (!own(scope, step.key) || !Number.isSafeInteger(scope[step.key]))
+          throw new Error("runtime event branch selector is invalid");
+        if (scope[step.key] === step.index) visit(site, index + 1, scope);
+        return;
+      }
+      if (!own(scope, step.key) || !Array.isArray(scope[step.key]))
+        throw new Error("runtime event loop selector is invalid");
+      if (step.kind === "each") {
+        for (const row of scope[step.key]) visit(site, index + 1, plain(row, "runtime event loop row"));
+      } else if (scope[step.key].length === 0) visit(site, index + 1, scope);
+    };
+    for (const site of definition.runtimeEventSites) visit(site, 0, occurrence.preparedData);
+    const eventTable = own(occurrence.preparedData, "eventBindings")
+      ? plain(occurrence.preparedData.eventBindings, "preparedData.eventBindings") : {};
+    const pollTable = own(occurrence.preparedData, "pollBindings")
+      ? plain(occurrence.preparedData.pollBindings, "preparedData.pollBindings") : {};
+    const runtimeEventIds = Object.keys(eventTable).filter(id => id.startsWith("citryRuntimeEvent"));
+    const runtimePollIds = Object.keys(pollTable).filter(id => id.startsWith("citryRuntimePoll"));
+    const eventRuntimeIds = Object.keys(eventTable).filter(id => id.startsWith("citryRuntime"));
+    const pollRuntimeIds = Object.keys(pollTable).filter(id => id.startsWith("citryRuntime"));
+    const runtimeIds = [...runtimeEventIds, ...runtimePollIds];
+    if (eventRuntimeIds.length !== runtimeEventIds.length || pollRuntimeIds.length !== runtimePollIds.length ||
+        runtimeIds.length !== referenced.size || runtimeIds.some(id => !referenced.has(id)))
+      throw new Error("runtime event references do not match definition sites");
+    for (const id of referenced) {
+      if (/^citryRuntimeEvent[0-9a-f]+$/.test(id) && own(eventTable, id) && !own(pollTable, id))
+        validateRuntimeEventSpec(id, eventTable[id], occurrence);
+      else if (/^citryRuntimePoll[0-9a-f]+$/.test(id) && own(pollTable, id) && !own(eventTable, id))
+        validateRuntimePollSpec(id, pollTable[id], occurrence);
+      else throw new Error("runtime event site references a missing or swapped binding table entry");
+    }
+  }
+
+  // keptOwners holds the components this revision keeps unchanged; see keptOwnerIds().
+  function preflightDefinitions(app, assets, occurrences, rootId, keptOwners = null) {
+    const declared = new Map();
+    for (const asset of assets) {
+      const normalized = normalizeDefinitionAsset(asset);
+      if (declared.has(normalized.id)) throw new Error("duplicate prepared definition asset");
+      const prior = app.definitions.get(normalized.id);
+      if (prior && definitionMetadataKey(prior) !== definitionMetadataKey(normalized))
+        throw new Error("prepared definition metadata collision");
+      declared.set(normalized.id, prior || normalized);
+    }
+    const occurrenceMap = new Map(occurrences.map(item => [item.id, item]));
+    // Computed once: only a kept caller reads it, and it does not change between occurrences.
+    const replacedTypes = keptOwners && replacedTypeIds(app, occurrenceMap);
+    for (const occurrence of occurrences) {
+      const definition = declared.get(occurrence.definitionId) || app.definitions.get(occurrence.definitionId);
+      if (!definition) throw new Error("unknown prepared definition metadata");
+      validateOccurrenceCallRuns(occurrenceMap, occurrence, definition, keptOwners?.has(occurrence.id) === true,
+        replacedTypes);
+      validateOccurrenceRuntimeEvents(occurrence, definition);
+      const opaque = own(occurrence.preparedData, "opaqueHtml")
+        ? plain(occurrence.preparedData.opaqueHtml, "preparedData.opaqueHtml") : {};
+      const declaredOpaque = new Map(definition.opaqueHtmlSites.map(site => [site.key, site]));
+      if (Object.keys(opaque).length !== declaredOpaque.size || Object.keys(opaque).some(key => !declaredOpaque.has(key)))
+        throw new Error("prepared opaque HTML does not match definition declarations");
+      for (const key of declaredOpaque.keys()) checkOpaqueHtmlRecord(opaque[key]);
+    }
+    validateGraph(occurrenceMap, rootId, keptOwners);
+    return declared;
+  }
+
+  // The components that a Render replaced with a different component, so their parent's template
+  // still names the old one: those replaced by an earlier Render, plus those this envelope replaces.
+  function replacedTypeIds(app, incoming) {
+    const ids = new Set(app.replacedTypeIds);
+    for (const [id, item] of incoming) {
+      const prior = app.occurrences.get(id);
+      if (prior && prior.typeKey !== item.typeKey) ids.add(id);
+    }
+    return ids;
+  }
+
+  // A Render into a marker or a component replaces everything inside it and keeps the rest of the
+  // page as it was. A caller outside that target may have written components between the target's
+  // tags (a fill), and the caller's call table still names them after the Render removed them. Only
+  // the slot they filled could render those entries, and the replaced target now shows content the
+  // caller did not supply, so they stay unused. A later server Render of the caller sends a call
+  // table without them. This returns the
+  // components an envelope keeps unchanged, whose call tables may hold such entries.
+
+  function keptOwnerIds(app, envelope) {
+    const updated = new Set(envelope.updatedIds);
+    return new Set(envelope.occurrences
+      .filter(item => !updated.has(item.id) && app.occurrences.has(item.id)).map(item => item.id));
+  }
+
+  // allowRemovedChildren: the occurrence is one the page keeps unchanged (see keptOwnerIds), so a
+  // call whose component is no longer in `occurrences` is a fill a Render replaced, not an error.
+  // A call whose component is present must still match its declaration exactly.
+  // replacedTypes: components that a Render put in place of the type their caller's template names (#164).
+  // Only a kept caller may still name the old type, because a caller the server renders again names the new one.
+  function validateOccurrenceCallRuns(occurrences, occurrence, definition, allowRemovedChildren = false,
+    replacedTypes = null) {
+    const typeMatches = (child, declaration) => child.typeKey === declaration.typeKey ||
+      allowRemovedChildren && replacedTypes?.has(child.id) === true;
+    const calls = plain(occurrence.preparedData.calls, "preparedData.calls");
+    const declarations = new Map(definition.localCallRuns.map(run => [run.runId, run]));
+    const values = own(occurrence.preparedData, "callRuns")
+      ? plain(occurrence.preparedData.callRuns, "preparedData.callRuns")
+      : declarations.size === 0 ? {} : (() => { throw new Error("prepared call runs do not match definition declarations"); })();
+    if (Object.keys(values).some(runId => !declarations.has(runId)) ||
+        [...declarations.keys()].some(runId => !own(values, runId)))
+      throw new Error("prepared call runs do not match definition declarations");
+    if (Object.keys(calls).length !== definition.localCalls.length)
+      throw new Error("prepared ordinary calls do not match definition declarations");
+    const covered = new Set();
+    for (const declaration of definition.localCalls) {
+      if (!own(calls, declaration.localId))
+        throw new Error("prepared ordinary local call does not match its declaration");
+      const binding = calls[declaration.localId];
+      const child = occurrences.get(binding.id);
+      if (!child && allowRemovedChildren) continue;
+      if (!child || child.parentId !== binding.parentId || !typeMatches(child, declaration) || covered.has(child.id))
+        throw new Error("prepared ordinary local call stable-type mismatch");
+      covered.add(child.id);
+    }
+    for (const [runId, ids] of Object.entries(values)) {
+      if (!Array.isArray(ids) || new Set(ids).size !== ids.length || ids.some(id => typeof id !== "string"))
+        throw new TypeError("invalid prepared call run values");
+      const declaration = declarations.get(runId);
+      for (const id of ids) {
+        const child = occurrences.get(id);
+        if (!child && allowRemovedChildren) continue;
+        if (!child || child.parentId !== occurrence.id || !typeMatches(child, declaration) || covered.has(id))
+          throw new Error("prepared local call run stable-type or ownership mismatch");
+        covered.add(id);
+      }
+    }
+  }
+
+  function validateDefinitionCallRuns(app, definition) {
+    const declared = new Set(definition.localCallRuns.map(run => run.runId));
+    for (const site of definition.replacementSites) {
+      if (site.localDescendantRuns.some(runId => !declared.has(runId)))
+        throw new Error("replacement site references an unknown local call run");
+    }
+    const stagedTags = new Map(app.callRunTags);
+    for (const run of [...definition.localCalls, ...definition.localCallRuns]) {
+      const prior = stagedTags.get(run.componentTag);
+      if (prior && prior !== run.typeKey) throw new Error("local call component tag stable-type mismatch");
+      stagedTags.set(run.componentTag, run.typeKey);
+    }
+  }
+
+  function validateGraph(occurrences, rootId, keptOwners = null) {
+    if (typeof rootId !== "string" || !occurrences.has(rootId) || occurrences.get(rootId).parentId !== null || occurrences.get(rootId).placementKey !== null) throw new Error("invalid prepared root");
+    let roots = 0;
+    const placements = new Set();
+    for (const item of occurrences.values()) {
+      if (item.parentId === null) roots += 1;
+      else {
+        if (!occurrences.has(item.parentId)) throw new Error("unknown occurrence parent");
+        if (typeof item.placementKey !== "string" || item.placementKey.length === 0) throw new Error("invalid occurrence placement key");
+        const placement = JSON.stringify([item.parentId, item.placementKey]);
+        if (placements.has(placement)) throw new Error("duplicate occurrence placement key within one parent");
+        placements.add(placement);
+      }
+      const seen = new Set([item.id]); let cursor = item.parentId;
+      while (cursor !== null) { if (seen.has(cursor)) throw new Error("cyclic occurrence graph"); seen.add(cursor); cursor = occurrences.get(cursor).parentId; }
+    }
+    if (roots !== 1) throw new Error("prepared graph must have exactly one root");
+    const directCalls = [...occurrences.values()].some(item => own(item.preparedData, "calls"));
+    if (directCalls) {
+      const referenced = new Set();
+      for (const owner of occurrences.values()) {
+        plain(owner.preparedData.calls, "preparedData.calls");
+        for (const binding of Object.values(owner.preparedData.calls)) {
+          plain(binding, "prepared local call binding");
+          if (Object.keys(binding).sort().join(",") !== "id,key,parentId" ||
+              typeof binding.id !== "string" || typeof binding.key !== "string" ||
+              typeof binding.parentId !== "string")
+            throw new Error("invalid prepared local call binding");
+          const child = occurrences.get(binding.id);
+          // A kept caller's entry for a fill a Render replaced (see keptOwnerIds).
+          if (!child && keptOwners?.has(owner.id)) continue;
+          if (!child || child.parentId !== binding.parentId || referenced.has(binding.id))
+            throw new Error("prepared local call does not match occurrence placement");
+          referenced.add(binding.id);
+        }
+        if (own(owner.preparedData, "callRuns")) {
+          const runs = plain(owner.preparedData.callRuns, "preparedData.callRuns");
+          for (const ids of Object.values(runs)) {
+            if (!Array.isArray(ids) || ids.some(id => typeof id !== "string"))
+              throw new Error("invalid prepared local call run values");
+            for (const id of ids) {
+              const child = occurrences.get(id);
+              if (!child && keptOwners?.has(owner.id)) continue;
+              if (!child || child.parentId !== owner.id || referenced.has(id))
+                throw new Error("prepared local call run does not match occurrence placement");
+              referenced.add(id);
+            }
+          }
+        }
+      }
+      for (const id of occurrences.keys()) {
+        if (id !== rootId && !referenced.has(id)) throw new Error("prepared occurrence has no local call binding");
+      }
+    }
+  }
+
+  function definitionRegistry(appId) {
+    const app = apps.get(appId);
+    if (!app) throw new Error("unknown Citry Vue app: " + appId);
+    return app;
+  }
+
+  const MARK_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
+  function normalizeMarkers(values, occurrences) {
+    if (!Array.isArray(values)) throw new TypeError("prepared markers must be an array");
+    if (values.length === 0) return new Map();
+    const markers = new Map(), physical = new Set();
+    let prior = null;
+    for (const value of values) {
+      plain(value, "prepared marker");
+      if (Object.keys(value).sort().join(",") !== "name,occurrenceId,ownerId" ||
+          typeof value.ownerId !== "string" || !occurrences.has(value.ownerId) ||
+          typeof value.occurrenceId !== "string" || !occurrences.has(value.occurrenceId) ||
+          typeof value.name !== "string" || !MARK_NAME.test(value.name))
+        throw new Error("prepared marker metadata is invalid");
+      const key = value.ownerId + "\0" + value.name;
+      const order = key + "\0" + value.occurrenceId;
+      if (markers.has(key) || physical.has(value.occurrenceId) || prior !== null && order <= prior)
+        throw new Error("prepared marker metadata is duplicated or unsorted");
+      markers.set(key, Object.freeze({...value}));
+      physical.add(value.occurrenceId); prior = order;
+    }
+    return markers;
+  }
+
+  function configure(bootstrap, startAttempt = null) {
+    plain(bootstrap, "bootstrap");
+    if (bootstrap.protocol !== "citry-vue-prepared/1" || typeof bootstrap.appId !== "string" || !Number.isInteger(bootstrap.revision) || !Array.isArray(bootstrap.occurrences)) throw new TypeError("invalid bootstrap");
+    if (apps.has(bootstrap.appId)) throw new Error("duplicate Citry Vue app");
+    const occurrences = new Map();
+    for (const item of bootstrap.occurrences) {
+      plain(item, "occurrence");
+      if (typeof item.id !== "string" || typeof item.typeKey !== "string" || typeof item.definitionId !== "string" || (item.parentId !== null && typeof item.parentId !== "string") || (item.placementKey !== null && typeof item.placementKey !== "string")) throw new TypeError("invalid occurrence identity");
+      plain(item.serverData, "serverData");
+      plain(item.preparedData, "preparedData");
+      if (occurrences.has(item.id)) throw new Error("duplicate occurrence id");
+      // The bootstrap belongs to the page or the caller, so keep a private copy, with server data
+      // copied on its own so it never aliases prepared data. Freeze all of it: retained occurrences
+      // are shared with later combined envelopes, which must not change.
+      const detached = clone({...item, serverData: undefined});
+      detached.serverData = clone(item.serverData);
+      occurrences.set(item.id, deepFreeze(detached));
+    }
+    validateGraph(occurrences, bootstrap.rootId);
+    const markers = normalizeMarkers(bootstrap.markers, occurrences);
+    // Components read and may write their server data through Vue reactivity, so each gets a
+    // writable copy; the frozen occurrence keeps the data the server sent.
+    const initialLive = new Map([...occurrences].map(([id,item]) => [id, {...item, serverData: V.reactive(clone(item.serverData))}]));
+    const definitionTypes = new Map();
+    for (const item of occurrences.values()) { const prior = definitionTypes.get(item.definitionId); if (prior && prior !== item.typeKey) throw new Error("definition used by multiple stable types"); definitionTypes.set(item.definitionId, item.typeKey); }
+    const app = {id: bootstrap.appId, startAttempt, rootId: bootstrap.rootId, revision: bootstrap.revision, occurrences, markers, snapshot: V.shallowRef(initialLive), definitions: new Map(), definitionTypes, callRunTags: new Map(), typeTags: new Map(), types: new Map(), replacedTypeIds: new Set(), untaggedTypes: new Set(), browserPlugins: [], templateContextNames: [], initialPluginStages: [], vueApp: null, hostElement: null, mounted: new Map(), mountEpoch: 0, nextMountGeneration: 0, preparedHost: null, eventDispatch: null, eventDispatchComponent: null, initialTasks: new Set(), initialError: null, transaction: null, busy: false, terminal: false};
+    apps.set(app.id, app);
+    return app;
+  }
+
+  function registerDefinition(appId, definitionId, definition, expected = null) {
+    plain(definition, "render definition");
+    if (typeof definitionId !== "string" || typeof definition.render !== "function" || definition.target !== ORDINARY_TARGET || definition.helperContract !== HELPER_CONTRACT) throw new TypeError("invalid render definition");
+    const normalized = Object.freeze({render: definition.render, target: definition.target, helperContract: definition.helperContract, dynamicElements:normalizeDynamicElements(definition.dynamicElements || []),directiveSignature: normalizeDirectiveSignature(definition.directiveSignature),replacementSites:normalizeReplacementSites(definition.replacementSites),localCalls:normalizeLocalCalls(definition.localCalls),localCallRuns:normalizeLocalCallRuns(definition.localCallRuns),opaqueHtmlSites:normalizeOpaqueHtmlSites(definition.opaqueHtmlSites),runtimeEventSites:normalizeRuntimeEventSites(definition.runtimeEventSites || [])});
+    validateRuntimeEventSiteDeclarations(normalized.directiveSignature, normalized.runtimeEventSites);
+    if (expected && definitionMetadataKey(expected) !== definitionMetadataKey(normalized))
+      throw new Error("loaded definition metadata does not match its prepared declaration");
+    const app = definitionRegistry(appId);
+    validateDefinitionCallRuns(app, normalized);
+    const prior = app.definitions.get(definitionId);
+    if (prior && (prior.render !== normalized.render || prior.target !== normalized.target || prior.helperContract !== normalized.helperContract || signatureKey(prior.dynamicElements) !== signatureKey(normalized.dynamicElements) || signatureKey(prior.directiveSignature) !== signatureKey(normalized.directiveSignature)||signatureKey(prior.replacementSites)!==signatureKey(normalized.replacementSites)||signatureKey(prior.localCalls)!==signatureKey(normalized.localCalls)||signatureKey(prior.localCallRuns)!==signatureKey(normalized.localCallRuns)||signatureKey(prior.opaqueHtmlSites)!==signatureKey(normalized.opaqueHtmlSites)||signatureKey(prior.runtimeEventSites)!==signatureKey(normalized.runtimeEventSites))) throw new Error("definition id collision");
+    // The committed page passed the strict graph check when it started and before every revision,
+    // so a call naming an absent component here is a fill a Render replaced (see keptOwnerIds).
+    for (const occurrence of app.occurrences.values()) if (occurrence.definitionId === definitionId)
+      validateOccurrenceCallRuns(app.occurrences, occurrence, normalized, true, app.replacedTypeIds);
+    if (!prior) {
+      app.definitions.set(definitionId, normalized);
+      for (const call of [...normalized.localCalls, ...normalized.localCallRuns])
+        app.callRunTags.set(call.componentTag, call.typeKey);
+    }
+  }
+
+  function attachVueApp(appId, vueApp) {
+    const app = definitionRegistry(appId), prior = vueApp.config.errorHandler;
+    for (const occurrence of app.occurrences.values()) {
+      const definition = app.definitions.get(occurrence.definitionId);
+      if (!definition) throw new Error("missing render definition before Vue app attachment");
+      validateOccurrenceCallRuns(app.occurrences, occurrence, definition);
+    }
+    app.vueApp = vueApp;
+    vueApp.config.errorHandler = (error, instance, info) => {
+      app.terminal = true;
+      stopAppPolling(app);
+      if (prior) prior(error, instance, info);
+      else queueMicrotask(() => { throw error; });
+    };
+  }
+
+  function attachPreparedHost(appId, host) {
+    plain(host, "prepared host");
+    if (
+      typeof host.onOccurrenceMounted !== "function" ||
+      typeof host.onOccurrenceUnmounted !== "function" ||
+      typeof host.beforeServerCallbacks !== "function"
+    ) throw new TypeError("invalid prepared host");
+    const app = definitionRegistry(appId);
+    if (app.preparedHost) throw new Error("prepared host is already attached");
+    app.preparedHost = Object.freeze({onOccurrenceMounted: host.onOccurrenceMounted, onOccurrenceUnmounted: host.onOccurrenceUnmounted, beforeServerCallbacks: host.beforeServerCallbacks});
+  }
+
+  function installServerKey(instance, record, key) {
+    if (key.startsWith("$") || key.startsWith("_")) throw new Error("reserved js_data key: " + key);
+    Object.defineProperty(instance, key, {enumerable: true, configurable: true,
+      get() { return record.live.value?.serverData[key]; },
+      set(value) { record.live.value.serverData[key] = value; }});
+  }
+
+  function eventDescriptor(record) {
+    return record.events.descriptor;
+  }
+
+  function requireEventHandler(record, name) {
+    const descriptor = eventDescriptor(record);
+    if (typeof name !== "string" || !descriptor || !own(descriptor.eventHandlers, name))
+      throw new Error("Unknown event handler '" + String(name) + "'.");
+    return name;
+  }
+
+  function cloneJsonValue(value, label) {
+    const ancestors = new Set();
+    const copy = item => {
+      if (item === null || typeof item === "string" || typeof item === "boolean") return item;
+      if (typeof item === "number" && Number.isFinite(item)) return item;
+      if (!item || typeof item !== "object") throw new TypeError(label + " must contain only strict JSON");
+      const raw = V.toRaw(item);
+      if (!Array.isArray(raw) && Object.getPrototypeOf(raw) !== Object.prototype && Object.getPrototypeOf(raw) !== null ||
+          ancestors.has(raw) || Object.getOwnPropertySymbols(raw).length)
+        throw new TypeError(label + " must contain only strict JSON");
+      const names = Object.getOwnPropertyNames(raw);
+      if (Array.isArray(raw) && (Object.keys(raw).length !== raw.length ||
+          Object.keys(raw).some((key, index) => key !== String(index))))
+        throw new TypeError(label + " must contain only dense JSON arrays");
+      for (const name of names) {
+        if (Array.isArray(raw) && name === "length") continue;
+        const descriptor = Object.getOwnPropertyDescriptor(raw, name);
+        if (!descriptor?.enumerable || !("value" in descriptor))
+          throw new TypeError(label + " must contain only strict JSON");
+      }
+      ancestors.add(raw);
+      const result = Array.isArray(raw) ? [] : {};
+      for (const key of Object.keys(raw)) {
+        Object.defineProperty(result, key, {
+          value: copy(raw[key]), enumerable: true, configurable: true, writable: true,
+        });
+      }
+      ancestors.delete(raw);
+      return result;
+    };
+    return copy(value);
+  }
+  const cloneStateValue = value => cloneJsonValue(value, "$state values");
+
+  function writableStateFields(descriptor, publicState) {
+    return new Set(own(descriptor, "writableStateFields") ? descriptor.writableStateFields : Object.keys(publicState));
+  }
+
+  function createStateFacade(record, initialContext) {
+    const state = {values: null, pending: null, writable: null, current: true, nestedViews: null, contractEpoch: 0};
+    const requireCurrent = key => {
+      if (!state.current || record.app.mounted.get(record.occurrenceId)?.record !== record)
+        throw new Error("Citry Events State source is stale or retired");
+      if (typeof key !== "string" || !state.values || !own(state.values, key))
+        throw new Error("Unknown $state field '" + String(key) + "'.");
+      if (!state.writable.has(key)) throw new Error("$state field '" + key + "' is not client-writable.");
+    };
+    const nested = value => {
+      const existing = state.nestedViews.get(value);
+      if (existing) return existing;
+      const epoch = state.contractEpoch;
+      const proxy = new Proxy(value, {
+      get(target, key) {
+        if (!state.current || epoch !== state.contractEpoch)
+          throw new Error("Citry Events State source is stale or retired");
+        const child = Reflect.get(target, key);
+        return child && typeof child === "object" ? nested(child) : child;
+      },
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        if (!descriptor || !descriptor.configurable || !("value" in descriptor) ||
+            !descriptor.value || typeof descriptor.value !== "object") return descriptor;
+        return {...descriptor, value: nested(descriptor.value)};
+      },
+      set() { throw new Error("Nested $state values are read-only; replace the whole top-level field instead."); },
+      deleteProperty() { throw new Error("Nested $state values are read-only; replace the whole top-level field instead."); },
+      defineProperty() { throw new Error("Nested $state values are read-only; replace the whole top-level field instead."); },
+      preventExtensions() { throw new Error("Nested $state values are read-only; replace the whole top-level field instead."); },
+      setPrototypeOf() { throw new Error("Nested $state values are read-only; replace the whole top-level field instead."); },
+      });
+      state.nestedViews.set(value, proxy);
+      return proxy;
+    };
+    state.facade = new Proxy(Object.create(null), {
+      get(_target, key) {
+        if (!state.current) throw new Error("Citry Events State source is stale or retired");
+        const value = state.values && own(state.values, key) ? state.values[key] : undefined;
+        return value && typeof value === "object" ? nested(value) : value;
+      },
+      set(_target, key, value) {
+        requireCurrent(key);
+        const copied = cloneStateValue(value);
+        const pending = cloneStateValue(copied);
+        state.values[key] = copied;
+        state.pending[key] = pending;
+        return true;
+      },
+      deleteProperty() { throw new Error("State fields cannot be deleted through $state."); },
+      defineProperty() { throw new Error("State fields cannot be defined through $state."); },
+      preventExtensions() { throw new Error("State fields cannot be frozen, sealed, or made non-extensible."); },
+      setPrototypeOf() { throw new Error("State prototypes cannot be changed through $state."); },
+      has(_target, key) { return Boolean(state.values && own(state.values, key)); },
+      ownKeys() { return state.values ? Reflect.ownKeys(state.values) : []; },
+      getOwnPropertyDescriptor(_target, key) {
+        return state.values && own(state.values, key)
+          ? {configurable: true, enumerable: true, writable: true,
+            value: state.values[key] && typeof state.values[key] === "object" ? nested(state.values[key]) : state.values[key]}
+          : undefined;
+      },
+    });
+    state.adopt = context => {
+      if (!context) {
+        state.contractEpoch += 1;
+        state.values = null; state.pending = null; state.writable = null; state.nestedViews = null;
+        return;
+      }
+      const incoming = context?.publicState || {};
+      if (!state.values) {
+        state.contractEpoch += 1;
+        // $state is writable from the browser, so it holds a copy, never the server's context object.
+        state.values = V.reactive(Object.assign(Object.create(null), clone(incoming)));
+        state.pending = Object.create(null);
+        state.nestedViews = new WeakMap();
+      }
+      state.writable = writableStateFields(context?.descriptor || {writableStateFields: []}, incoming);
+      for (const key of Object.keys(state.pending)) if (!state.writable.has(key)) delete state.pending[key];
+      for (const key of Object.keys(state.values)) if (!own(incoming, key) && !own(state.pending, key)) delete state.values[key];
+      for (const [key, value] of Object.entries(incoming)) if (!own(state.pending, key)) state.values[key] = clone(value);
+    };
+    state.retire = () => {
+      state.current = false; state.contractEpoch += 1;
+      state.values = null; state.pending = null; state.writable = null; state.nestedViews = null;
+    };
+    state.adopt(initialContext);
+    return state;
+  }
+
+  const controlLifetimes = new WeakMap();
+  // Vue-owned native state is private runtime metadata. Keep it out of the
+  // DOM so application code cannot accidentally forge ownership by assigning
+  // an expando with the same name.
+  const vueOwnedNativeProperties = new WeakMap();
+  // Uncontrolled native values need a per-element snapshot when Vue patches a
+  // surrounding component. The private ownership directive is present on each
+  // prepared native control, so this avoids scanning an entire app on every
+  // reactive update.
+  const nativeControlUpdateSnapshots = new WeakMap();
+  const eventTimingLifetimes = new WeakMap();
+  const eventTimingDirectives = new WeakMap();
+  const runtimeEventTimingDirectives = new WeakMap();
+  const MAX_TIMER_DELAY = 2_147_483_647;
+  function scheduleDelay(lifetime, milliseconds, callback) {
+    let remaining = milliseconds;
+    const schedule = () => {
+      const chunk = Math.min(remaining, MAX_TIMER_DELAY);
+      const started = performance.now();
+      lifetime.timer = setTimeout(() => {
+        lifetime.timer = 0;
+        remaining -= Math.max(0, performance.now() - started);
+        if (remaining <= 0) callback();
+        else schedule();
+      }, chunk);
+    };
+    schedule();
+  }
+  function releaseEventTiming(lifetime) {
+    if (lifetime.timer) clearTimeout(lifetime.timer);
+    lifetime.timer = 0;
+    const byBinding = eventTimingLifetimes.get(lifetime.element);
+    if (byBinding?.get(lifetime.bindingId) === lifetime) {
+      byBinding.delete(lifetime.bindingId);
+      if (byBinding.size === 0) eventTimingLifetimes.delete(lifetime.element);
+    }
+    lifetime.record.eventTimingLifetimes?.delete(lifetime);
+    if (lifetime.kind === "poll") {
+      const polling = lifetime.record.app.polling;
+      polling?.lifetimes.delete(lifetime);
+      if (polling?.lifetimes.size === 0) {
+        document.removeEventListener("visibilitychange", polling.onVisibility);
+        lifetime.record.app.polling = undefined;
+      }
+    }
+  }
+  function finishEventTiming(lifetime, value) {
+    releaseEventTiming(lifetime);
+    lifetime.resolve?.(value);
+    lifetime.resolve = undefined;
+  }
+  function disposeEventTimings(record) {
+    const lifetimes = record.eventTimingLifetimes;
+    if (!lifetimes || lifetimes.size === 0) return;
+    for (const lifetime of lifetimes) finishEventTiming(lifetime, undefined);
+  }
+  function stopAppPolling(app) {
+    const polling = app.polling;
+    if (!polling) return;
+    for (const lifetime of polling.lifetimes) finishEventTiming(lifetime, undefined);
+  }
+  function eventTimingLifetime(record, element, bindingId, binding) {
+    let byBinding = eventTimingLifetimes.get(element);
+    if (!byBinding) {
+      byBinding = new Map();
+      eventTimingLifetimes.set(element, byBinding);
+    }
+    let lifetime = byBinding.get(bindingId);
+    if (lifetime && (lifetime.record !== record || lifetime.binding !== binding)) {
+      finishEventTiming(lifetime, undefined);
+      lifetime = undefined;
+      byBinding = eventTimingLifetimes.get(element);
+      if (!byBinding) {
+        byBinding = new Map();
+        eventTimingLifetimes.set(element, byBinding);
+      }
+    }
+    if (!lifetime) {
+      lifetime = {record, element, bindingId, binding, timer: 0, last: -Infinity, resolve: undefined};
+      byBinding.set(bindingId, lifetime);
+      (record.eventTimingLifetimes ||= new Set()).add(lifetime);
+    }
+    return lifetime;
+  }
+  function disposeElementEventTimings(element, handles) {
+    const byBinding = eventTimingLifetimes.get(element);
+    if (byBinding) for (const handle of handles || []) {
+      const lifetime = byBinding.get(handle.id);
+      if (lifetime?.record === handle.record) finishEventTiming(lifetime, undefined);
+    }
+  }
+  const timingDirectiveOwns = (element, record, bindingId, binding) =>
+    [eventTimingDirectives.get(element), runtimeEventTimingDirectives.get(element)].some(handles =>
+      handles?.some(handle => handle.record === record && handle.id === bindingId && handle.spec === binding),
+    );
+  const timedBindingIsCurrent = (record, element, bindingId, binding) =>
+    record.app.mounted.get(record.occurrenceId)?.record === record && element.isConnected &&
+    record.live.value?.preparedData?.eventBindings?.[bindingId] === binding;
+  const pollBindingIsCurrent = lifetime =>
+    !lifetime.record.app.terminal &&
+    apps.get(lifetime.record.app.id) === lifetime.record.app &&
+    lifetime.record.app.mounted.get(lifetime.record.occurrenceId)?.record === lifetime.record &&
+    lifetime.element.isConnected &&
+    eventTimingLifetimes.get(lifetime.element)?.get(lifetime.bindingId) === lifetime &&
+    timingDirectiveOwns(lifetime.element, lifetime.record, lifetime.bindingId, lifetime.binding) &&
+    lifetime.record.live.value?.preparedData?.pollBindings?.[lifetime.bindingId] === lifetime.binding;
+  function reportPollFailure(lifetime, error) {
+    const app = lifetime.record.app;
+    const mounted = lifetime.record.app.mounted.get(lifetime.record.occurrenceId);
+    finishEventTiming(lifetime, undefined);
+    stopAppPolling(app);
+    app.vueApp.config.errorHandler(error, mounted?.component, "Citry @c-poll");
+  }
+  function schedulePoll(lifetime) {
+    if (lifetime.timer) clearTimeout(lifetime.timer);
+    if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return; }
+    if (document.hidden) return;
+    lifetime.pending = false;
+    scheduleDelay(lifetime, lifetime.binding.interval, () => {
+      if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return; }
+      if (document.hidden) return;
+      // A slow request must not create a chain of already-expired timers. If
+      // its deadline passes, restart the interval when the request settles.
+      if (lifetime.inFlight) { lifetime.pending = true; return; }
+      schedulePoll(lifetime);
+      let args;
+      try {
+        args = lifetime.args === undefined ? {} : lifetime.args();
+        plain(args, "Citry polling arguments");
+        args = cloneJsonValue(args, "Citry polling arguments");
+      } catch (error) {
+        reportPollFailure(lifetime, error);
+        return;
+      }
+      if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return; }
+      lifetime.inFlight = true;
+      Promise.resolve().then(() => {
+        if (document.hidden) return undefined;
+        if (!pollBindingIsCurrent(lifetime)) { finishEventTiming(lifetime, undefined); return undefined; }
+        return lifetime.record.app.eventPoll(lifetime.record, lifetime.bindingId, args);
+      })
+        .catch(error => { if (!lifetime.record.app.terminal) reportPollFailure(lifetime, error); })
+        .finally(() => {
+          lifetime.inFlight = false;
+          if (lifetime.pending) schedulePoll(lifetime);
+        });
+    });
+  }
+  function registerPoll(element, handle) {
+    const lifetime = eventTimingLifetime(handle.record, element, handle.id, handle.spec);
+    lifetime.kind = "poll";
+    lifetime.args = handle.args;
+    lifetime.inFlight = false;
+    let polling = handle.record.app.polling;
+    if (!polling) {
+      polling = {lifetimes: new Set(), onVisibility: undefined};
+      polling.onVisibility = () => {
+        for (const current of polling.lifetimes) {
+          if (document.hidden) {
+            if (current.timer) clearTimeout(current.timer);
+            current.timer = 0;
+          } else schedulePoll(current);
+        }
+      };
+      handle.record.app.polling = polling;
+      document.addEventListener("visibilitychange", polling.onVisibility);
+    }
+    polling.lifetimes.add(lifetime);
+    schedulePoll(lifetime);
+  }
+  const eventTimingSignature = handle => {
+    const spec = handle.spec;
+    return JSON.stringify([handle.record.occurrenceId, handle.record.generation, handle.id,
+      spec.event, spec.handler, spec.args, spec.prevent, spec.stop, spec.self, spec.once,
+      spec.key, spec.debounce, spec.throttle]);
+  };
+  function reconcileEventTimings(element, handles) {
+    const prior = eventTimingDirectives.get(element) || [];
+    const currentByKey = new Map(handles.map(handle => [handle.kind + ":" + handle.id, handle]));
+    for (const old of prior) {
+      const current = currentByKey.get(old.kind + ":" + old.id);
+      if (current && current.record === old.record &&
+          eventTimingSignature(current) === eventTimingSignature(old)) {
+        const lifetime = eventTimingLifetimes.get(element)?.get(old.id);
+        if (lifetime?.record === old.record && lifetime.binding === old.spec)
+          lifetime.binding = current.spec;
+        continue;
+      }
+      disposeElementEventTimings(element, [old]);
+    }
+    eventTimingDirectives.set(element, handles);
+    const byBinding = eventTimingLifetimes.get(element);
+    for (const handle of handles) {
+      if (handle.kind !== "poll") continue;
+      const old = prior.find(candidate => candidate.kind === "poll" && candidate.id === handle.id &&
+        candidate.record === handle.record && candidate.spec === handle.spec);
+      const lifetime = byBinding?.get(handle.id);
+      if (old && lifetime?.record === handle.record && lifetime.binding === handle.spec) lifetime.args = handle.args;
+      else registerPoll(element, handle);
+    }
+  }
+  const textualInputTypes = new Set(["text","search","email","url","tel","password","date","datetime-local","month","time","week","color"]);
+  const actionInputTypes = new Set(["button","submit","reset","image","file"]);
+  function classifyControl(element, spec) {
+    const tag = element.tagName.toLowerCase();
+    if (tag === "input") {
+      const raw = element.getAttribute("type");
+      const type = raw == null || raw === "" ? "text" : raw.toLowerCase();
+      if (type === "hidden") { if (spec.binding_mode !== "one-way") throw new Error("hidden controls support one-way State bindings only"); }
+      else if (!textualInputTypes.has(type) && !["checkbox","radio","number","range"].includes(type))
+        throw new Error(actionInputTypes.has(type) ? "action controls cannot be bound to State" : "unrecognized input type");
+      if (spec.lazy && ["checkbox","radio"].includes(type)) throw new Error(".lazy has no effect on change controls");
+      return {draft:["checkbox","radio"].includes(type)?"change":"input", flush:spec.on || (["checkbox","radio"].includes(type)||spec.lazy?"change":"input")};
+    }
+    if (tag === "select") { if (spec.lazy) throw new Error(".lazy has no effect on select controls"); return {draft:"change",flush:spec.on||"change"}; }
+    if (tag === "textarea") return {draft:"input",flush:spec.on||(spec.lazy?"change":"input")};
+    if (tag.includes("-")) {
+      if (spec.binding_mode === "two-way" && !spec.on) throw new Error("two-way custom controls require .on:<event>");
+      if (!customElements.get(tag)) return null;
+      if (!("value" in element)) throw new Error("custom control has no value property");
+      return {draft:spec.on,flush:spec.on};
+    }
+    throw new Error("element holds no value to bind");
+  }
+  function controlSignature(element, handles) {
+    const tag = element.tagName.toLowerCase();
+    const shape = tag === "input" ? element.getAttribute("type") || "text"
+      : tag === "select" ? String(element.multiple) : tag;
+    return shape + ":" + handles.map(handle => JSON.stringify(handle.spec)).join("|");
+  }
+  function controlEventName(element, spec) {
+    if (spec.on) return spec.on;
+    if (spec.lazy) return "change";
+    const tag = element.tagName.toLowerCase();
+    if (tag === "select" || tag === "input" && ["checkbox", "radio"].includes(element.type)) return "change";
+    return "input";
+  }
+  function controlRead(element) {
+    const tag = element.tagName.toLowerCase();
+    if (tag === "select" && element.multiple)
+      return [...element.selectedOptions].map(option => option.value);
+    if (tag === "input" && element.type === "checkbox") return element.checked;
+    if (tag === "input" && element.type === "radio") return element.checked;
+    if (tag === "input" && ["number","range"].includes(element.type))
+      return Number.isFinite(element.valueAsNumber) ? element.valueAsNumber : element.value;
+    return element.value;
+  }
+  function controlWrite(element, value) {
+    const tag = element.tagName.toLowerCase();
+    const lifetime = controlLifetimes.get(element);
+    if (lifetime) lifetime.writing = true;
+    try {
+    if (tag.includes("-")) { element.value = value; return; }
+    if (tag === "input" && ["checkbox","radio"].includes(element.type)) {
+      if (typeof value !== "boolean") throw new TypeError("checkbox and radio State values must be boolean");
+      element.checked = value; return;
+    }
+    if (tag === "select" && element.multiple) {
+      const selected = new Set(Array.isArray(value) && value.every(item => typeof item === "string") ? value : []);
+      for (const option of element.options) option.selected = selected.has(option.value);
+      return;
+    }
+    element.value = value == null ? "" : value;
+    } finally { if (lifetime) lifetime.writing = false; }
+  }
+  function applyControlValue(element, value) {
+    try { controlWrite(element, value); return true; }
+    catch (error) { console.error("[Citry] could not apply State value to control:", error); return false; }
+  }
+  const controlReadFailures = new WeakMap();
+  function adoptControlValue(element, record, field) {
+    try {
+      const value = controlRead(element);
+      if (value === undefined) throw new TypeError("control value is unavailable");
+      record.state.facade[field] = value;
+      controlReadFailures.get(element)?.delete(field);
+      return true;
+    } catch (error) {
+      let fields = controlReadFailures.get(element);
+      if (!fields) { fields = new Set(); controlReadFailures.set(element, fields); }
+      if (!fields.has(field)) {
+        fields.add(field);
+        console.error("[Citry] could not adopt control value into State:", error);
+      }
+      return false;
+    }
+  }
+  function disposeControl(element) {
+    const aggregate = controlLifetimes.get(element);
+    if (!aggregate) return;
+    aggregate.active = false;
+    for (const token of aggregate.pending) { token.element = null; token.handles = null; token.aggregate = null; }
+    aggregate.pending.clear();
+    for (const lifetime of aggregate.children) {
+      if (lifetime.listener) element.removeEventListener(lifetime.event, lifetime.listener);
+      if (lifetime.draftListener) element.removeEventListener(lifetime.draftEvent, lifetime.draftListener);
+      if (lifetime.timer) clearTimeout(lifetime.timer);
+    }
+    controlLifetimes.delete(element);
+  }
+  function installControl(element, handle, aggregate) {
+    if (!handle || !handle.record || !handle.spec) throw new Error("Citry control binding is missing or stale");
+    const {record, spec} = handle;
+    let classification;
+    try { classification = classifyControl(element, spec); }
+    catch (error) { console.error("[Citry] invalid State control binding:", error); return; }
+    if (classification === null) {
+      const name = element.tagName.toLowerCase();
+      const token = {element, handles:aggregate.handles, aggregate};
+      aggregate.pending.add(token);
+      customElements.whenDefined(name).then(() => {
+        const target = token.element, handles = token.handles, owner = token.aggregate;
+        token.element = null; token.handles = null; token.aggregate = null; owner?.pending.delete(token);
+        if (target && handles && owner?.active && controlLifetimes.get(target) === owner && target.isConnected)
+          installControls(target, handles);
+      }, error => console.error("[Citry] custom control definition failed:", error));
+      return;
+    }
+    const field = spec.field;
+    applyControlValue(element, record.state.facade[field]);
+    if (spec.binding_mode === "one-way") return;
+    const event = classification.flush;
+    const lifetime = {event, draftEvent:classification.draft, timer: 0, last: -Infinity, listener: null, draftListener:null, handle};
+    aggregate.children.push(lifetime);
+    const send = () => { void record.app.eventSend(record, spec.handler, {}).catch(() => {}); };
+    const listener = domEvent => {
+      if (aggregate.writing) return;
+      if (spec.key && String(domEvent.key || "").toLowerCase() !== spec.key) return;
+      if (!adoptControlValue(element, record, field)) return;
+      if (spec.throttle !== null) {
+        const now = performance.now();
+        if (now - lifetime.last < spec.throttle) return;
+        lifetime.last = now;
+      }
+      if (spec.debounce !== null) {
+        if (lifetime.timer) clearTimeout(lifetime.timer);
+        scheduleDelay(lifetime, spec.debounce, () => send());
+      } else send();
+    };
+    lifetime.listener = listener;
+    element.addEventListener(event, listener);
+    if (classification.draft && classification.draft !== event) {
+      lifetime.draftListener = () => {
+        adoptControlValue(element, record, field);
+      };
+      element.addEventListener(classification.draft, lifetime.draftListener);
+    }
+  }
+  function installControls(element, handles) {
+    disposeControl(element);
+    if (!Array.isArray(handles) || handles.length === 0) throw new Error("Citry control bindings are missing or stale");
+    const aggregate = {handles,children:[],active:true,writing:false,signature:controlSignature(element, handles),pending:new Set()};
+    controlLifetimes.set(element, aggregate);
+    for (const handle of handles) installControl(element, handle, aggregate);
+  }
+
+  function setVueOwnedNativeProperties(element, value) {
+    const values = Array.isArray(value) ? value : [value];
+    const properties = values.filter(property =>
+      property === "value" || property === "checked" || property === "selected");
+    if (properties.length === 0) {
+      vueOwnedNativeProperties.delete(element);
+      return;
+    }
+    vueOwnedNativeProperties.set(element, Object.freeze([...new Set(properties)]));
+  }
+
+  function createEventActivity(record, descriptor = null) {
+    const view = V.reactive({
+      total: 0,
+      loading: Object.create(null),
+      errors: Object.create(null),
+      errorOrder: Object.create(null),
+      nextStarted: 0,
+      nextError: 0,
+    });
+    const activity = {
+      descriptor,
+      view,
+      listeners: new Map(),
+      disposed: false,
+      loading(name) {
+        if (name === undefined) return view.total > 0;
+        return (view.loading[requireEventHandler(record, name)] ?? 0) > 0;
+      },
+      error(name) {
+        if (name !== undefined) return view.errors[requireEventHandler(record, name)] || null;
+        let selected = null, selectedOrder = -1;
+        for (const [handler, error] of Object.entries(view.errors)) {
+          const order = view.errorOrder[handler] ?? 0;
+          if (order > selectedOrder) { selected = error; selectedOrder = order; }
+        }
+        return selected;
+      },
+      enqueue(handler) {
+        requireEventHandler(record, handler);
+        view.total += 1;
+        view.loading[handler] = (view.loading[handler] ?? 0) + 1;
+        return {handler, started: 0};
+      },
+      start(intent) {
+        intent.started = ++view.nextStarted;
+        activity.latestStarted[intent.handler] = intent.started;
+      },
+      succeed(intent) {
+        if (activity.latestStarted[intent.handler] !== intent.started) return;
+        delete view.errors[intent.handler];
+        delete view.errorOrder[intent.handler];
+      },
+      fail(intent, error) {
+        if (activity.latestStarted[intent.handler] !== intent.started) return;
+        view.errors[intent.handler] = detached(error);
+        view.errorOrder[intent.handler] = ++view.nextError;
+      },
+      finish(intent) {
+        view.total = Math.max(0, view.total - 1);
+        const count = (view.loading[intent.handler] ?? 0) - 1;
+        if (count > 0) view.loading[intent.handler] = count;
+        else delete view.loading[intent.handler];
+      },
+      subscribe(name, callback) {
+        if (typeof name !== "string" || name.length === 0) throw new TypeError("$onEvent needs a non-empty event name");
+        if (typeof callback !== "function") throw new TypeError("$onEvent needs a callback function");
+        // An unmounted instance never receives another event, so a late call (from a timer, say) must not leave a
+        // listener behind that nothing will release.
+        if (activity.disposed) return () => {};
+        const listeners = activity.listeners.get(name) || new Set();
+        listeners.add(callback);
+        activity.listeners.set(name, listeners);
+        let active = true;
+        return () => {
+          if (!active) return;
+          active = false;
+          listeners.delete(callback);
+          if (!listeners.size) activity.listeners.delete(name);
+        };
+      },
+      dispatch(name, detail) {
+        const listeners = activity.listeners.get(name);
+        if (!listeners) return;
+        for (const callback of [...listeners]) {
+          try { callback(detail); }
+          catch (error) { queueMicrotask(() => { throw error; }); }
+        }
+      },
+      dispose() {
+        activity.disposed = true;
+        activity.listeners.clear();
+      },
+      latestStarted: Object.create(null),
+    };
+    return activity;
+  }
+
+  function typeOptions(appId, typeKey, userOptions) {
+    userOptions = userOptions || {};
+    // Citry must see every name the component defines to keep them apart
+    // from its js_data keys, and names from a mixin or base are not visible.
+    if (userOptions.mixins || userOptions.extends) {
+      throw new Error(
+        "$component() options for " + typeKey + " use " + (userOptions.mixins ? "mixins" : "extends") +
+        ", which Citry does not support: it cannot check that names from a mixin or base component " +
+        "do not clash with js_data keys. Define those data, methods, and computed values directly " +
+        "in the $component() options.",
+      );
+    }
+    const callback = userOptions.onServerRender;
+    const userData = userOptions.data;
+    const userSetup = userOptions.setup;
+    const userBeforeCreate = userOptions.beforeCreate;
+    const userCreated = userOptions.created;
+    const userMounted = userOptions.mounted;
+    const userBeforeUnmount = userOptions.beforeUnmount;
+    const props = Array.isArray(userOptions.props) ? [...userOptions.props, "citryId"] : {...(userOptions.props || {}), citryId: {type: String, required: true}};
+    const injectIsObject = userOptions.inject !== null && typeof userOptions.inject === "object" &&
+      Object.getPrototypeOf(userOptions.inject) === Object.prototype;
+    const injectedKeys = Array.isArray(userOptions.inject) ? userOptions.inject : injectIsObject ? Object.keys(userOptions.inject) : [];
+    if (userOptions.inject !== undefined && (!Array.isArray(userOptions.inject) && !injectIsObject ||
+        injectedKeys.some(key => typeof key !== "string")))
+      throw new TypeError("inject must be a Vue array or plain object with string local names");
+    const pluginContextNames = definitionRegistry(appId).templateContextNames;
+    const propsKeys = Array.isArray(userOptions.props) ? userOptions.props : Object.keys(userOptions.props || {});
+    const eventPublicNames = ["$loading", "$error", "$state", "$sendEvent", "$onEvent"];
+    for (const name of eventPublicNames) if (propsKeys.includes(name) || injectedKeys.includes(name) ||
+        own(userOptions.methods || {}, name) || own(userOptions.computed || {}, name))
+      throw new Error("$component() options for " + typeKey + " define " + JSON.stringify(name) +
+        ", a name Citry's event helpers ($loading, $error, $state, $sendEvent, $onEvent) already use. " +
+        "Rename that prop, inject, method, or computed value.");
+    for (const name of pluginContextNames) {
+      if (propsKeys.includes(name) || injectedKeys.includes(name) || own(userOptions.methods || {}, name) ||
+          own(userOptions.computed || {}, name)) {
+        throw new Error("$component() options for " + typeKey + " define " + JSON.stringify(name) +
+          ", a name a browser plugin already adds to templates. Rename that prop, inject, method, or computed value.");
+      }
+    }
+    const reservedOptionKeys = new Set([
+      ...Object.keys(userOptions.methods || {}), ...Object.keys(userOptions.computed || {}), ...injectedKeys,
+      ...pluginContextNames,
+    ]);
+    const reservedPublicNames = new Set([
+      "$citryPrepared", "$citryEvents", ...eventPublicNames, ...pluginContextNames,
+    ]);
+    const options = {...userOptions, name: userOptions.name || "CitryComponent_" + typeKey, props};
+    delete options.onServerRender;
+    options.data = function () {
+      const app = definitionRegistry(appId), occurrence = app.occurrences.get(this.citryId);
+      if (!occurrence || occurrence.typeKey !== typeKey) throw new Error("unknown or wrong-type occurrence");
+      const value = userData ? userData.call(this) : {};
+      plain(value, "data() result");
+      for (const key of Object.keys(value)) if (reservedPublicNames.has(key))
+        throw new Error("data() for " + typeKey + " returns " + JSON.stringify(key) +
+          ", a name that Citry or a browser plugin already uses. Rename that key.");
+      for (const key of Object.keys(occurrence.serverData)) if (own(value, key) || reservedOptionKeys.has(key)) {
+        throw new Error("js_data() for " + typeKey + " returns " + JSON.stringify(key) +
+          ", which data(), methods, computed, inject, or a browser plugin also defines. Rename one of them.");
+      }
+      return value;
+    };
+    if (userSetup) options.setup = function (props, context) {
+      const value = userSetup(props, context);
+      if (value === undefined) return undefined;
+      if (typeof value === "function" || value instanceof Promise)
+        throw new TypeError("setup() for " + typeKey + " must return a plain object of bindings or undefined, " +
+          "not a render function or a Promise. Move async work into a lifecycle hook.");
+      plain(value, "setup() result");
+      for (const key of Object.keys(value)) if (reservedPublicNames.has(key))
+        throw new Error("setup() for " + typeKey + " returns " + JSON.stringify(key) +
+          ", a name that Citry or a browser plugin already uses. Rename that key.");
+      return value;
+    };
+    options.beforeCreate = function () {
+      const app = definitionRegistry(appId), occurrence = app.occurrences.get(this.citryId);
+      if (!occurrence || occurrence.typeKey !== typeKey || app.mounted.has(occurrence.id)) throw new Error("invalid mounted occurrence");
+      const generation = ++app.nextMountGeneration;
+      const initialLive = app.snapshot.value.get(occurrence.id);
+      const record = {app, occurrenceId: occurrence.id, parentId: occurrence.parentId, generation, live: V.shallowRef(initialLive), serverKeys: new Set(Object.keys(occurrence.serverData)), definition: V.shallowRef({id: occurrence.definitionId, render: null, cache: []}), callbackScope: undefined, callbackCleanup: undefined, callbackSubscriptions: undefined, callbackRunning: false, rootElements: [], applying: false, failed: false, events: null, state: null, controlHandles: new Map()};
+      record.events = createEventActivity(record, occurrence.eventContext?.descriptor || null);
+      record.state = createStateFacade(record, occurrence.eventContext);
+      instanceRecords.set(this, record);
+      const currentInstance = V.getCurrentInstance?.();
+      if (currentInstance?.proxy) instanceRecords.set(currentInstance.proxy, record);
+      if (currentInstance?.ctx) instanceRecords.set(currentInstance.ctx, record);
+      for (const key of record.serverKeys) {
+        if (reservedOptionKeys.has(key) || key in this) throw new Error("js_data() returns " + JSON.stringify(key) +
+          ", which is also a prop, method, computed value, or other name on the component. Rename one of them.");
+        installServerKey(this, record, key);
+      }
+      // Generated templates read the values Python computed for each occurrence through `$citryPrepared`. The `$citry`
+      // prefix keeps it apart from author names: Vue never proxies a `$` key from data() and refuses a
+      // `$` prop, and this check rejects a method, computed or injection of that name.
+      if (reservedOptionKeys.has("$citryPrepared") || "$citryPrepared" in this) throw new Error("$citryPrepared/public instance collision");
+      Object.defineProperty(this, "$citryPrepared", {enumerable: false, configurable: true, get() { return record.live.value?.preparedData || {}; }});
+      Object.defineProperty(this, "$loading", {enumerable: false, configurable: true, value: record.events.loading});
+      Object.defineProperty(this, "$error", {enumerable: false, configurable: true, value: record.events.error});
+      Object.defineProperty(this, "$state", {enumerable: false, configurable: true, value: record.state.facade});
+      Object.defineProperty(this, "$sendEvent", {enumerable: false, configurable: true, value: (name, args, opts) => {
+        // Callers await the result, so every failure, even a bad name, arrives as a rejection they can catch.
+        try {
+          if (!record.events?.descriptor)
+            throw new Error("this component declares no Events class, so $sendEvent('" + String(name) +
+              "') has nothing to call; add a `class Events` to the component");
+          requireEventHandler(record, name);
+          return record.app.eventSend(record, name, args, opts);
+        } catch (error) {
+          return Promise.reject(error);
+        }
+      }});
+      Object.defineProperty(this, "$onEvent", {enumerable: false, configurable: true, value: (name, callback) => {
+        // A component without Events never receives a server event, so as in 0.5.1 the listener is not
+        // kept and the caller gets an unsubscribe that does nothing, rather than an error.
+        if (!record.events?.descriptor) return () => {};
+        if (!record.events?.subscribe) throw new Error("Citry Events subscriptions are unavailable");
+        // Only a call made while an onServerRender callback is running belongs to that run; any other call
+        // (mounted(), a method, a timer) keeps its listener for the life of this instance.
+        return subscribeRecordEvent(record, name, callback, record.callbackRunning ? record.callbackSubscriptions : undefined);
+      }});
+      if (reservedOptionKeys.has("$citryEvents") || "$citryEvents" in this) throw new Error("$citryEvents/public instance collision");
+      Object.defineProperty(this, "$citryEvents", {enumerable: false, configurable: true, value: Object.freeze({
+        dispatch(bindingId, event, authoredArgs) {
+          if (typeof record.app.eventDispatch !== "function") throw new Error("Citry Events bridge is unavailable");
+          return record.app.eventDispatch(record, bindingId, event, authoredArgs);
+        },
+        dispatchComponent(bindingId, emittedValue, authoredArgs) {
+          if (typeof record.app.eventDispatchComponent !== "function")
+            throw new Error("Citry Events bridge is unavailable");
+          return record.app.eventDispatchComponent(record, bindingId, emittedValue, authoredArgs);
+        },
+        componentRoot(childId) {
+          if (typeof record.app.componentRoot !== "function")
+            throw new Error("Citry Events component-root bridge is unavailable");
+          return record.app.componentRoot(record, childId);
+        },
+        controls(bindingIds) {
+          if (bindingIds === "") return Object.freeze([]);
+          if (typeof bindingIds !== "string") throw new TypeError("Citry control binding ids must be a string");
+          const bindings = record.live.value?.preparedData?.controlBindings;
+          const ids = bindingIds.split(",");
+          const specs = ids.map(id => bindings && bindings[id]);
+          if (specs.some(spec => !spec)) throw new Error("Citry control binding is missing or stale");
+          const prior = record.controlHandles.get(bindingIds);
+          if (prior && prior.every((handle, index) => handle.spec === specs[index])) return prior;
+          const handles = Object.freeze(specs.map(spec => Object.freeze({record, spec})));
+          record.controlHandles.set(bindingIds, handles);
+          return handles;
+        },
+        runtimeEvents(bindingIds) {
+          if (bindingIds === "") return Object.freeze([]);
+          if (typeof bindingIds !== "string") throw new TypeError("Citry runtime event binding ids must be a string");
+          const ids = bindingIds.split(",");
+          if (new Set(ids).size !== ids.length) throw new Error("Citry runtime event binding ids are duplicated");
+          const eventBindings = record.live.value?.preparedData?.eventBindings;
+          const pollBindings = record.live.value?.preparedData?.pollBindings;
+          const resolved = ids.map(id => {
+            if (/^citryRuntimeEvent[0-9a-f]+$/.test(id)) {
+              const spec = eventBindings && eventBindings[id];
+              validateRuntimeEventSpec(id, spec, {eventContext:{descriptor:record.events.descriptor}});
+              return {kind:"event", spec};
+            }
+            if (/^citryRuntimePoll[0-9a-f]+$/.test(id)) {
+              const spec = pollBindings && pollBindings[id];
+              validateRuntimePollSpec(id, spec, {eventContext:{descriptor:record.events.descriptor}});
+              return {kind:"poll", spec};
+            }
+            throw new Error("Citry runtime binding id has an invalid kind");
+          });
+          return Object.freeze(ids.map((id, index) => Object.freeze({
+            kind: resolved[index].kind,
+            record,
+            id,
+            spec: resolved[index].spec,
+            args: undefined,
+          })));
+        },
+        timings(bindingIds, pollEntries) {
+          if (typeof bindingIds !== "string") throw new TypeError("Citry event timing ids must be a string");
+          if (pollEntries !== undefined && !Array.isArray(pollEntries))
+            throw new TypeError("Citry poll timing entries must be an array");
+          if (bindingIds === "" && (pollEntries === undefined || pollEntries.length === 0))
+            throw new TypeError("Citry timing requires an event or poll binding");
+          const bindings = record.live.value?.preparedData?.eventBindings;
+          const ids = bindingIds === "" ? [] : bindingIds.split(",");
+          if (new Set(ids).size !== ids.length) throw new Error("Citry event timing ids are duplicated");
+          const specs = ids.map(id => bindings && bindings[id]);
+          if (specs.some(spec => !spec || spec.debounce === null && spec.throttle === null))
+            throw new Error("Citry event timing binding is missing, stale, or untimed");
+          const prior = record.eventTimingHandles?.get(bindingIds);
+          const eventHandles = prior && prior.every((handle, index) => handle.spec === specs[index])
+            ? prior
+            : Object.freeze(ids.map((id, index) => Object.freeze({kind:"event", record, id, spec: specs[index]})));
+          if (eventHandles !== prior) (record.eventTimingHandles ||= new Map()).set(bindingIds, eventHandles);
+          if (pollEntries === undefined || pollEntries.length === 0) return eventHandles;
+          const polls = record.live.value?.preparedData?.pollBindings;
+          const seenPolls = new Set();
+          const pollHandles = pollEntries.map(entry => {
+            plain(entry, "Citry poll timing entry");
+            if (Object.keys(entry).sort().join(",") !== "args,id" || typeof entry.id !== "string" ||
+                !/^citryPoll[0-9a-f]+$/.test(entry.id) ||
+                entry.args !== undefined && typeof entry.args !== "function" || seenPolls.has(entry.id))
+              throw new TypeError("Citry poll timing entry is invalid or duplicated");
+            seenPolls.add(entry.id);
+            const spec = polls && polls[entry.id];
+            if (!spec || Object.keys(spec).sort().join(",") !== "args,handler,id,interval" ||
+                spec.id !== entry.id || typeof spec.handler !== "string" || spec.handler === "" ||
+                spec.args !== null && typeof spec.args !== "string" ||
+                !Number.isSafeInteger(spec.interval) || spec.interval <= 0)
+              throw new Error("Citry poll timing binding is missing, stale, or invalid");
+            return Object.freeze({kind:"poll", record, id:entry.id, spec, args:entry.args});
+          });
+          return pollHandles.length === 0 ? eventHandles : Object.freeze([...eventHandles, ...pollHandles]);
+        },
+      })});
+      if (userBeforeCreate) userBeforeCreate.call(this);
+    };
+    options.created = function () {
+      const record = instanceRecords.get(this), definition = record.app.definitions.get(record.definition.value.id);
+      if (!definition) throw new Error("missing initial render definition: " + record.definition.value.id);
+      record.definition.value = {id: record.definition.value.id, render: definition.render, cache: []};
+      record.app.mounted.set(record.occurrenceId, {component: this, record});
+      // A validated envelope was checked against this set, so later steps must see that it moved.
+      record.app.mountEpoch += 1;
+      if (userCreated) userCreated.call(this);
+    };
+    options.render = function (...args) {
+      const record = instanceRecords.get(this), definition = record.definition.value;
+      if (!definition.render) throw new Error("render definition is unavailable");
+      args[1] = definition.cache;
+      const root = definition.render.apply(this, args);
+      // A caller's v-show or custom directive reaches only an element root.
+      // Vue skips it on a fragment, text, or fixed HTML root without an
+      // error, which would leave hidden content on the page or drop the
+      // directive's behavior. The server rejects the shapes it can see; this
+      // covers a root that is another component whose own root is unusable.
+      if (root && this.$.vnode.dirs?.length) {
+        const reason = root.type === V.Fragment ? "several root nodes"
+          : root.type === V.Text ? "only text"
+          : root.type === opaqueHtmlComponent ? "HTML from Python" : null;
+        if (reason) throw new Error("A 'v-show' or custom directive on a Citry component needs one root element, " +
+          "but component " + typeKey + " rendered " + reason + " at its root");
+      }
+      return root;
+    };
+    options.mounted = function () {
+      const record = instanceRecords.get(this);
+      if (userMounted) userMounted.call(this);
+      const transaction = record.app.transaction;
+      if (transaction) {
+        const generations = transaction.newMounts.get(record.occurrenceId) || [];
+        generations.push(record.generation);
+        transaction.newMounts.set(record.occurrenceId, generations);
+      } else {
+        const occurrence = record.app.occurrences.get(record.occurrenceId);
+        const mounted = {stableId: record.occurrenceId, generation: record.generation, occurrence};
+        const task = Promise.resolve(record.app.preparedHost?.onOccurrenceMounted(mounted))
+          .then(() => runCallback(this, record, callback, record.app.revision))
+          .catch(error => {
+            record.app.terminal = true;
+            record.app.initialError = error;
+          })
+          .finally(() => {
+            record.app.initialTasks.delete(task);
+          });
+        record.app.initialTasks.add(task);
+      }
+    };
+    options.beforeUnmount = function () {
+      const record = instanceRecords.get(this);
+      let error;
+      if (record) {
+        record.state.retire();
+        try { dispose(record); }
+        catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] component disposal failed:", caught); }
+        finally {
+          try {
+            const transaction = record.app.transaction;
+            const acceptedTransaction = transaction?.acceptedRetirementIds.has(record.occurrenceId) &&
+              transaction.oldAcceptedRecords.get(record.occurrenceId)?.record === record
+              ? transaction.acceptedTransaction : undefined;
+            record.app.preparedHost?.onOccurrenceUnmounted({
+              stableId: record.occurrenceId,
+              generation: record.generation,
+              acceptedTransaction,
+            });
+          } catch (caught) {
+            if (error === undefined) error = caught;
+            else console.error("[Citry] occurrence unmount failed:", caught);
+          }
+          if (record.app.mounted.get(record.occurrenceId)?.record === record) {
+            record.app.mounted.delete(record.occurrenceId);
+            record.app.mountEpoch += 1;
+          }
+          instanceRecords.delete(this);
+        }
+      }
+      try { if (userBeforeUnmount) userBeforeUnmount.call(this); }
+      catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] beforeUnmount failed:", caught); }
+      if (error !== undefined) throw error;
+    };
+    return options;
+  }
+
+  function defineType(appId, typeKey, userOptions) {
+    const app = definitionRegistry(appId);
+    if (typeof typeKey !== "string" || app.types.has(typeKey)) throw new Error("invalid or duplicate stable type");
+    if (userOptions === undefined) userOptions = registeredTypeOptions.get(typeKey)?.options || {};
+    const options = V.defineComponent(typeOptions(appId, typeKey, userOptions));
+    app.types.set(typeKey, options);
+    citryTypeInfo.set(options, {appId, typeKey});
+    return options;
+  }
+
+  function registerTypeOptions(typeKey, sourceHash, options) {
+    if (typeof typeKey !== "string" || typeof sourceHash !== "string" || !/^[0-9a-f]{64}$/.test(sourceHash))
+      throw new Error("invalid Vue type options identity");
+    if (typeof options === "function") options = {onServerRender: options};
+    plain(options, "Vue type options");
+    // `init` is the 0.5.1 name of the initializer. Vue would drop the unknown option without a word, and the
+    // initializer would never run, so it is renamed here, and a definition naming both is ambiguous.
+    if (own(options, "init")) {
+      if (own(options, "onServerRender"))
+        throw new Error("$component() got both `init` and `onServerRender`; `init` is the older name of " +
+          "`onServerRender`, so keep only `onServerRender`");
+      if (typeof options.init !== "function") throw new TypeError("$component() `init` must be a function");
+      const {init, ...rest} = options;
+      options = {...rest, onServerRender: init};
+    }
+    const prior = registeredTypeOptions.get(typeKey);
+    if (prior) {
+      if (prior.sourceHash !== sourceHash) throw new Error("Vue type options identity collision");
+      return;
+    }
+    registeredTypeOptions.set(typeKey, Object.freeze({options, sourceHash}));
+  }
+
+  const loadedDefinitionUrls = new Map();
+  const loadedScriptUrls = new Map();
+  const loadedStyleUrls = new Map();
+  // Stylesheets each app has loaded or adopted, kept after the last owner is removed. The app
+  // keeps its component types for its whole life (app.types), so a server render may bring a
+  // removed type back; its stylesheet must still count as seen, or a type whose assets went
+  // through dependency hooks could never return. Keyed like loadedStyleUrls.
+  const admittedStyles = new Map();
+  const preloadedAssetLinks = new Map();
+  const preloadFetchAttributes = new Set(["integrity", "crossorigin", "referrerpolicy", "fetchpriority"]);
+  // The browser checks integrity only on a CORS response, and Citry's asset routes send the header
+  // that allows one, so every request for an owned file asks for CORS in anonymous mode, which
+  // sends cookies only to the same origin. Preload hints use the same value, because a hint
+  // with a different crossorigin is not reused.
+  const ownedCrossOrigin = "anonymous";
+  function ownedFetchAttributes(attrs) {
+    return Object.keys(attrs).some(name => name.toLowerCase() === "crossorigin")
+      ? attrs : {...attrs, crossorigin: ownedCrossOrigin};
+  }
+
+  function assetPreloadKey(url, destination, integrity, attrs, nonce) {
+    let resolved;
+    try { resolved = new URL(url, document.baseURI); }
+    catch { return null; }
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
+    return JSON.stringify([resolved.href, destination, integrity || null,
+      attrs.crossorigin === undefined ? null : attrs.crossorigin,
+      attrs.referrerpolicy === undefined ? null : attrs.referrerpolicy,
+      attrs.fetchpriority === undefined ? null : attrs.fetchpriority,
+      nonce || null]);
+  }
+
+  function createAssetPreloadBatch() {
+    const batch = new Map();
+    const append = (url, destination, integrity, attrs, nonce) => {
+      const fetchKey = assetPreloadKey(url, destination, integrity, attrs, nonce);
+      if (!fetchKey || batch.has(fetchKey)) return;
+      let entry = preloadedAssetLinks.get(fetchKey);
+      if (!entry) {
+        const link = document.createElement("link");
+        link.rel = "preload";
+        link.as = destination;
+        link.href = url;
+        if (integrity) link.integrity = integrity;
+        for (const name of ["crossorigin", "referrerpolicy", "fetchpriority"]) {
+          const value = attrs[name];
+          if (value === true) link.setAttribute(name, "");
+          else if (value !== undefined && value !== false) link.setAttribute(name, value);
+        }
+        if (nonce) link.nonce = nonce;
+        entry = {link, refs: 0};
+        preloadedAssetLinks.set(fetchKey, entry);
+        document.head.append(link);
+      }
+      entry.refs++;
+      batch.set(fetchKey, entry);
+    };
+    return {
+      add(appId, assets, nonce, isDefinition = false) {
+        for (const asset of assets) {
+          let url, integrity, attrs = {};
+          if (isDefinition) {
+            if (global.__citryRuntimeDefinitions?.[asset.id] || loadedDefinitionUrls.has(asset.url)) continue;
+            url = asset.url;
+            integrity = sriFromHex(asset.sha256);
+            attrs = ownedFetchAttributes(attrs);
+          } else {
+            normalizeScriptAsset(asset);
+            if (loadedScriptUrls.has(scriptRecordKey(appId, asset))) continue;
+            const source = asset.source;
+            attrs = source.attrs || {};
+            if (Object.keys(attrs).some(name => !preloadFetchAttributes.has(name))) continue;
+            url = source.url;
+            integrity = source.kind === "owned" ? sriFromHex(source.sha256) : attrs.integrity;
+            if (source.kind === "owned") attrs = ownedFetchAttributes(attrs);
+          }
+          append(url, "script", integrity, attrs, nonce);
+        }
+      },
+      addStyles(appId, assets, nonce) {
+        for (const asset of assets) {
+          normalizeStyleAsset(asset);
+          if (loadedStyleUrls.has(styleRecordKey(appId, asset.source.url))) continue;
+          const source = asset.source;
+          const attrs = source.attrs || {};
+          if (Object.keys(attrs).some(name => name !== "rel" && !preloadFetchAttributes.has(name))) continue;
+          const fetchAttrs = Object.fromEntries(Object.entries(attrs).filter(([name]) => preloadFetchAttributes.has(name)));
+          append(source.url, "style", source.kind === "owned" ? sriFromHex(source.sha256) : attrs.integrity,
+            source.kind === "owned" ? ownedFetchAttributes(fetchAttrs) : fetchAttrs, nonce);
+        }
+      },
+      cleanup() {
+        for (const [key, entry] of batch) {
+          entry.refs--;
+          if (!entry.refs && preloadedAssetLinks.get(key) === entry) {
+            entry.link.remove();
+            preloadedAssetLinks.delete(key);
+          }
+        }
+        batch.clear();
+      },
+    };
+  }
+  function sriFromHex(value) {
+    if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) throw new Error("invalid definition digest");
+    return "sha256-" + btoa(String.fromCharCode(...value.match(/../g).map(part => parseInt(part, 16))));
+  }
+  function loadDefinition(asset, nonce) {
+    if (global.__citryRuntimeDefinitions?.[asset.id]) return Promise.resolve();
+    const prior = loadedDefinitionUrls.get(asset.url);
+    if (prior) return prior;
+    const promise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = asset.url;
+      script.integrity = sriFromHex(asset.sha256);
+      script.crossOrigin = ownedCrossOrigin;
+      if (nonce) script.nonce = nonce;
+      const finish = callback => {
+        script.onload = null;
+        script.onerror = null;
+        script.remove();
+        callback();
+      };
+      script.onload = () => finish(() => resolve());
+      script.onerror = () => finish(() => {
+        loadedDefinitionUrls.delete(asset.url);
+        reject(new Error("Citry Vue definition failed to load: " + asset.url));
+      });
+      document.head.append(script);
+    });
+    loadedDefinitionUrls.set(asset.url, promise);
+    return promise;
+  }
+  function normalizeStyleAsset(asset, occurrenceTypes) {
+    plain(asset, "prepared style asset");
+    if (Object.keys(asset).sort().join(",") !== "lazyAllowed,owner,source" ||
+        typeof asset.lazyAllowed !== "boolean")
+      throw new Error("invalid prepared style asset");
+    plain(asset.owner, "prepared style owner"); plain(asset.source, "prepared style source");
+    if (asset.owner.kind === "component") {
+      if (Object.keys(asset.owner).sort().join(",") !== "kind,occurrenceIds,typeKey" ||
+          typeof asset.owner.typeKey !== "string" || !Array.isArray(asset.owner.occurrenceIds) ||
+          !asset.owner.occurrenceIds.length || asset.owner.occurrenceIds.some(id => typeof id !== "string" ||
+            (occurrenceTypes && occurrenceTypes.get(id) !== asset.owner.typeKey)) ||
+          new Set(asset.owner.occurrenceIds).size !== asset.owner.occurrenceIds.length ||
+          [...asset.owner.occurrenceIds].sort().some((id, index) => id !== asset.owner.occurrenceIds[index]))
+        throw new Error("invalid prepared style asset");
+    } else if (asset.owner.kind !== "extension" || Object.keys(asset.owner).sort().join(",") !== "extensionName,kind" ||
+        typeof asset.owner.extensionName !== "string") throw new Error("invalid prepared style asset");
+    normalizeAssetSource(asset.source, "style");
+    return asset;
+  }
+  function normalizeScriptAsset(asset) {
+    plain(asset, "prepared script asset");
+    if (Object.keys(asset).sort().join(",") !== "lazyAllowed,owner,registersOptions,source" ||
+        typeof asset.lazyAllowed !== "boolean" || typeof asset.registersOptions !== "boolean")
+      throw new Error("invalid prepared script asset");
+    plain(asset.owner, "prepared script owner");
+    if (asset.owner.kind === "component") {
+      if (Object.keys(asset.owner).sort().join(",") !== "kind,typeKey" || typeof asset.owner.typeKey !== "string")
+        throw new Error("invalid prepared script asset");
+    } else if (asset.owner.kind !== "extension" || Object.keys(asset.owner).sort().join(",") !== "extensionName,kind" ||
+        typeof asset.owner.extensionName !== "string" || asset.registersOptions)
+      throw new Error("invalid prepared script asset");
+    normalizeAssetSource(asset.source, "script");
+    return asset;
+  }
+  function normalizeAssetSource(source, elementKind) {
+    if (source.kind === "owned") {
+      if (typeof source.url !== "string" || typeof source.sha256 !== "string" ||
+          !["kind,sha256,url", "attrs,kind,sha256,url"].includes(Object.keys(source).sort().join(",")))
+        throw new Error("invalid prepared asset source");
+      sriFromHex(source.sha256);
+    } else if (source.kind === "external") {
+      if (Object.keys(source).sort().join(",") !== "attrs,kind,url" || typeof source.url !== "string" || !plain(source.attrs, "prepared external asset attrs"))
+        throw new Error("invalid prepared asset source");
+    } else throw new Error("invalid prepared asset source");
+    const attrs = source.attrs || {};
+    const forbidden = elementKind === "script"
+      ? new Set(["src", "nonce", "async", "defer", "nomodule"])
+      : new Set(["href", "nonce"]);
+    if (Object.entries(attrs).some(([name, value]) => typeof name !== "string" || !name ||
+        (typeof value !== "string" && typeof value !== "boolean") || forbidden.has(name.toLowerCase())) ||
+        (attrs.integrity !== undefined && (typeof attrs.integrity !== "string" || !validIntegrity(attrs.integrity))))
+      throw new Error("invalid prepared asset source attributes");
+    const aliases = name => Object.keys(attrs).filter(key => key.toLowerCase() === name);
+    if (elementKind === "script") {
+      const types = aliases("type");
+      const classicTypes = new Set(["text/javascript", "application/javascript", "application/ecmascript",
+        "application/x-ecmascript", "application/x-javascript", "text/ecmascript", "text/javascript1.0",
+        "text/javascript1.1", "text/javascript1.2", "text/javascript1.3", "text/javascript1.4",
+        "text/javascript1.5", "text/jscript", "text/livescript", "text/x-ecmascript", "text/x-javascript"]);
+      if (types.length > 1 || types.length === 1 && (typeof attrs[types[0]] !== "string" ||
+          !classicTypes.has(attrs[types[0]].trim().toLowerCase().split(";", 1)[0].trimEnd())))
+        throw new Error("prepared scripts must use one classic JavaScript MIME type");
+    } else {
+      const rels = aliases("rel");
+      if (rels.length > 1 || rels.length === 1 && (rels[0] !== "rel" || attrs.rel !== "stylesheet"))
+        throw new Error("prepared stylesheets must retain canonical rel metadata");
+    }
+    return source;
+  }
+  function validIntegrity(value) {
+    const tokens = value.trim().split(/\s+/).filter(Boolean), lengths = {sha256: 32, sha384: 48, sha512: 64};
+    if (!tokens.length) return false;
+    return tokens.every(token => {
+      const separator = token.indexOf("-"), algorithm = token.slice(0, separator), encoded = token.slice(separator + 1);
+      if (separator < 1 || !(algorithm in lengths) || !encoded || encoded.includes("?")) return false;
+      const normalized = encoded.replaceAll("-", "+").replaceAll("_", "/");
+      const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+      try {
+        const decoded = atob(padded);
+        if (decoded.length !== lengths[algorithm]) return false;
+        const canonical = btoa(decoded), urlsafe = canonical.replaceAll("+", "-").replaceAll("/", "_");
+        return [canonical, canonical.replace(/=+$/, ""), urlsafe, urlsafe.replace(/=+$/, "")].includes(encoded);
+      } catch { return false; }
+    });
+  }
+  function assetIdentity(asset) {
+    const source = asset.source;
+    return JSON.stringify([source.kind, source.url, source.sha256 || null, Object.entries(source.attrs || {}).sort()]);
+  }
+  function assetRefs(asset) {
+    return asset.owner.kind === "component" ? new Set(asset.owner.occurrenceIds) : new Set(["extension:" + asset.owner.extensionName]);
+  }
+  function applyAssetSource(element, source, nonce) {
+    const attrs = source.attrs || {};
+    for (const [name, value] of Object.entries(attrs)) {
+      if (name.toLowerCase() === "nonce") throw new Error("prepared assets cannot replace the bootstrap nonce");
+      if (value === true) element.setAttribute(name, ""); else if (value !== false) element.setAttribute(name, value);
+    }
+    if (source.kind === "owned") {
+      element.integrity = sriFromHex(source.sha256);
+      // Set before the element joins the document, which is when the browser starts the request.
+      if (ownedFetchAttributes(attrs) !== attrs) element.crossOrigin = ownedCrossOrigin;
+    }
+    if (nonce) element.nonce = nonce;
+  }
+  function styleRecordKey(appId, url) {
+    return JSON.stringify([appId, url]);
+  }
+  function scriptRecordKey(appId, asset) {
+    return asset.owner.kind === "extension" ? JSON.stringify([appId, asset.source.url]) : asset.source.url;
+  }
+  function existingStyleElement(appId, url) {
+    return [...document.querySelectorAll('[data-citry-vue-style-app][data-citry-css-url]')]
+      .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
+        element.getAttribute("data-citry-css-url") === url) || null;
+  }
+  function retireUnusedStyles() {
+    for (const [key, record] of loadedStyleUrls) if (!record.refs.size && !record.stages.size) {
+      record.element?.remove();
+      loadedStyleUrls.delete(key);
+    }
+  }
+  function abortStyleStage(stage) {
+    if (!stage) return;
+    for (const record of loadedStyleUrls.values()) record.stages.delete(stage.token);
+    retireUnusedStyles();
+  }
+  function commitStyleStage(appId, stage) {
+    for (const record of loadedStyleUrls.values()) {
+      const prior = record.refs.get(appId);
+      if (prior) {
+        for (const id of stage.replacedIds) prior.delete(id);
+        if (!prior.size) record.refs.delete(appId);
+      }
+      record.stages.delete(stage.token);
+    }
+    for (const [url, ids] of stage.refs) {
+      const record = loadedStyleUrls.get(styleRecordKey(appId, url));
+      if (!record) throw new Error("prepared stylesheet disappeared before commit");
+      const refs = record.refs.get(appId) || new Set();
+      for (const id of ids) refs.add(id);
+      record.refs.set(appId, refs);
+    }
+    retireUnusedStyles();
+  }
+  function releaseAppStyles(appId) {
+    for (const [key, item] of admittedStyles) if (item.appId === appId) admittedStyles.delete(key);
+    for (const record of loadedStyleUrls.values()) record.refs.delete(appId);
+    retireUnusedStyles();
+  }
+  function releaseAppScripts(appId) {
+    for (const [key, record] of loadedScriptUrls) {
+      if (record.appId === appId) loadedScriptUrls.delete(key);
+    }
+  }
+  // Only the same source counts: a changed descriptor at the same URL is a new asset.
+  function styleWasAdmitted(key, asset) {
+    return admittedStyles.get(key)?.identity === assetIdentity(asset);
+  }
+  function loadStyle(appId, asset, nonce, stage, knownInitial = false) {
+    const key = styleRecordKey(appId, asset.source.url);
+    const prior = loadedStyleUrls.get(key);
+    if (prior) {
+      if (prior.identity !== assetIdentity(asset))
+        throw new Error("prepared stylesheet URL identity collision");
+      if (stage) prior.stages.add(stage.token);
+      return prior.promise;
+    }
+    if (!knownInitial && !asset.lazyAllowed && !styleWasAdmitted(key, asset))
+      throw new Error("lazy stylesheet loading is unsupported after custom dependency hooks");
+    // A mounted document links its initial stylesheets in <head>, so the served HTML paints with
+    // them. The browser runs no inline script before those links finish, so a served link is done
+    // here. It is adopted unless it failed: an integrity failure leaves no sheet, and an error
+    // status shows in its resource timing entry where the browser reports one (Safari does not).
+    // A failed link is replaced by a new request below, which reports the failure.
+    const served = knownInitial ? [...document.querySelectorAll('link[rel="stylesheet"][data-citry-vue-style-app]')]
+      .find(element => element.getAttribute("data-citry-vue-style-app") === appId &&
+        element.getAttribute("href") === asset.source.url) || null : null;
+    const servedFailed = served !== null && (!served.sheet ||
+      performance.getEntriesByName(served.href).some(entry => entry.responseStatus >= 400));
+    if (served && !servedFailed) {
+      const adopted = {element: served, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
+        identity: assetIdentity(asset), promise: Promise.resolve()};
+      loadedStyleUrls.set(key, adopted);
+      admittedStyles.set(key, {appId, identity: adopted.identity});
+      return adopted.promise;
+    }
+    served?.remove();
+    const link = document.createElement("link");
+    const record = {element: link, refs: new Map(), stages: new Set(stage ? [stage.token] : []),
+      identity: assetIdentity(asset)};
+    record.promise = new Promise((resolve, reject) => {
+      link.rel = "stylesheet";
+      link.href = asset.source.url;
+      link.setAttribute("data-citry-vue-style-app", appId);
+      link.setAttribute("data-citry-css-url", asset.source.url);
+      applyAssetSource(link, asset.source, nonce);
+      link.onload = resolve;
+      link.onerror = () => {
+        reject(new Error("Citry Vue stylesheet failed to load: " + asset.source.url));
+        if (loadedStyleUrls.get(key) === record) {
+          loadedStyleUrls.delete(key);
+          link.remove();
+        }
+      };
+      document.head.append(link);
+    });
+    loadedStyleUrls.set(key, record);
+    admittedStyles.set(key, {appId, identity: record.identity});
+    return record.promise;
+  }
+  function loadTypeScript(appId, asset, nonce, knownInitial = false) {
+    normalizeScriptAsset(asset);
+    const key = scriptRecordKey(appId, asset), prior = loadedScriptUrls.get(key);
+    const identity = assetIdentity(asset);
+    if (prior) {
+      if (prior.identity !== identity) throw new Error("prepared script URL identity collision");
+      return prior.promise;
+    }
+    if (!knownInitial && !asset.lazyAllowed)
+      throw new Error("lazy type script loading is unsupported after custom dependency hooks");
+    const record = {appId: asset.owner.kind === "extension" ? appId : null, identity, promise: null};
+    record.promise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = asset.source.url;
+      applyAssetSource(script, asset.source, nonce);
+      const finish = callback => {
+        script.onload = null;
+        script.onerror = null;
+        script.remove();
+        callback();
+      };
+      script.onload = () => finish(() => {
+        if (asset.registersOptions && (asset.owner.kind !== "component" || !registeredTypeOptions.has(asset.owner.typeKey))) {
+          if (loadedScriptUrls.get(key) === record) loadedScriptUrls.delete(key);
+          reject(new Error("Citry Vue type script did not register its declared Options"));
+        } else resolve();
+      });
+      script.onerror = () => finish(() => {
+        if (loadedScriptUrls.get(key) === record) loadedScriptUrls.delete(key);
+        reject(new Error("Citry Vue type script failed to load: " + asset.source.url));
+      });
+      document.head.append(script);
+    });
+    loadedScriptUrls.set(key, record);
+    return record.promise;
+  }
+
+  function waitForStartup(value, lifecycle) {
+    if (!lifecycle?.signal) return value;
+    lifecycle.guard();
+    if (lifecycle.signal.aborted)
+      return Promise.reject(lifecycle.signal.reason || new Error("Citry Vue startup was cancelled"));
+    return new Promise((resolve, reject) => {
+      let signal = lifecycle.signal;
+      const release = () => {
+        signal?.removeEventListener("abort", cancelled);
+        signal = null;
+      };
+      const cancelled = () => {
+        const reason = signal?.reason;
+        release();
+        reject(reason || new Error("Citry Vue startup was cancelled"));
+      };
+      signal.addEventListener("abort", cancelled, {once: true});
+      Promise.resolve(value).then(
+        result => { release(); resolve(result); },
+        error => { release(); reject(error); },
+      );
+    });
+  }
+
+  function validateCandidateAssets(appId, scripts, styles, occurrenceTypes, extensionNames, configuration,
+      enforceLazy) {
+    const normalizedScripts = scripts.map(asset => normalizeScriptAsset(asset));
+    const normalizedStyles = styles.map(asset => normalizeStyleAsset(asset, occurrenceTypes));
+    const candidates = [
+      [normalizedScripts, loadedScriptUrls, asset => scriptRecordKey(appId, asset), "script", () => false],
+      [normalizedStyles, loadedStyleUrls, asset => styleRecordKey(appId, asset.source.url), "stylesheet",
+        styleWasAdmitted],
+    ];
+    for (const [assets, live, keyFor, label, admitted] of candidates) {
+      const seen = new Map();
+      for (const asset of assets) {
+        if (asset.owner.kind === "extension" && !extensionNames.has(asset.owner.extensionName))
+          throw new Error("prepared asset references an uninstalled browser extension");
+        const key = keyFor(asset), prior = seen.get(key) || live.get(key);
+        if (prior && prior.identity !== assetIdentity(asset))
+          throw new Error(`prepared ${label} URL identity collision`);
+        seen.set(key, {identity: assetIdentity(asset)});
+        // A stylesheet this app loaded before is not lazy, even after its last owner left.
+        if (enforceLazy && !live.has(key) && !admitted(key, asset)) {
+          if (asset.lazyAllowed !== true) throw new Error(`prepared unseen ${label} asset disallows lazy loading`);
+          if (asset.owner.kind === "component" && configuration.allowLazyTypeAssets !== true)
+            throw new Error("lazy type assets are unsupported by this dependency or JavaScript policy");
+        }
+      }
+    }
+    return {scripts: normalizedScripts, styles: normalizedStyles};
+  }
+
+  async function primeInitialAssets(manifest, configuration, extensionNames, lifecycle, preloads) {
+    if (!Array.isArray(manifest.scripts) || !Array.isArray(manifest.styles) || !Array.isArray(manifest.typePolicies))
+      throw new Error("prepared manifest dependency assets must be arrays");
+    normalizeTypePolicies(manifest.typePolicies);
+    const initialTypes = new Map(manifest.occurrences.map(item => [item.id, item.typeKey]));
+    const {scripts: normalizedScripts, styles: normalizedStyles} = validateCandidateAssets(
+      manifest.appId, manifest.scripts, manifest.styles, initialTypes, extensionNames, configuration, false);
+    const initialStyleStage = configuration.loadInitialAssets === true ? {
+      token: Symbol("initial-style-stage"),
+      refs: new Map(),
+      replacedIds: new Set(),
+    } : null;
+    try {
+    if (configuration.loadInitialAssets !== true) {
+      for (const asset of normalizedScripts) if (asset.registersOptions &&
+          (asset.owner.kind !== "component" || !registeredTypeOptions.has(asset.owner.typeKey)))
+        throw new Error("initial Citry Vue type Options were not emitted before bootstrap");
+      for (const asset of normalizedStyles) {
+        const key = styleRecordKey(manifest.appId, asset.source.url);
+        if (!loadedStyleUrls.has(key) && !existingStyleElement(manifest.appId, asset.source.url))
+          throw new Error("initial Citry Vue stylesheet was not emitted before bootstrap");
+      }
+    }
+    if (configuration.loadInitialAssets === true) {
+      preloads?.add(manifest.appId, manifest.definitions, configuration.nonce, true);
+      preloads?.add(manifest.appId, normalizedScripts, configuration.nonce);
+      await waitForStartup(
+        Promise.all(normalizedStyles.map(asset =>
+          loadStyle(manifest.appId, asset, configuration.nonce, initialStyleStage, true))),
+        lifecycle,
+      );
+      lifecycle?.guard();
+      for (const asset of normalizedScripts) {
+        await waitForStartup(loadTypeScript(manifest.appId, asset, configuration.nonce, true), lifecycle);
+        lifecycle?.guard();
+      }
+    }
+    for (const [assets, loaded, name] of [[manifest.scripts, loadedScriptUrls, "script"]]) {
+      for (const asset of assets) {
+        if (name === "script" && asset.registersOptions &&
+            (asset.owner.kind !== "component" || !registeredTypeOptions.has(asset.owner.typeKey)))
+          throw new Error("initial Citry Vue type Options were not emitted before bootstrap");
+        const key = scriptRecordKey(manifest.appId, asset);
+        const prior = loaded.get(key), identity = assetIdentity(asset);
+        if (prior && prior.identity !== identity) throw new Error("prepared script URL identity collision");
+        if (!prior) loaded.set(key, {
+          appId: asset.owner.kind === "extension" ? manifest.appId : null,
+          identity,
+          promise: Promise.resolve(),
+        });
+      }
+    }
+    for (const rawAsset of manifest.styles) {
+      const asset = normalizeStyleAsset(rawAsset, initialTypes);
+      if (asset.owner.kind === "extension" && !extensionNames.has(asset.owner.extensionName))
+        throw new Error("prepared asset references an uninstalled browser extension");
+      const key = styleRecordKey(manifest.appId, asset.source.url);
+      let record = loadedStyleUrls.get(key);
+      if (!record) {
+        const element = existingStyleElement(manifest.appId, asset.source.url);
+        if (!element) throw new Error("initial Citry Vue stylesheet was not emitted before bootstrap");
+        record = {element, refs: new Map(), stages: new Set(), promise: Promise.resolve(),
+          identity: assetIdentity(asset)};
+        loadedStyleUrls.set(key, record);
+        admittedStyles.set(key, {appId: manifest.appId, identity: record.identity});
+      } else if (record.identity !== assetIdentity(asset)) {
+        throw new Error("prepared stylesheet URL identity collision");
+      }
+      const refs = record.refs.get(manifest.appId) || new Set();
+      for (const id of assetRefs(asset)) refs.add(id);
+      record.refs.set(manifest.appId, refs);
+    }
+    } finally {
+      abortStyleStage(initialStyleStage);
+    }
+  }
+
+  function normalizeTypePolicies(values) {
+    const policies = new Map();
+    for (const value of values) {
+      plain(value, "prepared type policy");
+      if (typeof value.typeKey !== "string" || typeof value.lazyAllowed !== "boolean" ||
+          Object.keys(value).sort().join(",") !== "lazyAllowed,typeKey" || policies.has(value.typeKey))
+        throw new Error("invalid prepared type policy");
+      policies.set(value.typeKey, value.lazyAllowed);
+    }
+    return policies;
+  }
+
+  async function startPreparedOwned(configuration, lifecycle, startAttempt) {
+    if (lifecycle) configuration = {...configuration, nonce: lifecycle.nonce};
+    plain(configuration, "prepared bootstrap");
+    const manifest = plain(configuration.manifest, "prepared manifest");
+    const hostElement = typeof configuration.host === "string" ? document.querySelector(configuration.host) : configuration.host;
+    if (!(hostElement instanceof Element) || !plain(configuration.tags, "component tags"))
+      throw new Error("prepared bootstrap needs one host element and component tags");
+    const appId = manifest.appId, registered = new Set(), contexts = new Map(), sources = new Map();
+    // The Events context each call source last reported in a `citry:events:*` detail. It outlives the
+    // component, so a notification that arrives after the component is gone still names it; keyed by
+    // the source object a call holds, so it is released with the call.
+    const lifecycleIdentities = new WeakMap();
+    const pluginEntries = extensionEntries(manifest.extensions || {}), plugins = new Map();
+    let staged = null;
+    if (!Array.isArray(manifest.definitions) || !Array.isArray(manifest.occurrences))
+      throw new Error("prepared manifest lacks definitions or occurrences");
+    const declaredDefinitions = preflightDefinitions(
+      {definitions: new Map()}, manifest.definitions, manifest.occurrences, manifest.rootId);
+    configure(manifest, startAttempt);
+    definitionRegistry(appId).hostElement = hostElement;
+    const claimedContextNames = new Set();
+    for (const [, item] of pluginEntries) for (const name of item.templateContextNames) {
+      if (claimedContextNames.has(name)) throw new Error("duplicate browser plugin template context claim: " + name);
+      claimedContextNames.add(name);
+    }
+    definitionRegistry(appId).templateContextNames = Object.freeze([...claimedContextNames].sort());
+    const initialAssetPreloads = createAssetPreloadBatch();
+    try {
+      await waitForStartup(
+        primeInitialAssets(manifest, configuration, new Set(pluginEntries.map(([name]) => name)), lifecycle,
+          initialAssetPreloads),
+        lifecycle,
+      );
+      lifecycle?.guard();
+      for (const asset of manifest.definitions) {
+        await waitForStartup(loadDefinition(asset, configuration.nonce), lifecycle);
+        lifecycle?.guard();
+      }
+    } finally {
+      initialAssetPreloads.cleanup();
+    }
+    for (const asset of manifest.definitions) {
+      registerDefinition(appId, asset.id, global.__citryRuntimeDefinitions?.[asset.id], declaredDefinitions.get(asset.id));
+      registered.add(asset.id);
+    }
+    const componentTypes = {};
+    const initialTypeTags = new Map(Object.entries(configuration.tags));
+    for (const definition of definitionRegistry(appId).definitions.values()) {
+      for (const call of [...definition.localCalls, ...definition.localCallRuns]) {
+        const prior = initialTypeTags.get(call.typeKey);
+        if (prior && prior !== call.componentTag) throw new Error("prepared stable type has conflicting component tags");
+        initialTypeTags.set(call.typeKey, call.componentTag);
+      }
+    }
+    const pluginHost = Object.freeze({
+      appId,
+      vue: V,
+      occurrenceId(component) {
+        const record = instanceRecords.get(component);
+        return record?.app.id === appId ? record.occurrenceId : null;
+      },
+      occurrence(id) { return definitionRegistry(appId).occurrences.get(id) || null; },
+      revision() { return definitionRegistry(appId).revision; },
+    });
+    const cleanupPluginStages = (values, method) => {
+      for (const item of [...values].reverse()) {
+        try { item.plugin[method](item.stage); }
+        catch (error) { console.error("[Citry] browser plugin " + method + " failed:", error); }
+      }
+    };
+    const activatedInitialPlugins = [];
+    try {
+      for (const [name, item] of pluginEntries) {
+        const registration = browserPluginFactories.get(name);
+        if (!registration || registration.schemaVersion !== item.schemaVersion ||
+            JSON.stringify(registration.templateContextNames) !== JSON.stringify(item.templateContextNames))
+          throw new Error("missing or incompatible Citry browser plugin: " + name);
+        const plugin = registration.factory(pluginHost);
+        if (!plugin || typeof plugin.install !== "function" || typeof plugin.prepareRevision !== "function" ||
+            typeof plugin.activateRevision !== "function" || typeof plugin.commitRevision !== "function" ||
+            typeof plugin.abortRevision !== "function" || typeof plugin.rollbackRevision !== "function" ||
+            typeof plugin.dispose !== "function")
+          throw new Error("invalid Citry browser plugin factory result: " + name);
+        plugins.set(name, {plugin, stage: null});
+        const stage = await waitForStartup(plugin.prepareRevision(detached(item.payload), detached(manifest)), lifecycle);
+        lifecycle?.guard();
+        plugins.set(name, {plugin, stage});
+      }
+      lifecycle?.guard();
+      for (const item of plugins.values()) {
+        activatedInitialPlugins.push(item);
+        item.plugin.activateRevision(item.stage);
+      }
+    } catch (error) {
+      cleanupPluginStages(activatedInitialPlugins, "rollbackRevision");
+      const activated = new Set(activatedInitialPlugins);
+      cleanupPluginStages([...plugins.values()].filter(item => item.stage !== null && !activated.has(item)), "abortRevision");
+      releaseAppStyles(appId);
+      releaseAppScripts(appId);
+      apps.delete(appId);
+      for (const {plugin} of plugins.values()) {
+        try { plugin.dispose(); } catch (disposeError) { console.error("[Citry] browser plugin dispose failed:", disposeError); }
+      }
+      throw error;
+    }
+    definitionRegistry(appId).browserPlugins = [...plugins.values()].map(item => item.plugin);
+    definitionRegistry(appId).initialPluginStages = [...plugins.values()];
+    const ownedApp = definitionRegistry(appId);
+    const firstLiveElement = (vnode, seen = new Set()) => {
+      if (!vnode || typeof vnode !== "object" || seen.has(vnode)) return null;
+      seen.add(vnode);
+      const nested = vnode.component?.subTree;
+      if (nested) {
+        const element = firstLiveElement(nested, seen);
+        if (element) return element;
+      }
+      if (vnode.type === V.Static && vnode.el instanceof Node && vnode.anchor instanceof Node) {
+        let node = vnode.el;
+        while (node) {
+          if (node instanceof Element && node.isConnected) return node;
+          if (node === vnode.anchor) break;
+          node = node.nextSibling;
+        }
+      }
+      if (vnode.el instanceof Element && vnode.el.isConnected) return vnode.el;
+      if (Array.isArray(vnode.children)) for (const child of vnode.children) {
+        const element = firstLiveElement(child, seen);
+        if (element) return element;
+      }
+      return null;
+    };
+    const liveComponentCarrier = component => {
+      const element = firstLiveElement(component?.$?.subTree);
+      if (element) return element;
+      const root = component?.$el;
+      if (typeof Node === "function" && root instanceof Node && root.isConnected) return root;
+      throw new Error("Citry Events component has no live DOM root");
+    };
+    const dispatchCarrier = source => {
+      if (!source || sources.get(source.stableId)?.generation !== source.generation)
+        throw new Error("Citry Events dispatch source is stale or retired");
+      const mounted = ownedApp.mounted.get(source.stableId);
+      if (!mounted || mounted.record.generation !== source.generation)
+        throw new Error("Citry Events dispatch source is stale or retired");
+      return liveComponentCarrier(mounted.component);
+    };
+    const componentContains = (component, element) =>
+      liveRootElements(component).some(root => root === element || root.contains(element));
+    ownedApp.componentRoot = (record, childId) => {
+      if (record?.app !== ownedApp || ownedApp.mounted.get(record.occurrenceId)?.record !== record)
+        throw new Error("Citry component event source is stale or retired");
+      if (typeof childId !== "string" || childId.length === 0)
+        throw new TypeError("Citry component event child id must be a non-empty string");
+      const child = ownedApp.occurrences.get(childId);
+      if (!child)
+        throw new Error("Citry component event child is not a descendant of its source");
+      let cursor = child.parentId;
+      while (cursor !== null && cursor !== record.occurrenceId)
+        cursor = ownedApp.occurrences.get(cursor)?.parentId ?? null;
+      if (cursor !== record.occurrenceId)
+        throw new Error("Citry component event child is not a descendant of its source");
+      const mounted = ownedApp.mounted.get(childId);
+      if (!mounted || mounted.record.app !== ownedApp || mounted.record.occurrenceId !== childId)
+        throw new Error("Citry component event child is stale or retired");
+      return liveComponentCarrier(mounted.component);
+    };
+    const sourceForElement = element => {
+      if (typeof Element !== "function" || !(element instanceof Element) || !element.isConnected) return null;
+      const candidates = [];
+      for (const [id, mounted] of ownedApp.mounted) {
+        if (!componentContains(mounted.component, element)) continue;
+        let depth = 0, cursor = id;
+        while (ownedApp.occurrences.get(cursor)?.parentId !== null) {
+          depth += 1;
+          cursor = ownedApp.occurrences.get(cursor).parentId;
+        }
+        const source = sources.get(id);
+        if (source?.generation === mounted.record.generation) candidates.push({source, depth});
+      }
+      candidates.sort((left, right) => right.depth - left.depth);
+      return candidates[0]?.source || null;
+    };
+    const sourceForTarget = target => {
+      if (typeof target === "string") {
+        const renderId = target.startsWith("render:") ? target.slice("render:".length) : target;
+        for (const occurrence of ownedApp.occurrences.values()) {
+          if (occurrence.renderId !== renderId) continue;
+          const mounted = ownedApp.mounted.get(occurrence.id), source = sources.get(occurrence.id);
+          if (mounted && source?.generation === mounted.record.generation) return source;
+          return null;
+        }
+        return null;
+      }
+      return sourceForElement(target);
+    };
+    for (const typeKey of new Set(manifest.occurrences.map(item => item.typeKey))) {
+      let options = registeredTypeOptions.get(typeKey)?.options || {};
+      for (const plugin of definitionRegistry(appId).browserPlugins) if (typeof plugin.decorateTypeOptions === "function")
+        options = plugin.decorateTypeOptions(typeKey, options);
+      componentTypes[typeKey] = defineTypeWithCallback(appId, typeKey, options);
+    }
+    const cleanupEventAttempt = (attempt, reason = new Error("prepared Events render was cancelled")) => {
+      if (!attempt || attempt.cleaned || attempt.published) return;
+      attempt.aborted = true;
+      attempt.abortReason ||= reason;
+      attempt.rejectCancellation?.(attempt.abortReason);
+      abortStyleStage(attempt.styleStage);
+      for (const item of attempt.pluginStages || []) {
+        if (item.cleaned || !item.hasStage) continue;
+        item.cleaned = true;
+        try { item.plugin[item.attempted ? "rollbackRevision" : "abortRevision"](item.stage); }
+        catch (error) { console.error("[Citry] Events plugin stage cleanup failed:", error); }
+      }
+      attempt.cleaned = true;
+      if (staged === attempt) staged = null;
+    };
+    const validateAddresses = (values, requireAddresses) => {
+      const byRender = new Map();
+      const addressed = values.filter(item => own(item, "renderId"));
+      if ((requireAddresses && addressed.length !== values.length) ||
+          (addressed.length !== 0 && addressed.length !== values.length))
+        throw new Error("prepared Events occurrence addresses are incomplete");
+      for (const occurrence of addressed) {
+        if (typeof occurrence.renderId !== "string" || !/^[a-z0-9_-]+$/.test(occurrence.renderId) ||
+            byRender.has(occurrence.renderId))
+          throw new Error("prepared Events occurrence address is invalid or duplicated");
+        if (occurrence.eventContext && occurrence.eventContext.serverRenderId !== occurrence.renderId)
+          throw new Error("prepared Events occurrence address disagrees with its event context");
+        byRender.set(occurrence.renderId, occurrence);
+      }
+      return byRender;
+    };
+    const addressSnapshot = (requireAddresses = false) =>
+      validateAddresses([...ownedApp.occurrences.values()], requireAddresses);
+    // Translate one isolated target envelope into this app's occurrence ids. The result is built from
+    // new objects wherever an id changes and shares everything else with rawEnvelope, which is never
+    // written to; preflightResult freezes the shared parts once the combined envelope passes.
+    const translateTargetEnvelope = (rawEnvelope, target, allocator) => {
+      const envelope = {...rawEnvelope}, incoming = new Map(envelope.occurrences.map(item => [item.id, item]));
+      if (incoming.size !== envelope.occurrences.length || !incoming.has(envelope.rootId))
+        throw new Error("invalid isolated prepared target snapshot");
+      for (const item of incoming.values()) if (typeof item.id !== "string" ||
+          !/^citryOccurrence[0-9A-Za-z]+$/.test(item.id))
+        throw new Error("prepared Events incoming occurrence ID is invalid");
+      // The caller ran validateIsolatedEnvelope on this same object just before, which already checked
+      // its graph and markers, so the translation below can rely on them without checking again.
+      const existingChildren = new Map();
+      for (const item of ownedApp.occurrences.values()) {
+        const key = item.parentId;
+        if (!existingChildren.has(key)) existingChildren.set(key, []);
+        existingChildren.get(key).push(item);
+      }
+      const incomingChildren = new Map();
+      for (const item of incoming.values()) {
+        if (!incomingChildren.has(item.parentId)) incomingChildren.set(item.parentId, []);
+        incomingChildren.get(item.parentId).push(item);
+      }
+      const occupied = allocator.occupied;
+      const reserved = allocator.reserved;
+      const claimedExisting = allocator.claimedExisting;
+      const mapped = new Map([[envelope.rootId, target.id]]);
+      claimedExisting.add(target.id);
+      // A component that a caller outside the target wrote between the target's tags stays in that
+      // caller's call table after the Render (see keptOwnerIds). Giving its id to new content would
+      // leave two call tables naming one component, so new content never takes such an id.
+      const ownedInsideTarget = id => {
+        let cursor = allocator.callOwners.get(id);
+        while (cursor !== undefined && cursor !== null && cursor !== target.id)
+          cursor = ownedApp.occurrences.get(cursor)?.parentId;
+        return cursor === target.id;
+      };
+      const visit = oldParent => {
+        const newParent = mapped.get(oldParent);
+        const candidates = existingChildren.get(newParent) || [];
+        for (const child of incomingChildren.get(oldParent) || []) {
+          const match = candidates.find(item => !claimedExisting.has(item.id) &&
+            item.placementKey === child.placementKey && item.typeKey === child.typeKey && ownedInsideTarget(item.id));
+          let id;
+          if (match) id = match.id;
+          else {
+            if (!occupied.has(child.id)) id = child.id;
+            if (!id) {
+              do id = `citryOccurrenceTranslated${envelope.revision}${allocator.ordinal++}`;
+              while (reserved.has(id));
+            }
+            reserved.add(id);
+            occupied.add(id);
+          }
+          claimedExisting.add(id);
+          mapped.set(child.id, id); visit(child.id);
+        }
+      };
+      visit(envelope.rootId);
+      const resolve = id => {
+        if (typeof id !== "string" || !mapped.has(id)) throw new Error("prepared target references an unknown incoming occurrence");
+        return mapped.get(id);
+      };
+      // Only the call tables hold occurrence ids, so only they are rebuilt; the rest of the prepared
+      // data (opaque HTML, bindings, loop rows) stays shared with rawEnvelope. Object.fromEntries
+      // keeps any key, including "__proto__", as an own property, the same way the parsed JSON did.
+      const translatePreparedData = value => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+        const prepared = {...value};
+        // A non-object table is left as is but still iterated, so a string table fails with the same
+        // error as a malformed entry.
+        const rebuild = (table, entry) => table && typeof table === "object"
+          ? Object.fromEntries(Object.entries(table).map(entry))
+          : (Object.entries(table || {}).forEach(entry), table);
+        prepared.calls = rebuild(prepared.calls, ([localId, call]) => {
+          if (call.key !== call.id) throw new Error("prepared component call key must equal its occurrence id");
+          const next = {...call};
+          next.id = resolve(call.id); next.key = next.id;
+          if (typeof call.parentId === "string") next.parentId = resolve(call.parentId);
+          return [localId, next];
+        });
+        prepared.callRuns = rebuild(prepared.callRuns, ([runId, ids]) => {
+          const next = Array.isArray(ids) ? ids.slice() : clone(ids);
+          for (let index = 0; index < next.length; index += 1) next[index] = resolve(next[index]);
+          return [runId, next];
+        });
+        // Keep the shape exact: a table the server omitted must stay absent, not become undefined.
+        if (!own(value, "calls")) delete prepared.calls;
+        if (!own(value, "callRuns")) delete prepared.callRuns;
+        return prepared;
+      };
+      envelope.rootId = resolve(envelope.rootId);
+      envelope.updatedIds = envelope.updatedIds.map(resolve).sort();
+      envelope.occurrences = envelope.occurrences.map(item => ({...item, id: resolve(item.id),
+        parentId: item.parentId === null ? null : resolve(item.parentId), preparedData: translatePreparedData(item.preparedData)}));
+      envelope.markers = envelope.markers.map(item => ({...item,
+        ownerId: resolve(item.ownerId), occurrenceId: resolve(item.occurrenceId)})).sort((a,b) => {
+        const left = `${a.ownerId}\0${a.name}\0${a.occurrenceId}`;
+        const right = `${b.ownerId}\0${b.name}\0${b.occurrenceId}`;
+        return left < right ? -1 : left > right ? 1 : 0;
+      });
+      if (envelope.styles) envelope.styles = envelope.styles.map(style =>
+        style.owner?.kind === "component" && Array.isArray(style.owner.occurrenceIds)
+          ? {...style, owner: {...style.owner, occurrenceIds: style.owner.occurrenceIds.map(resolve).sort()}}
+          : style);
+      const extensions = extensionEntries(envelope.extensions || {});
+      // Replace the extensions object rather than writing into the one shared with rawEnvelope.
+      if (extensions.length && [...mapped].some(([before, after]) => before !== after))
+        envelope.extensions = {...envelope.extensions};
+      for (const [name, extension] of extensions) {
+        const plugin = plugins.get(name)?.plugin;
+        if ([...mapped].some(([before, after]) => before !== after)) {
+          if (typeof plugin?.translateRevision !== "function") throw new Error("browser plugin cannot translate occurrence identities: " + name);
+          // The plugin gets its own frozen copy, and its answer is copied too, so plugin code
+          // never holds an object that the envelope also holds.
+          const translated = plugin.translateRevision(detached(extension.payload), resolve);
+          if (translated && typeof translated.then === "function") throw new Error("browser plugin occurrence translation must be synchronous: " + name);
+          envelope.extensions[name] = {...extension, payload: detached(translated)};
+        }
+      }
+      return envelope;
+    };
+    const host = {
+      appId(source) { return sources.get(source.stableId)?.generation === source.generation ? appId : ""; },
+      resolve(source) { return sources.get(source.stableId)?.generation === source.generation ? contexts.get(source.stableId) || null : null; },
+      revision(source) { return sources.get(source.stableId)?.generation === source.generation ? definitionRegistry(appId).revision : -1; },
+      resolveTarget(target) { return sourceForTarget(target); },
+      preflightResult(result, source) {
+        const renders = result.ok ? result.actions.filter(action => action.action === "render") : [];
+        if (!renders.length) return {result};
+        if (renders.length > 1) {
+          const indexes = renders.map(action => result.actions.indexOf(action));
+          if (indexes.some((index, ordinal) => index !== indexes[0] + ordinal) ||
+              renders.some(action => action.wait === false || typeof action.delay === "number" && action.delay > 0))
+            throw new Error("multiple prepared Render actions must be one immediate blocking contiguous group");
+        }
+        const byRender = addressSnapshot();
+        const allIncomingIds = new Set();
+        for (const action of renders) for (const occurrence of action.prepared?.occurrences || []) {
+          if (typeof occurrence.id !== "string") throw new Error("prepared Events incoming occurrence ID is invalid");
+          allIncomingIds.add(occurrence.id);
+        }
+        // Which component's call table names each component, and every id a call table names. A
+        // kept caller can still name a component an earlier Render removed (see keptOwnerIds), so
+        // those ids stay taken as well.
+        const callOwners = new Map();
+        for (const item of ownedApp.occurrences.values()) {
+          for (const binding of Object.values(item.preparedData.calls || {})) callOwners.set(binding.id, item.id);
+          for (const ids of Object.values(item.preparedData.callRuns || {})) for (const id of ids) callOwners.set(id, item.id);
+        }
+        const allocator = {occupied: new Set([...ownedApp.occurrences.keys(), ...callOwners.keys()]),
+          reserved: new Set([...ownedApp.occurrences.keys(), ...callOwners.keys(), ...allIncomingIds]),
+          claimedExisting: new Set(), callOwners, ordinal: 0};
+        const handles = [], entries = [], targetIds = new Set();
+        let combined = null;
+        const canonical = value => {
+          if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+          if (value && typeof value === "object") return `{${Object.keys(value).sort()
+            .map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`;
+          return JSON.stringify(value);
+        };
+        const merged = (name, identity) => {
+          const values = [], seen = new Map();
+          for (const entry of entries) for (const value of entry.envelope[name] || []) {
+            const key = identity(value), prior = seen.get(key);
+            if (prior && canonical(prior) !== canonical(value))
+              throw new Error(`prepared ${name} identity conflicts across Render targets`);
+            if (!prior) { seen.set(key, value); values.push(value); }
+          }
+          return values;
+        };
+        const mergedStyles = () => {
+          const values = [], seen = new Map();
+          for (const entry of entries) for (const raw of entry.envelope.styles || []) {
+            // Copies, because merging rewrites owner.occurrenceIds on them; style lists are short.
+            const value = clone(raw);
+            const key = canonical([value.source?.url, value.owner?.kind,
+              value.owner?.typeKey || value.owner?.extensionName]);
+            const prior = seen.get(key);
+            if (!prior) { seen.set(key, value); values.push(value); continue; }
+            const priorComparable = clone(prior), valueComparable = clone(value);
+            if (priorComparable.owner?.kind === "component") priorComparable.owner.occurrenceIds = [];
+            if (valueComparable.owner?.kind === "component") valueComparable.owner.occurrenceIds = [];
+            if (canonical(priorComparable) !== canonical(valueComparable))
+              throw new Error("prepared styles identity conflicts across Render targets");
+            if (prior.owner.kind === "component") prior.owner.occurrenceIds =
+              [...new Set([...prior.owner.occurrenceIds, ...value.owner.occurrenceIds])].sort();
+          }
+          return values;
+        };
+        for (const action of renders) {
+          if (action.renderer !== "vue-prepared/1" || action.swap !== "morph" || typeof action.target !== "string")
+            throw new Error("cross-component Vue rendering requires a render target, morph, and vue-prepared/1");
+          let target, selectedMarker = null;
+          if (action.target.startsWith("render:")) target = byRender.get(action.target.slice(7));
+          else {
+            const match = /^mark:([a-z0-9_-]+):([A-Za-z][A-Za-z0-9_-]*)$/.exec(action.target);
+            if (!match) throw new Error("prepared Events marker target syntax is invalid");
+            const caller = byRender.get(match[1]);
+            if (!caller || caller.id !== source.stableId)
+              throw new Error("prepared Events marker caller is stale or does not match the event source");
+            selectedMarker = ownedApp.markers.get(caller.id + "\0" + match[2]);
+            target = selectedMarker && ownedApp.occurrences.get(selectedMarker.occurrenceId);
+          }
+          if (!target) throw new Error("prepared Events Render target is stale or unknown");
+          if (targetIds.has(target.id)) throw new Error("multiple prepared Render actions target the same occurrence");
+          for (const other of targetIds) {
+            let cursor = target.id;
+            while (cursor !== null && cursor !== other) cursor = ownedApp.occurrences.get(cursor)?.parentId ?? null;
+            let reverse = other;
+            while (reverse !== null && reverse !== target.id) reverse = ownedApp.occurrences.get(reverse)?.parentId ?? null;
+            if (cursor === other || reverse === target.id) throw new Error("prepared Render targets overlap");
+          }
+          targetIds.add(target.id);
+          const mounted = ownedApp.mounted.get(target.id);
+          if (!mounted) throw new Error("prepared Events Render target is not mounted");
+          validateIsolatedEnvelope(ownedApp, action.prepared);
+          let sourceCursor = source.stableId, strictAncestor = false;
+          while (sourceCursor !== null) {
+            if (sourceCursor === target.id) { strictAncestor = target.id !== source.stableId; break; }
+            sourceCursor = ownedApp.occurrences.get(sourceCursor)?.parentId ?? null;
+          }
+          if (strictAncestor) {
+            const renderIndex = result.actions.indexOf(action);
+            const sourceRenderId = ownedApp.occurrences.get(source.stableId)?.renderId;
+            result.actions.forEach((candidate, index) => {
+              const sourceBound = candidate.action === "state" ||
+                (candidate.action === "event" &&
+                  (candidate.target === undefined || candidate.target === `render:${sourceRenderId}`));
+              if (sourceBound && (index > renderIndex || (index < renderIndex &&
+                  (candidate.wait === false || typeof candidate.delay === "number" && candidate.delay > 0))))
+                throw new Error("ancestor Render cannot be combined with deferred or later source-bound actions");
+            });
+          }
+          const root = action.prepared?.occurrences?.find(item => item.id === action.prepared.rootId);
+          if (!root) throw new Error("prepared Events Render has no root component occurrence");
+          // A nested component target may become another component: its caller's VNode reads the
+          // occurrence's current type (compilerCreateVNode), so the caller's template stays valid.
+          // The app's top-level component has no caller, and Vue fixes it when it creates the app.
+          // The handler author sees only this message, so it names both components and the fixes.
+          if (root.typeKey !== target.typeKey && target.parentId === null && !selectedMarker)
+            throw new Error(`Citry Events Render cannot replace ${target.typeKey}, the top-level component of ` +
+              `its Vue app, with a different component, ${root.typeKey}. The top-level component stays the ` +
+              `same for the life of the page. Render ${target.typeKey} again with new inputs, or place a ` +
+              "<c-mark name=\"...\"> region in the calling component's template and Render into " +
+              "target=\"mark:<name>\".");
+          // A marker Render wraps its content in the built-in mark component, so the region's own
+          // component never changes; a prepared result that says otherwise is malformed.
+          if (root.typeKey !== target.typeKey && selectedMarker)
+            throw new Error("prepared Events Render changed the component of a <c-mark> region");
+          const extensions = new Map(extensionEntries(action.prepared.extensions || {}));
+          for (const name of plugins.keys()) if (!extensions.has(name)) throw new Error("prepared revision omitted installed browser plugin: " + name);
+          for (const [name, incoming] of extensions) {
+            const registration = browserPluginFactories.get(name);
+            if (!plugins.has(name)) throw new Error("prepared revision introduced an uninstalled browser plugin: " + name);
+            if (!registration || incoming.schemaVersion !== registration.schemaVersion ||
+                JSON.stringify(incoming.templateContextNames) !== JSON.stringify(registration.templateContextNames))
+              throw new Error("prepared revision changed browser plugin schema: " + name);
+            if (renders.length > 1 && typeof plugins.get(name).plugin.prepareRevisionBatch !== "function")
+              throw new Error("browser plugin does not support multiple prepared Render targets: " + name);
+          }
+          const translated = translateTargetEnvelope(action.prepared, target, allocator);
+          validateIsolatedEnvelope(ownedApp, translated, target.id);
+          entries.push({envelope: translated, targetId: target.id,
+            extensions: new Map(extensionEntries(translated.extensions || {}))});
+          handles.push(Object.freeze({app: ownedApp, id: target.id, generation: mounted.record.generation,
+            renderId: target.renderId, typeKey: target.typeKey, revision: ownedApp.revision,
+            markerOwnerId: selectedMarker?.ownerId || null, markerName: selectedMarker?.name || null}));
+        }
+        const removed = new Set();
+        for (const id of ownedApp.occurrences.keys()) for (const rootId of targetIds) {
+          let cursor = id;
+          while (cursor !== null && cursor !== rootId) cursor = ownedApp.occurrences.get(cursor)?.parentId ?? null;
+          if (cursor === rootId) { removed.add(id); break; }
+        }
+        // A nontransparent parent can own the VNode for a child projected
+        // through a marker. Replacing that marker removes the child from the
+        // target subtree, while the parent's prepared call table still has to
+        // satisfy its unchanged render definition. Keep those ancestor-owned
+        // call chains in the composed graph; the replacement definition does
+        // not consume the projected slot, and the replaced-root style stage
+        // still retires their assets.
+        const preserve = new Set();
+        const preserveCalls = owner => {
+          const prepared = owner.preparedData || {};
+          for (const binding of Object.values(prepared.calls || {})) {
+            if (removed.has(binding.id) && !targetIds.has(binding.id)) preserve.add(binding.id);
+          }
+          for (const ids of Object.values(prepared.callRuns || {})) {
+            for (const id of ids) if (removed.has(id) && !targetIds.has(id)) preserve.add(id);
+          }
+        };
+        for (const owner of ownedApp.occurrences.values()) if (!removed.has(owner.id)) preserveCalls(owner);
+        for (const id of [...preserve]) {
+          const queue = [id];
+          while (queue.length) {
+            const current = queue.pop();
+            const owner = ownedApp.occurrences.get(current);
+            if (!owner) continue;
+            const before = preserve.size;
+            preserveCalls(owner);
+            if (preserve.size === before) continue;
+            for (const child of preserve) if (!queue.includes(child)) queue.push(child);
+          }
+        }
+        for (const id of preserve) removed.delete(id);
+        const occurrences = new Map([...ownedApp.occurrences].filter(([id]) => !removed.has(id)));
+        for (const entry of entries) {
+          const existingTarget = ownedApp.occurrences.get(entry.targetId);
+          for (const item of entry.envelope.occurrences) {
+            if (occurrences.has(item.id)) throw new Error("subtree occurrence collides outside its target group");
+            occurrences.set(item.id, item.id === entry.targetId ? {...item,
+              parentId: existingTarget.parentId, placementKey: existingTarget.placementKey} : item);
+          }
+        }
+        const compareMarker = (a, b) => {
+          const left = `${a.ownerId}\0${a.name}\0${a.occurrenceId}`;
+          const right = `${b.ownerId}\0${b.name}\0${b.occurrenceId}`;
+          return left < right ? -1 : left > right ? 1 : 0;
+        };
+        const markers = [
+          ...[...ownedApp.markers.values()].filter(item => targetIds.has(item.occurrenceId) || !removed.has(item.occurrenceId)),
+          ...entries.flatMap(entry => entry.envelope.markers.filter(item => item.occurrenceId !== entry.targetId)),
+        ].sort(compareMarker);
+        normalizeMarkers(markers, occurrences);
+        combined = {...entries[0].envelope, rootId: ownedApp.rootId,
+          occurrences: [...occurrences.values()], markers};
+        combined = {...combined,
+          definitions: merged("definitions", value => value.id),
+          scripts: merged("scripts", value => canonical([value.owner, value.source?.url])),
+          styles: mergedStyles(),
+          typePolicies: merged("typePolicies", value => value.typeKey),
+          updatedIds: [...new Set(entries.flatMap(entry => entry.envelope.updatedIds))].sort(),
+        };
+        const incomingTypes = new Map(combined.occurrences.map(item => [item.id, item.typeKey]));
+        const policies = normalizeTypePolicies(combined.typePolicies);
+        validateCandidateAssets(appId, combined.scripts, combined.styles, incomingTypes,
+          new Set(plugins.keys()), configuration, true);
+        for (const typeKey of incomingTypes.values()) if (!ownedApp.types.has(typeKey) &&
+            (configuration.allowLazyTypeAssets !== true || policies.get(typeKey) !== true))
+          throw new Error("lazy component types are unsupported by this dependency or JavaScript policy");
+        const declared = preflightDefinitions(ownedApp, combined.definitions, combined.occurrences, combined.rootId,
+          keptOwnerIds(ownedApp, combined));
+        const shadow = {...ownedApp, definitions: new Map(ownedApp.definitions)};
+        for (const [id, definition] of declared) shadow.definitions.set(id, definition);
+        validateCombinedActions(shadow, combined);
+        validateAddresses(combined.occurrences, true);
+        // Every check on the envelope's own content has passed. Freeze it, together with the
+        // translated per-target envelopes that plugins receive, so prepareRender and applyEnvelope
+        // can use it without copying it or checking it again. The bridge hands this host a result
+        // no one else holds, so it is safe to freeze the response objects the combined envelope shares.
+        for (const entry of entries) deepFreeze(entry.envelope);
+        deepFreeze(combined);
+        validatedEnvelopes.set(combined, declared);
+        const firstIndex = result.actions.indexOf(renders[0]);
+        const transformed = renders.length === 1 ? result : {...result, actions: [
+          ...result.actions.slice(0, firstIndex), {...renders[0], prepared: combined},
+          ...result.actions.slice(firstIndex + renders.length),
+        ]};
+        return {result: transformed, renderPlan: Object.freeze({handles: Object.freeze(handles), envelope: combined,
+          entries: Object.freeze(entries), replacedRootIds: Object.freeze([...targetIds]), mountEpoch: ownedApp.mountEpoch})};
+      },
+      async prepareRender(action, source, signal, renderPlan) {
+        if (signal?.aborted) throw new Error("prepared Events render was cancelled");
+        if (staged) throw new Error("a prepared Events transaction is already staged");
+        let rejectCancellation;
+        const cancellation = new Promise((_, reject) => { rejectCancellation = reject; });
+        cancellation.catch(() => undefined);
+        const attempt = {
+          preparing: true,
+          aborted: false,
+          abortReason: null,
+          cleaned: false,
+          published: false,
+          styleStage: null,
+          pluginStages: [],
+          rejectCancellation,
+        };
+        const cancel = () => cleanupEventAttempt(attempt);
+        signal?.addEventListener("abort", cancel, {once: true});
+        const guardHandles = () => {
+          if (!source || sources.get(source.stableId)?.generation !== source.generation)
+            throw new Error("prepared Events source became stale while rendering");
+          for (const handle of renderPlan?.handles || []) if (handle && (handle.app !== ownedApp || ownedApp.revision !== handle.revision ||
+              ownedApp.mounted.get(handle.id)?.record.generation !== handle.generation ||
+              ownedApp.occurrences.get(handle.id)?.renderId !== handle.renderId ||
+              ownedApp.occurrences.get(handle.id)?.typeKey !== handle.typeKey ||
+              handle.markerOwnerId !== null && ownedApp.markers.get(handle.markerOwnerId + "\0" + handle.markerName)?.occurrenceId !== handle.id))
+            throw new Error("prepared Events Render target became stale while rendering");
+        };
+        const wait = async promise => {
+          const value = await Promise.race([promise, cancellation]);
+          if (attempt.aborted || signal?.aborted) throw attempt.abortReason || new Error("prepared Events render was cancelled");
+          guardHandles();
+          return value;
+        };
+        staged = attempt;
+        try {
+        const envelope = renderPlan?.envelope || action.prepared;
+        const handles = renderPlan?.handles || [];
+        const replacedRootIds = renderPlan?.replacedRootIds || [source.stableId];
+        if (!envelope || envelope.appId !== appId || !Array.isArray(envelope.definitions) || !Array.isArray(envelope.scripts) || !Array.isArray(envelope.styles) || !Array.isArray(envelope.typePolicies)) throw new Error("invalid prepared Events envelope");
+        const incomingExtensions = new Map(extensionEntries(envelope.extensions || {}));
+        for (const name of incomingExtensions.keys()) if (!plugins.has(name))
+          throw new Error("prepared revision introduced an uninstalled browser plugin: " + name);
+        for (const name of plugins.keys()) if (!incomingExtensions.has(name))
+          throw new Error("prepared revision omitted installed browser plugin: " + name);
+        normalizeTypePolicies(envelope.typePolicies);
+        for (const [name, installed] of plugins) {
+          const incoming = incomingExtensions.get(name), registration = browserPluginFactories.get(name);
+          if (!registration || incoming.schemaVersion !== registration.schemaVersion ||
+              JSON.stringify(incoming.templateContextNames) !== JSON.stringify(registration.templateContextNames))
+            throw new Error("prepared revision changed browser plugin schema: " + name);
+        }
+        const incomingOccurrenceTypes = new Map(envelope.occurrences.map(item => [item.id, item.typeKey]));
+        const normalizedAssets = validateCandidateAssets(appId, envelope.scripts, envelope.styles,
+          incomingOccurrenceTypes, new Set(incomingExtensions.keys()), configuration, true);
+        const replacedStyleIds = new Set();
+        for (const id of definitionRegistry(appId).occurrences.keys()) {
+          for (const rootId of replacedRootIds) {
+            let cursor = id;
+            while (cursor !== null && cursor !== rootId)
+              cursor = definitionRegistry(appId).occurrences.get(cursor)?.parentId ?? null;
+            if (cursor === rootId) { replacedStyleIds.add(id); break; }
+          }
+        }
+        const suppliedLiveOccurrenceIds = renderPlan?.entries?.length
+          ? new Set(renderPlan.entries.flatMap(entry => entry.envelope.occurrences.map(item => item.id)))
+          : null;
+        attempt.styleStage = {
+          token: Object.freeze({appId, revision: envelope.revision}),
+          replacedIds: replacedStyleIds,
+          refs: new Map(),
+        };
+        for (const asset of normalizedAssets.styles) {
+          const refs = attempt.styleStage.refs.get(asset.source.url) || new Set();
+          for (const id of assetRefs(asset)) {
+            if (suppliedLiveOccurrenceIds && replacedStyleIds.has(id) && !suppliedLiveOccurrenceIds.has(id)) continue;
+            refs.add(id);
+          }
+          attempt.styleStage.refs.set(asset.source.url, refs);
+        }
+        if (!source || sources.get(source.stableId)?.generation !== source.generation)
+          throw new Error("prepared Events source is stale before render preflight");
+        guardHandles();
+        // preflightResult already checked this frozen envelope, and guardHandles just confirmed that
+        // no revision was published since. The envelope is checked against the app again here only
+        // when that earlier check could now answer differently: a definition it declares was
+        // registered with other metadata, or a component mounted or unmounted since preflight.
+        // applyEnvelope repeats both checks right before it publishes.
+        const validated = validatedEnvelopes.get(envelope) !== undefined && renderPlan?.envelope === envelope;
+        const mountsMoved = () => !validated || definitionRegistry(appId).mountEpoch !== renderPlan.mountEpoch;
+        let declaredDefinitions;
+        if (validated) {
+          declaredDefinitions = validatedEnvelopes.get(envelope);
+          assertDeclaredDefinitionsCurrent(definitionRegistry(appId), declaredDefinitions);
+        } else {
+          declaredDefinitions = preflightDefinitions(
+            definitionRegistry(appId), envelope.definitions, envelope.occurrences, envelope.rootId,
+            keptOwnerIds(definitionRegistry(appId), envelope));
+        }
+        if (mountsMoved()) {
+          const shadow = {...definitionRegistry(appId), definitions: new Map(definitionRegistry(appId).definitions)};
+          for (const [id, definition] of declaredDefinitions) shadow.definitions.set(id, definition);
+          validateCombinedActions(shadow, envelope);
+        }
+        const declaredDefinitionIds = new Set(declaredDefinitions.keys());
+        const priorDefinitionKeys = new Set(Object.keys(global.__citryRuntimeDefinitions || {}));
+        const declaredOptionTypes = new Set(normalizedAssets.scripts.filter(asset => asset.registersOptions).map(asset => asset.owner.typeKey));
+        const priorOptionTypes = new Set(registeredTypeOptions.keys());
+        const updateAssetPreloads = createAssetPreloadBatch();
+        try {
+          updateAssetPreloads.add(appId, envelope.definitions, configuration.nonce, true);
+          updateAssetPreloads.add(appId, normalizedAssets.scripts, configuration.nonce);
+          updateAssetPreloads.addStyles(appId, normalizedAssets.styles, configuration.nonce);
+          for (const asset of envelope.definitions) await wait(loadDefinition(asset, configuration.nonce));
+          for (const id of Object.keys(global.__citryRuntimeDefinitions || {}))
+            if (!priorDefinitionKeys.has(id) && !declaredDefinitionIds.has(id))
+              throw new Error("prepared definition asset registered an undeclared definition");
+          for (const asset of envelope.definitions) if (!registered.has(asset.id)) {
+            registerDefinition(
+              appId, asset.id, global.__citryRuntimeDefinitions?.[asset.id], declaredDefinitions.get(asset.id));
+            registered.add(asset.id);
+          }
+          // Check against the registry before loading type scripts and styles whenever the answer
+          // from preflight may be out of date; applyEnvelope repeats this check at commit.
+          if (validated) assertDeclaredDefinitionsCurrent(definitionRegistry(appId), declaredDefinitions);
+          if (mountsMoved()) validateCombinedActions(definitionRegistry(appId), envelope);
+          for (const asset of normalizedAssets.scripts)
+            await wait(loadTypeScript(appId, asset, configuration.nonce));
+          await wait(Promise.all(normalizedAssets.styles.map(asset =>
+            loadStyle(appId, asset, configuration.nonce, attempt.styleStage))));
+        } finally {
+          updateAssetPreloads.cleanup();
+        }
+        for (const typeKey of registeredTypeOptions.keys())
+          if (!priorOptionTypes.has(typeKey) && !declaredOptionTypes.has(typeKey))
+            throw new Error("prepared type asset registered undeclared Vue Options");
+        try {
+          for (const [name, installed] of plugins) {
+            const incoming = incomingExtensions.get(name);
+            const item = {
+              name, plugin: installed.plugin, attempted: false, cleaned: false, hasStage: false, stage: undefined,
+            };
+            attempt.pluginStages.push(item);
+            const entries = renderPlan?.entries;
+            // Plugins must not be able to change what the core holds. A validated envelope and
+            // its per-target envelopes are frozen whole already, so plugins read them directly;
+            // anything else gets a frozen copy.
+            const view = validated ? value => value : detached;
+            const pending = Promise.resolve(entries?.length > 1
+              ? installed.plugin.prepareRevisionBatch(entries.map(entry => ({
+                  payload: view(entry.extensions.get(name).payload), rootId: entry.targetId,
+                })), view(envelope))
+              : entries?.length === 1
+                ? installed.plugin.prepareRevision(view(entries[0].extensions.get(name).payload),
+                    view(entries[0].envelope))
+                : installed.plugin.prepareRevision(view(incoming.payload), view(envelope)));
+            pending.then(stage => {
+              item.stage = stage;
+              item.hasStage = true;
+              if (attempt.aborted && !item.cleaned) {
+                item.cleaned = true;
+                try { item.plugin.abortRevision(stage); }
+                catch (error) { console.error("[Citry] late Events plugin stage cleanup failed:", error); }
+              }
+            }, () => undefined);
+            await wait(pending);
+          }
+        } catch (error) {
+          cleanupEventAttempt(attempt, error);
+          throw error;
+        }
+        if (attempt.aborted || signal?.aborted) throw attempt.abortReason || new Error("prepared Events render was cancelled");
+        attempt.preparing = false;
+        attempt.envelope = envelope;
+        attempt.replacedRootIds = replacedRootIds;
+        attempt.targetHandles = handles;
+        attempt.callbackOwnerIds = new Set(handles.map(handle => handle.markerOwnerId).filter(Boolean));
+        return {transaction: attempt};
+        } catch (error) {
+          cleanupEventAttempt(attempt, error);
+          throw error;
+        } finally {
+          signal?.removeEventListener("abort", cancel);
+        }
+      },
+      abortRender(prepared) {
+        const transaction = prepared?.transaction;
+        if (!transaction) {
+          if (staged?.preparing) cleanupEventAttempt(staged);
+          return;
+        }
+        if (staged === transaction) cleanupEventAttempt(transaction);
+      },
+      async commitRender(prepared, source) {
+        if (apps.get(appId) !== ownedApp || ownedApp.terminal || !staged || prepared.transaction !== staged)
+          throw new Error("prepared Events transaction is stale");
+        const transaction = staged;
+        try {
+          if (!source || sources.get(source.stableId)?.generation !== source.generation)
+            throw new Error("prepared Events source became stale before publication");
+          for (const handle of transaction.targetHandles || []) if (handle && (handle.app !== ownedApp || ownedApp.revision !== handle.revision ||
+              ownedApp.mounted.get(handle.id)?.record.generation !== handle.generation ||
+              ownedApp.occurrences.get(handle.id)?.renderId !== handle.renderId ||
+              ownedApp.occurrences.get(handle.id)?.typeKey !== handle.typeKey ||
+              handle.markerOwnerId !== null && ownedApp.markers.get(handle.markerOwnerId + "\0" + handle.markerName)?.occurrenceId !== handle.id))
+            throw new Error("prepared Events Render target became stale before publication");
+          await applyEnvelope(appId, transaction.envelope, transaction.replacedRootIds[0] || source.stableId, {
+            combined: true,
+            acceptedTransaction: transaction,
+            callbackOwnerIds: transaction.callbackOwnerIds,
+            activate() { for (const item of transaction.pluginStages) {
+              if (apps.get(appId) !== ownedApp || ownedApp.terminal || staged !== transaction)
+                throw new Error("prepared Events transaction is stale before activation");
+              item.attempted = true;
+              item.plugin.activateRevision(item.stage);
+            } },
+            commit() {
+              if (apps.get(appId) !== ownedApp || ownedApp.terminal || staged !== transaction)
+                throw new Error("prepared Events transaction is stale before publication");
+              for (const item of transaction.pluginStages) {
+                item.plugin.commitRevision(item.stage);
+                if (apps.get(appId) !== ownedApp || ownedApp.terminal || staged !== transaction)
+                  throw new Error("prepared Events transaction was disposed during plugin publication");
+              }
+              if (apps.get(appId) !== ownedApp || ownedApp.terminal || staged !== transaction)
+                throw new Error("prepared Events transaction is stale before style publication");
+              commitStyleStage(appId, transaction.styleStage);
+              transaction.published = true;
+            },
+          });
+          if (apps.get(appId) !== ownedApp || ownedApp.terminal || staged !== transaction)
+            throw new Error("prepared Events transaction became stale after publication");
+        } catch (error) {
+          cleanupEventAttempt(transaction, error);
+          throw error;
+        } finally {
+          if (staged === transaction) staged = null;
+        }
+      },
+      commitState(serverRenderId, stateToken, publicState) {
+        for (const [id, value] of contexts) {
+          if (value.serverRenderId !== serverRenderId) continue;
+          const context = {...value, stateToken, publicState};
+          contexts.set(id, context);
+          // `$state` and State bindings read the mounted record, not this context, so a handler that
+          // changed State without rendering the component again must reach the record as well.
+          // `adopt` keeps every field with an unsent browser write.
+          const source = sources.get(id);
+          const mounted = ownedApp.mounted.get(id);
+          if (source && mounted?.record.generation === source.generation) mounted.record.state.adopt(context);
+        }
+      },
+      dispatchEvent(name, detail, source, followRemount = false) {
+        // After an accepted Render remounted the caller, the bridge asks for the instance at the
+        // caller's place now, which may be another component; its `$onEvent` listeners and first
+        // element receive the event. Without that request a retired sender is an error.
+        const effectiveSource = followRemount ? sources.get(source.stableId) || source : source;
+        const mounted = ownedApp.mounted.get(effectiveSource.stableId);
+        if (!mounted || mounted.record.generation !== effectiveSource.generation)
+          throw new Error("Citry Events dispatch source is stale or retired");
+        mounted.record.events.dispatch(name, detail);
+        dispatchCarrier(effectiveSource).dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
+      },
+      dispatchEventGlobal(name, detail) {
+        document.dispatchEvent(new CustomEvent(name, {detail, bubbles: true}));
+      },
+      lifecycle(kind, source, event, extra = {}) {
+        // A committed self-render may retire the sender and mount its
+        // replacement before the bridge emits `swapped`/`after`. Those
+        // notifications describe the committed instance, so follow the
+        // stable occurrence identity for post-commit hooks while keeping
+        // cancellation/error checks bound to the original generation.
+        const effectiveSource = kind === "swapped" || kind === "after"
+          ? sources.get(source.stableId) || source
+          : source;
+        const context = contexts.get(effectiveSource.stableId);
+        const mounted = ownedApp.mounted.get(effectiveSource.stableId);
+        // The calling component may be unmounted or replaced while its call is in flight. Page
+        // listeners on `document` must still hear the notification (a `stale` event under reason
+        // `version` decides whether the reload prompt appears), so a gone component only changes
+        // where the event starts. The detail keeps the render ID and class the call last reported,
+        // so a listener can still match the notification to the `before` event it saw.
+        const live = context && mounted && mounted.record.generation === effectiveSource.generation;
+        if (live) {
+          lifecycleIdentities.set(source, context);
+          lifecycleIdentities.set(effectiveSource, context);
+        }
+        const identity = live ? context
+          : lifecycleIdentities.get(effectiveSource) || lifecycleIdentities.get(source) || null;
+        return dispatchLifecycleEvent(
+          kind, identity, live ? liveRootElements(mounted.component) : [], event, extra);
+      },
+      promptReload,
+      redirect(url) { global.location.assign(url); },
+      updateUrl(url, mode) { global.history[mode === "push" ? "pushState" : "replaceState"]({}, "", url); },
+      takePendingState(source, handlerName) {
+        const mounted = ownedApp.mounted.get(source.stableId);
+        if (!mounted || mounted.record.generation !== source.generation) return undefined;
+        const descriptor = mounted.record.events.descriptor;
+        if (descriptor?.eventHandlers?.[handlerName]?.httpMethod === "GET") return undefined;
+        if (!mounted.record.state.pending) return undefined;
+        const keys = Object.keys(mounted.record.state.pending);
+        if (!keys.length) return undefined;
+        const snapshot = cloneStateValue(mounted.record.state.pending);
+        mounted.record.state.pending = Object.create(null);
+        return snapshot;
+      },
+      restorePendingState(source, updates) {
+        const mounted = ownedApp.mounted.get(source.stableId);
+        if (!mounted || mounted.record.generation !== source.generation || !mounted.record.state.current ||
+            !mounted.record.state.writable || !mounted.record.state.pending) return;
+        for (const [key, value] of Object.entries(updates))
+          if (mounted.record.state.writable.has(key) && !own(mounted.record.state.pending, key))
+            mounted.record.state.pending[key] = cloneStateValue(value);
+      },
+    };
+    const cookieToken = () => {
+      const match = document.cookie.split(";").map(value => value.trim()).find(value => value.startsWith("csrftoken="));
+      return match ? decodeURIComponent(match.slice("csrftoken=".length)) : "";
+    };
+    const hasEvents = manifest.occurrences.some(occurrence => occurrence.eventContext);
+    if (manifest.occurrences.some(occurrence => own(occurrence, "renderId"))) addressSnapshot();
+    let bridge = null;
+    const ensureEventsBridge = () => {
+      addressSnapshot(true);
+      if (bridge) return bridge;
+      if (!global.CitryVueEvents || typeof configuration.endpoint !== "string")
+        throw new Error("prepared Events components require the Events bridge and endpoint");
+      bridge = global.CitryVueEvents.createVueEventsBridge({
+        endpoint: configuration.endpoint,
+        eventBaseUrl: configuration.eventBaseUrl,
+        host,
+        csrf: configuration.csrf || {token: cookieToken},
+        runtimeConfig: () => publicEventsConfig,
+        transport: () => {
+          const name = typeof publicEventsConfig.transport === "string" && publicEventsConfig.transport
+            ? publicEventsConfig.transport : "fetch";
+          const implementation = publicEventTransports.get(name);
+          if (implementation) return implementation;
+          if (name === "fetch") return null;
+          throw new Error("Citry Events transport is not registered: " + name);
+        },
+        activity(source, descriptor) {
+          const mounted = ownedApp.mounted.get(source.stableId);
+          if (!mounted || mounted.record.generation !== source.generation)
+            throw new Error("Citry Events activity source is stale or retired");
+          mounted.record.events.descriptor = descriptor;
+          return mounted.record.events;
+        },
+      });
+      return bridge;
+    };
+    if (hasEvents) ensureEventsBridge();
+    async function sendDeclarativeEvent(record, binding, source, args) {
+      const eventsBridge = ensureEventsBridge();
+      let result;
+      try {
+        result = await eventsBridge.send({source, handler: binding.handler, args});
+      } catch (error) {
+        if (!ownedApp.terminal && eventsBridge.isDeclarativeFailureHandled(error)) return undefined;
+        throw error;
+      }
+      document.dispatchEvent(new CustomEvent("citry:rendered", {detail: {appId, revision: definitionRegistry(appId).revision}}));
+      return result;
+    }
+    const resolveDeclarativeEvent = (record, bindingId) => {
+      if (record.app !== definitionRegistry(appId) || record.app.mounted.get(record.occurrenceId)?.record !== record)
+        throw new Error("Citry Events source is stale or retired");
+      const bindings = record.live.value?.preparedData?.eventBindings;
+      const binding = bindings && bindings[bindingId];
+      if (!binding) throw new Error("Citry Events binding is missing or stale");
+      const source = sources.get(record.occurrenceId);
+      if (!source) throw new Error("Citry Events binding has no mounted Vue owner");
+      return {binding, source};
+    };
+    const declarativeEventArgs = (value, authoredArgs) => {
+      let args = authoredArgs;
+      if (args === undefined) {
+        const isEvent = typeof global.Event === "function" && value instanceof global.Event;
+        const form = isEvent && value.target instanceof HTMLFormElement
+          ? value.target
+          : isEvent && value.currentTarget instanceof HTMLFormElement ? value.currentTarget : null;
+        args = form
+          ? global.CitryVueEvents.collectFormArgs(form, new Set())
+          : {};
+      }
+      plain(args, "Citry Events arguments");
+      return args;
+    };
+    // Vue already checks a `@c-*` binding's `.enter` or `.escape` on its
+    // keyboard event, before `.prevent`, `.stop`, and `.self`. The key is
+    // checked again here, in that same order, so the server is never called
+    // for another key, whatever the Vue compiler does with key modifiers.
+    // Running these checks a second time changes nothing: the key still
+    // matches, the event is already prevented or stopped, and the target is
+    // unchanged because this runs before the first `await`.
+    const keyedEventPasses = (binding, event) => {
+      if (binding.key === null) return true;
+      if (event === null || typeof event !== "object") return false;
+      if (String(event.key || "").toLowerCase() !== binding.key) return false;
+      if (binding.prevent === true) event.preventDefault();
+      if (binding.stop === true) event.stopPropagation();
+      return binding.self !== true || event.target === event.currentTarget;
+    };
+    definitionRegistry(appId).eventDispatch = async (record, bindingId, event, authoredArgs) => {
+      const {binding, source} = resolveDeclarativeEvent(record, bindingId);
+      if (binding.event !== event.type) throw new Error("Citry Events binding is missing or stale");
+      if (!keyedEventPasses(binding, event)) return undefined;
+      const args = declarativeEventArgs(event, authoredArgs);
+      if (binding.debounce === null && binding.throttle === null)
+        return sendDeclarativeEvent(record, binding, source, args);
+      const element = event.currentTarget;
+      if (!(element instanceof Element)) throw new Error(TIMED_COMPONENT_BINDING_ERROR);
+      if (!timingDirectiveOwns(element, record, bindingId, binding))
+        throw new Error("Citry timed Events binding has no authenticated element lifecycle");
+      const capturedArgs = cloneJsonValue(args, "Citry Events arguments");
+      const lifetime = eventTimingLifetime(record, element, bindingId, binding);
+      if (binding.throttle !== null) {
+        const now = performance.now();
+        if (now - lifetime.last < binding.throttle) return undefined;
+        lifetime.last = now;
+      }
+      if (binding.debounce !== null) {
+        if (lifetime.timer) clearTimeout(lifetime.timer);
+        lifetime.resolve?.(undefined);
+        return await new Promise((resolve, reject) => {
+          lifetime.resolve = resolve;
+          scheduleDelay(lifetime, binding.debounce, () => {
+            const currentBinding = lifetime.binding;
+            lifetime.resolve = undefined;
+            if (!timedBindingIsCurrent(record, element, bindingId, currentBinding)) {
+              releaseEventTiming(lifetime);
+              resolve(undefined);
+              return;
+            }
+            const remainingThrottle = currentBinding.throttle === null
+              ? 0 : currentBinding.throttle - (performance.now() - lifetime.last);
+            if (remainingThrottle > 0)
+              scheduleDelay(lifetime, remainingThrottle, () => releaseEventTiming(lifetime));
+            else releaseEventTiming(lifetime);
+            void sendDeclarativeEvent(record, currentBinding, source, capturedArgs).then(resolve, reject);
+          });
+        });
+      }
+      if (!timedBindingIsCurrent(record, element, bindingId, binding)) {
+        finishEventTiming(lifetime, undefined);
+        return undefined;
+      }
+      if (lifetime.timer) {
+        clearTimeout(lifetime.timer);
+        lifetime.timer = 0;
+      }
+      scheduleDelay(lifetime, binding.throttle, () => releaseEventTiming(lifetime));
+      return sendDeclarativeEvent(record, binding, source, capturedArgs);
+    };
+    definitionRegistry(appId).eventDispatchComponent = async (record, bindingId, emittedValue, authoredArgs) => {
+      const {binding, source} = resolveDeclarativeEvent(record, bindingId);
+      if (!keyedEventPasses(binding, emittedValue)) return undefined;
+      const args = declarativeEventArgs(emittedValue, authoredArgs);
+      if (binding.debounce !== null || binding.throttle !== null)
+        throw new Error(TIMED_COMPONENT_BINDING_ERROR);
+      return sendDeclarativeEvent(record, binding, source, args);
+    };
+    definitionRegistry(appId).eventPoll = async (record, bindingId, args) => {
+      if (record.app !== definitionRegistry(appId) || record.app.mounted.get(record.occurrenceId)?.record !== record)
+        throw new Error("Citry polling source is stale or retired");
+      const binding = record.live.value?.preparedData?.pollBindings?.[bindingId];
+      if (!binding) throw new Error("Citry polling binding is missing or stale");
+      const source = sources.get(record.occurrenceId);
+      if (!source) throw new Error("Citry polling binding has no mounted Vue owner");
+      return sendDeclarativeEvent(record, binding, source, args);
+    };
+    definitionRegistry(appId).eventSend = async (record, handler, args, opts) => {
+      if (record.app !== ownedApp || ownedApp.mounted.get(record.occurrenceId)?.record !== record)
+        throw new Error("Citry Events source is stale or retired");
+      const checkedArgs = args === undefined ? {} : args;
+      plain(checkedArgs, "Citry Events arguments");
+      const source = sources.get(record.occurrenceId);
+      if (!source) throw new Error("Citry Events call has no mounted Vue owner");
+      // The bridge checks the options (an unknown key or `wait: false` rejects) and copies them.
+      return ensureEventsBridge().send({source, handler, args: checkedArgs, options: opts});
+    };
+    ownedApp.resolvePublicTarget = sourceForTarget;
+    ownedApp.publicSend = (source, handler, args, opts) => {
+      const mounted = ownedApp.mounted.get(source.stableId);
+      if (!mounted || mounted.record.generation !== source.generation)
+        return Promise.reject(new Error("Citry.events.send target is stale or retired."));
+      requireEventHandler(mounted.record, handler);
+      const checkedArgs = args === undefined ? {} : args;
+      plain(checkedArgs, "Citry Events arguments");
+      // The bridge checks the options (an unknown key or `wait: false` rejects) and copies them.
+      return ensureEventsBridge().send({source, handler, args: checkedArgs, options: opts});
+    };
+    ownedApp.publicApplyActions = (actions, source) => ensureEventsBridge().applyActions(actions, source);
+    attachPreparedHost(appId, {
+      onOccurrenceMounted({stableId, generation, occurrence}) {
+        sources.set(stableId, {stableId, generation});
+        const mounted = ownedApp.mounted.get(stableId);
+        if (mounted?.record.generation === generation)
+          { mounted.record.events.descriptor = occurrence.eventContext?.descriptor || null;
+            mounted.record.state.adopt(occurrence.eventContext); }
+        if (occurrence.eventContext) contexts.set(stableId, occurrence.eventContext);
+      },
+      onOccurrenceUnmounted({stableId, generation, acceptedTransaction}) {
+        const source = sources.get(stableId);
+        if (!source || source.generation !== generation) return;
+        bridge?.retire(source, acceptedTransaction);
+        sources.delete(stableId);
+        contexts.delete(stableId);
+      },
+      beforeServerCallbacks({mounted}) {
+        if ([...ownedApp.occurrences.values()].some(occurrence => occurrence.eventContext)) ensureEventsBridge();
+        for (const id of sources.keys()) if (!definitionRegistry(appId).occurrences.has(id)) { sources.delete(id); contexts.delete(id); }
+        for (const {stableId, generation, occurrence, adoptContext = true} of mounted) {
+          sources.set(stableId, {stableId, generation});
+          const current = ownedApp.mounted.get(stableId);
+          if (adoptContext && current?.record.generation === generation)
+            { current.record.events.descriptor = occurrence.eventContext?.descriptor || null;
+              current.record.state.adopt(occurrence.eventContext); }
+          if (adoptContext) {
+            if (occurrence.eventContext) contexts.set(stableId, occurrence.eventContext);
+            else contexts.delete(stableId);
+          }
+        }
+      },
+    });
+    const root = manifest.occurrences.find(item => item.id === manifest.rootId);
+    const hydrating = configuration.hydrate === true;
+    // Tests set this global before the page loads to see how much server HTML
+    // Vue reused. Recording it wraps the console and walks the DOM twice, so
+    // ordinary pages never pay for it.
+    const hydrationDiagnostics = hydrating && globalThis.__citryHydrationDiagnostics === true;
+    const vueAppFactory = hydrating ? V.createSSRApp : V.createApp;
+    // From here on the page's plugin list is fixed; see `Citry.vue.use()` above.
+    firstAppCreated = true;
+    const vueApp = vueAppFactory(componentTypes[root.typeKey], {citryId: root.id});
+    vueApp.component("citry-opaque-html", opaqueHtmlComponent);
+    vueApp.directive("citry-control", {
+      mounted(element, binding) {
+        if (binding.value.length) installControls(element, binding.value);
+      },
+      updated(element, binding) {
+        if (!binding.value.length) { disposeControl(element); return; }
+        const lifetime = controlLifetimes.get(element);
+        if (!lifetime || lifetime.handles !== binding.value || lifetime.signature !== controlSignature(element, binding.value))
+          installControls(element, binding.value);
+        else for (const handle of binding.value) applyControlValue(element, handle.record.state.facade[handle.spec.field]);
+      },
+      beforeUnmount(element) { disposeControl(element); },
+    });
+    vueApp.directive("citry-vue-owned", {
+      mounted(element, binding) { setVueOwnedNativeProperties(element, binding.value); },
+      beforeUpdate(element, binding) {
+        if (Array.isArray(binding.value) && binding.value.length === 0) {
+          const snapshot = captureNativeControlState(element);
+          if (snapshot.length) nativeControlUpdateSnapshots.set(element, snapshot);
+        }
+      },
+      updated(element, binding) {
+        setVueOwnedNativeProperties(element, binding.value);
+        const snapshot = nativeControlUpdateSnapshots.get(element);
+        nativeControlUpdateSnapshots.delete(element);
+        if (snapshot) restoreNativeControlState(snapshot);
+      },
+      beforeUnmount(element) { vueOwnedNativeProperties.delete(element); },
+    });
+    const runtimeEventLifetimes = new WeakMap();
+    const disposeRuntimeEvents = element => {
+      const lifetime = runtimeEventLifetimes.get(element);
+      if (!lifetime) return;
+      for (const item of lifetime.values()) element.removeEventListener(item.event, item.listener);
+      const timed = runtimeEventTimingDirectives.get(element);
+      disposeElementEventTimings(element, timed);
+      runtimeEventTimingDirectives.delete(element);
+      runtimeEventLifetimes.delete(element);
+    };
+    const runtimeEventSignature = eventTimingSignature;
+    const runtimeTimingSignature = handle => {
+      if (handle.kind === "event") return "event:" + runtimeEventSignature(handle);
+      const spec = handle.spec;
+      return JSON.stringify([
+        "poll",
+        handle.record.occurrenceId,
+        handle.record.generation,
+        handle.id,
+        spec.handler,
+        spec.args,
+        spec.interval,
+      ]);
+    };
+    const reconcileRuntimeEventTimings = (element, handles) => {
+      const prior = runtimeEventTimingDirectives.get(element) || [];
+      const current = Object.freeze(handles);
+      runtimeEventTimingDirectives.set(element, current);
+      const currentByKey = new Map(current.map(handle => [handle.kind + ":" + handle.id, handle]));
+      const retained = new Set();
+      for (const old of prior) {
+        const replacement = currentByKey.get(old.kind + ":" + old.id);
+        if (replacement && replacement.record === old.record &&
+            runtimeTimingSignature(replacement) === runtimeTimingSignature(old)) {
+          const lifetime = eventTimingLifetimes.get(element)?.get(old.id);
+          if (lifetime?.record === old.record && lifetime.binding === old.spec) {
+            lifetime.binding = replacement.spec;
+            lifetime.args = replacement.args;
+            retained.add(replacement);
+          } else if (old.kind === "event") {
+            retained.add(replacement);
+          }
+          continue;
+        }
+        disposeElementEventTimings(element, [old]);
+      }
+      for (const handle of current) {
+        if (handle.kind === "poll" && !retained.has(handle)) registerPoll(element, handle);
+      }
+    };
+    const installRuntimeEvents = (element, handles) => {
+      const prior = runtimeEventLifetimes.get(element) || new Map();
+      const current = new Map();
+      for (const handle of handles.filter(handle => handle.kind === "event")) {
+        const spec = handle.spec;
+        const signature = runtimeEventSignature(handle);
+        const retained = prior.get(handle.id);
+        if (retained?.signature === signature) { current.set(handle.id, retained); continue; }
+        if (retained) element.removeEventListener(retained.event, retained.listener);
+        let listener = event => {
+          let dispatched;
+          try { dispatched = handle.record.app.eventDispatch(handle.record, handle.id, event, undefined); }
+          catch (error) {
+            handle.record.app.vueApp.config.errorHandler(error, handle.record.app.mounted.get(handle.record.occurrenceId)?.component, "Citry runtime event");
+            return;
+          }
+          Promise.resolve(dispatched).catch(error => handle.record.app.vueApp.config.errorHandler(
+            error, handle.record.app.mounted.get(handle.record.occurrenceId)?.component, "Citry runtime event"));
+        };
+        const modifiers = ["prevent", "stop", "self"].filter(name => spec[name] === true);
+        if (modifiers.length) listener = V.withModifiers(listener, modifiers);
+        if (spec.key !== null) listener = V.withKeys(listener, [spec.key]);
+        element.addEventListener(spec.event, listener, spec.once === true ? {once:true} : undefined);
+        current.set(handle.id, {event:spec.event, listener, signature});
+      }
+      for (const [id, item] of prior) if (!current.has(id)) element.removeEventListener(item.event, item.listener);
+      const timed = handles.filter(handle => handle.kind === "poll" ||
+        handle.spec.debounce !== null || handle.spec.throttle !== null);
+      reconcileRuntimeEventTimings(element, timed);
+      runtimeEventLifetimes.set(element, current);
+    };
+    vueApp.directive("citry-runtime-events", {
+      mounted(element, binding) { installRuntimeEvents(element, binding.value); },
+      updated(element, binding) { installRuntimeEvents(element, binding.value); },
+      beforeUnmount(element) { disposeRuntimeEvents(element); },
+    });
+    vueApp.directive("citry-event-timing", {
+      mounted(element, binding) { reconcileEventTimings(element, binding.value); },
+      updated(element, binding) { reconcileEventTimings(element, binding.value); },
+      beforeUnmount(element) {
+        const handles = eventTimingDirectives.get(element);
+        disposeElementEventTimings(element, handles);
+        eventTimingDirectives.delete(element);
+      },
+    });
+    vueApp.config.globalProperties.$loading = function (name) {
+      const current = V.getCurrentInstance?.();
+      const record = instanceRecords.get(this) || instanceRecords.get(this?.$?.proxy) ||
+        instanceRecords.get(current?.proxy) || instanceRecords.get(current?.ctx);
+      if (!record) throw new Error("$loading is unavailable outside a Citry Vue component");
+      return record.events.loading(name);
+    };
+    vueApp.config.globalProperties.$error = function (name) {
+      const current = V.getCurrentInstance?.();
+      const record = instanceRecords.get(this) || instanceRecords.get(this?.$?.proxy) ||
+        instanceRecords.get(current?.proxy) || instanceRecords.get(current?.ctx);
+      if (!record) throw new Error("$error is unavailable outside a Citry Vue component");
+      return record.events.error(name);
+    };
+    let initialPublished = false;
+    try {
+      lifecycle?.guard();
+      for (const {plugin} of plugins.values()) vueApp.use(plugin);
+      // Page plugins go after Citry's own, before any component is registered or mounted, which is
+      // when a plugin such as a store or a global directive must be in place.
+      for (const {plugin, options} of pageVuePlugins) vueApp.use(plugin, ...options);
+      for (const [typeKey, type] of Object.entries(componentTypes)) {
+        const tag = initialTypeTags.get(typeKey);
+        if (typeof tag !== "string") throw new Error("prepared component type has no registered tag");
+        definitionRegistry(appId).typeTags.set(typeKey, tag);
+        vueApp.component(tag, type);
+      }
+      attachVueApp(appId, vueApp);
+      lifecycle?.guard();
+      // The server writes Citry's HTML inside each element whose children Vue builds in the browser
+      // (a shell, marked data-allow-mismatch="children"), so the page shows it before this runtime
+      // starts. Vue keeps the attributes of any element it adopts under that marker, so the contents
+      // are removed here, in the same task as the mount below, and Vue builds them anew.
+      if (hydrating && configuration.emptyShells === true)
+        for (const shell of hostElement.querySelectorAll('[data-allow-mismatch="children"]')) shell.replaceChildren();
+      const hydrationBeforeElements = hydrationDiagnostics ? Array.from(hostElement.querySelectorAll("*")) : null;
+      const hydrationWarnings = hydrationDiagnostics ? [] : null;
+      const hydrationErrors = hydrationDiagnostics ? [] : null;
+      const hydrationStartedAt = hydrationDiagnostics ? performance.now() : 0;
+      const priorWarn = hydrationDiagnostics ? console.warn : null;
+      const priorError = hydrationDiagnostics ? console.error : null;
+      const priorWarnHandler = hydrationDiagnostics ? vueApp.config.warnHandler : null;
+      if (hydrationDiagnostics) {
+        console.warn = (...args) => {
+          hydrationWarnings.push(args.map(value => String(value)).join(" "));
+          priorWarn.apply(console, args);
+        };
+        console.error = (...args) => {
+          hydrationErrors.push(args.map(value => String(value)).join(" "));
+          priorError.apply(console, args);
+        };
+        vueApp.config.warnHandler = (message, instance, trace) => {
+          hydrationWarnings.push(String(message));
+          if (priorWarnHandler) priorWarnHandler(message, instance, trace);
+        };
+      }
+      let hydrationMountError = null;
+      try {
+        vueApp.mount(hostElement);
+      } catch (error) {
+        hydrationMountError = String(error);
+        throw error;
+      } finally {
+        if (hydrationDiagnostics) {
+          console.warn = priorWarn;
+          console.error = priorError;
+          vueApp.config.warnHandler = priorWarnHandler;
+          const hydrationAfterElements = Array.from(hostElement.querySelectorAll("*"));
+          const reusedElementCount = hydrationBeforeElements.filter(element => hostElement.contains(element)).length;
+          const mismatchCount = [...hydrationWarnings, ...hydrationErrors].filter(message =>
+            /hydration|mismatch/i.test(message)).length;
+          globalThis.__citryHydrationReport = Object.freeze({
+            beforeElementCount: hydrationBeforeElements.length,
+            afterElementCount: hydrationAfterElements.length,
+            reusedElementCount,
+            replacedElementCount: hydrationBeforeElements.length - reusedElementCount,
+            hydrationMs: performance.now() - hydrationStartedAt,
+            warnings: Object.freeze([...hydrationWarnings]),
+            errors: Object.freeze([...hydrationErrors]),
+            mismatchCount,
+            mountError: hydrationMountError,
+          });
+        }
+      }
+      await waitForStartup(whenReady(appId), lifecycle);
+      initialPublished = true;
+      for (const {plugin, stage} of plugins.values()) plugin.commitRevision(stage);
+      definitionRegistry(appId).initialPluginStages = [];
+    } catch (error) {
+      ownedApp.terminal = true;
+      cleanupEventAttempt(staged, error);
+      bridge?.dispose?.();
+      if (!initialPublished) cleanupPluginStages(plugins.values(), "rollbackRevision");
+      definitionRegistry(appId).initialPluginStages = [];
+      try { vueApp.unmount(); } catch (unmountError) {
+        console.error("[Citry] failed to dispose a rejected Vue app:", unmountError);
+      }
+      for (const {plugin} of plugins.values()) {
+        try { plugin.dispose(); } catch (disposeError) { console.error("[Citry] browser plugin dispose failed:", disposeError); }
+      }
+      releaseAppStyles(appId);
+      releaseAppScripts(appId);
+      apps.delete(appId);
+      throw error;
+    }
+    document.dispatchEvent(new CustomEvent("citry:ready", {detail: {appId, revision: definitionRegistry(appId).revision}}));
+    const nativeUnmount = vueApp.unmount.bind(vueApp);
+    let disposed = false;
+    vueApp.unmount = () => {
+      if (disposed) return;
+      disposed = true;
+      ownedApp.terminal = true;
+      cleanupEventAttempt(staged, new Error("Vue app was disposed"));
+      bridge?.dispose?.();
+      try { nativeUnmount(); }
+      finally {
+        const current = apps.get(appId);
+        if (current?.vueApp === vueApp) current.mounted.clear();
+        for (const {plugin} of plugins.values()) {
+          try { plugin.dispose(); } catch (error) { console.error("[Citry] browser plugin dispose failed:", error); }
+        }
+        if (apps.get(appId) === ownedApp) {
+          releaseAppStyles(appId);
+          releaseAppScripts(appId);
+          apps.delete(appId);
+        }
+      }
+    };
+    return Object.freeze({appId, app: vueApp});
+  }
+
+  async function startPrepared(configuration, lifecycle) {
+    const candidateId = configuration && typeof configuration === "object" && configuration.manifest &&
+      typeof configuration.manifest === "object" ? configuration.manifest.appId : null;
+    const startAttempt = Object.freeze({});
+    try {
+      return await startPreparedOwned(configuration, lifecycle, startAttempt);
+    } catch (error) {
+      const created = typeof candidateId === "string" ? apps.get(candidateId) : undefined;
+      if (created?.startAttempt === startAttempt) {
+        for (const item of [...(created.initialPluginStages || [])].reverse()) {
+          try { item.plugin.rollbackRevision(item.stage); }
+          catch (rollbackError) { console.error("[Citry] browser plugin rollbackRevision failed:", rollbackError); }
+        }
+        created.initialPluginStages = [];
+        try { created.vueApp?.unmount(); } catch (unmountError) {
+          console.error("[Citry] rejected Vue app disposal failed:", unmountError);
+        }
+        for (const plugin of created.browserPlugins) {
+          try { plugin.dispose(); } catch (disposeError) {
+            console.error("[Citry] rejected browser plugin disposal failed:", disposeError);
+          }
+        }
+        if (apps.get(candidateId) === created) apps.delete(candidateId);
+        releaseAppStyles(candidateId);
+        releaseAppScripts(candidateId);
+      }
+      throw error;
+    }
+  }
+
+  function disposeCallbacks(record, options = {}) {
+    const scope = record.callbackScope, cleanup = record.callbackCleanup;
+    const subscriptions = record.callbackSubscriptions;
+    record.callbackScope = undefined; record.callbackCleanup = undefined; record.callbackSubscriptions = undefined;
+    let error;
+    try { scope?.stop(); } catch (caught) { error = caught; }
+    for (const unsubscribe of subscriptions || []) {
+      try { unsubscribe(); }
+      catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] callback event cleanup failed:", caught); }
+    }
+    try {
+      if (cleanup) {
+        if (options.handoff === true && cleanup.supportsHandoff === true) cleanup(options);
+        else cleanup();
+      }
+    }
+    catch (caught) { if (error === undefined) error = caught; else console.error("[Citry] callback cleanup failed:", caught); }
+    if (error !== undefined) throw error;
+  }
+  function subscribeRecordEvent(record, name, handler, subscriptions) {
+    const unsubscribe = record.events.subscribe(name, handler);
+    if (!subscriptions) return unsubscribe;
+    // The run that owns these subscriptions was already cleaned up or replaced by a newer run, so a listener it
+    // adds late would outlive it; drop it at once instead (after subscribe() has still validated the arguments).
+    if (record.callbackSubscriptions !== subscriptions) {
+      unsubscribe();
+      return () => {};
+    }
+    let active = true;
+    const off = () => {
+      if (!active) return;
+      active = false;
+      subscriptions.delete(off);
+      unsubscribe();
+    };
+    subscriptions.add(off);
+    return off;
+  }
+  function dispose(record) {
+    disposeEventTimings(record);
+    record.events?.dispose?.();
+    disposeCallbacks(record);
+    // A callback may still hold the `els` array; once the component is gone it has no elements.
+    record.rootElements.length = 0;
+  }
+  // Refill the component's one `els` array in place, so a callback that destructured it earlier
+  // reads the elements the component renders now rather than the ones it rendered then.
+  function refreshRootElements(component, record) {
+    const roots = liveRootElements(component);
+    record.rootElements.length = 0;
+    record.rootElements.push(...roots);
+    return record.rootElements;
+  }
+  // Fire one `citry:events:<kind>` notification for an Events call. `context` is the calling
+  // component's Events context (the last one it had, when it is no longer mounted), or null
+  // when none is known. `roots` are its
+  // connected top-level elements. The event bubbles from the first root so instance-scoped listeners
+  // hear it, and starts at `document` when there is no live root, so page-level listeners always do.
+  // Returns false only when a listener cancelled a cancellable event.
+  function dispatchLifecycleEvent(kind, context, roots, event, extra = {}) {
+    const detail = {
+      instance: context ? context.serverRenderId : null,
+      class: context ? context.componentClassId : null,
+      event,
+      ...extra,
+    };
+    if (kind === "swapped") detail.els = [...roots];
+    return (roots[0] || document).dispatchEvent(new CustomEvent(`citry:events:${kind}`, {
+      detail,
+      bubbles: true,
+      // A page cancels `before` to stop a call, and a version-skew `stale` to replace the reload prompt.
+      cancelable: kind === "before" || (kind === "stale" && extra.reason === "version"),
+    }));
+  }
+  // The connected DOM elements a component renders at its top level, in order. A fragment or a child
+  // component root contributes its own top-level elements, so this matches what the user sees.
+  function liveRootElements(component, seen = new Set(), output = []) {
+    const visit = vnode => {
+      if (!vnode || typeof vnode !== "object" || seen.has(vnode)) return;
+      seen.add(vnode);
+      if (vnode.component?.subTree) { visit(vnode.component.subTree); return; }
+      if (vnode.type === V.Fragment && Array.isArray(vnode.children)) {
+        for (const child of vnode.children) visit(child);
+        return;
+      }
+      if (typeof Element === "function" && vnode.el instanceof Element && vnode.el.isConnected) {
+        if (!output.includes(vnode.el)) output.push(vnode.el);
+        return;
+      }
+      if (Array.isArray(vnode.children)) for (const child of vnode.children) visit(child);
+    };
+    visit(component?.$?.subTree);
+    if (!output.length && typeof Element === "function" && component?.$el instanceof Element && component.$el.isConnected)
+      output.push(component.$el);
+    return output;
+  }
+
+  async function runCallback(component, record, callback, revision) {
+    if (!callback) return;
+    const scope = V.effectScope(true);
+    const subscriptions = new Set();
+    record.callbackScope = scope;
+    record.callbackSubscriptions = subscriptions;
+    // Marks the synchronous part of this run, so `this.$onEvent` called inside it is released with the run.
+    record.callbackRunning = true;
+    // Each run follows the mount or a server render this component applied, so `els` catches up here.
+    refreshRootElements(component, record);
+    try {
+      const context = {
+        component,
+        revision,
+        // Bound to this run's set: a call from a timer or promise the run started still ends with the run.
+        onEvent: (name, handler) => subscribeRecordEvent(record, name, handler, subscriptions),
+        // The remaining fields repeat instance helpers under the names a 0.5.1 initializer destructured,
+        // so such an initializer keeps working. Getters read the current value at each access, because a
+        // later server render may replace the occurrence or its State.
+        get id() { return record.app.occurrences.get(record.occurrenceId)?.renderId ?? null; },
+        // `els` is one array for the component's lifetime, refilled in place before every callback run
+        // and on each read of this getter, so a destructured reference follows later server renders.
+        // A change made only in the browser (a `v-if` toggle) reaches it at the next refill.
+        get els() { return refreshRootElements(component, record); },
+        // 0.5.1 gave a component without Events a null `state`, and code tests for that to tell the two apart.
+        get state() { return record.events?.descriptor ? component.$state : null; },
+        get i18n() { return component.$i18n ?? null; },
+        sendEvent: (name, args, opts) => component.$sendEvent(name, args, opts),
+        loading: name => component.$loading(name),
+        error: name => component.$error(name),
+      };
+      const cleanup = scope.run(() => callback(context));
+      if (cleanup !== null && typeof cleanup === "object" && typeof cleanup.then === "function") {
+        // An async callback. Citry does not hold the page's start or the next server render for it,
+        // so a slow await delays only this component's own work. A rejection is logged instead of
+        // stopping the app, since the rest of the page never waited on it.
+        record.callbackCleanup = undefined;
+        Promise.resolve(cleanup).then(resolved => {
+          if (resolved === undefined) return;
+          if (typeof resolved !== "function")
+            throw new TypeError("onServerRender must resolve to a function or undefined");
+          // While this run is still current, keep the cleanup for the next run or the unmount, as a
+          // synchronous callback's would be. If the run already ended (a newer server render or the
+          // unmount came first), nothing will call it later, so run it now.
+          if (record.callbackSubscriptions === subscriptions) record.callbackCleanup = resolved;
+          else resolved();
+        }).catch(error => console.error("[Citry] an async onServerRender callback failed:", error));
+      } else {
+        if (cleanup !== undefined && typeof cleanup !== "function") throw new TypeError("onServerRender must return a function or undefined");
+        record.callbackCleanup = cleanup;
+      }
+    } catch (error) {
+      scope.stop();
+      for (const unsubscribe of subscriptions) unsubscribe();
+      record.callbackScope = undefined;
+      record.callbackCleanup = undefined;
+      record.callbackSubscriptions = undefined;
+      throw error;
+    } finally {
+      record.callbackRunning = false;
+    }
+  }
+
+  async function whenReady(appId) {
+    const app = definitionRegistry(appId);
+    await V.nextTick();
+    while (app.initialTasks.size) {
+      await Promise.all([...app.initialTasks]);
+      await V.nextTick();
+    }
+    if (app.terminal) throw app.initialError || new Error("Citry Vue app failed during initialization");
+    validateMountedParents(app);
+    return app;
+  }
+
+  function validateMountedParents(app) {
+    for (const [id, mounted] of app.mounted) {
+      let parent = mounted.component.$parent;
+      while (parent && !instanceRecords.has(parent)) parent = parent.$parent;
+      const actualParentId = parent ? instanceRecords.get(parent).occurrenceId : null;
+      if (actualParentId !== app.occurrences.get(id)?.parentId) {
+        throw new Error("mounted Vue parent does not match prepared occurrence parent: " + id);
+      }
+    }
+  }
+
+  function validateIsolatedEnvelope(app, envelope, expectedRootId = null) {
+    plain(envelope, "envelope");
+    if (envelope.protocol !== "citry-vue-prepared/1" || envelope.appId !== app.id ||
+        envelope.baseRevision !== app.revision || envelope.revision !== app.revision + 1 ||
+        typeof envelope.rootId !== "string" || expectedRootId !== null && envelope.rootId !== expectedRootId ||
+        !Array.isArray(envelope.definitions) || !Array.isArray(envelope.scripts) ||
+        !Array.isArray(envelope.styles) || !Array.isArray(envelope.typePolicies) ||
+        !Array.isArray(envelope.occurrences) || !Array.isArray(envelope.updatedIds) ||
+        !Array.isArray(envelope.markers) ||
+        own(envelope, "topologyChanges")) throw new Error("stale or malformed envelope");
+    const subtree = new Map();
+    for (const item of envelope.occurrences) {
+      plain(item, "subtree occurrence");
+      if (typeof item.id !== "string" || subtree.has(item.id)) throw new Error("invalid or duplicate subtree occurrence");
+      subtree.set(item.id, item);
+    }
+    validateGraph(subtree, envelope.rootId);
+    const declaredUpdates = new Set(envelope.updatedIds);
+    if (envelope.updatedIds.some(id => typeof id !== "string") ||
+        declaredUpdates.size !== envelope.updatedIds.length || declaredUpdates.size !== subtree.size ||
+        [...subtree.keys()].some(id => !declaredUpdates.has(id)))
+      throw new Error("subtree update ids must exactly cover its snapshot");
+    normalizeMarkers(envelope.markers, subtree);
+    return subtree;
+  }
+
+  function expandSubtreeEnvelope(app, envelope, targetId) {
+    const subtree = validateIsolatedEnvelope(app, envelope, targetId);
+    if (!app.occurrences.has(targetId)) throw new Error("stale or malformed envelope");
+    const removed = new Set();
+    for (const id of app.occurrences.keys()) {
+      let cursor = id;
+      while (cursor !== null && cursor !== targetId) cursor = app.occurrences.get(cursor)?.parentId ?? null;
+      if (cursor === targetId) removed.add(id);
+    }
+    const combined = new Map([...app.occurrences].filter(([id]) => !removed.has(id)));
+    for (const id of subtree.keys()) if (combined.has(id)) throw new Error("subtree occurrence collides outside its target");
+    const existingTarget = app.occurrences.get(targetId);
+    for (const [id, item] of subtree) combined.set(id, id === targetId ? {
+      ...item, parentId: existingTarget.parentId, placementKey: existingTarget.placementKey,
+    } : item);
+    const markers = [
+      ...[...app.markers.values()].filter(item => item.occurrenceId === targetId || !removed.has(item.occurrenceId)),
+      ...envelope.markers.filter(item => item.occurrenceId !== targetId),
+    ].sort((a,b) => {
+      const left = `${a.ownerId}\0${a.name}\0${a.occurrenceId}`;
+      const right = `${b.ownerId}\0${b.name}\0${b.occurrenceId}`;
+      return left < right ? -1 : left > right ? 1 : 0;
+    });
+    normalizeMarkers(markers, combined);
+    return {...envelope, rootId: app.rootId, occurrences: [...combined.values()], markers};
+  }
+
+  function validateActions(app, envelope, targetId) {
+    return validateCombinedActions(app, expandSubtreeEnvelope(app, envelope, targetId));
+  }
+
+  // One side of a revision for slot lookups: the committed or the incoming occurrences, each read
+  // with its own definition. It finds the caller of a component, which holds that component's fills.
+  function slotLookupSide(app, occurrences) {
+    let callers = null;
+    return {occurrences, callerOf(id) {
+      // Built on first use: most revisions replace no element that holds a slot outlet.
+      if (!callers) {
+        callers = new Map();
+        for (const occurrence of occurrences.values()) {
+          for (const call of app.definitions.get(occurrence.definitionId)?.localCalls || []) {
+            if (!call.fills.length) continue;
+            const binding = occurrence.preparedData.calls?.[call.localId];
+            if (binding) callers.set(binding.id, {ownerId: occurrence.id, call});
+          }
+        }
+      }
+      return callers.get(id);
+    }};
+  }
+  // Add the components a caller passed into one slot outlet of `receiverId`. A fill can pass on a
+  // slot of the caller itself, so the lookup repeats one level up for each outlet inside the fill.
+  function addSlotOccupantIds(side, receiverId, outletName, output, visited = new Set()) {
+    const step = JSON.stringify([receiverId, outletName]);
+    if (visited.has(step)) return;
+    visited.add(step);
+    const caller = side.callerOf(receiverId);
+    // No fill for this outlet means it shows its fallback, whose calls the receiver's site lists.
+    const fill = caller?.call.fills.find(item => item.name === outletName);
+    if (!fill) return;
+    const owner = side.occurrences.get(caller.ownerId);
+    for (const localId of fill.localDescendants) {
+      const call = owner.preparedData.calls?.[localId];
+      if (!call) throw new Error("slot fill references an absent ordinary local call");
+      output.push(call.id);
+    }
+    for (const runId of fill.localDescendantRuns) {
+      const run = owner.preparedData.callRuns?.[runId];
+      if (!Array.isArray(run)) throw new Error("slot fill references an absent ordinary call run");
+      output.push(...run);
+    }
+    for (const nested of fill.slotOutlets) addSlotOccupantIds(side, caller.ownerId, nested, output, visited);
+  }
+
+  function validateCombinedActions(app, envelope) {
+    plain(envelope, "combined envelope");
+    if (envelope.protocol !== "citry-vue-prepared/1" || envelope.appId !== app.id ||
+        envelope.baseRevision !== app.revision || envelope.revision !== app.revision + 1 ||
+        envelope.rootId !== app.rootId || !Array.isArray(envelope.definitions) ||
+        !Array.isArray(envelope.scripts) || !Array.isArray(envelope.styles) ||
+        !Array.isArray(envelope.typePolicies) || !Array.isArray(envelope.occurrences) ||
+        !Array.isArray(envelope.updatedIds) || !Array.isArray(envelope.markers) || own(envelope, "topologyChanges"))
+      throw new Error("stale or malformed combined envelope");
+    const incoming = new Map(envelope.occurrences.map(item => [item.id, item]));
+    normalizeMarkers(envelope.markers, incoming);
+    const keptOwners = keptOwnerIds(app, envelope);
+    const replacedTypes = replacedTypeIds(app, incoming);
+    const staged = [], ids = new Set(), updatedIds = new Set(), nextDefinitionTypes = new Map(app.definitionTypes);
+    const typeChangedIds = new Set();
+    for (const id of envelope.updatedIds) { if (typeof id !== "string" || updatedIds.has(id)) throw new Error("invalid updated occurrence ids"); updatedIds.add(id); }
+    for (const action of envelope.occurrences) {
+      plain(action, "occurrence action");
+      if (typeof action.id !== "string" || typeof action.typeKey !== "string" || typeof action.definitionId !== "string" || (action.parentId !== null && typeof action.parentId !== "string") || (action.placementKey !== null && typeof action.placementKey !== "string") || !own(action, "serverData")) throw new TypeError("invalid occurrence action");
+      plain(action.serverData, "serverData");
+      plain(action.preparedData, "preparedData");
+      if (ids.has(action.id)) throw new Error("duplicate occurrence action"); ids.add(action.id);
+      const mounted = app.mounted.get(action.id), prepared = app.occurrences.get(action.id), nextDefinition = app.definitions.get(action.definitionId);
+      const added = !prepared;
+      // A Render that replaces a component with one of another type keeps the occurrence ID, because the
+      // caller's call table names it, and Vue mounts the new type in its place (#164). The app root has no
+      // caller VNode to retarget, so its type stays fixed.
+      const typeChanged = Boolean(prepared && prepared.typeKey !== action.typeKey);
+      if (typeChanged && action.parentId === null)
+        throw new Error("prepared revision changed the component of the app's top-level component");
+      if (typeChanged && !updatedIds.has(action.id))
+        throw new Error("prepared revision changed the component of an occurrence it did not update");
+      if (typeChanged) typeChangedIds.add(action.id);
+      if ((prepared && (prepared.parentId !== action.parentId || prepared.placementKey !== action.placementKey)) || !nextDefinition) throw new Error("unknown occurrence or definition");
+      const boundType = nextDefinitionTypes.get(action.definitionId);
+      if (boundType && boundType !== action.typeKey) throw new Error("render definition stable-type mismatch");
+      nextDefinitionTypes.set(action.definitionId, action.typeKey);
+      const definitionChanged = !prepared || prepared.definitionId !== action.definitionId;
+      validateOccurrenceCallRuns(incoming, action, nextDefinition, keptOwners.has(action.id), replacedTypes);
+      if (definitionChanged) {
+        const priorDefinition = prepared && app.definitions.get(prepared.definitionId);
+        if (!updatedIds.has(action.id) || nextDefinition.target !== ORDINARY_TARGET ||
+            (prepared && (!priorDefinition || priorDefinition.target !== ORDINARY_TARGET)))
+          throw new Error("incompatible retained render definition");
+      }
+      const nextKeys = new Set(Object.keys(action.serverData));
+      const serverShapeChanged = mounted ? signatureKey([...nextKeys].sort()) !==
+        signatureKey([...mounted.record.serverKeys].sort()) : false;
+      if (mounted && !typeChanged) for (const key of nextKeys) if (!mounted.record.serverKeys.has(key) && (key in mounted.component || key.startsWith("$") || key.startsWith("_"))) throw new Error("js_data() returned the new key " +
+        JSON.stringify(key) + ", which is already a name on the mounted component or starts with $ or _. Rename it.");
+      // Only an occurrence the server did not list as updated must keep its prior payload, so only
+      // those payloads are serialized and compared.
+      if (!updatedIds.has(action.id) && (added || JSON.stringify(prepared.serverData) !== JSON.stringify(action.serverData) ||
+          JSON.stringify(prepared.preparedData) !== JSON.stringify(action.preparedData)))
+        throw new Error("changed occurrence missing from updatedIds");
+      // Callers only read the staged action, so it can be the envelope's own object.
+      if (updatedIds.has(action.id)) staged.push({action, ...(mounted || {}), nextKeys,
+        serverShapeChanged, definitionChanged, nextDefinition, added});
+    }
+    validateGraph(incoming, app.rootId, keptOwners);
+    for (const id of updatedIds) if (!ids.has(id)) throw new Error("unknown explicitly updated occurrence");
+    const removed = [];
+    for (const id of app.occurrences.keys()) if (!incoming.has(id)) {
+      removed.push(id);
+    }
+    const addedIds = new Set([...incoming.keys()].filter(id => !app.occurrences.has(id)));
+    // The server keeps no page history, so only the browser holds both the committed and the
+    // incoming definition of a retained occurrence. A replacement site whose key differs between
+    // them is an element Vue replaces, and every component mounted inside it mounts again.
+    const expectedRemountIds = new Set();
+    const committedSide = slotLookupSide(app, app.occurrences), incomingSide = slotLookupSide(app, incoming);
+    for (const item of staged.filter(item => item.definitionChanged && !item.added)) {
+      const ownerId = item.action.id;
+      const prior = app.definitions.get(app.occurrences.get(ownerId).definitionId);
+      const before = new Map(prior.replacementSites.map(site => [site.siteId, site]));
+      const after = new Map(item.nextDefinition.replacementSites.map(site => [site.siteId, site]));
+      const changed = [...new Set([...before.keys(), ...after.keys()])]
+        .filter(id => before.get(id)?.key !== after.get(id)?.key);
+      for (const siteId of changed) {
+        // A site that only one definition has still replaces what the other rendered there, so
+        // both definitions name the calls it holds, each through its own occurrence's call table.
+        for (const [site, side] of [[before.get(siteId), committedSide], [after.get(siteId), incomingSide]]) {
+          if (!site) continue;
+          const occurrence = side.occurrences.get(ownerId);
+          const ids = [];
+          for (const localId of site.localDescendants) {
+            const call = occurrence.preparedData.calls?.[localId];
+            if (!call) throw new Error("replacement site references an absent ordinary local call");
+            ids.push(call.id);
+          }
+          for (const runId of site.localDescendantRuns) {
+            const run = occurrence.preparedData.callRuns?.[runId];
+            if (!Array.isArray(run)) throw new Error("replacement site references an absent ordinary call run");
+            ids.push(...run);
+          }
+          // A caller's component rendered through a slot outlet inside the element goes with it.
+          for (const outlet of site.slotOutlets) addSlotOccupantIds(side, ownerId, outlet, ids);
+          // Only a component that stays in the page and is mounted now can mount again.
+          for (const id of ids) if (incoming.has(id) && app.mounted.has(id)) {
+            let cursor = incoming.get(id).parentId;
+            while (cursor !== null && cursor !== ownerId) cursor = incoming.get(cursor).parentId;
+            if (cursor !== ownerId) throw new Error("expected remount is not a mounted descendant");
+            expectedRemountIds.add(id);
+          }
+        }
+      }
+      // A runtime directive may change only on an element that is replaced, because Vue cannot
+      // uninstall a directive from an element it keeps.
+      const beforeDirectives = new Map(prior.directiveSignature.map(value => [value.siteId, signatureKey(value)]));
+      const afterDirectives = new Map(item.nextDefinition.directiveSignature.map(value => [value.siteId, signatureKey(value)]));
+      const changedDirectives = [...new Set([...beforeDirectives.keys(), ...afterDirectives.keys()])]
+        .filter(id => beforeDirectives.get(id) !== afterDirectives.get(id));
+      if (changedDirectives.some(id => !changed.some(site => id.startsWith(site + "D"))))
+        throw new Error("runtime directive change is outside a changed keyed replacement site");
+    }
+    // A component that a Render replaced with another component mounts as a new instance.
+    for (const id of typeChangedIds) if (app.mounted.has(id)) expectedRemountIds.add(id);
+    // A component that mounts again takes every component mounted below it along.
+    const directRemountIds = new Set(expectedRemountIds);
+    for (const id of incoming.keys()) {
+      if (expectedRemountIds.has(id) || !app.mounted.has(id)) continue;
+      let cursor = incoming.get(id).parentId;
+      while (cursor !== null && !directRemountIds.has(cursor)) cursor = incoming.get(cursor).parentId;
+      if (cursor !== null) expectedRemountIds.add(id);
+    }
+    const expectedNewIds = addedIds;
+    return {snapshot: envelope, staged, removed, nextDefinitionTypes, expectedRemountIds, expectedNewIds, typeChangedIds};
+  }
+
+  function registerIncomingTypes(app, snapshot, typeChangedIds = new Set()) {
+    const incomingTypes = new Set(snapshot.occurrences.map(item => item.typeKey));
+    const pending = [];
+    for (const typeKey of incomingTypes) {
+      // A type first registered as a Render replacement has no tag yet. A later revision may bring a
+      // caller that names it by tag, and Vue can only resolve that tag once the type is registered under it.
+      const untagged = app.untaggedTypes.has(typeKey);
+      if (app.types.has(typeKey) && !untagged) continue;
+      if (!app.vueApp) throw new Error("new prepared component type requires an attached Vue app");
+      const tags = new Set();
+      for (const definition of app.definitions.values()) {
+        for (const call of [...definition.localCalls, ...definition.localCallRuns])
+          if (call.typeKey === typeKey) tags.add(call.componentTag);
+      }
+      // A type that arrives only as a Render replacement has no caller that names it by tag; the
+      // replaced call resolves it through citryTypeInfo, so it needs no tag registration.
+      if (tags.size === 0 && untagged) continue;
+      if (tags.size === 0 && snapshot.occurrences.some(item => typeChangedIds.has(item.id) && item.typeKey === typeKey)) {
+        pending.push({typeKey, tag: null});
+        continue;
+      }
+      if (tags.size !== 1) throw new Error("new prepared component type has no unique component tag");
+      const tag = [...tags][0];
+      const priorType = [...app.typeTags].find(([, value]) => value === tag)?.[0];
+      if (priorType && priorType !== typeKey) throw new Error("prepared component tag is already registered to another type");
+      pending.push({typeKey, tag});
+    }
+    const prepared = [];
+    for (const {typeKey, tag} of pending) {
+      // An untagged type keeps its Vue type, so instances already mounted stay valid.
+      if (app.types.has(typeKey)) { prepared.push({typeKey, tag, type: app.types.get(typeKey)}); continue; }
+      let options = registeredTypeOptions.get(typeKey)?.options || {};
+      for (const plugin of app.browserPlugins) if (typeof plugin.decorateTypeOptions === "function")
+        options = plugin.decorateTypeOptions(typeKey, options);
+      const callback = options.onServerRender;
+      const type = V.defineComponent(typeOptions(app.id, typeKey, options));
+      type.__citryCallback = callback;
+      prepared.push({typeKey, tag, type});
+    }
+    for (const {typeKey, tag, type} of prepared) {
+      app.types.set(typeKey, type);
+      citryTypeInfo.set(type, {appId: app.id, typeKey});
+      if (tag === null) { app.untaggedTypes.add(typeKey); continue; }
+      app.untaggedTypes.delete(typeKey);
+      app.typeTags.set(typeKey, tag);
+      app.vueApp.component(tag, type);
+    }
+  }
+
+  // Vue moves a keyed element with insertBefore, and the browser drops focus from an element that
+  // leaves the document even for that instant. A server revision that reorders rows would then
+  // take the focus and caret away from the field the user is typing in, so remember them here.
+  function captureFocus() {
+    const element = global.document?.activeElement;
+    if (!element || element === global.document.body || element === global.document.documentElement) return null;
+    let selection = null;
+    try {
+      if (typeof element.selectionStart === "number")
+        selection = [element.selectionStart, element.selectionEnd, element.selectionDirection];
+    } catch {
+      // Inputs such as email or number have no selection API; focus alone is restored for them.
+    }
+    return {element, selection};
+  }
+  function restoreFocus(focus) {
+    // Only an element Vue kept, and only when nothing else took the focus: the page may have moved
+    // it on purpose, and an element Vue replaced is a new field.
+    if (!focus || !focus.element.isConnected) return;
+    const current = global.document.activeElement;
+    if (current !== focus.element) {
+      if (current && current !== global.document.body) return;
+      focus.element.focus({preventScroll: true});
+    }
+    // Reapply the range even when the field kept focus: restoring a dirty native value after the
+    // publication writes `.value`, which moves the caret to the end.
+    if (focus.selection) {
+      try {
+        focus.element.setSelectionRange(...focus.selection);
+      } catch {
+        // The field's type changed to one without a selection; keeping the focus is enough.
+      }
+    }
+  }
+
+  function isNativeControl(value) {
+    return typeof HTMLInputElement === "function" && value instanceof HTMLInputElement ||
+      typeof HTMLTextAreaElement === "function" && value instanceof HTMLTextAreaElement ||
+      typeof HTMLSelectElement === "function" && value instanceof HTMLSelectElement;
+  }
+
+  function nativeControlElements(root) {
+    if (typeof Element !== "function" || !(root instanceof Element)) return [];
+    const elements = [];
+    if (isNativeControl(root)) elements.push(root);
+    elements.push(...root.querySelectorAll("input,textarea,select"));
+    return elements;
+  }
+
+  function nativeOwnedProperties(element) {
+    const properties = new Set(vueOwnedNativeProperties.get(element) || []);
+    const tag = element.tagName.toLowerCase();
+    if (controlLifetimes.has(element)) {
+      if (tag === "select") properties.add("selected");
+      else if (tag === "textarea") properties.add("value");
+      else if (tag === "input") {
+        const type = element.type.toLowerCase();
+        properties.add(type === "checkbox" || type === "radio" ? "checked" : "value");
+      }
+    }
+    if (tag === "select" && properties.has("selected") === false) {
+      for (const option of element.options) {
+        const owned = vueOwnedNativeProperties.get(option) || [];
+        if (owned.includes("selected") || owned.includes("value")) {
+          properties.add("selected");
+          break;
+        }
+      }
+    }
+    return properties;
+  }
+
+  function captureNativeControlState(root) {
+    const snapshots = [];
+    for (const element of nativeControlElements(root)) {
+      const owned = nativeOwnedProperties(element);
+      if (typeof HTMLInputElement === "function" && element instanceof HTMLInputElement) {
+        const type = element.type.toLowerCase();
+        if (type === "file") continue;
+        if ((type === "checkbox" || type === "radio") && !owned.has("checked") &&
+            element.checked !== element.defaultChecked) {
+          snapshots.push({root, element, kind: "checked", baseline: element.defaultChecked, value: element.checked});
+        }
+        if (!owned.has("value") && element.value !== element.defaultValue)
+          snapshots.push({root, element, kind: "value", baseline: element.defaultValue, value: element.value});
+        continue;
+      }
+      if (typeof HTMLTextAreaElement === "function" && element instanceof HTMLTextAreaElement) {
+        if (!owned.has("value") && element.value !== element.defaultValue)
+          snapshots.push({root, element, kind: "value", baseline: element.defaultValue, value: element.value});
+        continue;
+      }
+      if (owned.has("selected")) continue;
+      const options = [...element.options];
+      const values = options.map(option => option.value);
+      const selected = options.map(option => option.selected);
+      const defaults = options.map(option => option.defaultSelected);
+      if (selected.some((value, index) => value !== defaults[index]))
+        snapshots.push({root, element, kind: "selected", values, defaults, selected});
+    }
+    return snapshots;
+  }
+
+  function restoreNativeControlState(snapshots) {
+    for (const snapshot of snapshots || []) {
+      const {root, element} = snapshot;
+      if (typeof Element !== "function" || !(root instanceof Element) || !root.isConnected ||
+          !element.isConnected || !root.contains(element)) continue;
+      const owned = nativeOwnedProperties(element);
+      if (owned.has(snapshot.kind)) continue;
+      if (snapshot.kind === "value" && "value" in element) {
+        element.value = element.defaultValue === snapshot.baseline ? snapshot.value : element.defaultValue;
+      }
+      else if (snapshot.kind === "checked" && "checked" in element) {
+        element.checked = element.defaultChecked === snapshot.baseline ? snapshot.value : element.defaultChecked;
+      }
+      else if (snapshot.kind === "selected" && typeof HTMLSelectElement === "function" &&
+          element instanceof HTMLSelectElement) {
+        const options = [...element.options];
+        const unchanged = options.length === snapshot.values.length &&
+          !options.some((option, index) => option.value !== snapshot.values[index] ||
+            option.defaultSelected !== snapshot.defaults[index]);
+        options.forEach((option, index) => {
+          option.selected = unchanged ? snapshot.selected[index] : option.defaultSelected;
+        });
+      }
+    }
+  }
+
+  async function applyEnvelope(appId, envelope, targetId = envelope.rootId, pluginTransaction = null) {
+    const app = definitionRegistry(appId);
+    if (app.busy) throw new Error("concurrent server render rejected");
+    if (app.terminal) throw new Error("Citry Vue app lifecycle is terminal");
+    // The envelope that this app's own Events transaction prepared is frozen and passed every check
+    // on its own content, so it is used as is. Any other caller still owns its object and may change
+    // it while this function awaits, so it gets a private copy and the full definition checks.
+    const declared = validatedEnvelopes.get(envelope);
+    const validated = declared !== undefined && pluginTransaction?.acceptedTransaction?.envelope === envelope;
+    const incoming = validated ? envelope : clone(envelope);
+    if (!Array.isArray(incoming.definitions) || !Array.isArray(incoming.occurrences))
+      throw new Error("prepared envelope lacks definitions or occurrences");
+    if (validated) assertDeclaredDefinitionsCurrent(app, declared);
+    else preflightDefinitions(app, incoming.definitions, incoming.occurrences, incoming.rootId,
+      pluginTransaction?.combined ? keptOwnerIds(app, incoming) : null);
+    // This check always runs: it compares the envelope with the mounted components and the current
+    // revision, which may have moved since preflight, and it produces the records the commit uses.
+    const {snapshot, staged, removed, nextDefinitionTypes, expectedRemountIds, expectedNewIds, typeChangedIds} =
+      pluginTransaction?.combined ? validateCombinedActions(app, incoming) : validateActions(app, incoming, targetId);
+    app.busy = true;
+    const priorMounted = new Map(app.mounted);
+    const acceptedRetirementIds = new Set([...expectedRemountIds, ...removed]);
+    const oldAcceptedRecords = new Map([...acceptedRetirementIds].map(id => [id, app.mounted.get(id)]));
+    app.transaction = {
+      expectedRemountIds,
+      expectedNewIds,
+      acceptedRetirementIds,
+      oldAcceptedRecords,
+      acceptedTransaction: pluginTransaction?.acceptedTransaction,
+      newMounts: new Map(),
+    };
+    try {
+      pluginTransaction?.activate();
+      registerIncomingTypes(app, snapshot, typeChangedIds);
+    } catch (error) {
+      app.transaction = null;
+      app.busy = false;
+      throw error;
+    }
+    try {
+      const focus = captureFocus();
+      const callbackCleanupRecords = new Set();
+      for (const item of staged) if (item.record && !item.added && !expectedRemountIds.has(item.action.id))
+        callbackCleanupRecords.add(item.record);
+      for (const callbackOwnerId of pluginTransaction?.callbackOwnerIds || []) {
+        if (acceptedRetirementIds.has(callbackOwnerId)) continue;
+        const owner = app.mounted.get(callbackOwnerId)?.record;
+        if (owner) callbackCleanupRecords.add(owner);
+      }
+      for (const record of callbackCleanupRecords) disposeCallbacks(record, {handoff: true});
+      for (const id of removed) { const mounted = app.mounted.get(id); if (mounted) dispose(mounted.record); }
+      for (const {action, component, record, nextKeys, added} of staged) {
+        if (!record || added || expectedRemountIds.has(action.id)) continue;
+        for (const key of record.serverKeys) if (!nextKeys.has(key)) delete component[key];
+        for (const key of nextKeys) if (!record.serverKeys.has(key)) installServerKey(component, record, key);
+        record.serverKeys = nextKeys;
+      }
+      for (const item of staged) if (item.record && item.definitionChanged && !item.added && !expectedRemountIds.has(item.action.id)) item.record.definition.value = {id: item.action.definitionId, render: item.nextDefinition.render, cache: []};
+      // The snapshot is either the frozen validated envelope or this call's private copy, so the app
+      // can keep its occurrences without another copy; freezing makes them safe to share later.
+      app.occurrences = new Map(snapshot.occurrences.map(item => [item.id, deepFreeze(item)]));
+      // A component stays replaced while it exists and its Vue parent is kept. A parent the server
+      // rendered again wrote its children's types itself, so those children are ordinary again. For a
+      // fill, the call-table owner is the caller, not the parent, but a server Render of either one
+      // replaces the fill: the caller's render includes the receiver, and the receiver's drops the fill.
+      const updatedNow = new Set(snapshot.updatedIds);
+      app.replacedTypeIds = new Set([...app.replacedTypeIds, ...typeChangedIds].filter(id => {
+        const item = app.occurrences.get(id);
+        return item && !updatedNow.has(item.parentId);
+      }));
+      app.markers = normalizeMarkers(snapshot.markers, app.occurrences);
+      app.definitionTypes = nextDefinitionTypes;
+      const changedIds = new Set(staged.map(item => item.action.id)), priorLive = app.snapshot.value;
+      // Components may write server data through Vue reactivity, so each changed one gets a writable copy.
+      const nextLive = new Map([...app.occurrences].map(([id,item]) => [id, changedIds.has(id) || expectedRemountIds.has(id) ? {...item, serverData: V.reactive(clone(item.serverData))} : priorLive.get(id)]));
+      // Removed instances keep their prior server data until Vue runs beforeUnmount in this flush.
+      for (const id of removed) if (priorLive.has(id)) nextLive.set(id, priorLive.get(id));
+      const nativeControlSnapshot = captureNativeControlState(app.hostElement);
+      app.snapshot.value = nextLive;
+      for (const item of staged) if (item.record && !item.added && !expectedRemountIds.has(item.action.id))
+        item.record.live.value = nextLive.get(item.action.id);
+      for (const item of staged) if (item.record && item.serverShapeChanged && !item.added &&
+          !expectedRemountIds.has(item.action.id)) item.component.$forceUpdate();
+      // The VNode for a replaced component comes from whichever instance rendered it: its caller, or the
+      // receiver whose slot holds it. That is the old instance's Vue parent, and it may be a component this
+      // revision keeps unchanged, so it re-renders here and picks up the new type in compilerCreateVNode.
+      if (typeChangedIds.size) typeReplacementSeen = true;
+      for (const id of typeChangedIds) oldAcceptedRecords.get(id)?.component.$parent?.$forceUpdate();
+      await V.nextTick();
+      restoreNativeControlState(nativeControlSnapshot);
+      if (app.terminal) throw new Error("render failed after prepared revision publication");
+      restoreFocus(focus);
+      if (!app.mounted.has(app.rootId) || [...app.mounted.keys()].some(id => !app.occurrences.has(id)) ||
+          removed.some(id => app.mounted.has(id))) throw new Error("rendered occurrence set does not match prepared snapshot");
+      validateMountedParents(app);
+      // A browser condition (`v-if`) may show a component the page kept but had not mounted, for
+      // example when this revision sends a new `js_data` value. That is its first mount, not a
+      // remount, so it starts from this revision's data like a new occurrence.
+      const firstMountIds = new Set([...app.mounted.keys()].filter(id =>
+        !priorMounted.has(id) && !expectedRemountIds.has(id) && !expectedNewIds.has(id)));
+      for (const id of firstMountIds) {
+        const observed = app.transaction.newMounts.get(id);
+        if (!observed || observed.length !== 1 || observed[0] !== app.mounted.get(id).record.generation)
+          throw new Error("first mount generation is invalid");
+      }
+      for (const id of app.mounted.keys())
+        if (!expectedRemountIds.has(id) && !expectedNewIds.has(id) && !firstMountIds.has(id) &&
+            app.mounted.get(id)?.record !== priorMounted.get(id)?.record)
+          throw new Error("unexpected descendant remount");
+      for (const id of expectedRemountIds) {
+        const mounted = app.mounted.get(id), old = oldAcceptedRecords.get(id);
+        const observed = app.transaction.newMounts.get(id);
+        if (mounted && (mounted.record === old.record || mounted.record.generation <= old.record.generation ||
+            !observed || observed.length !== 1 || observed[0] !== mounted.record.generation))
+          throw new Error("expected descendant remount did not occur");
+      }
+      for (const id of expectedNewIds) {
+        const mounted = app.mounted.get(id), observed = app.transaction.newMounts.get(id);
+        if (mounted && (!observed || observed.length !== 1 || observed[0] !== mounted.record.generation))
+          throw new Error("new occurrence mount generation is invalid");
+      }
+      const expectedMounted = new Set([...expectedRemountIds, ...expectedNewIds, ...firstMountIds]);
+      if ([...app.transaction.newMounts.keys()].some(id => !expectedMounted.has(id)))
+        throw new Error("unexpected descendant remount occurred");
+      if (removed.length) app.snapshot.value = new Map([...app.snapshot.value].filter(([id]) => app.occurrences.has(id)));
+      const callbackIds = new Set([...staged.map(item => item.action.id), ...expectedRemountIds, ...firstMountIds,
+        ...(pluginTransaction?.callbackOwnerIds || [])]
+        .filter(id => app.mounted.has(id)));
+      app.revision = snapshot.revision;
+      pluginTransaction?.commit();
+      if (app.preparedHost) {
+        // A component mounted for the first time adopts this revision's Events context, as a new one does.
+        const stagedCallbackIds = new Set([...staged.map(item => item.action.id), ...expectedRemountIds,
+          ...firstMountIds]);
+        const mounted = [...callbackIds].map(id => {
+          const current = app.mounted.get(id);
+          if (!current) throw new Error("prepared callback target is not mounted");
+          return {
+            stableId: id,
+            generation: current.record.generation,
+            occurrence: app.occurrences.get(id),
+            adoptContext: stagedCallbackIds.has(id),
+          };
+        });
+        await app.preparedHost.beforeServerCallbacks({revision: app.revision, mounted});
+      }
+      for (const id of callbackIds) {
+        const mounted = app.mounted.get(id);
+        await runCallback(mounted.component, mounted.record, mounted.component.$options.__citryCallback, app.revision);
+      }
+      await V.nextTick();
+      if (app.terminal) throw new Error("render failed during onServerRender flush");
+    } catch (error) {
+      // Disposing the app below also disposes the Events bridge, which rejects the pending call as
+      // stale and hides this cause, so report it before the page stops.
+      console.error("[Citry] a server render failed and the app has stopped:", error);
+      app.terminal = true;
+      try { app.vueApp?.unmount(); } catch (unmountError) { console.error("[Citry] terminal Vue disposal failed:", unmountError); }
+      throw error;
+    }
+    finally { app.transaction = null; app.busy = false; }
+  }
+
+  // Kept private on the stable options so the coordinator invokes the exact type callback.
+  const originalDefineType = defineType;
+  function defineTypeWithCallback(appId, typeKey, userOptions) {
+    const resolvedOptions = userOptions === undefined ? registeredTypeOptions.get(typeKey)?.options || {} : userOptions;
+    const callback = resolvedOptions.onServerRender;
+    const result = originalDefineType(appId, typeKey, resolvedOptions);
+    result.__citryCallback = callback;
+    return result;
+  }
+
+  // The CSP nonce that authorized this runtime's own script tag. Read it now, while
+  // document.currentScript still points at that tag.
+  const documentNonce = document.currentScript?.nonce || document.currentScript?.getAttribute("nonce") || "";
+
+  // Starts a server-rendered document app. The server sends the app's configuration as a
+  // JSON data block (<script type="application/json" data-citry-vue-document="appId">),
+  // which the browser never runs, and a one-line module script that calls this function
+  // after the page is parsed. JSON.parse reads a large configuration much faster than the
+  // browser can compile the same data written as a JavaScript object.
+  function startDocument(appId) {
+    if (typeof appId !== "string" || !appId) throw new TypeError("[Citry] startDocument needs the app id");
+    // Compare attribute values instead of building a selector from the id, and require
+    // exactly one match, so a second block with the same id (for example markup injected
+    // into the page) stops the start instead of choosing between them.
+    const blocks = [...document.querySelectorAll('script[type="application/json"][data-citry-vue-document]')]
+      .filter(block => block.getAttribute("data-citry-vue-document") === appId);
+    if (blocks.length !== 1)
+      throw new Error(`[Citry] expected one configuration block for app ${appId}, found ${blocks.length}`);
+    // Under a nonce-based CSP the server stamps the data block with the same nonce as this
+    // runtime. A block without it did not come from the Citry render, so it is refused.
+    if (documentNonce && blocks[0].nonce !== documentNonce)
+      throw new Error(`[Citry] the configuration block for app ${appId} does not carry the page's CSP nonce`);
+    const configuration = JSON.parse(blocks[0].textContent);
+    if (configuration?.manifest?.appId !== appId)
+      throw new Error(`[Citry] the configuration block for app ${appId} describes a different app`);
+    // Report a failed start as an uncaught error on the page (window.onerror and the
+    // console see it), without leaving an unhandled promise rejection.
+    startPrepared(configuration).catch(error => queueMicrotask(() => { throw error; }));
+  }
+
+  global.__citryRuntime = {configure, registerDefinition, registerTypeOptions, registerBrowserPlugin, defineType: defineTypeWithCallback, startPrepared, startDocument, attachVueApp, attachPreparedHost, whenReady, applyEnvelope, compilerRuntime, _apps: apps, _dispatchLifecycleEvent: dispatchLifecycleEvent};
+  if (!global.CitryVueFragments?.installFragmentManager)
+    throw new Error("Citry Vue fragment support is unavailable");
+  global.CitryVueFragments.installFragmentManager(
+    global.Citry ||= {},
+    (node, exceptAppId) => [...apps.values()].some(app => app.id !== exceptAppId &&
+      app.hostElement instanceof Element && app.hostElement.contains(node)),
+    startPrepared,
+    documentNonce,
+  );
+})(window);

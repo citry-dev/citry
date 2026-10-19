@@ -206,7 +206,7 @@ cleanup but carries no public layout or selector promise.
 | Python input | Type | Default | Class | Validation and effect |
 |---|---|---|---|---|
 | `id` | `str` or `None` | generated | structural server-only | sets native identity and title, description, and activator relationships |
-| `open` | `bool` | `False` | initial controlled-state fallback | renders the initial `open` state; valid client `open` controls later state |
+| `open` | `bool` | `False` | server state and controlled-state fallback | renders the `open` state; on a server re-render, a changed value opens or closes it to match and an unchanged value keeps its current state; valid client `open` controls later state |
 | `dismissible` | `bool` | `True` | reactive configuration fallback | shows the built-in close control and permits passive dismissal |
 | `close_on_escape` | `bool` | `True` | reactive configuration fallback | permits Escape and equivalent platform cancel requests when dismissible |
 | `close_on_outside` | `bool` | `True` | reactive configuration fallback | permits a press that begins and ends on this Dialog's backdrop when dismissible |
@@ -235,6 +235,14 @@ state and makes later requests uncontrolled. Owner updates do not notify the
 owner again. Invalid fields do not disable independent valid fields. Server
 rerenders reset server fallbacks and preserve the normal Citry instance and
 client-prop lifecycle.
+
+A server re-render that keeps the Dialog keeps an open uncontrolled Dialog
+open when the server `open` value is unchanged, and opens or closes it to
+match a changed value without calling `onOpenChange`. A re-render that removes
+an open Dialog does not call `onOpenChange`: the owner removed it, so there is
+nothing to report. Its cleanup still takes the dialog out of modal mode,
+releases the scroll lock, and returns focus to the opener when focus was lost
+and the opener is still on the page.
 
 ## 5. State model
 

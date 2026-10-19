@@ -105,7 +105,8 @@ def _load_catalog_package(
     source_locale = _canonical_exact_locale(descriptor["source_locale"], source=f"{name!r} source_locale")
     formats = _load_package_formats(name=name, owner=owner, root=root)
 
-    manifest_path = root.joinpath("_compiled", "manifest.json")
+    # Python 3.10 namespace package paths accept one name per joinpath call.
+    manifest_path = root.joinpath("_compiled").joinpath("manifest.json")
     if mode == "production":
         if not manifest_path.is_file():
             raise ValueError(

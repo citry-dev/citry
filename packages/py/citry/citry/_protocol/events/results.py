@@ -5,7 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .calls import ACTION_KINDS, CAPABILITIES_BASELINE_V1, PROTOCOL, SWAPS, call_send_sequence, valid_render_id
+from .calls import (
+    ACTION_KINDS,
+    CAPABILITIES_BASELINE_V1,
+    PROTOCOL,
+    RENDERERS,
+    SWAPS,
+    call_send_sequence,
+    valid_render_id,
+)
 from .issues import (
     ProtocolValueError,
     ValidationIssue,
@@ -33,22 +41,26 @@ ERROR_STATUS_BY_CODE: dict[str, int] = {
 }
 ERROR_CODES = (*ERROR_STATUS_BY_CODE, "error")
 
+# A <c-mark> name, the same rule the server applies when a template declares one.
+_MARK_NAME_FIRST = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+_MARK_NAME_CHARS = _MARK_NAME_FIRST | frozenset("0123456789_-")
+
 _RESULT_ENVELOPE_FIELDS = ("protocol", "requestId", "results")
 _OK_RESULT_FIELDS = ("ok", "sendSequence", "actions")
 _ERROR_RESULT_FIELDS = ("ok", "sendSequence", "error")
 _ERROR_FIELDS = ("status", "code", "message", "fieldErrors")
 _ACTION_FIELDS: dict[str, tuple[str, ...]] = {
-    "render": ("action", "target", "swap", "html", "delay", "wait"),
+    "render": ("action", "target", "swap", "renderer", "html", "prepared", "delay", "wait"),
     "data": ("action", "value", "delay"),
-    "state": ("action", "targetRenderId", "stateToken", "delay", "wait"),
+    "state": ("action", "targetRenderId", "stateToken", "publicState", "delay", "wait"),
     "event": ("action", "eventName", "detail", "target", "delay", "wait"),
     "redirect": ("action", "url", "delay", "wait"),
     "url": ("action", "url", "mode", "delay", "wait"),
 }
 _ACTION_REQUIRED: dict[str, tuple[str, ...]] = {
-    "render": ("action", "target", "swap", "html"),
+    "render": ("action", "target", "swap"),
     "data": ("action", "value"),
-    "state": ("action", "targetRenderId", "stateToken"),
+    "state": ("action", "targetRenderId", "stateToken", "publicState"),
     "event": ("action", "eventName"),
     "redirect": ("action", "url"),
     "url": ("action", "url", "mode"),
@@ -242,14 +254,36 @@ def _validate_timing(action: Mapping[str, Any], path: str) -> ValidationIssue | 
     return None
 
 
-def _validate_target(value: Any, path: str) -> ValidationIssue | None:
+def _valid_mark_name(value: str) -> bool:
+    """Whether ``value`` is a ``<c-mark>`` name: a letter, then letters, digits, ``_``, or ``-``."""
+    return bool(value) and value[0] in _MARK_NAME_FIRST and all(character in _MARK_NAME_CHARS for character in value)
+
+
+def _validate_target(value: Any, path: str, *, allow_marker: bool) -> ValidationIssue | None:
+    # A target names a component occurrence, so a receiver finds it in its
+    # own records without searching the page's DOM.
     if not isinstance(value, str):
         return ValidationIssue(path, "type", "An action target must be a non-empty string.")
     if not value:
         return ValidationIssue(path, "range", "An action target must be a non-empty string.")
-    if value.startswith("render:") and not valid_render_id(value[7:]):
-        return ValidationIssue(path, "pattern", "A render target must contain a valid render ID.")
-    return None
+    if value.startswith("render:"):
+        if not valid_render_id(value[7:]):
+            return ValidationIssue(path, "pattern", "A render: target must contain a valid render ID.")
+        return None
+    if allow_marker and value.startswith("mark:"):
+        # The caller's render ID comes first because a marker name is only
+        # unique inside the component that rendered the <c-mark>.
+        caller, separator, name = value[5:].partition(":")
+        if not separator or not valid_render_id(caller) or not _valid_mark_name(name):
+            return ValidationIssue(
+                path, "pattern", "A marker target must be mark:<callerRenderId>:<name> with a valid ID and name."
+            )
+        return None
+    if allow_marker:
+        return ValidationIssue(
+            path, "pattern", "A render target must be render:<renderId> or mark:<callerRenderId>:<name>."
+        )
+    return ValidationIssue(path, "pattern", "An event target must be render:<renderId>.")
 
 
 def validate_action(value: Any, path: str = "") -> ValidationIssue | None:
@@ -278,14 +312,35 @@ def _validate_action_shape(value: Any, path: str) -> ValidationIssue | None:
     if found:
         return ValidationIssue(pointer(path, unknown), "unknown_field", f"The {kind} action has an unknown field.")
     if kind == "render":
-        issue = _validate_target(value["target"], pointer(path, "target"))
+        issue = _validate_target(value["target"], pointer(path, "target"), allow_marker=True)
         if issue is not None:
             return issue
         if value["swap"] not in SWAPS:
             category = "type" if not isinstance(value["swap"], str) else "enum"
             return ValidationIssue(pointer(path, "swap"), category, "The render swap is not a v1 swap.")
-        if not isinstance(value["html"], str):
+        renderer = value.get("renderer", "html-fragment/1")
+        if not isinstance(renderer, str):
+            return ValidationIssue(pointer(path, "renderer"), "type", "The render renderer must be a string.")
+        if renderer not in RENDERERS:
+            return ValidationIssue(pointer(path, "renderer"), "enum", "The render renderer is not a v1 renderer.")
+        content = "html" if renderer == "html-fragment/1" else "prepared"
+        other = "prepared" if content == "html" else "html"
+        if content not in value:
+            return ValidationIssue(pointer(path, content), "required", f"The {renderer} render requires {content!r}.")
+        if other in value:
+            return ValidationIssue(
+                pointer(path, other), "semantic", "A render action must carry exactly one content representation."
+            )
+        if content == "html" and not isinstance(value["html"], str):
             return ValidationIssue(pointer(path, "html"), "type", "The render HTML must be a string.")
+        if content == "prepared" and not isinstance(value["prepared"], dict):
+            return ValidationIssue(
+                pointer(path, "prepared"), "type", "The prepared render content must be a JSON object."
+            )
+        # Prepared Vue content updates the mounted component in place; the
+        # other swaps insert, remove, or skip DOM content, which it never does.
+        if content == "prepared" and value["swap"] != "morph":
+            return ValidationIssue(pointer(path, "swap"), "enum", "A vue-prepared/1 render must use the morph swap.")
     elif kind == "data":
         pass
     elif kind == "state":
@@ -301,6 +356,9 @@ def _validate_action_shape(value: Any, path: str) -> ValidationIssue | None:
             return ValidationIssue(pointer(path, "stateToken"), "type", "The state token must be a string.")
         if not token:
             return ValidationIssue(pointer(path, "stateToken"), "range", "The state token must not be empty.")
+        # The field names inside are application data; only the container is fixed.
+        if not isinstance(value["publicState"], dict):
+            return ValidationIssue(pointer(path, "publicState"), "type", "Public State must be an object.")
     elif kind == "event":
         name = value["eventName"]
         if not isinstance(name, str):
@@ -310,7 +368,7 @@ def _validate_action_shape(value: Any, path: str) -> ValidationIssue | None:
         if name.startswith("citry:"):
             return ValidationIssue(pointer(path, "eventName"), "pattern", "The event name is reserved.")
         if "target" in value:
-            issue = _validate_target(value["target"], pointer(path, "target"))
+            issue = _validate_target(value["target"], pointer(path, "target"), allow_marker=False)
             if issue is not None:
                 return issue
     elif kind == "redirect":
@@ -347,15 +405,51 @@ def build_render_action(target: str, swap: str, html: str, *, delay: float = 0, 
     return _with_timing({"action": "render", "target": target, "swap": swap, "html": html}, delay, wait)
 
 
+def build_prepared_render_action(
+    target: str,
+    swap: str,
+    renderer: str,
+    prepared: Mapping[str, Any],
+    *,
+    delay: float = 0,
+    wait: bool = True,
+) -> dict[str, Any]:
+    """Build an explicitly negotiated structured render action."""
+    return _with_timing(
+        {
+            "action": "render",
+            "target": target,
+            "swap": swap,
+            "renderer": renderer,
+            "prepared": copy_json(dict(prepared)),
+        },
+        delay,
+        wait,
+    )
+
+
 def build_data_action(value: Any, *, delay: float = 0) -> dict[str, Any]:
     return _with_timing({"action": "data", "value": copy_json(value)}, delay, wait=True, allow_wait=False)
 
 
 def build_state_action(
-    target_render_id: str, state_token: str, *, delay: float = 0, wait: bool = True
+    target_render_id: str,
+    state_token: str,
+    public_state: Mapping[str, Any],
+    *,
+    delay: float = 0,
+    wait: bool = True,
 ) -> dict[str, Any]:
+    """Build a State refresh: the fresh token plus the public values the browser shows."""
     return _with_timing(
-        {"action": "state", "targetRenderId": target_render_id, "stateToken": state_token}, delay, wait
+        {
+            "action": "state",
+            "targetRenderId": target_render_id,
+            "stateToken": state_token,
+            "publicState": copy_json(dict(public_state)),
+        },
+        delay,
+        wait,
     )
 
 
@@ -568,7 +662,7 @@ def validate_exchange(call_envelope: Mapping[str, Any], result_envelope: Any) ->
         name: set(raw_capabilities.get(name, CAPABILITIES_BASELINE_V1[name]))
         if isinstance(raw_capabilities, dict)
         else set()
-        for name in ("swaps", "actions")
+        for name in ("swaps", "actions", "renderers")
     }
     for index, (call, result) in enumerate(zip(calls, results, strict=True)):
         expected_sequence = call_send_sequence(call)
@@ -592,4 +686,12 @@ def validate_exchange(call_envelope: Mapping[str, Any], result_envelope: Any) ->
                     "capability",
                     "The result uses a swap the caller did not advertise.",
                 )
+            if action["action"] == "render":
+                renderer = action.get("renderer", "html-fragment/1")
+                if renderer not in allowed["renderers"]:
+                    return ValidationIssue(
+                        f"/results/{index}/actions/{action_index}/renderer",
+                        "capability",
+                        "The result uses a renderer the caller did not advertise.",
+                    )
     return None

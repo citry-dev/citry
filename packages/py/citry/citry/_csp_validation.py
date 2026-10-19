@@ -1,4 +1,4 @@
-"""Render-time validation for Citry's pinned Alpine CSP contract."""
+"""Render-time validation for Citry's strict CSP contract."""
 
 from __future__ import annotations
 
@@ -6,27 +6,9 @@ import html as html_module
 import re
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
-from citry._alpine_csp import ALPINE_CSP_COMPATIBILITY_VERSION, classify_alpine_csp
-from citry._browser_expressions import (
-    BrowserExpression,
-    BrowserExpressionHost,
-    BrowserExpressionTransform,
-    _browser_attribute,
-)
-from citry.ownership import (
-    AlpineHandlerClientBindingPayload,
-    CitryDomEventClientBindingPayload,
-    CitryPollClientBindingPayload,
-    OwnershipState,
-    PropsClientBindingPayload,
-)
-from citry_core.template_parser import HtmlAttr, TemplateElement, parse_template
-
-if TYPE_CHECKING:
-    from citry.citry_render import CitryRender
-    from citry_core.template_parser import Template
+from citry._output_html import OutputAttr, OutputTemplate, scan_output_html
 
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 _ENTITY_RE = re.compile(r"&(?:#[xX][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]+);?")
@@ -35,223 +17,36 @@ _JAVASCRIPT_URL_RE = re.compile(
     re.IGNORECASE,
 )
 _URL_ATTRIBUTES = frozenset({"action", "formaction", "href", "src", "xlink:href"})
-_NATIVE_EVENT_ATTRIBUTES = frozenset(
-    {
-        "onabort",
-        "onafterprint",
-        "onanimationcancel",
-        "onanimationend",
-        "onanimationiteration",
-        "onanimationstart",
-        "onauxclick",
-        "onbeforeinput",
-        "onbeforematch",
-        "onbeforeprint",
-        "onbeforetoggle",
-        "onbeforeunload",
-        "onblur",
-        "oncancel",
-        "oncanplay",
-        "oncanplaythrough",
-        "onchange",
-        "onclick",
-        "onclose",
-        "oncontextlost",
-        "oncontextmenu",
-        "oncontextrestored",
-        "oncopy",
-        "oncuechange",
-        "oncut",
-        "ondblclick",
-        "ondrag",
-        "ondragend",
-        "ondragenter",
-        "ondragleave",
-        "ondragover",
-        "ondragstart",
-        "ondrop",
-        "ondurationchange",
-        "onemptied",
-        "onended",
-        "onerror",
-        "onfocus",
-        "onformdata",
-        "ongotpointercapture",
-        "onhashchange",
-        "oninput",
-        "oninvalid",
-        "onkeydown",
-        "onkeypress",
-        "onkeyup",
-        "onlanguagechange",
-        "onload",
-        "onloadeddata",
-        "onloadedmetadata",
-        "onloadstart",
-        "onlostpointercapture",
-        "onmessage",
-        "onmessageerror",
-        "onmousedown",
-        "onmouseenter",
-        "onmouseleave",
-        "onmousemove",
-        "onmouseout",
-        "onmouseover",
-        "onmouseup",
-        "onoffline",
-        "ononline",
-        "onpagehide",
-        "onpagereveal",
-        "onpageshow",
-        "onpageswap",
-        "onpaste",
-        "onpause",
-        "onplay",
-        "onplaying",
-        "onpointercancel",
-        "onpointerdown",
-        "onpointerenter",
-        "onpointerleave",
-        "onpointermove",
-        "onpointerout",
-        "onpointerover",
-        "onpointerrawupdate",
-        "onpointerup",
-        "onpopstate",
-        "onprogress",
-        "onratechange",
-        "onrejectionhandled",
-        "onreset",
-        "onresize",
-        "onscroll",
-        "onscrollend",
-        "onsecuritypolicyviolation",
-        "onseeked",
-        "onseeking",
-        "onselect",
-        "onslotchange",
-        "onstalled",
-        "onstorage",
-        "onsubmit",
-        "onsuspend",
-        "ontimeupdate",
-        "ontoggle",
-        "ontouchcancel",
-        "ontouchend",
-        "ontouchmove",
-        "ontouchstart",
-        "ontransitioncancel",
-        "ontransitionend",
-        "ontransitionrun",
-        "ontransitionstart",
-        "onunhandledrejection",
-        "onunload",
-        "onvolumechange",
-        "onwaiting",
-        "onwheel",
-    }
-)
-_SVG_NATIVE_EVENT_ATTRIBUTES = frozenset({"onactivate", "onbegin", "onend", "onrepeat"})
 
 
 @dataclass(frozen=True, slots=True)
 class _CspRenderFinding:
-    """One deduplicated problem found in reached or settled render output."""
+    """One deduplicated problem found in the render output."""
 
     detail: str
     component: str
     attribute: str | None
-    range_kind: Literal["source", "pre-extension HTML", "settled HTML"]
-    origin: str | None = None
+    range_kind: Literal["pre-extension HTML", "settled HTML"]
     start_index: int | None = None
     end_index: int | None = None
 
     def display(self) -> str:
-        source = f" ({self.origin})" if self.origin else ""
         attribute = f", attribute {self.attribute!r}" if self.attribute is not None else ""
         position = "" if self.start_index is None else f", {self.range_kind} bytes {self.start_index}:{self.end_index}"
-        return f"{self.component}{source}{attribute}{position}: {self.detail}"
+        return f"{self.component}{attribute}{position}: {self.detail}"
 
 
 class _CspRenderValidator:
     """Collect CSP findings, then warn or fail once the render has settled."""
 
-    __slots__ = ("_check_alpine", "_findings", "_mode", "_pre_extension_raw", "_seen", "_site_counts")
+    __slots__ = ("_findings", "_mode", "_pre_extension_raw", "_seen", "_site_counts")
 
-    def __init__(self, mode: str, *, check_alpine: bool = True) -> None:
+    def __init__(self, mode: str) -> None:
         self._mode = mode
-        self._check_alpine = check_alpine
         self._findings: list[_CspRenderFinding] = []
         self._seen: set[tuple[object, ...]] = set()
         self._site_counts: dict[tuple[str, tuple[object, ...]], int] = {}
         self._pre_extension_raw: dict[tuple[str, str], int] = {}
-
-    def validate_reached_bindings(self, root: CitryRender) -> None:
-        """Check active component-boundary expressions that do not remain as HTML attrs."""
-        if not self._check_alpine:
-            return
-        graph = root.context.ownership
-        if graph is None:
-            return
-        snapshot = graph.snapshot()
-        locations = {location.id: location for location in snapshot.source_locations}
-        class_names = {instance.render_id: instance.class_name for instance in snapshot.logical_instances}
-        for invocation in snapshot.component_invocations:
-            if invocation.state != OwnershipState.ACTIVE:
-                continue
-            for binding in invocation.client_bindings:
-                location = locations.get(binding.source_location_id)
-                if location is None:
-                    continue
-                payload = binding.payload
-                if isinstance(payload, PropsClientBindingPayload):
-                    source = payload.expression
-                    host: BrowserExpressionHost = "citry-props"
-                    transform: BrowserExpressionTransform = "identity"
-                elif isinstance(payload, AlpineHandlerClientBindingPayload):
-                    source = payload.expression
-                    host = "alpine"
-                    transform = "identity"
-                elif isinstance(payload, (CitryDomEventClientBindingPayload, CitryPollClientBindingPayload)):
-                    if payload.args is None:
-                        continue
-                    source = payload.args
-                    host = "citry-event-args"
-                    transform = "citry-args"
-                else:
-                    continue
-                source_start, source_end = _located_source_range(location.source, location.span, source)
-                key_start, key_end = _located_source_range(location.source, location.span, binding.key)
-                expression = BrowserExpression(
-                    source=source,
-                    start_index=source_start,
-                    end_index=source_end,
-                    mode="statement" if isinstance(payload, AlpineHandlerClientBindingPayload) else "expression",
-                    attribute=binding.key,
-                    element=invocation.authored_tag.translate(_ASCII_LOWER),
-                    host=host,
-                    evaluator="raw",
-                    transform=transform,
-                    attribute_start_index=key_start,
-                    attribute_end_index=key_end,
-                )
-                result = classify_alpine_csp(expression)
-                if result.outcome == "incompatible":
-                    self._add(
-                        _compatibility_detail(result.detail),
-                        class_names.get(invocation.source_render_id, location.owner_class_id),
-                        result.start_index,
-                        result.end_index,
-                        attribute=binding.key,
-                        range_kind="source",
-                        origin=location.origin,
-                        dedupe_key=(
-                            location.owner_class_id,
-                            binding.key,
-                            location.byte_span,
-                            result.detail,
-                        ),
-                    )
 
     def validate_settled_html(
         self,
@@ -263,7 +58,7 @@ class _CspRenderValidator:
     ) -> None:
         """Check the final hook output while structured dependency markers still exist."""
         try:
-            template = parse_template(html)
+            template = scan_output_html(html)
         except Exception as error:  # noqa: BLE001 - strict mode must fail closed on ambiguous output
             self._add(
                 f"the settled HTML could not be parsed for CSP validation ({error})",
@@ -287,7 +82,7 @@ class _CspRenderValidator:
         if self._mode != "warn":
             return
         try:
-            template = parse_template(html)
+            template = scan_output_html(html)
         except Exception:  # noqa: BLE001 - the final strict/warn pass reports malformed settled output
             return
         self._walk_pre_extension_raw(
@@ -308,10 +103,7 @@ class _CspRenderValidator:
         if not self._findings:
             return
         body = "\n".join(f"- {finding.display()}" for finding in self._findings)
-        message = (
-            f"Citry found {len(self._findings)} strict-CSP incompatibility issue(s) for Alpine "
-            f"{ALPINE_CSP_COMPATIBILITY_VERSION}:\n{body}"
-        )
+        message = f"Citry found {len(self._findings)} strict-CSP incompatibility issue(s):\n{body}"
         if self._mode == "warn":
             warnings.warn(message, RuntimeWarning, stacklevel=4)
             return
@@ -320,7 +112,7 @@ class _CspRenderValidator:
     def _walk_template(
         self,
         html: str,
-        template: Template,
+        template: OutputTemplate,
         marker_prefix: str,
         trusted_tag_starts: frozenset[int],
         component_classes: dict[str, str],
@@ -329,9 +121,7 @@ class _CspRenderValidator:
         inherited_instance: str | None,
     ) -> None:
         for element in template.elements:
-            if not isinstance(element, TemplateElement.Node):
-                continue
-            node = element._0
+            node = element
             attrs = tuple(node.start_tag.attrs)
             tag = node.start_tag.name.content.translate(_ASCII_LOWER)
             own_instance = next(
@@ -373,16 +163,14 @@ class _CspRenderValidator:
     def _walk_pre_extension_raw(
         self,
         html: str,
-        template: Template,
+        template: OutputTemplate,
         component_classes: dict[str, str],
         *,
         inherited_component: str | None,
         inherited_instance: str | None,
     ) -> None:
         for element in template.elements:
-            if not isinstance(element, TemplateElement.Node):
-                continue
-            node = element._0
+            node = element
             attrs = tuple(node.start_tag.attrs)
             tag = node.start_tag.name.content.translate(_ASCII_LOWER)
             own_instance = next(
@@ -436,15 +224,15 @@ class _CspRenderValidator:
             dedupe_key=self._site_key(instance, (component, "raw-tag", tag)),
         )
 
-    def _validate_attribute(self, tag: str, attr: HtmlAttr, component: str, instance: str | None) -> None:
+    def _validate_attribute(self, tag: str, attr: OutputAttr, component: str, instance: str | None) -> None:
         name = attr.key.content.translate(_ASCII_LOWER)
         inner = attr.inner_value
         raw_source = "" if inner is None else inner.content
         value_start = attr.key.end_index if inner is None else inner.start_index
-        decoded, raw_spans = _decode_html_attribute(raw_source)
+        decoded = _decode_html_attribute(raw_source)
         if _is_native_event_attribute(name):
             self._add(
-                f"the native inline event attribute {attr.key.content!r}; use an Alpine handler or Component.js",
+                f"the native inline event attribute {attr.key.content!r}; use a Vue handler or Component.js",
                 component,
                 attr.key.start_index,
                 attr.key.end_index,
@@ -453,63 +241,13 @@ class _CspRenderValidator:
             )
         if _is_url_attribute(tag, name) and _javascript_url(decoded):
             self._add(
-                f"a javascript: URL in {attr.key.content!r}; use a normal URL or an Alpine handler",
+                f"a javascript: URL in {attr.key.content!r}; use a normal URL or a Vue handler",
                 component,
                 value_start,
                 value_start + len(raw_source.encode()),
                 attribute=attr.key.content,
                 dedupe_key=self._site_key(instance, (component, "javascript-url", tag, name, decoded)),
             )
-        if not self._check_alpine:
-            return
-        classified = _browser_attribute(name, decoded, citry_attribute=attr.key.content)
-        if classified is None:
-            return
-        mode, relative_start, relative_end = classified
-        expression_source = decoded[relative_start:relative_end]
-        value_prefix = len(decoded[:relative_start].encode())
-        attr_sentinel = len(expression_source.encode()) + 1
-        base_name = name.split(".", 1)[0]
-        transform: BrowserExpressionTransform = "citry-args" if attr.key.content.startswith("@c-") else "identity"
-        host: BrowserExpressionHost = "citry-event-args" if transform == "citry-args" else "alpine"
-        if base_name in {"x-model", "x-modelable"}:
-            transform = "x-model"
-        elif base_name == "x-for":
-            transform = "x-for"
-        expression = BrowserExpression(
-            source=expression_source,
-            start_index=0,
-            end_index=len(expression_source.encode()),
-            mode=mode,
-            attribute=attr.key.content,
-            element=tag,
-            host=host,
-            evaluator="normal",
-            transform=transform,
-            attribute_start_index=attr_sentinel,
-            attribute_end_index=attr_sentinel + len(attr.key.content.encode()),
-        )
-        result = classify_alpine_csp(expression)
-        if result.outcome != "incompatible":
-            return
-        if result.start_index >= attr_sentinel:
-            start = attr.key.start_index
-            end = attr.key.end_index
-        else:
-            decoded_start = value_prefix + result.start_index
-            decoded_end = value_prefix + result.end_index
-            raw_start, raw_end = _decoded_byte_range_to_raw(decoded, raw_spans, decoded_start, decoded_end)
-            start = value_start + raw_start
-            end = value_start + raw_end
-        detail = _compatibility_detail(result.detail)
-        self._add(
-            detail,
-            component,
-            start,
-            end,
-            attribute=attr.key.content,
-            dedupe_key=self._site_key(instance, (component, "alpine", tag, name, decoded, detail)),
-        )
 
     def _site_key(self, instance: str | None, signature: tuple[object, ...]) -> tuple[object, ...]:
         owner = instance or "settled render output"
@@ -526,8 +264,7 @@ class _CspRenderValidator:
         end: int | None,
         *,
         attribute: str | None = None,
-        range_kind: Literal["source", "pre-extension HTML", "settled HTML"] = "settled HTML",
-        origin: str | None = None,
+        range_kind: Literal["pre-extension HTML", "settled HTML"] = "settled HTML",
         dedupe_key: tuple[object, ...] | None = None,
     ) -> None:
         key = dedupe_key or (detail, component, attribute, range_kind, start, end)
@@ -540,19 +277,10 @@ class _CspRenderValidator:
                 component=component,
                 attribute=attribute,
                 range_kind=range_kind,
-                origin=origin,
                 start_index=start,
                 end_index=end,
             )
         )
-
-
-def _located_source_range(source: str, span: tuple[int, int], needle: str) -> tuple[int, int]:
-    snippet = source[span[0] : span[1]]
-    relative = snippet.find(needle)
-    start_char = span[0] if relative < 0 else span[0] + relative
-    end_char = span[1] if relative < 0 else start_char + len(needle)
-    return len(source[:start_char].encode()), len(source[:end_char].encode())
 
 
 def _node_html(html: str, node: Any) -> str:
@@ -562,60 +290,22 @@ def _node_html(html: str, node: Any) -> str:
     return raw[node.start_tag.token.start_index : end].decode()
 
 
-def _compatibility_detail(detail: str | None) -> str:
-    subject = detail or "this browser expression"
-    return (
-        f"Alpine CSP {ALPINE_CSP_COMPATIBILITY_VERSION} cannot evaluate {subject} here; "
-        "move complex logic to Component.js and call a scope method"
-    )
-
-
-def _decode_html_attribute(source: str) -> tuple[str, tuple[tuple[int, int], ...]]:
-    """Decode HTML references and map each decoded character to its raw byte span."""
+def _decode_html_attribute(source: str) -> str:
+    """Decode HTML character references in an attribute value so the checks see roughly what the browser sees."""
     decoded: list[str] = []
-    raw_spans: list[tuple[int, int]] = []
-    raw_bytes = 0
     position = 0
     while position < len(source):
         match = _ENTITY_RE.match(source, position)
         raw = match.group(0) if match is not None else source[position]
         value = html_module.unescape(raw)
+        # An unknown reference such as `&bogus;` stays literal, so step past
+        # only its `&` and keep scanning the rest as ordinary text.
         if value == raw and match is not None:
             raw = source[position]
             value = raw
-        raw_start = raw_bytes
-        raw_bytes += len(raw.encode())
-        for char in value:
-            decoded.append(char)
-            raw_spans.append((raw_start, raw_bytes))
+        decoded.append(value)
         position += len(raw)
-    return "".join(decoded), tuple(raw_spans)
-
-
-def _decoded_byte_to_char_index(decoded: str, byte_offset: int) -> int:
-    safe = max(0, min(len(decoded.encode()), byte_offset))
-    prefix = decoded.encode()[:safe]
-    while True:
-        try:
-            return len(prefix.decode())
-        except UnicodeDecodeError:
-            prefix = prefix[:-1]
-
-
-def _decoded_byte_range_to_raw(
-    decoded: str,
-    raw_spans: tuple[tuple[int, int], ...],
-    start: int,
-    end: int,
-) -> tuple[int, int]:
-    start_char = _decoded_byte_to_char_index(decoded, start)
-    end_char = _decoded_byte_to_char_index(decoded, end)
-    if start_char < end_char and raw_spans:
-        return raw_spans[start_char][0], raw_spans[end_char - 1][1]
-    if start_char < len(raw_spans):
-        return raw_spans[start_char][0], raw_spans[start_char][0]
-    boundary = raw_spans[-1][1] if raw_spans else 0
-    return boundary, boundary
+    return "".join(decoded)
 
 
 def _javascript_url(value: str) -> bool:
@@ -627,6 +317,8 @@ def _javascript_url(value: str) -> bool:
 
 
 def _is_native_event_attribute(name: str) -> bool:
+    # Any name longer than `on` that starts with `on` counts, so event names
+    # that browsers add later are caught too.
     return len(name) > 2 and name.startswith("on")
 
 

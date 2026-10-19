@@ -136,8 +136,9 @@ def test_controlled_expansion_selection_action_and_release(page: Any) -> None:
     assert page.evaluate("window.__treeState.actions") == ["readme"]
     assert page.evaluate("window.__treeState.submits") == 0
 
-    page.evaluate("window.__treeState.selected = null")
-    page.wait_for_timeout(20)
+    # Releasing control reaches the tree through a Vue update, so wait for
+    # that update to finish before clicking.
+    page.evaluate("() => { window.__treeState.selected = null; return Citry.vue.nextTick(); }")
     _item(page, "app").click()
     assert _item(page, "app").get_attribute("aria-selected") == "true"
     assert errors == []

@@ -59,6 +59,8 @@ class CitryTemplate:
         generate: Internal. The compiled body-generating function; calling it
             yields a fresh node list. ``None`` until the render pipeline
             compiles the template on first render.
+        prepared_generate: Internal. The separate typed-output generator used
+            only by the private Vue preparation path.
         used_vars: Internal. Every variable name the template uses, including
             in nested tags (the parse-time ``Template.used_variables``). Empty
             until compiled. The ``Const`` optimization keys its cache only on
@@ -77,6 +79,7 @@ class CitryTemplate:
 
     # The compiled form, populated by component_render on first render.
     generate: Callable[[], list[BodyItem]] | None = None
+    prepared_generate: Callable[[], list[BodyItem]] | None = None
     used_vars: frozenset[str] = field(default_factory=frozenset)
     declared_slots: tuple[DeclaredSlot, ...] = ()
     foreign_spans: tuple[Any, ...] = ()
@@ -87,6 +90,7 @@ class CitryTemplate:
     root_source: str | None = None
     compile_lock: RLock = field(default_factory=RLock, repr=False, compare=False)
     standalone_bodies: OrderedDict[object, list[Any]] = field(default_factory=OrderedDict, repr=False)
+    prepared_standalone_bodies: OrderedDict[object, list[Any]] = field(default_factory=OrderedDict, repr=False)
 
     def __repr__(self) -> str:
         compiled = "compiled" if self.generate is not None else "not compiled"
