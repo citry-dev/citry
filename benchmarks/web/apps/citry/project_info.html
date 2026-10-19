@@ -1,0 +1,55 @@
+<section id="project-info" data-tab-panel="project-info" v-show="activeTab === 'project-info'">
+<h2>Project Info</h2>
+<table>
+<tbody>
+<tr>
+<th>Organization</th>
+<td>{{ state['project']['organization'] }}</td>
+</tr>
+<tr>
+<th>Status</th>
+<td>{{ state['project']['status'] }}</td>
+</tr>
+<tr>
+<th>Duration</th>
+<td>{{ state['project']['start_date'] }} – {{ state['project']['end_date'] }}</td>
+</tr>
+</tbody>
+</table>
+<section data-project-tags>
+<h3>Tags</h3>
+<c-if cond="state['project_tags']">
+<span c-for="tag in state['project_tags']">{{ tag }}</span>
+</c-if>
+<c-else>
+<p>No project tags</p>
+</c-else>
+</section>
+<section data-project-status-updates>
+<h3>Status updates</h3>
+<c-if cond="state['status_updates']">
+<p c-for="update in state['status_updates']">{{ update }}</p>
+</c-if>
+<c-else>
+<p>No status updates</p>
+</c-else>
+</section>
+<section>
+<h3>Team</h3>
+<article c-for="role in state['roles']" c-data-role-id="role['id']">
+<span class="role-name">{{ role['name'] }}</span>
+<span class="user-name">{{ role['user_name'] }}</span>
+</article>
+</section>
+<section data-project-contacts>
+<h3>Contacts</h3>
+<c-if cond="state['contacts']">
+<p c-for="contact in state['contacts']">{{ contact['name'] }}</p>
+</c-if>
+<c-else>
+<p>No contacts</p>
+</c-else>
+</section>
+</section>
+
+

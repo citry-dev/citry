@@ -1,0 +1,44 @@
+<article c-bind="row_attrs" data-output-expanded="true">
+<header>
+<span class="row-title">{{ row['title'] }}</span>
+<span class="row-status">{{ row['status'] }}</span>
+<span c-data-output-badge="row['status']">{{ row['badge'] }}</span>
+</header>
+<form class="output-form">
+<input type="hidden" name="action" value="select">
+<input type="hidden" name="operation" value="manual">
+<input type="hidden" name="row_id" c-value="row['id']">
+<label>Description <textarea data-output-description>{{ row['description'] }}</textarea>
+</label>
+<label>
+<input type="checkbox" data-output-completed c-checked="row['completed']"> Completed</label>
+<button c-data-bench-action="row['select_action']">Select</button>
+</form>
+<button type="button" @click="open = !open" :aria-expanded="open">Output details</button>
+<div v-show="open">
+<section>
+<h4>Dependencies</h4>
+<c-if cond="row['dependencies']">
+<article c-for="dep in row['dependencies']" c-data-dependency-id="dep['id']" c-data-dependency-title="dep['title']" c-data-dependency-completed="'true' if dep['completed'] else 'false'">
+<span class="dependency-title">{{ dep['title'] }}</span>
+</article>
+</c-if>
+<c-else>
+<p>No dependencies</p>
+</c-else>
+</section>
+<section>
+<h4>Attachments</h4>
+<c-if cond="row['attachments']">
+<article c-for="attachment in row['attachments']" c-data-attachment-id="attachment['id']" c-data-attachment-name="attachment['name']">
+<a class="attachment-name" c-href="attachment['url']">{{ attachment['name'] }}</a>
+<span c-for="tag in attachment['tags']" c-data-attachment-tag="tag">{{ tag }}</span>
+</article>
+</c-if>
+<c-else>
+<p>No attachments</p>
+</c-else>
+</section>
+</div>
+</article>
+

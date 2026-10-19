@@ -3,9 +3,10 @@
 Refresh the numbers behind the Benchmarks page
 (``docs_site/data/benchmark_time_to_interactive.json``).
 
-The framework benchmark runner writes a report folder: ``report.html``, which
-carries every observation as one embedded JSON script element, and
-``manifest.json``, which records how and where the run happened. This script
+The framework benchmark runner's ``citry-bench compose`` command
+(``benchmarks/web``) writes a report folder: ``report.html``, which carries
+every observation as one embedded JSON script element, and ``manifest.json``,
+which records which runs measured each framework and how. This script
 reads both and keeps only what the ``<c-benchmark-chart />`` component draws:
 for each framework, the time until the page is ready for input at 1,400
 outputs, split into phases, for the first and the second page load. The docs
@@ -35,7 +36,7 @@ OUTPUTS = 1400
 # the docs page compares pages rendered on the server. A group of None draws
 # no heading, which is how Citry's own row sits on top unlabeled.
 GROUPS: tuple[tuple[str | None, tuple[tuple[str, str], ...]], ...] = (
-    (None, (("citry_vue", "Citry"),)),
+    (None, (("citry", "Citry"),)),
     (
         "Django libraries",
         (
@@ -114,7 +115,7 @@ def _citry_build(manifest: dict[str, Any]) -> dict[str, Any]:
     # The run group that measured Citry names the wheels it installed; the
     # run's own manifest, when it is still on disk, names the source commit.
     for group in manifest.get("source_runs", {}).get("run_groups", {}).values():
-        if "citry_vue" not in group.get("apps", ()):
+        if "citry" not in group.get("apps", ()):
             continue
         latency = group["latency"]
         build: dict[str, Any] = {
