@@ -166,9 +166,9 @@ walks through every step.
 
 ### Fixes
 
-- `parse_string_style()` and `style` merging no longer drop text that looks
-  like a CSS comment inside a quoted value or after a backslash, such as
-  `content: "/* note */"`, matching Vue.
+- `parse_string_style()`, `normalize_style()`, and `merge_attrs()` no longer
+  drop text that looks like a CSS comment inside a quoted value or after a
+  backslash, such as `content: "/* note */"`, matching Vue.
 - `class Kwargs(Parent.Kwargs):` on a subclass now keeps the parent's
   field defaults, and a nested data class such as `Kwargs` can list a
   required field after one with a default.
