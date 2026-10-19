@@ -495,7 +495,9 @@ ratchet immediately below the current measured runtime coverage; raise it as
 focused tests recover headroom.
 The `pyright` phase runs the pinned pyright from `node_modules` alongside mypy.
 The package-local Node phases run `pnpm run check` for `citry-client`, the docs
-playground, and the VS Code language extension. The `citry-ui assets` phase
+playground, and the VS Code language extension. In CI the VS Code check also
+fails when the rebuilt `out/extension.js` differs from the committed copy,
+because release qualification rejects that VSIX; locally it only warns. The `citry-ui assets` phase
 fails when a committed, minified Citry UI file (a `runtime.min.js` or
 production CSS) does not match the readable source it is built from. The
 `vue render parity` phase
@@ -600,7 +602,15 @@ installs each wheel into its own fresh environment. The installed checks run
 outside the repository with Node absent from `PATH` and without `jsonschema`.
 They exercise both embedded protocol packages, both browser data files, the
 typing marker, the top-level import, and `citry --help`. Both wheels must also
-stay below the checked 1.1 MiB release cap.
+stay below the release size cap, `MAX_WHEEL_BYTES` in the verifier.
+
+Pull requests run the wheel part of this check earlier. The `citry-ui-wheel-build`
+job in the Python tests workflow already builds the citry wheel, and checks its
+filename, metadata, RECORD, file list, and size with:
+
+```bash
+python scripts/verify_citry_distribution.py --check-wheel dist/citry-[0-9]*.whl
+```
 
 The main test workflow has a separate i18n release-qualification job. It builds
 the native extension in release mode, runs `benchmarks/i18n.py`, checks the
