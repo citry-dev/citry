@@ -612,6 +612,12 @@ filename, metadata, RECORD, file list, and size with:
 python scripts/verify_citry_distribution.py --check-wheel dist/citry-[0-9]*.whl
 ```
 
+The same job checks the citry-core wheel it builds for Linux with
+`verify_citry_core_distribution.py check-wheel`. It also builds citry-lsp and
+pygments-citry and runs their release verifiers with `--skip-install-smoke`.
+That checks the wheel, the sdist, and a wheel rebuilt from the sdist, leaving
+only the install smoke test to release qualification.
+
 The main test workflow has a separate i18n release-qualification job. It builds
 the native extension in release mode, runs `benchmarks/i18n.py`, checks the
 browser i18n payload, and uploads the machine-readable result. The Citry UI
