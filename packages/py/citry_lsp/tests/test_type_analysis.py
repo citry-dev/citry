@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
+import re
 import sys
 import venv
 from pathlib import PurePath, PurePosixPath, PureWindowsPath
@@ -38,6 +40,20 @@ def short_ty_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
     """Exercise shutdown escalation without paying production wall-clock bounds."""
     monkeypatch.setattr(type_analysis, "_CLIENT_STOP_TIMEOUT_SECONDS", 0.01)
     monkeypatch.setattr(type_analysis, "_PROCESS_STOP_TIMEOUT_SECONDS", 0.1)
+
+
+def _declared_ty_pins(distribution: str) -> set[str]:
+    """Read the exact ty versions a distribution's metadata requires."""
+    requirements = importlib.metadata.requires(distribution) or []
+    return {match.group(1) for req in requirements if (match := re.match(r"ty==([^;\s]+)", req))}
+
+
+def test_runtime_ty_version_matches_every_declared_ty_pin() -> None:
+    # The server refuses any ty other than TY_VERSION, so a dependency bump
+    # that misses this constant turns Python analysis off without failing
+    # installation. Citry's analysis-ty extra shares the same workspace lock.
+    assert _declared_ty_pins("citry-lsp") == {type_analysis.TY_VERSION}
+    assert _declared_ty_pins("citry") == {type_analysis.TY_VERSION}
 
 
 def test_utf16_positions_round_trip_without_splitting_astral_characters() -> None:

@@ -39,3 +39,22 @@ again (`adopt_js_data_inferred_types`).
 The Vue type declarations under `citry_lsp/types/` are generated and shipped
 in the wheel; [`citry_lsp/types/README.md`](citry_lsp/types/README.md) says
 how to regenerate them.
+
+## Updating ty
+
+The server runs only the exact `ty` version in `TY_VERSION`
+(`citry_lsp/type_analysis.py`) and turns Python analysis off for any other
+version. A `ty` update must change these together:
+
+- the `ty==` pin in this package's `pyproject.toml`;
+- `TY_VERSION` in `citry_lsp/type_analysis.py`;
+- the `analysis-ty` extra in `packages/py/citry/pyproject.toml`, because the
+  workspace lock holds one `ty` version;
+- the expected versions in `scripts/verify_citry_lsp_distribution.py` and
+  `scripts/verify_citry_distribution.py`;
+- `uv.lock`, by running `uv lock`.
+
+`test_runtime_ty_version_matches_every_declared_ty_pin` fails when
+`TY_VERSION` and the two package pins disagree. Dependabot changes only the
+`pyproject.toml` pins, so its `ty` pull requests need the other updates by
+hand.
