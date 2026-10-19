@@ -627,7 +627,7 @@ formatter to use VS Code's **Format Document** and format on save:
 For JavaScript and CSS, Citry uses
 [Prettier for VS Code](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
 when it is installed and selected for that language, so your Prettier
-configuration applies. Otherwise it uses its own copy of Prettier 3.9.6 with
+configuration applies. Otherwise it uses its own copy of Prettier 3.9.10 with
 two-space indentation.
 
 The template formatting matches `citry format` on the command line. The

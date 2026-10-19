@@ -10,7 +10,9 @@ test("packaging always compiles the current extension source", async () => {
 
 	assert.match(manifest.scripts.prepackage, /pnpm run compile/);
 	assert.match(manifest.scripts.compile, /--minify/);
-	assert.equal(manifest.dependencies.prettier, "3.9.6");
+	// An exact pin keeps the bundled formatter's output the same in every
+	// installed copy of the extension; a range would let it drift by install date.
+	assert.match(manifest.dependencies.prettier, /^\d+\.\d+\.\d+$/);
 });
 
 test("formatter commands and native save integration are contributed", async () => {
