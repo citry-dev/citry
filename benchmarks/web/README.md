@@ -49,7 +49,8 @@ an error.
 ## Which Citry the Citry app measures
 
 The Citry app pins and locks the published `citry` 0.6.0 and `citry-core`
-1.8.0 from PyPI, so every profile measures that release. To measure an
+1.8.0 from PyPI, so every profile without a `[local_wheels]` table
+measures that release. To measure an
 unreleased change instead, see
 [Test Citry with wheels you build](#test-citry-with-wheels-you-build).
 
@@ -233,27 +234,16 @@ charts from
 the time until the 1,400-output page is ready for input, first and second
 load, for Citry and eleven other frameworks.
 
-The numbers there now are a historical record of one composed report,
-`full-20260928-93925ce8fff0`, built from three runs at 140 and 1,400 outputs
-with one block, one session and two action cycles, the same blocks, sessions
-and cycles as `release-0.6.0`:
-
-- **Citry and nine other frameworks** (all except Next.js and Reflex), run
-  `20260927T232351Z-6a10df61` on 2026-09-27. Citry ran from wheels built from the then-unreleased Vue
-  runtime (commit `181416a00`, with uncommitted changes), labelled
-  `citry` 0.5.1 and `citry-core` 1.7.1.
-- **Next.js**, run `20260928T002042Z-16fd1835` on 2026-09-28, under its own
-  profile with the same settings.
-- **Reflex**, run
-  `20260924T111719Z-latency-whole-article-static-bindings-68f1ce81` on
-  2026-09-24. A research script measured it with the runner's own session
-  code on the Reflex app as it is here, but outside `prepare` and
-  `qualify`, which then failed for Reflex because of a runner fault since
-  fixed. Reflex now qualifies like every other app.
-
-Those runs cannot be repeated as they were: the Citry wheels came from a
-commit with uncommitted changes. The `release-0.6.0` run replaces all three
-with one run of the published release. From `benchmarks/web/runner/`:
+The numbers there now come from one composed report,
+`composed-70d4a8802900`, built on 2026-10-19 from the `release-0.6.0`
+qualify run `20261019T210740Z-2b5cd077` and the measurement run
+(`citry-bench run`) `20261019T213948Z-c6248185`. All fourteen apps of the
+profile, including the twelve frameworks on the docs page, ran in that one
+run, with Citry 0.6.0 and citry-core 1.8.0 installed from PyPI. The runner
+recorded commit `55740fd66` with no uncommitted changes; that local commit
+has the same benchmark sources as the change that published these numbers.
+To repeat it from `benchmarks/web/runner/` (for a later release, copy the
+profile under a new name first):
 
 ```bash
 uv run --no-sync citry-bench prepare --profile release-0.6.0

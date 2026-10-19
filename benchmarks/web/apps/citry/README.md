@@ -56,7 +56,7 @@ uv lock --python 3.12.13 \
   --upgrade-package citry --upgrade-package citry-core
 ```
 
-A profile can still replace both packages with wheels you build, to measure a
+A profile can replace both packages with wheels you build, to measure a
 change before it is released. The runner hashes those wheels into the
 prepared-build identity and installs them only into this app's environment.
 
