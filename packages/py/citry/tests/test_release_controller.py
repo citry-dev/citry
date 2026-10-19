@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import pytest
+from scripts import release
 from scripts.release import (
     GitHubClient,
     ReleaseError,
@@ -281,3 +283,99 @@ def test_candidate_accepts_both_supported_preparation_events(event: str) -> None
         commit="a" * 40,
         events=("push", "workflow_dispatch"),
     )
+
+
+class _ScriptedRuns:
+    """Serve one workflow run whose state advances on each poll."""
+
+    def __init__(
+        self,
+        states: list[tuple[str, str | None]],
+        jobs: list[dict[str, object]] | None = None,
+        *,
+        jobs_error: Exception | None = None,
+    ) -> None:
+        self.states = states
+        self.jobs = jobs or []
+        self.jobs_error = jobs_error
+        self.requested: list[str] = []
+
+    def workflow_runs(self, _workflow: str) -> list[dict[str, object]]:
+        status, conclusion = self.states.pop(0) if len(self.states) > 1 else self.states[0]
+        return [
+            {
+                "id": 7,
+                "display_title": "Qualify citry for candidate 1",
+                "created_at": "2026-01-01T00:00:00Z",
+                "status": status,
+                "conclusion": conclusion,
+                "html_url": "https://example.test/runs/7",
+            }
+        ]
+
+    def request(self, _method: str, path: str) -> dict[str, object]:
+        self.requested.append(path)
+        if self.jobs_error is not None:
+            raise self.jobs_error
+        return {"jobs": self.jobs}
+
+
+def _wait(monkeypatch: pytest.MonkeyPatch, client: _ScriptedRuns) -> dict[str, dict[str, object]]:
+    monkeypatch.setattr(release, "POLL_SECONDS", 0)
+    return release._wait_for_runs(
+        client,  # type: ignore[arg-type]
+        {"citry": ("py--citry--publish.yml", "Qualify citry for candidate 1")},
+        started_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        timeout_seconds=60,
+    )
+
+
+def test_waiting_logs_each_state_change_once_with_the_run_link(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Repeated polls of an unchanged run must not flood the log, and the first
+    # line must carry the URL so a reader can open the run being waited on.
+    client = _ScriptedRuns([("queued", None), ("queued", None), ("in_progress", None), ("completed", "success")])
+
+    assert _wait(monkeypatch, client)["citry"]["id"] == 7
+    assert capsys.readouterr().err.splitlines() == [
+        "Qualify citry for candidate 1: queued: https://example.test/runs/7",
+        "Qualify citry for candidate 1: in_progress",
+        "Qualify citry for candidate 1: completed/success",
+    ]
+
+
+def test_waiting_repeats_unfinished_states_on_the_progress_interval(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A zero interval makes the still-waiting line due on the first unfinished
+    # poll, without the test waiting five minutes.
+    monkeypatch.setattr(release, "PROGRESS_SECONDS", 0)
+    client = _ScriptedRuns([("in_progress", None), ("completed", "success")])
+
+    _wait(monkeypatch, client)
+    assert "Still waiting after 0 min on: citry (in_progress)" in capsys.readouterr().err
+
+
+def test_a_failed_run_names_its_failed_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _ScriptedRuns(
+        [("completed", "failure")],
+        jobs=[
+            {"name": "build", "conclusion": "success"},
+            {"name": "smoke-python (3.14)", "conclusion": "failure"},
+        ],
+    )
+
+    with pytest.raises(ReleaseError, match=r"failed in jobs smoke-python \(3\.14\): https://example"):
+        _wait(monkeypatch, client)
+    assert client.requested == ["/actions/runs/7/jobs?per_page=100"]
+
+
+def test_a_failed_job_lookup_still_reports_the_run_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The job names are extra detail, so a lookup error of any kind must leave
+    # the original failure message in place.
+    client = _ScriptedRuns([("completed", "failure")], jobs_error=ConnectionResetError("reset"))
+
+    with pytest.raises(ReleaseError) as raised:
+        _wait(monkeypatch, client)
+    assert str(raised.value) == "Qualify citry for candidate 1 failed: https://example.test/runs/7"
