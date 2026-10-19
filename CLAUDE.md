@@ -453,6 +453,25 @@ Do not create and push a new commit for each newly observed symptom when the
 remaining CI results can reveal related failures. Wait for the useful results,
 collect them, and make one corrective pass.
 
+While waiting on CI or release runs, wake up on the first failure, not only
+when every run has finished. A background command that polls `gh run` until
+every run finishes hides an early failure behind the slowest run. So the
+background command must:
+
+- exit as soon as any run or job finishes with a failure, a cancellation, or a
+  timeout; and
+- also exit after at most 20 minutes, even when nothing has changed, so the
+  agent wakes and checks a slow or stuck run.
+
+When you wake, read the failed jobs right away, even inside runs that are still
+going (`gh run view <run-id> --job <job-id> --log-failed`), rather than waiting
+for the whole workflow to finish. Then start a new background command on the
+runs that are still going, and keep going until every run that can still reveal
+a related failure has finished or a failure already makes the rest moot. Use
+that wait to group the failures and reproduce them locally. Waking up early
+does not mean fixing each failure as it appears: still make one corrective pass
+as described above.
+
 Run expensive repository-wide checks only at meaningful stage boundaries.
 During implementation and CI repair, use focused checks. Run the full local
 gate once the integrated candidate has settled, and run the required exact-SHA

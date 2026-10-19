@@ -95,6 +95,17 @@ tried to break it. The broader failure mode is the first one the industry
 notes below (stopping at the first plausible conclusion); an independent
 reviewer is the cheapest way to force the falsification that self-review skips.
 
+### A release watcher that waited for the slowest run
+
+During the 0.6.0 release, the agent started one background command that polled
+every CI and release run and exited only once all of them had finished. The
+`Check` workflow and the browser tests on main had already failed, but release
+qualification kept running for another hour, so nobody looked at the failures
+until it ended. The rule in CLAUDE.md ("Keep integration and release loops
+bounded") followed: a watcher exits on the first failure and on a timer of at
+most 20 minutes, and the agent reads failed jobs inside runs that are still
+going.
+
 ## What the industry has observed
 
 Recent writing on AI coding agent failure modes converges on a few points that
