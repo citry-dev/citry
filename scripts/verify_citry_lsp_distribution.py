@@ -43,7 +43,7 @@ EXPECTED_REQUIRES_DIST: Final = {
     "packaging>=25.0",
     "pygls==2.1.1",
     "python-dotenv<2,>=1.2.3",
-    "ty==0.0.78",
+    "ty==0.0.87",
 }
 
 
