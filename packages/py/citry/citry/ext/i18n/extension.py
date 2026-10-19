@@ -12,6 +12,9 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 from weakref import ReferenceType, WeakKeyDictionary, ref
 
+from citry._class_introspection import _component_declaration_generation
+from citry.browser_render import BrowserPluginDescriptor, BrowserRenderContribution
+from citry.ext.dependencies.types import Script
 from citry.extension import Extension, ExtensionCommand, StagedRenderCacheContribution, TemplateNamespaceContribution
 from citry_core.i18n import CatalogCompiler, CompiledCatalog, I18nCompileError, canonicalize_locale
 
@@ -55,6 +58,7 @@ from .usage import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from citry.browser_render import OnBrowserRenderPrepareContext
     from citry.component import Component
     from citry.ext.dependencies.emission import OnDependenciesContext
     from citry.extension import (
@@ -96,6 +100,7 @@ def _record_to_wire(
     *,
     instance: int,
     local_by_id: dict[str, int],
+    external_by_id: dict[str, int],
 ) -> dict[str, object]:
     usage = record.server_usage
     record.bindings.assert_ready()
@@ -108,28 +113,33 @@ def _record_to_wire(
             }
             for marker in record.bindings.markers
         ],
-        "bindings": [_binding_to_wire(binding, local_by_id=local_by_id) for binding in record.bindings.records],
+        "bindings": [
+            _binding_to_wire(binding, local_by_id=local_by_id, external_by_id=external_by_id)
+            for binding in record.bindings.records
+        ],
         "class_id": record.class_id,
         "client_barrier": record.client_barrier,
-        "client_owner": _owner_to_wire(record.client_owner, local_by_id=local_by_id),
+        "client_owner": _owner_to_wire(record.client_owner, local_by_id=local_by_id, external_by_id=external_by_id),
         "client_messages": list(record.client_messages),
         "client_outputs": [{"attr": item.attr, "message": item.message} for item in record.client_outputs],
         "formats": [{"operation": item.operation, "profile": item.profile} for item in usage.formats],
         "instance": instance,
         "messages": [{"attr": item.attr, "message": item.message} for item in usage.messages],
         "parsers": [{"operation": item.operation, "profile": item.profile} for item in usage.parsers],
-        "provider": _provider_to_wire(record.provider, local_by_id=local_by_id),
+        "provider": _provider_to_wire(record.provider, local_by_id=local_by_id, external_by_id=external_by_id),
     }
 
 
-def _binding_to_wire(binding: Any, *, local_by_id: dict[str, int]) -> dict[str, object]:
+def _binding_to_wire(
+    binding: Any, *, local_by_id: dict[str, int], external_by_id: dict[str, int]
+) -> dict[str, object]:
     target: dict[str, object] = {"kind": binding.target.kind}
     if binding.target.kind == "attribute":
         target["name"] = binding.target.name
     return {
         "id": binding.id,
         "message": binding.message,
-        "owner": _owner_to_wire(binding.owner, local_by_id=local_by_id),
+        "owner": _owner_to_wire(binding.owner, local_by_id=local_by_id, external_by_id=external_by_id),
         "output": binding.output,
         "target": target,
         "values": {name: {"type": tagged[0], "value": tagged[1]} for name, tagged in binding.values},
@@ -137,16 +147,23 @@ def _binding_to_wire(binding: Any, *, local_by_id: dict[str, int]) -> dict[str, 
     }
 
 
-def _owner_to_wire(owner: str | None, *, local_by_id: dict[str, int]) -> int | str | None:
+def _owner_to_wire(
+    owner: str | None, *, local_by_id: dict[str, int], external_by_id: dict[str, int]
+) -> int | str | dict[str, int] | None:
     if owner is None:
         return None
-    return local_by_id.get(owner, "ambient")
+    if owner in local_by_id:
+        return local_by_id[owner]
+    if owner in external_by_id:
+        return {"parent": external_by_id[owner]}
+    return "ambient"
 
 
 def _provider_to_wire(
     provider: ClientProviderUse | None,
     *,
     local_by_id: dict[str, int],
+    external_by_id: dict[str, int],
 ) -> dict[str, object] | None:
     if provider is None:
         return None
@@ -163,7 +180,7 @@ def _provider_to_wire(
         },
         "direction": _policy_to_wire(provider.direction),
         "locale": _policy_to_wire(provider.locale),
-        "parent": _owner_to_wire(provider.parent, local_by_id=local_by_id),
+        "parent": _owner_to_wire(provider.parent, local_by_id=local_by_id, external_by_id=external_by_id),
         "time_zone": _policy_to_wire(provider.time_zone),
     }
 
@@ -181,6 +198,7 @@ def _records_from_wire(ctx: OnRenderCacheStageContext) -> dict[str, I18nRenderRe
     if set(ctx.payload) != {"records"} or type(ctx.payload["records"]) is not list:
         raise CacheArtifactError("i18n render-cache payload has an invalid field set.")
     records: dict[str, I18nRenderRecord] = {}
+    ambient_owner = ctx.provided_render_ids.get(CLIENT_CONTEXT_KEY, AMBIENT_CLIENT_OWNER)
     seen_instances: set[int] = set()
     for index, raw in enumerate(ctx.payload["records"]):
         path = f"i18n.records[{index}]"
@@ -237,6 +255,8 @@ def _records_from_wire(ctx: OnRenderCacheStageContext) -> dict[str, I18nRenderRe
             item["client_owner"],
             path=f"{path}.client_owner",
             instance_ids=ctx.instance_ids,
+            parent_ids=ctx.parent_ids,
+            ambient_owner=ambient_owner,
         )
         client_barrier = item["client_barrier"]
         if type(client_barrier) is not bool:
@@ -246,6 +266,8 @@ def _records_from_wire(ctx: OnRenderCacheStageContext) -> dict[str, I18nRenderRe
             path=f"{path}.provider",
             extension=extension,
             instance_ids=ctx.instance_ids,
+            parent_ids=ctx.parent_ids,
+            ambient_owner=ambient_owner,
         )
         is_provider_component = getattr(component_class, "_citry_i18n_provider_component", False) is True
         if (provider is not None or client_barrier) and not is_provider_component:
@@ -258,6 +280,8 @@ def _records_from_wire(ctx: OnRenderCacheStageContext) -> dict[str, I18nRenderRe
             path=path,
             render_id=render_id,
             instance_ids=ctx.instance_ids,
+            parent_ids=ctx.parent_ids,
+            ambient_owner=ambient_owner,
         )
         records[render_id] = I18nRenderRecord(
             render_id=render_id,
@@ -281,6 +305,8 @@ def _bindings_from_wire(
     path: str,
     render_id: str,
     instance_ids: tuple[str, ...],
+    parent_ids: tuple[str, ...],
+    ambient_owner: str,
 ) -> tuple[Any, list[tuple[str, ...]], tuple[tuple[str, str], ...]]:
     from citry.ext.cache.errors import CacheArtifactError  # noqa: PLC0415
 
@@ -315,6 +341,8 @@ def _bindings_from_wire(
             item["owner"],
             path=f"{item_path}.owner",
             instance_ids=instance_ids,
+            parent_ids=parent_ids,
+            ambient_owner=ambient_owner,
         )
         if owner is None:
             raise CacheArtifactError(f"{item_path}.owner must name a client provider.")
@@ -401,6 +429,8 @@ def _provider_from_wire(
     path: str,
     extension: I18nExtension,
     instance_ids: tuple[str, ...],
+    parent_ids: tuple[str, ...],
+    ambient_owner: str,
 ) -> ClientProviderUse | None:
     from citry.ext.cache.errors import CacheArtifactError  # noqa: PLC0415
 
@@ -451,6 +481,8 @@ def _provider_from_wire(
             item["parent"],
             path=f"{path}.parent",
             instance_ids=instance_ids,
+            parent_ids=parent_ids,
+            ambient_owner=ambient_owner,
         ),
         locale=_policy_from_wire(item["locale"], path=f"{path}.locale", clear=False),
         direction=_policy_from_wire(item["direction"], path=f"{path}.direction", clear=False),
@@ -463,13 +495,20 @@ def _owner_from_wire(
     *,
     path: str,
     instance_ids: tuple[str, ...],
+    parent_ids: tuple[str, ...],
+    ambient_owner: str,
 ) -> str | None:
     from citry.ext.cache.errors import CacheArtifactError  # noqa: PLC0415
 
     if value is None:
         return None
     if value == "ambient":
-        return AMBIENT_CLIENT_OWNER
+        return ambient_owner
+    if type(value) is dict and set(value) == {"parent"}:
+        depth = value["parent"]
+        if type(depth) is int and 0 <= depth < len(parent_ids):
+            return parent_ids[depth]
+        raise CacheArtifactError(f"{path}.parent does not refer to a current boundary ancestor.")
     if type(value) is not int or not 0 <= value < len(instance_ids):
         raise CacheArtifactError(f"{path} must be null, 'ambient', or an artifact instance index.")
     return instance_ids[value]
@@ -774,7 +813,7 @@ class I18nService:
     Use messages, formatting, and parsing with one explicit locale context.
 
     Create this service with
-    [`I18nExtension.for_context`][citry.I18nExtension.for_context]. Components
+    [`I18nExtension.for_context`][citry.ext.i18n.I18nExtension.for_context]. Components
     receive the same operations through [`Component.i18n`][citry.Component.i18n].
 
     Attributes:
@@ -853,7 +892,7 @@ class I18nExtension(Extension):
     `app.extensions.get_extension("i18n")`. Create a context with
     [`make_context()`][citry.ext.i18n.make_context], pass it through root
     `render(provides={"citry_i18n": context})`, and use
-    [`for_context()`][citry.I18nExtension.for_context] outside components.
+    [`for_context()`][citry.ext.i18n.I18nExtension.for_context] outside components.
     Components receive the same operations through `self.i18n`.
     """
 
@@ -876,6 +915,11 @@ class I18nExtension(Extension):
         self._source_locales: tuple[str, ...] = ()
         self._registry_generation = 0
         self._loaded_registry_generation = -1
+        # The answer of ``_has_registered_message_source`` with the registry
+        # generation and component declaration count it was computed from.
+        # Registering, unregistering, clearing, reloading files, or assigning
+        # ``messages`` on a class moves one of the two, which forces a rescan.
+        self._message_source_answer: tuple[tuple[int, int], bool] | None = None
 
     @property
     def configured(self) -> bool:
@@ -1054,7 +1098,7 @@ class I18nExtension(Extension):
         if not self.configured:
             return
         object.__setattr__(self, "render_cache_mode", "payload")
-        object.__setattr__(self, "render_cache_version", 3)
+        object.__setattr__(self, "render_cache_version", 1)
         self._validate_template_global_names()
         self._packages = load_catalog_packages(self._config.catalogs, mode=ctx.citry.mode)
         format_contributions = tuple(
@@ -1139,11 +1183,20 @@ class I18nExtension(Extension):
         """Check whether source mode applies without loading assets or recursing through lint."""
         from citry.assets import _find_pair_declaration  # noqa: PLC0415
 
+        # Read the key before scanning: a registration that lands during the
+        # scan moves the generation, so the stored answer is never reused.
+        key = (self._registry_generation, _component_declaration_generation())
+        answer = self._message_source_answer
+        if answer is not None and answer[0] == key:
+            return answer[1]
+        found = False
         for component_class in self.citry._registered_component_classes_snapshot():
             _owner, inline, path = _find_pair_declaration(component_class, "messages", "messages_file")
             if inline is not None or path is not None:
-                return True
-        return False
+                found = True
+                break
+        self._message_source_answer = (key, found)
+        return found
 
     def on_component_data(self, ctx: OnComponentDataContext) -> None:
         with self._catalog_lock:
@@ -1190,7 +1243,7 @@ class I18nExtension(Extension):
         """Install render-time wrappers for direct, dynamic, and spread `$c-tr`."""
         from .bindings import compile_template_bindings  # noqa: PLC0415
 
-        if ctx.component_class.simple:
+        if ctx.component_class.simple is not False:
             # Simple bodies have no translation collector of their own. Their
             # template validator rejects literal bindings, and ordinary
             # attribute resolution rejects bindings arriving through spreads.
@@ -1213,11 +1266,11 @@ class I18nExtension(Extension):
 
         from citry._browser_expressions import (  # noqa: PLC0415
             BrowserExpression,
-            analyze_browser_component_source,
             analyze_browser_expression,
             browser_expressions,
             browser_i18n_bind_calls,
             browser_member_literal_calls,
+            component_js_i18n_owners,
         )
         from citry.tag_rules import build_tag_rules  # noqa: PLC0415
         from citry_core.template_parser import parse_template  # noqa: PLC0415
@@ -1240,32 +1293,31 @@ class I18nExtension(Extension):
 
         javascript = component_class.get_js()
         if javascript is not None:
-            analysis = analyze_browser_component_source(javascript)
-            if analysis.valid:
-                references: dict[str, set[tuple[int, int]]] = {}
-                for binding in analysis.bindings:
-                    if binding.name == "i18n":
-                        references.setdefault(binding.local_name, set()).update(binding.references)
-                expression = BrowserExpression(
-                    javascript,
-                    0,
-                    len(javascript.encode()),
-                    "statement",
-                    "component-js",
-                )
-                for call in browser_member_literal_calls(
-                    expression,
-                    frozenset(references),
-                    frozenset({"resolve", "tr"}),
-                ):
-                    if (call.owner_start_index, call.owner_end_index) in references[call.owner]:
-                        outputs[MessageOutputUse(call.value, None)] = None
-                for bind_call in browser_i18n_bind_calls(expression, frozenset(references)):
-                    if (
-                        bind_call.owner_start_index,
-                        bind_call.owner_end_index,
-                    ) not in references[bind_call.owner] or bind_call.has_dynamic_output:
-                        continue
+            # Only calls on reads the analyzer proves hold `component.$i18n` or
+            # `this.$i18n` (directly or through an unchanged local variable)
+            # are preloaded; another object named `i18n` could be anything.
+            owners, owner_spans = component_js_i18n_owners(javascript)
+            expression = BrowserExpression(
+                javascript,
+                0,
+                len(javascript.encode("utf-8")),
+                "statement",
+                "component-js",
+            )
+            for call in browser_member_literal_calls(
+                expression,
+                owners,
+                frozenset({"resolve", "tr"}),
+                authenticated_owner_spans=owner_spans,
+            ):
+                if (call.owner_start_index, call.owner_end_index) in owner_spans:
+                    outputs[MessageOutputUse(call.value, None)] = None
+            for bind_call in browser_i18n_bind_calls(
+                expression,
+                owners,
+                proven_owner_spans=owner_spans,
+            ):
+                if not bind_call.has_dynamic_output:
                     outputs[MessageOutputUse(bind_call.message, bind_call.output)] = None
 
         result = tuple(outputs)
@@ -1281,13 +1333,57 @@ class I18nExtension(Extension):
 
     def on_dependencies(self, ctx: OnDependenciesContext) -> None:
         """Emit browser i18n only for a client-enabled provider subtree."""
+        if getattr(ctx.selected_render, "render_target", None) == "prepared":
+            return
         from .emission import emit_i18n_dependencies  # noqa: PLC0415
 
         emit_i18n_dependencies(self, ctx)
 
+    def browser_plugin(self) -> BrowserPluginDescriptor | None:
+        """Install the checked Vue i18n plugin before the app mounts."""
+        if not self.configured:
+            return None
+        from .emission import client_runtime_resource, vue_plugin_js  # noqa: PLC0415
+
+        if self.citry.mounted_prefix is None:
+            script = Script(kind="core", content=vue_plugin_js(), wrap=False)
+        else:
+            resource = client_runtime_resource(self.citry)
+            script = Script(kind="core", url=resource.url)
+            script._owned_resource = resource
+        return BrowserPluginDescriptor(
+            schema_version=1,
+            script=script,
+            allows_late_component_assets=True,
+            template_context_names=("$citryI18nBinding", "$i18n"),
+        )
+
+    def prepare_browser_render(self, ctx: OnBrowserRenderPrepareContext) -> BrowserRenderContribution | None:
+        """Project selected i18n records onto stable Vue occurrences."""
+        from .emission import prepared_i18n_payload  # noqa: PLC0415
+
+        records = cast("dict[str, I18nRenderRecord]", ctx.context.extra.get(EXTRA_KEY, {}))
+        selected = {render_id: records[render_id] for render_id in ctx.render_to_occurrence if render_id in records}
+        if not self.configured:
+            return None
+        payload = prepared_i18n_payload(
+            self,
+            context=ctx.context,
+            records=selected,
+            render_to_occurrence=ctx.render_to_occurrence,
+            occurrence_parents={item.id: item.parent_id for item in ctx.view.occurrences},
+        )
+        return BrowserRenderContribution(schema_version=1, payload=payload)
+
     def export_render_cache(self, ctx: OnRenderCacheExportContext) -> dict[str, object]:
         """Detach i18n metadata for the selected cached subtree."""
         local_by_id = {instance.render_id: instance.index for instance in ctx.instances}
+        external_by_id: dict[str, int] = {}
+        boundary = ctx.root_context.component
+        ancestor = None if boundary is None else boundary.parent
+        while ancestor is not None:
+            external_by_id[ancestor.id] = len(external_by_id)
+            ancestor = ancestor.parent
         records: dict[str, I18nRenderRecord] = ctx.root_context.extra.get(EXTRA_KEY, {})
         return {
             "records": [
@@ -1295,6 +1391,7 @@ class I18nExtension(Extension):
                     record,
                     instance=local_by_id[record.render_id],
                     local_by_id=local_by_id,
+                    external_by_id=external_by_id,
                 )
                 for record in records.values()
                 if record.render_id in ctx.selected_render_ids

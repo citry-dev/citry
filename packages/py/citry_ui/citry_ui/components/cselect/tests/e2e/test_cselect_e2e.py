@@ -264,12 +264,18 @@ def test_native_form_reset_validation_readonly_fieldset_and_modal_safety(page: A
     assert errors == []
 
 
-def test_css_environment_geometry_and_axe(page: Any) -> None:
+def test_css_environment_geometry_and_axe(page: Any, wait_for_animations: Any) -> None:
     errors = _load(page)
     control = _control(page)
     control.click()
     popup = page.locator('.primary-select [data-citry-ui-part="popup"]')
-    page.wait_for_timeout(150)
+    # The popup scales in for about 170 ms after it opens, and its box is
+    # narrower than the control until that finishes, so wait for it to open
+    # and then for its animation to end rather than a fixed delay.
+    page.wait_for_function(
+        "document.querySelector('.primary-select [data-citry-ui-part=popup]').matches(':popover-open')"
+    )
+    wait_for_animations(popup)
     assert abs(popup.bounding_box()["width"] - control.bounding_box()["width"]) < 1.5
     page.emulate_media(reduced_motion="reduce")
     assert (

@@ -192,8 +192,8 @@ mod tests {
     #[test]
     fn test_dynamic_element_metadata() {
         assert_compile(
-            r#"<c-element c-is="tag" #c-key="k" #c-ignore />"#,
-            r##"[ComponentNode(source, (0, 45,), (ExprHtmlAttr(source, (11, 21,), """c-is""", """tag""", ("tag",)),), [], ("tag", "k",), """element""", False, ("element", ("key", ExprHtmlAttr(source, (22, 32,), """#c-key""", """k""", ("k",)),), ("morph", "ignore",),)),]"##,
+            r#"<c-element c-is="tag" #c-key="k" />"#,
+            r##"[ComponentNode(source, (0, 35,), (ExprHtmlAttr(source, (11, 21,), """c-is""", """tag""", ("tag",)),), [], ("tag", "k",), """element""", False, ("element", ("key", ExprHtmlAttr(source, (22, 32,), """#c-key""", """k""", ("k",)),),)),]"##,
         );
     }
 

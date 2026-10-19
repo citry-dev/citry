@@ -24,7 +24,13 @@ def release(monkeypatch):
     runtime = {
         "schema_version": 1,
         "protocol_version": 1,
-        "pyodide": {"version": "314.0.3", "python": "3.14.2"},
+        "source": "published",
+        "pyodide": {
+            "version": "314.0.3",
+            "python": "3.14.2",
+            "index_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/",
+            "module_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs",
+        },
         "citry": {
             "version": baseline["citry"],
             "core_version": baseline["citry-core"],
@@ -42,12 +48,17 @@ def release(monkeypatch):
             for name, version in baseline.items()
         ]
         + [
-            {"name": "wrapt", "version": "2.1.0", "source": "url", "url": "https://example.com/wrapt.whl"},
+            {
+                "name": "wrapt",
+                "version": "2.1.0",
+                "source": "url",
+                "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/wrapt.whl",
+            },
             {
                 "name": "typing-extensions",
                 "version": "4.15.0",
                 "source": "url",
-                "url": "https://example.com/typing.whl",
+                "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/typing_extensions.whl",
             },
         ],
     }
@@ -168,3 +179,23 @@ def test_failed_update_leaves_runtime_file_unchanged(release, monkeypatch, tmp_p
     monkeypatch.setattr(updater.sys, "argv", ["update", "--source-ref", "citry@0.5.0", "--runtime", str(path)])
     assert updater.main() == 1
     assert path.read_text() == original
+
+
+def test_update_rejects_a_workspace_manifest_before_downloads(release):
+    runtime, versions, _, _ = release
+    runtime["source"] = "workspace"
+
+    with pytest.raises(PlaygroundReleaseError, match="source 'published'"):
+        updater.update_runtime(runtime, versions)
+
+
+def test_update_rejects_a_relative_package_url_before_downloads(release):
+    runtime, versions, _, _ = release
+    package = next(package for package in runtime["packages"] if package["name"] == "citry")
+    package["source"] = "url"
+    package.pop("filename")
+    package.pop("sha256")
+    package["url"] = "./local/citry.whl"
+
+    with pytest.raises(PlaygroundReleaseError, match=r"approved .*HTTPS URL"):
+        updater.update_runtime(runtime, versions)

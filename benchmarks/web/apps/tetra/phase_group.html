@@ -1,0 +1,12 @@
+<section id="phase-{{ phase.id }}" key="phase-{{ phase.id }}" data-phase-id="{{ phase.id }}" data-phase-expanded="true">
+<details open>
+<summary><span class="phase-title">{{ phase.title }}</span></summary>
+<div>
+{% for row in phase.outputs %}
+{% component "default.ProjectOutput" board=board row=row key=row.id / %}
+{% empty %}
+<p>No outputs</p>
+{% endfor %}
+</div>
+</details>
+</section>

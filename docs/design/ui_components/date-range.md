@@ -209,7 +209,9 @@ loading surface.
 ## 14. Server rerender, fragments, morphing, and cleanup
 
 Committed range, draft, open state, visible month, and focus survive compatible
-morphs by public identity. Structural constraints come from a server rerender.
+morphs by public identity; DateRange has no server `open` input. A render that
+disables an open popup closes it and reports one forced close with reason
+`disabled`. Structural constraints come from a server rerender.
 Locale fragments reconcile before activation. Every listener, effect, reset
 entry, observer, Popover/Calendar callback, i18n subscription, and binding is
 released on removal.

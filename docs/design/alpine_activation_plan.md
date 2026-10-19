@@ -459,7 +459,7 @@ still require only the dependency manager so an initial document can mark
 them loaded for later fragments; they do not select the Alpine bundle.
 
 The dependency extension remains the delivery owner. A graph in
-`before_manifest` causes the document manager or fragment preloader to be
+`early_scripts` causes the document manager or fragment preloader to be
 emitted. The graph revision continues to link the ownership, dependency, and
 Events packages. Only artifact presence selects the combined Alpine bundle.
 

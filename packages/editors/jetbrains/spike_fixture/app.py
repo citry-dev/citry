@@ -44,9 +44,12 @@ class InlineCard(Component):
       >
         <h2>{{ title.upper() }}</h2>
         <button @c-click="save">Save</button>
-        <template x-for="color in colors">
-          <span x-text="color.toUpperCase()"></span>
-        </template>
+        <span
+          v-for="color in colors"
+          :key="color"
+          v-text="color.toUpperCase()"
+        ></span>
+        <output v-text="colorCount"></output>
         <c-Frame
           c-body="<><span c-title='title'>Nested {{ title }}</span></>"
         />
@@ -56,8 +59,10 @@ class InlineCard(Component):
 
     js = """
       $component({
-        init: ({ data, scope }) => {
-          scope.active = data.active;
+        computed: {
+          colorCount() {
+            return this.colors.length;
+          },
         },
       });
     """

@@ -1,0 +1,10 @@
+[app]
+name = "nuxt"
+runtime = "node"
+node = ".toolchain/node-v22.22.0-darwin-arm64/bin/node"
+rendering = "hybrid"
+update_payload = "json"
+launch = ["{node}", "server.mjs", "{port}"]
+health = "/health"
+build = [["{python}", "build.py"]]
+source_exclude = [".nuxt", ".output", ".toolchain", "generated", "node_modules"]

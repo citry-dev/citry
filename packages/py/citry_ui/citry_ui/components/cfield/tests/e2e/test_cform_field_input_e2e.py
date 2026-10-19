@@ -6,6 +6,8 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
 import citry_ui
 from citry import Citry, Component
 from citry.ext.events.renderers import dispatcher_for
@@ -320,8 +322,13 @@ def test_retained_field_revision_updates_ids_and_slot_relationships(page, serve_
     page.on("pageerror", lambda error: faults.append(str(error)))
     base = serve_citry_ui_live(app, FieldRevision(step=0).render().serialize())
     page.goto(base + "/")
-    page.wait_for_timeout(500)
-    assert page.locator("#before-field[data-citry-input-initialized]").count() == 1, (faults, page.content())
+    # The input marks itself initialized once its script has run; a fixed
+    # sleep before checking that guessed how long a slow runner needs.
+    try:
+        page.wait_for_selector("#before-field[data-citry-input-initialized]", state="attached")
+    except PlaywrightTimeoutError:
+        pytest.fail(f"the input never initialized: {faults}\n{page.content()}")
+    assert page.locator("#before-field[data-citry-input-initialized]").count() == 1
     page.evaluate("window.__retainedField=document.querySelector('[data-citry-field-root]')")
     assert page.locator("#before-field").get_attribute("aria-describedby") == "before-field-description"
     assert page.locator("#before-field-error").count() == 1

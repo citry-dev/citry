@@ -170,10 +170,10 @@ site's existing light and dark Pygments themes need no new CSS classes:
   attributes with string values, so they highlight instead of erroring.
 - `<c-raw>...</c-raw>` content is verbatim: the body is plain text and its
   `{{ }}` / `{# #}` / nested tags are **not** interpreted, matching the engine.
-
-Deferred to a later version (documented, low value in docs): highlighting a
-nested-template attribute value (`c-body="<>...</>"`) as HTML rather than as a
-Python expression.
+- A `c-*` value that starts with a tag or a `<>...</>` fragment is a nested
+  template, so its markup is highlighted with the same `citry-html` rules. A
+  quoted value ends at its first matching quote, as in the grammar, so an inner
+  attribute that reuses the outer quote shows as an error.
 
 ### Registration (belt and suspenders)
 

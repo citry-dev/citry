@@ -1,8 +1,51 @@
 # This same set of tests is also found in django-components, to ensure that
 # this implementation can be replaced with the django-components' pure-python implementation
 
+import pytest
 
-from citry_core.html_transform import mark_html, scan_alpine_html, transform_html
+from citry_core.html_transform import (
+    browser_fragment_matches_nodes,
+    mark_html,
+    transform_html,
+    validate_html_fragment_boundary,
+)
+
+
+def test_strict_fragment_boundary():
+    for html in ("", "<div>x</div><br>", "<svg><path/></svg>", "<math><mspace/></math>"):
+        validate_html_fragment_boundary(html)
+    for html in ("<div>", "</div>", "<div/>", "<li>a<li>b", "<!-- unfinished"):
+        with pytest.raises(ValueError, match="self-contained strict fragment"):
+            validate_html_fragment_boundary(html)
+
+
+def test_browser_fragment_matches_nodes_reads_every_event_kind():
+    marker = [("data-allow-mismatch", "children")]
+    html = '<main id="m"><!--[--><aside data-allow-mismatch="children"></aside><!--]--></main>'
+    expected = [
+        ("open", "main", [("id", "m")]),
+        ("comment", "[", []),
+        ("shell", "aside", marker),
+        ("comment", "]", []),
+        ("close", "main", []),
+    ]
+    assert browser_fragment_matches_nodes(html, "div", expected) is True
+    # The same tree with the anchors in another order is a different Vue tree.
+    swapped = [expected[0], expected[3], expected[2], expected[1], expected[4]]
+    assert browser_fragment_matches_nodes(html, "div", swapped) is False
+    # A shell with written content would hide that content's mismatches.
+    filled = html.replace("></aside>", "><b>x</b></aside>")
+    assert browser_fragment_matches_nodes(filled, "div", expected) is False
+    root_text = [("open", "p", []), ("close", "p", []), ("text", "\n", [])]
+    assert browser_fragment_matches_nodes("<p></p>\n", "div", root_text)
+
+
+def test_browser_fragment_matches_nodes_rejects_malformed_events():
+    with pytest.raises(ValueError, match="unknown expected node kind"):
+        browser_fragment_matches_nodes("<p></p>", "div", [("element", "p", [])])
+    for kind in ("close", "comment", "text"):
+        with pytest.raises(ValueError, match=f"a {kind} event cannot carry attributes"):
+            browser_fragment_matches_nodes("<p></p>", "div", [(kind, "p", [("id", "x")])])
 
 
 def test_basic_transformation():
@@ -196,16 +239,3 @@ def test_mark_html_no_attributes_no_placeholders():
     segments, placeholders = mark_html("hello", [], "c-render-id")
     assert segments == ["hello"]
     assert placeholders == []
-
-
-def test_scan_alpine_html_distinguishes_attributes_from_text_and_raw_content():
-    assert scan_alpine_html(
-        [
-            '<button x-data="{}">Open</button>',
-            '<div :class="active"></div>',
-            '<div @click="open = true"></div>',
-            '<p>Example: x-data="{}"</p>',
-            '<script>const sample = `<div x-data="{}">`;</script>',
-            '<DIV X-DATA="{}"></DIV>',
-        ]
-    ) == [True, True, True, False, False, True]

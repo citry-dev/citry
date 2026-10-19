@@ -72,6 +72,7 @@ jobs:
           packages/py/citry/tests/e2e
           packages/py/citry_ui/citry_ui/components
           packages/py/citry_ui/citry_ui/quality/tests/e2e
+          packages/py/citry_ui/tests/e2e
           -m e2e
           --browser ${{ matrix.browser }}
           -n 4

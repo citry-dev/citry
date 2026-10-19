@@ -1,9 +1,9 @@
 """
 Short ids for rendered components (e.g. ``c1a2b3c4d``).
 
-Every rendered component instance gets one. It scopes the component's CSS and JS
-to its own elements on the page (through ``data-cid-<id>`` markers) and is used
-as a lookup key by the browser-side code. The id is not a secret; it only has to
+Every rendered component instance gets one. Static output writes it into each
+component root's ``data-cid-<id>`` attribute, and browser-side code uses it as a
+lookup key. The id is not a secret; it only has to
 be unique among the components on a single rendered page.
 
 An id is generated in two steps:

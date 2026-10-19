@@ -331,13 +331,30 @@ The watcher is started explicitly. The natural place differs per host:
 |---|---|---|
 | Standalone / any | `citry watch --app myproj:engine` | new CLI subcommand via `build_cli` + the existing `--app` resolution ([`__main__.py:32`](../../packages/py/citry/citry/__main__.py#L32)) |
 | FastAPI / Starlette / ASGI | the root lifespan calls `engine.initialize()`, then enters `reload_lifespan(engine)`; the watcher stops on shutdown | `reload_lifespan` starts the same synchronous watcher on its daemon thread and stops its handle on shutdown ([`contrib/asgi.py`](../../packages/py/citry/citry/contrib/asgi.py)) |
-| Django | `citry.contrib.django.enable_hot_reload(engine)` connects to `file_changed` | piggyback Django's reloader, no second watcher; mirrors [`_djc_reference/apps.py:94`](../../packages/py/citry/_djc_reference/apps.py#L94) |
+| Django | `citry.contrib.django.enable_hot_reload(engine)` connects to `autoreload_started` and `file_changed` | piggyback Django's reloader, no second watcher; adapted from django-components' `apps.py` (`_setup_component_file_reload`) |
 | Flask / WSGI | `citry watch` alongside the dev server, or the host's own reloader | WSGI has no startup hook; the CLI covers it |
 
-The Django path is the important asymmetry: it installs **no** `FileWatcher`. It
-registers a `file_changed` receiver that calls `engine.invalidate_file(path)`
-and returns `True` (hot) or `None` (restart), exactly the django-components
-shape, so Django's existing reloader does the watching and citry only invalidates.
+The Django path is the important asymmetry: it installs **no** `FileWatcher`.
+Django's reloader does the watching and citry only invalidates, through two
+receivers:
+
+- An `autoreload_started` receiver calls `sender.watch_dir(dir, "**/*")` for
+  each of the engine's `dirs`. Django's reloader on its own reports Python
+  module files, files under its template directories, and translation `.mo`
+  files, so a component file anywhere else would never reach `file_changed`.
+- A `file_changed` receiver calls `engine.invalidate_file(path)`. When that
+  resets a component, `hot` returns `True` (handled, no restart) and `restart`
+  calls Django's `autoreload.trigger_reload(path)` itself. Returning `None` is
+  not enough to restart: Django's `notify_file_changed` restarts only when no
+  receiver returns a truthy value, and Django's own `template_changed`
+  receiver returns `True` for every non-Python file under a template
+  directory. A file that resets nothing returns `None` when it is a `.py` file
+  (Django restarts), `True` when it is any other file under the engine's
+  `dirs` (nothing is cached for it, and the `**/*` watch also reports
+  bytecode and unrelated files), and `None` otherwise (Django's other
+  receivers decide). Both receivers share one `dispatch_uid` per engine, and
+  a repeated call disconnects the earlier pair first, so the last `mode`
+  wins.
 
 `reload_lifespan` owns only the development watcher. It deliberately does not
 initialize Citry. The application's root lifespan owns `engine.initialize()` so
@@ -484,8 +501,8 @@ which this design deliberately does not require for the first version.
   orchestrator, and `WatchHandle`; the watcher library is imported lazily.
 - `citry/commands/watch.py`: the `citry watch` subcommand, added to the root
   command tree in `citry/commands/__init__.py`.
-- `citry/contrib/django.py`: `enable_hot_reload(engine)`, the `file_changed`
-  receiver (no `FileWatcher`).
+- `citry/contrib/django.py`: `enable_hot_reload(engine)`, the
+  `autoreload_started` and `file_changed` receivers (no `FileWatcher`).
 - `citry/contrib/asgi.py`: `reload_lifespan(engine)`, a Starlette/FastAPI
   lifespan that runs the watcher for the life of the app.
 - `packages/py/citry/pyproject.toml`: the `watcher-watchfiles` and

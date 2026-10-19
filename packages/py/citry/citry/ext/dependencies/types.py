@@ -38,10 +38,9 @@ DependencyKind: TypeAlias = Literal["core", "component", "variables", "extra"]
 """
 What a dependency is for:
 
-- ``"core"``: required for citry itself to work (the client-side manager).
+- ``"core"``: required for citry itself to work (Citry's browser runtime).
 - ``"component"``: a component's own ``Component.js`` / ``Component.css``.
-- ``"variables"``: a generated script carrying ``js_data()`` / ``css_data()``
-  values.
+- ``"variables"``: a generated stylesheet carrying ``css_data()`` values.
 - ``"extra"``: anything else, e.g. entries from a ``Dependencies`` class.
 """
 
@@ -64,7 +63,7 @@ class DependencyRecord(NamedTuple):
     component_id: str
     """The render id of the component instance (``component.id``)."""
     js_vars_hash: str | None = None
-    """Hash of the instance's ``js_data()`` result, or ``None`` when it has none."""
+    """Always ``None``: ``js_data()`` values reach the browser inside the page's Vue app data."""
     css_vars_hash: str | None = None
     """Hash of the instance's ``css_data()`` result, or ``None`` when it has none."""
     component_class: type[Component] | None = None
@@ -117,7 +116,7 @@ def _script_type_should_wrap(attrs: dict[str, str | bool]) -> bool:
 @dataclass(eq=False)
 class Dependency:
     """
-    Shared base of :class:`Script` and :class:`Style`.
+    Shared base of [`Script`][citry.ext.dependencies.Script] and [`Style`][citry.ext.dependencies.Style].
 
     Holds either inline ``content`` or a ``url``, never both; rendering
     raises when neither or both are set.
@@ -132,7 +131,12 @@ class Dependency:
     attrs: dict[str, str | bool] = field(default_factory=dict)
     """Extra HTML attributes (``True`` renders a bare boolean attribute)."""
     kind: DependencyKind = "extra"
-    """What this dependency is for; see :data:`DependencyKind`."""
+    """What this dependency is for: ``"core"`` (scripts Citry adds itself
+    to run its browser runtime, such as the runtime, the script that loads
+    it for a fragment, and the data it reads to mount components),
+    ``"component"`` (a component's own ``js`` or ``css``), ``"variables"`` (a
+    generated stylesheet carrying ``css_data()`` values), or ``"extra"``
+    (anything else, such as a ``Dependencies`` entry)."""
     origin_class_id: str | None = None
     """``class_id`` of the component class this dependency came from, when
     known. Used in error messages and for per-component hooks."""
@@ -215,7 +219,10 @@ class Script(Dependency):
 
     Example::
 
-        Script(content="console.log('hi');", attrs={"type": "module"}, wrap=False)
+        Script(
+            content="console.log('hi');",
+            attrs={"type": "module"},
+        )
         # <script type="module">console.log('hi');</script>
     """
 
@@ -235,7 +242,7 @@ class Script(Dependency):
     _owned_resource: _OwnedResource | None = field(default=None, init=False, repr=False, compare=False)
 
     def to_json(self) -> dict[str, Any]:
-        """Serialize for cache storage; the inverse of :meth:`from_json`."""
+        """Serialize for cache storage; ``from_json()`` reverses it."""
         return {
             "kind": self.kind,
             "url": self.url,
@@ -247,7 +254,7 @@ class Script(Dependency):
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Script:
-        """Rebuild from :meth:`to_json` output."""
+        """Rebuild a dependency from the output of ``to_json()``."""
         return cls(
             kind=data["kind"],
             content=data["content"],
@@ -285,7 +292,7 @@ class Style(Dependency):
     """
 
     def to_json(self) -> dict[str, Any]:
-        """Serialize for cache storage; the inverse of :meth:`from_json`."""
+        """Serialize for cache storage; ``from_json()`` reverses it."""
         return {
             "kind": self.kind,
             "url": self.url,
@@ -296,7 +303,7 @@ class Style(Dependency):
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Style:
-        """Rebuild from :meth:`to_json` output."""
+        """Rebuild a dependency from the output of ``to_json()``."""
         return cls(
             kind=data["kind"],
             content=data["content"],

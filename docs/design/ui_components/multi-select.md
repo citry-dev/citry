@@ -53,7 +53,7 @@ is visible and the proxy is visually clipped, out of the AX tree and Tab order.
 | `placeholder` | `str` | required | author-localized empty trigger copy |
 | `name`, `form`, `id` | `str | None` | `None` | native form/identity ownership |
 | `value` | `Sequence[str] | None` | `None` | initial selected values in collection order |
-| `open` | `bool` | `False` | initial eligible popup visibility |
+| `open` | `bool` | `False` | eligible popup visibility; on a server re-render, a changed value opens or closes the popup to match and an unchanged value keeps its current state |
 | `required`, `disabled`, `readonly`, `invalid` | `bool | None` | `None` | standalone state; Field owns when composed |
 | `loop` | `bool` | `False` | arrow edge wrapping |
 | `close_on_select` | `bool` | `False` | close after each accepted toggle |
@@ -81,7 +81,9 @@ fallback for configuration or release selection/open control. Controlled user
 requests notify but do not mutate. Forced disabled/ancestor/modal/invalid-tree
 closures always hide and report one forced close. Correlated reinitialization
 retains committed selection/open state when their server baselines are
-unchanged; stale tasks cannot affect replacements.
+unchanged and otherwise follows the server without calling `onOpenChange`; a
+disabled close reports reason `ancestor` whenever the popup was showing, even
+when the same render changes `open`. Stale tasks cannot affect replacements.
 
 ## 6. Slots and slot data
 

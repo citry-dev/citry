@@ -36,11 +36,19 @@ if TYPE_CHECKING:
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
-MAX_WHEEL_BYTES: Final = 1_100 * 1024
+# `packages/js/citry-client` bundles these inputs into `_vue/runtime.js`, and an
+# install reads only that bundle, so the wheel leaves them out. The sdist keeps
+# them (MANIFEST.in) because it carries sources and its tests read them. Paths
+# are relative to the `citry` package directory.
+SDIST_ONLY_SOURCES: Final = frozenset({"_vue/client.js", "_vue/events.js", "_vue/fragments.js", "_vue/vue.js"})
+# The package carries the bundled browser runtime, the i18n Vue plugin, and the
+# reusable browser programs in `_vue/leaf_program.py`. The wheel measured
+# 1,088,694 bytes when this cap was set, leaving about 61 KB of headroom.
+MAX_WHEEL_BYTES: Final = 1_124 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
     'playwright>=1.62.0; extra == "ext-preview"',
-    "citry-core==1.7.1",
+    "citry-core==1.8.0",
     "wrapt>=1.16",
     "markupsafe>=2.1",
     "typing-extensions>=4.10",
@@ -120,13 +128,16 @@ def _require_metadata(metadata: Message, *, artifact: Path, version: str) -> Non
         raise DistributionVerificationError(f"{artifact.name} has unexpected optional extras")
 
 
-def source_inventory(root: Path = SOURCE_ROOT) -> dict[str, str]:
-    """Hash every source file that belongs inside the installed package."""
+def source_inventory(root: Path = SOURCE_ROOT, *, include_sdist_only: bool = False) -> dict[str, str]:
+    """Hash every source file that belongs inside the installed package, or the sdist's copy of it."""
     inventory: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
             continue
-        inventory[path.relative_to(root).as_posix()] = sha256_bytes(path.read_bytes())
+        relative = path.relative_to(root).as_posix()
+        if relative in SDIST_ONLY_SOURCES and not include_sdist_only:
+            continue
+        inventory[relative] = sha256_bytes(path.read_bytes())
     return inventory
 
 
@@ -234,7 +245,9 @@ def verify_wheel(path: Path, *, version: str) -> dict[str, Any]:
 
 def _checkout_sdist_files() -> dict[str, bytes]:
     """Return every reviewed checkout file setuptools may place in the sdist."""
-    result = {name: (PACKAGE_ROOT / name).read_bytes() for name in ("LICENSE", "README.md", "pyproject.toml")}
+    result = {
+        name: (PACKAGE_ROOT / name).read_bytes() for name in ("LICENSE", "MANIFEST.in", "README.md", "pyproject.toml")
+    }
     for path in sorted(SOURCE_ROOT.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
             continue
@@ -363,7 +376,7 @@ def verify_artifacts(source_wheel: Path, sdist: Path, rebuilt_wheel: Path) -> di
     sdist_root = roots.pop()
     require_equal(
         "source and sdist package payload",
-        source_files,
+        source_inventory(include_sdist_only=True),
         package_payload(sdist_files, f"{sdist_root}/citry"),
     )
 
@@ -562,41 +575,23 @@ assert importlib.util.find_spec("jsonschema") is None
 
 import citry
 from citry import Citry, Component
-from citry._protocol import client_graph, events
+from citry._protocol import events
+from citry.ext.dependencies.emission import _runtime_js
 from citry.ext.i18n import make_context
 
 descriptor = events.build_descriptor("Page_1", {})
 instance = events.build_component_instance("page_1", "Page_1", None, {})
-events_manifest = events.build_manifest(None, [descriptor], [instance])
+events_manifest = events.build_manifest([descriptor], [instance])
 assert events.validate_manifest(events_manifest) is None
 
-component_class = client_graph.build_component_class("Page_1", "Page")
-component_instance = client_graph.build_component_instance(
-    instance_id=1,
-    render_id="page_1",
-    class_id="Page_1",
-    invocation_id=None,
-    parent_render_id=None,
-    transparent=False,
-)
-graph = client_graph.build_graph(
-    graph_id=0,
-    component_classes=[component_class],
-    component_instances=[component_instance],
-    source_locations=[],
-    nested_components=[],
-    component_execution_order_constraints=[],
-    fills=[],
-    slot_regions=[],
-)
-graph_manifest = client_graph.build_manifest("production", [graph])
-assert client_graph.validate_manifest(graph_manifest) is None
-
 root = importlib.resources.files("citry")
-assert root.joinpath("ext/dependencies/client/citry.js").is_file()
-assert root.joinpath("ext/events/client/citry-events.js").is_file()
-assert root.joinpath("ext/events/client/citry-events-csp.js").is_file()
-assert root.joinpath("ext/i18n/client/citry-i18n.js").is_file()
+delivered_runtime = root.joinpath("_vue/runtime.js")
+assert delivered_runtime.is_file()
+assert _runtime_js() == delivered_runtime.read_text(encoding="utf-8")
+# The bundle inputs stay in the repository; only the bundled runtime ships.
+for bundle_input in ("vue.js", "client.js", "events.js", "fragments.js"):
+    assert not root.joinpath("_vue", bundle_input).is_file(), bundle_input
+assert root.joinpath("ext/i18n/client/vue-plugin.source.js").is_file()
 assert root.joinpath("py.typed").is_file()
 
 i18n_app = Citry(

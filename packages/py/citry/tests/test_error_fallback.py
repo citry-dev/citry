@@ -148,6 +148,18 @@ class TestErrorFallback:
         assert trusted_html.endswith(">trusted</b>")
         assert "&lt;b" not in trusted_html
 
+    def test_non_string_fallback_renders_as_text(self):
+        # Kwargs types are not enforced at runtime; the boundary must still
+        # show the value instead of failing while it handles an error.
+        c = Citry()
+        _make_failing(c)
+
+        class Page(Component):
+            citry = c
+            template = '<c-error-fallback c-fallback="42"><c-failing /></c-error-fallback>'
+
+        assert Page().render().serialize() == "42"
+
     def test_fallback_slot_suppressed_from_python_when_content_is_safe(self):
         # The slot form of the fallback stays unrendered on the Python path
         # when the default slot renders fine.

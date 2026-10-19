@@ -69,7 +69,12 @@ Uncontrolled changes commit immediately and dispatch native `input` and
 `change` from the color input. Controlled changes emit and restore accepted
 state. `onValueChange(value, detail)` includes previous value, RGB/HSL/HSV
 records, interaction source, controlled flag, and native event. Form reset
-restores the server color or requests it from a controlled owner.
+restores the server color or requests it from a controlled owner. On a server
+re-render the open state carries over only when the server `open` value is
+unchanged; a changed value opens or closes the popup to match without calling
+`onOpenChange`. A render that disables an open popup closes it and reports
+one forced close with reason `disabled`, including when the same render also
+changes `open`.
 
 ## 6. Localization and styling
 

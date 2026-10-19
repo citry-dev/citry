@@ -67,6 +67,8 @@ members = ["packages/py/*"]
 [tool.uv.sources]
 citry = { workspace = true }
 citry-core = { workspace = true }
+# Citry UI's type-check test drives the language server package directly.
+citry-lsp = { workspace = true }
 # The docs build's citry lexer resolves to the local workspace member, not PyPI
 # (it may not be published yet); an ordinary version range applies for consumers
 # that install pygments-citry directly.
@@ -194,9 +196,29 @@ extend-markup-names = [
     "T201",    # The CLI commands print their output to stdout
     "ARG002",  # A command's handle receives the parsed options but may use none
 ]
+"packages/py/citry/citry/_vue/compiler.py" = [
+    # PYI049 asks whether a private TypedDict is used in the file that defines it.
+    # These declaration shapes describe the generated browser definition and are
+    # read by the other modules of the private `_vue` package, so the rule reports
+    # them as dead when they are not. The `.pyi` stubs still get the check.
+    "PYI049",
+]
 "benchmarks/*" = [
     "ARG002",
     "T201",    # The comparison runner prints its results
+]
+# The benchmark harness tests follow the same rules as the package tests.
+"benchmarks/web/**/test_*.py" = [
+    "ARG001",  # Unused function argument (mock/callback signatures in tests)
+    "ARG002",  # Unused method argument
+    "ARG003",  # Unused classmethod argument
+    "ANN",     # Annotations are not needed for tests
+    "N806",    # Variable in function should be lowercase
+    "PLC0415", # `import` should be at the top-level of a file
+    "PLW1641", # `__eq__` without `__hash__` is fine for throwaway test fixtures
+    "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
+    "S101",    # Use of `assert` detected
+    "TRY002",  # Create your own exception
 ]
 "docs_site/_internal/*" = [
     "T201",    # the CLI prints its build summary to stdout
@@ -355,6 +377,11 @@ testpaths = [
     "packages/py/citry_ui/citry_ui/quality/tests",
     "packages/py/pygments_citry/tests",
 ]
+# Put the repository root on sys.path so tests can import `scripts.*` and the
+# gate can load `-p scripts.vue_render_parity.collect`. pytest applies this
+# before it loads `-p` plugins, whether pytest starts as `uv run pytest` or
+# `python -m pytest`.
+pythonpath = ["."]
 markers = [
     "e2e: browser end-to-end test (needs Playwright and a browser binary)",
     "qualification: slow boundary proof kept in full integration and version-matrix runs",

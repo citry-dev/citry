@@ -120,15 +120,6 @@
       "implementations": ["python", "javascript"]
     },
     {
-      "id": "manifest-invalid-client-graph-revision",
-      "schema": "manifest.schema.json",
-      "constraint": "/properties/clientGraphRevision/pattern",
-      "seed": "manifests/complete.valid.json",
-      "operations": [{"op": "replace", "path": "/clientGraphRevision", "value": "not-a-revision"}],
-      "expected": {"path": "/clientGraphRevision", "category": "pattern"},
-      "implementations": ["python", "javascript"]
-    },
-    {
       "id": "manifest-public-state-must-be-object",
       "schema": "manifest.schema.json",
       "constraint": "/$defs/componentInstance/properties/publicState/type",
@@ -149,10 +140,98 @@
     {
       "id": "result-render-html-must-be-string",
       "schema": "result.schema.json",
-      "constraint": "/$defs/renderAction/properties/html/type",
+      "constraint": "/$defs/legacyRenderAction/properties/html/type",
       "seed": "happy_render.result.json",
       "operations": [{"op": "replace", "path": "/results/0/actions/0/html", "value": 1}],
       "expected": {"path": "/results/0/actions/0/html", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-explicit-html-must-be-string",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/explicitHtmlRenderAction/properties/html/type",
+      "seed": "happy_render.result.json",
+      "operations": [
+        {"op": "add", "path": "/results/0/actions/0/renderer", "value": "html-fragment/1"},
+        {"op": "replace", "path": "/results/0/actions/0/html", "value": 1}
+      ],
+      "expected": {"path": "/results/0/actions/0/html", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-prepared-render-must-be-object",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/preparedRenderAction/properties/prepared/type",
+      "seed": "happy_render.result.json",
+      "operations": [
+        {"op": "add", "path": "/results/0/actions/0/renderer", "value": "vue-prepared/1"},
+        {"op": "remove", "path": "/results/0/actions/0/html"},
+        {"op": "add", "path": "/results/0/actions/0/prepared", "value": []}
+      ],
+      "expected": {"path": "/results/0/actions/0/prepared", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-state-requires-public-state",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/stateAction/required/3",
+      "seed": "rename_coerce.result.json",
+      "operations": [{"op": "remove", "path": "/results/0/actions/0/publicState"}],
+      "expected": {"path": "/results/0/actions/0/publicState", "category": "required"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-state-public-state-must-be-object",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/stateAction/properties/publicState/type",
+      "seed": "rename_coerce.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/0/publicState", "value": ["count"]}],
+      "expected": {"path": "/results/0/actions/0/publicState", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-render-target-rejects-css-selector",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/renderTarget/pattern",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/0/target", "value": "#cart"}],
+      "expected": {"path": "/results/0/actions/0/target", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-marker-target-needs-caller-render-id",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/renderTarget/pattern",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/0/target", "value": "mark:cart-badge"}],
+      "expected": {"path": "/results/0/actions/0/target", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-event-target-rejects-marker",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/eventTarget/pattern",
+      "seed": "rename_coerce.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/1/target", "value": "mark:c9zk1q00:badge"}],
+      "expected": {"path": "/results/0/actions/1/target", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-prepared-render-requires-morph",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/preparedRenderAction/properties/swap/const",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "add", "path": "/results/0/actions/0/renderer", "value": "vue-prepared/1"}, {"op": "remove", "path": "/results/0/actions/0/html"}, {"op": "add", "path": "/results/0/actions/0/prepared", "value": {}}, {"op": "replace", "path": "/results/0/actions/0/swap", "value": "replace"}],
+      "expected": {"path": "/results/0/actions/0/swap", "category": "enum"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "call-unknown-renderer-capability",
+      "schema": "call.schema.json",
+      "constraint": "/$defs/renderer/enum",
+      "seed": "happy_render.call.json",
+      "operations": [{"op": "add", "path": "/capabilities/renderers", "value": ["unknown/1"]}],
+      "expected": {"path": "/capabilities/renderers/0", "category": "enum"},
       "implementations": ["python", "javascript"]
     },
     {
@@ -186,7 +265,7 @@
     {
       "id": "result-action-first-issue-follows-field-order",
       "schema": "result.schema.json",
-      "constraint": "/$defs/target/minLength",
+      "constraint": "/$defs/renderTarget/minLength",
       "seed": "happy_render.result.json",
       "operations": [
         {"op": "replace", "path": "/results/0/actions/0/target", "value": ""},

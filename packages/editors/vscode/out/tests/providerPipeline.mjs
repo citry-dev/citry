@@ -36,6 +36,39 @@ function linearlyMappedProjectionPosition(source, sourceOffset, sourceStart, sou
   }
   return textPositionAt(source, virtualOffset);
 }
+var comparePositions = (left, right) => left.line - right.line || left.character - right.character;
+var isLinearSegment = (segment) => segment.sourceRange.start.line === segment.sourceRange.end.line && segment.virtualRange.start.line === segment.virtualRange.end.line && segment.sourceRange.end.character - segment.sourceRange.start.character === segment.virtualRange.end.character - segment.virtualRange.start.character;
+function mapSegmentedPosition(position, segments, from, edge) {
+  const to = from === "virtualRange" ? "sourceRange" : "virtualRange";
+  const containing = segments.filter(
+    (segment) => comparePositions(segment[from].start, position) <= 0 && comparePositions(position, segment[from].end) <= 0
+  );
+  const preferred = containing.find((segment) => comparePositions(segment[from][edge], position) === 0) ?? containing[0];
+  if (preferred === void 0) {
+    return void 0;
+  }
+  if (isLinearSegment(preferred)) {
+    return {
+      line: preferred[to].start.line,
+      character: preferred[to].start.character + position.character - preferred[from].start.character
+    };
+  }
+  if (comparePositions(position, preferred[from].start) === 0) {
+    return { ...preferred[to].start };
+  }
+  if (comparePositions(position, preferred[from].end) === 0) {
+    return { ...preferred[to].end };
+  }
+  return void 0;
+}
+function mapSegmentedRange(range, segments) {
+  const start = mapSegmentedPosition(range.start, segments, "virtualRange", "start");
+  const end = comparePositions(range.start, range.end) === 0 ? start : mapSegmentedPosition(range.end, segments, "virtualRange", "end");
+  if (start === void 0 || end === void 0 || comparePositions(start, end) > 0) {
+    return void 0;
+  }
+  return { start, end };
+}
 function textOffsetAt(source, position) {
   let line = 0;
   let offset = 0;
@@ -132,6 +165,8 @@ export {
   delegatedCompletionResolveCount,
   delegatedProviderTimeoutMs,
   linearlyMappedProjectionPosition,
+  mapSegmentedPosition,
+  mapSegmentedRange,
   mappedProjectionRange,
   prepareProjectionRangeMapper,
   projectionTimeoutMs,

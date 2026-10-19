@@ -80,7 +80,7 @@ def test_protocol_members_resolve_once_per_call(monkeypatch, placement):
     assert calls == [app, app]
 
 
-@pytest.mark.parametrize("name", ["CitryRender", "PhysicalRegionPart"])
+@pytest.mark.parametrize("name", ["CitryRender"])
 @pytest.mark.parametrize("warm", [False, True])
 def test_structural_type_alias_replacements_preserve_unescaped_text(monkeypatch, name, warm):
     if warm:

@@ -12,7 +12,7 @@ import re
 
 import pytest
 
-from citry import Citry, Component, Const, Extension
+from citry import Citry, Component, Const, Extension, VueCodeError
 from citry.component_render import _compile_nested_template
 from citry.constness import precompute_const_parts
 from citry.ext.events import extension as events_extension_module
@@ -130,15 +130,16 @@ class TestCBindSpread:
         with pytest.raises((TypeError, ValueError, RuntimeError)):
             str(Page())
 
-    def test_repeated_spread_preserves_string_subclass_validation(self):
-        class ChangingKey(str):
-            __slots__ = ("reserved",)
+    def test_repeated_spread_checks_string_subclass_by_its_real_text(self):
+        # A str subclass is checked by the text it writes into the HTML, not
+        # by what its overridden methods claim, and on every render.
+        class DisguisedKey(str):
+            __slots__ = ()
 
             def lower(self):
-                return "data-cev-bind" if self.reserved else super().lower()
+                return "title"
 
-        key = ChangingKey("title")
-        key.reserved = False
+        key = DisguisedKey("data-cev-bind")
         c = Citry()
 
         class Page(Component):
@@ -151,10 +152,11 @@ class TestCBindSpread:
               <div c-bind="attrs"></div>
             """
 
-        assert 'title="value"' in str(Page())
-        key.reserved = True
-        with pytest.raises(RuntimeError, match="compiler-owned"):
-            str(Page())
+        for _ in range(2):
+            with pytest.raises(RuntimeError, match="reserved internal Events namespace") as exc_info:
+                str(Page())
+            assert "'data-cev-*'" in str(exc_info.value)
+            assert "@c-*" in str(exc_info.value)
 
     def test_spreads_mapping_onto_element(self):
         tpl = """<div c-bind="{'class': 'btn', 'disabled': True, 'data-id': item['id']}">y</div>"""
@@ -211,16 +213,16 @@ class TestLiteralFrameworkPrefix:
         template = '<div c-c-foo="first" c-c-c-foo="second" c-c-bind="third">x</div>'
         assert _html(template, first="a", second="b", third="c") == '<div c-foo="a" c-c-foo="b" c-bind="c">x</div>'
 
-    def test_colon_bridge_emits_literal_colon_attribute(self):
-        assert (
+    def test_colon_prefixed_attribute_is_rejected_as_vue_code(self):
+        # Stripping `c-` here would let Python data fill a Vue binding, so the
+        # render fails on every page instead (see test_vue_code_error.py).
+        with pytest.raises(VueCodeError, match=r"'c-:class' on <div> sets ':class'"):
             _html('<div c-:class="binding">x</div>', binding="{ active: true }")
-            == '<div :class="{ active: true }">x</div>'
-        )
 
     def test_c_bind_mapping_keys_are_already_literal(self):
         template = '<div c-bind="attrs">x</div>'
-        attrs = {"c-foo": "a", ":class": "b"}
-        assert _html(template, attrs=attrs) == '<div c-foo="a" :class="b">x</div>'
+        attrs = {"c-foo": "a", "x-bind:class": "b"}
+        assert _html(template, attrs=attrs) == '<div c-foo="a" x-bind:class="b">x</div>'
 
 
 class TestClassAndStyleMerging:
@@ -357,7 +359,7 @@ class TestOnAttrsResolvedHook:
         rewrite = events_extension_module.rewrite_resolved_attrs
 
         def spy(*args, **kwargs):
-            calls.append(args[3])
+            calls.append((args[2], args[3]))
             return rewrite(*args, **kwargs)
 
         monkeypatch.setattr(events_extension_module, "rewrite_resolved_attrs", spy)
@@ -370,7 +372,7 @@ class TestOnAttrsResolvedHook:
 
         with pytest.raises(ValueError, match="not a declared handler"):
             _html('<div c-bind="attrs">x</div>', attrs={"@c-click": "missing"})
-        assert calls == ["div"]
+        assert calls == [("div", {"@c-click": "missing"})]
 
     def test_hook_rewrites_resolved_attrs(self):
         class Rewriter(Extension):

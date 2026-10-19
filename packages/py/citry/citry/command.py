@@ -70,9 +70,9 @@ class CommandArg:
     """
     One positional argument or option, mirroring ``ArgumentParser.add_argument``.
 
-    Every field maps to the matching ``add_argument`` keyword, and
-    :func:`build_parser` passes them through unchanged, so the field names must
-    stay aligned with argparse.
+    Every field maps to the ``add_argument`` keyword of the same name, and
+    Citry passes the fields to argparse unchanged. A field left as ``None``
+    is not passed, so argparse applies its own default.
     """
 
     name_or_flags: str | Sequence[str]
@@ -93,8 +93,8 @@ class CommandArg:
         """
         The ``add_argument`` keywords for this argument, minus ``name_or_flags``.
 
-        ``name_or_flags`` is passed positionally by :func:`build_parser`, so it is
-        not included here; unset (``None``) fields are dropped.
+        Citry passes ``name_or_flags`` to ``add_argument`` positionally, so it
+        is not included here; unset (``None``) fields are dropped.
         """
         return _drop_none(
             {

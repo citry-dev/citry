@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 import textwrap
 
 import pytest
@@ -9,10 +10,12 @@ from citry.analysis import (
     TemplatePythonControl,
     TemplatePythonQuery,
     TemplatePythonRoot,
+    TemplatePythonValueType,
     build_inferred_template_shadow,
     build_schema_template_shadow,
     template_python_queries,
     template_python_query_at,
+    template_static_input_queries,
 )
 from citry_core.template_parser import parse_template
 
@@ -132,11 +135,10 @@ def test_fill_binding_is_unknown_only_inside_its_body() -> None:
 
 
 def test_static_and_browser_values_are_not_python_queries() -> None:
-    source = '<c-slot name="header" required /><c-card $c-props="items"></c-card>'
+    source = '<c-slot name="header" required /><c-card :items="items"></c-card>'
     template = parse_template(source)
 
-    for marker in ("header", "required", "items"):
-        index = source.index(marker) + 1
+    for index in (source.index("header") + 1, source.index("required") + 1, source.rindex("items") + 1):
         assert template_python_query_at(template, index) is None
 
 
@@ -537,8 +539,9 @@ def test_inferred_shadow_captures_same_module_owner_before_authored_name_shadowi
     assert shadow is not None
     ast.parse(shadow.source)
     assert "kwargs: Kwargs" in shadow.source
-    assert "title = __citry_data.title" in shadow.source
-    assert "__citry_cast(Card.Kwargs, __citry_data).title" not in shadow.source
+    # A returned variable is read directly, so ty keeps what it knows about it.
+    assert "title = kwargs.title" in shadow.source
+    assert "__citry_cast(Card.Kwargs, kwargs).title" not in shadow.source
 
 
 def test_schema_root_types_can_come_from_distinct_declaring_classes() -> None:
@@ -664,3 +667,338 @@ def test_shadow_declines_ambiguous_or_decorated_source_owners() -> None:
         is None
     )
     assert build_schema_template_shadow("class Card:\n    pass\n", "Card[TemplateData]", roots, query) is None
+
+
+def test_c_attribute_queries_name_their_target() -> None:
+    source = '<c-TaskCard c-task="task" c-if="show" /><div c-class="classes" title="x">{{ label }}</div>'
+
+    assert _query(source, 'c-task="ta').attribute_target == ("c-TaskCard", "task")
+    assert _query(source, 'c-class="cla').attribute_target == ("div", "class")
+    # Control attributes and interpolations have no attribute to type.
+    assert _query(source, 'c-if="sh').attribute_target is None
+    assert _query(source, "{{ lab").attribute_target is None
+
+
+def _checked_shadow(value_type: TemplatePythonValueType, *, source_module: str = "app.board") -> str:
+    source = '<c-TaskCard c-task="task" />'
+    shadow = build_schema_template_shadow(
+        "class Board:\n    class TemplateData:\n        task: int\n",
+        "Board.TemplateData",
+        (TemplatePythonRoot("task", "always", "attribute"),),
+        _query(source, 'c-task="ta'),
+        source_module=source_module,
+        value_type=value_type,
+    )
+    assert shadow is not None
+    # The authored value is still copied exactly once, inside the assignment.
+    assert [shadow.source[copy.shadow_start : copy.shadow_end] for copy in shadow.copies] == ["task"]
+    return shadow.source
+
+
+def test_value_check_assigns_the_value_to_an_annotated_name() -> None:
+    source = _checked_shadow(TemplatePythonValueType("app.store.Task | None", "app.cards"))
+
+    assert "    import app.store as __citry_checked_type_0\n" in source
+    assert "    __citry_checked_value: __citry_checked_type_0.Task | None = (\ntask\n)" in source
+    ast.parse(source)
+
+
+def test_value_check_reads_bare_names_from_their_module_and_typing() -> None:
+    source = _checked_shadow(TemplatePythonValueType("Literal['sm', 'md'] | Sequence[Task]", "app.cards"))
+
+    assert "import typing as __citry_checked_type_0" in source
+    assert "import app.cards as __citry_checked_type_1" in source
+    assert (
+        "__citry_checked_value: __citry_checked_type_0.Literal['sm', 'md'] | "
+        "__citry_checked_type_0.Sequence[__citry_checked_type_1.Task] = (\ntask\n)"
+    ) in source
+
+
+def test_value_check_keeps_names_from_the_copied_module_bare() -> None:
+    # The generated code is a copy of `app.board`, so importing the real
+    # module would name a different class than the copied value has.
+    source = _checked_shadow(TemplatePythonValueType("app.board._Registry", "app.cards"))
+
+    assert "__citry_checked_value: _Registry = (\ntask\n)" in source
+    assert "import app.board" not in source
+
+
+@pytest.mark.parametrize(
+    "value_type",
+    [
+        # A bare name with no module to read it from proves nothing.
+        TemplatePythonValueType("Task", None),
+        # A call is not an annotation.
+        TemplatePythonValueType("make_type()", "app.cards"),
+    ],
+)
+def test_value_check_is_skipped_when_the_annotation_cannot_be_resolved(value_type) -> None:
+    source = _checked_shadow(value_type)
+
+    assert "__citry_checked_value" not in source
+
+
+def test_value_check_is_added_at_each_inferred_template_data_return() -> None:
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                if kwargs:
+                    return {"task": 1}
+                return {"task": 2}
+        """
+    )
+    source = '<c-TaskCard c-task="task" />'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("task", "always"),),
+        _query(source, 'c-task="ta'),
+        source_module="app.board",
+        value_type=TemplatePythonValueType("app.store.Task"),
+    )
+
+    assert shadow is not None
+    assert shadow.source.count("__citry_checked_value: __citry_checked_type_0.Task = (\ntask\n)") == 2
+    ast.parse(shadow.source)
+
+
+def test_inferred_shadow_renames_method_locals_that_template_names_reuse() -> None:
+    module_source = textwrap.dedent(
+        """
+        import os.path
+
+        class Board:
+            def template_data(self, kwargs, slots):
+                resolved: list[int] = [1]
+                def read():
+                    return resolved
+                try:
+                    pass
+                except ValueError as item:
+                    pass
+                import json as label
+                os = 1
+                return {"items": read(), "label": label}
+        """
+    )
+    source = '<c-for each="resolved in items"><p c-title="(resolved, item, label, os)"></p></c-for>'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("items", "always"), TemplatePythonRoot("label", "always")),
+        _query(source, "(resolved, it"),
+        source_module="app.board",
+    )
+
+    assert shadow is not None
+    ast.parse(shadow.source)
+    method = shadow.source[shadow.source.index("def __citry_analyze_template") :]
+    # Every binding of a reused name, including a closure read and an import
+    # alias, moves to its own generated name, so the template names are free.
+    assert "__citry_local_resolved: list[int] = [1]" in method
+    assert "return __citry_local_resolved" in method
+    assert "except ValueError as __citry_local_item:" in method
+    assert "import json as __citry_local_label" in method
+    assert "'label': __citry_local_label" in method
+    assert "__citry_local_os = 1" in method
+    assert "for resolved in [resolved for resolved in items]:" in method
+
+
+def test_inferred_shadow_keeps_locals_that_cannot_be_renamed_safely() -> None:
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                item = 1
+                def touch():
+                    global item
+                import os.path
+                return {"items": [item, os.path.sep]}
+        """
+    )
+    source = '<c-for each="item in items"><p c-title="(item, os)"></p></c-for>'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("items", "always"),),
+        _query(source, 'c-title="(it'),
+        source_module="app.board",
+    )
+
+    assert shadow is not None
+    # Renaming would point the nested `global` at a different name, and an
+    # alias on `import os.path` binds the submodule, not `os`.
+    assert "__citry_local_item" not in shadow.source
+    assert "__citry_local_os" not in shadow.source
+
+
+def test_inferred_shadow_reads_present_optional_keys_by_subscript() -> None:
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                if kwargs:
+                    return {"extra": 1}
+                return {}
+        """
+    )
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("extra", "conditional"),),
+        TemplatePythonQuery("extra", 0, 5, "interpolation", free_names=("extra",)),
+    )
+
+    assert shadow is not None
+    # `.get()` would merge every value of the dict into one union, so it is
+    # used only at the return that may lack the key.
+    assert "extra = __citry_data['extra']" in shadow.source
+    assert "extra = __citry_data.get('extra')" in shadow.source
+
+
+@pytest.mark.parametrize(
+    ("method_body", "kept"),
+    [
+        # A nested function's parameter of the same name, called by keyword.
+        ("item = 1\n        def helper(item):\n            return item\n        helper(item=item)\n", "item"),
+        # A nested class attribute of the same name.
+        ("item = 1\n        class Inner:\n            item = 2\n        Inner.item\n", "item"),
+        # A nested function that reads the module's `item`, while a
+        # comprehension variable makes `item` a method local on Python 3.12+.
+        ("[item for item in [1]]\n        def read():\n            return item\n", "item"),
+    ],
+)
+def test_inferred_shadow_keeps_a_local_that_nested_code_binds_or_reads_globally(method_body: str, kept: str) -> None:
+    module_source = (
+        "item = 0\n"
+        "class Board:\n"
+        "    def template_data(self, kwargs, slots):\n"
+        f"        {method_body}"
+        "        return {'items': [1]}\n"
+    )
+    source = '<c-for each="item in items"><p c-title="item"></p></c-for>'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("items", "always"),),
+        _query(source, 'c-title="it'),
+        source_module="app.board",
+    )
+
+    assert shadow is not None
+    # Renaming every occurrence would change what the nested code means.
+    assert f"__citry_local_{kept}" not in shadow.source
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="generic class syntax needs Python 3.12")
+def test_inferred_shadow_renames_locals_in_a_generic_class() -> None:
+    module_source = (
+        "class Board[T]:\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        item: list[int] = [1]\n"
+        "        return {'items': item}\n"
+    )
+    source = '<c-for each="item in items"><p c-title="item"></p></c-for>'
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("items", "always"),),
+        _query(source, 'c-title="it'),
+        source_module="app.board",
+    )
+
+    assert shadow is not None
+    assert "__citry_local_item: list[int] = [1]" in shadow.source
+
+
+def test_inferred_shadow_reads_a_returned_root_through_the_copy() -> None:
+    # `data` is both the returned variable and a template root, and a nested
+    # `nonlocal` keeps it from being renamed, so reading the other roots from
+    # `data` would read the value the generated code just assigned to it.
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                data = {"data": 1, "other": "s"}
+                def touch():
+                    nonlocal data
+                return data
+        """
+    )
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("data", "always"), TemplatePythonRoot("other", "always")),
+        TemplatePythonQuery("other", 0, 5, "interpolation", free_names=("other",)),
+    )
+
+    assert shadow is not None
+    assert "other = __citry_data['other']" in shadow.source
+
+
+def test_inferred_shadow_reads_keys_before_a_spread_as_optional() -> None:
+    module_source = textwrap.dedent(
+        """
+        class Board:
+            def template_data(self, kwargs, slots):
+                if kwargs:
+                    return {"extra": 1, **kwargs, "after": 2}
+                return {}
+        """
+    )
+
+    shadow = build_inferred_template_shadow(
+        module_source,
+        "Board",
+        (TemplatePythonRoot("extra", "conditional"), TemplatePythonRoot("after", "conditional")),
+        TemplatePythonQuery("(extra, after)", 0, 14, "interpolation", free_names=("extra", "after")),
+    )
+
+    assert shadow is not None
+    # The spread may replace `extra`, so only `after` is read by subscript.
+    assert "extra = __citry_data.get('extra')" in shadow.source
+    assert "after = __citry_data['after']" in shadow.source
+
+
+def test_static_input_queries_cover_quoted_component_attributes() -> None:
+    source = (
+        '<c-Card lane="todo" mark=\'a&amp;b\' flag empty="" bare=x slash="a\\\\b">'
+        '<c-if cond="ok"><c-Inner n="5" /></c-if>'
+        "</c-Card>"
+        '<p title="x"></p>'
+    )
+
+    queries = template_static_input_queries(parse_template(source))
+
+    # Each source is the quoted text, a Python literal of the string the
+    # child receives. A value-less, empty, unquoted, or backslash value and
+    # an HTML element's attribute are left out.
+    assert [(query.source, query.attribute_target) for query in queries] == [
+        ('"todo"', ("c-Card", "lane")),
+        ("'a&amp;b'", ("c-Card", "mark")),
+        ('"5"', ("c-Inner", "n")),
+    ]
+    assert all(source.encode()[query.start_index : query.end_index].decode() == query.source for query in queries)
+
+
+def test_value_check_imports_a_nested_class_from_its_module() -> None:
+    nested = (("app.store.Board.Row", "app.store"),)
+
+    source = _checked_shadow(TemplatePythonValueType("list[app.store.Board.Row] | None", class_modules=nested))
+    same_module = _checked_shadow(
+        TemplatePythonValueType("app.store.Board.Row", class_modules=nested), source_module="app.store"
+    )
+
+    # The module is imported and the nested path read from it; in a copy of
+    # that same module the outer class is a bare name.
+    assert "import app.store as __citry_checked_type_0" in source
+    assert "__citry_checked_value: list[__citry_checked_type_0.Board.Row] | None = (\ntask\n)" in source
+    assert "__citry_checked_value: Board.Row = (\ntask\n)" in same_module

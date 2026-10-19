@@ -76,3 +76,66 @@ class Events(ExtensionConfig, Generic[StateT]):
     context: Any
     request: RouteRequest
     event: Any
+
+    def url(
+        self,
+        name: str,
+        *,
+        query: dict[str, Any] | None = None,
+        fragment: str | None = None,
+    ) -> str:
+        """
+        Build the URL that calls one of this component's event handlers.
+
+        Call it on the component while it renders, usually in
+        `template_data()`, to point a plain HTML form or a link at a handler.
+        Outside a render, use
+        [`get_event_url()`][citry.ext.events.get_event_url] with the
+        component class instead.
+
+        Args:
+            name: The handler's name: the method name, or the name given
+                with `@event(name=...)`.
+            query: Query parameters to add to the URL. Default: none.
+            fragment: Text for the `#fragment` part of the URL. Default:
+                none.
+
+        Returns:
+            The handler's URL path with `query` and `fragment` added, for
+            example `"/citry/ext/events/e/Signup_a1b2c3/submit"`.
+
+        Raises:
+            ValueError: When the component has no handler named `name`.
+            RuntimeError: When no web framework integration is mounted, so
+                the URL would point nowhere, or when you call `url()` on an
+                `Events` object you created yourself instead of on
+                `self.events` of a component.
+
+        Example:
+            ```python
+            class Signup(Component):
+                class Events:
+                    def submit(self, data: SignupIn) -> None:
+                        create_account(data.email)
+
+                def template_data(self, kwargs, slots):
+                    return {"submit_url": self.events.url("submit")}
+            ```
+
+        """
+        # Only the copy that the events extension builds for each component
+        # knows which component it belongs to; an instance made by hand
+        # does not, so there is no handler to point the URL at.
+        component_class = getattr(self, "component_class", None)
+        if component_class is None:
+            msg = (
+                "Events.url() was called on an Events object that belongs to no component. "
+                "Call it as self.events.url(...) inside a component, or use "
+                "get_event_url(MyComponent, ...) outside a render."
+            )
+            raise RuntimeError(msg)
+        # The route module imports the handler module, which imports this
+        # class, so importing it at the top would be circular.
+        from citry.ext.events.routes import get_event_url  # noqa: PLC0415
+
+        return get_event_url(component_class, name, query=query, fragment=fragment)

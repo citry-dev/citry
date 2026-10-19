@@ -88,7 +88,10 @@ def _load(page: Any) -> list[str]:
     page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.set_content(_page(), wait_until="load")
-    page.wait_for_selector(".brand-splitter[data-citry-splitter-initialized]")
+    # The page has three splitters and each one initializes on its own zero-
+    # delay timer, so the first being ready says nothing about the fieldset
+    # and right-to-left splitters the tests read next.
+    page.wait_for_function("document.querySelectorAll('[data-citry-splitter-initialized]').length === 3")
     return errors
 
 
@@ -150,8 +153,11 @@ def test_pointer_drag_reactive_orientation_fieldset_rtl_and_css(page: Any) -> No
     before = float(rtl_handle.get_attribute("aria-valuenow"))
     rtl_handle.focus()
     rtl_handle.press("ArrowRight")
-    page.wait_for_timeout(20)
-    assert float(rtl_handle.get_attribute("aria-valuenow")) < before
+    page.wait_for_function(
+        "before => Number(document.querySelector('[dir=rtl] [role=separator]')"
+        ".getAttribute('aria-valuenow')) < before",
+        arg=before,
+    )
     assert errors == []
 
 

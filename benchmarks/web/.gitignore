@@ -1,0 +1,37 @@
+# Everything below is produced by `citry-bench prepare`, an adapter's build.py,
+# or by running an app or its tests in place. The runner copies only source
+# files into `.benchmarks/` at the repository root before it builds, so none of
+# these paths is an input to a measurement.
+
+# Python environments and caches (uv sync, pytest, ruff).
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# JavaScript dependencies, downloaded Node and Bun runtimes, and build output.
+node_modules/
+apps/*/.toolchain/
+apps/*/generated/
+apps/next/.next/
+apps/nuxt/.nuxt/
+apps/nuxt/.output/
+apps/nuxt_csr/.nuxt/
+apps/nuxt_csr/.output/
+
+# Reflex writes its compiled frontend, tool cache, lock copy and session state
+# next to the app when it runs in place.
+apps/reflex/.web/
+apps/reflex/.reflex/
+apps/reflex/.states/
+apps/reflex/reflex.lock/
+apps/reflex/assets/external/
+apps/reflex/*.db
+
+# Tetra compiles its component assets during preparation.
+apps/tetra/board_app/static/
+apps/tetra/board_app/__tetracache__/
+
+.DS_Store

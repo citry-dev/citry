@@ -11,7 +11,7 @@ inputs:
     column_widths: [fit, 12rem, 7rem, auto]
     entries:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Sets native identity and title, description, and activator relationships.'}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible initial state and uncontrolled fallback. A valid client `open` input controls later state.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible state and uncontrolled fallback. A server re-render that changes it opens or closes the popover. A re-render that leaves it unchanged keeps the current state. A valid client `open` input controls later state.}
       - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: 'Permits Escape, outside-pointer, and focus-outside close requests. Trigger and explicit actions remain available when false.'}
       - id: placement
         name: placement

@@ -79,9 +79,17 @@ $component({
       ? prior.committedValue
       : data.serverValue;
     let currentValue = committedValue;
-    let internalOpen = prior?.serverFingerprint === serverFingerprint
-      ? Boolean(prior.internalOpen)
-      : data.serverOpen;
+    // A server re-render hands the previous run's open state to this one, so a
+    // popup that was open before the re-render is still open after it. When the
+    // server's `open` input changed, the popup follows the server instead.
+    const sameServerOpen = Boolean(prior) && prior.serverOpen === data.serverOpen;
+    let internalOpen = sameServerOpen ? Boolean(prior.internalOpen) : data.serverOpen;
+    // Set when the previous run left the popup showing. If this run cannot
+    // reopen it because the re-render disabled the select, the close is
+    // reported once, the same way a disabled select closes within one run.
+    // The disable is what closes it, so this holds even when the same render
+    // also changed the server's `open` input.
+    let pendingDisabledHandoff = Boolean(prior?.shown);
     let logicalOpen = false;
     let highlightedValue = prior?.highlightedValue ?? null;
     let controlledValue = false;
@@ -223,6 +231,16 @@ $component({
     const applyOpen = (next, {reason = null, source = null, focus = false} = {}) => {
       if (next === logicalOpen) {
         if (next && !coordinator.register(layer)) forceClose('ancestor', popup);
+        // The previous run leaves an open popup showing so this run can take it
+        // over. When this run starts closed, for example because the server's
+        // `open` input changed, nothing else hides it.
+        if (!next && popup.matches(':popover-open')) {
+          popup.hidePopover();
+          popup.hidden = true;
+          popup.inert = true;
+          popup.removeAttribute('data-open');
+          syncPresentation();
+        }
         return;
       }
       generation += 1;
@@ -231,6 +249,9 @@ $component({
         if (!eligible() || !coordinator.mayOpen(layer)) {
           internalOpen = false;
           logicalOpen = false;
+          // The previous run may have left this popup showing; hide it so it
+          // does not stay in the top layer behind a closed select.
+          if (popup.matches(':popover-open')) popup.hidePopover();
           popup.hidden = true;
           popup.inert = true;
           syncPresentation();
@@ -597,6 +618,10 @@ $component({
       if ((effectiveDisabled() || configuration.readonly) && logicalOpen) {
         forceClose('ancestor', trigger);
       }
+      if (pendingDisabledHandoff) {
+        pendingDisabledHandoff = false;
+        if (!logicalOpen && effectiveDisabled()) notifyOpen(false, 'ancestor', trigger, true);
+      }
       syncPresentation();
     };
 
@@ -616,6 +641,13 @@ $component({
       fieldsetObservers.push(observer);
     }
     const unregisterCapabilities = field?.registerCapabilities({required:true, readonly:true});
+    // The stylesheet hides the popup until this mark is present. A server
+    // re-render hands an open popup to this run, and the effect below reopens it
+    // at once, so the mark must already be back or the reopen measures a hidden
+    // popup, fails, and closes it without telling the owner.
+    root.setAttribute('data-citry-select-initialized', '');
+    nativeSelect.tabIndex = -1;
+    nativeSelect.setAttribute('aria-hidden', 'true');
     Citry.vue.watchEffect(() => {
       clientValue = props.value;
       clientOpen = props.open;
@@ -644,9 +676,6 @@ $component({
       };
       reconcileControlled();
     });
-    root.setAttribute('data-citry-select-initialized', '');
-    nativeSelect.tabIndex = -1;
-    nativeSelect.setAttribute('aria-hidden', 'true');
     reconcileControlled();
 
     return () => {
@@ -655,6 +684,8 @@ $component({
       if (typeTimer !== null) clearTimeout(typeTimer);
       root[selectHandoffKey] = {
         serverFingerprint,
+        serverOpen: data.serverOpen,
+        shown: logicalOpen,
         committedValue,
         internalOpen,
         highlightedValue,

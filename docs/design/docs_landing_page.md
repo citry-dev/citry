@@ -1733,6 +1733,25 @@ test because the page still builds, every other check still passes, and the
 damage is only visible to someone reading the rendered page. Its first run found
 three reference pages printing docstring cross-references as source.
 
+The landing page hydrates: the server writes the page chrome (header,
+navigation, footer) and the Markdown content into `<body>` for Vue to adopt.
+The content is HTML that Python hands over as one finished block; the
+server writes it unchanged between Vue's Fragment comments (see "Raw HTML
+blocks" in [`vue_ssr_selected_tree_plan.md`](vue_ssr_selected_tree_plan.md)),
+so the landing copy is in the served HTML. Vue builds the icon links and
+buttons with inline SVG in the browser; until then they show the icon from
+the served HTML. The guards' site index reads the body, and also reads the
+raw HTML the page ships inside the script that starts the Vue app when that
+HTML is not already in the body, so `rendered_markdown`, the link and anchor
+guards, and the `stray_markup` guard cover the landing content once.
+`stray_markup` fails a build
+whose markdown pass wrapped raw HTML in stray paragraphs: an empty `<p></p>`, or
+a `<p>` opened right before a `<div>`, `<section>` or `<template>` tag or its
+closing tag. `rendered_markdown` names the Markdown file and the line of the
+first leaked text; `stray_markup` names the file. `stray_markup` skips the
+HTML inside a Vue shell, which the server writes from component templates
+rather than Markdown.
+
 ## Success criteria
 
 ### Comprehension

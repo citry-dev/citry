@@ -24,8 +24,9 @@ choices, and parity keeps its test suite portable):
 - In a ``style`` merge, a ``None`` value means "skip, let an earlier value
   stand", while a literal ``False`` removes the property entirely.
 
-All escaping goes through ``citry.util.html`` (markupsafe): values render
-escaped unless they carry ``__html__``.
+All escaping goes through ``citry.util.html`` (markupsafe). Every value is
+escaped, ``Markup`` included: ``Markup`` says a string is safe to insert
+between tags, while an attribute value is plain text.
 
 HTML attribute identity is ASCII-case-insensitive. Merging therefore treats
 ``ID`` and ``id`` as one key while preserving the spelling and position of
@@ -38,12 +39,12 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from functools import lru_cache
-from typing import Any, TypeAlias
+from typing import Any, Literal, TypeAlias, cast
 
 import wrapt
 
 from citry.util import html as _html
-from citry.util.html import Markup, escape_to_str
+from citry.util.html import Markup, decode_attribute_entities, escape_attribute_value, escape_to_str
 
 ClassValue: TypeAlias = "str | Mapping[str, bool] | Sequence[ClassValue]"
 """A ``class`` attribute value: string, ``{class_name: bool}`` dict, or a list of those."""
@@ -56,6 +57,153 @@ StyleValue: TypeAlias = "str | StyleDict | Sequence[StyleValue]"
 
 _ASCII_LOWER_TRANSLATION = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 _INVALID_HTML_ATTR_NAME_CHARS = frozenset(" \t\n\r=/><")
+
+
+# Vue reads a name starting with one of these as a directive or binding:
+# `v-if`, `v-bind:x`, `:x`, `.x` (sets a DOM property), `^x` (forces an
+# attribute), `@x` (listener) and `#x` (slot).
+_VUE_DIRECTIVE_PREFIXES = ("v-", ":", ".", "^", "@", "#")
+
+
+def is_vue_directive_name(name: str) -> bool:
+    """Return whether Vue would treat an attribute name as a directive or binding."""
+    # Python-resolved names are data. Vue must never read one as code, and
+    # HTML names are case-insensitive, so `V-ON:click` must not slip past.
+    # The unbound `str` methods keep a str subclass that overrides
+    # `casefold` or `startswith` from hiding its real text from the check.
+    return str.startswith(str.casefold(name), _VUE_DIRECTIVE_PREFIXES)
+
+
+class VueCodeError(TypeError):
+    """
+    Raised when Python data sets an attribute name that Vue would read as code.
+
+    Vue reads an attribute whose name starts with `v-`, `:`, `.`, `^`, `@`,
+    or `#` (in any letter case) as a directive, a binding, a listener, or a
+    slot, and evaluates its value as JavaScript. Citry lets only the template
+    author write such names. When one of them comes from Python data
+    instead, the render fails with this error. Python data sets attribute
+    names in three places:
+
+    - a `c-bind` mapping, such as `c-bind="attrs"` where `attrs` holds
+      `{"@click": "save()"}`;
+    - a `c-*` attribute whose name, without the `c-`, starts with one of
+      those prefixes, such as `c-v-if="is_open"`;
+    - an extension's `on_attrs_resolved` hook that adds such a name, or
+      changes the value of one written in the template.
+
+    The check runs on HTML elements and component tags, on every page,
+    while the template renders. It runs even on a page that does not start
+    Vue, so the same template never works on one page and fails on another.
+    Citry's own `@c-*` event bindings and `:c-*` State bindings are not
+    Vue code, so `c-bind` may still carry them.
+
+    `VueCodeError` subclasses `TypeError`, so code that catches
+    `TypeError` around a render keeps working.
+
+    Example:
+        Write Vue syntax in the template and pass only its data from
+        Python:
+
+        ```citry-html
+        <!-- Fails: the mapping sets "@click" -->
+        <button c-bind="{'@click': 'save()'}">Save</button>
+
+        <!-- Works: the listener is written in the template -->
+        <button @click="save()">Save</button>
+        ```
+
+    """
+
+
+# Citry's own binding namespaces start with a Vue prefix but are not Vue
+# code: the Events extension turns `@c-*` and `:c-*` into its own markup, and
+# `#c-*` framework attributes have their own, more specific error.
+_CITRY_OWNED_ATTR_PREFIXES = ("@c-", ":c-", "#c-")
+
+
+def is_vue_code_attr_name(name: object) -> bool:
+    """Return whether Python data must not set this attribute name, because Vue would read it as code."""
+    # Non-strings are left to `validate_html_attr_name`, which names the bad type.
+    # `str.startswith` reads the real text even from a str subclass.
+    return (
+        isinstance(name, str) and is_vue_directive_name(name) and not str.startswith(name, _CITRY_OWNED_ATTR_PREFIXES)
+    )
+
+
+def vue_code_error(
+    name: str,
+    *,
+    tag_name: str,
+    origin: Literal["c-bind", "c-attr", "hook", "data"],
+    hint: str | None = None,
+) -> VueCodeError:
+    """
+    Build the one error every Vue-code check raises, so each path reads the same.
+
+    ``origin`` says where the name came from, so the message can point at it:
+    a ``c-bind`` mapping, a ``c-*`` attribute, an ``on_attrs_resolved``
+    hook, or (``"data"``) a late check that can no longer tell which.
+    ``hint`` replaces the general fix when the caller knows a better one,
+    such as `<c-fill>` for a `#slot` name on a component tag, where writing
+    the directive in the template would fail too.
+    """
+    tag = f"<{tag_name}>"
+    if origin == "c-bind":
+        subject = f"c-bind on {tag} sets {name!r}"
+    elif origin == "c-attr":
+        subject = f"'c-{name}' on {tag} sets {name!r}"
+    elif origin == "hook":
+        subject = f"An on_attrs_resolved extension hook sets {name!r} on {tag}"
+    else:
+        subject = f"Python data sets {name!r} on {tag}"
+    rule = (
+        "Python data from c-bind, c-* attributes, and extension hooks may not set a name that starts with "
+        "v-, :, ., ^, @, or #, even on a page that does not use Vue."
+    )
+    if hint is not None:
+        fix = hint
+    elif str.startswith(str.casefold(name), ("v-c-", "v-citry-")):
+        # Writing these in the template fails too, so the general advice
+        # would send the reader into a second error.
+        fix = "Citry reserves 'v-c-*' and 'v-citry-*' for its own browser runtime; remove the name."
+    elif origin == "hook":
+        fix = (
+            "Return only plain attribute names from the hook, and write Vue directives, bindings, and "
+            "listeners directly in the template."
+        )
+    else:
+        fix = "Write Vue directives, bindings, and listeners directly in the template."
+    return VueCodeError(f"{subject}{_VUE_CODE_MESSAGE_MARK} {rule} {fix}")
+
+
+# Every `vue_code_error` message carries this text. A Vue leaf keeps its
+# errors as text so render caches can store them, and the code that raises
+# them later uses the text to raise `VueCodeError` again.
+_VUE_CODE_MESSAGE_MARK = ", which Vue would read as code."
+
+
+def is_vue_code_message(message: str) -> bool:
+    """Return whether an error text stored as a string came from `vue_code_error`."""
+    return _VUE_CODE_MESSAGE_MARK in message
+
+
+def reject_vue_code_attr_name(
+    name: object,
+    *,
+    tag_name: str,
+    origin: Literal["c-bind", "c-attr", "hook", "data"],
+    hint: str | None = None,
+) -> None:
+    """
+    Raise `VueCodeError` when Python data sets an attribute name Vue would read as code.
+
+    The rule is `is_vue_code_attr_name` and the message is `vue_code_error`;
+    every check calls them, most through this function. Names written
+    literally in the template never reach it.
+    """
+    if is_vue_code_attr_name(name):
+        raise vue_code_error(cast("str", name), tag_name=tag_name, origin=origin, hint=hint)
 
 
 def _html_attr_identity(name: str) -> str:
@@ -80,6 +228,86 @@ def _uncached_html_attr_identity(name: str) -> str:
     return folded
 
 
+class _TemplateEmptyValue(str):
+    """
+    The value of a ``class`` or ``style`` that the template writes empty.
+
+    The template parser turns ``<p class>`` and ``<p class="">`` into the value
+    ``True``, the same value it gives any boolean attribute. The class and
+    style merge rejects ``True``, because from Python data (``c-class="flag"``)
+    it is a mistake worth reporting. The renderer therefore swaps a written
+    empty ``class`` or ``style`` for this marker before merging (see
+    ``template_attr_value``). As an empty string it adds no class names and
+    no style properties, and its own type lets the merge tell it apart from an
+    empty value that came from Python.
+    """
+
+    __slots__ = ()
+
+
+# The one marker the renderer uses. Code checks for the marker with
+# isinstance(), not `is`, so a copy made by deepcopy or pickle still counts.
+TEMPLATE_EMPTY_VALUE = _TemplateEmptyValue()
+
+
+def hide_template_empty_values(values: dict[str, Any]) -> tuple[str, ...]:
+    """
+    Put back the parser's ``True`` for each written empty ``class``/``style`` before an extension hook.
+
+    Extension hooks receive the attribute values the template compiled to, so
+    a hook never sees the private marker. Returns the names that held the
+    marker, for ``restore_template_empty_values`` to use after the hooks run.
+    The dict is changed in place with ``dict.__setitem__``, so a mapping that
+    tracks values beside its entries keeps that record.
+    """
+    names = tuple(name for name, value in values.items() if isinstance(value, _TemplateEmptyValue))
+    for name in names:
+        dict.__setitem__(values, name, True)  # noqa: FBT003 - the value the parser gives it
+    return names
+
+
+def restore_template_empty_values(values: dict[str, Any], names: tuple[str, ...]) -> None:
+    """
+    Turn a ``True`` the hooks left in place back into the marker.
+
+    Only a name that still holds exactly ``True`` gets the marker back. A hook
+    that replaced or removed the value gets what it asked for, and a ``True``
+    a hook moved to another name stays an ordinary boolean attribute there.
+    """
+    for name in names:
+        if name in values and values[name] is True:
+            dict.__setitem__(values, name, TEMPLATE_EMPTY_VALUE)
+
+
+def template_attr_value(name: str, value: Any) -> Any:
+    """
+    Return what an attribute written in the template contributes to the merge.
+
+    A written empty ``class`` or ``style`` becomes ``TEMPLATE_EMPTY_VALUE``, so
+    ``<p style="" c-style="s">`` renders the same as ``<p c-style="s">``.
+    Every other written value is returned unchanged. Callers pass only values
+    that come from the template source, never from Python data, so a ``True``
+    computed in Python still reaches the merge and raises there.
+    """
+    if value is True and _html_attr_identity(name) in {"class", "style"}:
+        return TEMPLATE_EMPTY_VALUE
+    return value
+
+
+def is_unchanged_template_value(value: object, written: object) -> bool:
+    """
+    Whether a merged attribute value still equals what the template wrote.
+
+    The Vue render copies an unchanged attribute's source text, so this check
+    decides whether the written text survives. A written empty ``class`` or
+    ``style`` merges to ``TEMPLATE_EMPTY_VALUE`` when nothing else set it, and
+    that still counts as unchanged.
+    """
+    if written is True and isinstance(value, _TemplateEmptyValue):
+        return True
+    return type(value) is type(written) and value == written
+
+
 @lru_cache(maxsize=512)
 def _is_valid_exact_html_attr_name(name: str) -> bool:
     """Cache validation for ordinary strings without retaining arbitrary objects."""
@@ -98,14 +326,12 @@ def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str
     if not isinstance(name, str):
         msg = f"{where} must use string attribute names, got {type(name).__name__} key {name!r}."
         raise TypeError(msg)
-    # Only exact strings enter the shared cache. A ``str`` subclass can define
-    # custom hashing/equality, so caching it would both execute user code and
-    # retain an arbitrary object on this render-time validation path.
-    is_valid = (
-        _is_valid_exact_html_attr_name(name)
-        if type(name) is str
-        else bool(name) and not any(char in _INVALID_HTML_ATTR_NAME_CHARS for char in name) and "{#" not in name
-    )
+    if type(name) is not str:
+        # A ``str`` subclass (a StrEnum member) can override methods such as
+        # ``startswith`` or ``__str__``. Every later check and the written
+        # HTML must see the same text, so continue with an exact copy.
+        name = str.__getitem__(name, slice(None))
+    is_valid = _is_valid_exact_html_attr_name(name)
     if not is_valid:
         msg = (
             f"{where} contains invalid HTML attribute name {name!r}. Attribute names must be non-empty and "
@@ -140,6 +366,20 @@ _style_comment_re = re.compile(r"/\*.*?\*/", re.DOTALL)
 _style_delimiter_re = re.compile(r";(?![^(]*\))", re.DOTALL)
 # Splits one CSS declaration into name and value on the first `:`.
 _style_property_re = re.compile(r":(.+)", re.DOTALL)
+
+
+def _attribute_text(value: Any) -> Any:
+    """
+    Return the attribute text of a ``Markup`` piece of a class or style value.
+
+    Splitting or formatting a ``Markup`` turns it into a plain ``str`` that
+    would then be escaped a second time, so decode its HTML to the text a
+    browser reads first, the same as ``escape_attribute_value`` does for a
+    whole value. Any other value is returned as it is.
+    """
+    if type(value) is not str and hasattr(value, "__html__"):
+        return decode_attribute_entities(str(value.__html__()))
+    return value
 
 
 def normalize_class(value: ClassValue) -> str:
@@ -185,7 +425,7 @@ def _collect_class(value: ClassValue, res: dict[str, bool]) -> None:
     # Defuse a transparent proxy (e.g. a Const-marked class string) so the
     # whitespace split below sees a real str. Recursion re-enters here for
     # each list element, so a marker nested inside a list is unwrapped too.
-    value = _underlying(value)
+    value = _attribute_text(_underlying(value))
     if isinstance(value, str):
         parts = _class_tokens(value) if type(value) is str and len(value) <= 2048 else _whitespace_re.split(value)
         for part in parts:
@@ -232,7 +472,10 @@ def normalize_style(value: StyleValue) -> str:
 
     Example::
 
-        normalize_style(["color: red; width: 100px", {"color": "green", "width": False}])
+        normalize_style([
+            "color: red; width: 100px",
+            {"color": "green", "width": False},
+        ])
         # -> "color: green;"
     """
     merged: dict[str, Any]
@@ -245,13 +488,15 @@ def normalize_style(value: StyleValue) -> str:
         msg = f"Invalid style value: {value!r}"
         raise TypeError(msg)
 
-    return " ".join(f"{prop}: {val};" for prop, val in merged.items() if val is not None and val is not False)
+    return " ".join(
+        f"{prop}: {_attribute_text(val)};" for prop, val in merged.items() if val is not None and val is not False
+    )
 
 
 def _collect_style(value: StyleValue, res: dict[str, Any]) -> None:
     """Apply nested style contributions without intermediate dictionaries."""
     if isinstance(value, str):
-        res.update(parse_string_style(value))
+        res.update(parse_string_style(_attribute_text(value)))
     elif isinstance(value, (list, tuple)):
         for item in value:
             _collect_style(item, res)
@@ -321,11 +566,12 @@ def _merge_resolved_attrs(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     identity_to_key: dict[str, str] = {}
     accumulated: dict[str, list[Any]] = {"class": [], "style": []}
+    accumulator = _TemplateEmptyAccumulator()
     for key, value in items:
         identity = _html_attr_identity(key)
         output_key = identity_to_key.setdefault(identity, key)
         if identity in accumulated:
-            if value is not None:
+            if accumulator.add(identity, value) and value is not None:
                 accumulated[identity].append(value)
             result[output_key] = None
         else:
@@ -335,7 +581,38 @@ def _merge_resolved_attrs(items: Iterable[tuple[str, Any]]) -> dict[str, Any]:
             output_key = identity_to_key[identity]
             normalizer = _normalize_class_contributions if identity == "class" else normalize_style
             result[output_key] = normalizer(values)
+        elif accumulator.keeps_written_empty(identity):
+            result[identity_to_key[identity]] = TEMPLATE_EMPTY_VALUE
     return result
+
+
+class _TemplateEmptyAccumulator:
+    """
+    Track, per ``class``/``style``, whether the template wrote it empty and whether anything else set it.
+
+    A written empty ``class`` adds nothing when Python also sets the class
+    (``c-class``, or a ``class`` key in ``c-bind``), even to ``None``: the
+    element renders as if only the Python value were there. When nothing else
+    sets it, the merge keeps the marker so the element still renders the empty
+    attribute the template wrote, the same as a page with no Python values.
+    """
+
+    __slots__ = ("provided", "written_empty")
+
+    def __init__(self) -> None:
+        self.written_empty: set[str] = set()
+        self.provided: set[str] = set()
+
+    def add(self, identity: str, value: Any) -> bool:
+        """Record one contribution; return whether it joins the ordinary merge."""
+        if isinstance(value, _TemplateEmptyValue):
+            self.written_empty.add(identity)
+            return False
+        self.provided.add(identity)
+        return True
+
+    def keeps_written_empty(self, identity: str) -> bool:
+        return identity in self.written_empty and identity not in self.provided
 
 
 def _coalesce_html_attrs(
@@ -347,6 +624,7 @@ def _coalesce_html_attrs(
     result: dict[str, Any] = {}
     identity_to_key: dict[str, str] = {}
     accumulated: dict[str, list[Any]] = {"class": [], "style": []}
+    accumulator = _TemplateEmptyAccumulator()
 
     for attrs in attrs_dicts:
         for authored_key, value in attrs.items():
@@ -358,7 +636,7 @@ def _coalesce_html_attrs(
                 # A None class/style contributes nothing (a spread dict often
                 # carries an optional value), but reserves first-seen position
                 # and spelling just like any other HTML attribute.
-                if value is not None:
+                if accumulator.add(identity, value) and value is not None:
                     accumulated[identity].append(value)
                 result[output_key] = None
             else:
@@ -368,6 +646,10 @@ def _coalesce_html_attrs(
 
     for identity, values in accumulated.items():
         if not values:
+            # Merging an already merged dict again (the Vue render does) must
+            # keep a written empty attribute that nothing else replaced.
+            if accumulator.keeps_written_empty(identity):
+                result[identity_to_key[identity]] = TEMPLATE_EMPTY_VALUE
             continue
         output_key = identity_to_key[identity]
         if normalize_accumulators or len(values) > 1:
@@ -390,8 +672,10 @@ def format_attrs(attrs: Mapping[str, Any]) -> Markup:
     - ``class`` and ``style`` values may use the structured forms; they are
       normalized here, so ``merge_attrs`` output and hand-built dicts render
       the same. An empty class or style is omitted.
-    - Everything else renders ``key="value"``, escaped; values with
-      ``__html__`` pass through unescaped.
+    - Everything else renders ``key="value"``, escaped. A value with
+      ``__html__`` (such as ``Markup``) is escaped too, after decoding its
+      HTML to the text a browser would read, so a ``"`` in it cannot end
+      the attribute.
 
     Example::
 
@@ -422,6 +706,14 @@ def _format_resolved_attrs_to_str(coalesced: Mapping[str, Any]) -> str:
         # which a browser reads as disabled because the attribute is present.
         value = _underlying(value)  # noqa: PLW2901
         identity = _html_attr_identity(key)
+        if identity in {"class", "style"} and isinstance(value, _TemplateEmptyValue):
+            # The template wrote this class or style empty and nothing else
+            # set it, so it renders as a bare attribute, as the tag would on
+            # a page with no Python values. Every other empty class or style
+            # is left out. The renderer only places the marker on these two
+            # names; on any other name it falls through as an empty string.
+            parts.append(escape_to_str(key))
+            continue
         if identity == "class" and value is not None:
             if not isinstance(value, str):
                 value = normalize_class(value)  # noqa: PLW2901
@@ -440,7 +732,9 @@ def _format_resolved_attrs_to_str(coalesced: Mapping[str, Any]) -> str:
         else:
             # Escape pieces to plain strings for insertion into trusted render
             # parts. The public formatting helper wraps the complete result.
-            parts.append(f'{escape_to_str(key)}="{escape_to_str(value)}"')
+            # The value is attribute text even when it is Markup, so a quote
+            # in it cannot end the attribute and add markup.
+            parts.append(f'{escape_to_str(key)}="{escape_attribute_value(value)}"')
 
     return " ".join(parts)
 
@@ -471,6 +765,7 @@ def _has_default_attr_formatting(formatter: object) -> bool:
         and normalize_style is _DEFAULT_FORMATTING_HELPERS[6]
         and escape_to_str is _html._DEFAULT_ESCAPE_TO_STR
         and _html.escape_to_str is _html._DEFAULT_ESCAPE_TO_STR
+        and escape_attribute_value is _html._DEFAULT_ESCAPE_ATTRIBUTE_VALUE
         and _html._CACHEABLE_ESCAPE_BACKEND
         and _html._escape_to_str_impl is _html._DEFAULT_ESCAPE_TO_STR_IMPL
     )

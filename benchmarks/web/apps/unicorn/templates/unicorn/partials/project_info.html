@@ -1,0 +1,53 @@
+<section id="project-info" data-tab-panel="project-info" x-show="activeTab === 'project-info'">
+<h2>Project Info</h2>
+<table>
+<tbody>
+<tr>
+<th>Organization</th>
+<td>{{ project.organization }}</td>
+</tr>
+<tr>
+<th>Status</th>
+<td>{{ project.status }}</td>
+</tr>
+<tr>
+<th>Duration</th>
+<td>{{ project.start_date }} – {{ project.end_date }}</td>
+</tr>
+</tbody>
+</table>
+<section data-project-tags>
+<h3>Tags</h3>
+{% for tag in project_tags %}
+<span>{{ tag }}</span>
+{% empty %}
+<p>No project tags</p>
+{% endfor %}
+</section>
+<section data-project-status-updates>
+<h3>Status updates</h3>
+{% for update in status_updates %}
+<p>{{ update }}</p>
+{% empty %}
+<p>No status updates</p>
+{% endfor %}
+</section>
+<section>
+<h3>Team</h3>
+{% for role in roles %}
+<article data-role-id="{{ role.id }}">
+<span class="role-name">{{ role.name }}</span>
+<span class="user-name">{{ role.user_name }}</span>
+</article>
+{% endfor %}
+</section>
+<section data-project-contacts>
+<h3>Contacts</h3>
+{% for contact in contacts %}
+<p>{{ contact.name }}</p>
+{% empty %}
+<p>No contacts</p>
+{% endfor %}
+</section>
+</section>
+

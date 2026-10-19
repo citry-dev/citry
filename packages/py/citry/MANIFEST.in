@@ -1,0 +1,8 @@
+# The sdist carries the readable browser sources that
+# packages/js/citry-client bundles into citry/_vue/runtime.js, so it holds
+# real sources and its tests can read them. The wheel leaves them out; see
+# include-package-data in pyproject.toml.
+include citry/_vue/client.js
+include citry/_vue/events.js
+include citry/_vue/fragments.js
+include citry/_vue/vue.js

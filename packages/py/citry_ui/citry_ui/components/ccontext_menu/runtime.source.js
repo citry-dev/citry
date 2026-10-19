@@ -31,7 +31,18 @@
             ((scope = root.getRootNode()), (manager = mutationScopes.get(scope)));
             if (!manager) {
               const entries = new Map(),
-                observer = new MutationObserver((records) => {
+                observer = new MutationObserver((allRecords) => {
+                  // An attribute write that left the value as it was changes
+                  // nothing a controller could react to. A repair rewrites
+                  // every owned attribute, so without this filter a root it
+                  // cannot make valid would wake its own watcher, which would
+                  // schedule the same repair again, without end.
+                  const records = allRecords.filter(
+                    (record) =>
+                      "attributes" !== record.type ||
+                      record.oldValue !== record.target.getAttribute(record.attributeName),
+                  );
+                  if (0 === records.length) return;
                   for (const record of records)
                     for (const node of record.addedNodes)
                       if (node instanceof Element)
@@ -54,7 +65,7 @@
                 });
               (observer.observe(
                 scope instanceof Document ? scope.documentElement : scope,
-                { subtree: !0, childList: !0, attributes: !0 },
+                { subtree: !0, childList: !0, attributes: !0, attributeOldValue: !0 },
               ),
                 (manager = { entries, observer }),
                 mutationScopes.set(scope, manager));
@@ -116,6 +127,30 @@
               active: !0,
             };
           (i.removeAttribute(u), (i[d] = f));
+          // The repair writes an attribute only when its value differs, so a
+          // repair that finds everything in place makes no DOM change and
+          // does not wake the mutation observer that schedules it again.
+          const setAttr = (element, name, value) => {
+              element.getAttribute(name) !== value && element.setAttribute(name, value);
+            },
+            toggleAttr = (element, name, on) => {
+              element.hasAttribute(name) !== on && element.toggleAttribute(name, on);
+            },
+            removeAttr = (element, name) => {
+              element.hasAttribute(name) && element.removeAttribute(name);
+            },
+            setData = (element, key, value) => {
+              element.dataset[key] !== value && (element.dataset[key] = value);
+            },
+            setId = (element, value) => {
+              element.id !== value && (element.id = value);
+            },
+            setStyle = (element, name, value) => {
+              element.style.getPropertyValue(name) !== value && element.style.setProperty(name, value);
+            },
+            removeStyle = (element, name) => {
+              element.style.getPropertyValue(name) !== "" && element.style.removeProperty(name);
+            };
           let m = !0,
             v = null,
             h = !1,
@@ -140,6 +175,11 @@
             It = !1,
             Ot = null,
             capInvalid = !1,
+            // Set when a props read found the root invalid, so the next time
+            // the menu becomes ready it reads them again. Without it, a page
+            // change that lands before the first read would leave
+            // onOpenChange unset until the props change.
+            propsDeferred = !1,
             St = null,
             Xt = [],
             E = {
@@ -454,7 +494,7 @@
             ne = (e) => {
               ((h = Boolean(e && W() && Q() && Z())),
                 h && (vt = !0),
-                i.toggleAttribute(u, h));
+                toggleAttr(i, u, h));
             },
             oe = () => {
               ((O = null),
@@ -852,6 +892,20 @@
             );
           }
           X && Y.invocation && ((O = Y.invocation), (i.dataset.invocation = O.kind));
+          const readOpenChange = () => {
+            const e = o.onOpenChange;
+            return null == e
+              ? (M.delete("onOpenChange"), null)
+              : "function" == typeof e
+                ? (M.delete("onOpenChange"), e)
+                : (V("onOpenChange", e, "; ignoring the callback"), null);
+          };
+          // Read onOpenChange before the Menu controller starts, not only in
+          // the props read that waits for a valid root on a later timer. On a
+          // server revision the new controller takes over an open menu, and a
+          // close it reports before that later read would otherwise never
+          // reach the callback.
+          w = readOpenChange();
           v = menuRuntime.factory({
             host: i,
             data: { ...n, placement: "bottom-start", matchWidth: !1 },
@@ -919,17 +973,30 @@
               if (e && v) {
                 const e = v.declarationSignature();
                 if (X && null !== Y.menuSignature && Y.menuSignature !== e) {
-                  const e = w;
-                  w = null;
+                  // The server changed the menu items while the menu was open,
+                  // so close it and tell the owner, as for any forced close.
+                  // The new Menu controller reports the close itself only when
+                  // it already counts the menu as open. After a handoff it may
+                  // not yet, and then it just hides the surface, so report the
+                  // close here when the surface was showing.
+                  const reportHere = !v.isOpen() && c.matches(":popover-open");
                   try {
                     v.forceClose(_() ? "disabled" : "ancestor", s);
                   } finally {
-                    ((w = e), (O = null), (Y.invocation = null), te());
+                    reportHere &&
+                      le(!1, {
+                        reason: "ancestor",
+                        controlled: v.isControlled(),
+                        forced: !0,
+                        source: s,
+                      });
+                    ((O = null), (Y.invocation = null), te());
                   }
                 }
                 ((Y.menuSignature = e), (mt = !1));
               }
-              (!e || pe() ? ne(e) : ne(!1), e && !yt && ((yt = !0), $(() => Pt())));
+              (!e || pe() ? ne(e) : ne(!1),
+                e && (!yt || propsDeferred) && ((yt = !0), $(() => Pt())));
             },
             disabledChanged() {
               W() && (i.toggleAttribute("data-disabled", _()), _() && de());
@@ -1403,56 +1470,83 @@
                   !0,
                 ));
           };
+          // Log one error when the root breaks, and again only after it
+          // recovers and breaks again. The repair makes no DOM change while it
+          // waits, so nothing else (such as the Menu's own structure check)
+          // tells the developer why the menu stopped opening. A lost browser
+          // capability gets its own message, because restoring the markup
+          // would not help there.
+          const reportBrokenRoot = (capabilityLost = !1) => {
+            const key = capabilityLost ? "capability-lost" : "structure";
+            M.has(key) ||
+              (M.add(key),
+              console.error(
+                capabilityLost
+                  ? "[citry-ui] CContextMenu cannot open because a browser feature it needs (popovers or CSS anchor positioning) is no longer available; it stays closed."
+                  : "[citry-ui] CContextMenu cannot open because page code changed its markup; it stays closed until that markup is restored.",
+                i,
+              ));
+          };
+          // Both readiness paths (the event handlers through Qe() and the
+          // mutation watcher) repair under this one condition: the root's
+          // state attributes disagree with the menu, or a menu that was ready
+          // before, or whose surface is initialized, is not ready now.
+          const needsRepair = () =>
+            !Qt() || (!h && (vt || c.hasAttribute("data-citry-menu-initialized")));
           const Fe = () => {
               if (W()) {
                 const e = !Z();
                 if (!qe() || !ye() || !G() || e) {
                   if (e && capInvalid) return;
+                  reportBrokenRoot(e);
                   return (
                     (capInvalid = e),
                     ne(!1),
                     de(),
                     v.isOpen()
                       ? void v.forceClose(_() ? "disabled" : "ancestor", s.isConnected ? s : null)
-                      : (Ht(c), te(), oe(), void i.removeAttribute("data-open"))
+                      : (Ht(c), te(), oe(), void removeAttr(i, "data-open"))
                   );
                 }
                 ((capInvalid = !1),
                   (g = !0),
-                  (i.id = n.rootId),
-                  (i.dataset.citryUiPart = "context-menu"),
-                  i.setAttribute("data-citry-context-menu-host", ""),
-                  (i.dataset.size = E.size),
-                  i.toggleAttribute("data-disabled", _()),
-                  i.toggleAttribute("data-open", v.isOpen()),
+                  setId(i, n.rootId),
+                  setData(i, "citryUiPart", "context-menu"),
+                  setAttr(i, "data-citry-context-menu-host", ""),
+                  setData(i, "size", E.size),
+                  toggleAttr(i, "data-disabled", _()),
+                  toggleAttr(i, "data-open", v.isOpen()),
                   v.isOpen() && O
-                    ? (i.dataset.invocation = O.kind)
-                    : i.removeAttribute("data-invocation"),
-                  (s.id = n.targetId),
-                  s.setAttribute("data-citry-context-menu-target", ""),
-                  (l.id = n.pointId),
-                  l.setAttribute("popover", "manual"),
-                  l.setAttribute("aria-hidden", "true"),
-                  l.setAttribute("data-citry-context-menu-point", ""),
-                  l.removeAttribute("inert"),
+                    ? setData(i, "invocation", O.kind)
+                    : removeAttr(i, "data-invocation"),
+                  setId(s, n.targetId),
+                  setAttr(s, "data-citry-context-menu-target", ""),
+                  setId(l, n.pointId),
+                  setAttr(l, "popover", "manual"),
+                  setAttr(l, "aria-hidden", "true"),
+                  setAttr(l, "data-citry-context-menu-point", ""),
+                  removeAttr(l, "inert"),
                   [...l.style]
                     .filter((e) => !["anchor-name", "left", "top"].includes(e))
                     .forEach((e) => l.style.removeProperty(e)),
                   syncPointAnchor(),
-                  l.style.setProperty("anchor-name", n.pointAnchorName),
+                  setStyle(l, "anchor-name", n.pointAnchorName),
                   (R ?? (v.isOpen() ? O : null))
                     ? ae(R ?? O)
-                    : (l.style.removeProperty("left"), l.style.removeProperty("top")),
-                  (c.id = n.surfaceId),
-                  c.setAttribute("popover", "manual"),
-                  c.setAttribute("role", "menu"),
-                  c.setAttribute("aria-label", n.ariaLabel),
-                  (c.dataset.citryUiPart = "menu"),
+                    : (removeStyle(l, "left"), removeStyle(l, "top")),
+                  setId(c, n.surfaceId),
+                  setAttr(c, "popover", "manual"),
+                  setAttr(c, "role", "menu"),
+                  setAttr(c, "aria-label", n.ariaLabel),
+                  setData(c, "citryUiPart", "menu"),
                   (z = i.getRootNode()),
                   v.repairOwned(),
                   v.refreshRootScope(),
                   (g = !1),
-                  ne(c.hasAttribute("data-citry-menu-initialized")));
+                  ne(c.hasAttribute("data-citry-menu-initialized")),
+                  // A repair that leaves an initialized menu not ready means
+                  // the page broke a part the repair does not own.
+                  h ? (M.delete("structure"), M.delete("capability-lost")) : c.hasAttribute("data-citry-menu-initialized") && reportBrokenRoot());
               }
             },
             Qe = () => {
@@ -1462,11 +1556,7 @@
                 ((capInvalid = !1), Fe());
               }
               if (!Q() || !qe() || !ye() || !Z()) return (Fe(), !1);
-              return (
-                (!Qt() || (!h && c.hasAttribute("data-citry-menu-initialized"))) &&
-                  Fe(),
-                Qt() && h
-              );
+              return (needsRepair() && Fe(), Qt() && h);
             };
           ((He = watchMutations(i, u, d, () => {
             S && Le();
@@ -1483,11 +1573,13 @@
                     void 0
                   );
                 }
+                // A root that was ready before and is valid again repairs at
+                // once, even when its menu surface lost its own initialized
+                // mark while the root was broken: the repair is what gives
+                // the surface that mark back.
                 if (Q() && qe() && ye() && Z())
                   return (
-                    (!Qt() ||
-                      (!h && vt && c.hasAttribute("data-citry-menu-initialized"))) &&
-                      Fe(),
+                    needsRepair() && Fe(),
                     (z = i.getRootNode()),
                     v.refreshRootScope(),
                     Ge(),
@@ -1531,21 +1623,15 @@
           (l.addEventListener("toggle", Ye),
             l.addEventListener("beforetoggle", Be),
             (Pt = () => {
-              if (!Qe()) return;
+              if (!Qe()) return void (propsDeferred = !0);
+              propsDeferred = !1;
               ((E = {
                 disabled: B("disabled"),
                 loop: B("loop"),
                 closeOnSelect: B("closeOnSelect"),
                 size: j(),
               }),
-                (w = (() => {
-                  const e = o.onOpenChange;
-                  return null == e
-                    ? (M.delete("onOpenChange"), null)
-                    : "function" == typeof e
-                      ? (M.delete("onOpenChange"), e)
-                      : (V("onOpenChange", e, "; ignoring the callback"), null);
-                })()),
+                (w = readOpenChange()),
                 (i.dataset.size = E.size),
                 i.toggleAttribute("data-disabled", _()),
                 _() && de(),

@@ -131,7 +131,9 @@ def _page() -> str:
 
 def _ready(page: Any) -> None:
     page.set_content(_page())
-    page.wait_for_selector("[data-citry-command-palette-initialized]")
+    # The page holds the basic and the controlled palette, and each one
+    # initializes in its own callback, so wait for both.
+    page.wait_for_function("document.querySelectorAll('[data-citry-command-palette-initialized]').length === 2")
 
 
 def test_open_filter_keyboard_action_and_close_reset(page: Any) -> None:

@@ -90,25 +90,7 @@ def _inspect_schema_role(
     include_default_values: bool = False,
 ) -> SchemaInfo:
     """Inspect one effective schema while retaining its authored C3 provenance."""
-    owner: type | None
-    schema: object
-    declarations = _get_nested_class_declarations(component_class, attribute)
-    if declarations:
-        owner = declarations[0].declaring_class
-        authored = declarations[0].value
-        schema = (
-            _static_class_dict(component_class).get(attribute, authored) if isinstance(authored, type) else authored
-        )
-    else:
-        owner = None
-        schema = None
-        for candidate in _static_class_mro(component_class):
-            namespace = _static_class_dict(candidate)
-            if attribute in namespace:
-                owner = candidate
-                schema = namespace[attribute]
-                break
-
+    owner, schema = _effective_schema_binding(component_class, attribute)
     if owner is None:
         return SchemaInfo(
             kind="absent",
@@ -160,6 +142,24 @@ def _inspect_schema_role(
         fields=inspected_fields,
         namespace_policy=_schema_namespace_policy(schema),
     )
+
+
+def _effective_schema_binding(component_class: type, attribute: str) -> tuple[type | None, object]:
+    """Return the class that binds one schema role and the schema it binds, following C3 order."""
+    declarations = _get_nested_class_declarations(component_class, attribute)
+    if declarations:
+        authored = declarations[0].value
+        # A nested declaration may be replaced on the component class itself,
+        # such as by a synthesized dataclass, so that binding wins.
+        schema = (
+            _static_class_dict(component_class).get(attribute, authored) if isinstance(authored, type) else authored
+        )
+        return declarations[0].declaring_class, schema
+    for candidate in _static_class_mro(component_class):
+        namespace = _static_class_dict(candidate)
+        if attribute in namespace:
+            return candidate, namespace[attribute]
+    return None, None
 
 
 def _schema_namespace_policy(schema_class: type) -> Literal["closed", "allow-extra", "unknown"]:

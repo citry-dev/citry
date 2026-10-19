@@ -305,6 +305,12 @@ class CDialog(LibraryComponent):
           };
           const invalidEpisodes = new Map();
           let internalOpen = data.open;
+          // The server's `open` input from the previous run, which the cleanup
+          // stores on the dialog. A kept dialog keeps its own open state only while
+          // this input is unchanged; otherwise it follows the server.
+          const serverOpenKey = Symbol.for("citry-ui:dialog-server-open");
+          const previousServerOpen = dialog[serverOpenKey];
+          delete dialog[serverOpenKey];
           let controlled = false;
           let appliedOpen = false;
           let suppressStaleControlledOpen = false;
@@ -463,14 +469,20 @@ class CDialog(LibraryComponent):
               syncRuntimeDialog(false);
               notify(false, reason, source, returnValue);
             },
-            forceClose: (_reason, source) => {
+            forceClose: (reason, source) => {
               suppressStaleControlledOpen = false;
               appliedOpen = false;
               internalOpen = false;
               dialog.removeAttribute("data-open");
               updateActivators(false);
               syncRuntimeDialog(false);
-              notify(false, "native", source, "");
+              // An enclosing dialog that closes this one passes itself as the
+              // source; that close is reported as "ancestor". The controller's
+              // other forced closes (the dialog left its root) stay "native".
+              const fromAncestor = reason === "ancestor"
+                && source instanceof HTMLDialogElement
+                && source !== dialog;
+              notify(false, fromAncestor ? "ancestor" : "native", source, "");
             },
             failed: () => {
               appliedOpen = false;
@@ -479,14 +491,31 @@ class CDialog(LibraryComponent):
               console.error("[citry-ui] CDialog could not enter modal state.");
             },
             handoffAborted: () => {
+              // No later run kept the dialog, so the page removed it. The owner
+              // removed it, so the close is not reported to `onOpenChange`.
               appliedOpen = false;
               updateActivators(false);
               syncRuntimeDialog(false);
             },
           });
 
+          // The controller closed a dialog this run would have taken over open,
+          // because an enclosing dialog closed first. Tell the owner once the
+          // callback below is known, and keep a stale controlled `open` from
+          // showing it again inside the closed ancestor.
+          const ancestorClose = controller.closedByAncestor;
+          if (ancestorClose) {
+            internalOpen = false;
+            suppressStaleControlledOpen = props.open === true;
+          }
           if (controller.retained) {
             appliedOpen = controller.isOpen();
+            // A server re-render that keeps the dialog and its `open` input keeps
+            // its open state too, so the effect below does not close it back to the
+            // server's default. A changed `open` input wins instead.
+            if (previousServerOpen === data.open) {
+              internalOpen = appliedOpen;
+            }
             dialog.toggleAttribute("data-open", appliedOpen);
             updateActivators(appliedOpen);
             syncRuntimeDialog(appliedOpen);
@@ -546,6 +575,7 @@ class CDialog(LibraryComponent):
               pendingControlledReturnValue = "";
             }
           });
+          if (ancestorClose) notify(false, "ancestor", ancestorClose, "");
           host.setAttribute("data-citry-dialog-initialized", "");
           if (dialog.getAttribute("role") === "alertdialog") {
             host.setAttribute("data-citry-alert-dialog-initialized", "");
@@ -553,16 +583,19 @@ class CDialog(LibraryComponent):
 
           return () => {
             host.removeEventListener("click", onHostClick);
+            dialog[serverOpenKey] = data.open;
             // A server revision runs this cleanup and then the callback again on the
             // same dialog, so an open dialog is handed to the next callback run.
             const handedOff = controller.cleanup({ handoff: true });
             if (handedOff) {
-              // Vue runs this cleanup before an unmount removes the dialog from the
-              // page. By the next microtask the removal is done, so a disconnected
-              // dialog releases the scroll lock now rather than when the handoff expires.
-              queueMicrotask(() => {
+              // Citry runs this cleanup before Vue updates the page, and Vue updates
+              // it in a later microtask, so by the next task a removed dialog is
+              // disconnected, and the check below releases its modal state, scroll
+              // lock, and focus. A kept dialog is still connected, so the check
+              // leaves its handoff for the next run.
+              setTimeout(() => {
                 if (!dialog.isConnected) controllerRuntime.abortHandoff(dialog);
-              });
+              }, 0);
             }
             appliedOpen = false;
             updateActivators(false);

@@ -510,6 +510,9 @@ def test_basic_cached_error_slots_geometry_and_native_semantics(page: Any) -> No
     page.wait_for_selector("#basic[data-citry-image-initialized]")
     page.wait_for_function("document.querySelector('#basic').dataset.status === 'loaded'")
     page.wait_for_function("document.querySelector('#missing').dataset.status === 'error'")
+    # `#basic` and `#reactive` both report into `__imageTest.events`, and
+    # `#reactive` can finish loading after `#basic`, so wait for its report too.
+    page.wait_for_function("window.__imageTest.events.filter(event => event.status === 'loaded').length >= 2")
 
     assert page.locator("#basic-image").get_attribute("alt") == "Green plate"
     assert page.locator("#basic").get_attribute("role") is None

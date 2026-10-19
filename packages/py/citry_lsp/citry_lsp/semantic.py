@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import io
 import re
 import tokenize
@@ -12,6 +13,8 @@ from typing import TYPE_CHECKING
 
 from lsprotocol import types
 
+from citry._source_lines import source_lines
+from citry.analysis import JsonWireType, build_reveal_shadow, json_wire_type_from_annotation
 from citry_lsp.engine import (
     _I18N_CALL_SIGNATURES,
     _I18N_OPERATION_SIGNATURES,
@@ -19,9 +22,11 @@ from citry_lsp.engine import (
     ExpressionShadow,
     ExpressionShadowGroup,
     TemplateVariableHover,
+    _widened_json_type,
     all_expression_shadows,
     expression_completion_ranges,
     expression_shadows,
+    js_data_inference_requests,
     map_expression_shadow_range,
     render_template_variable_hover,
     template_variable_hover,
@@ -509,6 +514,118 @@ async def semantic_diagnostics(
     return _dedupe_diagnostics(retained)
 
 
+async def infer_js_data_value_types(
+    analyzer: TyAnalyzer,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState],
+) -> None:
+    """
+    Ask ty for the type of each `js_data()` value part that Citry's own rules leave unknown.
+
+    Citry types a value such as `kwargs.title` or `[1, 2]` by its own rules.
+    A part such as `self.rows()` or a comprehension has no rule, so ty is
+    asked about it here: each part is wrapped in `reveal_type()` in a copy
+    of its module, and ty's answer is turned into a JSON type the same way
+    an annotation is. The project remembers the answers for that exact
+    source, and every later use of the `js_data()` keys, such as the
+    TypeScript check and completion, reads them. An answer that does not
+    describe a JSON value leaves the part unknown.
+    """
+    # Without ty, or with two open copies of one file that disagree, there is
+    # nothing to ask, so the scan of every js_data() method is skipped.
+    if analyzer.failure is not None:
+        return
+    synchronized = _python_documents(open_documents)
+    if synchronized is None:
+        return
+    workspace = Path(project.status.workspace)
+    # Reading and analyzing every js_data() source can take a while in a
+    # large project, so it runs off the event loop.
+    # The thread gets its own copy, because the server adds and removes open
+    # documents while it runs.
+    requests = await asyncio.to_thread(js_data_inference_requests, project, workspace, dict(open_documents))
+    if not requests:
+        return
+    for request in requests:
+        shadow = (
+            build_reveal_shadow(
+                request.source,
+                request.spans,
+                source_module=request.module,
+                source_is_package=request.source_file.name == "__init__.py",
+            )
+            if request.spans
+            else None
+        )
+        answers: dict[tuple[int, int], JsonWireType] = {}
+        if shadow is not None:
+            virtual = TyDocument(
+                virtual_document_uri(request.source_file, f"js_data_{request.qualname}", workspace=workspace),
+                shadow.source,
+            )
+            try:
+                findings = await analyzer.diagnostics(virtual, synchronized=synchronized)
+            except TyUnavailableError:
+                # Nothing is remembered, so the next check asks again.
+                return
+            for finding in findings:
+                revealed = _revealed_type(finding.code, finding.message)
+                offset = offset_at_position(shadow.source, finding.range.start)
+                if revealed is None or offset is None:
+                    continue
+                for span, (start, end) in zip(request.spans, shadow.reveals, strict=True):
+                    # ty marks the argument `(expr)`, which starts one
+                    # character before the expression.
+                    if start - 1 <= offset <= end:
+                        wire_type = _json_type_from_ty_display(revealed)
+                        if wire_type is not None:
+                            answers[span] = wire_type
+                        break
+        project.store_js_data_inferred_types(request.source_file, request.source, request.qualname, answers)
+
+
+def _revealed_type(code: str | int | None, message: str) -> str | None:
+    """Return the type text of one `revealed-type` finding."""
+    if code != "revealed-type":
+        return None
+    match = re.fullmatch(r"Revealed type: `(?P<type>.+)`", message.split("\n", 1)[0])
+    return match.group("type") if match is not None else None
+
+
+# Parts of ty's type display that name no JSON value: a type ty could not
+# infer, one it does not support yet, or a union it shortened.
+_UNPROVEN_TY_DISPLAY = re.compile(r"\bUnknown\b|@Todo|\.\.\. omitted \d+")
+# A string literal in a display, such as `Literal["Unknown"]`, is a value,
+# not a type name, so it is removed before the check above.
+_TY_DISPLAY_STRING = re.compile(r'"(?:[^"\\]|\\.)*"' + r"|'(?:[^'\\]|\\.)*'")
+
+
+def _json_type_from_ty_display(display: str) -> JsonWireType | None:
+    """
+    Turn ty's display of a type into a JSON type, or `None` when it does not describe a JSON value.
+
+    ty writes types the way Python annotations are written, such as
+    `list[str]` or `Literal["a", "b"]`, so the annotation rules read them.
+    A literal is widened to its kind, as Citry's own rules do for a
+    `js_data()` constant.
+    """
+    if _UNPROVEN_TY_DISPLAY.search(_TY_DISPLAY_STRING.sub('""', display)):
+        return None
+    wire_type = json_wire_type_from_annotation(re.sub(r"\bLiteralString\b", "str", display))
+    if wire_type.unsupported or _has_unknown_part(wire_type):
+        return None
+    return _widened_json_type(wire_type)
+
+
+def _has_unknown_part(value: JsonWireType) -> bool:
+    if value.kind == "unknown":
+        return True
+    parts = (*value.items, *(item.value for item in value.fields))
+    if value.additional is not None:
+        parts = (*parts, value.additional)
+    return any(_has_unknown_part(part) for part in parts)
+
+
 @dataclass(frozen=True, slots=True)
 class _DiagnosticExpressionCopy:
     """One authored expression copy inside a batched analyzer document."""
@@ -576,7 +693,12 @@ def _combined_diagnostic_document(
     if len(entries) < 2:
         position, shadow = entries[0]
         return _single_diagnostic_document(position, shadow, workspace)
-    bounds = [_generated_query_function_bounds(shadow.document.source) for _, shadow in entries]
+    # The shadow builder records where its function is; parsing each
+    # generated module again to find it cost most of a batch check's time.
+    bounds = [
+        shadow.document.query_function or _generated_query_function_bounds(shadow.document.source)
+        for _, shadow in entries
+    ]
     if any(bound is None for bound in bounds):
         return None
     valid_bounds = tuple(bound for bound in bounds if bound is not None)
@@ -653,7 +775,7 @@ def _generated_query_function_bounds(source: str) -> tuple[int, int] | None:
 
 def _ast_source_offset(source: str, line: int, byte_column: int) -> int | None:
     """Convert Python AST byte columns to string offsets for generated source."""
-    lines = source.splitlines(keepends=True)
+    lines = source_lines(source)
     if line < 1 or line > len(lines):
         return None
     raw_line = lines[line - 1].encode("utf-8")
@@ -672,10 +794,24 @@ def _map_diagnostic_range(
     finding_range: types.Range,
 ) -> types.Range | None:
     """Map a diagnostic only through one exact copied expression."""
-    start = offset_at_position(diagnostic_document.virtual.source, finding_range.start)
-    end = offset_at_position(diagnostic_document.virtual.source, finding_range.end)
+    source = diagnostic_document.virtual.source
+    start = offset_at_position(source, finding_range.start)
+    end = offset_at_position(source, finding_range.end)
     if start is None or end is None or end < start:
         return None
+    for copied in diagnostic_document.copies:
+        # A copied value sits inside generated `(\n...\n)`; a loop copy uses
+        # brackets and never matches. A finding over exactly those
+        # parentheses, such as a value that fails its annotated assignment,
+        # covers the authored expression and nothing else.
+        if (
+            start == copied.combined_start - 2
+            and end == copied.combined_end + 2
+            and source[start : copied.combined_start] == "(\n"
+            and source[copied.combined_end : end] == "\n)"
+        ):
+            start, end = copied.combined_start, copied.combined_end
+            break
     for copied in diagnostic_document.copies:
         if copied.combined_start <= start <= end <= copied.combined_end:
             original_start = copied.original_start + start - copied.combined_start
@@ -855,6 +991,7 @@ def _dedupe_diagnostics(diagnostics: list[types.Diagnostic]) -> tuple[types.Diag
 
 
 __all__ = [
+    "infer_js_data_value_types",
     "semantic_completions",
     "semantic_definition",
     "semantic_diagnostics",

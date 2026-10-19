@@ -432,7 +432,7 @@ bundling, typed errors, polling, loading/error state, timeout behavior, and
 cancellation/drop semantics. A received server call can still execute even
 when a newer call causes its eventual response to be ignored. The Events guide
 also documents a
-[download action and CSV export example](../../docs_site/content/events/http.md#downloads).
+[download action and CSV export example](../../docs_site/content/events/actions.md#download-a-file).
 
 Consequently, the roadmap should not describe table foundations, an icon
 registry, authorization boundaries, request-ordering basics, or a generic

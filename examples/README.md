@@ -37,7 +37,7 @@ from its own directory:
 | Bare ASGI | `uv run uvicorn app.main:application --host 127.0.0.1 --port 8000` |
 | Bare WSGI | `uv run waitress-serve --listen=127.0.0.1:8000 app.main:application` |
 
-Read the [web framework guide](https://citry.dev/web-frameworks/) for host
+Read the [web framework guide](https://citry.dev/advanced/web-frameworks/) for host
 setup and the [security guide](https://citry.dev/security/) before adding
 private data or write operations.
 

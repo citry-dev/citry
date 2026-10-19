@@ -2,8 +2,8 @@
 
 Citry Events lets browser code call a named component handler on the Python server.
 The browser sends JSON describing what events to call, and the server answers with a
-small list of actions such as render this fragment, update this State token,
-dispatch this DOM event, or return this data value.
+small list of actions such as render this fragment, update this component's
+State, dispatch this DOM event, or return this data value.
 
 This document defines protocol major 1. The JSON Schemas are the exact
 structural rules, [`validate.py`](validate.py) checks the worked examples, and
@@ -81,10 +81,10 @@ options.
 
 The browser checks the complete result envelope and every action's protocol
 shape before it applies the first action. If the tenth action has an invalid
-field or value, none of the first nine runs. Targets and returned fragments
-can still fail later for reasons outside the JSON protocol, such as an invalid
-CSS selector or malformed embedded HTML. The server performs the equivalent
-full protocol check before it runs a call.
+field or value, none of the first nine runs. A result can still fail after
+that check for reasons outside the JSON shape, such as a target that names a
+component the page no longer shows or malformed rendered content. The server
+performs the equivalent full protocol check before it runs a call.
 
 Only places that deliberately carry application data remain open:
 
@@ -127,7 +127,7 @@ interface JsonObject {
 ### Calls
 
 One call envelope contains one or more handler calls. `capabilities` and its
-two properties may be omitted to use the v1 defaults.
+three properties may be omitted to use the v1 defaults.
 
 ```ts
 type EventSwap =
@@ -147,9 +147,12 @@ type EventActionKind =
   | "redirect"
   | "url";
 
+type EventRenderer = "html-fragment/1" | "vue-prepared/1";
+
 interface EventsCapabilities {
   swaps?: EventSwap[];
   actions?: EventActionKind[];
+  renderers?: EventRenderer[];
 }
 
 interface EventCall {
@@ -259,12 +262,34 @@ interface ActionTiming {
   wait?: false;
 }
 
-interface RenderAction extends ActionTiming {
+// render:<renderId> or mark:<callerRenderId>:<name>
+type RenderActionTarget = `render:${string}` | `mark:${string}:${string}`;
+type EventActionTarget = `render:${string}`;
+
+interface LegacyRenderAction extends ActionTiming {
   action: "render";
-  target: string;
+  target: RenderActionTarget;
   swap: EventSwap;
   html: string;
 }
+
+interface HtmlRenderAction extends ActionTiming {
+  action: "render";
+  target: RenderActionTarget;
+  swap: EventSwap;
+  renderer: "html-fragment/1";
+  html: string;
+}
+
+interface PreparedRenderAction extends ActionTiming {
+  action: "render";
+  target: RenderActionTarget;
+  swap: "morph";
+  renderer: "vue-prepared/1";
+  prepared: JsonObject;
+}
+
+type RenderAction = LegacyRenderAction | HtmlRenderAction | PreparedRenderAction;
 
 interface DataAction {
   action: "data";
@@ -276,13 +301,14 @@ interface StateAction extends ActionTiming {
   action: "state";
   targetRenderId: string;
   stateToken: string;
+  publicState: JsonObject;
 }
 
 interface DispatchEventAction extends ActionTiming {
   action: "event";
   eventName: string;
   detail?: JsonValue;
-  target?: string;
+  target?: EventActionTarget;
 }
 
 interface RedirectAction extends ActionTiming {
@@ -337,7 +363,6 @@ interface EventComponentInstance {
 
 interface EventsManifest {
   protocol: "citry-events/1";
-  clientGraphRevision: string | null;
   componentClasses: EventComponentClass[];
   componentInstances: EventComponentInstance[];
 }
@@ -353,11 +378,11 @@ The IDs are deliberately separate because they answer different questions:
 | `componentClassId` | The registered component class containing the Python handler. |
 | `renderId` | One rendered occurrence of a component. Each new render receives a new ID. |
 | `callerRenderId` | The rendered occurrence that sent a call. |
-| `targetRenderId` | The rendered occurrence whose State token a `state` action replaces. |
-| `render:<renderId>` | A render or DOM-event action target written in component-address form. |
+| `targetRenderId` | The rendered occurrence whose State token and public State values a `state` action updates. |
+| `render:<renderId>` | A render or DOM-event action target that names one rendered occurrence. |
+| `mark:<callerRenderId>:<name>` | A render action target that names one `<c-mark>` region inside the calling occurrence. |
 | `handlerName` | The Python handler the server runs. |
 | `eventName` | The browser DOM `CustomEvent` an `event` action dispatches. |
-| `clientGraphRevision` | The client graph emitted with the same Events manifest. |
 | `sendSequence` | The order in which one stable browser record sent its calls. |
 
 ## The call envelope
@@ -369,7 +394,7 @@ top-level fields are:
 |---|---|---|
 | `protocol` | Required; exactly `citry-events/1`. | Selects the protocol major. |
 | `requestId` | Required non-empty string. | A client-created request ID that the server echoes. |
-| `capabilities` | Optional strict object. | Says which v1 actions and swaps this browser can apply. See [Capabilities](#capabilities). |
+| `capabilities` | Optional strict object. | Says which v1 actions, swaps, and renderers this browser can apply. See [Capabilities](#capabilities). |
 | `calls` | Required array of 1 to 16 calls. | `results[i]` answers `calls[i]`. |
 
 Each call contains:
@@ -456,38 +481,154 @@ Actions are a closed v1 vocabulary:
 
 | Action | Required fields | Optional fields | Meaning |
 |---|---|---|---|
-| `render` | `target`, `swap`, `html` | `delay`, `wait` | Apply a complete Citry fragment to every selected target. |
+| `render` | `target`, `swap`, and `html` or `prepared` | `renderer`, `delay`, `wait` | Update one component occurrence, or one marked region inside the caller, with newly rendered content, as `swap` says. |
 | `data` | `value` | `delay` | Resolve the caller with any JSON value, including `null`. A result has at most one data action. |
-| `state` | `targetRenderId`, `stateToken` | `delay`, `wait` | Replace one rendered component occurrence's stored State token. |
+| `state` | `targetRenderId`, `stateToken`, `publicState` | `delay`, `wait` | Replace one rendered component occurrence's State token and the public State values the browser shows. |
 | `event` | `eventName` | `detail`, `target`, `delay`, `wait` | Dispatch a bubbling DOM `CustomEvent`. Names beginning `citry:` are reserved. |
 | `redirect` | `url` | `delay`, `wait` | Navigate the page. |
 | `url` | `url`, `mode` | `delay`, `wait` | Push or replace browser history without navigation. `mode` is `push` or `replace`. |
 
-A render action's `html` is the complete fragment, including any inert Citry
-graph, Events, and dependency manifest tags needed by the inserted content.
-The v1 swaps are `morph`, `replace`, `inner`, `append`, `prepend`, `remove`,
-and `none`.
+A render action carries its content in one of two forms, selected by its
+`renderer` (see [Capabilities](#capabilities)):
 
-When a handler changes State but does not render, the server places a `state`
-action before the handler's own actions. Code triggered while later actions
-run therefore sees the fresh token. A rendered fragment carries its fresh
-token in its Events manifest instead.
+- `html-fragment/1` carries `html`, a complete HTML fragment. When the
+  content is interactive, the fragment mounts its own Vue app and includes
+  the inert JSON and asset tags that app needs, including its Events records.
+- `vue-prepared/1` carries `prepared`, a JSON object that the browser merges
+  into the Vue app already on the page. Its Events records are inside that
+  object.
+
+The v1 swaps are `morph`, `replace`, `inner`, `append`, `prepend`, `remove`,
+and `none`. A `vue-prepared/1` render always uses `morph`: the browser updates
+the mounted component in place, while the other swaps insert, remove, or skip
+DOM content, which prepared content never does. An `html-fragment/1` render
+may use any v1 swap. Citry's browser client applies only `vue-prepared/1`
+renders; `html-fragment/1` serves other clients and form posts without
+JavaScript, which read the HTML directly.
+
+### State refresh
+
+A handler can change State without rendering the calling component again, for
+example when it only returns data or renders a `<c-mark>` region. The browser
+still shows the old values in `$state` and in State bindings, and it still
+holds a token for State that the server has replaced. So the server places a
+`state` action before the handler's own actions. A counter handler that only
+runs `state.count += 1` answers:
+
+```json
+{
+  "action": "state",
+  "targetRenderId": "c9zk1q00",
+  "stateToken": "cev1.eyJ...k2Qa",
+  "publicState": {"count": 1, "name": "Counter"}
+}
+```
+
+`publicState` holds every public State field of the target after the handler
+ran, under the same rules as `publicState` in the manifest's component
+instance record. A field outside the component's public State never appears.
+A render of the calling component carries its fresh token and values in its
+Events records instead, so the server sends no `state` action for it.
+
+The browser applies the action in three steps:
+
+1. It stores `stateToken`, which the component's next call sends back.
+2. It sets each field of the target's browser State object to the value in
+   `publicState`. A field the browser changed but has not sent yet keeps the
+   browser's value, and that value travels with the next call.
+3. It removes a field that is missing from `publicState`, unless that field
+   has an unsent browser value.
+
+Citry's browser client applies a `state` action that has no `delay` and no
+`wait: false` before the other actions in the result, so code triggered while
+later actions run sees the fresh token and values.
+
+These inputs fail or degrade as follows:
+
+- A missing `publicState`, or one that is not a JSON object, fails protocol
+  validation. The receiver rejects the whole result before it applies any
+  action.
+- Field names inside `publicState` are application data, so the protocol does
+  not reject an extra or missing field. The browser adds the extra field and
+  removes the missing one, as the steps above say. When the class record omits
+  `writableStateFields`, Citry's browser client also treats an extra field as
+  writable, and the server then rejects the next call that sends it as
+  `invalid_args`. A server sends exactly the component's public fields.
+- The protocol does not check a field's value against the State declaration.
+  The browser shows the value it receives, so a server sends values of the
+  declared types. The server still validates every browser write against the
+  declaration when the next call carries it.
+- Citry's browser client skips a `state` action in a server result whose
+  `targetRenderId` names no component that its Vue app currently shows. Page
+  code that passes such an action to `Citry.events.applyActions` gets a
+  rejected promise instead, because that function first finds the component
+  each action names.
 
 ### Targets
 
-A target is either:
+A target tells the browser which rendered component an action is about. It
+names the component directly, so the browser finds it in its own records
+instead of searching the page. There are two forms:
 
-- a non-empty CSS selector, applied with `querySelectorAll`; or
-- `render:<renderId>`, where the ID matches `^[a-z0-9_-]+$`.
+1. `render:<renderId>` names one rendered component occurrence. The ID
+   matches `^[a-z0-9_-]+$`, the same rule as `renderId` in the manifest.
+2. `mark:<callerRenderId>:<name>` names one `<c-mark name="...">` region that
+   the calling component rendered. Marker names are unique only inside the
+   component that renders them, so the target carries the caller's render ID
+   as well. The name matches `^[A-Za-z][A-Za-z0-9_-]*$`.
 
-`render:` is reserved. A value beginning with it but carrying an unsafe or
-empty ID is invalid, not a CSS selector. The `targetRenderId` of a `state`
-action uses the same ID grammar without the prefix.
+A handler can update a small part of its own output without re-rendering the
+whole component. Given this template fragment:
+
+```citry-html
+<c-mark name="cart-badge">
+  <c-CartBadge c-count="count" />
+</c-mark>
+```
+
+a handler returns
+`actions.Render(CartBadge(count=3), target="mark:cart-badge")`, and the server
+writes the caller's render ID into the wire target:
+
+```json
+{
+  "action": "render",
+  "target": "mark:c9zk1q00:cart-badge",
+  "swap": "morph",
+  "renderer": "vue-prepared/1",
+  "prepared": {"...": "..."}
+}
+```
+
+Render actions accept both forms. An `event` action's optional `target`
+accepts only `render:<renderId>`; the event fires on that component's first
+connected element and bubbles from there. The server only ever addresses an
+event to the calling component. The `targetRenderId` of a `state`
+action uses the same ID rule without the `render:` prefix.
 
 When the server creates a render, State refresh, or event action without an
-explicit target, it can target the `callerRenderId` automatically. A call
-without a rendered caller cannot have an automatic component target; an
-unaddressed event then dispatches on `document`.
+explicit target, it targets the `callerRenderId` automatically. A call
+without a rendered caller cannot have an automatic component target: the
+server fails a render without a target, or with a `mark:` target, as a
+`handler_error`, and an unaddressed event dispatches on `document`.
+
+A target in any other form, such as a CSS selector (`#cart`), a marker
+without its caller (`mark:cart-badge`), or an empty ID (`render:`), fails
+protocol validation, so a receiver rejects the whole result before it applies
+any action.
+
+Citry's browser client also rejects the whole result, before any action runs
+and with the caller's promise rejected, in these cases:
+
+- A render target names a component that is not currently mounted in the
+  caller's Vue app, or a marker whose caller is not the component that sent
+  the call. This happens when the component was replaced or removed while the
+  call was in flight.
+- An event target names a component other than the caller.
+- A result holds several `vue-prepared/1` renders and any of these is
+  true: they are not next to each other in the list, one has a positive
+  `delay` or `wait: false`, or two name the same component or a component
+  and one inside it. The browser applies such a group as one update.
 
 ### Order and timing
 
@@ -498,8 +639,13 @@ following action immediately. A data action must remain in the sequence
 because applying it settles the caller's promise.
 
 Only `false` is valid when `wait` is present. A blocking delay preserves order.
-A non-blocking delay re-resolves its target when it eventually runs. Actions
-after a redirect race the navigation, so a server should warn when it encodes
+When a delayed action runs, Citry's browser client first checks that the
+calling component is still mounted and that no newer result for it has been
+applied; otherwise it skips a non-blocking action and fires
+`citry:events:stale`, or rejects the caller's promise for a blocking one.
+This check is what keeps a delayed `state` action from replacing newer State
+values and a newer token with older ones.
+Actions after a redirect race the navigation, so a server should warn when it encodes
 such a list even though the authored order remains unchanged.
 
 ### Errors
@@ -547,32 +693,55 @@ a wildcard request ID. An unreadable or structurally invalid body answers
 
 ## Capabilities
 
-Clients advertise the swaps and action kinds they can apply:
+Clients advertise the swaps, action kinds, and renderers they can apply:
 
 ```json
 {
   "swaps": ["replace", "morph"],
-  "actions": ["render", "data", "state", "event", "redirect", "url"]
+  "actions": ["render", "data", "state", "event", "redirect", "url"],
+  "renderers": ["html-fragment/1"]
 }
 ```
 
-Both arrays contain unique known values. The object and its arrays are strict.
-Either key may be omitted; an omitted key uses that key's v1 baseline. The
-server never emits outside the advertised set. In particular, it downgrades a
-`morph` render to `replace` for a client that did not advertise morphing.
+All arrays contain unique known values. The object and its arrays are strict.
+Any key may be omitted; an omitted key uses that key's v1 baseline. The
+server never emits outside the advertised set. In particular, it downgrades an
+`html-fragment/1` render from `morph` to `replace` for a client that did not
+advertise morphing. A `vue-prepared/1` render has no such fallback, so a client
+that advertises `vue-prepared/1` must also advertise `morph`; otherwise a call
+that renders fails with `handler_error`. Any other render outside the
+advertised swaps or renderers also fails with `handler_error`, because the
+server never drops or reorders actions.
 
-When the complete `capabilities` object is absent, both keys use
+Citry's own browser client advertises exactly what it applies:
+
+```json
+{
+  "swaps": ["morph"],
+  "actions": ["render", "data", "state", "event", "redirect", "url"],
+  "renderers": ["vue-prepared/1"]
+}
+```
+
+When the complete `capabilities` object is absent, all three keys use
 `CAPABILITIES_BASELINE_V1`:
 
 ```json
 {
   "swaps": ["replace", "inner", "append", "prepend", "remove", "none"],
-  "actions": ["render", "data", "state", "event", "redirect", "url"]
+  "actions": ["render", "data", "state", "event", "redirect", "url"],
+  "renderers": ["html-fragment/1"]
 }
 ```
 
 The baseline includes every v1 action and every v1 swap except `morph`, which
 needs a morphing runtime.
+
+An omitted Render `renderer` means `html-fragment/1` and requires the legacy
+`html` string. An explicit `html-fragment/1` action also carries only `html`.
+A `vue-prepared/1` action carries only a strict JSON `prepared` object. Unknown
+renderers, mixed content representations, and renderer output absent from the
+caller's advertised set are invalid.
 
 ## State tokens
 
@@ -580,10 +749,12 @@ needs a morphing runtime.
 it back verbatim. The server binding that minted it owns its internal format
 and verifies it.
 
-The plain public State values are separate. They appear only in
-`publicState` inside the browser manifest, where Alpine bindings can read them.
-Server-only values never appear there. A refreshed token arrives through a
-rendered fragment's manifest or a `state` action.
+The plain public State values are separate. They appear in `publicState` in
+two places: the component's Events record, where browser code reads them to
+set up the component's reactive State, and a `state` action, which updates
+them after a handler changes State (see [State refresh](#state-refresh)). Server-only values never appear in either
+place. A refreshed token arrives the same two ways: in the Events records of a
+new render, or in a `state` action beside the refreshed values.
 
 ## How the browser learns what it can call
 
@@ -592,22 +763,14 @@ not contain: which handler names a component class exposes, which State fields
 the browser may write, which State values belong to one rendered occurrence,
 and which opaque token that occurrence must send back.
 
-The server places that information in inert JSON. Before embedding it in HTML,
-the server escapes `<` as `\u003c`, so State containing `</script>` cannot
-close the script element. This escaping is what **script-safe JSON** means
-here; parsing restores the original value.
-
-```html
-<script type="application/json" data-citry-events>{...}</script>
-```
-
+For each render, the server first builds one Events manifest for every
+component in it that declares Events, and validates the whole manifest.
 [`manifest.schema.json`](manifest.schema.json) defines the complete shape. A
 typical manifest is:
 
 ```json
 {
   "protocol": "citry-events/1",
-  "clientGraphRevision": null,
   "componentClasses": [
     {
       "componentClassId": "TodoList_a1b2c3",
@@ -633,22 +796,28 @@ typical manifest is:
 }
 ```
 
-Manifest entries are named JSON objects embedded directly in the inert script
-block. A browser parses the tag as JSON, never executes its contents, and
-validates the full manifest before publishing its class and instance records.
+The manifest does not travel to the browser as one object. The server copies
+each instance record, together with its class record, into that component's
+entry in the page's Vue app data. The app data is inert JSON, carried in a
+`<script type="application/json">` tag in the page or fragment, or in the
+`prepared` object of a `vue-prepared/1` render action. Before embedding JSON in
+HTML, the server escapes `<` as `\u003c`, so State containing `</script>`
+cannot close the script element. This escaping is what **script-safe JSON**
+means here; parsing restores the original value. The browser parses the tag as
+JSON and never executes its contents.
+
+Before a component sends a call, the browser checks that component's records:
+the class record must pass the descriptor checks and name the same
+`componentClassId` as the instance. A component whose records fail the check
+cannot send calls; the browser rejects the call instead of sending it.
 
 ### Top-level fields
 
 | Field | Meaning |
 |---|---|
 | `protocol` | Exactly `citry-events/1`. |
-| `clientGraphRevision` | The 64-character lowercase revision of the `data-citry-graph` block emitted for the same render, or `null` when there is no client graph. |
 | `componentClasses` | Class-wide handler and writable-State descriptors. |
 | `componentInstances` | Per-render occurrence tokens and public State values. |
-
-When `clientGraphRevision` is not null, the browser waits for that exact
-client graph and attaches each Events instance to its matching graph instance.
-A rendered fragment cannot point at a different or absent graph revision.
 
 ### Component classes
 
@@ -685,7 +854,7 @@ Each instance record requires:
 
 | Field | Meaning |
 |---|---|
-| `renderId` | The rendered occurrence ID used by `data-cid-*` markers and `render:` action targets. |
+| `renderId` | The rendered occurrence ID that `render:` action targets and a call's `callerRenderId` name. |
 | `componentClassId` | A class ID present in `componentClasses` in the same manifest. |
 | `stateToken` | A non-empty opaque token, or `null` for a stateless instance. |
 | `publicState` | Open application data used to initialize the reactive browser State object. |
@@ -703,8 +872,6 @@ relationships that are clearer in code:
 - The reference validator checks unique class and render IDs, class
   references, and the stateless `stateToken: null` plus empty `publicState`
   rule.
-- The browser also requires a non-null `clientGraphRevision` to match the
-  graph emitted for the same render.
 - The exchange checker verifies that `results[i]` answers `calls[i]`, request
   IDs match, every `sendSequence` is echoed exactly, results stay within the
   advertised capabilities, and each result contains at most one `data`
@@ -712,8 +879,8 @@ relationships that are clearer in code:
 
 The server validates a complete call envelope before running its first
 handler. The browser validates a complete result envelope before applying its
-first action, and a complete Events manifest before publishing any of its new
-records. A failure rejects that whole incoming unit.
+first action. The server validates a complete Events manifest before it hands
+any record to a component. A failure rejects that whole unit.
 
 ## HTTP adapters
 
@@ -888,7 +1055,7 @@ A server binding passes when it:
 A browser reader passes when it:
 
 1. accepts every valid manifest and rejects every invalid manifest before
-   registry mutation;
+   using any of its records;
 2. validates a complete result before any action side effect;
 3. applies every valid result example with the documented ordering, targeting,
    State, and send-order behavior.

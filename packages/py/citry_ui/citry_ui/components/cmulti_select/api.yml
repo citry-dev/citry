@@ -16,7 +16,7 @@ inputs:
       - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native value proxy with a Form ID.}
       - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native proxy identity and generated relationships.}
       - {id: value, name: value, type: 'Sequence[str] | None', default: {kind: literal, value: null}, effect: Sets initial selected stable values in collection order.}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial popup visibility when eligible.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets popup visibility when eligible. A server re-render that changes it opens or closes the popup. A re-render that leaves it unchanged keeps the current state.}
       - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native required validity outside Field.}
       - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Disables selection and form contribution.}
       - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Preserves submission while preventing changes.}

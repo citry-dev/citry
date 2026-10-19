@@ -69,7 +69,15 @@
           let visibleItems = [];
           let selectedValue = server.value;
           let query = server.inputValue;
-          let open = server.open;
+          // A server re-render runs the cleanup below and then this callback again on
+          // the same element. The cleanup stores the open state and the server's
+          // `open` input on the element and this run reads them back, so a popup that
+          // was open before the re-render is still open after it. When the server's
+          // `open` input changed, the popup follows the server instead.
+          const openHandoffKey = Symbol.for("citry-ui:combobox-open-handoff");
+          const handoff = root[openHandoffKey];
+          delete root[openHandoffKey];
+          let open = handoff && handoff.serverOpen === server.open ? handoff.open : server.open;
           let highlightedValue = null;
           let querySelectionValue = data.inputValueExplicit ? null : server.value;
           let controlledValue = false;
@@ -1066,9 +1074,22 @@
             }
 
             if (configuration.disabled || configuration.readonly) {
+              // On this run's first update, the popup was showing only if the
+              // previous run left it open. The disable is what closes it, so
+              // that holds even when the render also changed the server's `open`.
+              const wasShowing = firstRun ? Boolean(handoff?.open) : open;
               abortRequest();
               highlightedValue = null;
               applyOpen(false);
+              // Disabling an open popup closes it, as CMenu does. The owner did
+              // not ask for that close, so tell it once.
+              if (configuration.disabled && wasShowing) {
+                callbacks.onOpenChange?.(false, {
+                  reason: "disabled",
+                  controlled: controlledOpen,
+                  source: null,
+                });
+              }
             } else if (controlledOpen) {
               applyOpen(Boolean(controlledOpenValue) && canOpen());
             } else if (!canOpen() && open) {
@@ -1132,6 +1153,7 @@
           root.setAttribute("data-citry-combobox-initialized", "");
 
           return () => {
+            root[openHandoffKey] = { open, serverOpen: server.open };
             destroyed = true;
             abortRequest();
             root.removeEventListener("click", onRootClick);

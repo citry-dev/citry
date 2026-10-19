@@ -1,15 +1,17 @@
 """
-Tests for the value nodes: ExprNode and TemplateNode (component_rendering.md phase 2).
+Tests for `ExprNode` and for a template-valued attribute on an HTML element.
 
 Covers expression evaluation via safe_eval, autoescaping in both body-text and
 attribute positions, the None/Markup rules, and the embedded-CitryRender /
 CitryElement detection. Also covers the value layer underneath rendering, where
 `ExprNode.evaluate` and `ExprHtmlAttr.resolve` hand back the Python value
-untouched. The remaining HTML-attr nodes (StaticHtmlAttr/TemplateHtmlAttr) are
-phase 3 (they resolve to component kwargs).
+untouched, and a `TemplateHtmlAttr` on an HTML element, which renders its
+nested template into the attribute value.
 """
 
 # ruff: noqa: ANN
+
+from html.parser import HTMLParser
 
 from citry import Citry, CitryContext, Component, Const, Markup
 from citry import nodes as nodes_module
@@ -46,6 +48,19 @@ def _count_compiles(monkeypatch):
 
     monkeypatch.setattr(nodes_module, "compile_expr", counting_compile)
     return compiled
+
+
+def _body_attribute(rendered: str) -> str | None:
+    class BodyAttributeParser(HTMLParser):
+        value: str | None = None
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "div":
+                self.value = dict(attrs).get("body")
+
+    parser = BodyAttributeParser(convert_charrefs=True)
+    parser.feed(rendered)
+    return parser.value
 
 
 class TestExprNodeEval:
@@ -197,16 +212,17 @@ class TestExprNodeEmbedding:
         assert _html("<main>{{ c }}</main>", c=element) == '<main data-cid-c1=""><span data-cid-c2="">IN</span></main>'
 
 
-class TestTemplateNode:
+class TestTemplateHtmlAttrOnElement:
     def test_renders_nested_template(self):
-        # c-body holds a nested template; it renders against the same context.
-        assert (
-            _html('<div c-body="<span>{{ x }}</span>">end</div>', x="hi")
-            == '<div body="<span>hi</span>" data-cid-c1="">end</div>'
-        )
+        # The nested template renders in the same context. Its HTML is escaped
+        # at the outer attribute boundary and decodes to the original value.
+        rendered = _html('<div c-body="<span>{{ x }}</span>">end</div>', x="hi")
+
+        assert rendered == '<div body="&lt;span&gt;hi&lt;/span&gt;" data-cid-c1="">end</div>'
+        assert _body_attribute(rendered) == "<span>hi</span>"
 
     def test_nested_template_escapes_inner_expression(self):
-        assert (
-            _html('<div c-body="<span>{{ x }}</span>">end</div>', x="<i>")
-            == '<div body="<span>&lt;i&gt;</span>" data-cid-c1="">end</div>'
-        )
+        rendered = _html('<div c-body="<span>{{ x }}</span>">end</div>', x="<i>")
+
+        assert rendered == '<div body="&lt;span&gt;&amp;lt;i&amp;gt;&lt;/span&gt;" data-cid-c1="">end</div>'
+        assert _body_attribute(rendered) == "<span>&lt;i&gt;</span>"

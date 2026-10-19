@@ -1361,7 +1361,11 @@ class CCommandPalette(LibraryComponent):
             closeOnAction: defaults.closeOnAction,
             size: defaults.size,
           };
-          let internalOpen = retained ? previous.internalOpen : defaults.open;
+          // A kept palette keeps its own open state only while the server's
+          // `open` input is unchanged since the previous run; a changed input
+          // opens or closes it to match, as CDialog does.
+          const sameServerOpen = retained && previous.serverOpen === defaults.open;
+          let internalOpen = sameServerOpen ? previous.internalOpen : defaults.open;
           let logicalOpen = retained ? previous.logicalOpen : false;
           let openControlled = false;
           let queryControlled = false;
@@ -1716,6 +1720,11 @@ class CCommandPalette(LibraryComponent):
             },
           });
           if (retained) logicalOpen = controller.isOpen();
+          // The controller closed a palette this run would have kept open,
+          // because an enclosing dialog closed first; report it once the
+          // callback is known.
+          const ancestorClose = controller.closedByAncestor;
+          if (ancestorClose) internalOpen = false;
 
           add(host, "click", (event) => {
             const trigger = event.target.closest?.("[data-citry-command-palette-trigger]");
@@ -1945,6 +1954,10 @@ class CCommandPalette(LibraryComponent):
             filter({ preserveActive: effectStarted });
             effectStarted = true;
           });
+          if (ancestorClose) {
+            callbacks.open?.(false, { reason: "ancestor", controlled: openControlled, source: ancestorClose });
+            settleCloseQuery("ancestor", ancestorClose);
+          }
 
           const teardown = (diagnose = false) => {
             if (!active) return;
@@ -1986,6 +1999,7 @@ class CCommandPalette(LibraryComponent):
                 actualRoot: host.getRootNode(),
                 internalOpen,
                 logicalOpen,
+                serverOpen: defaults.open,
                 query,
                 fallbackQuery,
                 suppliedQuery,

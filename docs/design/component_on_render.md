@@ -102,7 +102,7 @@ class MyTable(Component):
 
     def on_render(self):
         if not self.kwargs.get("rows"):
-            return "<p>No data</p>"   # replace the output entirely
+            return Markup("<p>No data</p>")  # replace the output
         return None                   # render the template as usual
 ```
 
@@ -111,9 +111,22 @@ class MyTable(Component):
 - **Return replacement content**: the returned value is used as the
   component's entire output instead of the template. Accepted values follow
   the same rules as a `{{ ... }}` expression result (`_render_value` in
-  `citry_render.py`): a `str` (autoescaping does NOT apply here, the value is
-  the component's own output), a `CitryElement` (rendered, children deferred
-  as usual), a `CitryRender` (inlined, dependencies merged), or a `Slot`.
+  `citry_render.py`): a plain `str` is text and is escaped, `Markup` (or any
+  object with `__html__`) is trusted HTML and is inserted as-is, a
+  `CitryElement` is rendered (children deferred as usual), a `CitryRender`
+  is inlined (dependencies merged), and a `Slot` is invoked with no data.
+  Unlike `{{ ... }}`, any other type is a `TypeError` rather than escaped
+  text.
+- **On every page, a plain `str` is text and `Markup` is HTML.** On an
+  ordinary render the plain `str` is escaped into the output. On a prepared
+  (Vue) render it
+  becomes a text part, the same kind a `{{ ... }}` expression produces, so
+  the browser renders a text node from the same value the server escaped
+  and hydration sees identical text. `Markup` stays a trusted HTML part in
+  both; the Vue target that server events render through gets the typed
+  trusted-HTML part a `{{ ... }}` `Markup` value becomes there. A returned `str` with markup in it therefore shows as visible tags,
+  never as elements; user input returned from the hook cannot inject a
+  script.
 - Because `None` means "no replacement", a component that wants literally
   empty output returns `""`.
 
@@ -140,8 +153,8 @@ class MyTable(Component):
         # AFTER: result is the component's completed CitryRender
         # (children rendered), or None if rendering failed.
         if error is not None:
-            return "<p>Something went wrong</p>"   # swallow the error
-        return None                                # keep the result
+            return Markup("<p>Something went wrong</p>")  # swallow it
+        return None                                       # keep the result
 ```
 
 The protocol, step by step:
@@ -164,7 +177,9 @@ The protocol, step by step:
   The result is the live render object, NOT a string. Inspect its parts or
   hand it around, but do not serialize it here unless you are replacing the
   output with the serialized form: serialization is one-shot
-  ([`component_rendering.md`](component_rendering.md) section 5.3).
+  ([`component_rendering.md`](component_rendering.md) section 5.3). The
+  serialized form is a plain `str`, so a hook that returns it wraps it in
+  `Markup`; otherwise it shows as escaped text.
 
 - **Multiple yields are supported.** Each `yield <content>` discards the
   previous output, renders the new content (deferring and resolving any
@@ -503,8 +518,9 @@ multiple-yield processing handles that. If the fallback errors too, the error
 bubbles past this component, which is the right behavior for nested
 boundaries.
 
-The attribute form escapes an ordinary fallback string before returning it.
-Authors who need markup use the fallback fill.
+The attribute form returns the fallback string unchanged, and `on_render`
+escapes a plain `str`, so the text shows as written. Authors who need markup
+use the fallback fill.
 
 DJC registered the component as `"error_fallback"`; the citry reserved name
 is `"error-fallback"` (the registry's kebab-case convention, like the other

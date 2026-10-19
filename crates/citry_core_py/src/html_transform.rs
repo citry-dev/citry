@@ -4,14 +4,146 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString, PyTuple};
 
 use citry_html_transform::{
-    HtmlTransformerConfig, mark_html as mark_html_rust, scan_alpine_html as scan_alpine_html_rust,
-    transform_html as transform_html_rust,
+    ExpectedElementEvent, ExpectedNodeEvent, HtmlTransformerConfig,
+    browser_fragment_matches_elements as browser_fragment_matches_elements_rust,
+    browser_fragment_matches_nodes as browser_fragment_matches_nodes_rust,
+    mark_html as mark_html_rust, scan_output_html as scan_output_html_rust,
+    static_html_node_count as static_html_node_count_rust, transform_html as transform_html_rust,
+    validate_html_fragment_boundary as validate_html_fragment_boundary_rust,
 };
 
-/// Find actual Alpine attributes in a batch of HTML fragments.
 #[pyfunction]
-pub fn scan_alpine_html(html_fragments: Vec<String>) -> Vec<bool> {
-    scan_alpine_html_rust(html_fragments.iter().map(String::as_str))
+pub fn browser_fragment_matches_elements(
+    html: &str,
+    context: &str,
+    expected: Vec<(bool, String, Vec<(String, Option<String>)>)>,
+) -> bool {
+    let expected = expected
+        .into_iter()
+        .map(|(opening, tag, attributes)| ExpectedElementEvent {
+            opening,
+            tag,
+            attributes,
+        })
+        .collect::<Vec<_>>();
+    browser_fragment_matches_elements_rust(html, context, &expected)
+}
+
+/// Check that the browser builds the expected nodes from an HTML fragment.
+///
+/// Each expected event is a `(kind, value, attributes)` tuple, in document
+/// order:
+///
+/// - `("open", tag, attributes)`: an element whose children follow.
+/// - `("close", tag, [])`: the end of the latest open element.
+/// - `("shell", tag, attributes)`: an element whose contents Vue builds in
+///   the browser, checked with any contents the server wrote there cut out
+///   of `html`. `attributes` must include
+///   `("data-allow-mismatch", "children")`, the browser must build it with
+///   no child nodes, and no `close` follows it.
+/// - `("comment", data, [])`: one of Vue's anchor comments, whose data is
+///   `[`, `]`, `v-if`, or empty.
+/// - `("text", value, [])`: whitespace-only text directly in the fragment
+///   root.
+///
+/// Returns `False` when the browser's tree differs, including any comment or
+/// root text that is not expected.
+///
+/// **Raises**
+///
+/// ValueError: If a kind is unknown, or a `close`, `comment`, or `text`
+/// event carries attributes.
+#[pyfunction]
+pub fn browser_fragment_matches_nodes(
+    html: &str,
+    context: &str,
+    expected: Vec<(String, String, Vec<(String, Option<String>)>)>,
+) -> PyResult<bool> {
+    let expected = expected
+        .into_iter()
+        .map(|(kind, value, attributes)| {
+            let has_attributes = !attributes.is_empty();
+            let event = match kind.as_str() {
+                "open" => ExpectedNodeEvent::Open {
+                    tag: value,
+                    attributes,
+                },
+                "shell" => ExpectedNodeEvent::Shell {
+                    tag: value,
+                    attributes,
+                },
+                "close" if !has_attributes => ExpectedNodeEvent::Close { tag: value },
+                "comment" if !has_attributes => ExpectedNodeEvent::Comment { data: value },
+                "text" if !has_attributes => ExpectedNodeEvent::RootText { value },
+                "close" | "comment" | "text" => {
+                    return Err(PyValueError::new_err(format!(
+                        "a {kind} event cannot carry attributes"
+                    )));
+                }
+                _ => {
+                    return Err(PyValueError::new_err(format!(
+                        "unknown expected node kind {kind:?}"
+                    )));
+                }
+            };
+            Ok(event)
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(browser_fragment_matches_nodes_rust(
+        html, context, &expected,
+    ))
+}
+
+/// Count the top-level nodes (elements, texts and comments) the browser
+/// creates when Vue inserts `html` as one fixed block while it builds a page.
+///
+/// The browser parses the block inside a `<template>` element, so table
+/// parts stay where they are written. Vue needs this count to adopt the
+/// block's nodes when the server already wrote them into the page.
+#[pyfunction]
+pub fn static_html_node_count(html: &str) -> usize {
+    static_html_node_count_rust(html)
+}
+
+#[pyfunction]
+pub fn validate_html_fragment_boundary(html: &str) -> PyResult<()> {
+    validate_html_fragment_boundary_rust(html).map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+pub fn scan_output_html(py: Python, html: &str) -> PyResult<Py<PyAny>> {
+    let output = scan_output_html_rust(html)
+        .into_iter()
+        .map(|tag| {
+            let item = PyDict::new(py);
+            item.set_item("name", tag.name)?;
+            item.set_item("start", tag.start)?;
+            item.set_item("end", tag.end)?;
+            item.set_item("name_start", tag.name_start)?;
+            item.set_item("name_end", tag.name_end)?;
+            item.set_item("element_end", tag.element_end)?;
+            item.set_item("element_end_start", tag.element_end_start)?;
+            item.set_item(
+                "attributes",
+                tag.attributes
+                    .into_iter()
+                    .map(|attr| {
+                        (
+                            attr.name,
+                            attr.value,
+                            attr.name_start,
+                            attr.name_end,
+                            attr.value_start,
+                            attr.value_end,
+                            attr.has_value,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )?;
+            Ok(item)
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(output.into_pyobject(py)?.into_any().unbind())
 }
 
 /// Splice attributes onto root-level tags and split the HTML around child

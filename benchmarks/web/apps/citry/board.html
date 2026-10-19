@@ -1,0 +1,61 @@
+<section id="board" @c-submit.prevent="act" c-data-project-id="project['id']" c-data-revision="revision" c-data-session="session" c-data-operation="operation" c-data-visible-count="visible_count" c-data-total-count="total_count">
+<c-ProjectLayout c-context="state">
+<c-fill name="sidebar">
+<h2>Phases</h2>
+<nav aria-label="Project phases">
+<c-for each="phase in phase_groups">
+<a c-href="'#' + phase['anchor']">{{ phase['title'] }}</a>
+</c-for>
+</nav>
+<h2>Bookmarks</h2>
+<c-for each="bookmark in bookmarks">
+<a c-data-bookmark-id="bookmark['id']" c-data-bookmark-name="bookmark['text']" c-href="bookmark['url']">
+<span class="bookmark-name">{{ bookmark['text'] }}</span>
+</a>
+</c-for>
+</c-fill>
+<c-fill name="header">
+<header id="project-header">
+<p id="project-organization">{{ project['organization'] }}</p>
+<h1 id="board-title">{{ title }}</h1>
+<p>
+<span id="project-start-date">{{ project['start_date'] }}</span> – <span id="project-end-date">{{ project['end_date'] }}</span> · <span id="project-status">{{ project['status'] }}</span>
+</p>
+</header>
+</c-fill>
+<c-fill name="content">
+<div class="toolbar">
+<form>
+<input type="hidden" name="action" value="filter">
+<input type="hidden" name="operation" value="manual">
+<label for="query">Filter outputs</label>
+<input id="query" name="query" c-value="query">
+<button data-bench-action="filter">Filter</button>
+</form>
+<form novalidate>
+<input type="hidden" name="action" value="save">
+<input type="hidden" name="operation" value="manual">
+<label for="title-input">Project title</label>
+<input id="title-input" name="title" c-value="title_input">
+<button data-bench-action="save">Save</button>
+</form>
+</div>
+<p id="form-error" role="alert">{{ error }}</p>
+<p id="form-notice" role="status">{{ notice }}</p>
+<div class="toolbar">
+<c-for each="action, label in action_buttons">
+<form>
+<input type="hidden" name="action" c-value="action">
+<input type="hidden" name="operation" value="manual">
+<button c-data-bench-action="action">{{ label }}</button>
+</form>
+</c-for>
+</div>
+<p>
+<span id="visible-count">{{ visible_count }}</span> visible outputs</p>
+<c-ProjectTabs c-state="state" />
+</c-fill>
+</c-ProjectLayout>
+</section>
+
+

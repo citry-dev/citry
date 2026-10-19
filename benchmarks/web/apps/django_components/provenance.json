@@ -1,0 +1,24 @@
+{
+  "checked": "2026-09-10",
+  "django-components": {
+    "version": "0.152.0",
+    "distributions": [
+      {
+        "filename": "django_components-0.152.0-py3-none-any.whl",
+        "url": "https://files.pythonhosted.org/packages/39/bc/d3aafad17f4956b0e09ace643d45350f7924510efe4b1e795e5f7639c4a6/django_components-0.152.0-py3-none-any.whl",
+        "sha256": "2f21b391d758e4fd565ecc4bdb072b56f405177e52652b51ee85e39e47bad14d"
+      },
+      {
+        "filename": "django_components-0.152.0.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/47/94/e501ece6232bcc7f242c3074415bb60f2b174e5f62e5b8f06d527f424bc3/django_components-0.152.0.tar.gz",
+        "sha256": "bbd3e1a735f60efb3b214eddfd4b95fa7e693c7cc95031d5ef05ff8207dfc97b"
+      }
+    ]
+  },
+  "manager": {
+    "path": "django_components/django_components.min.js",
+    "sha256": "221f3cc711ebcf05df4901592b5aaf62c1b6936c692930c44e97a97f345c5370",
+    "bytes": 5590,
+    "license": "assets/django_components.LICENSE"
+  }
+}

@@ -12,7 +12,7 @@ rules have been built. Template, JavaScript, and CSS asset files remain lazy.
 
 For user-facing setup, see
 [`Registration and autodiscovery`](../../docs_site/content/concepts/registration.md)
-and [`Web frameworks`](../../docs_site/content/web-frameworks.md).
+and [`Web frameworks`](../../docs_site/content/advanced/web-frameworks.md).
 
 ---
 

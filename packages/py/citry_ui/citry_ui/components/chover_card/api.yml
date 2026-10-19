@@ -11,7 +11,7 @@ inputs:
     column_widths: [fit, 12rem, 7rem, auto]
     entries:
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets private surface identity and exposes it as slot data.}
-      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible initial state and uncontrolled fallback.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible state and uncontrolled fallback. A server re-render that changes it opens or closes the card. A re-render that leaves it unchanged keeps the current state.}
       - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Suppresses visual opening without changing the activator itself.}
       - {id: delay, name: delay, type: int, default: {kind: literal, value: 600}, effect: Sets the first fine-pointer hover delay in milliseconds from 0 through 60000. Focus remains immediate.}
       - {id: close-delay, name: close_delay, type: int, default: {kind: literal, value: 300}, effect: Sets the pointer bridge delay in milliseconds from 0 through 60000.}
@@ -42,7 +42,7 @@ inputs:
         effect: Controls requested placement and `data-placement`.
       - {id: arrow, name: arrow, type: boolean, omitted: Uses the server input., effect: Reactively shows or hides the decorative arrow.}
       - {id: size, name: size, type: CHoverCardSize, omitted: Uses the server input., effect: Reactively changes card geometry.}
-      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a component callback., effect: "Receives hover, focus, dismissal, peer, press, and external-native visibility requests."}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a component callback., effect: "Receives hover, focus, dismissal, peer, press, and external-native visibility requests, and the close caused by disabling an open card."}
 
 slots:
   - id: chover-card-slots
@@ -66,8 +66,8 @@ events:
       - id: on-open-change
         name: onOpenChange
         signature: {display: '(requestedOpen: boolean, detail: CHoverCardOpenChangeDetail) => void', interfaces: [CHoverCardOpenChangeDetail]}
-        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer HoverCard, or external native visibility requests another state.
-        detail: {display: '{reason: "hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal", controlled: boolean, forced: boolean, source: EventTarget | null}', interfaces: [CHoverCardOpenChangeDetail]}
+        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer HoverCard, or external native visibility requests another state; disabling an open card also closes it and calls it with reason `disabled`.
+        detail: {display: '{reason: "hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal" | "disabled", controlled: boolean, forced: boolean, source: EventTarget | null}', interfaces: [CHoverCardOpenChangeDetail]}
         behavior: Uncontrolled requests commit before notification. Controlled requests wait for the owner. Owner commits do not notify.
 
 methods: []
@@ -128,7 +128,7 @@ interfaces:
     kind: record
     name: CHoverCardOpenChangeDetail
     entries:
-      - {id: reason, name: reason, type: '"hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal"', meaning: Source of the requested visibility change.}
+      - {id: reason, name: reason, type: '"hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal" | "disabled"', meaning: Source of the requested visibility change.}
       - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client `open` Boolean currently owns state.}
       - {id: forced, name: forced, type: boolean, meaning: Whether structural or modal safety required the component to close regardless of controlled ownership.}
       - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source associated with the request.}

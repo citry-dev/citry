@@ -167,6 +167,25 @@ class TestShapes:
             "print": (tmp_path / "p.css",),
         }
 
+    @pytest.mark.parametrize(
+        "declared",
+        [{"css": []}, {"js": []}, {"css": {"print": []}}, {"css": (), "js": ()}],
+        ids=["css-list", "js-list", "css-media", "both-tuples"],
+    )
+    def test_empty_declarations_equal_no_declaration(self, declared):
+        # Callers test the merged set's truth value to skip asset work, so an
+        # empty list must give the same falsy result as no Dependencies.
+        c = Citry()
+        card = type("Card", (Component,), {"citry": c, "Dependencies": type("Dependencies", (), declared)})
+
+        deps = card.get_dependencies()
+        assert deps == CitryDependencies()
+        assert not deps
+
+    def test_media_types_without_entries_do_not_make_the_set_truthy(self):
+        assert not CitryDependencies(css={"all": (), "print": ()})
+        assert CitryDependencies(css={"all": (), "print": ("/p.css",)})
+
     def test_urls_and_unresolved_paths_pass_through(self):
         c = Citry()
 

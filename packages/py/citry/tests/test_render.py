@@ -25,7 +25,7 @@ from citry import (
     SerializedScriptSecurity,
     SerializedSecurity,
 )
-from citry.citry_render import Placeholder
+from citry.citry_render import Placeholder, PreparedOccurrenceMetadata
 
 
 def _card(template="<p>hi</p>"):
@@ -162,6 +162,11 @@ class TestRenderReturnsCitryRender:
             class_name="Card",
             is_component_root=True,
             root_markers=(),
+            prepared_occurrence=PreparedOccurrenceMetadata(
+                call=None,
+                raw_slots_present=False,
+                component_tag_client_bindings=(),
+            ),
         )
         with pytest.raises(FrozenInstanceError):
             rendered.frame.render_id = "changed"
@@ -407,6 +412,22 @@ class TestSerialize:
 
 
 class TestCoercions:
+    def test_typed_static_serializer_preserves_self_closing_svg_siblings(self):
+        c = Citry()
+
+        class Icon(Component):
+            citry = c
+            template = '<svg><path c-fill="color"/><circle c-r="radius"/></svg><br><img/>'
+
+            def template_data(self, kwargs, slots):
+                return {"color": "red", "radius": 2}
+
+        html = str(Icon())
+        assert '<path fill="red"></path><circle r="2"' in html
+        assert "</circle>" in html
+        assert "<br" in html
+        assert "<img" in html
+
     def test_str_of_render_serializes(self):
         rendered = _card("<p>hi</p>").render()
         assert str(rendered) == '<p data-cid-c1="">hi</p>'

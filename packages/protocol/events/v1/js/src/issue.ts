@@ -61,11 +61,11 @@ export const firstUnknown = (
 
 const containerIssue = (
 	value: object,
-	path: string,
+	path: () => string,
 ): ValidationIssue | null => {
 	if (Object.getOwnPropertySymbols(value).length) {
 		return {
-			path,
+			path: path(),
 			category: "strict_json",
 			message: "The value contains a symbol-keyed property.",
 		};
@@ -75,7 +75,7 @@ const containerIssue = (
 		const descriptor = Object.getOwnPropertyDescriptor(value, name);
 		if (!descriptor?.enumerable || !("value" in descriptor)) {
 			return {
-				path: pointer(path, name),
+				path: pointer(path(), name),
 				category: "strict_json",
 				message: "A JSON property must be an enumerable data property.",
 			};
@@ -89,8 +89,29 @@ export const validateStrictJson = (
 	value: unknown,
 	path = "",
 ): ValidationIssue | null => {
-	type Frame = { value: unknown; path: string; leaving: boolean };
-	const stack: Frame[] = [{ value, path, leaving: false }];
+	// A frame records only its parent and member name. The JSON Pointer string is built when an
+	// issue reports it, because most values are valid and a large response would otherwise
+	// allocate one path string per value it contains.
+	type Frame = {
+		value: unknown;
+		parent: Frame | null;
+		member: string | number;
+		leaving: boolean;
+	};
+	const pathOf = (frame: Frame): string => {
+		const members: (string | number)[] = [];
+		for (
+			let cursor: Frame | null = frame;
+			cursor.parent;
+			cursor = cursor.parent
+		)
+			members.push(cursor.member);
+		let result = path;
+		for (let index = members.length - 1; index >= 0; index -= 1)
+			result = pointer(result, members[index]);
+		return result;
+	};
+	const stack: Frame[] = [{ value, parent: null, member: "", leaving: false }];
 	const ancestors = new Set<object>();
 	while (stack.length) {
 		const frame = stack.pop() as Frame;
@@ -109,7 +130,7 @@ export const validateStrictJson = (
 		if (typeof current === "number") {
 			if (!Number.isFinite(current)) {
 				return {
-					path: frame.path,
+					path: pathOf(frame),
 					category: "strict_json",
 					message: "The value contains a non-finite number.",
 				};
@@ -118,29 +139,32 @@ export const validateStrictJson = (
 		}
 		if (typeof current !== "object") {
 			return {
-				path: frame.path,
+				path: pathOf(frame),
 				category: "strict_json",
 				message: "The value contains a non-JSON value.",
 			};
 		}
 		if (!Array.isArray(current) && !isPlainObject(current)) {
 			return {
-				path: frame.path,
+				path: pathOf(frame),
 				category: "strict_json",
 				message: "The value contains a non-JSON object.",
 			};
 		}
-		const ownIssue = containerIssue(current, frame.path);
+		const ownIssue = containerIssue(current, () => pathOf(frame));
 		if (ownIssue) return ownIssue;
 		if (ancestors.has(current)) {
 			return {
-				path: frame.path,
+				path: pathOf(frame),
 				category: "strict_json",
 				message: "The value contains a cycle.",
 			};
 		}
 		ancestors.add(current);
-		stack.push({ value: current, path: frame.path, leaving: true });
+		// Reuse this frame as the marker that removes the container from `ancestors` once all
+		// of its children are done; its path fields stay valid for the children that point to it.
+		frame.leaving = true;
+		stack.push(frame);
 		if (Array.isArray(current)) {
 			const names = Object.keys(current);
 			if (
@@ -148,7 +172,7 @@ export const validateStrictJson = (
 				names.some((name, index) => name !== String(index))
 			) {
 				return {
-					path: frame.path,
+					path: pathOf(frame),
 					category: "strict_json",
 					message: "A JSON array must be dense and carry no named properties.",
 				};
@@ -156,17 +180,21 @@ export const validateStrictJson = (
 			for (let index = current.length - 1; index >= 0; index -= 1) {
 				stack.push({
 					value: current[index],
-					path: pointer(frame.path, index),
+					parent: frame,
+					member: index,
 					leaving: false,
 				});
 			}
 			continue;
 		}
-		const keys = Object.keys(current).sort().reverse();
-		for (const key of keys) {
+		// Visit keys in sorted order so the first reported issue does not depend on insertion order.
+		const keys = Object.keys(current).sort();
+		for (let index = keys.length - 1; index >= 0; index -= 1) {
+			const key = keys[index];
 			stack.push({
-				value: current[key],
-				path: pointer(frame.path, key),
+				value: (current as Record<string, unknown>)[key],
+				parent: frame,
+				member: key,
 				leaving: false,
 			});
 		}

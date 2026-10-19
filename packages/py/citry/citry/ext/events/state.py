@@ -13,15 +13,23 @@ kwargs. Design: ``docs/design/events.md`` sections 3.2 and 7.2.
 from __future__ import annotations
 
 import inspect
+import json
 from dataclasses import MISSING, dataclass, fields
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 
 from citry._annotation_introspection import _own_annotations
+from citry._class_introspection import _safe_class_text
 from citry._nested_declarations import (
+    _CONST_SCHEMA_DEFAULTS_ATTR,
     _SYNTHESIZED_DECLARATION_ATTR,
     _SYNTHESIZED_FIELD_OWNERS_ATTR,
+    NestedClassDeclaration,
     _convert_to_slotted_dataclass,
+    _dropped_field_names,
+    _dropped_fields_sentence,
+    _replaced_parent_schema,
+    _warn_nested_schema_replaced,
 )
 
 # The full State meta surface. Every other underscore attribute on a State
@@ -36,7 +44,9 @@ _DEFAULT_MAX_BYTES = 8192
 # underscore name: State may carry private helpers just like it carries the
 # recommended ``render()`` method. Plain values are what must be meta names.
 _DEF_LIKE = (staticmethod, classmethod, property)
-_SYNTHESIZED_STATE_NAMES = frozenset({_SYNTHESIZED_DECLARATION_ATTR, _SYNTHESIZED_FIELD_OWNERS_ATTR})
+_SYNTHESIZED_STATE_NAMES = frozenset(
+    {_SYNTHESIZED_DECLARATION_ATTR, _SYNTHESIZED_FIELD_OWNERS_ATTR, _CONST_SCHEMA_DEFAULTS_ATTR}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,26 +144,87 @@ def convert_state_class(comp_name: str, user_cls: type) -> type:
     Mirrors the treatment the core gives ``Kwargs``: a plain class converts
     to a slotted dataclass, a class the user already decorated with
     ``@dataclass`` is kept as-is (but must not be frozen, because handlers
-    mutate state). A State with base classes (e.g. ``class State(Kwargs):``)
-    is rebuilt with the inherited field declarations included, since plain
-    bases do not feed ``dataclass()`` on their own.
+    mutate state). A State with base classes, such as
+    ``class State(Parent.State):`` or ``class State(Kwargs):``, keeps the
+    fields and defaults of those bases.
 
     The class the user wrote is never modified. The generated dataclass
     inherits the authored declaration, preserving methods, descriptors,
     zero-argument ``super()``, and source identity in its MRO.
     """
+    frozen_msg = (
+        f"Component {comp_name}: State is a frozen dataclass. State must stay mutable"
+        f" (handlers mutate it and the changes travel back to the client);"
+        f" declare it without frozen=True."
+    )
     if "__dataclass_fields__" in user_cls.__dict__:
         # The user decorated the class explicitly; respect their choices,
         # except immutability, which contradicts the State contract.
         if user_cls.__dataclass_params__.frozen:  # type: ignore[attr-defined]
-            msg = (
-                f"Component {comp_name}: State is a frozen dataclass. State must stay mutable"
-                f" (handlers mutate it and the changes travel back to the client);"
-                f" declare it without frozen=True."
-            )
-            raise ValueError(msg)
+            raise ValueError(frozen_msg)
         return user_cls
-    return _convert_to_slotted_dataclass(user_cls)
+    converted = _convert_to_slotted_dataclass(user_cls)
+    # A plain State based on a frozen dataclass inherits the frozen flag.
+    if converted.__dataclass_params__.frozen:  # type: ignore[attr-defined]
+        raise ValueError(frozen_msg)
+    return converted
+
+
+def check_replaced_state(component_class: type, nearest: NestedClassDeclaration, state_cls: type) -> None:
+    """
+    Check a State that replaces its parent's State instead of extending it.
+
+    A replacing State starts from the default settings, not the parent's.
+    Moving server-kept values into the page is a security change, so it
+    fails at class definition unless the new State sets ``_storage`` itself.
+    Losing the parent's fields, ``_public``, ``_model``, or ``_max_age`` is
+    less severe, so it only warns, once per declaring class.
+
+    Raises:
+        ValueError: The parent's State sets ``_storage = "server"`` and the
+            new State does not set ``_storage``.
+
+    """
+    replaced = _replaced_parent_schema(component_class, "State", nearest)
+    if replaced is None:
+        return
+    parent, parent_schema = replaced
+    declared = cast("type", nearest.value)
+    owner = _safe_class_text(nearest.declaring_class, "__name__") or "Component"
+    parent_name = f"{_safe_class_text(parent.declaring_class, '__name__') or '<class>'}.State"
+
+    if getattr(parent_schema, "_storage", "signed") == "server" and not hasattr(declared, "_storage"):
+        msg = (
+            f"Component {owner}: State replaces {parent_name}, which keeps its values on the server"
+            f' (_storage = "server"). The new State does not set _storage, so its values would be'
+            f" stored in the page, where anyone who opens the page can read them. Write"
+            f" `class State({parent_name}):` to keep the parent's fields and settings, or set"
+            f' _storage in the new State ("server", or "signed" to store the values in the page'
+            f" on purpose)."
+        )
+        raise ValueError(msg)
+
+    sentences: list[str] = []
+    dropped = _dropped_field_names(parent_schema, state_cls)
+    if dropped:
+        sentences.append(_dropped_fields_sentence(nearest, parent, dropped))
+    else:
+        sentences.append(f"Component {owner}: State replaces {parent_name}.")
+    consequences = {
+        "_public": "browser code can now read every field",
+        "_model": "browser code can now change every field it can read",
+        "_max_age": "its values never expire",
+    }
+    for setting, consequence in consequences.items():
+        if getattr(parent_schema, setting, None) is not None and not hasattr(declared, setting):
+            sentences.append(f"It does not set {setting}, which {parent_name} sets, so {consequence}.")
+    if len(sentences) == 1 and not dropped:
+        return
+    sentences.append(
+        f"To keep the parent's fields and settings, write `class State({parent_name}):`"
+        " or copy them into the new State."
+    )
+    _warn_nested_schema_replaced(nearest, " ".join(sentences))
 
 
 def _validate_field_tuple(comp_name: str, attr_name: str, value: Any, field_names: tuple[str, ...]) -> tuple[str, ...]:
@@ -252,3 +323,18 @@ def build_state_instance(comp_name: str, state_cls: type, raw_kwargs: dict[str, 
         )
         raise ValueError(msg)
     return state_cls(**values)
+
+
+def public_state_values(state: Any, meta: StateMeta) -> dict[str, Any]:
+    """
+    Return the JSON form of a State instance's public fields, sorted by name.
+
+    Only these fields ever reach the browser: every render puts them in the
+    component's Events record, and a handler that changes State without
+    rendering the component sends them in its ``state`` action. Both use this
+    function, so a field outside ``_public`` cannot leak through either one.
+    The JSON round trip turns a tuple into a list, the same as the token
+    stores it, and sorting gives both places the same key order.
+    """
+    values = {name: getattr(state, name) for name in sorted(meta.public)}
+    return json.loads(json.dumps(values, allow_nan=False))

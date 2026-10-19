@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from citry._diagnostic_catalog import TEMPLATE_UNKNOWN_VARIABLE
+from citry._diagnostic_catalog import JS_DATA_PUBLIC_NAME_COLLISION, TEMPLATE_UNKNOWN_VARIABLE
 from citry._diagnostics import (
     diagnostic_definition,
     diagnostic_documentation_url,
@@ -26,6 +26,23 @@ def test_catalog_message_variants_are_the_runtime_wording() -> None:
     )
     assert render_diagnostic(TEMPLATE_UNKNOWN_VARIABLE, variant="allow-extra", name="missing") == (
         "Template variable 'missing' is not declared. It may be supplied dynamically."
+    )
+
+
+def test_js_data_public_name_collision_catalog_definition_and_messages() -> None:
+    definition = diagnostic_definition(JS_DATA_PUBLIC_NAME_COLLISION)
+
+    assert definition.title == "JsData field conflicts with a public instance name"
+    assert definition.default_severity == "error"
+    assert definition.surfaces == ("lsp",)
+    assert diagnostic_documentation_url(JS_DATA_PUBLIC_NAME_COLLISION) == (
+        "https://citry.dev/ide/diagnostics/#citry.js-data.public-name-collision"
+    )
+    assert render_diagnostic(JS_DATA_PUBLIC_NAME_COLLISION, name="displayName") == (
+        "JsData field 'displayName' conflicts with a reserved or component-defined public instance name."
+    )
+    assert render_diagnostic(JS_DATA_PUBLIC_NAME_COLLISION, variant="conditional", name="save") == (
+        "JsData field 'save' conflicts with a reserved or component-defined public instance name when supplied."
     )
 
 

@@ -218,6 +218,55 @@ test("Python template attributes preserve Citry channel precedence", async () =>
 	}
 });
 
+test("Vue channels remain embedded while retired props channels are ordinary invalid attributes", async () => {
+	const template = [
+		'<div :title="label" v-if="visible" @click="open = true" $c-props="legacyBrowser"></div>',
+		'<c-Card :open="open" v-bind:title="label" c-$c-props="legacyPython"></c-Card>',
+	].join("\n");
+	for (const { scopeName, source } of [
+		{ scopeName: "text.html.citry", source: template },
+		{
+			scopeName: "source.python",
+			source: ["class Card(Component):", '    template = """', template, '    """'].join("\n"),
+		},
+	]) {
+		const tokens = await tokenize(scopeName, source);
+		for (const [needle, occurrence] of [
+			["label", 1],
+			["visible", 1],
+			["open = true", 1],
+			["open", 3],
+			["label", 2],
+		]) {
+			const token = tokenAt(tokens, findOccurrence(source, needle, occurrence));
+			assert.equal(hasRole(token, "javascript"), true, `${needle} expected JavaScript, got ${formatToken(token)}`);
+		}
+		const retiredBrowser = tokenAt(tokens, findOccurrence(source, "legacyBrowser"));
+		const retiredPython = tokenAt(tokens, findOccurrence(source, "legacyPython"));
+		assert.equal(hasRole(retiredBrowser, "javascript"), false, formatToken(retiredBrowser));
+		assert.equal(hasRole(retiredBrowser, "python"), false, formatToken(retiredBrowser));
+		assert.equal(hasRole(retiredPython, "javascript"), false, formatToken(retiredPython));
+		assert.equal(hasRole(retiredPython, "python"), false, formatToken(retiredPython));
+	}
+});
+
+test("Vue slot shorthands embed JavaScript while Citry key metadata remains Python", async () => {
+	const template = '<c-List #default="{ item }" #named="slotProps" #c-key="python_key"></c-List>';
+	for (const { scopeName, source } of [
+		{ scopeName: "text.html.citry", source: template },
+		{
+			scopeName: "source.python",
+			source: ["class List(Component):", '    template = """', template, '    """'].join("\n"),
+		},
+	]) {
+		const tokens = await tokenize(scopeName, source);
+		assert.equal(hasRole(tokenAt(tokens, findOccurrence(source, "item")), "javascript"), true);
+		assert.equal(hasRole(tokenAt(tokens, findOccurrence(source, "slotProps")), "javascript"), true);
+		assert.equal(hasRole(tokenAt(tokens, findOccurrence(source, "python_key")), "python"), true);
+		assert.equal(hasRole(tokenAt(tokens, findOccurrence(source, "python_key")), "javascript"), false);
+	}
+});
+
 test("Python call targets receive standard function and method scopes", async () => {
 	const template = [
 		'<p>{{ tr("hello") }}</p>',
@@ -450,7 +499,7 @@ test("embedded line comments stop before template host delimiters", async () => 
 		'<div c-if="value # attribute comment"></div>\n<p>after</p>',
 		"<c-for each='item in items # loop comment'></c-for>\n<p>after</p>",
 		'<button @click="run() // event comment"></button>\n<p>after</p>',
-		"<div x-data='{ ready: true } // state comment'></div>\n<p>after</p>",
+		"<div v-show='ready // state comment'></div>\n<p>after</p>",
 	]) {
 		const tokens = await tokenize("text.html.citry", source);
 		const after = tokenAt(tokens, findOccurrence(source, "after"));

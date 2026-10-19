@@ -43,10 +43,6 @@ Source records serve more than developer error messages:
 - Slot-outlet IDs identify the particular placement to resolve or rebind.
 - Cache export and replay match source ranges and snippets to a supplied-slot
   writer, then relocate them to the current writer.
-- JavaScript and CSP validation use source records to inspect reached bindings
-  and report their authored position. The CSP validator currently skips a
-  binding when its location is missing; deleting locations would therefore
-  change validation, not just diagnostic precision.
 - Manifest preparation validates source references even when production output
   omits source provenance. Snapshots and cache artifacts preserve source order.
 

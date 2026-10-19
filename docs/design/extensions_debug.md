@@ -1,7 +1,6 @@
 # Design: the Debug extension
 
-**Status (2026-07-21): implemented, with the cross-engine serialization rule
-folded in after adversarial review.** This document defines
+**Status (2026-09-14): implemented with typed render decorations.** This document defines
 Citry's opt-in visual debugging extension. The extension draws blue boundaries
 around component output and red boundaries around slot output, with labels that
 identify each boundary.
@@ -111,9 +110,9 @@ The original rendered output remains in source order inside the wrapper.
 
 ### 3.2 Root identity stays on authored elements
 
-Debug wrappers are inserted after Citry marks component roots. Attributes such
-as `data-cid-*`, `data-cid`, `data-citry-key`, and component CSS-variable
-markers therefore stay on the elements authored by the component:
+Debug wraps the component body after root markers have been selected. Attributes
+such as `data-cid-*`, `data-cid`, `data-citry-key`, and component CSS-variable
+markers therefore stay on elements authored by the component:
 
 ```html
 <div class="citry-debug citry-debug-component">
@@ -121,9 +120,8 @@ markers therefore stay on the elements authored by the component:
 </div>
 ```
 
-The wrapper itself is not a component root. This preserves the elements seen
-by `$component(...).els`, Events, keyed morphing, dependency cleanup, and the
-ownership manifest.
+The wrapper itself is not a component root. It does not take the component's
+root markers or change which component owns its Events and keyed-morph data.
 
 ### 3.3 Errors, transparent components, and documents
 
@@ -156,72 +154,52 @@ or layout-sensitive behavioral verification. The future debug-toolbar panel
 can provide non-wrapping inspection through the separate
 [`component tracing`](component_tracing.md) design.
 
-## 4. Serialize-time boundary insertion
+## 4. Atomic boundary decoration
 
-[`Placeholder`](../../packages/py/citry/citry/citry_render.py) already
-represents a position whose final HTML is supplied during serialization. Debug
-uses a paired placeholder around each enabled result:
+Debug wraps each enabled result in an internal `RenderDecoration`, a
+`CitryRender` subtype whose normal `parts` contain only the original rendered
+body. Its immutable opening and closing metadata contain fixed, inert typed
+element and text parts:
 
 ```python
-CitryRender(
-    parts=[Placeholder(open_key), original_result, Placeholder(close_key)],
+body_parts = list(result.parts) if type(result) is CitryRender else [result]
+RenderDecoration(
+    parts=body_parts,
     context=result_context,
+    opening=(...),
+    closing=(...),
 )
 ```
 
-For an existing `CitryRender`, the interior wrapper reuses its context. This
-keeps nested dependency and ownership metadata attached to the rendered
-subtree. A string slot result uses a component-less interior `CitryContext`;
-the slot's physical ownership wrapper remains authoritative.
+The decoration travels with its body through render replacement and nesting.
+Ordinary serialization applies component root markers to the body before it
+emits both edges, so no half-wrapper state exists and the visual wrapper does
+not become the authored component root. Prepared Vue capture keeps the body in
+its native slot and data-owner scopes, emits the typed edges around the
+compiled fragment, and rebases source offsets for the generated opening
+elements. The label stays prepared data rather than becoming Vue source.
 
-Placeholder keys carry encoded string-only boundary metadata: the boundary
-kind, a render-tree-unique pairing token, and the label input. A component
-boundary's token includes its render ID; a slot boundary's token includes its
-receiving component's render ID and that slot occurrence's counter. Every
-variable field uses lowercase hexadecimal UTF-8 bytes, so the key contains no
-quote, angle bracket, equals sign, or whitespace when the serializer places it
-in the `c-render-id` attribute. The serializer appends a random private
-identity on every serialization, so an authored `c-render-id` lookalike cannot
-be mistaken for a generated placeholder during replacement or cleanup. The
-decoded label is HTML-escaped when the final wrapper is built. The extension
-does not keep a side table keyed by components or render IDs, so it retains no
-component class, component instance, or rendered tree after a render finishes.
-
-Component root marking occurs before every serialize hook. The dependencies
-extension's serialize hook runs before `Debug.on_serialize` because built-ins
-are prepended to the extension list. Events has already contributed its
-render-time root markers by this point. Debug then uses the serializer's exact
-placeholder texts to:
-
-1. pair each opening and closing boundary;
-2. process nested boundaries without changing their order;
-3. omit full-document component and slot boundaries;
-4. replace complete pairs with the final wrapper HTML;
-5. remove a surviving half when an earlier extension discarded the other
-   half.
+The fixed edge contract rejects executable bindings, Vue directives, and
+opaque trusted HTML. Label values remain typed data and are escaped normally.
+Debug keeps no side table keyed by components or render IDs. Cache export is
+bypassed while highlighting is active, and the version 1 typed cache codec
+explicitly rejects a decoration if one reaches it.
 
 The same `CitryRender` may be serialized more than once. Replacement operates
 on each serialization's HTML string and does not mutate the render object.
 All dependency strategies (`ignore`, `simple`, `document`, and `fragment`)
-use the same boundary replacement.
+use the same atomic decoration.
 
 ### 4.1 Embedded renders from another Citry instance
 
 A pre-rendered `CitryRender` may be embedded in output owned by another
-`Citry` instance when the render does not require a client ownership manifest.
-Only the root component's extension manager receives `on_serialize`.
+`Citry` instance when the ordinary render-composition rules permit it. The
+receiving root owns whole-output serialization hooks, but it does not need a
+Debug instance to preserve an existing decoration.
 
-Debug placeholder keys therefore use one stable format understood by every
-`Debug` instance. When the root instance also installs Debug, its serialize
-hook resolves boundaries contributed by the embedded render. When the root
-instance does not install Debug, the embedded content remains and its visual
-boundaries are omitted.
-
-After all serialize hooks run, the core Python serializer removes every exact
-placeholder occurrence that remains unresolved. This is the fallback already
-defined by `Placeholder`: a position that no extension fills serializes to an
-empty string. It also makes extension handoff safe generally, including a root
-render with no component and therefore no extension manager.
+The decoration is part of the embedded structured render, so its visual
+boundary travels with the output even when the receiving root instance does
+not install Debug. No receiving Debug lookup or shared registry is needed.
 
 ## 5. Extension ordering
 
@@ -233,13 +211,14 @@ want to inspect:
 app = Citry(extensions=[MyOutputExtension, Debug])
 ```
 
-An extension that runs after `Debug` may deliberately replace output and drop
-the Debug placeholders. Serialization removes any unmatched half rather than
-emitting malformed wrapper HTML.
+An extension that runs after `Debug` may deliberately replace the
+`RenderDecoration` with its body or with unrelated output. The boundary is
+dropped atomically.
 
-Root marking is complete before `on_serialize`, and the built-in dependencies
-extension runs its serialize hook before user extensions. Debug therefore sees
-the marked component roots and the dependency extension's final HTML.
+The earlier an extension runs, the more later extensions can transform its
+result. Debug returns a `RenderDecoration` from the component or slot render
+hook; a later extension can replace that decoration to remove the boundary.
+Root marking and dependency insertion remain serializer responsibilities.
 
 ## 6. Implementation record
 
@@ -254,20 +233,16 @@ the marked component roots and the dependency extension's final HTML.
 
 ### Round 2: render and serialization hooks
 
-- Implemented `on_component_rendered`, including error, transparent-component,
-  and configuration handling.
-- Implemented `on_slot_rendered` for string and `CitryRender` results, including
-  transparent receivers and repeated slot occurrences.
-- Implemented paired `Placeholder` replacement in `on_serialize` with escaping,
-  nesting, full-document detection, unmatched-half cleanup, and
-  repeated-serialization safety.
-- Made the core Python serializer remove exact unresolved placeholder
-  occurrences after all serialize hooks, fulfilling `Placeholder`'s empty
-  fallback contract for roots with and without an extension manager.
-- Stored only encoded strings and slot counters scoped to one component config
-  instance. Included the component render ID in every pairing token so tokens
-  remain unique across instances. Added no extension-owned component or class
-  cache.
+- Implemented `on_component_rendered` and `on_slot_rendered` with immutable
+  `RenderDecoration` edges around the existing typed body.
+- Kept component frames and nested render subtypes intact through finalization
+  and Python composition; root markers continue to target the body.
+- Added ordinary-HTML and direct-Vue serialization for decoration edges. Label
+  text is escaped in ordinary HTML and carried as per-occurrence prepared data
+  for Vue. Active highlighting bypasses render-cache export, and cache codec
+  version 1 rejects decorations if one reaches it.
+- Kept slot occurrence numbering on each receiving component's config and
+  added no extension-owned component or class cache.
 
 ### Round 3: focused and integration tests
 
@@ -286,11 +261,11 @@ the marked component roots and the dependency extension's final HTML.
 - repeated serialization and all four dependency strategies;
 - pre-rendered cross-`Citry` embedding when the root instance installs Debug
   and when it does not;
-- unresolved placeholder cleanup on a component root and a component-less
-  root;
-- authored-root `data-cid`, Events, key, CSS-variable, dependency, and
-  ownership-manifest behavior;
-- browser proof that `$component(...).els` still contains the authored roots;
+- decoration wrappers around component and component-less roots, with markers
+  and prepared values remaining attached to the authored body;
+- authored-root markers, Events, key, CSS-variable, and dependency behavior;
+- browser proof that highlighting retains the component's authored output and
+  event behavior;
 - component-class collection after final unregister, proving that Debug adds
   no lifetime retention.
 
@@ -299,7 +274,8 @@ accounted for individually in
 [`migration_djc_tests.md`](migration_djc_tests.md#test_component_highlightpy-7-tests):
 three are ported, two direct-helper tests are replaced by assertions through
 the public extension, and two legacy core-setting tests are dropped. The Citry
-suite also adds serializer, ownership, dependency, browser, and lifetime cases.
+suite also adds serializer, render-composition, dependency, browser, and
+lifetime cases.
 
 ### Round 4: documentation and status records
 
@@ -324,9 +300,9 @@ python scripts/check.py --reporter agent
 
 ## 7. Boundaries
 
-This work is Python-side. It adds the generic unresolved-placeholder cleanup to
-the Python serializer but introduces no core lifecycle hook. It requires no
-changes to the Rust parser, grammar, AST, compiler, host-language
-implementations, PyO3 bindings, or `citry_core` type stubs. The existing
-component-rendered, slot-rendered, and serialize hooks provide the extension
-behavior.
+This work is Python-side. It adds `RenderDecoration` to the typed render
+pipeline and teaches the existing serializer and prepared Vue assembler to emit
+its inert edges around the body. It requires no changes to the Rust parser,
+grammar, AST, compiler, host-language implementations, PyO3 bindings, or
+`citry_core` type stubs. The existing component-rendered and slot-rendered
+hooks provide the extension behavior.
