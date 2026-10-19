@@ -15,8 +15,8 @@ importers:
         specifier: 4.3.3
         version: 4.3.3
       axe-core:
-        specifier: 4.14.0
-        version: 4.14.0
+        specifier: 4.13.0
+        version: 4.13.0
       bootstrap:
         specifier: 5.3.8
         version: 5.3.8(@popperjs/core@2.11.8)
@@ -1789,8 +1789,8 @@ packages:
   asynckit@0.4.0:
     resolution: {integrity: sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==}
 
-  axe-core@4.14.0:
-    resolution: {integrity: sha512-9WTZxEjsZ7b13TH8JPmbV2z8CHbl80/2hm3XPEG4JgNdQLK81IBRXmSxHfMAOkSqQeRxT/0dwNDz2GOm3zzpcQ==}
+  axe-core@4.13.0:
+    resolution: {integrity: sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A==}
     engines: {node: '>=4'}
 
   azure-devops-node-api@12.5.0:
@@ -5394,7 +5394,7 @@ snapshots:
   '@storybook/addon-a11y@10.6.2(storybook@10.6.2(@types/react@19.2.17)(prettier@3.9.10)(react@19.2.8))':
     dependencies:
       '@storybook/global': 5.0.0
-      axe-core: 4.14.0
+      axe-core: 4.13.0
       storybook: 10.6.2(@types/react@19.2.17)(prettier@3.9.10)(react@19.2.8)
 
   '@storybook/addon-docs@10.6.2(@types/react@19.2.17)(storybook@10.6.2(@types/react@19.2.17)(prettier@3.9.10)(react@19.2.8))':
@@ -6102,7 +6102,7 @@ snapshots:
 
   asynckit@0.4.0: {}
 
-  axe-core@4.14.0: {}
+  axe-core@4.13.0: {}
 
   azure-devops-node-api@12.5.0:
     dependencies:
@@ -7293,7 +7293,7 @@ snapshots:
     dependencies:
       '@paulirish/trace_engine': 0.0.53
       '@sentry/node': 7.120.4
-      axe-core: 4.14.0
+      axe-core: 4.13.0
       chrome-launcher: 1.2.1
       configstore: 5.0.1
       csp_evaluator: 1.1.5

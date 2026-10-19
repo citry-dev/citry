@@ -12,7 +12,7 @@
   "devDependencies": {
     "@lhci/cli": "0.15.1",
     "@tailwindcss/cli": "4.3.3",
-    "axe-core": "4.14.0",
+    "axe-core": "4.13.0",
     "bootstrap": "5.3.8",
     "lightningcss": "1.33.0",
     "pyright": "1.1.414",
