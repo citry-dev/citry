@@ -1,0 +1,92 @@
+<section id="board" data-project-id="{{ board.project.id }}" data-revision="{{ board.revision }}" data-session="{{ board.session }}" data-operation="{{ board.operation }}" data-visible-count="{{ board.visible_count }}" data-total-count="{{ board.total_count }}">
+{% component "default.ProjectLayout" board=board %}
+{% block sidebar %}
+<h2>Phases</h2>
+<nav aria-label="Project phases">
+{% for phase in board.phase_groups %}
+<a href="#phase-{{ phase.id }}">{{ phase.title }}</a>
+{% endfor %}
+</nav>
+<h2>Bookmarks</h2>
+{% for bookmark in board.bookmarks %}
+<a data-bookmark-id="{{ bookmark.id }}" data-bookmark-name="{{ bookmark.text }}" href="{{ bookmark.url }}">
+<span class="bookmark-name">{{ bookmark.text }}</span>
+</a>
+{% endfor %}
+{% endblock %}
+{% block header %}
+<header id="project-header">
+<p id="project-organization">{{ board.project.organization }}</p>
+<h1 id="board-title">{{ board.title }}</h1>
+<p>
+<span id="project-start-date">{{ board.project.start_date }}</span> – <span id="project-end-date">{{ board.project.end_date }}</span> · <span id="project-status">{{ board.project.status }}</span>
+</p>
+</header>
+{% endblock %}
+{% block content %}
+<div class="toolbar">
+<form @submit.prevent="act(Object.fromEntries(new FormData($event.target)))">
+<input type="hidden" name="action" value="filter">
+<input type="hidden" name="operation" value="manual">
+<label for="query">Filter outputs</label>
+<input id="query" name="query" value="{{ board.query }}">
+<button data-bench-action="filter" type="submit">Filter</button>
+</form>
+<form @submit.prevent="act(Object.fromEntries(new FormData($event.target)))" novalidate>
+<input type="hidden" name="action" value="save">
+<input type="hidden" name="operation" value="manual">
+<label for="title-input">Project title</label>
+<input id="title-input" name="title" value="{{ board.title_input }}">
+<button data-bench-action="save" type="submit">Save</button>
+</form>
+</div>
+<p id="form-error" role="alert">{{ board.error }}</p>
+<p id="form-notice" role="status">{{ board.notice }}</p>
+<div class="toolbar">
+<form @submit.prevent="act(Object.fromEntries(new FormData($event.target)))">
+<input type="hidden" name="action" value="insert">
+<input type="hidden" name="operation" value="manual">
+<button data-bench-action="insert">Insert output</button>
+</form>
+<form @submit.prevent="act(Object.fromEntries(new FormData($event.target)))">
+<input type="hidden" name="action" value="reorder">
+<input type="hidden" name="operation" value="manual">
+<button data-bench-action="reorder">Reverse outputs</button>
+</form>
+<form @submit.prevent="act(Object.fromEntries(new FormData($event.target)))">
+<input type="hidden" name="action" value="remove">
+<input type="hidden" name="operation" value="manual">
+<button data-bench-action="remove">Remove inserted output</button>
+</form>
+<form @submit.prevent="act(Object.fromEntries(new FormData($event.target)))">
+<input type="hidden" name="action" value="probe">
+<input type="hidden" name="operation" value="manual">
+<button data-bench-action="probe">Check server</button>
+</form>
+</div>
+<p>
+<span id="visible-count">{{ board.visible_count }}</span> visible outputs</p>
+<div id="project-tabs">
+<div role="tablist">
+<button type="button" data-tab-target="project-info" @click="active_tab='project-info'">Project Info</button>
+<button type="button" data-tab-target="notes-1" @click="active_tab='notes-1'">Notes 1</button>
+<button type="button" data-tab-target="notes-2" @click="active_tab='notes-2'">Notes 2</button>
+<button type="button" data-tab-target="notes-3" @click="active_tab='notes-3'">Notes 3</button>
+<button type="button" data-tab-target="outputs" @click="active_tab='outputs'">Outputs</button>
+</div>
+{% component "default.ProjectInfo" board=board / %}
+{% for tab in board.note_tabs %}
+{% component "default.NotePanel" tab=tab key=tab.id / %}
+{% endfor %}
+<section id="outputs" data-tab-panel="outputs" x-show="active_tab === 'outputs'">
+<h2>Outputs</h2>
+{% for phase in board.phase_groups %}
+{% component "default.PhaseGroup" board=board phase=phase key=phase.id / %}
+{% endfor %}
+</section>
+</div>
+{% endblock %}
+{% /default.ProjectLayout %}
+</section>
+
+

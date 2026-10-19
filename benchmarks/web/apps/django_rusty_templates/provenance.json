@@ -1,0 +1,14 @@
+{
+  "package": {
+    "name": "django-rusty-templates",
+    "version": "0.1.0",
+    "source": "https://github.com/LilyFirefly/django-rusty-templates",
+    "commit": "0725f875535b2fca93953a403a57df1d9b34e073",
+    "commit_date": "2026-09-22",
+    "license": "BSD-3-Clause",
+    "status": "unreleased experimental",
+    "prepare_requirements": ["Rust", "Maturin"]
+  },
+  "method": "The configured django_rusty_templates.RustyTemplates backend is used for initial and fragment rendering; DjangoTemplates is used only by the parity test.",
+  "known_upstream_issue": "The pinned commit emits a {% for %} empty branch incorrectly when the iterable resolves to an existing empty list. The maintained variant uses semantically equivalent {% if sequence %}{% for %}...{% else %}...{% endif %} branches for every canonical empty collection."
+}

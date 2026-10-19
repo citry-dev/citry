@@ -581,14 +581,12 @@ the agreed single combined PR at the end.
 
 ### Current local implementation scope
 
-Fourteen native adapters in the maintained cohort implement the shared
+Fourteen native apps in the maintained cohort implement the shared
 project-board model and semantic assertions: Citry, Django + HTMX + Alpine,
 Django Rusty Templates + HTMX + Alpine, FastHTML, Tetra, django-unicorn,
 ReactPy, Reflex, Jinja + HTMX + Alpine, django-components + HTMX + Alpine,
-Python API + Vue, Python API + React, Next.js and Nuxt. The Citry + Vue
-adapter also implements the model with Citry's public Vue renderer. The
-`vue-migration-cohort` and report-refresh profiles select it; the `cohort`
-profiles do not. Twelve
+Python API + Vue, Python API + React, Next.js and Nuxt. The Citry app uses
+Citry 0.6.0 and its default Vue renderer. Twelve
 use HTTP update paths; ReactPy uses a persistent WebSocket and Reflex uses its
 native Socket.IO event protocol.
 The Django Rusty Templates adapter pins unreleased experimental package
@@ -597,8 +595,7 @@ licensed BSD-3-Clause, and requires Rust and Maturin during preparation. It
 uses the official `django_rusty_templates.RustyTemplates` backend for initial
 and fragment rendering. The upstream empty-branch behavior is worked around by
 the adapter's standard-DTL `if`/`for`/`else` template variant; the parity test
-compares it byte-for-byte with the original Django template. The focused
-`vue-migration-rusty` profile has no Citry local-wheel inputs.
+compares it byte-for-byte with the original Django template.
 Reflex is a compiled browser-rendered Python UI entry, not a Python HTML
 renderer. The Vue and React entries share the same Starlette JSON API and render
 the board in the browser. Their initial shell, assets and JSON fetch all belong
@@ -607,9 +604,9 @@ to initial payload and readiness. The browser-only entries declare
 scripts before a board exists. Next and Nuxt declare `rendering = "hybrid"` with
 explicit `update_payload` values (`delta` and `json` respectively): their
 initial document is SSR HTML, while actions use a different browser payload.
-Citry + Vue is also hybrid with `update_payload = "json"`: with Citry's
+Citry is also hybrid with `update_payload = "json"`: with Citry's
 default settings every board size arrives as server HTML that Vue hydrates. A
-hybrid adapter whose smaller pages mount in the browser declares
+hybrid app whose smaller pages mount in the browser declares
 `hydration_min_count`, the smallest board size that arrives as server HTML.
 Unknown rendering modes,
 undeclared hybrid payload kinds and a `hydration_min_count` that is not a
@@ -730,8 +727,8 @@ Memory measurement uses the same frozen applications and canonical scenarios,
 but runs separately from latency timing. Sampling process memory or querying
 heap state must not change the published latency observations.
 
-The final cohort contains the current Citry adapter, the Citry + Vue control,
-and every other maintained framework adapter: Django + HTMX + Alpine, Django
+The final cohort contains the Citry 0.6.0 app and every other maintained
+framework app: Django + HTMX + Alpine, Django
 Rusty Templates + HTMX + Alpine, FastHTML,
 Tetra, django-unicorn, ReactPy, Reflex, Jinja + HTMX + Alpine,
 django-components + HTMX + Alpine, Python API + Vue, Python API + React,

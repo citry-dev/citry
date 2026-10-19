@@ -1,0 +1,66 @@
+{% load component_tags %}
+<section id="board" data-project-id="{{ project.id }}" data-revision="{{ revision }}" data-session="{{ session }}" data-operation="{{ operation }}" data-visible-count="{{ visible_count }}" data-total-count="{{ total_count }}">
+{% component "project_layout" state=state %}
+{% fill "sidebar" %}
+<h2>Phases</h2>
+<nav aria-label="Project phases">
+{% for phase in phase_groups %}
+<a href="#phase-{{ phase.id }}">{{ phase.title }}</a>
+{% endfor %}
+</nav>
+<h2>Bookmarks</h2>
+{% for bookmark in bookmarks %}
+<a data-bookmark-id="{{ bookmark.id }}" data-bookmark-name="{{ bookmark.text }}" href="{{ bookmark.url }}">
+<span class="bookmark-name">{{ bookmark.text }}</span>
+</a>
+{% endfor %}
+{% endfill %}
+{% fill "header" %}
+<header id="project-header">
+<p id="project-organization">{{ project.organization }}</p>
+<h1 id="board-title">{{ title }}</h1>
+<p>
+<span id="project-start-date">{{ project.start_date }}</span> – <span id="project-end-date">{{ project.end_date }}</span> · <span id="project-status">{{ project.status }}</span>
+</p>
+</header>
+{% endfill %}
+{% fill "content" %}
+<div class="toolbar">
+<form hx-post="/action" hx-target="#board" hx-swap="outerHTML">
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf }}">
+<input type="hidden" name="session" value="{{ session }}">
+<input type="hidden" name="action" value="filter">
+<input type="hidden" name="operation" value="manual">
+<label for="query">Filter outputs</label>
+<input id="query" name="query" value="{{ query }}">
+<button data-bench-action="filter" type="submit">Filter</button>
+</form>
+<form hx-post="/action" hx-target="#board" hx-swap="outerHTML" novalidate>
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf }}">
+<input type="hidden" name="session" value="{{ session }}">
+<input type="hidden" name="action" value="save">
+<input type="hidden" name="operation" value="manual">
+<label for="title-input">Project title</label>
+<input id="title-input" name="title" value="{{ title_input }}">
+<button data-bench-action="save" type="submit">Save</button>
+</form>
+</div>
+<p id="form-error" role="alert">{{ error }}</p>
+<p id="form-notice" role="status">{{ notice }}</p>
+<div class="toolbar">
+{% for action,label in action_buttons %}
+<form hx-post="/action" hx-target="#board" hx-swap="outerHTML">
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf }}">
+<input type="hidden" name="session" value="{{ session }}">
+<input type="hidden" name="action" value="{{ action }}">
+<input type="hidden" name="operation" value="manual">
+<button data-bench-action="{{ action }}" type="submit">{{ label }}</button>
+</form>
+{% endfor %}
+</div>
+<p>
+<span id="visible-count">{{ visible_count }}</span> visible outputs</p>
+{% component "project_tabs" state=state csrf=csrf / %}
+{% endfill %}
+{% endcomponent %}
+</section>

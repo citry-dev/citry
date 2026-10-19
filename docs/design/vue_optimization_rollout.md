@@ -1,6 +1,6 @@
 # Supported Vue performance features and the experiments they replaced
 
-The project board benchmark (`benchmarks/web/apps/citry_vue`) now reaches
+The project board benchmark (`benchmarks/web/apps/citry`) now reaches
 the research report's request-to-layout targets using only supported code. Every
 optimization it relies on is general: any component can use it, and none
 of it checks for one benchmark class, template hash or page shape. The
