@@ -3,9 +3,9 @@ import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { build, transform } from "esbuild";
 
-export const VUE_VERSION = "3.5.42";
+export const VUE_VERSION = "3.5.44";
 export const VUE_GENERATED_BANNER =
-  "/* Citry Vue runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-vue.ts (pnpm run build there). Bundles Vue 3.5.42 runtime-only (MIT). */";
+  "/* Citry Vue runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-vue.ts (pnpm run build there). Bundles Vue 3.5.44 runtime-only (MIT). */";
 export const VUE_EVENTS_GENERATED_BANNER =
   "/* Citry Vue Events bridge. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events-vue.ts (pnpm run build there). */";
 export const VUE_FRAGMENTS_GENERATED_BANNER =

@@ -1,76 +1,76 @@
 {
-  "vue": "3.5.42",
+  "vue": "3.5.44",
   "packages": [
     {
       "name": "vue",
-      "version": "3.5.42",
+      "version": "3.5.44",
       "files": [
         "LICENSE",
         "dist/vue.d.mts",
         "dist/vue.d.ts",
         "package.json"
       ],
-      "sha256": "f6b7133aff439fedb365af35dcba9667c700cd8e44e21a59d7d74cc281b202ed"
+      "sha256": "59666e444e896fe09171baae0773cfc68e1ffbe851a605584ef567ce981364be"
     },
     {
       "name": "@vue/shared",
-      "version": "3.5.42",
+      "version": "3.5.44",
       "files": [
         "LICENSE",
         "dist/shared.d.ts",
         "package.json"
       ],
-      "sha256": "ebd869bd32801a6122ba9d141d539a58d09552b28a901d795bfee598a17cbf4a"
+      "sha256": "7281a35e7365c736fac3444d88cfc5ef24ce371877c4f6d11be0e67148315fb6"
     },
     {
       "name": "@vue/compiler-core",
-      "version": "3.5.42",
+      "version": "3.5.44",
       "files": [
         "LICENSE",
         "dist/compiler-core.d.ts",
         "package.json"
       ],
-      "sha256": "15b3f8449e49b7e4bcaf073323cebc97a79a531f6874307c02e49bbd7cfb4bdc"
+      "sha256": "35384b9a942617504f5f8336ac7742ce6524f185f24a9a0dc0c378b5e5d332ed"
     },
     {
       "name": "@vue/compiler-dom",
-      "version": "3.5.42",
+      "version": "3.5.44",
       "files": [
         "LICENSE",
         "dist/compiler-dom.d.ts",
         "package.json"
       ],
-      "sha256": "ceb826c3b65943ba59b2b0bf0098ce714a27f0f695204e9b3d1b5b31a5a0b5b7"
+      "sha256": "2ae37fc7eb3c26c80167daa6eede10ddc9529a7b065125bfc3824171dd6743ff"
     },
     {
       "name": "@vue/reactivity",
-      "version": "3.5.42",
+      "version": "3.5.44",
       "files": [
         "LICENSE",
         "dist/reactivity.d.ts",
         "package.json"
       ],
-      "sha256": "86aa06c6b5f69b9a8a4a972ca3fe2d151fe2b4f19859f2a4c9572b3cc7be102c"
+      "sha256": "af70035fab4461f8ec26c89b6458a878ae8e934e43cf096ef7f1a7a2a12d2cad"
     },
     {
       "name": "@vue/runtime-core",
-      "version": "3.5.42",
+      "version": "3.5.44",
       "files": [
         "LICENSE",
         "dist/runtime-core.d.ts",
         "package.json"
       ],
-      "sha256": "21aa819bf6e97ee94d60dc322353effe20a7a21c509676ec1719bcf792440e9b"
+      "sha256": "e604d58931484155e2b50e80d3632559753b0084c0394694e309948af0143eec"
     },
     {
       "name": "@vue/runtime-dom",
-      "version": "3.5.42",
+      "version": "3.5.44",
       "files": [
         "LICENSE",
         "dist/runtime-dom.d.ts",
         "package.json"
       ],
-      "sha256": "aebb40d6a3e39bfc0822242436ea009ab6d2787fb315e8a3f4e41281981508c3"
+      "sha256": "668d029de2739bbf6ddb176782de315e40db60154f5999031e9859cc5412a4ff"
     },
     {
       "name": "@babel/types",
@@ -84,13 +84,13 @@
     },
     {
       "name": "@babel/parser",
-      "version": "7.29.8",
+      "version": "7.29.9",
       "files": [
         "LICENSE",
         "package.json",
         "typings/babel-parser.d.ts"
       ],
-      "sha256": "3d59c10d316b93cff8ccd90d29c20c444fd87dfc3f1eb386410753dbe159c986"
+      "sha256": "92236f8c4f6e795755d459811e1a0218648c025eb2a77031e55da0bfa2af72c0"
     },
     {
       "name": "csstype",

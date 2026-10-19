@@ -2,7 +2,7 @@
 
 Build and verification tooling for Citry's committed browser runtime.
 
-Citry ships Vue as its sole interactive renderer. The package pins Vue 3.5.42
+Citry ships Vue as its sole interactive renderer. The package pins Vue 3.5.44
 and builds the production runtime-only API, the prepared-tree Events bridge,
 and the independent Fluent i18n runtime. Node and pnpm are repository build
 tools; applications serve the committed JavaScript from the Python package and

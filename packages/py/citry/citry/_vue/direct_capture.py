@@ -2852,7 +2852,7 @@ def _source_attribute_target(name: str) -> str | None:
 
 # Names a Vue template expression may read without a component instance.
 # This is Vue's own list of template globals (runtime-core
-# `isGloballyAllowed`, 3.5.42); any other free name reads the instance.
+# `isGloballyAllowed`, 3.5.44); any other free name reads the instance.
 _VUE_TEMPLATE_GLOBALS = frozenset(
     {
         "Array",

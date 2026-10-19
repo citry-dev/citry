@@ -16,7 +16,7 @@
   "dependencies": {
     "@citry/protocol-events-v1": "workspace:*",
     "@fluent/bundle": "0.19.1",
-    "vue": "3.5.42"
+    "vue": "3.5.44"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

@@ -1338,7 +1338,7 @@ fn prop_span(prop: &PropNode<'_>) -> (u32, u32) {
     }
 }
 
-/// Classify a native element's attributes with the rules Vue 3.5.42's
+/// Classify a native element's attributes with the rules Vue 3.5.44's
 /// `hydrateElement` applies (`runtime-core` `hydration.ts`): a prop is
 /// patched when it is a listener, a `.prop` binding, `value`/`indeterminate`
 /// on `input`/`option`, any non-reserved prop of a custom element, or listed

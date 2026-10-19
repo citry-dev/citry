@@ -24,16 +24,19 @@ from scripts.verify_citry_lsp_distribution import (  # noqa: E402
 )
 
 RELEASE_VERSION = distribution_verifier.package_version()
+# The shipped Vue declarations must match the Vue that citry-client bundles.
+CLIENT_PACKAGE = json.loads((ROOT / "packages/js/citry-client/package.json").read_text(encoding="utf8"))
+VUE_VERSION = CLIENT_PACKAGE["dependencies"]["vue"]
 VUE_TYPE_PACKAGES = {
-    "vue": "3.5.42",
-    "@vue/shared": "3.5.42",
-    "@vue/compiler-core": "3.5.42",
-    "@vue/compiler-dom": "3.5.42",
-    "@vue/reactivity": "3.5.42",
-    "@vue/runtime-core": "3.5.42",
-    "@vue/runtime-dom": "3.5.42",
+    "vue": VUE_VERSION,
+    "@vue/shared": VUE_VERSION,
+    "@vue/compiler-core": VUE_VERSION,
+    "@vue/compiler-dom": VUE_VERSION,
+    "@vue/reactivity": VUE_VERSION,
+    "@vue/runtime-core": VUE_VERSION,
+    "@vue/runtime-dom": VUE_VERSION,
     "@babel/types": "7.29.8",
-    "@babel/parser": "7.29.8",
+    "@babel/parser": "7.29.9",
     "csstype": "3.2.3",
 }
 
@@ -81,7 +84,7 @@ def test_release_inventory_is_one_universal_wheel_and_one_sdist() -> None:
 def test_official_vue_type_tree_has_exact_inventory_and_licenses() -> None:
     root = distribution_verifier.SOURCE_ROOT / "types"
     inventory = json.loads((root / "inventory.json").read_text(encoding="utf8"))
-    assert inventory["vue"] == "3.5.42"
+    assert inventory["vue"] == VUE_VERSION
     packages = inventory["packages"]
     assert len(packages) == len(VUE_TYPE_PACKAGES)
     assert {item["name"]: item["version"] for item in packages} == VUE_TYPE_PACKAGES
