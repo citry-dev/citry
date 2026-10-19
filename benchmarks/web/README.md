@@ -46,25 +46,13 @@ runs, network shaping, cache and compression variants and publication
 statistics are not built yet. A profile that asks for one of them fails with
 an error.
 
-## The Citry app needs Citry 0.6.0
+## Which Citry the Citry app measures
 
-The Citry app pins `citry==0.6.0` and `citry-core==1.8.0`, the first release
-with the Vue renderer. Until that release is on PyPI, the app's lockfile
-resolves those two packages from wheels you build from this repository, and
-`prepare` stops with an error for any profile that includes Citry (`smoke`,
-`local`, `cohort`, `cohort-100x` and `release-0.6.0`). Two ways forward:
-
-- Measure Citry now with wheels you build: see
-  [Test Citry with wheels you build](#test-citry-with-wheels-you-build).
-- Compare Citry with the other apps before the release: copy
-  `release-0.6.0.toml` under a new name, remove `"citry"` from `apps`, and
-  run it; run `citry-local-wheels` too; then combine the two runs with
-  [`compose`](#update-the-numbers-on-the-docs-page). Treat the result as a
-  test, not as release numbers.
-
-After the release, the [Citry app README](apps/citry/README.md#which-citry-it-installs)
-gives the one command that locks the app against PyPI, and every profile
-works as described below.
+The Citry app pins and locks the published `citry` 0.6.0 and `citry-core`
+1.8.0 from PyPI, so every profile without a `[local_wheels]` table
+measures that release. To measure an
+unreleased change instead, see
+[Test Citry with wheels you build](#test-citry-with-wheels-you-build).
 
 ## Before you start
 
@@ -106,9 +94,6 @@ cohort. From the repository root:
 ```bash
 cd benchmarks/web/runner
 uv sync --frozen --python 3.12.13
-
-# Until Citry 0.6.0 is on PyPI, these profiles stop at `prepare`;
-# see "The Citry app needs Citry 0.6.0" above.
 
 # Quick setup check: Citry and Django + HTMX + Alpine, 14 outputs.
 uv run --no-sync citry-bench prepare --profile smoke
@@ -249,28 +234,16 @@ charts from
 the time until the 1,400-output page is ready for input, first and second
 load, for Citry and eleven other frameworks.
 
-The numbers there now are a historical record of one composed report,
-`full-20260928-93925ce8fff0`, built from three runs at 140 and 1,400 outputs
-with one block, one session and two action cycles, the same blocks, sessions
-and cycles as `release-0.6.0`:
-
-- **Citry and nine other frameworks** (all except Next.js and Reflex), run
-  `20260927T232351Z-6a10df61` on 2026-09-27. Citry ran from wheels built from the then-unreleased Vue
-  runtime (commit `181416a00`, with uncommitted changes), labelled
-  `citry` 0.5.1 and `citry-core` 1.7.1.
-- **Next.js**, run `20260928T002042Z-16fd1835` on 2026-09-28, under its own
-  profile with the same settings.
-- **Reflex**, run
-  `20260924T111719Z-latency-whole-article-static-bindings-68f1ce81` on
-  2026-09-24. A research script measured it with the runner's own session
-  code on the Reflex app as it is here, but outside `prepare` and
-  `qualify`, which then failed for Reflex because of a runner fault since
-  fixed. Reflex now qualifies like every other app.
-
-Those runs cannot be repeated as they were: the Citry wheels came from a
-commit with uncommitted changes. The `release-0.6.0` run replaces all three
-with one run of the published release. After Citry 0.6.0 is on PyPI and the Citry app
-is locked against it, from `benchmarks/web/runner/`:
+The numbers there now come from one composed report,
+`composed-70d4a8802900`, built on 2026-10-19 from the `release-0.6.0`
+qualify run `20261019T210740Z-2b5cd077` and the measurement run
+(`citry-bench run`) `20261019T213948Z-c6248185`. All fourteen apps of the
+profile, including the twelve frameworks on the docs page, ran in that one
+run, with Citry 0.6.0 and citry-core 1.8.0 installed from PyPI. The runner
+recorded commit `55740fd66` with no uncommitted changes; that local commit
+has the same benchmark sources as the change that published these numbers.
+To repeat it from `benchmarks/web/runner/` (for a later release, copy the
+profile under a new name first):
 
 ```bash
 uv run --no-sync citry-bench prepare --profile release-0.6.0
