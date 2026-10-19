@@ -137,6 +137,35 @@ def test_wheel_verifier_rejects_payload_outside_the_closed_package(monkeypatch, 
         verify_wheel(invalid, version="0.4.3")
 
 
+def test_check_wheel_mode_runs_only_the_release_wheel_check(monkeypatch, tmp_path: Path, capsys) -> None:
+    # Pull-request CI calls this mode on the wheel it already built, so it must
+    # apply the same wheel check the release runs, without building anything.
+    monkeypatch.setattr(
+        distribution_verifier,
+        "source_inventory",
+        lambda: {"__init__.py": distribution_verifier.sha256_bytes(b"value = 1\n")},
+    )
+    monkeypatch.setattr(distribution_verifier, "package_version", lambda: "0.4.3")
+    monkeypatch.setattr(
+        distribution_verifier,
+        "_build_checkout_distribution",
+        lambda _directory: pytest.fail("--check-wheel must not build a distribution"),
+    )
+    wheel = tmp_path / "citry-0.4.3-py3-none-any.whl"
+    _write_wheel(wheel)
+
+    assert distribution_verifier.main(["--check-wheel", str(wheel)]) == 0
+    assert json.loads(capsys.readouterr().out)["name"] == wheel.name
+
+    monkeypatch.setattr(distribution_verifier, "MAX_WHEEL_BYTES", wheel.stat().st_size - 1)
+    assert distribution_verifier.main(["--check-wheel", str(wheel)]) == 1
+    assert "the release cap is" in capsys.readouterr().err
+
+    # Combining it with a build option would silently skip that work.
+    assert distribution_verifier.main(["--check-wheel", str(wheel), "--stage-output-dir", str(tmp_path / "s")]) == 1
+    assert "cannot build, stage, or promote" in capsys.readouterr().err
+
+
 def test_staged_bundle_requires_the_recorded_bytes(monkeypatch, tmp_path: Path) -> None:
     bundle = tmp_path / "bundle"
     bundle.mkdir()

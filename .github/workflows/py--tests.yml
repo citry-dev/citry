@@ -32,6 +32,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - "README.md" # the citry wheel's metadata includes the root README
       - ".github/workflows/py--tests.yml"
       - ".github/workflows/py--citry-ui--publish.yml"
       - ".github/workflows/py--pygments-citry--publish.yml"
@@ -62,6 +63,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - "README.md" # the citry wheel's metadata includes the root README
       - ".github/workflows/py--tests.yml"
       - ".github/workflows/py--citry-ui--publish.yml"
       - ".github/workflows/py--pygments-citry--publish.yml"
@@ -403,6 +405,25 @@ jobs:
         run: >-
           uv build --package citry-core --wheel --out-dir dist
           --config-setting 'maturin.build-args=--features abi3-py310'
+
+      # Release qualification runs this same wheel check, so a size or
+      # file-list problem shows up on the pull request instead of mid-release.
+      - name: Check the Citry wheel's size and file list against the release rules
+        run: python scripts/verify_citry_distribution.py --check-wheel dist/citry-[0-9]*.whl
+
+      - name: Check the Citry Core wheel against the release rules
+        run: python scripts/verify_citry_core_distribution.py check-wheel --wheel "dist/citry_core-[0-9]*.whl"
+
+      # These two packages build in seconds, so the job builds them only for
+      # this check. It runs the release check on the wheel and sdist, including
+      # a wheel rebuilt from the sdist; only the install smoke test is left to
+      # release qualification.
+      - name: Check the Citry LSP and Pygments distributions against the release rules
+        run: |
+          uv build --package citry-lsp --out-dir dist-citry-lsp
+          python scripts/verify_citry_lsp_distribution.py --dist-dir dist-citry-lsp --skip-install-smoke
+          uv build --package pygments-citry --out-dir dist-pygments-citry
+          python scripts/verify_pygments_citry_distribution.py --dist-dir dist-pygments-citry --skip-install-smoke
 
       - name: Check the exact wheel inventory
         run: >-

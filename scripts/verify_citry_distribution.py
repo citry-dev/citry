@@ -650,7 +650,7 @@ def _smoke_install(wheel: Path, directory: Path, *, core_wheel: Path | None) -> 
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the complete distribution proof and print one JSON report."""
+    """Run the distribution proof, or one of its narrower modes, and print one JSON report."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--dist-dir",
@@ -672,10 +672,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         type=Path,
         help="Instead of building, promote this immutable GitHub qualification archive.",
     )
+    parser.add_argument(
+        "--check-wheel",
+        type=Path,
+        help=(
+            "Check only this already-built wheel (filename, metadata, RECORD, file list, size cap); "
+            "builds and installs nothing."
+        ),
+    )
     parser.add_argument("--artifact-digest", help="GitHub's sha256:<hex> digest for --promote-archive.")
     parser.add_argument("--promotion-output-dir", type=Path, help="Safe extraction target for --promote-archive.")
     args = parser.parse_args(argv)
     try:
+        # Pull-request CI already builds the wheel, so it runs only this check
+        # rather than building from the checkout, rebuilding from the sdist, and
+        # installing both wheels below.
+        if args.check_wheel is not None:
+            if any(
+                value is not None
+                for value in (args.dist_dir, args.core_wheel, args.stage_output_dir, args.promote_archive)
+            ):
+                raise DistributionVerificationError("--check-wheel cannot build, stage, or promote a distribution")
+            report = verify_wheel(args.check_wheel.resolve(), version=package_version())
+            sys.stdout.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+            return 0
         if args.promote_archive is not None:
             if args.artifact_digest is None or args.promotion_output_dir is None:
                 raise DistributionVerificationError(
