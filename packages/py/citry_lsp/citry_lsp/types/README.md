@@ -22,17 +22,20 @@ re-includes this one on purpose, so these files are committed.
 
 Do not edit the files under `node_modules/` or `inventory.json` by hand.
 `packages/js/citry-client/build-vue-types.mjs` copies them from the Vue
-version that `packages/js/citry-client/package.json` installs. After you
-change that Vue version (and `expectedVueVersion` in the script), run from
-the repository root:
+version that `packages/js/citry-client/package.json` installs. To change
+the Vue version, edit `vue` in that `package.json` and `VUE_VERSION` in
+`packages/js/citry-client/build-support.mjs`, then run from the repository
+root:
 
 ```console
 pnpm install
 pnpm --dir packages/js/citry-client run build:vue-types
 ```
 
-Then update the expected package versions (`VUE_TYPE_PACKAGES` and the Vue
-version) in `packages/py/citry_lsp/tests/test_lsp_distribution_artifacts.py`.
+The distribution test in
+`packages/py/citry_lsp/tests/test_lsp_distribution_artifacts.py` reads the
+Vue version from `package.json`. If the `@babel/*` or `csstype` versions in
+`inventory.json` change, update them in that test's `VUE_TYPE_PACKAGES`.
 
 `pnpm --dir packages/js/citry-client run check:vue-types` checks that the
 committed files match the installed packages. It runs as part of that

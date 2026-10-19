@@ -338,6 +338,11 @@ class TestParseStringStyle:
             # An unclosed quote does not protect what follows it.
             ('content: "unclosed /* gone */; color: red', {"content": '"unclosed', "color": "red"}),
             ("a: 1 /* open", {"a": "1 /* open"}),
+            ('content: "\\"/* x */"; color: blue', {"content": '"\\"/* x */"', "color": "blue"}),
+            ('x: "é/*ü*/"; y: 3', {"x": '"é/*ü*/"', "y": "3"}),
+            ('z: "trail\\', {"z": '"trail\\'}),
+            # An escape inside a string can be a newline.
+            ('content: "a\\\n/* x */"; b: 1', {"content": '"a\\\n/* x */"', "b": "1"}),
         ],
     )
     def test_comment_like_text_in_quotes_and_escapes_is_kept(self, css_text, expected):
