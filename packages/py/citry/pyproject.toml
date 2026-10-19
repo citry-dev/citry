@@ -45,7 +45,7 @@ dependencies = [
     # wrapt keeps `ObjectProxy` working across its 2.0 rewrite, so both major
     # lines serve. Raising the floor would force wrapt 2 on every installation
     # for no gain here.
-    "wrapt>=1.16",
+    "wrapt>=2.5.1",
     # Deliberately wide. `Markup` and `escape` are all citry needs; the private
     # `_escape_inner` fast path in citry.util.html is opportunistic and falls back
     # to `escape` where it is absent, which is the case on 2.x. Raising the floor
