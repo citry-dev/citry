@@ -50,7 +50,7 @@ dependencies = [
     # `_escape_inner` fast path in citry.util.html is opportunistic and falls back
     # to `escape` where it is absent, which is the case on 2.x. Raising the floor
     # would force markupsafe 3 on every installation to buy only that fast path.
-    "markupsafe>=2.1",
+    "markupsafe>=3.0.4",
     # 4.10 is the first release with `TypeIs` (PEP 742), which citry.util.misc
     # imports. The other symbols used here (`TypeAliasType`, `Unpack`,
     # `override`, and `TypeVar` with a PEP 696 default) all land earlier.
