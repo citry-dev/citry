@@ -61,7 +61,7 @@ dependencies = [
     # Citry opens this package directly instead of consulting the host's
     # system zoneinfo search path. LocaleContext records the installed data
     # version, so time-zone conversion and cache identity stay explicit.
-    "tzdata>=2026.3",
+    "tzdata>=2026.5",
 ]
 
 # Optional runtime extras, namespaced `<category>-<name>` (see docs/codebase.md).
