@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 SCHEMA_VERSION: Final = 1
 API_VERSION: Final = "2022-11-28"
 POLL_SECONDS: Final = 10
+# While runs are still going, repeat their states this often, so a long wait
+# keeps adding lines to the Actions log.
+PROGRESS_SECONDS: Final = 5 * 60
 QUALIFICATION_TIMEOUT_SECONDS: Final = 60 * 60
 PUBLICATION_TIMEOUT_SECONDS: Final = 20 * 60
 FULL_SHA: Final = re.compile(r"[0-9a-f]{40}")
@@ -406,6 +409,39 @@ def verify_qualification(
         raise ReleaseError(f"{package} qualification artifact has different source or identity")
 
 
+def _log(message: str) -> None:
+    """Report one progress line in the Actions log as it happens."""
+    # Progress goes to stderr beside the `release error:` line, which keeps
+    # stdout for the JSON that `plan` prints.
+    sys.stderr.write(f"{message}\n")
+    sys.stderr.flush()
+
+
+def _run_state(run: Mapping[str, Any] | None) -> str:
+    if run is None:
+        return "no run found yet"
+    status = str(run.get("status", "unknown"))
+    return f"{status}/{run.get('conclusion')}" if status == "completed" else status
+
+
+def _failed_jobs(client: GitHubClient, run: Mapping[str, Any]) -> list[str]:
+    """List the jobs that made a run fail, so the error message points at the cause."""
+    try:
+        payload = client.request("GET", f"/actions/runs/{run.get('id')}/jobs?per_page=100")
+    except Exception:  # noqa: BLE001 - the job names are optional detail
+        # The caller still raises the run failure; a failed job lookup only
+        # drops the job names, whatever went wrong in the request.
+        return []
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list):
+        return []
+    return [
+        str(job.get("name"))
+        for job in jobs
+        if isinstance(job, dict) and job.get("conclusion") in {"failure", "cancelled", "timed_out"}
+    ]
+
+
 def _run_title(operation: str, package: str, candidate_id: str) -> str:
     verb = "Qualify" if operation == "qualify" else "Publish"
     return f"{verb} {package} for candidate {candidate_id}"
@@ -435,8 +471,15 @@ def _wait_for_runs(
     started_at: datetime,
     timeout_seconds: int,
 ) -> dict[str, dict[str, Any]]:
-    deadline = time.monotonic() + timeout_seconds
+    started = time.monotonic()
+    deadline = started + timeout_seconds
+    next_progress = started + PROGRESS_SECONDS
     completed: dict[str, dict[str, Any]] = {}
+    # The run id and state last logged for each package, so only a change
+    # prints a line.
+    states: dict[str, tuple[object, str]] = {}
+    # The newest run seen for each package, listed in the still-waiting line.
+    latest: dict[str, dict[str, Any] | None] = dict.fromkeys(pending)
     while len(completed) != len(pending):
         if time.monotonic() >= deadline:
             missing = ", ".join(sorted(set(pending) - completed.keys()))
@@ -445,12 +488,30 @@ def _wait_for_runs(
             if package in completed:
                 continue
             run = _find_run(client, workflow=workflow, title=title, started_at=started_at)
+            latest[package] = run
+            state = _run_state(run)
+            if run is not None and states.get(package) != (run.get("id"), state):
+                # A newly seen run carries its URL, so the log links to every run,
+                # including one dispatched again by hand under the same title.
+                is_new_run = states.get(package, (None, ""))[0] != run.get("id")
+                link = f": {run.get('html_url', 'unknown run URL')}" if is_new_run else ""
+                _log(f"{title}: {state}{link}")
+                states[package] = (run.get("id"), state)
             if run is None or run.get("status") != "completed":
                 continue
             if run.get("conclusion") != "success":
-                raise ReleaseError(f"{title} failed: {run.get('html_url', 'unknown run URL')}")
+                jobs = _failed_jobs(client, run)
+                detail = f" in jobs {', '.join(jobs)}" if jobs else ""
+                raise ReleaseError(f"{title} failed{detail}: {run.get('html_url', 'unknown run URL')}")
             completed[package] = run
         if len(completed) != len(pending):
+            if time.monotonic() >= next_progress:
+                minutes = int((time.monotonic() - started) // 60)
+                waiting = ", ".join(
+                    f"{package} ({_run_state(latest[package])})" for package in pending if package not in completed
+                )
+                _log(f"Still waiting after {minutes} min on: {waiting}")
+                next_progress += PROGRESS_SECONDS
             time.sleep(POLL_SECONDS)
     return completed
 
@@ -469,6 +530,10 @@ def qualify_plan(
     # GitHub timestamps runs to whole seconds, so include the dispatch second.
     started_at = datetime.now(timezone.utc) - timedelta(seconds=2)
     pending: dict[str, tuple[str, str]] = {}
+    _log(
+        f"Qualifying {len(packages)} package(s) at {plan['commit']} for candidate {candidate_id}: "
+        + ", ".join(f"{package['key']} {package['version']}" for package in packages)
+    )
     for package in packages:
         key = package["key"]
         title = _run_title("qualify", key, candidate_id)
@@ -483,6 +548,7 @@ def qualify_plan(
             },
         )
         pending[key] = (package["workflow"], title)
+        _log(f"Dispatched {title} ({package['workflow']})")
     runs = _wait_for_runs(
         client,
         pending,
@@ -519,6 +585,7 @@ def qualify_plan(
             or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None
         ):
             raise ReleaseError(f"{package['key']} qualification artifact has no valid identity")
+        _log(f"Retained {package['key']} artifact {artifact_id} ({digest}) from run {run_id}")
         qualifications.append(
             {
                 "package": package["key"],
@@ -549,10 +616,18 @@ def publish_candidate(
         commit=str(candidate.get("commit", "")),
         events=("push", "workflow_dispatch"),
     )
+    _log(f"Verified candidate run {candidate_run_id} for {candidate.get('commit')}")
     packages = {package["key"]: package for package in _plan_packages(candidate)}
     qualifications = _candidate_qualifications(candidate, packages.keys())
     layers = _plan_layers(candidate, packages)
-    for layer in layers:
+    for number, layer in enumerate(layers, start=1):
+        # Name the layer before dispatching it, so the log shows which packages
+        # are publishing now. The publish runs are titled with this release
+        # run's id, which differs from the candidate run id.
+        _log(
+            f"Publishing layer {number}/{len(layers)} (publication {publication_id}): "
+            + ", ".join(f"{key} {packages[key]['version']}" for key in layer)
+        )
         # GitHub timestamps runs to whole seconds, so include the dispatch second.
         started_at = datetime.now(timezone.utc) - timedelta(seconds=2)
         pending: dict[str, tuple[str, str]] = {}
@@ -575,12 +650,15 @@ def publish_candidate(
                 },
             )
             pending[key] = (package["workflow"], title)
+            _log(f"Dispatched {title} from qualification run {qualification['run_id']}")
         _wait_for_runs(
             client,
             pending,
             started_at=started_at,
             timeout_seconds=PUBLICATION_TIMEOUT_SECONDS,
         )
+        _log(f"Layer {number}/{len(layers)} published: {', '.join(layer)}")
+    _log(f"Published every package in candidate run {candidate_run_id}")
 
 
 def _plan_packages(plan: Mapping[str, Any]) -> list[dict[str, Any]]:
