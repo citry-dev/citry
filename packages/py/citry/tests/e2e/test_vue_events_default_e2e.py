@@ -1382,8 +1382,11 @@ def test_server_render_callback_failure_remains_terminal(page: Any, serve_live: 
     faults: list[str] = []
     page.on("pageerror", lambda error: faults.append(str(error)))
     open_citry_page(serve_live(engine, Broken().render().serialize(), "") + "/")
-    page.locator("#break-callback").click()
-    page.wait_for_function("globalThis.__citryRuntime._apps.size === 0")
+    # Firefox can report the page error after the app is already gone, so
+    # wait for the error event itself instead of reading the list right away.
+    with page.expect_event("pageerror"):
+        page.locator("#break-callback").click()
+        page.wait_for_function("globalThis.__citryRuntime._apps.size === 0")
     assert len(faults) == 1
     assert faults[0].startswith("The Vue Events bridge was disposed")
 
