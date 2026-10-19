@@ -215,7 +215,7 @@ jobs:
         env:
           REF_NAME: ${{ inputs.release_tag }}
         run: |
-          python scripts/apply_release_site_update.py generated-site
+          python -m scripts.apply_release_site_update generated-site
           git add -- docs_site/versions/ docs_site/static/playground/runtime.json
           if git diff --cached --quiet; then
             echo "The release site update is already on main." >> "$GITHUB_STEP_SUMMARY"
