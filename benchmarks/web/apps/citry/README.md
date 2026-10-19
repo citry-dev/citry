@@ -47,18 +47,9 @@ phases as unclassified rather than presenting the script load as browser time.
 `pyproject.toml` pins `citry==0.6.0` and `citry-core==1.8.0`, the release that
 ships the Vue renderer this app uses.
 
-Until that release is on PyPI, `uv.lock` resolves those two packages from
-wheels built from this repository and placed in
-`.benchmarks/wheels/citry-0.6.0/` at the repository root (the recorded
-relative path works from this folder, where you run `uv lock`; the runner
-never installs those two lock entries). Every other package comes from PyPI. In that state `citry-bench prepare` refuses a profile that
-includes this app unless the profile names those wheels in a `[local_wheels]`
-table, and the `citry-local-wheels` profile does. The
-[suite README](../../README.md#test-citry-with-wheels-you-build) shows how to
-build them.
-
-Once Citry 0.6.0 and citry-core 1.8.0 are published, lock the app against
-PyPI, from this folder:
+`uv.lock` resolves both packages, like every other dependency, from PyPI.
+To move the app to a newer release, change the pins and relock from this
+folder:
 
 ```bash
 uv lock --python 3.12.13 \
@@ -71,8 +62,7 @@ prepared-build identity and installs them only into this app's environment.
 
 ## Run the tests
 
-With the wheels in place (or after you lock the app against PyPI, above),
-from this folder:
+From this folder:
 
 ```bash
 uv sync --frozen --python 3.12.13

@@ -14,7 +14,7 @@ wheels = [
 [[package]]
 name = "citry"
 version = "0.6.0"
-source = { registry = "../../../../.benchmarks/wheels/citry-0.6.0" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "citry-core" },
     { name = "markupsafe" },
@@ -22,16 +22,31 @@ dependencies = [
     { name = "tzdata" },
     { name = "wrapt" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/20/2e/3b5142abfd202a4bf6669a142c32537ec1255d7d1b69785bc228f28450a9/citry-0.6.0.tar.gz", hash = "sha256:93049bd77e067e5fee7eeee362e8829e55deeaf4c18dc8c66d55654f2972ff9b", size = 2137003, upload-time = "2026-10-19T19:57:30.943Z" }
 wheels = [
-    { path = "citry-0.6.0-py3-none-any.whl" },
+    { url = "https://files.pythonhosted.org/packages/01/6d/205cf20ef75e0047295b2aa46d8bcc2161dc03752acb6cc22241fd625f4f/citry-0.6.0-py3-none-any.whl", hash = "sha256:125a83e9882f14c27be9e5473d3242614cca5d51294447f0b60728ba51a0a923", size = 1188823, upload-time = "2026-10-19T19:57:28.973Z" },
 ]
 
 [[package]]
 name = "citry-core"
 version = "1.8.0"
-source = { registry = "../../../../.benchmarks/wheels/citry-0.6.0" }
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/3e/e5f5d650cc98e0aeb465bcef76cfe83ea4e6adbfe19d8922b7c776f6e4d4/citry_core-1.8.0.tar.gz", hash = "sha256:5eefdf9609ed95ea4613ceae6a0e5547f3af265256163a48341bdea089f6f3c4", size = 3034886, upload-time = "2026-10-19T19:48:19.519Z" }
 wheels = [
-    { path = "citry_core-1.8.0-cp312-cp312-macosx_11_0_arm64.whl" },
+    { url = "https://files.pythonhosted.org/packages/dc/0e/1466085fe6a283d9c640b16518f241f697f065f10df1503c1048c8a7a282/citry_core-1.8.0-cp310-abi3-macosx_10_12_x86_64.whl", hash = "sha256:cc4defc83ec08cfe6ffde109f7a12675f6d5fd5d220569e6d7679e2a0aac6f9f", size = 8445766, upload-time = "2026-10-19T19:46:47Z" },
+    { url = "https://files.pythonhosted.org/packages/24/bb/6c0879883a24e5edb327d8486604d9d12d9a2c18a8176a884a4f6b471714/citry_core-1.8.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:f19cbd73a3098495b2ebc0ab2da32efa45f9f2ae052b7035601a14078363b4ba", size = 8108512, upload-time = "2026-10-19T19:46:50.278Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/54/d710ed0c04ab42f068a7e03c45bf98588393158ce2cb3da295684dab6294/citry_core-1.8.0-cp310-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4c3e683eab052fb5d67648f42d9fbc461b697390a43a727e5c72cbe4545f350d", size = 8473613, upload-time = "2026-10-19T19:46:52.417Z" },
+    { url = "https://files.pythonhosted.org/packages/29/b4/6f6e11dc48ce3de6bf083de49a48a9d2ff3c3614bb8e7f2f2d09c7cab0e4/citry_core-1.8.0-cp310-abi3-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:9c50e9db1cc15d4aa43450f80b08fcdb335b9ee6e39716fb4d40355e3a619746", size = 8300821, upload-time = "2026-10-19T19:46:55.046Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/47/135b3f1edd559d27475f75afb4efb5f981013f62517a9962eed9d02c24a7/citry_core-1.8.0-cp310-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:a72fca1e3ca1214d3de8b6e94c3f55dd71d1d3aa5acc96c4261f08c8bfeeebf8", size = 9518588, upload-time = "2026-10-19T19:46:57.371Z" },
+    { url = "https://files.pythonhosted.org/packages/be/37/610bae329a4d80a8b7ed6512cec58c5f70d56653841433389ec1b96b48bf/citry_core-1.8.0-cp310-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:5507680df4b9aee33901c90c53afaa69a1932d418a1e2ead02897f0674990824", size = 9627480, upload-time = "2026-10-19T19:47:00.211Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/5e/1280475addf556fb6938b039f1fa42eafad4d4ecd8ad92d0b5e768147800/citry_core-1.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:aeba35e60e5aaae2aaaf976fc9a8e10b2078a01fc2cf5856886444846d79c079", size = 8784974, upload-time = "2026-10-19T19:47:02.859Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/9e/a92c94127fb332c664d5f98208f83adc8fc14e636ce2df02fb2f7d95afb3/citry_core-1.8.0-cp310-abi3-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:4cce993380fc21203821185b03dd93dc5af713e47332bcf2b4524949586dc70e", size = 8821871, upload-time = "2026-10-19T19:47:05.414Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/6f/6d7c33cf11ef82f99bde8dc03096138790f1c920110738bcc63ecd5052ba/citry_core-1.8.0-cp310-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:759f1c407fd9df180d50343409e3a21b15edabb181a4ea4da15ef8b0c677cf60", size = 8649742, upload-time = "2026-10-19T19:47:07.959Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/e9/7ec61c645dc283ab94a439269b9076ee3ce6677208341a6ed4516d9d99d2/citry_core-1.8.0-cp310-abi3-musllinux_1_2_armv7l.whl", hash = "sha256:fcc7a6c521455a49f3be3f36faef8113053d108c62393436e490cf9ac453ca19", size = 8574269, upload-time = "2026-10-19T19:47:10.727Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/94/8839bfa993d3b88a1e1fa57377c118ada5bc8f7da7acfb15a5c1964fd548/citry_core-1.8.0-cp310-abi3-musllinux_1_2_i686.whl", hash = "sha256:3818f5155a005f992a42d8d332d15b33a1417909609f1d5a9e36308a88b31bdb", size = 8868230, upload-time = "2026-10-19T19:47:13.506Z" },
+    { url = "https://files.pythonhosted.org/packages/57/ec/7ffac6dd374f2287af87d948a86a75c7578f3bb037bf87cc81aca690fee7/citry_core-1.8.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:1c2fb77d57e5714e3b82beda534b5b01225daff416d2fec77261834c9d45d2f1", size = 9123940, upload-time = "2026-10-19T19:47:16.098Z" },
+    { url = "https://files.pythonhosted.org/packages/12/70/0e4f22591b02ac3ef0b31449fed2457d6a50dde66999fab21be86e3a6662/citry_core-1.8.0-cp310-abi3-win32.whl", hash = "sha256:f7f4836479abecdb34ac306afe4c0c2f7ccaf01b3ee9ea09053e0d8f486d1144", size = 8191621, upload-time = "2026-10-19T19:47:18.544Z" },
+    { url = "https://files.pythonhosted.org/packages/84/62/44c6b5b5d81bd1f3e622ce76366827b3f9d68523f2f0837a82e8f6c421a4/citry_core-1.8.0-cp310-abi3-win_amd64.whl", hash = "sha256:f54a955a5e7961a66e58ec32e7ffbdf028ecc0ee7c4c38c4a476a12112bc8708", size = 8706829, upload-time = "2026-10-19T19:47:20.831Z" },
 ]
 
 [[package]]

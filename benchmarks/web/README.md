@@ -46,25 +46,12 @@ runs, network shaping, cache and compression variants and publication
 statistics are not built yet. A profile that asks for one of them fails with
 an error.
 
-## The Citry app needs Citry 0.6.0
+## Which Citry the Citry app measures
 
-The Citry app pins `citry==0.6.0` and `citry-core==1.8.0`, the first release
-with the Vue renderer. Until that release is on PyPI, the app's lockfile
-resolves those two packages from wheels you build from this repository, and
-`prepare` stops with an error for any profile that includes Citry (`smoke`,
-`local`, `cohort`, `cohort-100x` and `release-0.6.0`). Two ways forward:
-
-- Measure Citry now with wheels you build: see
-  [Test Citry with wheels you build](#test-citry-with-wheels-you-build).
-- Compare Citry with the other apps before the release: copy
-  `release-0.6.0.toml` under a new name, remove `"citry"` from `apps`, and
-  run it; run `citry-local-wheels` too; then combine the two runs with
-  [`compose`](#update-the-numbers-on-the-docs-page). Treat the result as a
-  test, not as release numbers.
-
-After the release, the [Citry app README](apps/citry/README.md#which-citry-it-installs)
-gives the one command that locks the app against PyPI, and every profile
-works as described below.
+The Citry app pins and locks the published `citry` 0.6.0 and `citry-core`
+1.8.0 from PyPI, so every profile measures that release. To measure an
+unreleased change instead, see
+[Test Citry with wheels you build](#test-citry-with-wheels-you-build).
 
 ## Before you start
 
@@ -106,9 +93,6 @@ cohort. From the repository root:
 ```bash
 cd benchmarks/web/runner
 uv sync --frozen --python 3.12.13
-
-# Until Citry 0.6.0 is on PyPI, these profiles stop at `prepare`;
-# see "The Citry app needs Citry 0.6.0" above.
 
 # Quick setup check: Citry and Django + HTMX + Alpine, 14 outputs.
 uv run --no-sync citry-bench prepare --profile smoke
@@ -269,8 +253,7 @@ and cycles as `release-0.6.0`:
 
 Those runs cannot be repeated as they were: the Citry wheels came from a
 commit with uncommitted changes. The `release-0.6.0` run replaces all three
-with one run of the published release. After Citry 0.6.0 is on PyPI and the Citry app
-is locked against it, from `benchmarks/web/runner/`:
+with one run of the published release. From `benchmarks/web/runner/`:
 
 ```bash
 uv run --no-sync citry-bench prepare --profile release-0.6.0
