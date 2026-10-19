@@ -1521,14 +1521,20 @@ fn style_entries<'a>(
 fn strip_style_comments(text: &str) -> String {
     let mut output = String::with_capacity(text.len());
     let mut index = 0;
+    // Once one `/*` has no `*/` after it, no later `/*` can close either, so
+    // stop searching and keep the scan linear on many unclosed comments.
+    let mut comment_can_close = true;
     while let Some(first) = text[index..].chars().next() {
         let rest = &text[index..];
-        if rest.starts_with("/*") {
-            // An unclosed comment is not matched, so its text stays.
-            if let Some(end) = rest[2..].find("*/") {
-                index += 2 + end + 2;
-                continue;
+        if let Some(after_open) = rest.strip_prefix("/*") {
+            if comment_can_close {
+                if let Some(end) = after_open.find("*/") {
+                    index += 2 + end + 2;
+                    continue;
+                }
+                comment_can_close = false;
             }
+            // An unclosed comment is not matched, so its text stays.
         } else if let Some(length) = kept_style_token_length(rest) {
             output.push_str(&rest[..length]);
             index += length;
@@ -1553,7 +1559,7 @@ fn kept_style_token_length(rest: &str) -> Option<usize> {
                     return Some(at + 1);
                 }
                 // A trailing backslash leaves the string unclosed, so the
-                // whole alternative fails and the quote is plain text.
+                // quote does not start a string and stays as plain text.
                 if ch == '\\' {
                     chars.next()?;
                 }
@@ -4086,8 +4092,8 @@ mod tests {
             client_attribute("form", "novalidate", &Val::Bool(false)),
             Ok(None)
         );
-        // `playsinline` is a special boolean attribute since Vue 3.5.44, so
-        // `false` removes it instead of writing the text "false".
+        // `playsinline` is one of Vue's special boolean attributes: `true`
+        // writes it empty and `false` removes it.
         assert_eq!(
             client_attribute("video", "playsinline", &Val::Bool(true)),
             Ok(Some(String::new()))
