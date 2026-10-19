@@ -439,9 +439,9 @@ def test_simple_vue_c_bind_rejects_framework_attributes_once() -> None:
 def test_simple_vue_renders_actual_project_output_template() -> None:
     app = Citry()
     repo_root = Path(__file__).resolve().parents[4]
-    template_path = repo_root / "benchmarks/web/apps/citry_vue/project_output.html"
-    # This branch does not include the web benchmark apps (benchmarks/web), so
-    # there is no real project template to render.
+    template_path = repo_root / "benchmarks/web/apps/citry/project_output.html"
+    # A checkout without the web benchmark apps (benchmarks/web) has no real
+    # project template to render.
     if not template_path.is_file():
         pytest.skip("benchmarks/web is not in this checkout; the web benchmark apps ship separately")
     project_template = template_path.read_text()

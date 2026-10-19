@@ -161,12 +161,12 @@ def _all_samples() -> list[dict[str, Any]]:
 def test_extract_keeps_totals_phases_and_provenance() -> None:
     samples = _all_samples()
     # A sample from another size or action must not leak into the chart.
-    samples.append({**_sample("citry_vue", 1, {"server": 999.0}, 0.0), "count": 140})
+    samples.append({**_sample("citry", 1, {"server": 999.0}, 0.0), "count": 140})
     result = extract(_report(samples), _manifest())
 
     first = result["loads"][0]["frameworks"]
     assert first[0] == {
-        "key": "citry_vue",
+        "key": "citry",
         "name": "Citry",
         "group": None,
         "total_ms": 17.0,
@@ -182,7 +182,7 @@ def test_extract_keeps_totals_phases_and_provenance() -> None:
 def test_extract_rejects_phases_that_do_not_add_up() -> None:
     samples = _all_samples()
     samples[0]["ready_elapsed_ms"] += 5
-    with pytest.raises(ValueError, match="citry_vue load 1: phases do not add up"):
+    with pytest.raises(ValueError, match="citry load 1: phases do not add up"):
         extract(_report(samples), _manifest())
 
 

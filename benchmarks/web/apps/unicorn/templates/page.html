@@ -1,0 +1,26 @@
+{% load unicorn %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Project board benchmark</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/assets/board.css">
+<script src="/assets/readiness.js">
+</script>
+<script defer src="/assets/alpine.min.js">
+</script>
+</head>
+<body>
+<aside x-data="{ open: false }" id="local-disclosure">
+<button type="button" data-bench-action="disclosure" @click="open = !open" :aria-expanded="open">Local details</button>
+<p x-show="open" x-cloak id="disclosure-content">This disclosure needs no server request.</p>
+<label for="preserved-input">Local draft</label>
+<input id="preserved-input" value="Unchanged draft">
+</aside>
+{% unicorn "board" session=session %}
+{% unicorn_scripts %}
+<script>window.unicornBenchStart();</script>
+</body>
+</html>

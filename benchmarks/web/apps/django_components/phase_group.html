@@ -1,0 +1,13 @@
+{% load component_tags %}
+<section id="phase-{{ phase.id }}" data-phase-id="{{ phase.id }}" data-phase-expanded="true" x-data="{ open: true }">
+<button type="button" @click="open = !open" :aria-expanded="open">
+<h3 class="phase-title">{{ phase.title }}</h3>
+</button>
+<div x-show="open">
+{% for row in phase.outputs %}
+{% component "project_output" state=state row=row csrf=csrf / %}
+{% empty %}
+<p>No outputs</p>
+{% endfor %}
+</div>
+</section>

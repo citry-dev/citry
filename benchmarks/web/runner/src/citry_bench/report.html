@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Framework benchmark</title>
+<style>
+:root{color-scheme:light;font:16px system-ui;color:#172638;background:#f3f6fa}
+body{max-width:1500px;margin:0 auto;padding:32px}h1{font-size:32px;margin-bottom:8px}
+p{line-height:1.6;max-width:1000px}.muted{color:#526275}.controls{display:flex;gap:24px;flex-wrap:wrap;
+background:white;padding:18px 22px;border:1px solid #dbe3ed;border-radius:12px;margin:24px 0}
+label{display:flex;align-items:center;gap:10px;font-weight:600}select{font:inherit;padding:6px 10px}
+#charts{display:flex;flex-direction:column;gap:28px}[hidden]{display:none!important}
+.group-body{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,580px),1fr));gap:20px;margin-top:12px}
+article.chart{background:white;border:1px solid #dbe3ed;border-radius:12px;padding:20px;min-width:0}
+h2{font-size:24px;margin:0}h3{font-size:20px;margin:0}.description{font-size:14px;color:#526275;margin:6px 0 12px}
+.toggle{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.toggle::before{content:'\25BE' / '';display:inline-block;width:1.1em;color:#526275}
+.toggle[aria-expanded=false]::before{content:'\25B8' / ''}
+.chart-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.inline-controls{display:flex;flex-wrap:wrap;gap:6px}.inline-select{font-size:13px;padding:2px 6px}
+svg{width:100%;height:auto;display:block}svg text{font-family:system-ui;font-size:12px;fill:#26394c}
+.download{display:inline-block;font-size:13px;margin-top:10px;color:#2455a0}
+.notice{padding:12px 16px;background:#fff2d6;border-radius:8px}footer{font-size:14px;color:#526275;margin-top:24px}
+@media(max-width:600px){body{padding:16px}article.chart{padding:12px}}
+</style>
+<h1>Framework interaction benchmarks</h1>
+<p class="muted">Local diagnostic results. Bars show medians; circles show individual successful observations.
+Warmups are excluded. Every axis starts at zero; chart scales differ. Hover or focus an observation for its value.
+Click a section or chart title to collapse it; the small selects beside a chart title change the same settings as the selects below.</p>
+<p id="run-status" class="notice"></p>
+<div class="controls">
+<label><span id="count-label">Scale</span> <select id="count"></select></label>
+<label>Server action <select id="action"></select></label>
+<label>Load detail <select id="page-load"></select></label>
+</div>
+<div id="charts"></div>
+<noscript>This interactive report needs JavaScript. The adjacent summary.json retains the numerical results.</noscript>
+<footer>
+<p>Payload sizes include HTTP bodies and WebSocket bootstrap messages; request and response sizes omit transport headers and socket frame overhead. Final HTML and memory use the common endpoint. Raw observations and failures remain in adjacent JSONL files.</p>
+<details><summary>Measurement notes</summary>
+<p>The common endpoint starts at framework readiness, then schedules a frame, reads board and last-row geometry, and records the next frame. The added ready-to-layout wait is stacked when present; legacy observations without that endpoint keep ready-only bars and show the wait as unavailable. Semantic checks run after the endpoint, so a transient DOM state repaired before it is not independently detected. This is a rendering opportunity, not physical paint.</p>
+<p>FCP and LCP are the browser's own first-contentful-paint and largest-contentful-paint times, observed with PerformanceObserver on every initial load and counted from navigation start, the same zero as the stacked bars (the first segment is the wait before the document request). An HTML page can paint before its framework is ready; a page built by JavaScript may first paint only loading text, or nothing until its script runs, so its LCP follows the render. The browser stamps a paint when the frame is shown, so FCP and LCP can fall after the layout endpoint. Chromium reports paint times in coarse steps (whole multiples of 4 ms were observed), so smaller differences are noise. The runner reads the last LCP candidate after the common endpoint and before any click, because Chromium stops reporting LCP at the first input; content that grows after that read is not counted. Values the browser did not report are shown as unavailable, never as zero.</p>
+<p>First and second page loads share an application and browser process but use fresh browser contexts and scenario sessions. Latency-stack residuals include transport and unmeasured server work. Memory observer overhead has not been calibrated; these are diagnostic results, not publication rankings.</p>
+</details>
+<p>No data or libraries are fetched by this report.</p>
+</footer>
+<footer><a href="https://citry.dev/advanced/performance/">Citry performance guide</a>.</footer>
+<script id="report-data" type="application/json">__BENCH_DATA__</script>
+<script>__BENCH_SCRIPT__</script>
+</html>

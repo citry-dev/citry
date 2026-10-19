@@ -1,0 +1,10 @@
+{% load component_tags %}
+<nav id="project-navbar" aria-label="Project navigation">Project workspace</nav>
+<aside id="project-sidebar">
+{% slot "sidebar" required / %}
+</aside>
+<main>
+{% slot "header" required / %}
+{% slot "content" required / %}
+</main>
+
