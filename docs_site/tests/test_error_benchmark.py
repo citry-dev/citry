@@ -148,7 +148,6 @@ def test_chart_view_stacks_buckets_in_order_then_extra_parts() -> None:
         assert sum(widths) == pytest.approx(100, abs=0.01)
 
 
-
 def test_chart_view_draws_a_record_without_a_case_as_its_own_part() -> None:
     report = _report()
     report["results"][6].update(status="missing", cell="-")

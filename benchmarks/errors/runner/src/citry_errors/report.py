@@ -34,7 +34,7 @@ CODES = (
     ("C", "reported by a command-line check, type check or linter"),
     ("B", "reported by the production build"),
     ("R", "reported at runtime by a server error, an error response or a browser error (Rw: only a warning)"),
-    ("w", "the stage before it gave only a warning; after the comma, the first stage that gave an error, or M"),
+    ("w", "after a letter: that stage gave only a warning, such as Ew for a warning in the editor"),
     ("M", "missed: nothing reports it"),
     ("?", "the runtime check was skipped and no tool reported it"),
     ("P", "the framework's design prevents the mistake"),
@@ -67,8 +67,8 @@ CATEGORIES = {
 # off the earlier a mistake is reported and the louder the report. A missed
 # mistake is a miss whether or not the page visibly changed.
 BUCKETS = {
-    "static-error": "Static error",
-    "static-warning": "Static warning",
+    "static-error": "Static/IDE error",
+    "static-warning": "Static/IDE warning",
     "runtime-error": "Runtime error",
     "runtime-warning": "Runtime warning",
     "missed": "Missed",
@@ -104,15 +104,15 @@ def caught_total(by: dict, framework: str, mistake_ids: list[str]) -> str:
 
 
 def cell(record: dict) -> str:
-    """Show the earliest report, and when it was only a warning, the first error after it."""
+    """Show where the mistake was first reported, marked `w` when that report was only a warning."""
     if record["status"] != "ported":
         return SHORT[record["status"]]
     if record["strict"] == record["lenient"]:
         return _cell(record, "strict")
-    return f"{_cell(record, 'lenient')}w, {_cell(record, 'strict')}"
+    return _cell(record, "lenient", warning=True)
 
 
-def _cell(record: dict, column: str) -> str:
+def _cell(record: dict, column: str, *, warning: bool = False) -> str:
     if record["status"] != "ported":
         return SHORT[record["status"]]
     mark = "" if record.get("baseline_clean", True) else "!"
@@ -126,7 +126,7 @@ def _cell(record: dict, column: str) -> str:
         else ""
     )
     mark += "°" if record.get("indirect") else ""
-    return SHORT[record[column]] + mark
+    return SHORT[record[column]] + ("w" if warning else "") + mark
 
 
 def _public(text: str) -> str:

@@ -143,7 +143,7 @@ def test_a_case_lands_in_the_first_of_the_five_buckets_it_reaches() -> None:
     assert report.bucket(record("never", "never")) == "missed"
     assert report.bucket(record("not-run", "not-run")) is None
     assert report.bucket({"status": "not-applicable"}) is None
-    assert report.cell(record("never", "editor")) == "Ew, M"
+    assert report.cell(record("never", "editor")) == "Ew"
     assert report.cell(record("check", "check") | {"indirect": "why"}) == "C°"
 
 

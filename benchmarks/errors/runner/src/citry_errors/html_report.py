@@ -259,11 +259,7 @@ def render(summary: dict[str, Any]) -> str:
     out.append(
         '<section class="group"><details open><summary><h2>Every mistake</h2></summary><div class="group-body">'
     )
-    out.append(
-        '<article class="chart wide"><p class="description">(caught/total) counts the mistakes a framework'
-        " reported at all, before or while running, out of those that apply to it.</p>"
-    )
-    out.append('<div class="table-wrap"><table><thead><tr><th>Mistake</th>')
+    out.append('<article class="chart wide"><div class="table-wrap"><table><thead><tr><th>Mistake</th>')
     out += [f'<th scope="col">{escape(framework["name"])}</th>' for framework in frameworks]
     out.append('</tr><tr class="counts"><td>(caught/total)</td>')
     every = [mistake["id"] for mistake in summary["mistakes"]]

@@ -6,8 +6,8 @@ Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
 
 | Outcome | Citry | Django + HTMX + Alpine | Jinja + HTMX + Alpine | FastHTML | Nuxt (TypeScript) | Next.js (TypeScript) |
 | --- | --- | --- | --- | --- | --- | --- |
-| Static error | 16 | 3 | 2 | 11 | 13 | 18 |
-| Static warning | 1 | 0 | 0 | 0 | 0 | 0 |
+| Static/IDE error | 16 | 3 | 2 | 11 | 13 | 18 |
+| Static/IDE warning | 1 | 0 | 0 | 0 | 0 | 0 |
 | Runtime error | 3 | 5 | 10 | 5 | 5 | 2 |
 | Runtime warning | 0 | 0 | 0 | 0 | 0 | 0 |
 | N/A or prevented | 0 | 1 | 3 | 3 | 1 | 2 |
@@ -21,7 +21,7 @@ Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
 | C | reported by a command-line check, type check or linter |
 | B | reported by the production build |
 | R | reported at runtime by a server error, an error response or a browser error (Rw: only a warning) |
-| w | the stage before it gave only a warning; after the comma, the first stage that gave an error, or M |
+| w | after a letter: that stage gave only a warning, such as Ew for a warning in the editor |
 | M | missed: nothing reports it |
 | ? | the runtime check was skipped and no tool reported it |
 | P | the framework's design prevents the mistake |
@@ -52,7 +52,7 @@ Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
 | Syntax error in component JavaScript | E | E | R | R | E | E |
 | Unclosed element in a template | E | C | C | E | E | E° |
 | **HTML and CSS** | (1/4) | (0/4) | (0/4) | (1/4) | (2/4) | (3/4) |
-| Invalid HTML attribute value | Ew, M | M | M | M | E | E |
+| Invalid HTML attribute value | Ew | M | M | M | E | E |
 | Misspelled HTML attribute name | M | M | M | M | M | E |
 | Misspelled HTML element | M | M | M | E | R | E |
 | Misspelled CSS class | M | M | M | M | M | M |

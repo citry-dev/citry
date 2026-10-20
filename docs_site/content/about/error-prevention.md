@@ -21,10 +21,10 @@ The earlier a mistake is reported, the less time it costs you.
 
 - Each bar is one framework, and covers all 24 mistakes. Each colored
   part shows how many ended one way.
-- Dark green, "Static error": the editor, a command-line check, or the
+- Dark green, "Static/IDE error": the editor, a command-line check, or the
   production build reported an error before the app ran. This is the
   best outcome.
-- Light green, "Static warning": a tool reported the mistake before the
+- Light green, "Static/IDE warning": a tool reported the mistake before the
   app ran, but only as a warning, which is easy to miss.
 - Orange, "Runtime error": nothing reported the mistake until the app
   ran, and then the server, an error response, or the browser reported
@@ -99,9 +99,6 @@ Each cell shows, as a short code, where the mistake was first
 reported. A scored cell is tinted with its chart color. On a computer, hover
 over a cell to see what the tools printed, or why the mistake does not
 apply.
-
-"(caught/total)" counts the mistakes a framework reported at all, before
-or while running, out of those that apply to it.
 
 <c-error-benchmark-table />
 

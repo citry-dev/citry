@@ -59,11 +59,11 @@
   "buckets": [
     {
       "id": "static-error",
-      "label": "Static error"
+      "label": "Static/IDE error"
     },
     {
       "id": "static-warning",
-      "label": "Static warning"
+      "label": "Static/IDE warning"
     },
     {
       "id": "runtime-error",
@@ -97,7 +97,7 @@
     },
     {
       "code": "w",
-      "meaning": "the stage before it gave only a warning; after the comma, the first stage that gave an error, or M"
+      "meaning": "after a letter: that stage gave only a warning, such as Ew for a warning in the editor"
     },
     {
       "code": "M",
@@ -462,7 +462,7 @@
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "static-warning",
-      "cell": "Ew, M",
+      "cell": "Ew",
       "evidence": [
         "Citry language server (citry check --types): citry.template.invalid-attribute-value 'sumbit' is not a valid value for 'type' on <button>. Did you mean 'submit'? Valid values: 'submit', 'reset', 'button'.",
         "citry check: citry.template.invalid-attribute-value 'sumbit' is not a valid value for 'type' on <button>. Did you mean 'submit'? Valid values: 'submit', 'reset', 'button'."
