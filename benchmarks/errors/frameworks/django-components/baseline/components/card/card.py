@@ -1,7 +1,7 @@
 from typing import Literal, TypedDict
 
 from django_components import Component, SlotInput, register
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 # What the card hands to the page's footer fill.
@@ -16,14 +16,22 @@ class Card(Component):
     css_file = 'card.css'
 
     class Kwargs(BaseModel):
+        # Reject names the model does not declare, as django-components'
+        # default named tuples do; Pydantic's default ignores them.
+        model_config = ConfigDict(extra='forbid')
+
         title: str
         count: int
         tone: Literal['plain', 'accent']
 
     class Slots(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+
         footer: SlotInput[FooterData]
 
     class TemplateData(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+
         title: str
         count: int
         tone: Literal['plain', 'accent']

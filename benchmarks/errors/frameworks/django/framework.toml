@@ -71,6 +71,21 @@ the project page's URL takes the number as `<int:project_id>`.
 runtime: `manage.py migrate`, because sessions are stored in the database and \
 need their table (the Django tutorial runs it too), then `manage.py runserver \
 --noreload`, so the runner stops a single process.
+
+Stricter settings: none changed from the default. The benchmark turns on a \
+framework's stricter check when other frameworks here have the same kind of \
+check, and Django has none that is off by default. No template setting makes \
+an undefined name raise: `string_if_invalid` only prints a marker in its \
+place, and the template `debug` option, already on with DEBUG, only adds line \
+numbers to errors. djLint's five rules that are off by default (T003, H006, \
+H017, H018, T028) check style and layout, which no other framework here \
+checks. Three tools the plan names are not added, because none is part of a \
+Django project's usual setup and none would report a mistake the cases make: \
+the Django Language Server (djls) checks tags, filters and block structure, \
+and django-extensions' `validate_templates` only loads each template, while \
+every template mistake here appears only when the page renders; with \
+django-stubs, the session and the functions the cases misuse still take any \
+value.
 """
 
 [setup]

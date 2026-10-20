@@ -77,6 +77,19 @@ lives.
 The browser always runs Vue's production build, so Vue's development
 warnings never appear, and no Citry case can end as a runtime warning
 through them.
+
+Stricter settings: none changed from the default. The benchmark turns on
+a framework's stricter check when other frameworks here have the same
+kind of check, and Citry has no check that is off by default: every lint
+rule starts as a warning or an error, and raising a warning to an error
+is not turning a check on (m09's `Ew` comes from such a warning). Two
+options were tried on the clean app and every case, and neither changed
+a finding. ty's rules that are off by default can be turned on in the
+project's `[tool.ty.rules]`, which `citry check --types` honors; they are
+ty's general extra rules, like pyright's strict mode, which no Python app
+here turns on. TypeScript's `strict` option, which the Next.js and Nuxt
+starters turn on, is fixed off in the TypeScript check Citry runs, and a
+project cannot change it.
 """
 
 [setup]

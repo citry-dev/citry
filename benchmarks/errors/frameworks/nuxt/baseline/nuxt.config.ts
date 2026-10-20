@@ -14,4 +14,14 @@ export default defineNuxtConfig({
   },
 
   modules: ['@nuxt/eslint'],
+
+  // Off by default. The benchmark turns them on because other frameworks
+  // here run the same kind of check: unknown components, attributes,
+  // directives and events in templates, and typed links.
+  typescript: {
+    tsConfig: {
+      vueCompilerOptions: { strictTemplates: true },
+    },
+  },
+  experimental: { typedPages: true },
 })

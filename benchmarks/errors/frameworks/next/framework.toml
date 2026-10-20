@@ -30,8 +30,23 @@ is a next/image `<Image>`, because the starter's ESLint config warns on a
 plain `<img>` (@next/next/no-img-element), and its `src` is a path into
 public/, the first form the Next.js image docs show. So a misspelled file
 (m48) is a 404 at runtime; a static import of the file would fail
-`next build` instead. `typedRoutes`, which would type-check
-link paths such as m45's, is off, as it is by default.
+`next build` instead.
+
+Setting changed from the default: `typedRoutes: true` in next.config.ts.
+The benchmark turns on a framework's stricter check when other
+frameworks here have the same kind of check, and the Django, Rusty,
+Jinja and django-components apps check each link's route when the page
+renders. With it on, `next typegen` writes the app's routes as types,
+and tsc reports a literal path that matches no route in a next/link
+`href`, a next/form `action`, a router call or `redirect()`, so a
+misspelled link (m45) is an editor error rather than a 404. The clean
+app needs no change. Left off: `experimental.typedEnv`, because the
+types it writes still accept any `process.env` name, so it checks
+nothing; `experimental.strictRouteTypes`, which checks what page and
+layout files export, a kind of check no other framework here has; and
+`experimental.taint`, which needs code that calls React's taint
+functions, so it is not a setting. Every other check in the starter's
+tsconfig.json and eslint-config-next is already on.
 
 Versions come from the lockfile: next 16.3.5, react and react-dom 19.3.0,
 typescript 5.9.3, @types/react and @types/react-dom 19.3.0, @types/node

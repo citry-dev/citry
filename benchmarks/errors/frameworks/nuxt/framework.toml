@@ -30,9 +30,8 @@ The editor stage stands in for the Vue - Official extension, which Nuxt's instal
 recommends. It first runs `nuxi prepare`, as the starter's postinstall script does, to write the
 `.nuxt` tsconfigs the editor reads. A failing prepare is ignored, because the editor keeps the
 `.nuxt` folder an earlier install wrote. It then runs `vue-tsc -b --noEmit`, the command
-`nuxt typecheck` runs when tsconfig.json lists project references, as the starter's does. The
-`vueCompilerOptions` stay at their defaults, so `strictTemplates` and the `checkUnknown*`
-options are off. vue-tsc checks every file, while the editor shows diagnostics only for open
+`nuxt typecheck` runs when tsconfig.json lists project references, as the starter's does.
+vue-tsc checks every file, while the editor shows diagnostics only for open
 files. A type error is reported where the wrong value is used: in m17 the server route returns a
 string, and vue-tsc reports TS2322 at the `:count` binding in `app/pages/index.vue`. The case's
 `indirect` note records why that finding still counts. A developer editing the route sees no
@@ -58,16 +57,39 @@ describe, runs the same vue-tsc command as the editor stage, so it is not a sepa
 The runtime check runs `nuxt dev`, so Vue's development warnings stay on, and Nuxt DevTools
 stays enabled as in the starter. The editor reports m06 indirectly: `$fetch` of an unknown
 route returns `unknown`, so reading `result.count` four lines below is TS18046. m11 renames both
-the opening and the closing tag; renaming only the opening tag is a template compile error that
-the editor reports.
+the opening and the closing tag; vue-tsc reports the unknown element because
+`strictTemplates` is on (below), and renaming only the opening tag is also a template compile
+error.
 
 Three results depend on how the page is written. The heading's color is read with `v-bind()`,
 so m43's misspelled name reads a property the board data does not have, which vue-tsc reports; a
 `style` binding that sets `--accent` for a `var(--accent)` in main.css would report nothing. The
 avatar is a path into public/, and Vite turns an absolute path in a template into an import, so
-m48's misspelled file fails `nuxt build`. And `experimental.typedPages` is off, as it is by
-default, so a `<NuxtLink>` to a misspelled path (m45) shows only vue-router's warning in the
-browser.
+m48's misspelled file fails `nuxt build`. And the page links with paths, `<NuxtLink
+to="/about">`, the form Nuxt's routing docs show first, so `typedPages` (below) does not check
+them, and a misspelled path (m45) shows only vue-router's warning in the browser.
+
+Settings changed from the default. The benchmark turns on a framework's stricter check when
+other frameworks here have the same kind of check, so nuxt.config.ts sets two:
+- `typescript.tsConfig.vueCompilerOptions.strictTemplates: true`, which Nuxt writes into the
+  `.nuxt/tsconfig.app.json` that vue-tsc reads. In vue-tsc 3.3.13 it turns on
+  `checkUnknownProps`, `checkUnknownEvents`, `checkUnknownComponents`,
+  `checkUnknownDirectives` and `strictVModel`, so vue-tsc reports an unknown component, element,
+  attribute, directive or component event, as Citry and Next.js's tsc do. It moves m01, m10,
+  m11, m21 and m29 to the editor. A misspelled event on a plain element (m31) is still not
+  reported, because vue-tsc writes such a listener in a form TypeScript does not check for
+  unknown names, and Vue's slot types accept any slot name, so m05 and m35 are not reported
+  either.
+- `experimental.typedPages: true`, which types `<NuxtLink>` and router calls with the app's
+  routes, as Next.js's `typedRoutes` does. It checks a route given by name, such as
+  `{ name: 'abuot' }`, but vue-router accepts any string as a path, so it does not change m45.
+The clean app needs no change for either. Left off: `typescript.typeCheck`, which runs the same
+vue-tsc during `nuxt dev` and `nuxt build`, later than the editor stage, so it cannot change a
+result; the `fallthroughAttributes` options, which check attributes a wrapper component passes
+on, a kind of check no other framework here has; and eslint-plugin-vue rules outside Nuxt's
+presets, which either repeat vue-tsc's checks at a later stage or, like
+`vue/no-undef-components`, flag Nuxt's auto-imported components in the clean app. Every other
+`@nuxt/eslint` check, its TypeScript rules included, is already on.
 
 m12 reads the private `secretToken` in the page, so the server renders the
 secret into the HTML it sends; the hydration error comes after the leak.

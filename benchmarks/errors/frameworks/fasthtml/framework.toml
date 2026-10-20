@@ -75,6 +75,12 @@ which was 2.5.0). The page behaves as it would with the CDN files.
 
 Python dependencies are locked in baseline/uv.lock; fastcore, starlette and \
 uvicorn are held to the versions the benchmarks/web FastHTML app uses.
+
+Stricter settings: none changed from the default. The benchmark turns on a \
+framework's stricter check when other frameworks here have the same kind of \
+check, and FastHTML has no check that is off by default: `debug` changes only \
+what an error page shows, route parameters are always converted and checked, \
+and no setting makes the tag functions reject an unknown attribute.
 """
 
 [setup]

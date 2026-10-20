@@ -2,9 +2,9 @@ key = "jinja"
 name = "Jinja + HTMX + Alpine"
 notes = """
 Starlette 1.6.0 serves the page with Jinja2 3.1.6 through Starlette's
-Jinja2Templates(directory="templates"), which builds a default Jinja
-Environment: autoescaping on for .html files, the default Undefined (not StrictUndefined), and
-no extensions. uvicorn 0.52.4 runs the app, as Starlette's docs show, and
+Jinja2Templates, given the Jinja Environment that
+`Jinja2Templates(directory="templates")` would build (autoescaping on for
+.html files, no extensions) with one setting changed, below. uvicorn 0.52.4 runs the app, as Starlette's docs show, and
 the app sets Starlette(debug=True) as the docs' first example does.
 HTMX 2.0.10 and Alpine 3.17.2 are served from baseline/static, copied from
 the npm packages (htmx.org dist/htmx.min.js, alpinejs dist/cdn.min.js).
@@ -43,6 +43,20 @@ component. Alpine has no required or typed component inputs, so the status
 line's markup reads `open` through the scope Alpine shares with it. Its
 Close button dispatches a `close` event, and a listener on the Details
 component sets `open` to false.
+
+Setting changed from the default: `undefined=StrictUndefined`. The
+benchmark turns on a framework's stricter check when other frameworks
+here have the same kind of check, and Citry reports a template name it
+does not know, while Django Rusty Templates raises on a misspelled
+attribute. Jinja's default prints an undefined name as empty text and
+raises only when the template reads an attribute of it; with
+StrictUndefined, printing, testing or looping over an undefined name
+raises too. Starlette 1.6.0 takes the setting through its `env=`
+argument, the way its docs pass a custom environment. The clean app
+needs no change: every template reads only names its route gives it.
+This moves m04 (a macro called without its required `title`), m08
+(`owner.nmae`) and m36 (a misspelled slot-data name) from missed to an
+error when the page renders.
 """
 
 [setup]

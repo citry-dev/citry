@@ -82,16 +82,22 @@ that to check types as well, a project writes these classes as Pydantic \
 models and installs the djc-ext-pydantic extension, which the \
 django-components project publishes. The benchmark turns on a framework's \
 stricter check when other frameworks here have the same kind of check, and \
-Citry checks input types when a component renders, so this app turns it on: \
-djc-ext-pydantic 1.1.0 (with Pydantic 2.14.1) is listed in \
-`COMPONENTS["extensions"]`, and those classes are Pydantic \
-`BaseModel`s. This is the one change from django-components' defaults. \
-Pydantic's default mode converts text such as "3" to a number, and ignores \
-names a model does not declare: a misspelled input or slot name is reported \
-because the required name is then missing, but an extra unknown name next to \
-all the right ones would pass. Of the cases, m03 and m49 end differently \
-because of this setting: without it, nothing checks the input's type or \
-its allowed choices.
+Citry, Next.js, Nuxt and FastHTML check the types of a component's inputs \
+(before the app runs; Citry does not check them again when a component \
+renders), so this app turns it on: djc-ext-pydantic 1.1.0 (with Pydantic \
+2.14.1) is listed in `COMPONENTS["extensions"]`, and those classes are \
+Pydantic `BaseModel`s. Pydantic's default ignores names a model does not \
+declare, which would lose the named tuples' check of unknown names, so each \
+model also sets `model_config = ConfigDict(extra='forbid')`, as Citry and \
+the named tuples reject an unknown name. These are the two changes from \
+django-components' defaults. Pydantic's default mode still converts text \
+such as "3" to a number; its `strict=True` would reject that, but no other \
+framework here rejects a value it can convert, so it stays off. Of the \
+cases, m03 and m49 end differently because of the Pydantic models: without \
+them, nothing checks the input's type or its allowed choices. No case \
+passes an unknown name next to all the right ones, so `extra='forbid'` \
+changes no result; a misspelled input or slot name was already reported \
+because the required name is then missing.
 
 `get_template_data()` and `get_js_data()` return plain dicts, which \
 django-components checks against those models. Its docs also show returning \
