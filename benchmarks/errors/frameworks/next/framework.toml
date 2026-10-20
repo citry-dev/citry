@@ -83,18 +83,18 @@ page_path = "/"
 ready_timeout = 300
 settle_ms = 1500
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "click"
 selector = "button:text-is('Add')"
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "wait"
 ms = 500
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "click"
 selector = "button:text-is('Details')"
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "click"
 selector = "button:text-is('Hide')"

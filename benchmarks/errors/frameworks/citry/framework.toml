@@ -111,22 +111,22 @@ ready_timeout = 180
 settle_ms = 1500
 env = { CITRY_SECRET = "benchmark-only-secret-not-for-production" }
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "click"
 selector = "button:has-text('Add')"
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "wait"
 ms = 1500
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "click"
 selector = "button:has-text('Details')"
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "click"
 selector = "button:has-text('Hide')"
 
-[[runtime.steps]]
+[[runtime.journeys.default]]
 action = "wait"
 ms = 500

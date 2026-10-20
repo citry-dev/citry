@@ -92,7 +92,8 @@ timeout = 900
 argv = ["nuxt", "dev", "--port", "{port}", "--host", "127.0.0.1"]
 page_path = "/"
 ready_timeout = 240
-steps = [
+[runtime.journeys]
+default = [
   { action = "click", selector = "button:has-text('Add')" },
   { action = "click", selector = "button:has-text('Details')" },
   { action = "click", selector = "button:has-text('Hide')" },

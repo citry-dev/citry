@@ -101,7 +101,8 @@ argv = [
 page_path = "/"
 ready_timeout = 180
 env = { PYTHONUNBUFFERED = "1" }
-steps = [
+[runtime.journeys]
+default = [
   { action = "click", selector = "button:has-text('Add')" },
   { action = "wait", ms = 500 },
   { action = "click", selector = "button:has-text('Details')" },
