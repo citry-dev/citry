@@ -29,9 +29,10 @@ add findings.
 The card macro hands its title and count back to the page's `{% call %}`
 block with `caller(title, count)`, the form Jinja's docs show. The status
 line inside Details is an Alpine component nested inside the Details
-component. Alpine components declare no inputs, so it reads `open` through
-the scope Alpine shares with it, and its Close button dispatches a `close`
-event that the Details component handles.
+component. Alpine has no required or typed component inputs, so the status
+line's markup reads `open` through the scope Alpine shares with it. Its
+Close button dispatches a `close` event, and a listener on the Details
+component sets `open` to false.
 """
 
 [setup]

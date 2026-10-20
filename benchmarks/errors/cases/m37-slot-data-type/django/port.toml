@@ -1,10 +1,2 @@
-# Django templates print every value as text, so the common way to treat a
-# value as text is to join it to more text with the `add` filter. With a
-# number on one side, `add` returns an empty string.
-status = "ported"
-mistake = { file = "board/templates/board/project_card.html", contains = 'count|add:" tasks"' }
-
-[[edits]]
-file = "board/templates/board/project_card.html"
-old = "({{ count }})"
-new = '({{ count|add:" tasks" }})'
+status = "not-applicable"
+reason = "project_card.html extends card.html and fills its footer block, and Django renders that block with the same context the page's include gave the card. The fill reads `title` and `count` from that context. A Django block takes no arguments, so the card hands the fill nothing of its own and there is no slot data whose type the fill could get wrong. A wrong-typed use of a variable there is m23."

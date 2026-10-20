@@ -43,8 +43,8 @@ function hide(title: string) {
         :tone="card.featured ? 'accent' : 'plain'"
         @hide="hide(card.title)"
       >
-        <template #footer="{ title, count }">
-          <a :href="`#${card.title.toLowerCase()}`">Open {{ title }} ({{ count }})</a>
+        <template #footer="footer">
+          <a :href="`#${card.title.toLowerCase()}`">Open {{ footer.title }} ({{ footer.count }})</a>
         </template>
       </Card>
 

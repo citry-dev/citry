@@ -17,14 +17,17 @@ Django's built-in `{% translate %}` with the English text as the message id, \
 which is how Django's docs and gettext name messages. The page has no message \
 catalog, so no .po or .mo file is needed.
 
-The footer block renders inside the card's template, so it reads the title \
-and count the card was given; that is how the card hands data back to the \
-page's fill. The page picks each card's `tone` with \
-`card.featured|yesno:"accent,plain"`. The status line inside Details is an \
-Alpine component (`Alpine.data('status')` in board.js) nested inside the \
-board's. Alpine components declare no inputs, so it reads the board's `open` \
-through the scope Alpine shares with it, and its Close button dispatches a \
-`close` event that the page handles.
+project_card.html extends card.html and fills its footer block. Django \
+renders that block with the same context the include gave the card, so the \
+fill reads `title` and `count` directly. A Django block takes no arguments, \
+so the card hands the fill nothing of its own, and m36 and m37 do not apply. The page picks each \
+card's `tone` with `card.featured|yesno:"accent,plain"`.
+
+The status line inside Details is an Alpine component \
+(`Alpine.data('status')` in board.js) nested inside the board's. Alpine has \
+no required or typed component inputs, so the status line's markup reads the \
+board's `open` through the scope Alpine shares with it. Its Close button \
+dispatches a `close` event, and a listener on the board sets `open` to false.
 
 The save view reads the count, adds the amount and stores it, then renders the \
 total it computed, as the MDN Django tutorial's session counter does. A typo in \

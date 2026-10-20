@@ -3,5 +3,5 @@ mistake = { file = "app/app.vue", contains = "padStart" }
 
 [[edits]]
 file = "app/app.vue"
-old = "({{ count }})"
-new = "({{ count.padStart(2, '0') }})"
+old = "({{ footer.count }})"
+new = "({{ footer.count.padStart(2, '0') }})"

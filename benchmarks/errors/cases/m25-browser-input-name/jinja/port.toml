@@ -1,11 +1,11 @@
-# Alpine has no named inputs: the status line is an Alpine component nested
-# inside the one that owns `open`, and it reads `open` through the scope
-# Alpine shares with it. The name it reads is therefore the input's name, and
-# the case misspells that read.
+# Alpine has no declared component inputs: the status line is an Alpine
+# component nested inside the one that owns `open`, and its markup reads
+# `open` through the scope Alpine shares with it. The name it reads stands in
+# for the input's name, so the case misspells that read.
 status = "ported"
-mistake = { file = "templates/index.html", contains = "this.opne" }
+mistake = { file = "templates/index.html", contains = "opne ?" }
 
 [[edits]]
 file = "templates/index.html"
-old = "return this.open ? 'Status: open'"
-new = "return this.opne ? 'Status: open'"
+old = '''x-text="open ? 'Status: open' :'''
+new = '''x-text="opne ? 'Status: open' :'''

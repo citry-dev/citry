@@ -1,2 +1,2 @@
-status = "not-applicable"
-reason = "An Alpine component nested inside another shares its parent's scope instead of receiving a copy of the parent's values. Assigning `open = false` in the status line therefore changes the parent's own `open` and closes the details correctly. That is an ordinary way for an Alpine component to update its parent, so there is no one-way input whose change would be a mistake."
+status = "prevented"
+reason = "An Alpine component nested inside another shares its parent's scope instead of receiving a copy of the parent's values. Assigning `open = false` in the status line therefore changes the parent's own `open` and closes the details correctly, so the code this mistake describes works as intended."

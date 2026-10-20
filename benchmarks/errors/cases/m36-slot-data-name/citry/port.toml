@@ -1,3 +1,6 @@
+# The fill names its slot data `card`, the first form Citry's slot docs show.
+# Citry's parser checks field names only when the fill unpacks them
+# (`data="{ title, count }"`).
 status = "ported"
 mistake = { file = "app/components/board_page.py", contains = "card.titel" }
 

@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "{{ titel }}" }
+mistake = { file = "app/app.vue", contains = "footer.titel" }
 
 [[edits]]
 file = "app/app.vue"
-old = "Open {{ title }} ({{ count }})"
-new = "Open {{ titel }} ({{ count }})"
+old = "Open {{ footer.title }}"
+new = "Open {{ footer.titel }}"
