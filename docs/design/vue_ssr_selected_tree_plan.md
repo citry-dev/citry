@@ -335,18 +335,22 @@ host's HTML as a template.
 
 How the server builds it (`serialize.py`, `prepare_vue_serialization`):
 
-1. A client-mounted document normally skips building its body children's
-   HTML (`_can_defer_vue_body_children`). The frame pass keeps those
-   children aside instead of dropping them, and `server_html()` builds
-   them only when `prepare_vue_serialization` asks, so a page that
-   hydrates or opts out pays nothing.
+1. A client-mounted or hydrated document that passes
+   `_can_skip_vue_document_body` writes only the shell around its
+   `<body>`: the root's own body content and its child components are
+   left out of the frame pass. `server_html()` builds the whole page again
+   from the root only when `prepare_vue_serialization` asks, so in
+   production a page that hydrates or opts out pays nothing. Development
+   mode builds every frame, because the page id check needs every id.
 2. `prepare_vue_serialization` asks for it when the page did not hydrate,
    `deps_strategy` is `"document"`, and the recorded page reason is not an
    explicit opt-out (`ssr-disabled`, `below-threshold`) or output that is
    not a document (`not-a-document`).
 3. `_server_host_contents` takes the body's contents (or the whole output
    when it is not a document), removes every dependency placeholder, and
-   declines when a `<script` start tag remains.
+   declines when a `<script` start tag remains. It also declines when the
+   page holds more than one body opening or closing tag match, such as
+   `</body>` inside a comment, because the body's edges are then unknown.
    `_server_contents_pass_policies` then declines for any JavaScript
    policy, and for a CSP mode when a private CSP validator finds anything
    in the copy (inline handlers, `javascript:` URLs).

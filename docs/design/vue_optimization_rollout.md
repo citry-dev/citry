@@ -136,11 +136,28 @@ item. Serialize writes a row's HTML whenever it builds the frame that holds
 the row: static pages (`deps_strategy="simple"`), fragments, and
 client-mounted pages that are not a full HTML document. Only static output
 keeps that HTML; the others drop it, as they did when evaluation wrote it.
-A client-mounted full document skips the frames that hold the rows, and a
-hydrated page gets its HTML from the Rust server render programs, so
-neither writes row HTML. A `simple="vue"` component rendered directly as
-the root is the exception: serialize builds the root frame, so it writes
-that one row's HTML once per serialization.
+A client-mounted or hydrated full document writes only the shell around
+its `<body>`, because the Vue host replaces the body's contents. It skips
+the root's own body content, which includes rows written directly in the
+root template, and the frames of the child components that hold other
+rows. A hydrated page gets its body HTML from the Rust server render
+programs, so neither a client-mounted nor a hydrated page writes row
+HTML. When hydration is declined, the page still sends Citry's ordinary
+body HTML, so serialize then builds the whole page again, rows included.
+
+The skip applies only to a document that passes
+`_can_skip_vue_document_body`: the default asset placement,
+no `<c-js>` or `<c-css>` insertion point, no CSS-variable marker on the
+root's children or rows, no CSP, nonce, script integrity or JavaScript
+policy, only the built-in `on_serialize` hook, and production mode
+(with `Citry(mode="development")` the page id check needs every id, so
+every frame is built). Any other Vue
+document builds every frame, and drops the body HTML when it hydrates or
+keeps an empty host, as a fragment does.
+
+A `simple="vue"` component rendered directly as the root is the
+exception: serialize builds the root frame, so it writes that one row's
+HTML once per serialization.
 
 When every root tag of the template is fixed at compile time (no root inside
 `c-if` or `c-for`) and the compiler can prove where the component's marker

@@ -10,7 +10,7 @@ the row through the general per-row path or scan it again. These tests pin
 that the result is byte-identical to the ordinary component path and to the
 per-row serialize path used when no row HTML exists, that serialize really
 skips the per-row work, and that full client-mounted or hydrated documents
-never write it.
+that pass the body-skip check never write it.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ import pytest
 import citry.serialize as serializer
 from citry import Citry, Component
 from citry._vue import leaf_program
+from citry._vue.serialization import hydration_admission
 from citry.citry_render import CitryRender, SimpleVueRecord
 
 # One row exercising the supported shapes: a c-bind spread on the root next
@@ -345,6 +346,158 @@ def test_row_html_is_written_only_for_outputs_that_contain_the_rows(monkeypatch:
     assert static_html == (
         _build(simple=False, document=True)(groups=groups).render().serialize(deps_strategy="simple")
     )
+
+
+# Four rows written directly in the document root's own template, and two
+# more inside a child component. The optional browser-only v-if at the host
+# root makes the page decline hydration, so it sends its ordinary server
+# HTML for Vue to replace.
+ROOT_ROWS_DOCUMENT = """
+<!doctype html>
+<html>
+<head><title>Rows</title></head>
+<body>
+{browser_only}<main>
+<p>{{{{ heading }}}}</p>
+<c-Row c-for="row in rows" #c-key="row['id']" c-row="row" />
+<c-Group c-group="group" />
+</main>
+</body>
+</html>
+"""
+
+# Each mode as (browser-only root, element threshold, serialize options,
+# row HTML writes). The outputs that keep the rows' HTML write each of the
+# six rows once, and the outputs that replace the body with the Vue host
+# write none. A threshold of None keeps the engine's default.
+ROOT_ROW_MODES: dict[str, tuple[bool, int | None, dict[str, Any], int | None]] = {
+    "hydrated": (False, None, {}, 0),
+    "ssr-false": (False, None, {"ssr": False}, 0),
+    "below-threshold": (False, 10**6, {}, 0),
+    "hydration-declined": (True, None, {}, 6),
+    "static": (False, None, {"deps_strategy": "simple"}, 6),
+    "deps-position": (False, None, {"deps_position": "append"}, 6),
+    "csp": (False, None, {"security_csp": "warn"}, 6),
+    # A Vue fragment drops this HTML too, but it never skips the root's body,
+    # so only its bytes are checked here.
+    "fragment": (False, None, {"deps_strategy": "fragment"}, None),
+}
+
+
+def _build_root_rows(*, browser_only: bool, ssr_element_threshold: int | None = None) -> type[Component]:
+    """Build a document whose own template loops over simple='vue' rows, with fixed render IDs."""
+    counter = itertools.count()
+    threshold: dict[str, Any] = (
+        {} if ssr_element_threshold is None else {"ssr_element_threshold": ssr_element_threshold}
+    )
+    app = Citry(autodiscover=False, id_generator=lambda: f"r{next(counter)}", **threshold)
+    # Fragment serialization references assets by URL, so it needs a prefix.
+    app.set_mounted_prefix("/citry")
+    page_template = ROOT_ROWS_DOCUMENT.format(browser_only='<p v-if="open">x</p>' if browser_only else "")
+
+    class Row(Component):
+        citry = app
+        simple = "vue"
+        template = ROW_TEMPLATE
+        js = """
+            $component({data(){return {open: true};}});
+        """
+
+        class Kwargs:
+            row: dict
+
+        @staticmethod
+        def template_data(kwargs: Any, _slots: Any) -> dict[str, Any]:
+            return {"row": kwargs.row, "row_attrs": _row_attrs(kwargs.row)}
+
+    class Group(Component):
+        citry = app
+        template = GROUP_TEMPLATE
+
+        class Kwargs:
+            group: dict
+
+    class Page(Component):
+        citry = app
+        template = page_template
+        js = """
+            $component({data(){return {open: true};}});
+        """
+
+        def template_data(self, _kwargs: Any, _slots: Any) -> dict[str, Any]:
+            return {"heading": "Rows & <more>", "rows": _rows(4, 0), "group": {"id": "g1", "rows": _rows(2, 1)}}
+
+    return Page
+
+
+# CSP warn mode reports the page's inline Vue bindings as a RuntimeWarning; that report is expected here.
+@pytest.mark.filterwarnings("ignore::RuntimeWarning")
+@pytest.mark.parametrize("mode", list(ROOT_ROW_MODES))
+def test_document_root_rows_are_written_only_when_the_output_keeps_them(
+    monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    """A Vue document skips the rows in its own body; every mode matches a serialization that writes the body."""
+    browser_only, threshold, options, expected_writes = ROOT_ROW_MODES[mode]
+    writes = {"count": 0}
+    original_default_row_formatting = leaf_program._default_row_formatting
+
+    # The row HTML writer checks the formatting functions first on every call,
+    # so this counts one call per row whose HTML serialize asked for.
+    def counting_default_row_formatting() -> bool:
+        writes["count"] += 1
+        return original_default_row_formatting()
+
+    monkeypatch.setattr(leaf_program, "_default_row_formatting", counting_default_row_formatting)
+
+    def serialize_twice() -> tuple[str, int]:
+        rendered = _build_root_rows(browser_only=browser_only, ssr_element_threshold=threshold)().render()
+        writes["count"] = 0
+        first = rendered.serialize(**options)
+        first_writes = writes["count"]
+        # A render serialized again makes the same decision and the same bytes.
+        assert rendered.serialize(**options) == first
+        return first, first_writes
+
+    html, written = serialize_twice()
+    if expected_writes is not None:
+        assert written == expected_writes
+    if mode == "hydrated":
+        assert '"hydrate":true' in html
+    if mode == "hydration-declined":
+        # The page sends its whole body for Vue to replace, rows included.
+        assert '"hydrate":true' not in html
+        assert html.count('data-fixed="source"') == 6
+        assert "Rows &amp; &lt;more&gt;" in html
+
+    # The reference writes the root's whole body on every output, as a page
+    # that skips nothing does. Only the work differs, never the bytes.
+    with monkeypatch.context() as unskipped:
+        unskipped.setattr(serializer, "_document_shell_parts", lambda parts: parts)
+        reference, _ = serialize_twice()
+    assert html == reference
+
+
+def test_declined_document_with_body_tag_text_keeps_an_empty_host() -> None:
+    """A page whose HTML holds body tag text elsewhere sends an empty host, not a body cut at the wrong tag."""
+    engine = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = engine
+        template = """
+<!doctype html><html><head><title>T</title></head><body><p v-if="open">x</p><!-- </body> --><p>kept</p></body></html>
+"""
+        js = """
+            $component({data(){return {open: true};}});
+        """
+
+    rendered = Page().render()
+    html = rendered.serialize()
+
+    # The browser-only v-if declines hydration. The comment's </body> would
+    # end a cut early and swallow the host's closing tag and scripts.
+    assert '"hydrate":true' not in html
+    assert re.search(r'<body><div id="citry-vue-[^"]+"></div><script', html)
+    assert not hydration_admission(rendered).server_html  # type: ignore[union-attr]
 
 
 def test_hydrated_direct_root_writes_vue_html_and_static_output_reuses_row_html(
