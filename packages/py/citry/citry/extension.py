@@ -544,8 +544,12 @@ class OnSerializeContext:
     citry: Citry
     """The ``Citry`` instance the render belongs to."""
     context: CitryContext
-    """The root render's ``CitryContext`` (its ``extra`` carries everything
-    that bubbled up during the render)."""
+    """The root render's ``CitryContext``. Its ``extra`` holds everything
+    that bubbled up during the render. One render can be serialized several
+    times, and every ``serialize()`` call sees the same ``extra``: a value
+    your ``on_serialize`` hook stores there is still there the next time the
+    hook runs, so set or delete it on every run rather than adding it only
+    when it is missing."""
     selected_render: CitryRender
     """The final hook-selected render tree being serialized."""
     html: str

@@ -61,6 +61,22 @@ _VUE_RUNTIME_SCRIPT_KEY = "_citry_vue_managed_runtime_script"
 VUE_FRAGMENT_MOUNT_KEY = "vue_fragment_mount"
 VUE_DEPENDENCIES_PREPARED_KEY = "vue_dependencies_prepared"
 
+# The context.extra keys that one serialize() call writes for its own later
+# steps: the Vue serialization step and this emitter record them, and the
+# emitter and the Vue plan's finalize read them. serialize_render_result
+# removes them for the length of each call and then puts back what was there
+# before, so one call never reads another's notes.
+# "_vue_app_id" is not listed: later calls on the same render keep the app
+# id the first call chose.
+SERIALIZATION_NOTE_KEYS: tuple[str, ...] = (
+    VUE_DEPENDENCIES_PREPARED_KEY,
+    VUE_RUNTIME_REQUIRED_KEY,
+    VUE_RUNTIME_EMITTED_KEY,
+    _VUE_RUNTIME_SCRIPT_KEY,
+    VUE_FRAGMENT_MOUNT_KEY,
+    "_vue_style_app_id",
+)
+
 # The Placeholder keys the <c-js> / <c-css> built-ins render. The serializer
 # makes each occurrence unique by appending a counter and private
 # per-serialization identity ("deps:js:1:<identity>", ...).
@@ -221,32 +237,42 @@ def emit_dependencies(
     # CSS variables are pure CSS (a stylesheet plus a root-element marker)
     # and work under both.
     with_client_js = ctx.deps_strategy == "document"
-    resolved = _resolve_records(
-        citry,
-        records,
-        with_client_js=with_client_js,
-        prepared_vue=ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True,
-        script_security=script_security,
-    )
-    scripts, styles = resolved.scripts, resolved.styles
-
-    # Prepared Vue tracks only stylesheet elements emitted for this app. The
-    # URL alone is not ownership: authored markup may intentionally use the
-    # same href, so give each engine-emitted initial sheet an app-local marker.
-    vue_style_app_id = ctx.context.extra.get("_vue_style_app_id")
-    if isinstance(vue_style_app_id, str):
-        for style in styles:
-            if "data-citry-css-url" in style.attrs:
-                style.attrs["data-citry-vue-style-app"] = vue_style_app_id
-
-    # The extension-owned custom hook: other extensions adjust the lists in
-    # place (docs/design/extensions.md section 9.2). The hook sees the
-    # component-derived entries (possibly none). The runtime is added after
-    # the hook runs, so the hook cannot move or drop it. A prepared Vue page
-    # skips the hook here, because its assets are delivered by the Vue app.
+    vue_runtime_required = with_client_js and ctx.context.extra.get(VUE_RUNTIME_REQUIRED_KEY) is True
     if ctx.context.extra.get(VUE_DEPENDENCIES_PREPARED_KEY) is True:
+        # The Vue producer (_vue/events.py) already resolved these records
+        # while it built the app's asset list, running each instance's
+        # Component.on_dependencies and the extension hook once, and the app
+        # loads those assets itself. Resolving again here would call the
+        # component hook a second time per instance, so emit only the
+        # runtime below.
+        if not vue_runtime_required:
+            raise AssertionError("a prepared Vue page did not request the Vue runtime")
         scripts, styles, early_scripts = [], [], []
+        has_component_calls = False
     else:
+        resolved = _resolve_records(
+            citry,
+            records,
+            with_client_js=with_client_js,
+            script_security=script_security,
+        )
+        scripts, styles = resolved.scripts, resolved.styles
+        has_component_calls = resolved.has_component_calls
+
+        # Prepared Vue tracks only stylesheet elements emitted for this app.
+        # The URL alone is not ownership: authored markup may intentionally
+        # use the same href, so give each engine-emitted initial sheet an
+        # app-local marker.
+        vue_style_app_id = ctx.context.extra.get("_vue_style_app_id")
+        if isinstance(vue_style_app_id, str):
+            for style in styles:
+                if "data-citry-css-url" in style.attrs:
+                    style.attrs["data-citry-vue-style-app"] = vue_style_app_id
+
+        # The extension-owned custom hook: other extensions adjust the lists
+        # in place (docs/design/extensions.md section 9.2). The hook sees the
+        # component-derived entries (possibly none). The runtime is added
+        # after the hook runs, so the hook cannot move or drop it.
         hook_ctx = OnDependenciesContext(
             citry=citry,
             scripts=scripts,
@@ -267,12 +293,11 @@ def emit_dependencies(
     # which the browser loads on its own without any Citry runtime.
     core_scripts: list[Dependency] = []
     managed_runtime: Script | None = None
-    vue_runtime_required = with_client_js and ctx.context.extra.get(VUE_RUNTIME_REQUIRED_KEY) is True
     if vue_runtime_required:
         managed_runtime = _runtime_script(citry)
         core_scripts.append(managed_runtime)
         ctx.context.extra[VUE_RUNTIME_EMITTED_KEY] = True
-    elif resolved.has_component_calls:
+    elif has_component_calls:
         raise RuntimeError("Component JavaScript calls require a native Vue serialization plan.")
     core_scripts.extend(early_scripts)
 

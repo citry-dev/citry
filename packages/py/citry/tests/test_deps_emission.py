@@ -782,6 +782,134 @@ class TestOnDependenciesHooks:
         assert any("console.log('hook');" in body for body in _asset_bodies(c, html, "scripts"))
         assert any(".hook {}" in body for body in _asset_bodies(c, html, "styles"))
 
+    @pytest.mark.parametrize(
+        ("with_js", "strategy", "serialize_options", "vue_marker"),
+        [
+            # A custom dependency hook keeps the page from hydrating, so Vue
+            # mounts over the server HTML here instead of adopting it.
+            pytest.param(True, "document", {}, "data-citry-vue-document", id="interactive-document"),
+            pytest.param(True, "document", {"ssr": False}, "data-citry-vue-document", id="client-mounted-document"),
+            pytest.param(False, "document", {}, None, id="static-document"),
+            pytest.param(True, "simple", {}, None, id="simple"),
+            pytest.param(True, "fragment", {}, "data-citry-vue-fragment", id="interactive-fragment"),
+            pytest.param(False, "fragment", {}, None, id="static-fragment"),
+        ],
+    )
+    def test_hooks_run_once_per_instance_in_every_output(self, with_js, strategy, serialize_options, vue_marker):
+        # The component hook is documented to run once per rendered instance,
+        # and the extension hook once per serialization. A Vue page resolves
+        # its dependencies while it builds the app's asset list, so a second
+        # resolution later in the same serialization would call the component
+        # hook again.
+        c_hook_calls: list[str] = []
+        ext_hook_calls: list[str] = []
+
+        class Count(Extension):
+            name = "count"
+
+            def on_dependencies(self, ctx):
+                ext_hook_calls.append(ctx.strategy)
+
+        c = Citry(extensions=[Count])
+        # A fragment references its assets by URL, so it needs a mount prefix.
+        c.set_mounted_prefix("/citry")
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            css = ".widget {}"
+            # Here Component.js is the only thing that makes the output interactive.
+            if with_js:
+                js = "console.log('widget');"
+
+            @classmethod
+            def on_dependencies(cls, scripts, styles):
+                c_hook_calls.append(cls.__name__)
+
+        page = _page(c, template="<html><head></head><body><c-widget /><c-widget /></body></html>")
+        html = page().render().serialize(deps_strategy=strategy, **serialize_options)
+
+        # Confirm the output kind, so each case covers the path it names.
+        if vue_marker is None:
+            assert "data-citry-vue-" not in html
+        else:
+            assert vue_marker in html
+        assert c_hook_calls == ["Widget", "Widget"]
+        assert ext_hook_calls == [strategy]
+
+    @pytest.mark.parametrize("position", ["smart", "append"])
+    @pytest.mark.parametrize("first_strategy", ["document", "fragment"])
+    def test_simple_serialize_after_an_interactive_one_matches_a_fresh_render(self, first_strategy, position):
+        # One render serialized twice: the first call builds a Vue app, which
+        # loads the assets itself. The second, deps_strategy="simple", call
+        # must still write the tags where deps_position asks and run the
+        # extension hook, the same as a fresh render does.
+        ext_hook_calls: list[str] = []
+
+        class Count(Extension):
+            name = "count"
+
+            def on_dependencies(self, ctx):
+                ext_hook_calls.append(ctx.strategy)
+
+        c = Citry(extensions=[Count])
+        c.set_mounted_prefix("/citry")
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            css = ".widget {}"
+            js = "console.log('widget');"
+
+        page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
+        rendered = page().render()
+        assert "data-citry-vue-" in rendered.serialize(deps_strategy=first_strategy)
+
+        html = rendered.serialize(deps_strategy="simple", deps_position=position)
+
+        assert ext_hook_calls == [first_strategy, "simple"]
+        # Every render gets new component ids, so compare without them.
+        fresh = page().render().serialize(deps_strategy="simple", deps_position=position)
+        assert "console.log('widget');" in html
+        assert re.sub(r"data-cid-\w+", "data-cid", html) == re.sub(r"data-cid-\w+", "data-cid", fresh)
+
+    def test_serializing_the_render_inside_on_serialize_leaves_the_outer_page_intact(self):
+        # An extension can serialize the render it is handed, for example to
+        # keep a copy without JavaScript. That inner call must not change
+        # what the outer, interactive call is still writing: the page keeps
+        # one Vue runtime, and the inner copy gets the component's script.
+        def build(*, take_snapshot):
+            snapshots: list[str] = []
+
+            class Snapshot(Extension):
+                name = "snapshot"
+
+                def on_serialize(self, ctx):
+                    if take_snapshot and ctx.deps_strategy == "document":
+                        snapshots.append(ctx.selected_render.serialize(deps_strategy="simple"))
+                    return ctx.html
+
+            c = Citry(extensions=[Snapshot])
+            c.set_mounted_prefix("/citry")
+
+            class Widget(Component):
+                citry = c
+                template = "<span>w</span>"
+                js = "console.log('widget');"
+
+            page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
+            return page().render().serialize(), snapshots
+
+        html, snapshots = build(take_snapshot=True)
+        plain, _ = build(take_snapshot=False)
+
+        assert len(snapshots) == 1
+        assert "console.log('widget');" in snapshots[0]
+        # The extension only reads, so the page matches one whose extension
+        # skips the inner call. Ids differ between renders, so drop them.
+        ids = r'data-cid-\w+|[0-9a-f]{32}|"renderId":"[^"]+"'
+        assert re.sub(ids, "X", html) == re.sub(ids, "X", plain)
+
 
 class TestComponentAssetEndTagGuard:
     """A component's inline JS/CSS may not contain its own closing tag."""
