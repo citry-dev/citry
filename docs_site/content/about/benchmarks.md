@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and five others report the same 44 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and six others report the same 44 developer mistakes.
 ---
 
 # Benchmarks
@@ -72,10 +72,13 @@ noise.
 
 The earlier a mistake is reported, the less time it costs you.
 
-We wrote the same small app in Citry and five other frameworks, made
+We wrote the same small app in Citry and six other frameworks, made
 the same 44 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
-each mistake was first reported**.
+each mistake was first reported**. Rusty is the Django app with its
+templates rendered by
+[Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
+an experimental Rust version of Django's template engine.
 
 <c-error-benchmark-chart
   title="How the 44 mistakes ended in each framework"
@@ -100,8 +103,8 @@ each mistake was first reported**.
 
 - **Before the app runs: 24 of 42** (23 errors, 1 warning). Two of
   the 44 mistakes don't apply to Citry. Next.js 34 of 39, Nuxt 23 of
-  40, FastHTML 17 of 32, Django + HTMX + Alpine 3 of 35, Jinja + HTMX
-  + Alpine 2 of 35.
+  40, FastHTML 17 of 32, Django + HTMX + Alpine 3 of 35,
+  Rusty + HTMX + Alpine 3 of 33, Jinja + HTMX + Alpine 2 of 35.
 - **Missed: 13**, nothing tells you:
     - a misspelled HTML element, HTML attribute name, or CSS class: the
       page looks wrong
@@ -158,12 +161,13 @@ each mistake was first reported**.
   Every framework's versions are pinned in its app's lockfile.
 - **Citry**: the editor extension's language server (measured with
   `citry check --types`) and `citry check`.
-- **Every Python stack** (Citry, Django, Jinja, FastHTML): Pylance
-  with type checking on (measured with pyright in standard mode), and
+- **Every Python stack** (Citry, Django, Rusty, Jinja, FastHTML):
+  Pylance with type checking on (measured with pyright in standard mode), and
   ruff with its default rules.
-- **Django and Jinja**: djLint with the Django or Jinja profile,
-  `manage.py check` for Django, and VS Code's JavaScript syntax check
-  for Django's one script file.
+- **Django, Rusty and Jinja**: djLint with the Django or Jinja
+  profile, `manage.py check` for Django and Rusty, and VS Code's
+  JavaScript syntax check for the one script file in the Django and
+  Rusty apps.
 - **Next.js and Nuxt**: the editor's TypeScript checks (tsc for
   Next.js; vue-tsc and the Vue compiler's errors for Nuxt), ESLint, and
   the production build.

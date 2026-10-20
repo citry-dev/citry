@@ -67,7 +67,7 @@ requires-dist = [{ name = "django", specifier = "==6.1.1" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "djlint", specifier = ">=1.46.6" },
+    { name = "djlint", specifier = "==1.46.6" },
     { name = "pyright", specifier = "==1.1.414" },
     { name = "ruff", specifier = "==0.15.5" },
 ]

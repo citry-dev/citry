@@ -91,10 +91,11 @@ TypeScript.
 - Nuxt and Next.js are the TypeScript frameworks with the strongest editor
   tooling. Citry's browser side is Vue, so Nuxt is its closest relative.
 
-Django Rusty Templates, django-components, Tetra, django-unicorn, Reflex and
-ReactPy are the next ones to add. They are named here as not yet measured;
-the report covers only the six above. The choice was made before any result
-was seen.
+Six more were chosen before any result was seen: Django Rusty Templates,
+django-components, Tetra, django-unicorn, Reflex and ReactPy. Django Rusty
+Templates, an experimental Rust version of Django's template engine, is
+measured as the Django app with its template backend switched
+(`frameworks/rusty`). The others are not measured yet.
 
 ### Fairness rules
 
@@ -112,12 +113,12 @@ was seen.
   `citry-errors validate` enforces the half.
 - Each framework's tools are its official starter's tools plus the linters
   and type checker most of its projects add: pyright in standard mode and
-  ruff for every Python stack, djLint for Django and Jinja templates, and
-  ESLint for Nuxt and Next.js. A framework that relies on the language's own
-  checks, such as FastHTML's typed Python functions, gets credit for what
-  those checks catch. Each tool keeps its default rules. A stricter setting
-  is not in the published results; it can be added later as a separately
-  labeled run.
+  ruff for every Python stack, djLint for Django, Django Rusty Templates
+  and Jinja templates, and ESLint for Nuxt and Next.js. A framework that
+  relies on the language's own checks, such as FastHTML's typed Python
+  functions, gets credit for what those checks catch. Each tool keeps its
+  default rules. A stricter setting is not in the published results; it
+  can be added later as a separately labeled run.
 - Each case is written the way a developer of that framework would naturally
   make the mistake. A case is not changed after its result is seen, except to
   fix a case that did not express its mistake.
@@ -269,10 +270,10 @@ FastHTML together (42 cases) took 211 seconds with `--jobs 1` and 54 seconds
 with `--jobs 5` on a 10-core machine. Running every browser check as well,
 one case at a time, took about 280 seconds. A rerun with nothing changed
 took 8 seconds, because the browser checks of the 4 cases whose journey
-stops on an error page are never stored and run again. The Next.js and Nuxt
-cases have not been timed side by side yet; from the per-case times of the
-2026-10-20 run, a full run of the six frameworks should take about 5
-minutes, most of it the Nuxt cases, which run one at a time. It is not part
-of routine CI. Its result changes only when a case, a pinned version or
-Citry changes, so it is run at each Citry release. The runner's own tests
-run in seconds on small made-up tool output and need no network.
+stops on an error page are never stored and run again. A full run of the
+seven frameworks (308 cases) with nothing stored took about 8.5 minutes
+with the default `--jobs 5`, most of it the Nuxt cases, which run one at
+a time. It is not part of routine CI. Its result changes only when a
+case, a pinned version or Citry changes, so it is run at each Citry
+release. The runner's own tests run in seconds on small made-up tool
+output and need no network.

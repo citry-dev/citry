@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/templates/board/card.html", contains = 'class="card-footer"' }
+
+[[edits]]
+file = "board/templates/board/card.html"
+old = '<div class="card-footer"><a href="#{{ title|lower }}">Open {{ title }} ({{ count }})</a></div>'
+new = '<div class="card-footer"><a href="#{{ title|lower }}">Open {{ title }} ({{ count }})</a>'

@@ -1,0 +1,8 @@
+{
+  "name": "rusty-error-benchmark-editor",
+  "private": true,
+  "description": "Measurement only: the TypeScript engine that VS Code uses to report syntax errors in plain .js files.",
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

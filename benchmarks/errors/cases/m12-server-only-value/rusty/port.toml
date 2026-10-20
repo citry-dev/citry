@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/static/board/board.js", contains = 'secret-token' }
+
+[[edits]]
+file = "board/static/board/board.js"
+old = "api: JSON.parse(document.getElementById('api-base').textContent),"
+new = "api: JSON.parse(document.getElementById('secret-token').textContent),"

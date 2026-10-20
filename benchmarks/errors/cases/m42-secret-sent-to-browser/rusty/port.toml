@@ -1,0 +1,18 @@
+# The page view turns each value it hands to the browser into a json_script
+# tag, so the secret goes the same way as the public setting.
+status = "ported"
+mistake = { file = "board/views.py", contains = "json_script(settings.SECRET_TOKEN" }
+
+[[edits]]
+file = "board/views.py"
+old = "'api_base_script': json_script(settings.API_BASE, 'api-base'),"
+new = '''
+'api_base_script': json_script(settings.API_BASE, 'api-base'),
+        'secret_token_script': json_script(settings.SECRET_TOKEN, 'secret-token'),'''
+
+[[edits]]
+file = "board/templates/board/page.html"
+old = "{{ api_base_script }}"
+new = '''
+{{ api_base_script }}
+  {{ secret_token_script }}'''

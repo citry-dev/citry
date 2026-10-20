@@ -1,0 +1,29 @@
+[project]
+name = "rusty-error-benchmark"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+# Django Rusty Templates has no release on PyPI yet, so it is pinned to the
+# same commit as the performance benchmark (benchmarks/web), and uv builds
+# its Rust extension from that commit.
+dependencies = [
+    "django==6.1.1",
+    "django-rusty-templates @ git+https://github.com/LilyFirefly/django-rusty-templates.git@0725f875535b2fca93953a403a57df1d9b34e073",
+]
+
+[dependency-groups]
+# The tools most Django projects add, which Django's own starter does
+# not install: pyright stands in for Pylance in the editor, ruff lints the
+# Python files and djLint the templates.
+dev = [
+    "djlint==1.46.6",
+    "pyright==1.1.414",
+    "ruff==0.15.5",
+]
+
+[tool.uv]
+package = false
+
+# Type checking on, as in most typed Python projects: Pylance's "standard"
+# mode, which is also the pyright command line's default.
+[tool.pyright]
+typeCheckingMode = "standard"

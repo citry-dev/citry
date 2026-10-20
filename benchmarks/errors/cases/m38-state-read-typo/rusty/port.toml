@@ -1,0 +1,10 @@
+# The page view reads the saved total from the session for the counter's
+# text; the save view still reads and writes `count` correctly. A
+# misspelled name in the template itself would be m07.
+status = "ported"
+mistake = { file = "board/views.py", contains = "get('cuont', 0)" }
+
+[[edits]]
+file = "board/views.py"
+old = "'count': request.session.get('count', 0),"
+new = "'count': request.session.get('cuont', 0),"

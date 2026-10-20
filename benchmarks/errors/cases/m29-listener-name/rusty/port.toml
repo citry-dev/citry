@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/templates/board/page.html", contains = '@hdie="shown = false"' }
+
+[[edits]]
+file = "board/templates/board/page.html"
+old = '@hide="shown = false"'
+new = '@hdie="shown = false"'

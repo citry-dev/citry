@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The card dispatches `hide` with no value (`$dispatch('hide')`). Each card sits in its own Alpine wrapper, and that wrapper's listener hides itself, so the page already knows which card the event came from and the event carries no payload whose type could be wrong."
