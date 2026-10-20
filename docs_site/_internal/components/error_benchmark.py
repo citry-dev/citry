@@ -144,7 +144,6 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
         for key, (label, color) in EXTRA_PARTS.items()
         if any(count[key] for count in counts.values())
     ]
-    first = buckets[0]
     # A mistake that does not apply takes no room, so a bar is as long as the
     # mistakes that apply to its framework, and only the longest bar spans the
     # full width. The table below still counts the ones that do not apply.
@@ -158,7 +157,6 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
     rows = [
         {
             "name": framework["name"],
-            "total": str(counts[framework["key"]][first["id"]]),
             "is_reference": index == 0,
             "segments": [
                 {
@@ -171,21 +169,19 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
         }
         for index, framework in enumerate(data["frameworks"])
     ]
-    totals = ", ".join(
-        f"{framework['name']} {counts[framework['key']][first['id']]}" for framework in data["frameworks"]
+    # The bar parts are hidden from screen readers, so the chart's label
+    # carries every count instead.
+    totals = "; ".join(
+        f"{framework['name']}: "
+        + ", ".join(
+            f"{label} {counts[framework['key']][key]}" for key, label, _ in parts if counts[framework["key"]][key]
+        )
+        for framework in data["frameworks"]
     )
     return {
         "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in drawn],
         "rows": rows,
-        "summary": f"Stacked bar chart. {first['label']}, out of {total}: {totals}.",
-        "columns": [label for _, label, _ in parts],
-        "table": [
-            {
-                "name": framework["name"],
-                "cells": [str(counts[framework["key"]][key]) for key, _, _ in parts],
-            }
-            for framework in data["frameworks"]
-        ],
+        "summary": f"Stacked bar chart of {total} mistakes. {totals}.",
     }
 
 
@@ -229,15 +225,32 @@ def table_view(data: dict[str, Any]) -> dict[str, Any]:
                     },
                 )
             rows.append({"title": mistake["title"], "cells": cells})
-        groups.append({"heading": category["heading"], "rows": rows})
+        ids = [mistake["id"] for mistake in mistakes]
+        counts = [_caught_total(records, framework["key"], ids, buckets) for framework in data["frameworks"]]
+        groups.append({"heading": category["heading"], "counts": counts, "rows": rows})
 
+    every = [mistake["id"] for mistake in data["mistakes"]]
     return {
         # The meanings come from the report, which also writes the cells.
         "codes": data["codes"],
         "frameworks": [row["name"] for row in data["frameworks"]],
-        "span": len(data["frameworks"]) + 1,
+        "counts": [_caught_total(records, framework["key"], every, buckets) for framework in data["frameworks"]],
         "groups": groups,
     }
+
+
+def _caught_total(
+    records: dict[tuple[str, str], dict[str, Any]], framework: str, mistake_ids: list[str], buckets: set[str]
+) -> str:
+    """Count the mistakes a framework reported at all, out of those that apply to it, as "(caught/total)"."""
+    scored = [
+        records[framework, mistake] for mistake in mistake_ids if records[framework, mistake]["status"] == "ported"
+    ]
+    # The first four buckets are the ones in which a tool or the running app
+    # reported the mistake; the last two are misses.
+    reported = [row for row in BUCKET_COLORS if row in buckets][:4]
+    caught = sum(_part(record, buckets) in reported for record in scored)
+    return f"({caught}/{len(scored)})"
 
 
 @cache
@@ -274,9 +287,8 @@ class ErrorBenchmarkChartMarkup(Component):
         return {"title": kwargs.title, **kwargs.view}
 
     # As in <c-benchmark-chart />, the bars are one role="img" element whose
-    # label lists every total, and screen readers get the table instead of
-    # the bar parts. The plot has no axis: every bar is the same length, and
-    # each part's count is in its title and in the table.
+    # label lists every count, so screen readers skip the bar parts. The plot
+    # has no axis: each part's count is in its title and its label.
     template = """
       <figure class="bench-chart bench-chart--counts">
         <figcaption class="bench-chart__title">{{ title }}</figcaption>
@@ -310,29 +322,8 @@ class ErrorBenchmarkChartMarkup(Component):
                 c-title="segment['title']"
               ></span>
             </span>
-            <span class="bench-chart__total">{{ row['total'] }}</span>
           </div>
         </div>
-        <details class="bench-chart__details">
-          <summary>Show the counts as a table</summary>
-          <div class="bench-chart__table-wrap">
-            <table>
-              <caption>{{ title }}, number of mistakes</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Framework</th>
-                  <th c-for="column in columns" scope="col">{{ column }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr c-for="row in table">
-                  <th scope="row">{{ row['name'] }}</th>
-                  <td c-for="cell in row['cells']">{{ cell }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </details>
       </figure>
     """
 
@@ -379,12 +370,6 @@ class ErrorBenchmarkTableMarkup(Component):
     # gets no leading or trailing space.
     template = """
       <div class="error-bench-table">
-        <ul class="bench-chart__legend error-bench-table__codes">
-          <li c-for="item in codes">
-            <code>{{ item['code'] }}</code>
-            {{ item['meaning'] }}
-          </li>
-        </ul>
         <div class="bench-chart__table-wrap">
           <table>
             <caption>How each mistake ended, by framework</caption>
@@ -393,13 +378,15 @@ class ErrorBenchmarkTableMarkup(Component):
                 <th scope="col">Mistake</th>
                 <th c-for="name in frameworks" scope="col">{{ name }}</th>
               </tr>
+              <tr class="error-bench-table__counts">
+                <td>(caught/total)</td>
+                <td c-for="count in counts">{{ count }}</td>
+              </tr>
             </thead>
             <tbody c-for="group in groups">
               <tr class="error-bench-table__heading">
-                <th
-                  c-colspan="span"
-                  scope="rowgroup"
-                >{{ group['heading'] }}</th>
+                <th scope="rowgroup">{{ group['heading'] }}</th>
+                <td c-for="count in group['counts']">{{ count }}</td>
               </tr>
               <tr c-for="row in group['rows']">
                 <th scope="row">{{ row['title'] }}</th>
@@ -413,6 +400,12 @@ class ErrorBenchmarkTableMarkup(Component):
             </tbody>
           </table>
         </div>
+        <ul class="bench-chart__legend error-bench-table__codes">
+          <li c-for="item in codes">
+            <code>{{ item['code'] }}</code>
+            {{ item['meaning'] }}
+          </li>
+        </ul>
       </div>
     """
 

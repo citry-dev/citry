@@ -384,7 +384,10 @@ def test_the_html_report_draws_every_framework_and_escapes_tool_output() -> None
     assert "&lt;c-Crad&gt;" in page
     assert "<c-Crad>" not in page
     # A mistake that does not apply takes no room: the bar is as long as what applies.
-    assert "1 mistakes apply" in page
+    assert "1 N/A or prevented by design" in page
+    # Citry reported its one mistake; Next.js has none that apply.
+    assert "<td>(1/1)</td>" in page
+    assert "<td>(0/0)</td>" in page
     assert page.count('<rect x="180.00" y="') == 1
     assert 'download="error-outcomes.svg"' in page
     assert "<script" not in page

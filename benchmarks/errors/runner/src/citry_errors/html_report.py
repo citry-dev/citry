@@ -2,8 +2,7 @@
 
 The page follows the framework interaction benchmark's report: white cards on
 a light page, each chart an SVG with its legend on top, framework groups with
-bold headings, light grid lines with an axis, and the totals to the right of
-each bar. It draws the same data as results.json: a stacked bar per
+bold headings, and light grid lines with an axis. It draws the same data as results.json: a stacked bar per
 framework with the six outcomes, then every mistake grouped by category. It
 has no scripts and loads nothing, so it reads the same in any browser,
 offline.
@@ -32,6 +31,9 @@ BUCKET_COLORS = {
     "never": "#4a5568",
 }
 
+# The outcomes in which a tool or the running app reported the mistake.
+CAUGHT = ("static-error", "static-warning", "runtime-error", "runtime-warning")
+
 # A case the runtime check skipped still takes its share of the bar, drawn
 # apart, so a partial run cannot pass for a finished one.
 NOT_SCORED = ("Not scored (runtime check skipped)", "#cbd5e0")
@@ -53,8 +55,7 @@ _DARK_TEXT = {"#9ae6b4", "#f6c177", "#cbd5e0", "#dd6b20"}
 _WIDTH = 700
 _LABEL_RIGHT = 168
 _BAR_LEFT = 180
-_BAR_WIDTH = 380
-_VALUE_LEFT = _BAR_LEFT + _BAR_WIDTH + 18
+_BAR_WIDTH = 490
 _ROW = 56
 _HEADING_ROW = 28
 _BAR_HEIGHT = 20
@@ -81,6 +82,8 @@ th,td{border-bottom:1px solid #e0e7ef;padding:4px 8px;text-align:center}
 th:first-child,td:first-child{text-align:left}
 thead th{color:#526275;font-weight:600;border-bottom:1px solid #dbe3ed}
 tr.category th{padding-top:12px;font-weight:700;border-bottom:1px solid #dbe3ed}
+tr.category td{padding-top:12px;color:#526275;border-bottom:1px solid #dbe3ed}
+tr.counts td{color:#526275;font-weight:400}
 tbody th[scope=row]{font-weight:400}
 td.cell{white-space:nowrap;font-variant-numeric:tabular-nums}
 dl.codes{display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;font-size:12px;margin:14px 0 0}
@@ -177,11 +180,14 @@ def chart_svg(summary: dict[str, Any]) -> str:
                         f' style="fill:{fill}">{count}</text>'
                     )
                 x += width
-            before = row["static-error"] + row["static-warning"]
-            rows.append(f'<text x="{_VALUE_LEFT}" y="{y + 14}" font-weight="700">{before} before running</text>')
-            detail = f"{row['static-error']} errors · {row['static-warning']} warnings"
-            rows.append(f'<text x="{_VALUE_LEFT}" y="{y + 31}" style="fill:#526275">{detail}</text>')
-            rows.append(f'<text x="{_BAR_LEFT}" y="{y + 37}" style="fill:#526275">{totals[key]} mistakes apply</text>')
+            # The mistakes that cannot be written in this framework take no room
+            # in the bar, so the note under it says how many there are.
+            not_applicable = sum(
+                1 for record in summary["results"] if record["framework"] == key and record["status"] != "ported"
+            )
+            if not_applicable:
+                note = f"{not_applicable} N/A or prevented by design"
+                rows.append(f'<text x="{_BAR_LEFT}" y="{y + 37}" style="fill:#526275">{note}</text>')
             y += _ROW
     bottom = y
     grid = []
@@ -197,6 +203,17 @@ def chart_svg(summary: dict[str, Any]) -> str:
         'text[font-weight="700"]{font-weight:700}</style>'
         f"<title>{escape(title)}</title>{body}</svg>"
     )
+
+
+def _caught_total(by: dict[tuple[str, str], dict[str, Any]], framework: str, mistake_ids: list[str]) -> str:
+    """Count the mistakes a framework reported at all, out of those that apply to it."""
+    scored = [
+        by[framework, mistake]
+        for mistake in mistake_ids
+        if (framework, mistake) in by and by[framework, mistake]["status"] == "ported"
+    ]
+    caught = sum(record.get("bucket") in CAUGHT for record in scored)
+    return f"({caught}/{len(scored)})"
 
 
 def _tint(color: str) -> str:
@@ -233,7 +250,7 @@ def render(summary: dict[str, Any]) -> str:
     out.append('<article class="chart"><details open><summary><h3>How each mistake ended</h3></summary>')
     out.append(
         '<p class="description">One bar per framework, as long as the number of mistakes that apply to it. '
-        "Greens were reported before the app ran, oranges only at runtime; red and gray were never reported. "
+        "Green: reported before running; orange: at runtime; red and gray: never. "
         "The lighter shade of each pair is a warning.</p>"
     )
     out.append(svg)
@@ -244,15 +261,24 @@ def render(summary: dict[str, Any]) -> str:
     out.append(
         '<section class="group"><details open><summary><h2>Every mistake</h2></summary><div class="group-body">'
     )
-    out.append('<article class="chart wide"><div class="table-wrap"><table><thead><tr><th>Mistake</th>')
+    out.append(
+        '<article class="chart wide"><p class="description">(caught/total) counts the mistakes a framework'
+        " reported at all, before or while running, out of those that apply to it.</p>"
+    )
+    out.append('<div class="table-wrap"><table><thead><tr><th>Mistake</th>')
     out += [f'<th scope="col">{escape(framework["name"])}</th>' for framework in frameworks]
+    out.append('</tr><tr class="counts"><td>(caught/total)</td>')
+    every = [mistake["id"] for mistake in summary["mistakes"]]
+    out += [f"<td>{_caught_total(by, framework['key'], every)}</td>" for framework in frameworks]
     out.append("</tr></thead><tbody>")
     for category in summary["categories"]:
         group = [mistake for mistake in summary["mistakes"] if mistake["category"] == category["id"]]
         if not group:
             continue
-        out.append(f'<tr class="category"><th colspan="{len(frameworks) + 1}" scope="rowgroup">')
-        out.append(f"{escape(category['heading'])}</th></tr>")
+        ids = [mistake["id"] for mistake in group]
+        out.append(f'<tr class="category"><th scope="rowgroup">{escape(category["heading"])}</th>')
+        out += [f"<td>{_caught_total(by, framework['key'], ids)}</td>" for framework in frameworks]
+        out.append("</tr>")
         for mistake in group:
             out.append(f'<tr><th scope="row">{escape(mistake["title"])}</th>')
             for framework in frameworks:

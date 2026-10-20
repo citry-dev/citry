@@ -128,8 +128,6 @@ def test_chart_view_stacks_buckets_in_order_then_extra_parts() -> None:
     alpha, beta = view["rows"]
     assert alpha["is_reference"] is True
     assert beta["is_reference"] is False
-    # The total is the count of "Error before running".
-    assert (alpha["total"], beta["total"]) == ("2", "0")
     # Each part's width is its share of the most mistakes that apply to any
     # framework: three here, for both.
     assert [segment["title"] for segment in alpha["segments"]] == [
@@ -142,7 +140,6 @@ def test_chart_view_stacks_buckets_in_order_then_extra_parts() -> None:
         "Missed, no visible change: 1",
         "Not scored: 1",
     ]
-    assert view["table"][1] == {"name": "Beta", "cells": ["0", "0", "1", "0", "0", "1", "1", "1"]}
     for row in view["rows"]:
         widths = [float(segment["style"].split("%")[0].removeprefix("width: ")) for segment in row["segments"]]
         assert sum(widths) == pytest.approx(100, abs=0.01)
@@ -223,21 +220,12 @@ def test_rendered_chart_draws_rows_and_table() -> None:
 
     rows = figure.xpath(".//*[contains(concat(' ', @class, ' '), ' bench-chart__row ')]")
     assert [row.xpath("string(.//*[@class='bench-chart__name'])") for row in rows] == ["Alpha", "Beta"]
-    assert [row.xpath("string(.//*[@class='bench-chart__total'])") for row in rows] == ["2", "0"]
-    plot = figure.xpath(".//*[@role='img']")[0]
-    assert plot.attrib["aria-label"] == (
-        "Mistakes. Stacked bar chart. Error before running, out of 4: Alpha 2, Beta 0."
-    )
-    assert [cell.text_content() for cell in figure.xpath(".//table/tbody/tr[1]/td")] == [
-        "2",
-        "0",
-        "0",
-        "0",
-        "1",
-        "0",
-        "0",
-        "1",
-    ]
+    # The chart has no number column or table: the counts are in the bar
+    # parts' titles, and the label screen readers hear lists every count.
+    assert not figure.xpath(".//*[@class='bench-chart__total'] | .//table")
+    label = figure.xpath(".//*[@role='img']")[0].attrib["aria-label"]
+    assert label.startswith("Mistakes. Stacked bar chart of 4 mistakes. Alpha: Error before running 2, ")
+    assert "Beta: Error at runtime 1, " in label
 
 
 def test_rendered_table_keeps_line_breaks_in_cell_titles(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -254,7 +242,15 @@ def test_rendered_table_keeps_line_breaks_in_cell_titles(monkeypatch: pytest.Mon
         "Names",
         "Types",
     ]
-    assert table.xpath(".//tr[@class='error-bench-table__heading']/th/@colspan") == ["3", "3"]
+    # Each heading row and the header's second row count the mistakes
+    # reported at all, out of those that apply.
+    headings = table.xpath(".//tr[@class='error-bench-table__heading']")
+    assert [[td.text_content() for td in row.xpath("./td")] for row in headings] == [
+        ["(1/2)", "(1/2)"],
+        ["(1/1)", "(0/1)"],
+    ]
+    counts = table.xpath(".//tr[@class='error-bench-table__counts']/td")
+    assert [td.text_content() for td in counts] == ["(caught/total)", "(2/3)", "(1/3)"]
     # Each heading labels the rows of its own <tbody>.
     assert table.xpath(".//tr[@class='error-bench-table__heading']/th/@scope") == ["rowgroup", "rowgroup"]
 

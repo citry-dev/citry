@@ -23,23 +23,21 @@ The earlier a mistake is reported, the less time it costs you.
   apply to that framework, so a framework where some mistakes cannot be
   made has a shorter bar. Each colored part shows how many ended one
   way.
-- Dark green, "Error before running": the editor, a command-line check,
-  or the production build reported an error before the app ran. This
-  is the best outcome.
-- Light green, "Warning before running": a tool reported the mistake
-  before the app ran, but only as a warning, which is easy to miss.
-- Orange, "Error at runtime": nothing reported the mistake until the
-  app ran, and then the server, an error response, or the browser
-  reported an error.
-- Light orange, "Warning at runtime": the running app only printed a
+- Dark green, "Static error": the editor, a command-line check, or the
+  production build reported an error before the app ran. This is the
+  best outcome.
+- Light green, "Static warning": a tool reported the mistake before the
+  app ran, but only as a warning, which is easy to miss.
+- Orange, "Runtime error": nothing reported the mistake until the app
+  ran, and then the server, an error response, or the browser reported
+  an error.
+- Light orange, "Runtime warning": the running app only printed a
   warning.
-- Red, "Missed, page wrong": nothing reported the mistake, and the page
-  looks or behaves wrongly.
-- Dark gray, "Missed, no visible change": nothing reported the mistake,
-  and the page looks the same, so the mistake stays hidden until the
-  case it affects comes up.
-- The number at the end of each bar counts the mistakes reported as an
-  error before running.
+- Red, "Missed": nothing reported the mistake, and the page looks or
+  behaves wrongly.
+- Dark gray, "Missed, page unchanged": nothing reported the mistake, and
+  the page looks the same, so the mistake stays hidden until the case it
+  affects comes up.
 
 ## Where Citry stands
 
@@ -103,6 +101,9 @@ Each cell shows, as a short code, where the mistake was first
 reported. A scored cell is tinted with its chart color. On a computer, hover
 over a cell to see what the tools printed, or why the mistake does not
 apply.
+
+"(caught/total)" counts the mistakes a framework reported at all, before
+or while running, out of those that apply to it.
 
 <c-error-benchmark-table />
 

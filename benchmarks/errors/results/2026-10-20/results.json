@@ -59,27 +59,27 @@
   "buckets": [
     {
       "id": "static-error",
-      "label": "Error before running"
+      "label": "Static error"
     },
     {
       "id": "static-warning",
-      "label": "Warning before running"
+      "label": "Static warning"
     },
     {
       "id": "runtime-error",
-      "label": "Error at runtime"
+      "label": "Runtime error"
     },
     {
       "id": "runtime-warning",
-      "label": "Warning at runtime"
+      "label": "Runtime warning"
     },
     {
       "id": "silent",
-      "label": "Missed, page wrong"
+      "label": "Missed"
     },
     {
       "id": "never",
-      "label": "Missed, no visible change"
+      "label": "Missed, page unchanged"
     }
   ],
   "codes": [

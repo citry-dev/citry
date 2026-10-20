@@ -66,13 +66,17 @@ CATEGORIES = {
 # The six ways a mistake can end, from best to worst. A developer is better
 # off the earlier a mistake is reported and the louder the report.
 BUCKETS = {
-    "static-error": "Error before running",
-    "static-warning": "Warning before running",
-    "runtime-error": "Error at runtime",
-    "runtime-warning": "Warning at runtime",
-    "silent": "Missed, page wrong",
-    "never": "Missed, no visible change",
+    "static-error": "Static error",
+    "static-warning": "Static warning",
+    "runtime-error": "Runtime error",
+    "runtime-warning": "Runtime warning",
+    "silent": "Missed",
+    "never": "Missed, page unchanged",
 }
+
+
+# The buckets in which some tool or the running app reported the mistake.
+CAUGHT = ("static-error", "static-warning", "runtime-error", "runtime-warning")
 
 
 def bucket(record: dict) -> str | None:
@@ -89,6 +93,14 @@ def bucket(record: dict) -> str | None:
     if lenient == "runtime-warning":
         return "runtime-warning"
     return strict if strict in {"silent", "never"} else None
+
+
+def caught_total(by: dict, framework: str, mistake_ids: list[str]) -> str:
+    """Count the mistakes a framework reported at all, out of those that apply to it, as "(caught/total)"."""
+    records = [by[(mistake, framework)] for mistake in mistake_ids if (mistake, framework) in by]
+    scored = [record for record in records if record["status"] == "ported"]
+    caught = sum(bucket(record) in CAUGHT for record in scored)
+    return f"({caught}/{len(scored)})"
 
 
 def cell(record: dict) -> str:
@@ -146,21 +158,28 @@ def write(run_dir: Path, output: Path) -> None:
         key: Counter(bucket(record) or record["status"] for record in records if record["framework"] == key)
         for key in keys
     }
+    for key in keys:
+        # A mistake that cannot be written in a framework, for either reason, is one row.
+        counts[key]["n/a"] = counts[key]["not-applicable"] + counts[key]["prevented"]
     for outcome, label in (
-        *BUCKETS.items(),
-        ("not-applicable", "Does not apply"),
-        ("prevented", "Prevented by design"),
+        *((bucket_id, BUCKETS[bucket_id]) for bucket_id in CAUGHT),
+        ("n/a", "N/A or prevented by design"),
+        ("silent", BUCKETS["silent"]),
+        ("never", BUCKETS["never"]),
         ("ported", "Not scored (runtime skipped)"),
         ("missing", "No case written"),
     ):
         if any(counts[key][outcome] for key in keys) or outcome in BUCKETS:
             lines.append(f"| {label} | " + " | ".join(str(counts[key][outcome]) for key in keys) + " |")
     lines += ["", "## Every mistake", "", LEGEND, f"| Mistake | {names} |", "| --- |" + " --- |" * len(keys)]
+    every = [mistake.id for mistake in mistakes]
+    lines.append("| (caught/total) | " + " | ".join(caught_total(by, key, every) for key in keys) + " |")
     for category, heading in CATEGORIES.items():
         group = [mistake for mistake in mistakes if mistake.category == category]
         if not group:
             continue
-        lines.append(f"| **{heading}** |" + " |" * len(keys))
+        ids = [mistake.id for mistake in group]
+        lines.append(f"| **{heading}** | " + " | ".join(caught_total(by, key, ids) for key in keys) + " |")
         for mistake in group:
             cells = [cell(by[(mistake.id, key)]) if (mistake.id, key) in by else "-" for key in keys]
             lines.append(f"| {mistake.title} | " + " | ".join(cells) + " |")
