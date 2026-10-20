@@ -2,6 +2,15 @@
 
 All notable changes to `citry-lsp` are documented here.
 
+## Unreleased
+
+### Fixed
+
+- `citry check --types` and the editor now report type errors in a
+  component that has no `template_data()` of its own, or whose
+  `template_data()` or `js_data()` comes from a class in an installed
+  package, an editable install, or a `.venv` inside the project.
+
 ## [0.2.0] - 2026-10-19
 
 ### Added

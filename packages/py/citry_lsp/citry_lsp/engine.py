@@ -151,6 +151,7 @@ from citry_lsp.regions import (
     standalone_region,
 )
 from citry_lsp.root_element import TAG_ELEMENT_TYPEDEF, UNKNOWN_ROOT, template_root_element_type
+from citry_lsp.type_analysis import is_project_source_file
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
@@ -378,7 +379,13 @@ class _JsDataNamespace:
 
 @dataclass(frozen=True, slots=True)
 class ExpressionShadow:
-    """One analyzer document for one proven template consumer."""
+    """
+    One analyzer document for one proven template consumer.
+
+    `source_file` is the module the document copies, which may be an
+    inherited base class in another package. `anchor_file` is the consuming
+    component's own file, and the document is placed next to it.
+    """
 
     identity: str
     source_file: Path
@@ -386,6 +393,7 @@ class ExpressionShadow:
     document: ShadowPythonDocument
     query: TemplatePythonQuery
     cursor_offset: int
+    anchor_file: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -410,6 +418,7 @@ class _ExpressionShadowConsumer:
 
     identity: str
     source_file: Path
+    anchor_file: Path
     source: str
     source_kind: Literal["schema", "inferred"]
     source_module: str | None
@@ -4653,8 +4662,14 @@ def _expression_shadow_consumers(
         return None
     consumers: list[_ExpressionShadowConsumer] = []
     for owner, context in zip(owners, contexts, strict=True):
+        # ty checks only files in its project, and the copied module may be a
+        # base class outside it, so the copy is placed next to the
+        # component's own file. A file template is the fallback, because the
+        # user's checked files hold it too.
+        anchor_file = owner.python_file or owner.template_file
         if (
             context is None
+            or anchor_file is None
             or context.source_file is None
             or context.source is None
             or context.source_kind not in {"schema", "inferred"}
@@ -4677,6 +4692,7 @@ def _expression_shadow_consumers(
             _ExpressionShadowConsumer(
                 identity=owner.definition_id,
                 source_file=context.source_file,
+                anchor_file=anchor_file,
                 source=context.source,
                 source_kind=cast("Literal['schema', 'inferred']", context.source_kind),
                 source_module=context.source_module,
@@ -4874,6 +4890,7 @@ def _build_expression_shadows(
                 document=shadow,
                 query=query,
                 cursor_offset=cursor_offset,
+                anchor_file=consumer.anchor_file,
             )
         )
     return tuple(shadows)
@@ -8460,11 +8477,13 @@ def js_data_inference_requests(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> tuple[JsDataInferenceRequest, ...]:
     """
-    Return the `js_data()` methods in `workspace` whose values Citry's rules leave partly unknown.
+    Return the `js_data()` methods of components in `workspace` whose values Citry's rules leave partly unknown.
 
     Each request names the expressions to ask ty about: the largest parts of
     each value that the rules could not type. A method whose current source
-    ty has already answered for is left out.
+    ty has already answered for is left out. The method may be inherited
+    from a base class outside the workspace; the component that uses it
+    must be the user's own source.
     """
     catalog = project.catalog
     source_analysis = project.source_analysis
@@ -8480,7 +8499,14 @@ def js_data_inference_requests(
             continue
         owner = chain[-1]
         source_file = owner.source_file.resolve()
-        if not source_file.is_relative_to(workspace) or (source_file, owner.qualname) in requests:
+        # ty answers only for a copy placed next to the user's own file, so
+        # an installed component, whose authors check it, is skipped.
+        anchor_file = component.python_file
+        if (
+            anchor_file is None
+            or not is_project_source_file(anchor_file, workspace)
+            or (source_file, owner.qualname) in requests
+        ):
             continue
         found, source = (
             _synchronized_document_source(owner.source_file, open_documents)
@@ -8521,6 +8547,7 @@ def js_data_inference_requests(
             qualname=owner.qualname,
             module=owner.module,
             spans=spans,
+            anchor_file=anchor_file,
         )
     return tuple(requests.values())
 
@@ -8545,6 +8572,9 @@ class JsDataInferenceRequest:
         qualname: The qualified name of the class that defines the method.
         module: The importable module name of the file.
         spans: Start and end string offsets in `source` of each part to type.
+        anchor_file: The file of a component in the workspace that uses the
+            method. The copy ty checks is placed next to it, because ty
+            reports nothing for a file outside its project.
 
     """
 
@@ -8553,6 +8583,7 @@ class JsDataInferenceRequest:
     qualname: str
     module: str
     spans: tuple[tuple[int, int], ...]
+    anchor_file: Path
 
 
 def _projected_type(value: JsonWireType | str) -> str:

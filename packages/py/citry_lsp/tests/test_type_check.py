@@ -702,6 +702,102 @@ def test_check_project_python_types_reports_ty_findings_like_the_editor(tmp_path
     assert found[0].diagnostic.source == "Citry (ty)"
 
 
+# Without a template_data() of its own, the component inherits the one on
+# Citry's base class, outside this workspace, and its Kwargs fields reach
+# the template.
+_NO_TEMPLATE_DATA_APP = """from dataclasses import dataclass
+from citry import Citry, Component
+engine = Citry(autodiscover=False)
+@dataclass
+class Owner:
+    name: str
+class Greeting(Component):
+    citry = engine
+    class Kwargs:
+        owner: Owner
+    template = '<p>Hello {{ owner.nmae }}</p>'
+"""
+
+
+def test_check_project_python_types_reports_findings_without_template_data(tmp_path):
+    (tmp_path / "app.py").write_text(_NO_TEMPLATE_DATA_APP, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+
+    found = check_project_python_types(project, tmp_path)
+
+    assert [(item.path.name, item.diagnostic.code, item.diagnostic.message) for item in found] == [
+        ("app.py", "citry.python.unresolved-attribute", "Object of type `Owner` has no attribute `nmae`"),
+    ]
+
+
+# A base class installed in the project's own virtual environment. ty reports
+# nothing for files under `.venv`, so its template_data() and js_data() are
+# checked through copies placed next to the component that uses them.
+_VENV_BASE = """from dataclasses import dataclass
+@dataclass
+class Owner:
+    name: str
+class Base:
+    def labels(self) -> list[str]:
+        return []
+    def template_data(self, kwargs, slots):
+        return {"owner": Owner(name="Ada")}
+    def js_data(self, kwargs, slots):
+        return {"labels": self.labels()}
+"""
+
+_VENV_APP = """from pathlib import Path
+from basepkg import Base
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Greeting(Base, Component):
+    citry = engine
+    template_file = 'greeting.html'
+    js_file = 'greeting.js'
+"""
+
+
+def _venv_base_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    site_packages = tmp_path / ".venv" / "lib" / "site-packages"
+    (site_packages / "basepkg").mkdir(parents=True)
+    (site_packages / "basepkg" / "__init__.py").write_text(_VENV_BASE, encoding="utf-8")
+    (tmp_path / ".venv" / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+    # The app worker imports the base from the environment, as an installed
+    # package would be imported.
+    monkeypatch.setenv("PYTHONPATH", str(site_packages))
+    return _documents(
+        tmp_path,
+        {
+            "greeting.html": ("citry-html", "<p>Hello {{ owner.nmae }}</p>"),
+            "greeting.js": ("javascript", "$component({ methods: { f() { this.labels.toFixed(); } } });"),
+        },
+        app=_VENV_APP,
+    )
+
+
+def test_check_project_python_types_reports_findings_from_a_base_in_the_virtual_environment(tmp_path, monkeypatch):
+    project, _documents_by_uri = _venv_base_project(tmp_path, monkeypatch)
+
+    found = check_project_python_types(project, tmp_path)
+
+    assert [(item.path.name, item.diagnostic.code, item.diagnostic.message) for item in found] == [
+        ("greeting.html", "citry.python.unresolved-attribute", "Object of type `Owner` has no attribute `nmae`"),
+    ]
+
+
+def test_ty_types_js_data_inherited_from_a_base_in_the_virtual_environment(tmp_path, monkeypatch):
+    _command()
+    project, documents = _venv_base_project(tmp_path, monkeypatch)
+
+    asyncio.run(_infer_js_data(tmp_path, project, documents))
+
+    # ty typed `labels` as a list of strings, so TypeScript rejects toFixed.
+    assert [(code, text) for code, text, _range in _findings(tmp_path, "greeting.js", project, documents)] == [
+        ("citry.typescript.ts2339", "toFixed"),
+    ]
+
+
 def test_check_types_reports_ty_findings_in_both_formats(tmp_path):
     tsc = Path(_command()[0])
     (tmp_path / "app.py").write_text(_TY_APP, encoding="utf-8")
