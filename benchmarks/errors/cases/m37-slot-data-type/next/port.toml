@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/board.tsx", contains = "padStart" }
+
+[[edits]]
+file = "app/board.tsx"
+old = "({card.count})"
+new = '({card.count.padStart(2, "0")})'

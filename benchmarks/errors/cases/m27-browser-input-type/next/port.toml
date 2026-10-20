@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/board.tsx", contains = "open={open ?" }
+
+[[edits]]
+file = "app/board.tsx"
+old = "<Status open={open} onClose={() => setOpen(false)} />"
+new = '<Status open={open ? "open" : "closed"} onClose={() => setOpen(false)} />'

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/status.py", contains = '@click="open = false"' }
+
+[[edits]]
+file = "app/components/status.py"
+old = '''@click="$emit('close')"'''
+new = '@click="open = false"'

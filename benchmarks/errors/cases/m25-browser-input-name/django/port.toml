@@ -1,0 +1,11 @@
+# Alpine has no named inputs: the status line is an Alpine component nested
+# inside the one that owns `open`, and it reads `open` through the scope
+# Alpine shares with it. The name it reads is therefore the input's name, and
+# the case misspells that read.
+status = "ported"
+mistake = { file = "board/static/board/board.js", contains = "this.opne" }
+
+[[edits]]
+file = "board/static/board/board.js"
+old = "return this.open ? 'Status: open'"
+new = "return this.opne ? 'Status: open'"

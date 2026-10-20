@@ -1,0 +1,10 @@
+status = "ported"
+mistake = { file = "app/status.tsx", contains = "open = false" }
+
+[[edits]]
+file = "app/status.tsx"
+old = "onClick={onClose}"
+new = '''
+onClick={() => {
+          open = false;
+        }}'''

@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "FastHTML has no browser-side component model: its components are Python functions that run on the server, and its browser code is plain scripts. The page therefore has no browser-side `Status` component with an `open` input, and this baseline leaves the status line out."

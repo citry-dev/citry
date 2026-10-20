@@ -1,0 +1,8 @@
+# The footer block renders inside the card's template, so it reads the title and count the card was given.
+status = "ported"
+mistake = { file = "board/templates/board/project_card.html", contains = "{{ titel }}" }
+
+[[edits]]
+file = "board/templates/board/project_card.html"
+old = "Open {{ title }} ({{ count }})"
+new = "Open {{ titel }} ({{ count }})"

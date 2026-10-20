@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/board_page.py", contains = "card.titel" }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = "Open {{ card.title }} ({{ card.count }})"
+new = "Open {{ card.titel }} ({{ card.count }})"

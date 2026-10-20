@@ -1,0 +1,10 @@
+# Django templates print every value as text, so the common way to treat a
+# value as text is to join it to more text with the `add` filter. With a
+# number on one side, `add` returns an empty string.
+status = "ported"
+mistake = { file = "board/templates/board/project_card.html", contains = 'count|add:" tasks"' }
+
+[[edits]]
+file = "board/templates/board/project_card.html"
+old = "({{ count }})"
+new = '({{ count|add:" tasks" }})'

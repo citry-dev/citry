@@ -1,0 +1,8 @@
+# The macro hands the title and count to the call block with `caller(title, count)`.
+status = "ported"
+mistake = { file = "templates/index.html", contains = "{{ titel }}" }
+
+[[edits]]
+file = "templates/index.html"
+old = "Open {{ title }} ({{ count }})"
+new = "Open {{ titel }} ({{ count }})"

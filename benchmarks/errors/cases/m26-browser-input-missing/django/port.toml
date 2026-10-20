@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "Alpine components declare no inputs. The status line is an Alpine component nested inside the one that owns `open`, and it reads `open` through the scope Alpine shares with it, so the page passes it no input it could leave out."
