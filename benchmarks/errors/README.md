@@ -17,13 +17,15 @@ framework, the earliest stage that reported it.
    described in [The reference page](#the-reference-page), so a mistake means
    the same thing everywhere.
 2. Every mistake in [`catalogue.toml`](catalogue.toml) has one folder per
-   framework under `cases/<mistake>/<framework>/`. Its `port.toml` names the
-   baseline files the case replaces and the line that carries the mistake.
-3. The runner copies the clean app, lays the case's files over it, and runs
-   that framework's tools, listed in `frameworks/<framework>/framework.toml`.
+   framework under `cases/<mistake>/<framework>/`. Its `port.toml` lists the
+   text edits that write the mistake into the baseline's files, and names
+   the line that carries the mistake.
+3. The runner copies the clean app, applies the case's edits to the copy,
+   and runs that framework's tools, listed in
+   `frameworks/<framework>/framework.toml`.
    A tool's finding counts if the clean app did not produce it and it
-   points within `window` lines of the change (three by default). A failing
-   command with no location takes the first file and line its output names;
+   points within `window` lines of the mistake line (three by default). A
+   failing command with no location takes the first file and line its output names;
    with none, it counts only when its message names the changed file. A
    finding elsewhere can still come from the change: a
    parser reports an unclosed tag at the outer element, and a type checker
@@ -145,8 +147,24 @@ hydration, so m14 does not apply to it.
   naturally is.
 - **One mistake per case.** Change only what the mistake needs, in files the
   baseline already has.
+- **Write the change as edits.** Each `[[edits]]` entry replaces the text
+  `old` in the baseline file `file` with `new`. `old` must appear exactly
+  once in that file, so include enough of the surrounding line, or the line
+  before it, to make it unique. Every `old` is looked up in the clean file,
+  not in the result of another edit, so two edits of one case must not
+  overlap. `validate` checks every edit against the current baseline: when a
+  baseline change removes or repeats an edit's `old` text, it names each case
+  that needs a look. A case that rewrites a file completely can instead
+  replace it with a copy kept next to `port.toml`, with
+  `files = { "<path in the baseline>" = "<copy>" }`. Nothing checks such a
+  copy when the baseline changes later, so use one only when edits would
+  replace most of the file. A case cannot both replace and edit the same
+  file. Put the `[[edits]]` entries after the
+  other keys, because TOML puts every key below a table header into that
+  table.
 - **Point at the mistake.** `mistake.contains` is text that appears on exactly
-  one line of `mistake.file`, the line where a developer would look first.
+  one line of `mistake.file` once the edits are applied, the line where a
+  developer would look first.
 - **Record what does not apply.** Use `status = "not-applicable"` when the
   mistake has no natural equivalent, and `status = "prevented"` when the
   framework's design makes it impossible to write. Both need a `reason`.
@@ -165,8 +183,12 @@ hydration, so m14 does not apply to it.
 ```toml
 # cases/m02-input-name/next/port.toml
 status = "ported"
-files = { "app/board.tsx" = "board.tsx" }
 mistake = { file = "app/board.tsx", contains = "titel=" }
+
+[[edits]]
+file = "app/board.tsx"
+old = "title={project.title}"
+new = "titel={project.title}"
 ```
 
 ## Each framework's tools

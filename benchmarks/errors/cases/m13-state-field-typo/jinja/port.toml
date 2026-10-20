@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app.py" = "app.py" }
 mistake = { file = "app.py", contains = "cuont" }
+
+[[edits]]
+file = "app.py"
+old = 'request.app.state.count += int(str(form["amount"]))'
+new = 'request.app.state.cuont += int(str(form["amount"]))'

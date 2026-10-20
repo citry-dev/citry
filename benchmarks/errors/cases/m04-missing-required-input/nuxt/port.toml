@@ -1,3 +1,12 @@
 status = "ported"
-files = { "app/app.vue" = "app.vue" }
 mistake = { file = "app/app.vue", contains = "<Card" }
+
+[[edits]]
+file = "app/app.vue"
+old = '''
+        :key="card.title"
+        :title="card.title"
+'''
+new = '''
+        :key="card.title"
+'''

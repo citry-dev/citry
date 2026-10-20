@@ -1,3 +1,18 @@
 status = "ported"
-files = { "templates/index.html" = "index.html" }
 mistake = { file = "templates/index.html", contains = "<dvi " }
+
+[[edits]]
+file = "templates/index.html"
+old = '<div class="board" title="Board">'
+new = '<dvi class="board" title="Board">'
+
+[[edits]]
+file = "templates/index.html"
+old = '''
+    <form role="search"><button type="submit">Search</button></form>
+  </div>
+'''
+new = '''
+    <form role="search"><button type="submit">Search</button></form>
+  </dvi>
+'''

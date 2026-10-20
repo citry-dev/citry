@@ -80,13 +80,27 @@ class Framework:
 
 
 @dataclass(frozen=True)
+class Edit:
+    """One text replacement a case makes in a baseline file: `old` must appear there exactly once."""
+
+    file: str
+    old: str
+    new: str
+
+
+@dataclass(frozen=True)
 class Port:
     mistake: str
     framework: str
     status: str
     reason: str
-    # Published path inside the baseline -> source file next to port.toml.
+    # Published path inside the baseline -> source file next to port.toml,
+    # for a case that replaces the whole file.
     files: dict[str, Path]
+    # Replacements in baseline files, for a case that changes a few lines.
+    # Written as edits, a case keeps following the baseline when other parts
+    # of the same file change.
+    edits: tuple[Edit, ...]
     mistake_file: str
     mistake_contains: str
     window: int
@@ -199,25 +213,51 @@ def load_port(path: Path) -> Port:
         tomllib.loads(path.read_text(encoding="utf-8")),
         where,
         {"status"},
-        {"reason", "files", "mistake", "window", "indirect"},
+        {"reason", "files", "edits", "mistake", "window", "indirect"},
     )
     status = data["status"]
     if status not in PORT_STATUSES:
         raise ConfigError(f"{where} has unknown status {status!r}")
     root = path.parent
     files: dict[str, Path] = {}
+    edits: list[Edit] = []
     mistake_file = mistake_contains = ""
     if status == "ported":
-        _table(data, where, {"status", "files", "mistake"}, {"reason", "window", "indirect"})
-        for published, source in data["files"].items():
+        _table(data, where, {"status", "mistake"}, {"files", "edits", "reason", "window", "indirect"})
+        raw_files = data.get("files", {})
+        # A wrong shape would otherwise fail later as a traceback instead of
+        # an error that names the port file.
+        if not isinstance(raw_files, dict) or not all(isinstance(value, str) for value in raw_files.values()):
+            raise ConfigError(f"{where} files must be a table of baseline paths to copy file names")
+        for published, source in raw_files.items():
             source_path = root / source
             if not source_path.is_file():
                 raise ConfigError(f"{where} names a missing file {source!r}")
             files[published] = source_path
+        if not isinstance(data.get("edits", []), list):
+            raise ConfigError(f"{where} edits must be a list of tables")
+        for index, raw in enumerate(data.get("edits", [])):
+            row = _table(raw, f"{where} edit {index}", {"file", "old", "new"})
+            if not all(isinstance(row[key], str) for key in ("file", "old", "new")):
+                raise ConfigError(f"{where} edit {index} needs text for file, old and new")
+            # Empty text is found everywhere, and an edit that keeps the text
+            # would leave the clean app unchanged, so both point at a typo.
+            if not row["old"]:
+                raise ConfigError(f"{where} edit {index} has an empty old text")
+            if row["old"] == row["new"]:
+                raise ConfigError(f"{where} edit {index} changes nothing")
+            if row["file"] in files:
+                # Edits to a file the case also replaces whole have no single
+                # meaning: they could apply to the clean file or to the copy.
+                raise ConfigError(f"{where} both replaces and edits {row['file']!r}")
+            edits.append(Edit(**row))
+        # A ported case that changes nothing would score the clean app.
+        if not files and not edits:
+            raise ConfigError(f"{where} with status 'ported' needs files or edits")
         mistake = _table(data["mistake"], f"{where} [mistake]", {"file", "contains"})
         mistake_file, mistake_contains = mistake["file"], mistake["contains"]
-        if mistake_file not in files:
-            raise ConfigError(f"{where} mistake file {mistake_file!r} is not one of the replaced files")
+        if mistake_file not in files and all(edit.file != mistake_file for edit in edits):
+            raise ConfigError(f"{where} mistake file {mistake_file!r} is not one of the changed files")
     elif not data.get("reason"):
         # A case a framework cannot express is recorded with its reason, never dropped.
         raise ConfigError(f"{where} with status {status!r} needs a reason")
@@ -232,6 +272,7 @@ def load_port(path: Path) -> Port:
         status=status,
         reason=data.get("reason", ""),
         files=files,
+        edits=tuple(edits),
         mistake_file=mistake_file,
         mistake_contains=mistake_contains,
         window=int(data.get("window", 3)),

@@ -1,3 +1,7 @@
 status = "ported"
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = 'Dvi(' }
+
+[[edits]]
+file = "main.py"
+old = 'return Title("Projects"), Div('
+new = 'return Title("Projects"), Dvi('

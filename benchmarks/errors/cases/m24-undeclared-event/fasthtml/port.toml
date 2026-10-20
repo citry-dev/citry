@@ -1,3 +1,7 @@
 status = "ported"
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = "'hdie'" }
+
+[[edits]]
+file = "main.py"
+old = '''Button("Hide", onclick="this.dispatchEvent(new CustomEvent('hide', {bubbles: true}))"),'''
+new = '''Button("Hide", onclick="this.dispatchEvent(new CustomEvent('hdie', {bubbles: true}))"),'''

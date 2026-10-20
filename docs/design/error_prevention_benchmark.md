@@ -1,7 +1,9 @@
 # Error-prevention benchmark
 
 Status: implemented in [`benchmarks/errors/`](../../benchmarks/errors/README.md)
-for issue [#158](https://github.com/citry-dev/citry/issues/158).
+for issue [#158](https://github.com/citry-dev/citry/issues/158). The plan for
+extending it with more mistakes and frameworks is in
+[error_prevention_benchmark_plan.md](error_prevention_benchmark_plan.md).
 
 ## What it is for
 
@@ -116,11 +118,31 @@ was seen.
   note; and `results.json` lists both the findings each note accepted and
   every finding elsewhere that no note covers.
 
+### How a case changes the clean app
+
+A case lists text edits to the baseline's files: each one replaces an `old`
+text, which must appear exactly once in the clean file, with a `new` one.
+The reference page will grow as mistakes are added, and each addition edits
+the same files the cases change. A case that kept a full copy of such a file
+would go on testing the old page without any warning. `validate` instead
+reports an edit whose `old` text it cannot find exactly once, and names the
+case. A case that rewrites a file completely can still replace it with a full
+copy, but nothing checks that copy against later baseline changes, so a
+copy is only for a case where edits would replace most of the file.
+
+Every `old` text is looked up in the clean file, never in the result of
+another edit. So the order of a case's edits does not matter, and one edit
+cannot create or hide the text another one needs.
+
 ## How it behaves when something goes wrong
 
 | Problem | What happens |
 | --- | --- |
-| A case (`port.toml`) names a file the clean app does not have, or its mistake text is not on exactly one line | `validate` reports it, and `run` stops the whole run with an error, writing no results |
+| A case (`port.toml`) replaces or edits a file the clean app does not have, or its mistake text is not on exactly one line after the edits | `validate` reports it with the case's folder, and `run` stops the whole run with an error, writing no results |
+| An edit's `old` text is not in the clean file, or appears there more than once (a repeat that overlaps the first match counts) | The same: `validate` names the case and quotes the text, and `run` stops before running anything. This is how a baseline change shows which cases need a look |
+| Two edits of one case change overlapping text | The same. There is no single result for two replacements of the same characters. Edits that share no characters are allowed, even when one ends where the next begins |
+| A case both replaces a file with a copy and edits it, gives an edit an empty `old` text, gives one whose `new` equals its `old`, has neither edits nor copies, or gives `edits` or `files` the wrong shape | Loading fails with the file named. Each of these is a mistake in the case: edits to a copied file have no single meaning, empty text matches everywhere, and an edit that changes nothing leaves the clean app as it is |
+| The baseline changes in a file that a case replaces with a full copy | Nothing reports it: the copy keeps the old version of the whole file, so the case tests a page that differs from the clean app in more than its mistake. Cases therefore use edits unless they rewrite most of a file |
 | A `framework.toml` or `port.toml` has an unknown or missing key | Loading fails with the file and key named. A typo cannot silently change what is measured |
 | A mistake has no port in some framework | `validate` lists it. In a run the cell shows `-`, so a gap is visible rather than counted |
 | The clean app produces an error in some stage, or its page fails | The run continues, but every cell for that framework is marked `!`, because a case's finding could not be told apart from what was already there |

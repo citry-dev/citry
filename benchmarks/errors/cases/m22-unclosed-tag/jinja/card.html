@@ -1,7 +1,0 @@
-{% macro card(title, count) %}
-<div class="card">
-  <h2>{{ title }}: {{ count }} tasks</h2>
-  <footer>{{ caller() }}
-  <button type="button" @click="$dispatch('hide')">Hide</button>
-</div>
-{% endmacro %}

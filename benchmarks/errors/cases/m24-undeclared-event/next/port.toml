@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/card.tsx" = "card.tsx" }
 mistake = { file = "app/card.tsx", contains = 'onHdie' }
+
+[[edits]]
+file = "app/card.tsx"
+old = '<button type="button" onClick={onHide}>'
+new = '<button type="button" onClick={onHdie}>'

@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/app.vue" = "app.vue" }
 mistake = { file = "app/app.vue", contains = "titel=\"Board\"" }
+
+[[edits]]
+file = "app/app.vue"
+old = '<div class="board" title="Board">'
+new = '<div class="board" titel="Board">'

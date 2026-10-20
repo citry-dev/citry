@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/app.vue" = "app.vue" }
 mistake = { file = "app/app.vue", contains = "amont" }
+
+[[edits]]
+file = "app/app.vue"
+old = "body: { amount: 1 },"
+new = "body: { amont: 1 },"

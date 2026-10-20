@@ -1,3 +1,12 @@
 status = "ported"
-files = { "app/page.tsx" = "page.tsx" }
 mistake = { file = "app/page.tsx", contains = '<dvi className' }
+
+[[edits]]
+file = "app/page.tsx"
+old = '<div className="board" title="Board">'
+new = '<dvi className="board" title="Board">'
+
+[[edits]]
+file = "app/page.tsx"
+old = "</div>"
+new = "</dvi>"

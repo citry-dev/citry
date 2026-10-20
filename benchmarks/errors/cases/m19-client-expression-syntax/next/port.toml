@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/board.tsx" = "board.tsx" }
 mistake = { file = "app/board.tsx", contains = 'visible</p> &&}' }
+
+[[edits]]
+file = "app/board.tsx"
+old = "{open && <p>Details are visible</p>}"
+new = "{open && <p>Details are visible</p> &&}"

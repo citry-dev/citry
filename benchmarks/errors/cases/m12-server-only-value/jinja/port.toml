@@ -1,3 +1,7 @@
 status = "ported"
-files = { "templates/index.html" = "index.html" }
 mistake = { file = "templates/index.html", contains = "SECRET_TOKEN" }
+
+[[edits]]
+file = "templates/index.html"
+old = '''<p x-data='{ api: {{ api_base|tojson }} }'>API: <span x-text="api"></span></p>'''
+new = '''<p x-data='{ api: {{ api_base|tojson }} }'>API: <span x-text="SECRET_TOKEN"></span></p>'''

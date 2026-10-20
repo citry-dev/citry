@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/board.tsx" = "board.tsx" }
 mistake = { file = "app/board.tsx", contains = 'const toggle' }
+
+[[edits]]
+file = "app/board.tsx"
+old = "const toggle = () => setOpen((value) => !value);"
+new = "const toggle = () => setOpen((value) => !value;"

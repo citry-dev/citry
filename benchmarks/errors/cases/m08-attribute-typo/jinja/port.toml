@@ -1,3 +1,7 @@
 status = "ported"
-files = { "templates/index.html" = "index.html" }
 mistake = { file = "templates/index.html", contains = "owner.nmae" }
+
+[[edits]]
+file = "templates/index.html"
+old = "<p>Owner: {{ owner.name }}</p>"
+new = "<p>Owner: {{ owner.nmae }}</p>"

@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/components/counter.py" = "counter.py" }
 mistake = { file = "app/components/counter.py", contains = "sav({amount: 1})" }
+
+[[edits]]
+file = "app/components/counter.py"
+old = '<button type="button" @c-click="save({amount: 1})">Add</button>'
+new = '<button type="button" @c-click="sav({amount: 1})">Add</button>'

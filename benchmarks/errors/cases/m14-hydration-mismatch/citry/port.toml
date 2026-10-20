@@ -3,5 +3,17 @@
 # It shows only on a window at least 60rem wide; the runner's Chromium
 # window is 1280px. It changes whether the details text shows, not a label.
 status = "ported"
-files = { "app/components/details.py" = "details.py" }
 mistake = { file = "app/components/details.py", contains = "window.matchMedia" }
+
+[[edits]]
+file = "app/components/details.py"
+old = '''
+      $component({
+'''
+new = '''
+      $component({
+        created() {
+          // Start with the details open on wide screens.
+          this.open = window.matchMedia('(min-width: 60rem)').matches;
+        },
+'''

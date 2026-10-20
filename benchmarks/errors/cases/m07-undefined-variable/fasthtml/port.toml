@@ -1,3 +1,7 @@
 status = "ported"
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = 'ownr.name' }
+
+[[edits]]
+file = "main.py"
+old = 'P(f"Owner: {owner.name}"),'
+new = 'P(f"Owner: {ownr.name}"),'

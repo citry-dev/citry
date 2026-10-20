@@ -3,5 +3,9 @@
 # secret's value into the script instead would be a different mistake: it
 # sends the secret to the browser.
 status = "ported"
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = "'API: ' + SECRET_TOKEN" }
+
+[[edits]]
+file = "main.py"
+old = '''Script(f"document.getElementById('api').textContent = 'API: ' + {json.dumps(API_BASE)};"),'''
+new = '''Script("document.getElementById('api').textContent = 'API: ' + SECRET_TOKEN;"),'''

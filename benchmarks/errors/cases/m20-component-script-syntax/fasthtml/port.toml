@@ -1,3 +1,7 @@
 status = "ported"
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = 'function toggleDetails( {' }
+
+[[edits]]
+file = "main.py"
+old = "function toggleDetails() {"
+new = "function toggleDetails( {"

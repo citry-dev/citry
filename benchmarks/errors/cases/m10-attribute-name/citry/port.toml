@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/components/board_page.py" = "board_page.py" }
 mistake = { file = "app/components/board_page.py", contains = "titel=\"Board\"" }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = '<div class="board" title="Board">'
+new = '<div class="board" titel="Board">'

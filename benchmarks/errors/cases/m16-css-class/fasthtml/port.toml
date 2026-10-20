@@ -1,3 +1,7 @@
 status = "ported"
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = 'cls="bord"' }
+
+[[edits]]
+file = "main.py"
+old = 'cls="board",'
+new = 'cls="bord",'

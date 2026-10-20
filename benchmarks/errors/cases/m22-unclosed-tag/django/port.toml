@@ -1,4 +1,7 @@
 status = "ported"
-files = { "board/templates/board/card.html" = "card.html" }
 mistake = { file = "board/templates/board/card.html", contains = 'class="card-footer"' }
 
+[[edits]]
+file = "board/templates/board/card.html"
+old = '<div class="card-footer">{% block footer %}{% endblock %}</div>'
+new = '<div class="card-footer">{% block footer %}{% endblock %}'
