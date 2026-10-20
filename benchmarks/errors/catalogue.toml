@@ -3,9 +3,15 @@
 # Each entry describes the mistake in framework-neutral words. A framework's
 # version of it lives in cases/<id>/<framework>/port.toml. `origin` records
 # where the mistake came from, so a reader can check that the set is not
-# chosen to suit Citry: "neutral" entries come from issue #158 and from a
-# survey of what other frameworks' tools check, "citry-inventory" entries
-# from the list of mistakes Citry itself checks or misses. At least half must be "neutral".
+# chosen to suit Citry. "neutral" entries come from one of three sources:
+# issue #158; the maintainer's list of hand-offs, the places where a web app
+# passes data from one part to another (server data into a template or into
+# browser code, a browser request to a server handler, a slot fill, saved
+# state), each checked for a misspelled name, a missing value and a wrong
+# type (section 2 of docs/design/error_prevention_benchmark_plan.md); and a
+# survey of what other frameworks' tools check. "citry-inventory" entries
+# come from the list of mistakes Citry itself checks or misses. At least half
+# must be "neutral".
 #
 # Freeze this file before a published run. Changing a mistake after seeing which
 # framework catches it would bias the result.
@@ -201,3 +207,107 @@ category = "events"
 origin = "citry-inventory"
 description = "The card's Hide control emits or calls a misspelled event, for example `hdie` instead of `hide`, so the page's listener never runs."
 correct = "Clicking Hide on the first card hides that card."
+
+[[mistake]]
+id = "m29-listener-name"
+title = "Parent listens for a misspelled event"
+category = "events"
+origin = "neutral"
+description = "The card emits or calls `hide` correctly, but the page listens under a misspelled name, for example `@hdie` or `onHdie`."
+correct = "Clicking Hide on the first card hides that card."
+
+[[mistake]]
+id = "m30-event-payload-type"
+title = "Event sent with a payload of the wrong type"
+category = "events"
+origin = "neutral"
+description = "The card's `hide` event carries a number, for example the card's task count, where the page expects the card's title (a string). Where the event carries no value, because the page's listener already knows which card it belongs to, this mistake does not apply."
+correct = "Clicking Hide on the first card hides that card."
+
+[[mistake]]
+id = "m31-dom-event-name"
+title = "Misspelled browser event name on an element"
+category = "events"
+origin = "neutral"
+description = "The Details button listens for a misspelled browser event, for example `@clik`, `onClik`, `x-on:clik` or `hx-trigger=\"clik\"`."
+correct = "Clicking Details shows the details text."
+
+[[mistake]]
+id = "m32-payload-type"
+title = "Request payload field of the wrong type"
+category = "events"
+origin = "neutral"
+description = "The Add button sends `amount` as text, for example `{amount: \"1\"}` or a value read from an element's text, where the server declares a whole number. Where the framework turns that text into a number before the server code sees it, the mistake is prevented."
+correct = "Clicking Add increases the saved count from 0 to 1."
+
+[[mistake]]
+id = "m33-payload-missing-field"
+title = "Request payload leaves out a required field"
+category = "events"
+origin = "neutral"
+description = "The Add button sends its request without the `amount` field, for example an empty payload."
+correct = "Clicking Add increases the saved count from 0 to 1."
+
+[[mistake]]
+id = "m34-reply-field"
+title = "Browser reads a misspelled field of the server's reply"
+category = "events"
+origin = "neutral"
+description = "Browser code that receives the server's reply to Add reads a misspelled field, for example `result.cuont` instead of `result.count`. Where the server replies with HTML that replaces part of the page, this mistake does not apply."
+correct = "Clicking Add increases the saved count from 0 to 1."
+
+[[mistake]]
+id = "m35-required-slot-missing"
+title = "Required slot left unfilled"
+category = "naming"
+origin = "neutral"
+description = "The page renders a card without filling its required `footer` slot (or block, or child region)."
+correct = "Each card shows the footer link the page passed in."
+
+[[mistake]]
+id = "m38-state-read-typo"
+title = "Template reads a misspelled state field"
+category = "naming"
+origin = "neutral"
+description = "The counter's text reads the saved total from a misspelled state field, for example `cuont`, while the code that updates it is correct."
+correct = "Clicking Add changes the text from `Saved: 0` to `Saved: 1`."
+
+[[mistake]]
+id = "m39-state-type"
+title = "State field given a value of the wrong type"
+category = "types"
+origin = "neutral"
+description = "The Add handler stores the new total as text, for example `str(total)`, in a state field declared as a number."
+correct = "Clicking Add increases the saved count from 0 to 1. (Only tools can see the wrong type; the page looks the same.)"
+
+[[mistake]]
+id = "m40-browser-value-name"
+title = "Browser code reads a misspelled server value"
+category = "naming"
+origin = "neutral"
+description = "Browser code reads the public setting the server passes to it under a misspelled name, for example `apiBsae`."
+correct = "The page shows `API: /api`."
+
+[[mistake]]
+id = "m41-browser-value-not-json"
+title = "Server passes browser code a value the browser cannot receive"
+category = "server-browser"
+origin = "citry-inventory"
+description = "The server passes the public setting to browser code as an object that cannot be sent as JSON, for example a path or URL object, a set, or a date, instead of a string."
+correct = "The page shows `API: /api`."
+
+[[mistake]]
+id = "m42-secret-sent-to-browser"
+title = "Server sends a secret to the browser"
+category = "server-browser"
+origin = "citry-inventory"
+description = "The server adds `SECRET_TOKEN` to the data it passes to browser code (props, JSON data, a public config key), although no browser code reads it."
+correct = "The page shows `API: /api`, and the secret appears nowhere in what the browser receives. (The page comparison cannot see this; only tools can catch it.)"
+
+[[mistake]]
+id = "m47-template-path"
+title = "Misspelled path to a template or component file"
+category = "templates"
+origin = "neutral"
+description = "The page names the file of its layout or of the card's script with a typo, for example an `extends` target, a `template_file`, or an import path such as `./crad`. Django's m01 port is already an include-path typo, so Django's m47 port misspells the `extends` target instead."
+correct = "The page renders three project cards."

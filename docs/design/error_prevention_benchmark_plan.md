@@ -248,7 +248,7 @@ id = "m30-event-payload-type"
 title = "Event sent with a payload of the wrong type"
 category = "events"
 origin = "neutral"
-description = "The card's `hide` event carries the card's position (a number) where the page expects the card's title (a string)."
+description = "The card's `hide` event carries a number, for example the card's task count, where the page expects the card's title (a string). Where the event carries no value, because the page's listener already knows which card it belongs to, this mistake does not apply."
 correct = "Clicking Hide on the first card hides that card."
 
 [[mistake]]
@@ -264,7 +264,7 @@ id = "m32-payload-type"
 title = "Request payload field of the wrong type"
 category = "events"
 origin = "neutral"
-description = "The Add button sends `amount` as text, for example `{amount: \"one\"}` or a value read from an element's text, where the server declares a whole number."
+description = "The Add button sends `amount` as text, for example `{amount: \"1\"}` or a value read from an element's text, where the server declares a whole number. Where the framework turns that text into a number before the server code sees it, the mistake is prevented."
 correct = "Clicking Add increases the saved count from 0 to 1."
 
 [[mistake]]
@@ -414,9 +414,9 @@ correct = "Each card shows `Board: Projects` under its title."
 
 Notes on single entries:
 
-- **m32:** some frameworks turn `"1"` into `1` on the way in. That is why
-  the description uses a value no framework converts. Whether a documented
-  conversion should count as "prevented" is open question 3.
+- **m32:** some frameworks turn `"1"` into `1` on the way in. Following
+  the decision on open question 3, the description uses `"1"`, and a
+  framework that converts it counts as "prevented".
 - **m34** and **m38** both test reading a field by name; they differ in
   where the value comes from (the reply to one request, or kept state), and
   frameworks check them with different tools. In Citry, m34 does not apply,
