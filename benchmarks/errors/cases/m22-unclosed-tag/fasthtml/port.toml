@@ -6,4 +6,4 @@ mistake = { file = "main.py", contains = 'Footer(footer,' }
 
 [indirect]
 reason = "In FastHTML an unclosed element is an unclosed call. pyright reports the open parenthesis at the start of the call and the statements it swallows below, and ruff reports where the parenthesis should close."
-codes = ["pyright", "syntax-error"]
+codes = ["pyright", "invalid-syntax"]

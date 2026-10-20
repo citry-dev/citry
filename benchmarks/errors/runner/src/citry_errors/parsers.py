@@ -127,7 +127,8 @@ def pyright_json(stdout: str, stderr: str, exit_code: int, work: Path) -> list[F
         return exit_status(stdout, stderr, exit_code, work)
     findings = []
     for raw in payload.get("generalDiagnostics", []):
-        # An "information" diagnostic is a hint the editor shows faintly, not a report.
+        # pyright's "information" level is below a warning; Pylance shows it in
+        # blue, and this benchmark does not count it as a report.
         if raw.get("severity") == "information":
             continue
         start = (raw.get("range") or {}).get("start") or {}
@@ -220,8 +221,8 @@ def ruff_json(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Find
             relative(raw.get("filename", ""), work),
             (raw.get("location") or {}).get("row"),
             "error",
-            # A syntax error has no rule code.
-            str(raw.get("code") or "syntax-error"),
+            # ruff names a syntax error `invalid-syntax`; the fallback covers a finding with no code.
+            str(raw.get("code") or "invalid-syntax"),
             str(raw.get("message", "")),
         )
         for raw in payload
@@ -250,10 +251,17 @@ def djlint(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding
 
 def exit_status(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding]:
     """Treat a failing command as one unlocated error, quoting the end of its output."""
-    del work  # Every parser takes the same arguments; this one has no paths to rewrite.
     if exit_code == 0:
         return []
-    tail = [line for line in _strip_ansi(stdout + "\n" + stderr).splitlines() if line.strip()][-12:]
+    text = _strip_ansi(stdout + "\n" + stderr)
+    tail = [line for line in text.splitlines() if line.strip()][-12:]
+    # A build that fails on a file usually names it with a line somewhere in
+    # its output, often above the tail kept as the message, such as Vite's
+    # `[plugin vite:vue] <work>/app/components/Card.vue:15:5`.
+    for folder in (str(work.resolve()), str(work)):
+        match = re.search(re.escape(folder) + r"/([^\s:()'\"]+):(\d+)", text)
+        if match:
+            return [Finding(match[1], int(match[2]), "error", f"exit-{exit_code}", "\n".join(tail))]
     return [Finding(None, None, "error", f"exit-{exit_code}", "\n".join(tail))]
 
 

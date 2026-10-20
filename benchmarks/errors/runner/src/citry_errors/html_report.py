@@ -63,7 +63,7 @@ h2 { font-size: 1.2rem; margin: 32px 0 8px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: center; }
 th:first-child, td:first-child { text-align: left; }
-thead th { background: var(--head); position: sticky; top: 0; }
+thead th { background: var(--head); }
 tr.group th { background: var(--head); text-align: left; font-weight: 700; }
 td.cell { white-space: nowrap; }
 .wrap { overflow-x: auto; }
@@ -76,8 +76,9 @@ dl.codes dd { margin: 0; }
 }
 """
 
-# Shades light enough that black text reads better on them than white.
-_LIGHT = {"#9ae6b4", "#f6c177", "#cbd5e0", "#e2e8f0", "#a0aec0"}
+# Shades on which dark text reads better than white; on the orange, white
+# text at this size would fall short of the WCAG AA contrast ratio.
+_LIGHT = {"#9ae6b4", "#f6c177", "#cbd5e0", "#e2e8f0", "#a0aec0", "#dd6b20"}
 
 
 def _part(record: dict[str, Any]) -> str:
@@ -124,7 +125,10 @@ def render(summary: dict[str, Any]) -> str:
     if source:
         meta += f", cases and tools from commit <code>{escape(source['commit'][:12])}</code>"
         meta += " with uncommitted benchmark changes" if source.get("benchmark_files_changed") else ""
-    out.append(f'<p class="meta">{meta}. The same {total} mistakes in each framework; earlier is better.</p>')
+    out.append(
+        f'<p class="meta">{meta}. The same {total} mistakes, written in each framework where they apply;'
+        " earlier is better.</p>"
+    )
 
     out.append("<h2>How each mistake ended</h2>")
     out.append('<ul class="legend">')
@@ -150,7 +154,8 @@ def render(summary: dict[str, Any]) -> str:
                 f' title="{escape(label)}: {count}">{count}</span>'
             )
         out.append(
-            f'</span><span class="total" title="Error before running">{row_counts["static-error"]}</span></div>'
+            '</span><span class="total" title="Error before running" aria-label="Errors before running">'
+            f"{row_counts['static-error']}</span></div>"
         )
     out.append("</div>")
 
@@ -170,7 +175,8 @@ def render(summary: dict[str, Any]) -> str:
         out.append(f"<dt>{escape(row['code'])}</dt><dd>{escape(row['meaning'])}</dd>")
     out.append("</dl>")
     out.append(
-        '<p class="meta">Hover over a cell to see what the tools printed, or why the mistake does not apply.</p>'
+        '<p class="meta">On a computer, hover over a cell to see what the tools printed,'
+        " or why the mistake does not apply.</p>"
     )
     out.append('<div class="wrap"><table><thead><tr><th>Mistake</th>')
     out += [f"<th>{escape(framework['name'])}</th>" for framework in frameworks]

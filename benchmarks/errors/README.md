@@ -22,8 +22,10 @@ framework, the earliest stage that reported it.
 3. The runner copies the clean app, lays the case's files over it, and runs
    that framework's tools, listed in `frameworks/<framework>/framework.toml`.
    A tool's finding counts if the clean app did not produce it and it
-   points within `window` lines of the change (three by default), or has no
-   location at all. A finding elsewhere can still come from the change: a
+   points within `window` lines of the change (three by default). A failing
+   command with no location takes the first file and line its output names;
+   with none, it counts only when its message names the changed file. A
+   finding elsewhere can still come from the change: a
    parser reports an unclosed tag at the outer element, and a type checker
    reports a wrong value where it is used. It can also be a side effect, such
    as a variable the change left unused. So a finding elsewhere counts only
@@ -43,8 +45,8 @@ The report puts each mistake in the first of six outcomes it reaches, from
 best to worst: an error before running (in the editor, a check, or the
 build), only a warning before running, an error at runtime, only a warning
 at runtime, missed with a wrong page, and missed with no visible change. A
-summary table counts these per framework (the docs page draws it as a
-chart), and a second table shows every mistake.
+summary table counts these per framework (the docs page and `report.html`
+draw it as a chart), and a second table shows every mistake.
 Many tools show warnings in the editor but let a build pass, so a warning
 is kept apart from an error. A linter that has no severity of its own, such
 as ruff or djLint, fails its command on any finding, so its findings count
@@ -61,7 +63,7 @@ uv run --no-sync citry-errors prepare
 uv run --no-sync citry-errors run
 uv run --no-sync citry-errors report \
   ../../../.benchmarks/errors/runs/<run-id> \
-  --output ../results/<date>-<label>
+  --output ../results/<date>
 ```
 
 `run` takes `--framework` and `--mistake`, each repeatable, to run part of

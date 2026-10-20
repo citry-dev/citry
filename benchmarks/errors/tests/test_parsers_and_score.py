@@ -19,7 +19,7 @@ from citry_errors.parsers import (
     ruff_json,
     tsc,
 )
-from citry_errors.runtime import Observation, compare, problems
+from citry_errors.runtime import Observation, _normal, compare, problems
 from citry_errors.score import RuntimeResult, StageResult, earliest, new_findings, score_stage
 
 WORK = Path("/cache/envs/next/work/m02-input-name")
@@ -334,7 +334,7 @@ def test_ruff_findings_are_errors_with_their_rule() -> None:
     ]
     assert ruff_json(json.dumps(payload), "", 1, WORK) == [
         Finding("main.py", 7, "error", "F821", "Undefined name"),
-        Finding("main.py", 9, "error", "syntax-error", "Expected ')'"),
+        Finding("main.py", 9, "error", "invalid-syntax", "Expected ')'"),
     ]
 
 
@@ -385,3 +385,25 @@ def test_the_html_report_draws_every_framework_and_escapes_tool_output() -> None
     assert "<c-Crad>" not in page
     assert "Does not apply or prevented by design" in page
     assert "<script" not in page
+
+
+def test_a_failing_build_takes_the_first_file_its_output_names() -> None:
+    out = f"[plugin vite:vue] {WORK}/app/components/Card.vue:15:5\nElement is missing end tag.\n" + "frame\n" * 20
+    [finding] = exit_status(out, "", 1, WORK)
+    assert (finding.file, finding.line) == ("app/components/Card.vue", 15)
+
+
+def test_an_import_failure_counts_and_a_file_name_must_match_whole() -> None:
+    crash = Finding(None, None, "error", "citry.app-failure", "NameError: name 'x' is not defined")
+    assert score_stage("check", "citry check", [], [crash], "app/data.py", 3, 3).error
+    other = Finding(None, None, "error", "exit-1", "failed in app/board_card.py")
+    assert score_stage("build", "build", [], [other], "app/card.py", 3, 3).unconfirmed == [other]
+
+
+def test_the_working_folder_name_in_a_server_log_is_not_a_new_line() -> None:
+    clean = _normal("Will watch for changes in /x/work/baseline", keep_status=True)
+    assert _normal("Will watch for changes in /x/work/m01-component-name", keep_status=True) == clean
+
+
+def test_published_evidence_blanks_dev_server_ports() -> None:
+    assert report._public("404 http://127.0.0.1:51234/sav") == "404 http://127.0.0.1:<port>/sav"

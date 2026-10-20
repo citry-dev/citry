@@ -2,6 +2,3 @@ status = "ported"
 files = { "app/components/card.py" = "card.py" }
 mistake = { file = "app/components/card.py", contains = "<footer class=\"card__footer\">" }
 
-[indirect]
-reason = "Citry's parser reports an unclosed element at the closing tag it reaches instead, `</article>`, three lines below the unclosed `<footer>`."
-codes = ["citry.parse.syntax"]

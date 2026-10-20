@@ -110,7 +110,9 @@ was seen.
   so they are the one place where a result informs a case. To keep that in
   check, each note must name the mechanism (where the tool reports this kind
   of mistake) and the rule codes it covers, so it cannot let an unrelated
-  finding through; a reviewer other than the case's author checks every
+  finding through (a code such as `build` or `pyright`, which a tool gives
+  every finding of a kind, covers that whole kind, which suits a syntax
+  error that breaks the rest of the file); a reviewer other than the case's author checks every
   note; and `results.json` lists both the findings each note accepted and
   every finding elsewhere that no note covers.
 
@@ -125,7 +127,7 @@ was seen.
 | A tool times out | The stage counts as neither a catch nor a miss. When it comes before the stage the cell shows, so that it could have reported the mistake earlier, the cell is marked `~` |
 | The development server never answers | The case counts as a runtime error, because a developer starting the app would see the failure. A server that is only slower than the framework's `ready_timeout` is counted the same way, so the timeout is set well above the clean app's start time |
 | A tool reports the mistake more than `window` lines from the change, or in another file | It counts only when the case's `indirect` note says why it comes from the mistake and names its rule code, and the cell is marked `°`. Otherwise it is listed in `results.json` under `unconfirmed_indirect` and does not count, because a change can also cause side-effect findings, such as a variable it left unused |
-| A tool crashes on a case | Its failure has no location. It counts as a report when its message names the changed file, because the developer sees the tool fail on that file; otherwise it is listed as unconfirmed, because it could be an unrelated failure such as a build that could not reach the network |
+| A tool crashes on a case | The runner takes the first file and line under the working copy that the whole output names, and scores the failure like any located finding. A failure that names no such file counts only when the end of its output names the changed file; otherwise it is listed as unconfirmed, because it could be an unrelated failure such as a build that could not reach the network. A Citry app that fails to import always counts: the check imports it the same way every run and needs no network |
 | A tool's output format changes | The parser finds nothing and the stage looks silent. The runner's tests cover each parser on small made-up outputs in the tools' formats, and a cell that suddenly changes after a version bump is checked against the raw output |
 
 ## What could make a result wrong

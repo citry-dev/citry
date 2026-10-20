@@ -27,8 +27,8 @@ error there; the editor shows it only with `app/app.vue` open.
 
 vue-tsc reports only TypeScript's diagnostics. The extension also shows the Vue compiler's own
 errors for a single-file component (SFC), such as "Element is missing end tag", through the
-`vue-sfc` and `vue-compiler-dom-errors` plugins of @vue/language-service 3.3.13, the version the Vue - Official extension ships. The second
-editor command, `vue-template-diagnostics.cjs` next to this file, calls the @vue/language-core
+`vue-sfc` and `vue-compiler-dom-errors` plugins of @vue/language-service 3.3.13, the version
+the Vue - Official extension ships. The second editor command, `vue-template-diagnostics.cjs` next to this file, calls the @vue/language-core
 3.3.13 parse and compile functions with the default options to report those errors. It skips
 two adjustments language-core makes while a developer types: it adds a closing `>` when the
 template ends inside an unfinished opening tag, and it reuses the previous result while an edit

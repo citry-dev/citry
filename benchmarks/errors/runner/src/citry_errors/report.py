@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -120,6 +121,8 @@ def _public(text: str) -> str:
     """Make one evidence line fit to publish: no local folders, and short enough to read on hover."""
     # A traceback names the machine's folders, which say nothing about the result.
     text = text.replace(str(REPO_ROOT) + "/", "").replace(str(Path.home()), "~")
+    # Each dev server listens on a random port, which would change every rerun's file.
+    text = re.sub(r"127\.0\.0\.1:\d+", "127.0.0.1:<port>", text)
     return text if len(text) <= _EVIDENCE_CHARS else text[: _EVIDENCE_CHARS - 3] + "..."
 
 

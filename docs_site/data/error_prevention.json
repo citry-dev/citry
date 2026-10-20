@@ -272,7 +272,7 @@
         "citry check: citry.template.unknown-component Component <c-Crad> is not registered.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53771/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -289,7 +289,7 @@
         "citry check: citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'c-if', 'c-elif', 'c-else', 'c-for', 'c-empty'. Found invalid a...",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53775/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -317,7 +317,7 @@
         "citry check: citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n21 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53789/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -334,7 +334,7 @@
         "citry check: citry.parse.syntax Parse error:   --> 23:13\n   |\n23 |             <c-fill name=\"fotter\">\n   |             ^--------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53794/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -351,7 +351,7 @@
         "citry check: citry.browser.unknown-server-event Server event 'sav' is not declared by this component.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53799/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -368,7 +368,7 @@
         "citry check: citry.template.unknown-variable Template variable 'ownr' is not available in this template.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53867/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -384,7 +384,7 @@
         "Citry language server (citry check --types): citry.python.unresolved-attribute Object of type `Owner` has no attribute `nmae`",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53871/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -469,7 +469,7 @@
         "citry check: citry.i18n.unknown-message Unknown i18n message ID 'board-titel'; no component or configured catalog package defines it.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53938/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -513,7 +513,7 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:53977/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -557,7 +557,7 @@
         "citry check: citry.parse.syntax Parse error:  --> 7:1\n  |\n7 | </article>\n  | ^--------^\n  |\n  = Mismatched tags: expected closing tag '</footer>', found '</article>'",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54003/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -573,7 +573,7 @@
         "Citry language server (citry check --types): citry.python.unsupported-operator Operator `+` is not supported between objects of type `str` and `Literal[1]`",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54007/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -600,7 +600,7 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54032/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):"
       ]
@@ -651,7 +651,7 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54073/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):"
       ]
@@ -773,7 +773,7 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: Response Status Error Code 500 from /save/, [object HTMLSpanElement]",
-        "error: 500 http://127.0.0.1:54203/save/",
+        "error: 500 http://127.0.0.1:<port>/save/",
         "error: Internal Server Error: /save/",
         "error: Traceback (most recent call last):"
       ]
@@ -856,8 +856,8 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54462/",
-        "error: INFO:     127.0.0.1:54465 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -871,8 +871,8 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54467/",
-        "error: INFO:     127.0.0.1:54469 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -913,7 +913,7 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Response Status Error Code 404 from /sav, [object HTMLDivElement]",
-        "error: 404 http://127.0.0.1:54481/sav"
+        "error: 404 http://127.0.0.1:<port>/sav"
       ]
     },
     {
@@ -926,8 +926,8 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54486/",
-        "error: INFO:     127.0.0.1:54488 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -991,8 +991,8 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: Response Status Error Code 500 from /save, [object HTMLDivElement]",
-        "error: 500 http://127.0.0.1:54581/save",
-        "error: INFO:     127.0.0.1:54585 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/save",
+        "error: INFO:     127.0.0.1:<port> - \"POST /save HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1044,8 +1044,8 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: Response Status Error Code 500 from /save, [object HTMLDivElement]",
-        "error: 500 http://127.0.0.1:54622/save",
-        "error: INFO:     127.0.0.1:54625 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/save",
+        "error: INFO:     127.0.0.1:<port> - \"POST /save HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1108,8 +1108,8 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54647/",
-        "error: INFO:     127.0.0.1:54649 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1133,8 +1133,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"Crad\" is not defined",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54295/",
-        "error: INFO:     127.0.0.1:54297 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1150,8 +1150,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"titel\"",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54301/",
-        "error: INFO:     127.0.0.1:54303 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1175,8 +1175,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"title\"",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54306/",
-        "error: INFO:     127.0.0.1:54308 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1192,8 +1192,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"fotter\"",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54310/",
-        "error: INFO:     127.0.0.1:54312 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1207,7 +1207,7 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Response Status Error Code 404 from /sav",
-        "error: 404 http://127.0.0.1:54320/sav"
+        "error: 404 http://127.0.0.1:<port>/sav"
       ]
     },
     {
@@ -1221,8 +1221,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"ownr\" is not defined",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54329/",
-        "error: INFO:     127.0.0.1:54331 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1237,8 +1237,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"nmae\" for class \"Owner\"\n\u00a0\u00a0Attribute \"nmae\" is unknown",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54333/",
-        "error: INFO:     127.0.0.1:54335 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1271,8 +1271,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"Dvi\" is not defined",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54358/",
-        "error: INFO:     127.0.0.1:54360 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1300,8 +1300,8 @@
         "ruff 0.15.5 (default rules): F841 Local variable `cuont` is assigned to but never used",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: Response Status Error Code 500 from /save",
-        "error: 500 http://127.0.0.1:54371/save",
-        "error: INFO:     127.0.0.1:54374 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/save",
+        "error: INFO:     127.0.0.1:<port> - \"POST /save HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1353,7 +1353,7 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 400 (Bad Request)",
         "error: Response Status Error Code 400 from /save",
-        "error: 400 http://127.0.0.1:54399/save"
+        "error: 400 http://127.0.0.1:<port>/save"
       ]
     },
     {
@@ -1414,8 +1414,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportOperatorIssue Operator \"+\" not supported for types \"str\" and \"Literal[1]\"",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:54441/",
-        "error: INFO:     127.0.0.1:54443 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1669,8 +1669,8 @@
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-parsing-error Parsing error: Unexpected end of expression.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
-        "error: 500 http://127.0.0.1:55418/",
-        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55418/",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:<port>/",
         "error: \u001b[31m\u2139 Error: /app.vue \u2014 Error parsing JavaScript expression: Unexpected token (1:8)\u001b[39m"
       ]
     },
@@ -1686,8 +1686,8 @@
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): eslint Parsing error: ';' expected.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
-        "error: 500 http://127.0.0.1:55422/",
-        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55422/",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:<port>/",
         "error: \u001b[31m\u2139 Error: /app.vue \u2014 Missing semicolon. (22:26)\u001b[39m"
       ]
     },
@@ -1701,7 +1701,7 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Server Error)",
-        "error: 500 http://127.0.0.1:55426/",
+        "error: 500 http://127.0.0.1:<port>/",
         "warning: An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.",
         "warning: WARN  [Vue warn]: Failed to resolve directive: iff at <App>"
       ]
@@ -1718,8 +1718,8 @@
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/html-end-tags '<footer>' should have end tag.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
-        "error: 500 http://127.0.0.1:55437/",
-        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55437/",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:<port>/",
         "error: \u001b[31m\u2139 Error: /components/Card.vue \u2014 Element is missing end tag.\u001b[39m"
       ]
     },
@@ -1760,7 +1760,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: pageerror: Crad is not defined",
-        "error: 500 http://127.0.0.1:54691/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: \u2a2f ReferenceError: Crad is not defined"
       ]
     },
@@ -1839,7 +1839,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: pageerror: ownr is not defined",
-        "error: 500 http://127.0.0.1:54790/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: \u2a2f ReferenceError: ownr is not defined"
       ]
     },
@@ -2060,7 +2060,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: pageerror: onHdie is not defined",
-        "error: 500 http://127.0.0.1:55167/",
+        "error: 500 http://127.0.0.1:<port>/",
         "error: \u2a2f ReferenceError: onHdie is not defined"
       ]
     }

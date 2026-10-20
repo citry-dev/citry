@@ -50,11 +50,10 @@ reload the clean page shows `Saved: 0` again, where the other frameworks
 show `Saved: 1`.
 
 In three cases the mistake is written where a Citry rule checks, and a
-closely related form of the same mistake would go unreported: m24
-misspells the event on the child's emit, which Citry's `undeclared-emit`
-rule (an event the component does not declare) checks; misspelling it in
-the parent's `@hdie` listener reports nothing.
-m21 misspells `v-if`, which Vue rejects in the browser; a misspelled
+closely related form goes unreported. m24 misspells the event on the
+child's emit, which Citry's `undeclared-emit` rule (an event the component
+does not declare) checks; misspelling it in the parent's `@hdie` listener
+reports nothing. m21 misspells `v-if`, which Vue rejects in the browser; a misspelled
 server-side `c-if` would be silent, but the reference page has no server
 conditional. m12 reads `SECRET_TOKEN` in Vue code, which the unknown
 variable rule checks; returning it from `js_data()`, which sends it to the

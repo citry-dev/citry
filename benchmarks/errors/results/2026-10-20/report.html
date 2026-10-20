@@ -31,7 +31,7 @@ h2 { font-size: 1.2rem; margin: 32px 0 8px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: center; }
 th:first-child, td:first-child { text-align: left; }
-thead th { background: var(--head); position: sticky; top: 0; }
+thead th { background: var(--head); }
 tr.group th { background: var(--head); text-align: left; font-weight: 700; }
 td.cell { white-space: nowrap; }
 .wrap { overflow-x: auto; }
@@ -44,7 +44,7 @@ dl.codes dd { margin: 0; }
 }
 </style></head><body><main>
 <h1>Error-prevention results</h1>
-<p class="meta">Run 20261020T094732Z, cases and tools from commit <code>b0ef345dcc7a</code>. The same 24 mistakes in each framework; earlier is better.</p>
+<p class="meta">Run 20261020T094732Z, cases and tools from commit <code>b0ef345dcc7a</code>. The same 24 mistakes, written in each framework where they apply; earlier is better.</p>
 <h2>How each mistake ended</h2>
 <ul class="legend">
 <li><span class="swatch" style="background:#2f855a"></span>Error before running</li>
@@ -59,42 +59,42 @@ dl.codes dd { margin: 0; }
 <div class="row reference"><span class="name">Citry</span><span class="bar">
 <span class="part" style="width:66.667%;background:#2f855a" title="Error before running: 16">16</span>
 <span class="part light" style="width:4.167%;background:#9ae6b4" title="Warning before running: 1">1</span>
-<span class="part" style="width:12.500%;background:#dd6b20" title="Error at runtime: 3">3</span>
+<span class="part light" style="width:12.500%;background:#dd6b20" title="Error at runtime: 3">3</span>
 <span class="part" style="width:16.667%;background:#c53030" title="Missed, page wrong: 4">4</span>
-</span><span class="total" title="Error before running">16</span></div>
+</span><span class="total" title="Error before running" aria-label="Errors before running">16</span></div>
 <div class="row"><span class="name">Django + HTMX + Alpine</span><span class="bar">
 <span class="part" style="width:12.500%;background:#2f855a" title="Error before running: 3">3</span>
-<span class="part" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
+<span class="part light" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
 <span class="part" style="width:58.333%;background:#c53030" title="Missed, page wrong: 14">14</span>
 <span class="part" style="width:4.167%;background:#4a5568" title="Missed, no visible change: 1">1</span>
 <span class="part light" style="width:4.167%;background:#cbd5e0" title="Does not apply or prevented by design: 1">1</span>
-</span><span class="total" title="Error before running">3</span></div>
+</span><span class="total" title="Error before running" aria-label="Errors before running">3</span></div>
 <div class="row"><span class="name">Jinja + HTMX + Alpine</span><span class="bar">
 <span class="part" style="width:8.333%;background:#2f855a" title="Error before running: 2">2</span>
-<span class="part" style="width:41.667%;background:#dd6b20" title="Error at runtime: 10">10</span>
+<span class="part light" style="width:41.667%;background:#dd6b20" title="Error at runtime: 10">10</span>
 <span class="part" style="width:33.333%;background:#c53030" title="Missed, page wrong: 8">8</span>
 <span class="part" style="width:4.167%;background:#4a5568" title="Missed, no visible change: 1">1</span>
 <span class="part light" style="width:12.500%;background:#cbd5e0" title="Does not apply or prevented by design: 3">3</span>
-</span><span class="total" title="Error before running">2</span></div>
+</span><span class="total" title="Error before running" aria-label="Errors before running">2</span></div>
 <div class="row"><span class="name">FastHTML</span><span class="bar">
 <span class="part" style="width:45.833%;background:#2f855a" title="Error before running: 11">11</span>
-<span class="part" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
+<span class="part light" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
 <span class="part" style="width:16.667%;background:#c53030" title="Missed, page wrong: 4">4</span>
 <span class="part" style="width:4.167%;background:#4a5568" title="Missed, no visible change: 1">1</span>
 <span class="part light" style="width:12.500%;background:#cbd5e0" title="Does not apply or prevented by design: 3">3</span>
-</span><span class="total" title="Error before running">11</span></div>
+</span><span class="total" title="Error before running" aria-label="Errors before running">11</span></div>
 <div class="row"><span class="name">Nuxt (TypeScript)</span><span class="bar">
 <span class="part" style="width:54.167%;background:#2f855a" title="Error before running: 13">13</span>
-<span class="part" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
+<span class="part light" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
 <span class="part" style="width:20.833%;background:#c53030" title="Missed, page wrong: 5">5</span>
 <span class="part light" style="width:4.167%;background:#cbd5e0" title="Does not apply or prevented by design: 1">1</span>
-</span><span class="total" title="Error before running">13</span></div>
+</span><span class="total" title="Error before running" aria-label="Errors before running">13</span></div>
 <div class="row"><span class="name">Next.js (TypeScript)</span><span class="bar">
 <span class="part" style="width:75.000%;background:#2f855a" title="Error before running: 18">18</span>
-<span class="part" style="width:8.333%;background:#dd6b20" title="Error at runtime: 2">2</span>
+<span class="part light" style="width:8.333%;background:#dd6b20" title="Error at runtime: 2">2</span>
 <span class="part" style="width:8.333%;background:#c53030" title="Missed, page wrong: 2">2</span>
 <span class="part light" style="width:8.333%;background:#cbd5e0" title="Does not apply or prevented by design: 2">2</span>
-</span><span class="total" title="Error before running">18</span></div>
+</span><span class="total" title="Error before running" aria-label="Errors before running">18</span></div>
 </div>
 <div class="wrap"><table><thead><tr><th>Outcome</th>
 <th>Citry</th>
@@ -178,7 +178,7 @@ dl.codes dd { margin: 0; }
 <dt>~</dt><dd>a tool timed out or skipped this case, so it may have caught the mistake earlier</dd>
 <dt>°</dt><dd>the report points away from the change, and the case explains why it still counts</dd>
 </dl>
-<p class="meta">Hover over a cell to see what the tools printed, or why the mistake does not apply.</p>
+<p class="meta">On a computer, hover over a cell to see what the tools printed, or why the mistake does not apply.</p>
 <div class="wrap"><table><thead><tr><th>Mistake</th>
 <th>Citry</th>
 <th>Django + HTMX + Alpine</th>
@@ -194,24 +194,24 @@ Names: components, inputs, slots, variables</th></tr>
 citry check: citry.template.unknown-component Component &lt;c-Crad&gt; is not registered.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53771/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54032/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: Internal Server Error: /
 error: Traceback (most recent call last):">R</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54462/
-error: INFO:     127.0.0.1:54465 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">R</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable &quot;Crad&quot; is not defined
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54295/
-error: INFO:     127.0.0.1:54297 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Hydration completed but contains mismatches.
@@ -238,7 +238,7 @@ next build: TS2304 Cannot find name &#x27;Crad&#x27;.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 error: pageerror: Crad is not defined
-error: 500 http://127.0.0.1:54691/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ⨯ ReferenceError: Crad is not defined">E</td>
 </tr>
 <tr><th scope="row" style="font-weight:400">Misspelled input name</th>
@@ -260,21 +260,21 @@ citry check: citry.parse.syntax Parse error:   --&gt; 16:11
    = Tag &#x27;&lt;c-Card&gt;&#x27; can only have the following attributes: &#x27;title&#x27;, &#x27;c-title&#x27;, &#x27;count&#x27;, &#x27;c-count&#x27;, &#x27;c-if&#x27;, &#x27;c-elif&#x27;, &#x27;c-else&#x27;, &#x27;c-for&#x27;, &#x27;c-empty&#x27;. Found invalid a...
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53775/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54467/
-error: INFO:     127.0.0.1:54469 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">R</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter &quot;title&quot;
 Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named &quot;titel&quot;
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54301/
-error: INFO:     127.0.0.1:54303 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2345 Argument of type &#x27;{ key: string; titel: string; count: number; onHide: any; }&#x27; is not assignable to parameter of type &#x27;{ readonly title: string; readonly count: number; readonly onHide?: (() =&gt; any) | undefined; } &amp; VNodeProps &amp; AllowedComponentProps &amp; ComponentCu...
 warning: %cssr:warn%c [Vue warn]: Missing required prop: &quot;title&quot; 
@@ -334,7 +334,7 @@ citry check: citry.parse.syntax Parse error:   --&gt; 16:11
    = Tag &#x27;&lt;c-Card&gt;&#x27; must have one of the following attributes: &#x27;title&#x27;, &#x27;c-title&#x27;.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53789/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
@@ -342,8 +342,8 @@ error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter &quot;title&quot;
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54306/
-error: INFO:     127.0.0.1:54308 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2345 Argument of type &#x27;{ key: string; count: number; onHide: any; }&#x27; is not assignable to parameter of type &#x27;{ readonly title: string; readonly count: number; readonly onHide?: (() =&gt; any) | undefined; } &amp; VNodeProps &amp; AllowedComponentProps &amp; ComponentCustomProps &amp; Rec...
 warning: %cssr:warn%c [Vue warn]: Missing required prop: &quot;title&quot; 
@@ -399,7 +399,7 @@ citry check: citry.parse.syntax Parse error:   --&gt; 23:13
    = Tag &#x27;&lt;c-Card&gt;&#x27; does not allow a slot named &#x27;fotter&#x27;.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53794/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
@@ -408,8 +408,8 @@ error: Traceback (most recent call last):">E</td>
 Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named &quot;fotter&quot;
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54310/
-error: INFO:     127.0.0.1:54312 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2322 Type &#x27;{ key: string; title: string; count: number; fotter: Element; onHide: () =&gt; void; }&#x27; is not assignable to type &#x27;IntrinsicAttributes &amp; CardProps&#x27;.
@@ -420,20 +420,20 @@ next build: TS2322 Type &#x27;{ key: string; title: string; count: number; fotte
 citry check: citry.template.unknown-variable Template variable &#x27;ownr&#x27; is not available in this template.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53867/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54486/
-error: INFO:     127.0.0.1:54488 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">R</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable &quot;ownr&quot; is not defined
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54329/
-error: INFO:     127.0.0.1:54331 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2339 Property &#x27;bord&#x27; does not exist on type &#x27;ComponentPublicInstance&lt;{}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase&lt;any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string, ComponentProvideOptions&gt;, ... 4 more ..., any&gt;&#x27;.
 warning: %cssr:warn%c [Vue warn]: Property &quot;bord&quot; was accessed during render but is not defined on instance. 
@@ -461,14 +461,14 @@ next build: TS2552 Cannot find name &#x27;ownr&#x27;. Did you mean &#x27;owner&#
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 error: pageerror: ownr is not defined
-error: 500 http://127.0.0.1:54790/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ⨯ ReferenceError: ownr is not defined">E</td>
 </tr>
 <tr><th scope="row" style="font-weight:400">Misspelled attribute on a template object</th>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.python.unresolved-attribute Object of type `Owner` has no attribute `nmae`
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53871/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
@@ -477,8 +477,8 @@ error: Traceback (most recent call last):">E</td>
   Attribute &quot;nmae&quot; is unknown
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54333/
-error: INFO:     127.0.0.1:54335 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2339 Property &#x27;nmae&#x27; does not exist on type &#x27;{ name: string; }&#x27;.">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2339 Property &#x27;nmae&#x27; does not exist on type &#x27;Owner&#x27;.
@@ -489,7 +489,7 @@ next build: TS2339 Property &#x27;nmae&#x27; does not exist on type &#x27;Owner&
 citry check: citry.i18n.unknown-message Unknown i18n message ID &#x27;board-titel&#x27;; no component or configured catalog package defines it.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53938/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
@@ -507,7 +507,7 @@ error: pageerror: Citry Vue app failed during initialization">R</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Server Error)
-error: 500 http://127.0.0.1:55426/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 warning: An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.
 warning: WARN  [Vue warn]: Failed to resolve directive: iff at &lt;App&gt;">R</td>
 <td class="cell" title="React has no template directives. The details text is shown with a plain JavaScript expression, `{open &amp;&amp; &lt;p&gt;...&lt;/p&gt;}`, so there is no directive name to misspell; misspelling `open` there is the undefined-variable mistake (m07) and a broken `&amp;&amp;` is m19.">n/a</td>
@@ -607,20 +607,20 @@ next build: TS2322 Type &#x27;{ count: string; title: string; }[]&#x27; is not a
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.python.unsupported-operator Operator `+` is not supported between objects of type `str` and `Literal[1]`
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54007/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54647/
-error: INFO:     127.0.0.1:54649 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">R</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportOperatorIssue Operator &quot;+&quot; not supported for types &quot;str&quot; and &quot;Literal[1]&quot;
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54441/
-error: INFO:     127.0.0.1:54443 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
@@ -630,7 +630,7 @@ Template and script syntax</th></tr>
 <tr><th scope="row" style="font-weight:400">Syntax error in a browser expression</th>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53977/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">R</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Unexpected token &#x27;}&#x27;
@@ -661,8 +661,8 @@ Expression: &quot;open = !open &amp;&amp;&quot;
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-parsing-error Parsing error: Unexpected end of expression.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Vite Error)
-error: 500 http://127.0.0.1:55418/
-error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55418/
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:&lt;port&gt;/
 error: [31mℹ Error: /app.vue — Error parsing JavaScript expression: Unexpected token (1:8)[39m">C</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS1109 Expression expected.
 eslint (npm run lint): eslint Parsing error: Expression expected.
@@ -730,8 +730,8 @@ error: pageerror: Unexpected token &#x27;;&#x27;">R</td>
 ESLint 10.13.0 (@nuxt/eslint 1.17.0): eslint Parsing error: &#x27;;&#x27; expected.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Vite Error)
-error: 500 http://127.0.0.1:55422/
-error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55422/
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:&lt;port&gt;/
 error: [31mℹ Error: /app.vue — Missing semicolon. (22:26)[39m">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS1005 &#x27;)&#x27; expected.
 eslint (npm run lint): eslint Parsing error: &#x27;)&#x27; expected.
@@ -778,7 +778,7 @@ citry check: citry.parse.syntax Parse error:  --&gt; 7:1
   = Mismatched tags: expected closing tag &#x27;&lt;/footer&gt;&#x27;, found &#x27;&lt;/article&gt;&#x27;
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54003/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. &lt;div class=&quot;card&quot;&gt;">C</td>
@@ -791,8 +791,8 @@ the development server did not answer">E</td>
 ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/html-end-tags &#x27;&lt;footer&gt;&#x27; should have end tag.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Vite Error)
-error: 500 http://127.0.0.1:55437/
-error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55437/
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:&lt;port&gt;/
 error: [31mℹ Error: /components/Card.vue — Element is missing end tag.[39m">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS17008 JSX element &#x27;div&#x27; has no corresponding closing tag.
 tsc --noEmit (VS Code TypeScript): TS1381 Unexpected token. Did you mean `{&#x27;}&#x27;}` or `&amp;rbrace;`?
@@ -869,8 +869,8 @@ next build: TS2322 Type &#x27;{ children: Element[]; className: string; titel: s
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable &quot;Dvi&quot; is not defined
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54358/
-error: INFO:     127.0.0.1:54360 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Hydration completed but contains mismatches.
 error: Hydration completed but contains mismatches.
@@ -901,20 +901,20 @@ Events and server requests</th></tr>
 citry check: citry.browser.unknown-server-event Server event &#x27;sav&#x27; is not declared by this component.
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:53799/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ERROR:    Exception in ASGI application
 error: Traceback (most recent call last):">E</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
-error: 500 http://127.0.0.1:54073/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: Internal Server Error: /
 error: Traceback (most recent call last):">R</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 404 (Not Found)
 error: Response Status Error Code 404 from /sav, [object HTMLDivElement]
-error: 404 http://127.0.0.1:54481/sav">R</td>
+error: 404 http://127.0.0.1:&lt;port&gt;/sav">R</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 404 (Not Found)
 error: Response Status Error Code 404 from /sav
-error: 404 http://127.0.0.1:54320/sav">R</td>
+error: 404 http://127.0.0.1:&lt;port&gt;/sav">R</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS18046 &#x27;result&#x27; is of type &#x27;unknown&#x27;.">E°</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name &#x27;sav&#x27;. Did you mean &#x27;save&#x27;?
 next build: TS2552 Cannot find name &#x27;sav&#x27;. Did you mean &#x27;save&#x27;?
@@ -931,15 +931,15 @@ error: AttributeError: &#x27;State&#x27; object has no attribute &#x27;cuont&#x2
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 error: Response Status Error Code 500 from /save, [object HTMLDivElement]
-error: 500 http://127.0.0.1:54581/save
-error: INFO:     127.0.0.1:54585 - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/save
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">R</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportUnboundVariable &quot;cuont&quot; is unbound
 ruff 0.15.5 (default rules): F841 Local variable `cuont` is assigned to but never used
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 error: Response Status Error Code 500 from /save
-error: 500 http://127.0.0.1:54371/save
-error: INFO:     127.0.0.1:54374 - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/save
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2551 Property &#x27;cuont&#x27; does not exist on type &#x27;{ count: number; }&#x27;. Did you mean &#x27;count&#x27;?
 vue-tsc (Vue - Official): TS2551 Property &#x27;cuont&#x27; does not exist on type &#x27;{ count: number; }&#x27;. Did you mean &#x27;count&#x27;?">E</td>
@@ -950,17 +950,17 @@ next build: TS2551 Property &#x27;cuont&#x27; does not exist on type &#x27;{ cou
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 error: Response Status Error Code 500 from /save/, [object HTMLSpanElement]
-error: 500 http://127.0.0.1:54203/save/
+error: 500 http://127.0.0.1:&lt;port&gt;/save/
 error: Internal Server Error: /save/
 error: Traceback (most recent call last):">R</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 error: Response Status Error Code 500 from /save, [object HTMLDivElement]
-error: 500 http://127.0.0.1:54622/save
-error: INFO:     127.0.0.1:54625 - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
+error: 500 http://127.0.0.1:&lt;port&gt;/save
+error: INFO:     127.0.0.1:&lt;port&gt; - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
 error: ERROR:    Exception in ASGI application">R</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 400 (Bad Request)
 error: Response Status Error Code 400 from /save
-error: 400 http://127.0.0.1:54399/save">R</td>
+error: 400 http://127.0.0.1:&lt;port&gt;/save">R</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2561 Object literal may only specify known properties, but &#x27;amont&#x27; does not exist in type &#x27;{ amount: number; }&#x27;. Did you mean to write &#x27;amount&#x27;?
 next build: TS2561 Object literal may only specify known properties, but &#x27;amont&#x27; does not exist in type &#x27;{ amount: number; }&#x27;. Did you mean to write &#x27;amount&#x27;?">E</td>
@@ -980,7 +980,7 @@ next build: TS2552 Cannot find name &#x27;onHdie&#x27;. Did you mean &#x27;onHid
 interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
 error: pageerror: onHdie is not defined
-error: 500 http://127.0.0.1:55167/
+error: 500 http://127.0.0.1:&lt;port&gt;/
 error: ⨯ ReferenceError: onHdie is not defined">E</td>
 </tr>
 <tr class="group"><th colspan="7" scope="rowgroup">

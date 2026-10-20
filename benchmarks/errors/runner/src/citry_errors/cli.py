@@ -113,6 +113,11 @@ def run(args: argparse.Namespace) -> Path:
     ports = load_ports()
     mistakes = load_catalogue()
     selected = [frameworks[key] for key in (args.framework or frameworks)]
+    # A broken case would otherwise stop the run when it is reached, perhaps
+    # tens of minutes in, and leave no results.
+    problems_found = validate(frameworks, ports)
+    if problems_found:
+        raise ConfigError("the cases do not validate:\n" + "\n".join(problems_found))
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     run_dir = CACHE / "runs" / run_id
     run_dir.mkdir(parents=True)

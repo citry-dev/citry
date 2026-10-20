@@ -61,7 +61,8 @@ The earlier a mistake is reported, the less time it costs you.
   in a template expression) need the component to define
   `template_data()`. The components in Citry's starter do. Components
   written from the Getting Started guide often do not, and then these
-  three mistakes are not reported. This is a known bug.
+  three mistakes are not reported. This is a Citry bug
+  ([#202](https://github.com/citry-dev/citry/issues/202)).
 - Some cases are written where a Citry rule checks, and a close variant
   goes unreported: a misspelled event name in the parent's listener
   (the child's misspelled emit is caught), a misspelled server-side

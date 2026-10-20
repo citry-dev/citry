@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -48,10 +49,15 @@ def near_mistake(finding: Finding, mistake_file: str, mistake_line: int | None, 
     indirect finding counts only when the case confirms it, with a reason.
     """
     if finding.file is None:
-        # A failure with no location counts only when it names the changed
-        # file; otherwise it could be an unrelated failure, such as a build
-        # that could not reach the network.
-        return Path(mistake_file).name in finding.message
+        # Citry's check imports the app the same way in every run and needs
+        # no network, so a new import failure can only come from the change.
+        if finding.code == "citry.app-failure":
+            return True
+        # Any other failure with no location counts only when it names the
+        # changed file; otherwise it could be an unrelated failure, such as a
+        # build that could not reach the network.
+        name = re.escape(Path(mistake_file).name)
+        return re.search(rf"(?<![\w.-]){name}\b", finding.message) is not None
     if finding.file != mistake_file:
         return False
     return finding.line is None or mistake_line is None or abs(finding.line - mistake_line) <= window
