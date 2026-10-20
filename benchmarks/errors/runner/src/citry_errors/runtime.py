@@ -65,9 +65,9 @@ _STEP_TIMEOUT_MS = 5_000
 # operating system takes the local ends of outgoing connections from (49152
 # and up on macOS, 32768 and up on Linux), so the browser's or another
 # server's connections cannot take a port between its reservation here and
-# the server's start. It also ends below 24678, where Vite and `nuxt dev`
-# look for a free hot-reload port on their own, so they never find one of
-# these free and then lose it to the server it was reserved for.
+# the server's start. It also ends below 24678, where `nuxt dev` looks for a
+# free hot-reload port (24678 to 24698) on its own, so it never finds one of
+# these free and then loses it to the server it was reserved for.
 _PORTS = range(20_000, 24_678)
 # Ports handed to a server that is still running in this process. Several
 # workers start servers at once, and checking that a port is free does not

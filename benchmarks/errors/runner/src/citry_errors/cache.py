@@ -48,9 +48,9 @@ _RUNNER_PROJECT = ("pyproject.toml", "uv.lock")
 # them does not rerun every case: the prose notes, and how many cases may
 # run at once.
 _UNUSED_KEYS = ("notes", "max_jobs")
-# Environment variables the tools pass on to what they print, such as
-# colors or Node's own options. The rest of the environment is not hashed,
-# because it differs between shells without changing any tool's output.
+# Environment variables known to change what these tools print, such as
+# colors or Node's own options. The rest of the environment is not hashed:
+# it differs between shells, and these are the ones known to matter.
 _TOOL_VARIABLES = ("CI", "FORCE_COLOR", "NO_COLOR", "NODE_ENV", "NODE_OPTIONS", "PYTHONWARNINGS", "TERM")
 # Files an install writes into a framework's environment that name what was
 # installed: the Python the virtual environment uses, and npm's record of
@@ -97,10 +97,14 @@ def framework_digest(framework: Framework, env: Path) -> str:
     The folder holds the clean app, its lockfiles, helper scripts and
     framework.toml. framework.toml is read and hashed without the keys in
     `_UNUSED_KEYS`, so rewording its notes keeps the stored results; comments
-    are dropped by the same reading. The folder's own location is hashed
-    too, because commands name helper scripts by their absolute path.
+    are dropped by the same reading. When a command names a file by its
+    absolute path in the checkout (`{framework}` or `{repo}`), that path is
+    printed in the output, so the folder's location is hashed too; otherwise
+    two checkouts sharing one cache folder can reuse each other's output.
     """
-    digest = hashlib.sha256(f"{framework.root}\0".encode())
+    definition = (framework.root / "framework.toml").read_text(encoding="utf-8")
+    names_checkout = "{framework}" in definition or "{repo}" in definition
+    digest = hashlib.sha256(f"{framework.root if names_checkout else ''}\0".encode())
     for name in _INSTALL_RECORDS:
         record = env / name
         digest.update(name.encode() + b"\0" + (record.read_bytes() if record.is_file() else b"<none>") + b"\0")
@@ -162,9 +166,11 @@ def load(folder: Path, key: str) -> Entry | None:
         if not runtime.is_file() or not log.is_file():
             return Entry(stages, None, None)
         return Entry(stages, Observation.from_json(runtime.read_text()), log)
-    except (OSError, ValueError, TypeError, KeyError):
-        # A damaged or hand-edited entry is a miss: the case runs again and
-        # its entry is replaced, rather than the whole run stopping.
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
+        # A damaged entry is a miss: the case runs again and its entry is
+        # replaced, rather than the whole run stopping. It is named, so a
+        # format change that makes every entry unreadable does not go unseen.
+        print(f"citry-errors: ignoring the stored output in {folder}: {error!r}", file=sys.stderr)
         return None
 
 

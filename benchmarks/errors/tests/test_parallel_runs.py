@@ -82,27 +82,32 @@ def test_a_failing_task_stops_new_tasks_and_is_raised_after_the_running_ones_fin
 
 def test_ctrl_c_stops_new_tasks_sets_stop_and_waits_for_running_ones() -> None:
     stop = threading.Event()
+    both_running = threading.Barrier(2)
     started: list[int] = []
-    finished: list[int] = []
+    gave_up: list[int] = []
 
     def work(number: int) -> int:
         started.append(number)
+        # Ctrl-C comes only once both workers are on a case.
+        both_running.wait(timeout=5)
         if number == 0:
             # Ctrl-C reaches the main thread, which is waiting for the workers.
             signal.pthread_kill(threading.main_thread().ident, signal.SIGINT)
         # A running case notices `stop` at its next step and gives up its case.
-        for _ in range(100):
+        for _ in range(500):
             if stop.is_set():
+                time.sleep(0.05)
+                gave_up.append(number)
                 raise parallel.Stopped
             time.sleep(0.01)
-        finished.append(number)
         return number
 
     with pytest.raises(KeyboardInterrupt):
         parallel.run_all(range(10), work, jobs=2, group=lambda _: "all", limits={}, stop=stop)
     assert stop.is_set()
     assert sorted(started) == [0, 1]
-    assert finished == []
+    # Both workers had given up their case before run_all returned, so it waited for them.
+    assert sorted(gave_up) == [0, 1]
 
 
 def test_a_task_whose_group_cannot_be_worked_out_fails_the_run() -> None:

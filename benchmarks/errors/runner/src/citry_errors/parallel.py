@@ -87,8 +87,10 @@ def run_all[T, R](
         for thread in threads:
             thread.join()
     except KeyboardInterrupt:
-        # Ctrl-C reaches only this thread. The workers finish the case they
-        # are on, which stops its development server, and start no other.
+        # Ctrl-C reaches only this thread. Each worker gives up its case
+        # before the case's next tool or browser check, or finishes it; a
+        # running browser check stops its development server. No new case
+        # starts.
         stop.set()
         with changed:
             changed.notify_all()

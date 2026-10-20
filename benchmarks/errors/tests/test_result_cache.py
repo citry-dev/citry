@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import threading
 from typing import TYPE_CHECKING
 
 import pytest
-from citry_errors import cache, cli
-from citry_errors.config import ConfigError, load_frameworks
-from citry_errors.execute import StageOutput
+from citry_errors import cache, cli, parallel
+from citry_errors.config import ConfigError, load_framework, load_frameworks
+from citry_errors.execute import StageOutput, run_stages
 from citry_errors.runtime import JourneyRecord, Observation
 from conftest import MISTAKES
 
@@ -217,12 +219,11 @@ def test_a_stored_browser_check_reads_back_the_same(tmp_path: Path) -> None:
 
 
 def test_two_runs_cannot_use_one_cache_folder_at_once(tmp_path: Path) -> None:
-    with (
-        cache.exclusive(tmp_path),
-        pytest.raises(ConfigError, match="another run is using"),
-        cache.exclusive(tmp_path),
-    ):
-        pass
+    with cache.exclusive(tmp_path):
+        with pytest.raises(ConfigError, match="another run is using"), cache.exclusive(tmp_path):
+            pass
+        # The refused run leaves the running one's process id in the lock file.
+        assert (tmp_path / "run.lock").read_text() == str(os.getpid())
     # Released when the first run ends.
     with cache.exclusive(tmp_path):
         pass
@@ -234,6 +235,29 @@ def test_the_framework_digest_skips_folders_a_working_copy_leaves_out(toy: Toy) 
     (framework.baseline / "node_modules").mkdir()
     (framework.baseline / "node_modules" / "pkg.js").write_text("installed")
     assert cache.framework_digest(framework, toy.cache / "envs" / "toy") == before
+
+
+def test_the_checkout_location_counts_only_for_a_framework_whose_commands_name_it(toy: Toy, tmp_path: Path) -> None:
+    framework = load_frameworks(toy.root / "frameworks")["toy"]
+    env = toy.cache / "envs" / "toy"
+    moved = tmp_path / "other checkout" / "toy"
+    shutil.copytree(framework.root, moved)
+    assert cache.framework_digest(load_framework(moved), env) == cache.framework_digest(framework, env)
+    # Once a command names a file in the checkout, that path reaches the output, so the location counts.
+    for root in (framework.root, moved):
+        definition = root / "framework.toml"
+        definition.write_text(definition.read_text().replace('argv = ["unused', 'argv = ["{framework}/unused'))
+    assert cache.framework_digest(load_framework(moved), env) != cache.framework_digest(
+        load_framework(framework.root), env
+    )
+
+
+def test_stages_stop_before_the_next_tool_once_the_run_is_ending(toy: Toy) -> None:
+    stop = threading.Event()
+    stop.set()
+    framework = load_frameworks(toy.root / "frameworks")["toy"]
+    with pytest.raises(parallel.Stopped):
+        run_stages(framework, framework.baseline, stop)
 
 
 def test_the_framework_digest_follows_what_the_environment_installed(toy: Toy) -> None:

@@ -23,10 +23,12 @@ if TYPE_CHECKING:
 
 # The check stage fails, naming the file, when the app text holds BAD. It
 # sleeps a random moment first, so cases run on several workers finish in a
-# different order from the one they started in.
+# different order from the one they started in. It also leaves a file in the
+# working copy, as a build does, which the browser check must not see.
 _CHECK = (
     "import random, sys, time\n"
     "time.sleep(random.random() * 0.05)\n"
+    "open('tool-output.txt', 'w').write('built')\n"
     "text = open('app.txt').read()\n"
     "if 'BAD' in text:\n"
     "    print('app.txt: BAD found'); sys.exit(1)\n"
@@ -111,6 +113,9 @@ def _fake_observe(toy: Toy):  # noqa: ANN202 - returns the replacement for runti
         # A random pause makes the cases finish out of order.
         time.sleep(random.random() * 0.05)  # noqa: S311
         text = (path / "app.txt").read_text()
+        # The development server starts from a fresh copy, whether or not the tools ran in this run.
+        if (path / "tool-output.txt").exists():
+            raise AssertionError("the browser check saw what the tools wrote")
         with toy.lock:
             toy.observed.append(path.name)
         if path.name in toy.silent_servers:

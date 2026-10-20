@@ -102,25 +102,26 @@ only the cases whose inputs changed: the case itself, its framework's
 folder, what that framework's environment installed, the runner code that
 runs the tools and the browser, the installed Playwright, the Node and
 Python versions, the operating system version, a few environment variables
-the tools read, or the cache folder's location. Output that may only show a
-busy machine is not kept: a tool that timed out, a server that never
-answered, a journey that stopped early, and anything from a framework whose
-clean app had a problem. Scoring and the report are always worked out again
-from the stored output, so a change to them needs no rerun. `run.json` in
-the run's folder under `.benchmarks/errors/runs/` lists the clean apps and
-cases that came from earlier runs, and `--no-cache` runs everything again.
-Use it after changing something outside those inputs that could change a
-tool's output, such as a package installed by hand into
-`.benchmarks/errors/envs/`.
+the tools read, or the cache folder's location. Output that may say more
+about the machine than the case is not kept: a tool that timed out or was
+killed, a server that never answered, a journey that stopped early, and
+everything from a run whose clean app for that framework had a problem.
+Scoring and the report are always worked out again from the stored output,
+so a change to them needs no rerun. `run.json` in the run's folder under
+`.benchmarks/errors/runs/` lists the clean apps and cases that came from
+earlier runs, and `--no-cache` runs everything again. Use it after changing
+something outside those inputs that could change a tool's output, such as a
+package installed by hand into `.benchmarks/errors/envs/`.
 
 On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 `--jobs 1` and under a minute with the default of 5, with the same results.
-A rerun with nothing changed took 8 seconds: it ran only the browser checks
-of the 4 cases whose journey stops on an error page, which are never stored.
-A full run of the six frameworks with nothing stored is estimated at about 5
-minutes; it has not been timed yet, and most of it is the Nuxt cases, which
-run one at a time, and the Next.js builds. It is not part of routine CI. Run
-it at each Citry release, and when a framework's pinned versions change.
+Rerunning them with nothing changed took 8 seconds: it repeated only the
+browser checks of the 4 cases whose journey stops on an error page, which
+are never stored. Every framework repeats such cases on each run. A full run
+of the six frameworks with nothing stored is estimated at about 5 minutes;
+it has not been timed yet, and most of it is the Nuxt cases, which run one
+at a time, and the Next.js builds. It is not part of routine CI. Run it at
+each Citry release, and when a framework's pinned versions change.
 
 ## Latest result
 

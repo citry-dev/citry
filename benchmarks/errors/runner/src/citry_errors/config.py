@@ -18,7 +18,9 @@ REPO_ROOT = BENCH_ROOT.parents[1]
 # Installed environments, per-case working copies, raw run evidence and the
 # stored output of earlier runs stay out of the repository, next to the other
 # benchmarks' caches. CITRY_ERRORS_CACHE moves them, for example to share one
-# set of installed frameworks between two checkouts that do not run at once.
+# set of installed frameworks, and the stored output of frameworks whose
+# commands name no file in the checkout, between two checkouts that do not
+# run at once.
 CACHE = Path(os.environ.get("CITRY_ERRORS_CACHE") or REPO_ROOT / ".benchmarks" / "errors").resolve()
 
 # Static stages in the order a developer meets them. The runtime stages and
