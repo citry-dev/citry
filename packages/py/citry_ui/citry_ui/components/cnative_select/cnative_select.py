@@ -278,6 +278,10 @@ class CNativeSelect(LibraryComponent):
     class Slots:
         pass
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def _normalize(self, kwargs: Kwargs) -> _NormalizedSelect:
         name = _plain_optional_string("name", kwargs.name)
         if name == "":

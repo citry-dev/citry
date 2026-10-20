@@ -122,7 +122,7 @@ def _is_vue_variable_name(name: object) -> bool:
 @dataclass(frozen=True, slots=True)
 class LintSettings:
     """
-    Configure Citry's template and browser lint rules and analysis-only variables.
+    Configure Citry's template and browser lint rules, analysis-only variables, and the render-time input type check.
 
     Attributes:
         rule_unknown_template_variable: Severity for a free template root that
@@ -186,9 +186,29 @@ class LintSettings:
             so the directive never runs; with ``c-iff`` the element always
             shows up. An attribute of the element, such as ``c-id``, is not
             reported. The default is ``"error"``.
+        check_input_types: Check that each value a component receives has
+            the type its annotation names. On by default, in development and
+            in production. Unlike the ``rule_*`` settings, this check runs
+            when a component renders, not in ``citry check`` or the editor.
+            Citry compares each field of the component's ``Kwargs``,
+            ``TemplateData``, ``JsData``, ``CssData``, and ``State`` with the
+            field's annotation and raises ``TypeError`` for a value of the
+            wrong type, so ``Card(title=123)`` against ``title: str`` fails
+            with a message that names the component, the field, the expected
+            type, and the value. Only the outer type is checked:
+            ``list[str]`` accepts any ``list``. A field's own default always
+            passes. Annotations Citry cannot test while the page runs, such
+            as ``Any``, a type variable, or a name imported only for type
+            checkers, are not checked, and Pydantic models and dataclasses
+            that write their own ``__init__`` keep their own rules. [Inputs
+            and validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
+            lists what each annotation accepts. A component overrides this
+            for itself with ``check_input_types`` in its nested
+            [`Lint`][citry.Component.Lint] class.
 
     Raises:
-        TypeError: If a variable or global collection is not a mapping.
+        TypeError: If a variable or global collection is not a mapping, or
+            ``check_input_types`` is not a ``bool``.
         ValueError: If a severity or variable name is invalid.
 
     """
@@ -207,6 +227,7 @@ class LintSettings:
     rule_invalid_attribute_value: LintSeverity = "error"
     rule_i18n_cross_language_fallback: LintSeverity = "warning"
     rule_misspelled_directive: LintSeverity = "error"
+    check_input_types: bool = True
 
     # Hidden from type checkers so they keep checking calls against the
     # generated __init__ signature.
@@ -331,6 +352,11 @@ class LintSettings:
             if type(severity) is not str or severity not in _ALLOWED_LINT_SEVERITIES:
                 msg = f"{rule_name} must be one of {_ALLOWED_LINT_SEVERITIES}, got {severity!r}"
                 raise ValueError(msg)
+        # Every render reads this flag, so a truthy string such as "false"
+        # must fail here rather than silently keep the check on.
+        if type(self.check_input_types) is not bool:
+            msg = f"LintSettings.check_input_types must be True or False, got {self.check_input_types!r}."
+            raise TypeError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -394,9 +420,9 @@ class CitrySettings:
             which is how you add or change a global after the instance exists
             (including the default instance, created at import before your code
             runs).
-        lint: Template lint severities and analysis-only variables. Runtime
-            globals are discovered from ``Citry.template_globals`` and do not
-            need to be repeated here.
+        lint: Template lint severities, analysis-only variables, and the
+            render-time input type check. Runtime globals are discovered from
+            ``Citry.template_globals`` and do not need to be repeated here.
         security_csp: Content Security Policy check for rendered output.
             Citry scans the final HTML for raw ``<script>`` and ``<style>``
             elements, inline ``on*`` attributes, and ``javascript:`` URLs.

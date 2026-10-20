@@ -144,13 +144,20 @@ print(reading_list)
 # keyword argument 'heding'. Did you mean 'heading'?
 ```
 
-!!! note "Type annotations do not check values at runtime"
+So is an option of the wrong type. `books: list[str]` rejects a single
+string:
 
-    The type annotations help your editor and type checker, but Citry does
-    not check value types while the program runs. Validate values from
-    forms, APIs, or other sources you do not control before you pass them
-    in. [Inputs and validation](/concepts/inputs-and-validation/) explains
-    the choices.
+```python
+reading_list = ReadingList(books="The Dispossessed")
+print(reading_list)
+# TypeError: ReadingList.Kwargs.books expects list[str], got
+# str ('The Dispossessed'). ...
+```
+
+Citry checks the outer type only: it confirms that `books` is a list, but
+not that each item is a string.
+[Inputs and validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
+explains what each annotation accepts and how to check more.
 
 ## Next steps
 

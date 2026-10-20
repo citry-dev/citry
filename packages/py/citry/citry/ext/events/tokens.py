@@ -805,7 +805,12 @@ def _value_matches(value: Any, hint: Any) -> bool:
         return isinstance(value, list)
     if hint is dict or origin is dict:
         return isinstance(value, dict)
-    if isinstance(hint, type):
+    if hint is tuple or origin is tuple:
+        # JSON has no tuple: the browser sends a list for a tuple field.
+        return isinstance(value, (list, tuple))
+    # On Python 3.10 a parameterized generic such as ``set[str]`` also counts
+    # as a type, and isinstance() rejects it, so it is told apart by its origin.
+    if isinstance(hint, type) and origin is None:
         return isinstance(value, hint)
     # A parameterized or exotic annotation we do not special-case: accept.
     return True

@@ -104,6 +104,23 @@ each `LibraryComponent` class, after its methods and its `template`, `js`, and
 `css` assets. Do not put source messages at the top of the class beside its
 input schemas.
 
+Each Citry UI component checks its public inputs itself, with an error that
+names the input and the accepted values (for example "Tabs loop must be a
+bool, got 'x'."), and some accept values their annotations do not name, such
+as `heading_level="2"`. Citry's general input type check would replace those
+messages and reject such values, so each definition, including the internal
+ones, turns it off with a nested `Lint` class after its input schemas:
+
+```python
+class CTabs(LibraryComponent):
+    class Kwargs: ...
+
+    class Slots: ...
+
+    class Lint:
+        check_input_types = False
+```
+
 ## Edit readable assets and ship checked production files
 
 Citry UI keeps readable file-backed CSS next to each production family and

@@ -138,6 +138,12 @@ def make_mark_component(citry_instance: Citry) -> type[Component]:
         class Slots:
             default: SlotInput | None = None
 
+        # validate_mark_name() rejects a wrong name with an error that names
+        # the <c-mark> tag and the accepted pattern, which says more than the
+        # general type check would.
+        class Lint:
+            check_input_types = False
+
         def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:  # noqa: ARG002
             if set(self.raw_kwargs) != {"name"}:
                 raise ValueError("<c-mark> requires exactly one 'name' attribute.")
