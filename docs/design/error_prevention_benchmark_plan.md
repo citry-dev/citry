@@ -984,21 +984,30 @@ any result was seen, as the catalogue header requires. Each new-framework PR
 **Case count per new framework.** 62: the 63 mistakes minus m50, which
 waits for Ref G.
 
-**Full run time.** With 63 mistakes and 11 frameworks (all but Reflex) the
-full run grows from 22 minutes to about 1.6 hours (about 60 minutes for the
-current six, plus about 38 minutes for the five new ones). With Reflex it is
-about 2.1 to 3.2 hours, depending on its frontend build. It is not routine
-CI, but it crosses the "call out the cost" line in CLAUDE.md, so it needs
-the maintainer's agreement (open question 6). Ways to keep it practical:
+**Full run time.** Measured one case at a time, with every browser check
+run, 63 mistakes and 11 frameworks (all but Reflex) would take about 1.6
+hours. The runner now does three things that cut this:
 
-- run two or three frameworks at a time: each already has its own
-  environment and port. A slower development server start is scored as a
-  runtime error, so parallel runs need `ready_timeout` raised and a check
-  that every clean app still passes; do not run Next.js and Nuxt builds at
-  the same time;
-- for a PR, run only the new mistakes or the new framework with
-  `--framework` and `--mistake`, and run the full matrix only at a Citry
-  release.
+- **Several cases at once.** `run --jobs N` (default 5 on a 10-core
+  machine) runs cases of every framework side by side, after each clean
+  app has run alone. For Jinja and FastHTML it cut 211 seconds to 54, with
+  the same results. Nuxt runs one case at a time (its hot-reload port), and
+  Next.js and Nuxt builds have not been timed side by side yet.
+- **No browser check after a static error.** A case a tool already
+  reported as an error skips the browser check. In the 2026-10-20 run that
+  is 63 of 134 cases and about 38% of the run's time.
+- **Stored output.** A rerun runs only the cases whose inputs changed, so a
+  PR that adds mistakes or a framework runs only its new cases, and a
+  scoring or report change runs nothing again.
+
+The run times in the PR table above are for one case at a time with every
+browser check run. Together, a full run with nothing stored should take
+about 15 to 25 minutes for 11 frameworks (about 1 hour of work one case at a
+time, run 5 at once). This is an estimate from the 2026-10-20 per-case times
+and the Jinja and FastHTML measurement, to be replaced by the first full
+run's time. With Reflex, add its frontend builds for the cases no tool
+reported, divided by the worker count, unless Reflex needs a `max_jobs`
+limit.
 
 ---
 

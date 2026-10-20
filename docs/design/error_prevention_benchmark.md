@@ -224,6 +224,17 @@ one, where it would change the page that every existing case is compared on.
 | A tool reports the mistake more than `window` lines from the change, or in another file | It counts only when the case's `indirect` note says why it comes from the mistake and names its rule code, and the cell is marked `°`. Otherwise it is listed in `results.json` under `unconfirmed_indirect` and does not count, because a change can also cause side-effect findings, such as a variable it left unused |
 | A tool crashes on a case | The runner takes the first file and line under the working copy that the whole output names, and scores the failure like any located finding. A failure that names no such file counts only when the end of its output names the changed file; otherwise it is listed as unconfirmed, because it could be an unrelated failure such as a build that could not reach the network. A Citry app that fails to import always counts: the check imports it the same way every run and needs no network |
 | A tool's output format changes | The parser finds nothing and the stage looks silent. The runner's tests cover each parser on small made-up outputs in the tools' formats, and a cell that suddenly changes after a version bump is checked against the raw output |
+| Two workers start development servers at the same moment | They get different ports. Ports come from 20000-31999, below the range the operating system gives to outgoing connections, and the runner keeps each one reserved until its server stops |
+| Another program takes a server's port after the runner checked it was free | The server cannot listen. When its log says the address is in use, the runner starts it again on another port, up to three times in all. After that the case counts as a runtime error, as for any server that never answers, and its browser check is not stored |
+| Two `nuxt dev` servers start together | Each picks a port for its server-side hot reload from the same 21 ports, so both can pick the same one. Nuxt's `max_jobs = 1` keeps its cases one at a time; its static stages and other frameworks' cases still run beside it |
+| Parallel cases slow each other down | The clean apps run alone, before any case, so the comparison point is measured on a quiet machine. A case's browser check waits a fixed `settle_ms` after the page goes quiet, so a page that is still changing after that under load can read as "silently wrong". The development server's `ready_timeout` and each tool's timeout are minutes, far above a case's normal time. A run with `--jobs 1` and one with the default gave the same records for Jinja and FastHTML; a cell that changes between the two would point at this |
+| A case raises an unexpected error on its worker, such as a runner bug | No new case starts, the cases already running finish and stop their servers, and the run stops with that error and no `results.jsonl`. The cases that finished are stored, so the next run starts where this one stopped |
+| The run is stopped with Ctrl-C | The same, except that nothing that finishes after Ctrl-C is stored, because the signal also reaches the tools the running cases started. A tool killed by a signal is never stored either, whenever that happens |
+| A run stops while it stores a case's output | The entry's key file is written last, so the next run finds no key, ignores the entry and runs the case again |
+| A stage times out, or a server never answers | That output is not stored, because it may only show that the machine was busy, so the next run tries again. A clean app with any problem is never stored |
+| Two runs use the same cache folder at once | The second stops at the start with a message naming the folder, because both would write the same working copies and stored output. `CITRY_ERRORS_CACHE` gives the second its own folder |
+| Something outside the stored output's key changes a tool's output: an environment variable, a package installed by hand into an environment, a system tool such as `sh`, or anything a tool reads from the network | The stored output no longer matches what the tools would print, and nothing reports it. `--no-cache` runs everything again; a run meant for publishing can use it to rule this out. The key covers the case, its framework's folder (lockfiles included), the runner code that runs the tools and the browser, the runner's lockfile (which fixes the Chromium build), and the Node and Python versions |
+| A scoring rule changes so that a stored case's static error no longer counts | Whether to skip the browser check is decided again on every run, so the case gets its browser check on the next run. The stored stage output is reused |
 
 ## What could make a result wrong
 
@@ -247,8 +258,15 @@ one, where it would change the page that every existing case is compared on.
 ## Cost
 
 A full run installs each framework once, then runs every tool for every case
-and starts every development server once per case. It takes tens of minutes,
-most of it in the Next.js and Nuxt builds. It is not part of routine CI. Its
-result changes only when a case, a pinned version or Citry changes, so it is
-run at each Citry release. The runner's own tests run in seconds on small
-made-up tool output and need no network.
+and starts the development server for each case that no tool reported as an
+error. Cases run side by side, `--jobs` at a time, and a run repeats only
+the cases whose inputs changed since an earlier run stored them. Jinja and
+FastHTML together (42 cases) took 211 seconds with `--jobs 1` and 54 seconds
+with `--jobs 5` on a 10-core machine; the same run with the earlier runner,
+one case at a time and every browser check run, took about 280 seconds. A
+rerun with nothing changed takes about a second. The Next.js and Nuxt cases
+have not been timed side by side yet; from the earlier per-case times, a
+full run of the six frameworks should take about 5 minutes.
+It is not part of routine CI. Its result changes only when a case, a pinned
+version or Citry changes, so it is run at each Citry release. The runner's
+own tests run in seconds on small made-up tool output and need no network.

@@ -79,14 +79,38 @@ uv run --no-sync citry-errors report \
 `run` takes `--framework` and `--mistake`, each repeatable, to run part of
 the matrix, and `--skip-runtime` to run the static stages only. Installed
 environments, working copies and the raw output of every tool are kept under
-`.benchmarks/errors/` at the repository root. Only the compact report in
-`results/` is committed: `report.html`, a self-contained page with the chart
-and the full table that opens straight from disk, plus `matrix.md` and
-`results.json`.
+`.benchmarks/errors/` at the repository root; set `CITRY_ERRORS_CACHE` to
+keep them somewhere else. Only the compact report in `results/` is
+committed: `report.html`, a self-contained page with the chart and the full
+table that opens straight from disk, plus `matrix.md` and `results.json`.
 
-A full run takes tens of minutes, mostly production builds and development
-servers. It is not part of routine CI. Run it at each Citry release, and
-when a framework's pinned versions change.
+`run` runs several cases at once, from several frameworks side by side.
+`--jobs N` sets how many (by default half the CPUs, at most 8). Each clean
+app runs alone first, before any case, because every case of its framework
+is compared with it. A framework can lower its own limit with `max_jobs` in
+`framework.toml`: Nuxt runs one case at a time, because two `nuxt dev`
+servers starting together can pick the same port for their hot reload. The
+records come out in the same order whatever order the cases finish in.
+
+`run` also reuses what earlier runs stored. It keeps each case's raw tool
+output and browser check under `.benchmarks/errors/results/`, and a later
+run runs only the cases whose inputs changed: the case itself, its
+framework's folder, the runner code that runs the tools and the browser, or
+the Node and Python versions. Scoring and the report are always worked out
+again from the stored output, so a change to them needs no rerun. `run.json`
+in the run folder lists the clean apps and cases that came from earlier
+runs, and `--no-cache` runs everything again. Use it after changing
+something outside those inputs that could change a tool's output, such as
+an environment variable or a package installed by hand into
+`.benchmarks/errors/envs/`.
+
+On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
+`--jobs 1` and under a minute with the default of 5, with the same results.
+A full run of the six frameworks with nothing stored should take about 5
+minutes, mostly Next.js and Nuxt builds and development servers, and a
+rerun with nothing changed takes about a second. It is not part of routine
+CI. Run it at each Citry release, and when a framework's pinned versions
+change.
 
 ## Latest result
 

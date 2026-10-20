@@ -120,6 +120,9 @@ def _source() -> dict:
     return {"commit": git("rev-parse", "HEAD"), "benchmark_files_changed": bool(changed)}
 
 
+_print_lock = threading.Lock()
+
+
 @dataclass
 class Baseline:
     """The clean app's results for one framework, which every case of that framework is compared with."""
@@ -302,7 +305,12 @@ def _run_case(context: Context, framework: Framework, port: Port, baseline: Base
         "runtime_skipped": f"caught by {caught_by}" if caught_by and baseline.runtime is not None else "",
     }
     source = "(stored)" if reused else ""
-    print(f"{framework.key:10} {port.mistake:32} {record['strict']:16} {record['lenient']:16} {source}", flush=True)
+    # One write per line under a lock: workers finishing together would
+    # otherwise interleave their lines and newlines.
+    with _print_lock:
+        print(
+            f"{framework.key:10} {port.mistake:32} {record['strict']:16} {record['lenient']:16} {source}", flush=True
+        )
     return record, reused
 
 
