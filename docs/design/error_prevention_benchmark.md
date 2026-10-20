@@ -126,15 +126,27 @@ details and the search form turned into its components
   Templates, django-components, django-unicorn and Jinja templates, and
   ESLint for Nuxt and Next.js. A framework that relies on the language's
   own checks, such as FastHTML's typed Python functions, gets credit for
-  what those checks catch. Each tool keeps its default rules.
+  what those checks catch. Each tool keeps its default rules, apart from
+  the stricter settings in the next rule.
 - When a framework has a setting that turns on a stricter check, and other
   frameworks here have the same kind of check, its app turns the setting on,
   so the frameworks are compared like for like (decided on 2026-10-20; see
-  the plan's decisions). The framework's notes name every setting changed
-  from the default. The django-components and ReactPy apps are set up this
-  way. The django-unicorn app was added under the rule too, but
-  django-unicorn has no setting that turns on a stricter check. The apps
-  measured before them are set up under the rule in a later change.
+  the plan's decisions). There is no separate run with the defaults or
+  with every option on: the one published run uses these settings. The
+  framework's notes name every setting changed from the default, and the
+  ones considered and left off, with the reason. Raising a check that is
+  already on from a warning to an error does not count as turning on a
+  stricter check, because the report scores warnings separately on
+  purpose. A setting is left off when it adds a kind of check no other
+  framework here has, when it can only repeat, at a later stage, a check
+  another stage already runs, when it adds no check by itself, or when
+  the only way to satisfy it in the clean app is to change code that the
+  framework's docs write that way; the notes then say how many findings
+  it gives in the clean app. One option that turns on many checks at
+  once is turned on only when most of them are of a kind other
+  frameworks here check. A linter keeps the rules its framework's preset
+  turns on: a rule outside the preset is a project's own choice, not a
+  framework setting. The README lists the settings that are on.
 - Each case is written the way a developer of that framework would naturally
   make the mistake. A case is not changed after its result is seen, except to
   fix a case that did not express its mistake.

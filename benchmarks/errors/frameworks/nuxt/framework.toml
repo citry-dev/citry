@@ -31,8 +31,7 @@ recommends. It first runs `nuxi prepare`, as the starter's postinstall script do
 `.nuxt` tsconfigs the editor reads. A failing prepare is ignored, because the editor keeps the
 `.nuxt` folder an earlier install wrote. It then runs `vue-tsc -b --noEmit`, the command
 `nuxt typecheck` runs when tsconfig.json lists project references, as the starter's does.
-vue-tsc checks every file, while the editor shows diagnostics only for open
-files. A type error is reported where the wrong value is used: in m17 the server route returns a
+vue-tsc checks every file, while the editor shows diagnostics only for open files. A type error is reported where the wrong value is used: in m17 the server route returns a
 string, and vue-tsc reports TS2322 at the `:count` binding in `app/pages/index.vue`. The case's
 `indirect` note records why that finding still counts. A developer editing the route sees no
 error there; the editor shows it only with `app/pages/index.vue` open.
@@ -57,9 +56,8 @@ describe, runs the same vue-tsc command as the editor stage, so it is not a sepa
 The runtime check runs `nuxt dev`, so Vue's development warnings stay on, and Nuxt DevTools
 stays enabled as in the starter. The editor reports m06 indirectly: `$fetch` of an unknown
 route returns `unknown`, so reading `result.count` four lines below is TS18046. m11 renames both
-the opening and the closing tag; vue-tsc reports the unknown element because
-`strictTemplates` is on (below), and renaming only the opening tag is also a template compile
-error.
+the opening and the closing tag; vue-tsc reports the unknown element because `strictTemplates`
+is on (below), and renaming only the opening tag is also a template compile error.
 
 Three results depend on how the page is written. The heading's color is read with `v-bind()`,
 so m43's misspelled name reads a property the board data does not have, which vue-tsc reports; a
@@ -73,23 +71,37 @@ Settings changed from the default. The benchmark turns on a framework's stricter
 other frameworks here have the same kind of check, so nuxt.config.ts sets two:
 - `typescript.tsConfig.vueCompilerOptions.strictTemplates: true`, which Nuxt writes into the
   `.nuxt/tsconfig.app.json` that vue-tsc reads. In vue-tsc 3.3.13 it turns on
-  `checkUnknownProps`, `checkUnknownEvents`, `checkUnknownComponents`,
-  `checkUnknownDirectives` and `strictVModel`, so vue-tsc reports an unknown component, element,
-  attribute, directive or component event, as Citry and Next.js's tsc do. It moves m01, m10,
+  `checkUnknownProps`, `checkUnknownEvents`, `checkUnknownComponents`, `checkUnknownDirectives`
+  and `strictVModel`, so vue-tsc reports an unknown component, element, attribute, directive or
+  component event, the same kinds of names Citry and Next.js's tsc check. It moves m01, m10,
   m11, m21 and m29 to the editor. A misspelled event on a plain element (m31) is still not
-  reported, because vue-tsc writes such a listener in a form TypeScript does not check for
-  unknown names, and Vue's slot types accept any slot name, so m05 and m35 are not reported
-  either.
-- `experimental.typedPages: true`, which types `<NuxtLink>` and router calls with the app's
-  routes, as Next.js's `typedRoutes` does. It checks a route given by name, such as
-  `{ name: 'abuot' }`, but vue-router accepts any string as a path, so it does not change m45.
-The clean app needs no change for either. Left off: `typescript.typeCheck`, which runs the same
-vue-tsc during `nuxt dev` and `nuxt build`, later than the editor stage, so it cannot change a
-result; the `fallthroughAttributes` options, which check attributes a wrapper component passes
-on, a kind of check no other framework here has; and eslint-plugin-vue rules outside Nuxt's
-presets, which either repeat vue-tsc's checks at a later stage or, like
-`vue/no-undef-components`, flag Nuxt's auto-imported components in the clean app. Every other
-`@nuxt/eslint` check, its TypeScript rules included, is already on.
+  reported, because vue-tsc lets a plain element take any listener name, and Vue's slot types
+  accept any slot name, so m05 and m35 are not reported either.
+- `experimental.typedPages: true`, which checks a `<NuxtLink>` or router call that names a
+  route, such as `{ name: 'abuot' }`, against the app's routes, the same kind of check as
+  Next.js's `typedRoutes`, which checks paths too. vue-router accepts any string as a path, so
+  it does not change m45.
+The clean app needs no change for either.
+
+Considered and left off:
+- `typescript.typeCheck`, which runs the same vue-tsc during `nuxt dev` and `nuxt build`, later
+  than the editor stage, so it cannot change a result.
+- The `fallthroughAttributes` options, which check attributes a wrapper component passes on, a
+  kind of check no other framework here has.
+- `eslint.config.typescript.tsconfigPath`, which gives @nuxt/eslint a tsconfig so that it turns
+  on about 46 typescript-eslint rules that read the code's types. A few match a check other
+  frameworks here make, such as reporting a promise that is never awaited, which pyright does
+  in every Python app. Most do not: the `no-unsafe-*` rules report values typed `any`, as
+  pyright's strict mode does, which no Python app here turns on, and others, such as
+  `restrict-template-expressions` and `no-unnecessary-condition`, have no counterpart here. It
+  also replaces seven typescript-eslint strict rules that do not read types. No case leaves out
+  an `await`, so it would change no result.
+- eslint-plugin-vue rules outside Nuxt's presets. The benchmark keeps each linter's rules as
+  the framework's preset sets them; these rules either repeat vue-tsc's checks at a later stage
+  or, like `vue/no-undef-components`, report Nuxt's auto-imported components, which the clean
+  app uses as Nuxt's docs show (6 findings in the clean app).
+The rest of `@nuxt/eslint`'s default checks, including typescript-eslint's strict rules, are
+already on.
 
 m12 reads the private `secretToken` in the page, so the server renders the
 secret into the HTML it sends; the hydration error comes after the leak.

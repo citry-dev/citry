@@ -464,11 +464,10 @@ benchmark's stage: editor, check, build, or runtime.
   The benchmark does not run the plugin (see `frameworks/next/framework.toml`).
   Most of these rules have no Citry equivalent, because Citry does not split
   server and client components.
-- **Typed links (`typedRoutes`, editor and build).** Off by default.
-  PR 4 left it off, because every app except django-components keeps its
-  defaults until the later change that applies the decision on stricter
-  settings. With it off, a misspelled link (m45) is a 404 when the link is
-  clicked. Source: [Next.js TypeScript docs](https://nextjs.org/docs/app/api-reference/config/typescript).
+- **Typed links (`typedRoutes`, editor and build).** Off by default. The
+  stricter-settings PR (section 8) turned it on, so
+  tsc checks a literal link path against the app's routes, and a misspelled
+  link (m45) is an editor error rather than a 404. Source: [Next.js TypeScript docs](https://nextjs.org/docs/app/api-reference/config/typescript).
 - **eslint-config-next (check).** Its rules come from
   [packages/eslint-config-next](https://github.com/vercel/next.js/blob/canary/packages/eslint-config-next/src/index.ts):
   - errors: `react/jsx-key` and `jsx-no-duplicate-props`, and
@@ -509,9 +508,10 @@ benchmark's stage: editor, check, build, or runtime.
   - a misplaced `v-slot`, and duplicate slot names.
 - **vue-tsc (editor).** It types props, emit payloads (`defineEmits`), slot
   data (`defineSlots`), and provide/inject through `InjectionKey`. A write to
-  a prop from script is TS2540 (readonly). `strictTemplates` and the
-  `checkUnknown*` options are off by default
-  ([Vue compiler options](https://github.com/vuejs/language-tools/wiki/Vue-Compiler-Options)).
+  a prop from script is TS2540 (readonly). `strictTemplates`, which turns
+  on the `checkUnknown*` options, is off by default
+  ([Vue compiler options](https://github.com/vuejs/language-tools/wiki/Vue-Compiler-Options));
+  the stricter-settings PR turned it on in the Nuxt app.
 - **eslint-plugin-vue through @nuxt/eslint (check).** Nuxt combines the
   essential, strongly-recommended and recommended sets:
   - errors: `vue/no-mutating-props`, `vue/require-v-for-key`,
@@ -530,14 +530,16 @@ benchmark's stage: editor, check, build, or runtime.
 - **Nuxt options that are off by default.** `experimental.typedPages` (typed
   `<NuxtLink>`) and the typed message options of @nuxtjs/i18n
   ([experimental features](https://nuxt.com/docs/4.x/guide/going-further/experimental-features)).
-  PR 4 left `typedPages` off too. It checks route names, and the Nuxt page
-  links by path, so it would not change m45 there: vue-router prints a
+  The stricter-settings PR turned `typedPages` on. A test on the pinned
+  versions showed that it checks route names but accepts any string as a
+  path, and the Nuxt page
+  links by path, so it does not change m45 there: vue-router prints a
   warning in the browser when the link is clicked.
 
 ### Django 6.1 and Jinja 3.1
 
-- **`manage.py check` (check).** It checks settings and URL configuration
-  only, never templates
+- **`manage.py check` (check).** It checks settings and URL configuration,
+  including the template settings, but never opens a template file
   ([system checks](https://docs.djangoproject.com/en/dev/ref/checks/)).
 - **The Django template engine (runtime).** Errors appear when a view first
   loads the template:
@@ -551,7 +553,8 @@ benchmark's stage: editor, check, build, or runtime.
     parent does not have, or a missing attribute (which prints an empty
     string). This was probed on the pinned version.
 - **CSRF (runtime).** A POST form without `{% csrf_token %}` gets a 403.
-- **djLint (check).** Rules beyond the H025 already measured
+- **djLint (check).** Rules beyond the H025 already measured, all on by
+  default; no case makes these mistakes yet
   ([rule list](https://djlint.com/docs/linter/)):
   - H013 (image without `alt`), H037 (duplicate attribute), H053
     (duplicate `id`);
@@ -561,11 +564,13 @@ benchmark's stage: editor, check, build, or runtime.
 - **Jinja (runtime).** It reports unknown tags and filters when the template
   loads, but stays silent inside an `{% if %}` that never runs. Macros reject
   an unknown keyword argument with a `TypeError`. `StrictUndefined` is off by
-  default ([API docs](https://jinja.palletsprojects.com/en/stable/api/#jinja2.StrictUndefined)).
-- **Not in the default setup.** Under the decision on stricter settings,
-  each of these is turned on in the Django app when other frameworks here
-  have the same kind of check; that has not been decided for any of them
-  yet:
+  default ([API docs](https://jinja.palletsprojects.com/en/stable/api/#jinja2.StrictUndefined));
+  the stricter-settings PR turned it on in the Jinja app.
+- **Not in the default setup.** The stricter-settings PR considered each
+  of these for the Django, Rusty and django-components apps and added
+  none: none is part of
+  a Django project's usual setup, and none would report a mistake the
+  cases make (the Django framework notes give the details):
   - the [Django Language Server](https://djls.joshthomas.dev/en/latest/template-validation/)
     (djls), which reports unknown tags and filters and filter argument counts
     in the editor;
@@ -592,7 +597,9 @@ benchmark's stage: editor, check, build, or runtime.
   - **Not at runtime by default:** value types, because NamedTuples do
     not check them. Its docs say that to check types, a project writes
     these classes as Pydantic models and installs the djc-ext-pydantic
-    extension; PR 6 turns that on, under the decision on stricter settings.
+    extension; PR 6 turns that on, under the decision on stricter settings,
+    and the stricter-settings PR adds `extra='forbid'`, so unknown
+    names stay rejected as the named tuples reject them.
   - **No static template checks:** its one system check looks only at the
     folders its settings name, and it ships no editor support.
 
@@ -680,8 +687,9 @@ Citry already catches two of the part 3 mistakes: a duplicate attribute
 m59 through ty and `template.unknown-variable`. Citry is likely ahead on
 input and slot names, slot data, state fields, server events and
 translation keys. Mistakes nobody's defaults catch:
-misspelled links (typed routes are off by default everywhere), secrets sent
-to the browser on purpose, and CSS class and variable names.
+misspelled links (typed routes are off by default everywhere; the
+benchmark turns them on in Next.js and Nuxt), secrets sent to the browser
+on purpose, and CSS class and variable names.
 
 ---
 
@@ -1062,14 +1070,18 @@ per page addition: Django Rusty Templates (PR 9) and django-components
 (PR 6) came before both, and ReactPy (PR 8) and django-unicorn (PR 10)
 before PR 5.
 
-**Stricter settings for the frameworks measured before PR 6.** The decision
-on stricter settings applies to every framework, but only django-components
+**Stricter settings for the frameworks measured before PR 6 (done).** The
+decision on stricter settings applies to every framework. django-components
 (PR 6), ReactPy (PR 8) and django-unicorn (PR 10) were set up under it when
-they were added, and django-unicorn has no stricter setting to turn on; the
-others get their own PR. Until then the published cells compare
-django-components with its type checks on against the other frameworks at
-their defaults. The django-components notes name the cells this changes
-(m03 and m49). ReactPy's one changed setting, debug mode, changes no cell.
+they were added: django-components turns on Pydantic models, ReactPy its
+debug mode, and django-unicorn has no stricter setting to turn on. The
+stricter-settings PR applied it to the others: Jinja turns on
+`StrictUndefined`, Nuxt `strictTemplates` and `typedPages`, Next.js
+`typedRoutes` and two of the TypeScript options Nuxt's generated tsconfig
+adds, and django-components adds `extra='forbid'` to its Pydantic models.
+Citry, Django, Django Rusty Templates and FastHTML have no such setting.
+Each framework's notes name the settings changed and the ones left off,
+and the README lists the ones that are on.
 
 Each of PRs 2 to 5 should also publish a new `results/<date>/` run and update
 the README's reference-page table and its notes on single cells.
@@ -1150,16 +1162,13 @@ count, unless Reflex needs a `max_jobs` limit.
 
 ### Decisions (2026-10-20)
 
-- **Stricter settings (question 2):** there is no separate "strict
-  setup" run. When a framework has a setting that turns on a stricter
-  check, and other frameworks here have the same kind of check, the
-  benchmark turns it on in that framework's normal setup, so the
-  frameworks are compared like for like. The framework notes record each
-  setting changed from the default. This applies to the next published
-  run, so the published results change too. (As of PR 10,
-  django-components, ReactPy and django-unicorn are set up under it,
-  though django-unicorn has no setting to change; the frameworks
-  measured before django-components follow in their own PR, see
+- **Stricter settings (question 2):** there is no separate "strict setup"
+  run. When a framework has a setting that turns on a stricter check, and
+  other frameworks here have the same kind of check, the benchmark turns
+  it on in that framework's normal setup, so the frameworks are compared
+  like for like. The framework notes record each setting changed from the
+  default. This applies to the next published run, so the published
+  results change too. (Every framework is now set up under it; see
   section 8.)
 - **Conversions (question 3):** a framework that turns `"1"` into `1`
   for you counts as "prevented". Judge it case by case, with "prevented"

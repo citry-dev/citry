@@ -78,18 +78,29 @@ The browser always runs Vue's production build, so Vue's development
 warnings never appear, and no Citry case can end as a runtime warning
 through them.
 
-Stricter settings: none changed from the default. The benchmark turns on
-a framework's stricter check when other frameworks here have the same
-kind of check, and Citry has no check that is off by default: every lint
-rule starts as a warning or an error, and raising a warning to an error
-is not turning a check on (m09's `Ew` comes from such a warning). Two
-options were tried on the clean app and every case, and neither changed
-a finding. ty's rules that are off by default can be turned on in the
-project's `[tool.ty.rules]`, which `citry check --types` honors; they are
-ty's general extra rules, like pyright's strict mode, which no Python app
-here turns on. TypeScript's `strict` option, which the Next.js and Nuxt
-starters turn on, is fixed off in the TypeScript check Citry runs, and a
-project cannot change it.
+Stricter settings: none changed from the default. The benchmark turns
+on a framework's stricter check when other frameworks here have the same
+kind of check. Considered and left off:
+- Citry's own lint rules are all on by default: each starts as a warning
+  or an error, and raising a warning to an error is not turning a check
+  on (m09 is reported only as an editor warning because of such a rule).
+- ty's rules that are off by default. `citry check --types` honors the
+  project's `[tool.ty.rules]`, but it keeps only ty's findings inside
+  template expressions. One of these rules, `possibly-unresolved-reference`,
+  matches a check pyright's standard mode makes, but inside a template
+  expression Citry's own check already reports an unknown name, and no
+  test produced a finding from it, so it adds no check. The others
+  resemble pyright's strict mode, which no Python app here turns on.
+  Turning all of them on changed no finding in the clean app or any case.
+- TypeScript's `strict` option, which the Next.js and Nuxt starters turn
+  on, is fixed off in the TypeScript check Citry runs; a project cannot
+  change it. A test build of Citry's check with `strict` on changed no
+  finding.
+- Pydantic models for `Kwargs`, which Citry's docs show, would check
+  input types again when a component renders. ty already checks them in
+  the editor, so they could only repeat that check at a later stage.
+- `mode="development"` changes only how translations are loaded, and
+  the browser gets Vue's production build in either mode.
 """
 
 [setup]

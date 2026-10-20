@@ -17,8 +17,8 @@ SECRET_TOKEN = "s3cr3t"
 ACCENT = "rgb(0, 0, 255)"
 
 # The same environment `Jinja2Templates(directory=...)` builds, plus
-# StrictUndefined: printing or testing a name the template was not given
-# raises instead of printing nothing. Off by default; the benchmark turns it
+# StrictUndefined: printing a name the template was not given, using it in
+# `{% if %}` or looping over it raises an error. Off by default; the benchmark turns it
 # on because other frameworks here report unknown template names too.
 templates = Jinja2Templates(
     env=jinja2.Environment(
