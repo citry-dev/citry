@@ -97,11 +97,11 @@ Templates, an experimental Rust version of Django's template engine, is
 measured as the Django app with its template backend switched
 (`frameworks/rusty`). django-components, the project Citry grew out of, is
 measured as the Django app with the page's parts turned into components
-(`frameworks/django-components`). ReactPy, whose components are Python
-functions that the server runs while the browser shows what they return, is
-measured with its Starlette backend served by uvicorn, as in the
-performance benchmark in `benchmarks/web` (`frameworks/reactpy`). Tetra, django-unicorn and
-Reflex are not measured yet.
+(`frameworks/django-components`). ReactPy (`frameworks/reactpy`), whose
+components are Python functions that the server runs while the browser
+shows what they return, is measured with its Starlette backend served by
+uvicorn, as in the performance benchmark in `benchmarks/web`. Tetra,
+django-unicorn and Reflex are not measured yet.
 
 ### Fairness rules
 

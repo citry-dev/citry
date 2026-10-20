@@ -291,8 +291,8 @@ ReactPy has a case for every mistake
 its cells are not in the published run above yet; the next published run
 adds them. In ReactPy the server runs every component in Python and sends
 the browser the elements to show over a WebSocket, and a click runs a
-Python handler on the server. Its cells differ from FastHTML's, the other
-framework here that writes its page as Python functions, in these places:
+Python handler on the server. The main differences from FastHTML's cells,
+the other framework here that writes its page as Python functions:
 
 - **m02, m04, m05, m25, m26, m29 and m35:** ReactPy's `@component`
   decorator is typed so that pyright accepts any arguments in a call to a
@@ -316,6 +316,11 @@ framework here that writes its page as Python functions, in these places:
   calls `save(amount=1)`. The amount is a Python argument, not a field
   in a request, so pyright reports a misspelled, wrong-typed or missing
   amount in the editor.
+- **m06, m24 and m47:** the Add button's handler, the card's hide
+  callback and the card's module are Python names, so pyright reports a
+  misspelled one in the editor. FastHTML names its handler by URL and its
+  hide event by a string, so it reports m06 only at runtime and misses
+  m24, and its page has no second file to import.
 - **m19 and m20:** the conditional that shows the details text and the
   toggle's click handler are Python code, so their syntax errors are
   Python syntax errors, which pyright and ruff report.
@@ -324,8 +329,9 @@ framework here that writes its page as Python functions, in these places:
   pass shows `API: undefined` with no error. (A second prop that carries
   the secret, m42, reaches the browser unnoticed, as in every framework.)
 
-m14 and m34 are n/a, as in the other Python apps: ReactPy 1.1.0 renders
-nothing on the server, and no browser code reads a reply to the click.
+m14 and m34 are n/a, as in FastHTML and the Django and Jinja apps:
+ReactPy 1.1.0 renders nothing on the server, and no browser code reads a
+reply to the click.
 
 Tetra, django-unicorn and Reflex are not measured yet.
 
@@ -524,11 +530,10 @@ django-components app was the first one set up this way: it checks the
 types of component inputs when a component renders, as Citry does, using
 Pydantic models. The ReactPy app turns on ReactPy's debug mode, which adds
 development checks such as a warning for a list item without a key, as
-React does in development; it changes no cell in this run. The apps
-measured before
-django-components are set up under the same rule in a later change; until
-then they keep every setting at its default, such as Jinja's
-`StrictUndefined`.
+React does in development; it changes none of ReactPy's cells. The apps
+measured before django-components are set up under the same rule in a
+later change; until then they keep every setting at its default, such as
+Jinja's `StrictUndefined`.
 
 | Stage | What it measures |
 | --- | --- |

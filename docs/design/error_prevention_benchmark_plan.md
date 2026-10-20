@@ -643,8 +643,8 @@ benchmark's stage: editor, check, build, or runtime.
     it imports `pkg_resources`. It checks only where hooks are
     called, which no mistake in the catalogue tests, so it is not a stage.
   - **Debug mode:** PR 8 turns it on under the decision on stricter
-    settings. It changes no cell, because each error it shows in the page
-    is also logged without it.
+    settings. It changes no cell; a run with it off gave the same 44
+    cells.
 
 ### What this says about Citry's blind spots
 
@@ -851,13 +851,13 @@ Recommended order:
    pyright and ruff as the tools. It mostly shows what a Python framework
    with weak typing catches, and many cells will be runtime errors that only
    reach the server log.
-   Done in PR 8. The page is built from ReactPy components and served by
-   uvicorn, as in the performance benchmark in `benchmarks/web`, with one JavaScript component for the API
-   line. Of the 44 cases, 18 end as editor errors, 1 as a check error, 9
-   as runtime errors, 10 are missed and 6 do not apply. The runtime errors are mostly
-   misspelled or missing component arguments, which pyright cannot see
-   through `@component`. The 44 cases ran on their own in about a minute
-   with `--jobs 5`.
+   Done in PR 8. The page is built from ReactPy components, with one
+   JavaScript component for the API line, and served by uvicorn as in the
+   performance benchmark in `benchmarks/web`. Of the 44 cases, 18 end as
+   editor errors, 1 as a check error, 9 as runtime errors, 10 are missed
+   and 6 do not apply. The runtime errors are mostly misspelled or missing
+   component arguments, which pyright cannot see through `@component`. The
+   44 cases ran on their own in about a minute with `--jobs 5`.
 4. **Django Rusty Templates.** Cheap, because it copies the Django baseline
    and changes the backend. The difference from Django is small: m08 moves to
    a runtime error, and m05 and m15 do not apply. The pinned parser has no

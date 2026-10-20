@@ -75,7 +75,7 @@ def Page() -> VdomDict:
     # Cards are hidden in this page's state only; the project list stays the same.
     hidden, set_hidden = hooks.use_state([])
 
-    # Each card gets a hide handler of its own, built by a function the way
+    # Each card gets a hide handler of its own, built by a function, the way
     # ReactPy's docs build one handler per list item, so the handler knows
     # its card's title without the card passing it back.
     def make_hide(title: str) -> Callable[[], None]:

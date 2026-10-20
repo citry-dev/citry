@@ -12,6 +12,7 @@ def Card(
     tone: Literal["plain", "accent"],
     # The card hands its title and count to `footer`, which builds the footer link.
     footer: Callable[[str, int], VdomDict],
+    # The page's handler already knows which card it hides, so the card passes nothing.
     on_hide: Callable[[], None],
 ) -> VdomDict:
     return html.article(
