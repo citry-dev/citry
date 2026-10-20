@@ -78,6 +78,11 @@ uv run --no-sync citry-errors report \
   --output ../results/<date>
 ```
 
+`prepare` installs every framework's locked dependencies. Django Rusty
+Templates has no release on PyPI, so its app's lockfile pins it to a git
+commit, and `prepare` builds its Rust extension. That needs a Rust
+compiler (https://rustup.rs/) unless uv has already built it.
+
 `run` takes `--framework` and `--mistake`, each repeatable, to run part of
 the matrix, and `--skip-runtime` to run the static stages only. Installed
 environments, working copies and the raw output of every tool are kept under
@@ -185,8 +190,28 @@ The gaps the earlier 24-mistake run found in Citry are tracked in
 [#207](https://github.com/citry-dev/citry/issues/207); the gaps the
 mistakes measured since (m25 to m42, m47 and m49) found are not in it yet.
 
-Django Rusty Templates, django-components, Tetra, django-unicorn, Reflex and
-ReactPy are not measured yet.
+Django Rusty Templates, an experimental Rust version of Django's template
+engine, is measured as "Rusty + HTMX + Alpine": the Django app with its
+template backend switched. It has a clean app and a case for every
+mistake, but is not in the published run yet. Its cells match Django's
+except three:
+
+- **m08:** Django Rusty Templates raises an error when the page reads a
+  misspelled attribute of an existing object (`owner.nmae`), where Django
+  prints an empty string. This is the only mistake the two template
+  engines handle differently.
+- **m05 and m35:** n/a. The version this benchmark pins has no
+  `{% extends %}` or `{% block %}`, so the card writes its own footer
+  link, and the page has no footer to misspell or leave out.
+
+Two cases are written differently but end as Django's do. With no
+`{% translate %}` tag, the view translates the heading with Django's
+`gettext`, so a misspelled message id (m15) is missed. With no
+`{% extends %}`, the m47 case misspells the page template's path in the
+view, which fails at runtime.
+
+django-components, Tetra, django-unicorn, Reflex and ReactPy are not
+measured yet.
 
 ## The reference page
 
@@ -358,9 +383,9 @@ linters and type checker most of its projects add. Earlier is better, so a
 mistake these tools report counts as caught before running, however the
 framework itself would have reported it. For every Python stack that means
 pyright in standard mode (Pylance with type checking turned on) and ruff
-with its default rules; for Django and Jinja templates, djLint; for Nuxt,
-the official `@nuxt/eslint` module; for Next.js, the ESLint its starter
-installs. Each tool keeps its default rules, with two exceptions that the
+with its default rules; for Django, Rusty and Jinja templates, djLint;
+for Nuxt, the official `@nuxt/eslint` module; for Next.js, the ESLint its
+starter installs. Each tool keeps its default rules, with two exceptions that the
 clean app needs and that such projects commonly make: FastHTML's main.py
 turns off ruff's star-import rules (F403, F405), and Nuxt's ESLint config
 turns off `vue/multi-word-component-names`. An app setting that is off by

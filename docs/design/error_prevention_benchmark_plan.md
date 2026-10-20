@@ -4,9 +4,11 @@ Status: approved by the maintainer on 2026-10-20, with the decisions listed
 at the end. Written against the benchmark as added in PR #205 (commit
 `9346c7131`). PRs 1a (case edits) and 1b (runner journeys and page
 comparison) are done, as described in section 7, and so are PR 2 (the
-hand-off mistakes on the current page) and PR 3 (browser components and
-slot data); the other PRs in section 8 are planned. The published results
-include 1b, PR 2 and PR 3. The
+hand-off mistakes on the current page), PR 3 (browser components and slot
+data) and PR 9 (Django Rusty Templates). PR 9 landed before PRs 4 and 5,
+so each of those PRs also adds its page changes and cases to the Rusty
+app. The other PRs in section 8 are planned. The published results include
+1b, PR 2 and PR 3, but not PR 9 yet. The
 benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
@@ -561,10 +563,15 @@ benchmark's stage: editor, check, build, or runtime.
 
 - **Django Rusty Templates** (pinned commit `0725f87`): same stages as
   Django, with better messages. `{{ owner.nmae }}` raises at render where
-  Django prints nothing, so m08 would move from missed to runtime error. The
-  pinned parser has no `extends`, `block` or `translate`, so m05 and m15 do
-  not apply ([repository](https://github.com/LilyFirefly/django-rusty-templates),
+  Django prints nothing, so m08 moves from missed to runtime error. The
+  pinned parser has no `extends`, `block`, `translate`, `static`,
+  `partialdef` or `json_script`, and `{% load %}` fails for any library
+  with a tag that is not a simple tag, such as `i18n` and `static`
+  ([repository](https://github.com/LilyFirefly/django-rusty-templates),
   [issue #2](https://github.com/LilyFirefly/django-rusty-templates/issues/2)).
+  Measured in PR 9: m05 and m35 do not apply, because the card cannot take
+  a footer from the page. m15 still applies, because the view can
+  translate the heading with Django's `gettext`.
 - **django-components 0.152.0**:
   - **At render:** it builds `Kwargs` and `Slots` as NamedTuples, so an
     unknown input, a missing input or an unknown slot raises a `TypeError`.
@@ -786,8 +793,9 @@ exists.
 
 ## 6. Part 3: which frameworks to add
 
-The performance benchmark compares six frameworks the error benchmark does
-not measure yet: Django Rusty Templates, django-components, Tetra,
+When this plan was written, the performance benchmark compared six
+frameworks the error benchmark did not measure yet: Django Rusty Templates,
+django-components, Tetra,
 django-unicorn, Reflex and ReactPy.
 
 Recommended order:
@@ -817,6 +825,13 @@ Recommended order:
    and changes the backend. The difference from Django is small: m08 moves to
    a runtime error, and m05 and m15 do not apply. The pinned parser has no
    `extends`, `block` or `translate`, so the baseline has to drop those.
+   Done in PR 9 (`frameworks/rusty`). The measurement differs from this
+   estimate in two cells: m15 applies, because the view translates the
+   heading with `gettext`, and m35 does not apply, because the card cannot
+   take a footer from the page. The baseline also had to work around
+   `static`, `partialdef` and `json_script`. Apart from m05, m08 and m35,
+   every cell matches Django's. The framework notes list each difference
+   from the Django app.
 5. **django-unicorn.** Low to medium cost. Several cases do not apply,
    because it has no slots and no child-to-parent events. Its unknown-method
    behavior (silently ignored) is a useful data point.
@@ -827,7 +842,8 @@ Recommended order:
 Each new framework gets `framework.toml`, a baseline, and one case for each
 mistake in the catalogue at that point. So adding frameworks after the
 catalogue grows makes each framework PR larger, but keeps each
-catalogue PR at six frameworks. The total work is the same either way; the
+catalogue PR at six frameworks. Django Rusty Templates (PR 9) came before
+PRs 3 to 5, so those PRs cover it too. The total work is the same either way; the
 split in section 8 keeps every PR to one dimension.
 
 ---
@@ -967,10 +983,14 @@ change per baseline, plus re-checking the clean page.
 | 6. django-components | framework, baseline, one case per mistake | ~62 | ~8 min | ~66 min |
 | 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first | ~62 | unknown: 30-95 min if every case builds the frontend | see open question 4 |
 | 8. ReactPy | | ~62 | ~6 min | |
-| 9. Django Rusty Templates | starts from the Django baseline | ~62 | ~7 min | |
+| 9. Django Rusty Templates (done, before PRs 3 to 5) | starts from the Django baseline. 37 cases, one per mistake the catalogue had then (PRs 3 to 5 add the rest); its cases ran in about 1 minute with `--jobs 5` | 37 written (estimate ~62) | ~1 min measured (estimate ~7 min) | |
 | 10. django-unicorn | | ~62 | ~7 min | |
 | 11. Tetra | | ~62 | ~10 min | |
 | (later) Ref G and m50 | provide/inject in every baseline | 1 case + 1 baseline change per framework | | |
+
+The case counts for PRs 3 to 5 assume six frameworks. Each framework
+added before them, such as Django Rusty Templates in PR 9, adds one case
+per mistake and one baseline change per page addition.
 
 Each of PRs 2 to 5 should also publish a new `results/<date>/` run and update
 the README's reference-page table and its notes on single cells.
