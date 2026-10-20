@@ -102,10 +102,9 @@ components are Python functions that the server runs while the browser
 shows what they return, is measured with its Starlette backend served by
 uvicorn, as in the performance benchmark in `benchmarks/web`.
 django-unicorn, whose components the server renders again after every
-click, is measured as the Django app with the cards, the counter and the
-details turned into its components (`frameworks/unicorn`); it has an app
-and cases but is not in a published run yet. Tetra and Reflex are not
-measured yet.
+click, is measured as the Django app with the cards, the counter, the
+details and the search form turned into its components
+(`frameworks/unicorn`). Tetra and Reflex are not measured yet.
 
 ### Fairness rules
 
@@ -288,7 +287,7 @@ with `--jobs 5` on a 10-core machine. Running every browser check as well,
 one case at a time, took about 280 seconds. A rerun with nothing changed
 took 8 seconds, because the browser checks of the 4 cases whose journey
 stops on an error page are never stored and run again. A full run of the
-nine frameworks (441 cases) with nothing stored took about 22 minutes
+ten frameworks (490 cases) with nothing stored took about 25 minutes
 with the default `--jobs 5`, most of it the Nuxt cases, which run one at
 a time. It is not part of routine CI. Its result changes only when a
 case, a pinned version or Citry changes, so it is run at each Citry

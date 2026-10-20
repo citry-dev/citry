@@ -120,18 +120,19 @@ something outside those inputs that could change a tool's output, such as a
 package installed by hand into `.benchmarks/errors/envs/`.
 
 On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
-`--jobs 1` and under a minute with the default of 5, with the same results.
-Rerunning them with nothing changed took 8 seconds: it repeated only the
-browser checks of the 4 cases whose journey stops on an error page, which
-are never stored. Every framework repeats such cases on each run. A full run
-of the nine frameworks' 441 cases with nothing stored (`--no-cache`) took
-about 22 minutes on the same machine; most of it is the Nuxt cases, which
-run one at a time, and the Next.js builds. ReactPy's 49 cases, run on
-their own, took about 2 minutes. Each journey loads the page again in
-every browser check, and the `search`, `about` and `project` journeys
-bring each framework to five (FastHTML to four). It is not part of
-routine CI. Run it at each Citry release, and when a framework's pinned
-versions change.
+`--jobs 1` and under a minute with the default of 5, with the same
+results. Rerunning them with nothing changed took 8 seconds: it repeated
+only the browser checks of the 4 cases whose journey stops on an error
+page, which are never stored. Every framework repeats such cases on each
+run. A full run of the ten frameworks' 490 cases with nothing stored
+(`--no-cache`) took about 25 minutes on the same machine; most of it is
+the Nuxt cases, which run one at a time, and the Next.js builds.
+ReactPy's 49 cases, run on their own, took about 2 minutes, and
+django-unicorn's about 3. Each journey loads the page again in every
+browser check, and the `search`, `about` and `project` journeys bring
+each framework to five (FastHTML to four). It is not part of routine CI.
+Run it at each Citry release, and when a framework's pinned versions
+change.
 
 ## Latest result
 
@@ -150,7 +151,11 @@ counter, the status line and the page rewritten as components of
 the Django library Citry grew out of. "ReactPy" is
 [ReactPy](https://github.com/reactive-python/reactpy), a Python library
 for React-style components: the server runs them in Python and sends the
-browser the page to show over a WebSocket.
+browser the page to show over a WebSocket. "django-unicorn" is the
+Django app with its interactive parts rewritten as components of
+[django-unicorn](https://www.django-unicorn.com/), which sends each click
+to the server and replaces the component's HTML with the HTML the server
+sends back.
 
 Some differences between cells come from how each framework naturally
 writes a part of the page, not from its tools:
@@ -182,12 +187,15 @@ writes a part of the page, not from its tools:
   only when the value is written as a literal; nothing checks a child that
   assigns to its own prop (m28).
 - **m30 and m34:** most pages need no value in the hide event, and most
-  never read the server's reply as data, so each applies to one framework
-  only: Citry's card sends its title with the hide event (m30), and Nuxt's
-  page reads `count` from the reply (m34). The other cells are n/a.
+  never read the server's reply as data, so m30 applies to two
+  frameworks and m34 to one: Citry's and django-unicorn's cards send
+  their title when they ask to be hidden (m30), and Nuxt's page reads
+  `count` from the reply (m34). The other cells are n/a.
 - **m32:** Django, Rusty, Jinja, django-components and FastHTML are
   "prevented": HTMX sends form fields, which are always text, so `"1"`
-  and `1` send the same request.
+  and `1` send the same request. django-unicorn is "prevented" too: it
+  converts an action's argument to the type the method declares, so
+  `save(amount='1')` calls `save(amount=1)`.
 - **m35:** Citry, FastHTML and Next.js declare the card's footer as
   required, so leaving it out is reported before the app runs;
   django-components declares it required too, and reports it when the
@@ -217,20 +225,20 @@ writes a part of the page, not from its tools:
   reads, so the search shows no `Searched:` line. Citry's form calls a
   server event, which rejects the call because `q` is missing, but the
   error stays in `$error('search')`, which the page does not show.
-- **m45:** Django, Rusty, Jinja and django-components build the link from
-  the route's name, so the page fails to render. Citry, FastHTML and
-  Next.js link by path and get a 404 when the link is clicked. Nuxt's
-  router prints only a warning. ReactPy's router changes the page in the
-  browser, so the link shows the app's catch-all `Page not found` route,
-  and nothing reports an error. Next.js's `typedRoutes` and Nuxt's
-  `typedPages`, which would check links before the app runs, are off,
-  as they are by default.
-- **m46:** Citry checks a message's arguments in the editor. Django's and
-  django-components' `{% blocktranslate %}` leaves the owner's name out,
-  so the subtitle reads `Owned by ` with no error, while Rusty's view
-  fills the gettext placeholder from a dictionary and raises a
-  `KeyError`. The other frameworks have no
-  translations built in, as for m15.
+- **m45:** Django, Rusty, Jinja, django-unicorn and django-components
+  build the link from the route's name, so the page fails to render.
+  Citry, FastHTML and Next.js link by path and get a 404 when the link
+  is clicked. Nuxt's router prints only a warning. ReactPy's router
+  changes the page in the browser, so the link shows the app's catch-all
+  `Page not found` route, and nothing reports an error. Next.js's
+  `typedRoutes` and Nuxt's `typedPages`, which would check links before
+  the app runs, are off, as they are by default.
+- **m46:** Citry checks a message's arguments in the editor. In Django,
+  django-unicorn and django-components, `{% blocktranslate %}` leaves
+  the owner's name out, so the subtitle reads `Owned by ` with no error,
+  while Rusty's view fills the gettext placeholder from a dictionary and
+  raises a `KeyError`. The other frameworks have no translations built
+  in, as for m15.
 - **m48:** the misspelled image is a 404 when the page loads, except in
   Nuxt, whose build turns an image path in a template into an import and
   fails on the missing file.
@@ -343,17 +351,15 @@ ReactPy 1.1.0 renders nothing on the server, and no browser code reads a
 reply to the click. m46 is n/a as in FastHTML, because ReactPy has no
 translations.
 
-django-unicorn has an app and cases
-([`frameworks/unicorn/`](frameworks/unicorn/) holds the app and its
-notes), but it is not in the run above; it joins the next published run.
-Its app is the Django app with the cards, the counter, the details with
-their status line, and the search form turned into
-[django-unicorn](https://www.django-unicorn.com/) components.
-Each click sends the component's state to the server, which runs a Python
-method and sends back the component's new HTML, so the page loads neither
-HTMX nor Alpine. The saved count lives in the page, not in the session, so
-after a reload the page shows `Saved: 0`, as Citry's does. In a run of its
-own, its cells differ from Django's in these places:
+The django-unicorn app ([`frameworks/unicorn/`](frameworks/unicorn/)
+holds it and its notes) is the Django app with the cards, the counter,
+the details with their status line, and the search form turned into
+[django-unicorn](https://www.django-unicorn.com/) components. Each click
+sends the component's state to the server, which runs a Python method
+and sends back the component's new HTML, so the page loads neither HTMX
+nor Alpine. The saved count lives in the page, not in the session, so
+after a reload the page shows `Saved: 0`, as Citry's does. Its cells
+differ from Django's in these places:
 
 - **m06:** django-unicorn ignores a click whose action names a method
   the component does not have, and prints nothing, so a misspelled `save`
