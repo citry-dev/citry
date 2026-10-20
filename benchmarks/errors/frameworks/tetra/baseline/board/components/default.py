@@ -8,8 +8,8 @@ from tetra import Component, public
 # Tetra finds this module because it is board/components/default.py: every
 # component class here belongs to the app's `default` library, the group of
 # components whose scripts and styles Tetra builds into one JavaScript file
-# and one CSS file. Templates use each one as a tag named after its class,
-# such as {% Card %}.
+# and one CSS file. Templates use each component as a tag named after its
+# class, such as {% Card %}.
 #
 # A public attribute is part of the component's Alpine data in the browser.
 # Its type annotation lets Tetra check the value whenever it saves the

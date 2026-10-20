@@ -129,7 +129,8 @@ STATIC_URL = 'static/'
 
 # Tetra
 # Tetra builds each component library's JavaScript and CSS with esbuild, a
-# JavaScript bundler. Tetra 0.8.5 ships no esbuild binary and would download
+# JavaScript bundler. A library is a group of components whose scripts and
+# styles Tetra builds into one JavaScript file and one CSS file. Tetra 0.8.5 ships no esbuild binary and would download
 # one on first use, so this app installs the version Tetra downloads (0.27.2)
 # from npm, as Tetra's install guide allows, and names it here. npm puts it
 # in node_modules/.bin next to package.json. The benchmark's runner keeps

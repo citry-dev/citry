@@ -32,6 +32,10 @@ def env_dir(framework: Framework) -> Path:
 
 def _manifest_digest(framework: Framework) -> str:
     digest = hashlib.sha256()
+    # The command is part of what the environment holds: a setup step that
+    # builds something, such as Tetra's own component library, must run again
+    # when the step changes, even if no lockfile did.
+    digest.update(json.dumps(framework.setup_command).encode())
     for name in framework.setup_manifests:
         digest.update(name.encode())
         digest.update((framework.baseline / name).read_bytes())

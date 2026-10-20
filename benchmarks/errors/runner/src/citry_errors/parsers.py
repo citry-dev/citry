@@ -249,37 +249,44 @@ def djlint(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding
     return findings
 
 
-# esbuild prints `✘ [ERROR] message`, then the place as `    path:line:col:`.
-_ESBUILD_ERROR = re.compile(r"^\s*(?:✘\s*)?\[ERROR\]\s+(?P<msg>.*)$")
+# esbuild starts each report with `✘ [ERROR] message` or `▲ [WARNING] message`
+# (`X` in place of `✘` on Windows), then gives its place as `    path:line:col:`.
+# A report's notes may name further places; only the first one is the report's.
+_ESBUILD_HEADER = re.compile(r"^\s*(?:✘|▲|X)\s*\[(?P<level>ERROR|WARNING)\]\s+(?P<msg>.*)$")
 _ESBUILD_LOCATION = re.compile(r"^\s+(?P<file>[^\s:][^:]*):(?P<line>\d+):\d+:\s*$")
 
 
 def esbuild(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding]:
-    """Read the esbuild errors a build command prints, such as Tetra's `manage.py tetrabuild`.
+    """Read the esbuild errors and warnings a build command prints, such as Tetra's `manage.py tetrabuild`.
 
     A command can print esbuild's error and still succeed, as tetrabuild does.
     The developer sees the error, but a CI build passes, so the error counts as
-    a warning then, and as an error only when the command fails.
+    a warning then, and as an error only when the command fails. esbuild's own
+    warnings are always warnings. A report esbuild gives no place for has the
+    code `esbuild-unlocated`, so a case's note that accepts located reports
+    does not also accept it.
     """
-    severity = "error" if exit_code != 0 else "warning"
+    error_severity = "error" if exit_code != 0 else "warning"
     findings = []
-    pending: str | None = None
+    # The report whose place has not been read yet: its severity and message.
+    pending: tuple[str, str] | None = None
     for line in _strip_ansi(stdout + "\n" + stderr).splitlines():
-        match = _ESBUILD_ERROR.match(line)
+        match = _ESBUILD_HEADER.match(line)
         if match:
-            # An error with no place before the next one is kept unlocated.
             if pending is not None:
-                findings.append(Finding(None, None, severity, "esbuild", pending))
-            pending = match["msg"].strip()
+                findings.append(Finding(None, None, pending[0], "esbuild-unlocated", pending[1]))
+            pending = (error_severity if match["level"] == "ERROR" else "warning", match["msg"].strip())
             continue
         match = _ESBUILD_LOCATION.match(line)
         if pending is not None and match:
-            findings.append(Finding(relative(match["file"], work), int(match["line"]), severity, "esbuild", pending))
+            findings.append(
+                Finding(relative(match["file"], work), int(match["line"]), pending[0], "esbuild", pending[1])
+            )
             pending = None
     if pending is not None:
-        findings.append(Finding(None, None, severity, "esbuild", pending))
+        findings.append(Finding(None, None, pending[0], "esbuild-unlocated", pending[1]))
     # The command can also fail before esbuild runs, such as on a Python import error.
-    if exit_code != 0 and not findings:
+    if exit_code != 0 and not any(finding.severity == "error" for finding in findings):
         findings.extend(exit_status(stdout, stderr, exit_code, work))
     return findings
 

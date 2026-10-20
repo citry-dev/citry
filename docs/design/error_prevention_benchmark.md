@@ -64,7 +64,10 @@ publish separate tables
   `w`. Counting only errors, or warnings like errors, would favor whichever
   framework reports at the chosen level: Citry's invalid-attribute rule is a
   warning by default, and many Vue and React problems are only
-  development-mode console warnings.
+  development-mode console warnings. A build command that prints a tool's
+  error but still succeeds counts as a static warning for the same reason:
+  the developer sees the error, but a CI build passes. Tetra's
+  `tetrabuild` does this with esbuild's errors.
 - **Tool versions.** Each baseline pins exact versions in its own lockfile.
   They are bumped together, as one recorded change, at a Citry release run.
   A version bump changes what a framework catches, so the result belongs to

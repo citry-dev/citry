@@ -394,6 +394,37 @@ def test_esbuild_errors_are_warnings_when_the_build_command_still_succeeds() -> 
     assert esbuild("Tetra: Building Javascript and CSS\n", "", 0, WORK) == []
 
 
+def test_esbuild_keeps_each_report_with_its_own_place() -> None:
+    # Colored output with an unlocated error, a warning, and an error whose
+    # note names a second place, which belongs to the note, not to a report.
+    err = "\n".join(
+        [
+            "\x1b[31m\u2718 [ERROR]\x1b[0m Must use outdir",
+            "",
+            "\u25b2 [WARNING] Comparison with -0",
+            "",
+            f"    {WORK}/a.js:3:4:",
+            "",
+            "\u2718 [ERROR] Duplicate key",
+            "",
+            "    b.js:7:2:",
+            "",
+            "  The original key is here:",
+            "",
+            "    b.js:5:2:",
+            "",
+            "[ERROR] a log line, not esbuild",
+        ]
+    )
+    assert esbuild("", err, 0, WORK) == [
+        Finding(None, None, "warning", "esbuild-unlocated", "Must use outdir"),
+        Finding("a.js", 3, "warning", "esbuild", "Comparison with -0"),
+        Finding("b.js", 7, "warning", "esbuild", "Duplicate key"),
+    ]
+    # In a failing command only esbuild's errors become errors; its warnings stay warnings.
+    assert [f.severity for f in esbuild("", err, 1, WORK)] == ["error", "warning", "error"]
+
+
 def test_the_html_report_draws_every_framework_and_escapes_tool_output() -> None:
     summary = {
         "run": "r1",

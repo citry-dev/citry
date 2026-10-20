@@ -62,7 +62,9 @@ table shows every mistake.
 Many tools show warnings in the editor but let a build pass, so a warning
 is kept apart from an error. A linter that has no severity of its own, such
 as ruff or djLint, fails its command on any finding, so its findings count
-as errors.
+as errors. A build command that prints a tool's error but still succeeds,
+such as Tetra's `tetrabuild`, has that error counted as a warning, because
+a CI build passes.
 
 ## Run it
 
@@ -78,7 +80,8 @@ uv run --no-sync citry-errors report \
   --output ../results/<date>
 ```
 
-`prepare` installs every framework's locked dependencies. Django Rusty
+`prepare` installs every framework's locked dependencies, and builds once
+what a framework's setup needs, such as Tetra's own component library. Django Rusty
 Templates, an experimental Rust version of Django's template engine, has
 no release on PyPI, so its app's lockfile pins it to a git
 commit, and `prepare` builds its Rust extension. That needs a Rust
@@ -500,10 +503,10 @@ card list, the cards, the counter, the details with their status line and
 the search form turned into [Tetra](https://www.tetraframework.com/)
 components. Each component is a Python class whose template and script
 are strings in the class. The server renders it, and in the browser it
-becomes an Alpine component. The attributes it declares with
-`public(...)`, its public attributes, are Alpine data in the browser and
-travel back to the server with each call, and its Alpine code can call
-the class's public methods on the server. A page passes a component its
+becomes an Alpine component. Its Alpine code can call the class's public
+methods on the server. The attributes it declares with `public(...)`, its
+public attributes, are Alpine data in the browser, and they travel back
+to the server with each such call. A page passes a component its
 values in the component's tag, such as `{% Card title=... %}`, and Tetra
 hands them to the component's `load()` method when it renders it. The
 saved count lives in the page, as in django-unicorn, so after a reload the
@@ -549,10 +552,10 @@ Django's in these places:
   pyright reports text stored in it. The Django app keeps the total in
   the session, which nothing checks.
 
-m30 and, as in the Django app, m41 are runtime errors, but in Tetra only
-because the app gives its public attributes types, following the rule on
-stricter settings below. In a trial run without the types, both were
-missed.
+m30 and m41 are runtime errors (m41 is one in the Django app too), but in
+Tetra only because the app gives its public attributes types, following
+the rule on stricter settings below. In a trial run without the types on
+`api_base` and `hidden`, both were missed.
 
 Reflex is not measured yet.
 

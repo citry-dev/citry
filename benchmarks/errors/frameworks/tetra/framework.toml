@@ -36,7 +36,8 @@ stylesheet, as Python strings in the class, as the tutorial and the \
 components docs do. A component's public attributes, declared with \
 `public(...)`, are part of its Alpine data in the browser; its other \
 attributes stay on the server. Its load() method is the one Tetra calls \
-with the component tag's values when it renders the component:
+with the component tag's values when it renders the component. The \
+components:
 - ApiLine has the public attribute `api_base`, which load() sets from the \
 settings, and shows it with Alpine's `x-text`.
 - ProjectList builds the cards in load() and keeps the titles of the hidden \
@@ -123,8 +124,8 @@ time it writes the component's state into the page. The docs write public \
 attributes both with an annotation (`visible: bool = public(False)`) and \
 without (`title = public("")`); without one, the model accepts any value. \
 Citry, and django-components with its type-checking extension, check \
-component values' types too, so this app annotates every public attribute. \
-Two cells depend on it, measured in a trial run without the annotations: \
+component values' types too. Two cells depend on it, measured in a trial \
+run without the annotations on `api_base` and `hidden`: \
 m30 and m41 end as runtime errors with them, and were missed without them \
 (m30's list stored the number and no title matched it; m41 showed the same \
 page, because Tetra's JSON encoder writes the Path as its text). The trial \
@@ -138,7 +139,9 @@ numeric text such as "3" for a number, and Tetra keeps the text, but it \
 rejects text such as "card.count". Were the card's `count` and `tone` \
 public, Tetra would check them too, and m03 and m49 would likely end as \
 runtime errors (reasoned from the source, not measured); they are not \
-public because no browser code reads them. pyright sees `public(...)` as a \
+public because no browser code reads them.
+
+pyright sees `public(...)` as a \
 `Public` object, not as a value of the annotated type, so each annotated \
 line carries a `# pyright: ignore` comment for that one check \
 (reportAssignmentType); no case edits those lines except m42, which adds \
@@ -154,8 +157,8 @@ What Tetra itself checks, read from the installed source and seen in the \
 cases:
 - Tetra compiles every component's template when Django starts, so an \
 unknown tag, such as a misspelled component tag (m01), fails `manage.py \
-check` and the build. This is not a system check, and it is partly an \
-accident: in DEBUG, Tetra catches the template's syntax error, logs it and \
+check` and the build. This is not a system check, and it depends on how \
+Tetra 0.8.5 compiles templates: in DEBUG, Tetra catches the template's syntax error, logs it and \
 puts off compiling until the first render, but its own check that the \
 template has exactly one top-level tag then reads the template's source, \
 which compiles it at once and raises the error. A later version could keep \
@@ -176,7 +179,8 @@ spaces so that its lines match the component's Python file, and esbuild \
 reports a syntax error at that copy's line. Tetra then prints `ERROR \
 BUILDING JS`, but tetrabuild still exits with status 0. The build stage \
 reads esbuild's error from the output and counts it as a warning, because \
-the developer sees it but a CI build passes (m20). runserver goes on, and \
+the developer sees it but a CI build passes (m20). The error names the \
+copy, so the case's `indirect` note confirms it. runserver goes on, and \
 every page that uses a component of that library then fails, because the \
 library's JavaScript file is missing.
 
@@ -227,7 +231,7 @@ manifests = [".python-version", "pyproject.toml", "uv.lock", "package.json", "pa
 # by side from building it at the same time.
 command = [
   "sh", "-c",
-  "uv sync --frozen && npm ci --no-audit --no-fund && cd {framework}/baseline && {venv}/bin/python manage.py tetrabuild tetra",
+  "uv sync --frozen && npm ci --no-audit --no-fund && cd \"{framework}/baseline\" && \"{venv}/bin/python\" manage.py tetrabuild tetra",
 ]
 
 [[stages]]

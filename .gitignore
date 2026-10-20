@@ -118,6 +118,9 @@ old-*.zip
 # Node.js distributions the benchmark harness downloads into each Node app
 # (third-party binaries and scripts; ruff skips them through this entry too).
 /benchmarks/web/apps/*/.toolchain/
+# What Tetra builds when its error-benchmark app runs by hand.
+/benchmarks/errors/frameworks/tetra/baseline/**/__tetracache__/
+/benchmarks/errors/frameworks/tetra/baseline/board/static/board/tetra/
 
 # Pages recorded by the Vue render parity check (scripts/vue_render_parity).
 .vue-render-parity/
