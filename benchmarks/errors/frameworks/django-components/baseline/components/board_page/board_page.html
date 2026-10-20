@@ -1,0 +1,34 @@
+{% load component_tags i18n static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Board</title>
+  <script src="{% static 'board/htmx.min.js' %}" defer></script>
+  <script src="{% static 'board/alpine.min.js' %}" defer></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <div class="board" title="Board" x-data="board">
+    <h1>{% translate "Projects" %}</h1>
+    <p>Owner: {{ owner.name }}</p>
+    <p>API: <span x-text="api"></span></p>
+
+    {% for card in cards %}
+      <div x-data="{ shown: true }" x-show="shown" @hide="shown = false">
+        {% component "card" title=card.title count=card.count %}
+          {% fill "footer" %}<a href="#{{ card.title|lower }}">Open {{ card.title }}</a>{% endfill %}
+        {% endcomponent %}
+      </div>
+    {% endfor %}
+
+    {% component "counter" count=count / %}
+
+    <button type="button" @click="toggle">Details</button>
+    <p x-show="open">Details are visible</p>
+
+    <form role="search">
+      <button type="submit">Search</button>
+    </form>
+  </div>
+</body>
+</html>

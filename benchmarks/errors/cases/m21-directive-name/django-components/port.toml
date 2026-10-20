@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = 'x-shwo' }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = '<p x-show="open">Details are visible</p>'
+new = '<p x-shwo="open">Details are visible</p>'

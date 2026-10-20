@@ -1,0 +1,163 @@
+key = "django-components"
+name = "django-components + HTMX + Alpine"
+notes = """
+The app is the Django app (frameworks/django) with django-components 0.152.0 \
+added the way its installation guide says: `django_components` in \
+INSTALLED_APPS, its template loaders listed in place of APP_DIRS, its static \
+file finder, and `django_components.urls` in the URL configuration. \
+django-components installs djc-core 1.3.1, its compiled helper package. \
+Django, HTMX, Alpine, the settings and the tools are otherwise the same as in \
+the Django app.
+
+The page is built from three components in the project's `components/` \
+folder, the folder django-components looks in by default. Each component is a \
+Python class in its own folder with its template in a separate .html file, as \
+the getting-started tutorial writes them, and is registered with `@register`:
+- BoardPage is the whole page. Its `View.get` answers `/`, and \
+`get_js_data()` sends the public API base to the page's script, \
+board_page.js. That script registers the board's Alpine data (the API base \
+and the Details toggle) from its `$onComponent` callback. The docs' Alpine \
+example instead writes into a running Alpine component, but Alpine is loaded \
+with `defer` and has not started yet when the callback runs: django-components \
+runs the callback while the page is still being parsed, and a deferred \
+script starts only after that. So the script registers the data for Alpine \
+to find when it starts. The page's stylesheet is board_page.css.
+- Card declares the inputs `title: str` and `count: int` in `Kwargs` and its \
+required `footer` slot in `Slots`, and marks the slot `required` in its \
+template. The page fills the slot with `{% fill "footer" %}`. The Hide \
+button sends Alpine's `hide` event, as in the Django app.
+- Counter shows the saved total. Its `View.post` handles Add: it adds the \
+posted amount to the session's `count` and replies with the counter's own \
+HTML, which HTMX swaps in. As in the Django app, the reply shows the total \
+it computed, so a typo in the stored field name shows only after the reload \
+the runner does after its clicks.
+
+A component's View gets a URL in one of two ways the docs show: \
+`get_component_url()`, which makes one up from the class, or \
+`Component.as_view()` in the URL configuration, which the docs' HTML \
+fragments guide uses with HTMX. The app uses `as_view()` for both views, so \
+the Add button names its handler `save` through `{% url %}`, as the Django \
+app does. With `get_component_url()` the button would name the Counter class \
+in Python instead, and a misspelled class name there (m06) would be an \
+editor error rather than the runtime error `{% url %}` gives.
+
+Value types: by default django-components turns a component's `Kwargs`, \
+`Slots`, `TemplateData` and `JsData` classes into named tuples, which check \
+only that each name is known and each required name is given. Its docs say \
+that to check types as well, a project writes these classes as Pydantic \
+models and installs the djc-ext-pydantic extension, which the \
+django-components project publishes. The benchmark turns on a framework's \
+stricter check when other frameworks here have the same kind of check, and \
+Citry checks input types when a component renders, so this app turns it on: \
+djc-ext-pydantic 1.1.0 (with Pydantic 2.14.1) is listed in \
+`COMPONENTS["extensions"]`, and those four classes are Pydantic \
+`BaseModel`s. This is the one change from django-components' defaults. \
+Pydantic's default mode converts text such as "3" to a number, and ignores \
+names a model does not declare: a misspelled input or slot name is reported \
+because the required name is then missing, but an extra unknown name next to \
+all the right ones would pass. Of the cases, only m03 ends differently \
+because of this setting.
+
+`get_template_data()` and `get_js_data()` return plain dicts, which \
+django-components checks against those models. Its docs also show returning \
+a `TemplateData` instance, but django-components types the method as \
+returning a mapping, so pyright rejects that. Each `class View:` is written \
+as the docs write it; django-components turns it into a ComponentView \
+subclass when it creates the component, but pyright sees only the plain \
+class and reports that it overrides `Component.View` with an incompatible \
+type, so that line carries a \
+`# pyright: ignore[reportIncompatibleVariableOverride]` comment. No case \
+edits those lines.
+
+editor: as in the Django app. django-components ships no editor extension or \
+language server; its docs point to a third-party extension that only \
+highlights HTML, JS and CSS written inside Python strings. The diagnostics \
+come from:
+- Pylance with type checking turned on, measured with pyright 1.1.414 in \
+typeCheckingMode "standard" (Pylance's own default is "off"). Pylance checks \
+only open files by default, while the command line checks every file; with \
+one case per run this can only add findings.
+- VS Code's built-in JavaScript support, which reports syntax errors in plain \
+.js files. It is measured with tsc from TypeScript 6.0.3 (the version VS Code \
+ships) with --allowJs and no checkJs, on the one hand-written script \
+components/board_page/board_page.js.
+Nothing in the editor checks the component templates, the inputs given in \
+`{% component %}` tags, the HTMX attributes or the Alpine expressions.
+
+check: `python manage.py check`, plus ruff with its default rules for the \
+Python files and djLint with its Django profile for the component templates. \
+A linter finding fails its command, so it counts as an error. The only check \
+django-components adds to `manage.py check` comes from its static file \
+finder, which checks the folders its settings name; nothing checks templates \
+or component classes. `manage.py check` does import every component module, \
+because django-components finds and imports them when Django starts, so a \
+component module that fails to import fails the check. Its \
+`manage.py components` command creates, lists and upgrades components and \
+runs extension commands; none of them checks anything, so it is not a \
+stage. There is no build stage.
+
+runtime: as in the Django app, `manage.py migrate` (sessions are stored in \
+the database), then `manage.py runserver --noreload`. django-components \
+checks each component's inputs, slots and data when it renders, so a \
+misspelled, missing or wrong-type input, slot or data value surfaces as a \
+server error on the first page load.
+"""
+
+[setup]
+manifests = [".python-version", "pyproject.toml", "uv.lock", "package.json", "package-lock.json"]
+command = ["sh", "-c", "uv sync --frozen && npm ci --no-audit --no-fund"]
+
+[[stages]]
+stage = "editor"
+label = "Pylance, type checking on (pyright 1.1.414, standard)"
+argv = ["{venv}/bin/pyright", "--outputjson", "--pythonpath", "{venv}/bin/python"]
+parser = "pyright-json"
+timeout = 300
+env = { PYRIGHT_PYTHON_IGNORE_WARNINGS = "1" }
+
+[[stages]]
+stage = "editor"
+label = "VS Code JavaScript syntax check (tsc 6.0.3 --allowJs)"
+argv = ["{env}/node_modules/.bin/tsc", "--allowJs", "--noEmit", "--pretty", "false", "components/board_page/board_page.js"]
+parser = "tsc"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "manage.py check"
+argv = ["{venv}/bin/python", "manage.py", "check"]
+parser = "exit"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "ruff 0.15.5 (default rules)"
+# --isolated: a real project's ruff reads only its own settings, not those of
+# a repository it happens to sit in.
+argv = ["{venv}/bin/ruff", "check", "--isolated", "--no-respect-gitignore", "--output-format", "json", "."]
+parser = "ruff-json"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "djLint 1.46.6 (--lint, django profile)"
+argv = ["{venv}/bin/djlint", "components", "--lint", "--profile=django"]
+parser = "djlint"
+timeout = 300
+
+[runtime]
+argv = [
+  "sh", "-c",
+  "{venv}/bin/python manage.py migrate --noinput -v 0 && exec {venv}/bin/python manage.py runserver 127.0.0.1:{port} --noreload",
+]
+page_path = "/"
+ready_timeout = 180
+env = { PYTHONUNBUFFERED = "1" }
+[runtime.journeys]
+default = [
+  { action = "click", selector = "button:has-text('Add')" },
+  { action = "wait", ms = 500 },
+  { action = "click", selector = "button:has-text('Details')" },
+  { action = "wait", ms = 300 },
+  { action = "click", selector = "button:has-text('Hide')" },
+]

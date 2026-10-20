@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """django-components renders components only on the server and sends finished HTML. Its component JavaScript and Alpine run on that HTML in the browser and never render the component again, so there is no server render and first browser render that could disagree."""

@@ -1,0 +1,6 @@
+{% load component_tags %}
+<div class="card">
+  <h2>{{ title }}: {{ count }} tasks</h2>
+  <button type="button" @click="$dispatch('hide')">Hide</button>
+  <div class="card-footer">{% slot "footer" required %}{% endslot %}</div>
+</div>

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = 'titel=card.title' }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = '{% component "card" title=card.title count=card.count %}'
+new = '{% component "card" titel=card.title count=card.count %}'

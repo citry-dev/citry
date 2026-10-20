@@ -1,0 +1,12 @@
+# Without a fill the card tag has no content, so it is written in its
+# self-closing form, as a developer who never wrote the fill would write it.
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = '{% component "card" title=card.title count=card.count / %}' }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = '''
+{% component "card" title=card.title count=card.count %}
+          {% fill "footer" %}<a href="#{{ card.title|lower }}">Open {{ card.title }}</a>{% endfill %}
+        {% endcomponent %}'''
+new = '{% component "card" title=card.title count=card.count / %}'

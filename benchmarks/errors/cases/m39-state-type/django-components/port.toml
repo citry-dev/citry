@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/counter/counter.py", contains = 'str(count)' }
+
+[[edits]]
+file = "components/counter/counter.py"
+old = '''request.session['count'] = count'''
+new = '''request.session['count'] = str(count)'''

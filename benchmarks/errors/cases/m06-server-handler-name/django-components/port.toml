@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/counter/counter.html", contains = '''url 'sav'''' }
+
+[[edits]]
+file = "components/counter/counter.html"
+old = '''hx-post="{% url 'save' %}"'''
+new = '''hx-post="{% url 'sav' %}"'''

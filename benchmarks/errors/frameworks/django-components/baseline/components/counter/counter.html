@@ -1,0 +1,12 @@
+<p id="counter">
+  <span>Saved: {{ count }}</span>
+  <button
+    type="button"
+    hx-post="{% url 'save' %}"
+    hx-vals='{"amount": 1}'
+    hx-target="#counter"
+    hx-swap="outerHTML"
+  >
+    Add
+  </button>
+</p>
