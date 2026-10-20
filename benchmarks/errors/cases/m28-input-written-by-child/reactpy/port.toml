@@ -1,0 +1,23 @@
+# The status line's own click handler assigns `False` to its `open` input.
+# `nonlocal` is what Python needs for that assignment to change the input
+# rather than a new local name.
+status = "ported"
+mistake = { file = "status.py", contains = 'open = False' }
+
+[[edits]]
+file = "status.py"
+old = '''
+    return html.p(
+'''
+new = '''
+    def close(event):
+        nonlocal open
+        open = False
+
+    return html.p(
+'''
+
+[[edits]]
+file = "status.py"
+old = '"on_click": lambda event: on_close()'
+new = '"on_click": close'

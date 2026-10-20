@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'str(project.count)' }
+
+[[edits]]
+file = "main.py"
+old = 'count=project.count,'
+new = 'count=str(project.count),'

@@ -51,8 +51,8 @@ LEGEND = "| Code | Meaning |\n| --- | --- |\n" + "".join(f"| {code} | {meaning} 
 _EVIDENCE_CHARS = 300
 
 # Citry comes first, so every other column reads as a comparison with it; then
-# the Python server stacks, then the TypeScript frameworks.
-ORDER = ("citry", "django", "rusty", "jinja", "django-components", "fasthtml", "nuxt", "next")
+# the Python frameworks, then the TypeScript frameworks.
+ORDER = ("citry", "django", "rusty", "jinja", "django-components", "fasthtml", "reactpy", "nuxt", "next")
 
 CATEGORIES = {
     "naming": "Names: components, inputs, slots, variables",

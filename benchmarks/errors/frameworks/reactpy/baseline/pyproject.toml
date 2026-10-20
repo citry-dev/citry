@@ -1,0 +1,40 @@
+[project]
+name = "reactpy-error-benchmark"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+# The same direct dependencies as the ReactPy app in benchmarks/web. Starlette
+# stays on 0.x, because ReactPy 1.1.0's Starlette backend calls
+# `add_websocket_route`, which Starlette 1.x does not have.
+dependencies = [
+    "reactpy==1.1.0",
+    "starlette==0.52.1",
+    "uvicorn==0.52.4",
+    "websockets==17.1",
+]
+
+[dependency-groups]
+# The tools most Python projects add, which `pip install reactpy` does not
+# install: pyright stands in for Pylance in the editor, and ruff lints the
+# Python files.
+dev = [
+    "pyright==1.1.414",
+    "ruff==0.15.5",
+]
+
+[tool.uv]
+package = false
+# The same resolved versions as the ReactPy app in benchmarks/web, so the two
+# benchmarks describe one ReactPy install.
+constraint-dependencies = [
+    "certifi==2026.7.22",
+    "charset-normalizer==3.5.1",
+    "idna==3.19",
+    "jsonpatch==1.33",
+    "jsonpointer==3.1.1",
+    "urllib3==2.7.0",
+]
+
+# Type checking on, as in most typed Python projects: Pylance's "standard"
+# mode, which is also the pyright command line's default.
+[tool.pyright]
+typeCheckingMode = "standard"

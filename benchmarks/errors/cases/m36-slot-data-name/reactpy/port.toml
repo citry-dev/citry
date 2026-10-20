@@ -1,0 +1,9 @@
+# The card calls `footer(title, count)`, and the page's lambda builds the
+# link from those values.
+status = "ported"
+mistake = { file = "main.py", contains = '{titel}' }
+
+[[edits]]
+file = "main.py"
+old = 'f"Open {title} ({count})"'
+new = 'f"Open {titel} ({count})"'

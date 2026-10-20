@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = "count + ' tasks'" }
+
+[[edits]]
+file = "main.py"
+old = 'f"Open {title} ({count})"'
+new = '''f"Open {title} ({count + ' tasks'})"'''

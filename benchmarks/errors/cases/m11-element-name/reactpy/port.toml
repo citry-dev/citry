@@ -1,0 +1,11 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'html.dvi(' }
+
+[[edits]]
+file = "main.py"
+old = '''
+        html.div(
+            {"class_name": "board"'''
+new = '''
+        html.dvi(
+            {"class_name": "board"'''

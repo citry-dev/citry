@@ -1,0 +1,9 @@
+# ReactPy runs the toggle's behavior on the server, so the code that defines
+# it is a Python click handler; here it has lost a closing parenthesis.
+status = "ported"
+mistake = { file = "main.py", contains = 'set_open(lambda value: not value' }
+
+[[edits]]
+file = "main.py"
+old = 'set_open(lambda value: not value)'
+new = 'set_open(lambda value: not value'

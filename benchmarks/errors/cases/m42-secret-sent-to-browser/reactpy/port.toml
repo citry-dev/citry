@@ -1,0 +1,10 @@
+# The page hands the secret to the JavaScript component as a prop, next to the
+# API base, although the component never reads it. ReactPy sends every prop
+# to the browser.
+status = "ported"
+mistake = { file = "main.py", contains = '"secret_token": SECRET_TOKEN' }
+
+[[edits]]
+file = "main.py"
+old = 'ApiLine({"api_base": API_BASE})'
+new = 'ApiLine({"api_base": API_BASE, "secret_token": SECRET_TOKEN})'

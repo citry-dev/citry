@@ -1,0 +1,18 @@
+# The setting is written as a path object; the page passes it to the
+# JavaScript component unchanged, as in the clean app.
+status = "ported"
+mistake = { file = "main.py", contains = 'API_BASE = PurePosixPath("/api")' }
+
+[[edits]]
+file = "main.py"
+old = '''
+from pathlib import Path
+'''
+new = '''
+from pathlib import Path, PurePosixPath
+'''
+
+[[edits]]
+file = "main.py"
+old = 'API_BASE = "/api"'
+new = 'API_BASE = PurePosixPath("/api")'

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "card.py", contains = 'on_hdie(title)' }
+
+[[edits]]
+file = "card.py"
+old = 'lambda event: on_hide(title)'
+new = 'lambda event: on_hdie(title)'
