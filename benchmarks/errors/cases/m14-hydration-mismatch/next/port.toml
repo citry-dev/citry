@@ -4,10 +4,10 @@ mistake = { file = "app/board.tsx", contains = 'typeof window' }
 [[edits]]
 file = "app/board.tsx"
 old = '''
-      <button type="button" onClick={toggle}>
+      <button type="button" aria-expanded={open} onClick={toggle}>
         Details
 '''
 new = '''
-      <button type="button" onClick={toggle}>
+      <button type="button" aria-expanded={open} onClick={toggle}>
         {typeof window === "undefined" ? "Loading" : "Details"}
 '''

@@ -17,6 +17,15 @@ Django's built-in `{% translate %}` with the English text as the message id, \
 which is how Django's docs and gettext name messages. The page has no message \
 catalog, so no .po or .mo file is needed.
 
+The footer block renders inside the card's template, so it reads the title \
+and count the card was given; that is how the card hands data back to the \
+page's fill. The page picks each card's `tone` with \
+`card.featured|yesno:"accent,plain"`. The status line inside Details is an \
+Alpine component (`Alpine.data('status')` in board.js) nested inside the \
+board's. Alpine components declare no inputs, so it reads the board's `open` \
+through the scope Alpine shares with it, and its Close button dispatches a \
+`close` event that the page handles.
+
 The save view reads the count, adds the amount and stores it, then renders the \
 total it computed, as the MDN Django tutorial's session counter does. A typo in \
 the stored field name therefore shows only after a reload, which the runner \
@@ -108,4 +117,10 @@ default = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "wait", ms = 300 },
   { action = "click", selector = "button:has-text('Hide')" },
+]
+# Opens the details, closes them from the status line, and opens them again.
+status = [
+  { action = "click", selector = "button:has-text('Details')" },
+  { action = "click", selector = "button:has-text('Close')" },
+  { action = "click", selector = "button:has-text('Details')" },
 ]

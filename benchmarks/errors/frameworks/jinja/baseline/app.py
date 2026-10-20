@@ -25,6 +25,8 @@ class Owner:
 class Project:
     title: str
     count: int
+    # The page draws a featured project's card with the accent border.
+    featured: bool
 
 
 OWNER = Owner(name="Ada")
@@ -32,7 +34,9 @@ TASK_COUNTS = {"Alpha": 3, "Beta": 5, "Gamma": 8}
 
 
 async def homepage(request: Request):
-    projects = [Project(title=title, count=count) for title, count in TASK_COUNTS.items()]
+    projects = [
+        Project(title=title, count=count, featured=title == "Alpha") for title, count in TASK_COUNTS.items()
+    ]
     return templates.TemplateResponse(
         request,
         "index.html",

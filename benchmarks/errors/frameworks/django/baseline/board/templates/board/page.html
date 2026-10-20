@@ -18,7 +18,7 @@
 
     {% for card in cards %}
       <div x-data="{ shown: true }" x-show="shown" @hide="shown = false">
-        {% include "board/project_card.html" with title=card.title count=card.count %}
+        {% include "board/project_card.html" with title=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}
       </div>
     {% endfor %}
 
@@ -37,8 +37,12 @@
       </button>
     </p>
 
-    <button type="button" @click="toggle">Details</button>
+    <button type="button" :aria-expanded="open" @click="toggle">Details</button>
     <p x-show="open">Details are visible</p>
+    <p x-data="status" @close="open = false">
+      <span x-text="label"></span>
+      <button type="button" @click="$dispatch('close')">Close</button>
+    </p>
 
     <form role="search">
       <button type="submit">Search</button>

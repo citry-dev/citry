@@ -98,3 +98,16 @@ selector = "button:text-is('Details')"
 [[runtime.journeys.default]]
 action = "click"
 selector = "button:text-is('Hide')"
+
+# Opens the details, closes them from the status line, and opens them again.
+[[runtime.journeys.status]]
+action = "click"
+selector = "button:text-is('Details')"
+
+[[runtime.journeys.status]]
+action = "click"
+selector = "button:text-is('Close')"
+
+[[runtime.journeys.status]]
+action = "click"
+selector = "button:text-is('Details')"

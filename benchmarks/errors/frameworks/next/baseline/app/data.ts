@@ -3,12 +3,13 @@
 
 export type Owner = { name: string };
 
-export type Project = { title: string; count: number };
+// The page draws a featured project's card with the accent border.
+export type Project = { title: string; count: number; featured?: boolean };
 
 export const owner: Owner = { name: "Ada" };
 
 export const projects: Project[] = [
-  { title: "Alpha", count: 3 },
+  { title: "Alpha", count: 3, featured: true },
   { title: "Beta", count: 5 },
   { title: "Gamma", count: 8 },
 ];

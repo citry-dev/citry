@@ -7,8 +7,8 @@ mistake = { file = "app/components/board_page.py", contains = "<c-Card" }
 file = "app/components/board_page.py"
 old = '''
                 >
-                  <c-fill name="footer">
-                    <a c-href="'#' + project.slug">Open {{ project.title }}</a>
+                  <c-fill name="footer" data="card">
+                    <a c-href="'#' + project.slug">Open {{ card.title }} ({{ card.count }})</a>
                   </c-fill>
                 </c-Card>
 '''

@@ -4,10 +4,10 @@ mistake = { file = "app/board.tsx", contains = "<Card" }
 [[edits]]
 file = "app/board.tsx"
 old = '''
-            footer={
+            footer={(card) => (
               <a href={`#${project.title.toLowerCase()}`}>
-                Open {project.title}
+                Open {card.title} ({card.count})
               </a>
-            }
+            )}
 '''
 new = ""

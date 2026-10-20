@@ -17,8 +17,16 @@ string. FastHTML also lets a page pass the route function itself \
 (`hx_post=save`). With that style a misspelled route (m06) is an undefined \
 Python name, which the editor reports as an error; with the string style it \
 shows nothing until a 404 at runtime. Components are typed Python \
-functions (`def Card(title: str, count: int, footer)`), so the type checker \
-sees a wrong argument as an ordinary call error.
+functions (`def Card(title: str, count: int, tone: Literal[...], footer: \
+Callable[[str, int], FT])`), so the type checker sees a wrong argument as an \
+ordinary call error. The card hands its title and count back to the page by \
+calling `footer(title, count)`, and the page passes a lambda that builds the \
+link.
+
+FastHTML has no browser-side component model, so this baseline leaves out \
+the reference page's status line (the browser-side `Status` component inside \
+Details) and lists no journey for it. The Details button still reports its \
+state through `aria-expanded`, which the page's script updates.
 
 editor: FastHTML's docs name no editor. VS Code with Pylance is used as the \
 most common Python setup, with type checking turned on. It is measured with \

@@ -3,5 +3,5 @@ mistake = { file = "templates/card.html", contains = "<footer>" }
 
 [[edits]]
 file = "templates/card.html"
-old = "<footer>{{ caller() }}</footer>"
-new = "<footer>{{ caller() }}"
+old = "<footer>{{ caller(title, count) }}</footer>"
+new = "<footer>{{ caller(title, count) }}"

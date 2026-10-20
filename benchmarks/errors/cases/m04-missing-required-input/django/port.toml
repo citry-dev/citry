@@ -3,5 +3,5 @@ mistake = { file = "board/templates/board/page.html", contains = 'with count=car
 
 [[edits]]
 file = "board/templates/board/page.html"
-old = '{% include "board/project_card.html" with title=card.title count=card.count %}'
-new = '{% include "board/project_card.html" with count=card.count %}'
+old = '{% include "board/project_card.html" with title=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}'
+new = '{% include "board/project_card.html" with count=card.count tone=card.featured|yesno:"accent,plain" %}'

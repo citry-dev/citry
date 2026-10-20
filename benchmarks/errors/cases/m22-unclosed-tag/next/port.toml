@@ -7,5 +7,5 @@ codes = ["TS17008", "TS1381", "TS1005", "build", "eslint"]
 
 [[edits]]
 file = "app/card.tsx"
-old = '<div className="card-footer">{footer}</div>'
-new = '<div className="card-footer">{footer}'
+old = '<div className="card-footer">{footer({ title, count })}</div>'
+new = '<div className="card-footer">{footer({ title, count })}'

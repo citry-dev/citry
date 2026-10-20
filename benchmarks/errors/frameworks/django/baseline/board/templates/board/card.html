@@ -1,4 +1,4 @@
-<div class="card">
+<div class="card card--{{ tone }}">
   <h2>{{ title }}: {{ count }} tasks</h2>
   <button type="button" @click="$dispatch('hide')">Hide</button>
   <div class="card-footer">{% block footer %}{% endblock %}</div>

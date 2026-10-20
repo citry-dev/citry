@@ -1,12 +1,18 @@
 status = "ported"
 mistake = { file = "app/components/card.py", contains = "<footer class=\"card__footer\">" }
 
+[indirect]
+reason = "The unclosed footer takes the card's closing `</article>`, so the parser reports a mismatched tag there, several lines below the footer, because the slot tag between them spans five lines."
+codes = ["citry.parse.syntax"]
+
 [[edits]]
 file = "app/components/card.py"
 old = '''
-          <c-slot name="footer" />
+            c-count="count"
+          />
         </footer>
 '''
 new = '''
-          <c-slot name="footer" />
+            c-count="count"
+          />
 '''

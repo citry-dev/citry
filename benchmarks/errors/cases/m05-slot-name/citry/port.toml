@@ -3,5 +3,5 @@ mistake = { file = "app/components/board_page.py", contains = "name=\"fotter\"" 
 
 [[edits]]
 file = "app/components/board_page.py"
-old = '<c-fill name="footer">'
-new = '<c-fill name="fotter">'
+old = '<c-fill name="footer" data="card">'
+new = '<c-fill name="fotter" data="card">'

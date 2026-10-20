@@ -3,5 +3,5 @@ mistake = { file = "main.py", contains = 'titel=' }
 
 [[edits]]
 file = "main.py"
-old = 'Card(title=p.title, count=p.count, footer=A(f"Open {p.title}", href=f"#{p.title.lower()}"))'
-new = 'Card(titel=p.title, count=p.count, footer=A(f"Open {p.title}", href=f"#{p.title.lower()}"))'
+old = 'title=p.title,'
+new = 'titel=p.title,'

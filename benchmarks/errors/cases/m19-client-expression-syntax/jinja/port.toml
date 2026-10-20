@@ -3,5 +3,5 @@ mistake = { file = "templates/index.html", contains = "!open &&" }
 
 [[edits]]
 file = "templates/index.html"
-old = '<button type="button" @click="open = !open">Details</button>'
-new = '<button type="button" @click="open = !open &&">Details</button>'
+old = '<button type="button" :aria-expanded="open" @click="open = !open">Details</button>'
+new = '<button type="button" :aria-expanded="open" @click="open = !open &&">Details</button>'

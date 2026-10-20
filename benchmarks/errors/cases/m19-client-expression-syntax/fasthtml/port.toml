@@ -3,5 +3,5 @@ mistake = { file = "main.py", contains = 'toggleDetails() &&' }
 
 [[edits]]
 file = "main.py"
-old = 'Button("Details", onclick="toggleDetails()"),'
-new = 'Button("Details", onclick="toggleDetails() &&"),'
+old = 'Button("Details", onclick="toggleDetails()",'
+new = 'Button("Details", onclick="toggleDetails() &&",'

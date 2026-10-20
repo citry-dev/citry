@@ -1,7 +1,9 @@
 """The error benchmark's reference page, written the way the FastHTML docs write an app."""
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 # FastHTML apps import its whole namespace, which ruff's default rules
 # flag at every use; a project that adds ruff silences that once here.
@@ -36,22 +38,25 @@ class Owner:
 class Project:
     title: str
     count: int
+    # The page draws a featured project's card with the accent border.
+    featured: bool = False
 
 
 owner = Owner("Ada")
-projects = [Project("Alpha", 3), Project("Beta", 5), Project("Gamma", 8)]
+projects = [Project("Alpha", 3, featured=True), Project("Beta", 5), Project("Gamma", 8)]
 count = 0
 
 
 # This page's own card. It replaces the Pico `Card` that the star import brings in.
-def Card(title: str, count: int, footer):
+# The card hands its title and count to `footer`, which builds the footer link.
+def Card(title: str, count: int, tone: Literal["plain", "accent"], footer: Callable[[str, int], FT]):
     return Article(
         H3(title),
         P(f"{title}: {count} tasks"),
-        Footer(footer),
+        Footer(footer(title, count)),
         # The card only announces the click; the page decides what hiding means.
         Button("Hide", onclick="this.dispatchEvent(new CustomEvent('hide', {bubbles: true}))"),
-        cls="card",
+        cls=f"card card--{tone}",
     )
 
 
@@ -63,19 +68,25 @@ def get():
         P(id="api"),
         Script(f"document.getElementById('api').textContent = 'API: ' + {json.dumps(API_BASE)};"),
         *[
-            Card(title=p.title, count=p.count, footer=A(f"Open {p.title}", href=f"#{p.title.lower()}"))
+            Card(
+                title=p.title,
+                count=p.count,
+                tone="accent" if p.featured else "plain",
+                footer=lambda title, count: A(f"Open {title} ({count})", href=f"#{title.lower()}"),
+            )
             for p in projects
         ],
         P(f"Saved: {count}", id="saved"),
         # FastHTML's type hints take hx_vals as a JSON string.
         Button("Add", hx_post="/save", hx_vals=json.dumps({"amount": 1}), hx_target="#saved"),
-        Button("Details", onclick="toggleDetails()"),
+        Button("Details", onclick="toggleDetails()", id="details-button", aria_expanded="false"),
         P("Details are visible", id="details", hidden=True),
         Script("""
             let open = false;
             function toggleDetails() {
                 open = !open;
                 document.getElementById('details').hidden = !open;
+                document.getElementById('details-button').setAttribute('aria-expanded', String(open));
             }
             // The card's hide event bubbles up to the page, which hides that card.
             document.addEventListener('hide', (event) => {

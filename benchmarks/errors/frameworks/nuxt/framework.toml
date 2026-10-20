@@ -104,3 +104,9 @@ default = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "click", selector = "button:has-text('Hide')" },
 ]
+# Opens the details, closes them from the status line, and opens them again.
+status = [
+  { action = "click", selector = "button:has-text('Details')" },
+  { action = "click", selector = "button:has-text('Close')" },
+  { action = "click", selector = "button:has-text('Details')" },
+]
