@@ -1390,8 +1390,10 @@ class Button(Component):
         href: str | None = None
         link: bool | None = None
         disabled: bool | None = False
-        variant: ThemeVariant | Literal["plain"] = "primary"
-        color: ThemeColor | str = "default"
+        # None picks the default styling, as get_styling_css() does; Dialog
+        # and Form pass None when the caller did not choose a color.
+        variant: ThemeVariant | Literal["plain"] | None = "primary"
+        color: ThemeColor | str | None = "default"
         type: str | None = "button"
         attrs: dict | None = None
 
