@@ -7,10 +7,11 @@
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old
-  behavior, set `check_input_types = False` on a component or pass
-  `Citry(check_input_types=False)`. If you use Citry UI, upgrade it at the
-  same time: earlier Citry UI releases reject some valid inputs under this
-  check.
+  behavior, set `check_input_types = False` in a component's nested
+  `class Lint:`, or pass
+  `Citry(lint=LintSettings(check_input_types=False))`. If you use Citry
+  UI, upgrade it at the same time: earlier Citry UI releases reject some
+  valid inputs under this check.
 
   ```python
   class Card(Component):

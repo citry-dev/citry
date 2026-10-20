@@ -250,6 +250,10 @@ class CCascader(LibraryComponent):
     class Slots:
         default: SlotInput[CCascaderDefaultSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_cascader_snapshot", None)
         if cached is not None:
@@ -355,6 +359,10 @@ class CCascaderOption(LibraryComponent):
     class Slots:
         default: SlotInput[CCascaderOptionDefaultSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         provided = self.inject(_CONTEXT, None)
         if provided is None:
@@ -399,6 +407,10 @@ class CInternalCascaderDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CCascaderDefaultSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -421,6 +433,10 @@ class CInternalCascader(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         data = kwargs.snapshot
@@ -504,6 +520,10 @@ class CInternalCascaderOption(LibraryComponent):
     class Slots:
         pass
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         option = kwargs.option
         path = option.path
@@ -555,6 +575,10 @@ class CInternalCascaderGroup(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         parent = kwargs.parent

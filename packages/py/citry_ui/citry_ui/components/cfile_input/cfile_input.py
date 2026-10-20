@@ -215,6 +215,10 @@ class CFileInput(LibraryComponent):
     class Slots:
         pass
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         normalized = _normalize_common(
             "CFileInput",
@@ -575,6 +579,10 @@ class CDropTarget(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CDropTargetDefaultSlotData] | None = None
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(FIELD_CONTEXT_KEY, None) is not None:

@@ -96,6 +96,10 @@ class CButtonGroup(LibraryComponent):
     class Slots:
         default: SlotInput[CButtonGroupDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         label = _plain_label(kwargs.label)
         orientation = _plain_orientation(kwargs.orientation)

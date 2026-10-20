@@ -386,7 +386,8 @@ Details:
   template attribute. Write `c-count="3"` to pass the number, or widen the
   annotation, such as `panel_id: int | str`. `title: str = None` keeps
   working, because a field's own default always passes. To port first
-  and fix types later, set `check_input_types = False` on the component;
+  and fix types later, set `check_input_types = False` in the
+  component's nested `class Lint:`;
   [Inputs and validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
   lists what each annotation accepts.
 - **DJC-068:** Indexing, unpacking, `_asdict()`, and `_replace()` raise,

@@ -182,6 +182,10 @@ class CTooltip(LibraryComponent):
         activator: SlotInput[CTooltipActivatorSlotData]
         default: SlotInput[CTooltipDefaultSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tooltip_snapshot", None)
         if cached is not None:

@@ -36,12 +36,6 @@ def make_cache_component(citry_instance: Citry) -> type[Component]:
         citry = citry_instance
         name = "cache"
         transparent = True
-        # The cache controls check their own values more strictly than the
-        # annotations (an exact non-empty string key, no bool for ttl) and
-        # raise ValueError with a message for each control that names the
-        # <c-cache> tag, so the general type check would only replace those
-        # messages with vaguer ones.
-        check_input_types = False
 
         class Kwargs:
             key: str
@@ -52,6 +46,14 @@ def make_cache_component(citry_instance: Citry) -> type[Component]:
 
         class Slots:
             default: SlotInput | None = None
+
+        # The cache controls check their own values more strictly than the
+        # annotations (an exact non-empty string key, no bool for ttl) and
+        # raise ValueError with a message for each control that names the
+        # <c-cache> tag, so the general type check would only replace those
+        # messages with vaguer ones.
+        class Lint:
+            check_input_types = False
 
         template = """\
 <c-slot />\

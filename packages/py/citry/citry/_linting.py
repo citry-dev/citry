@@ -351,6 +351,9 @@ class _ComponentLintOverrides:
     rule_alpine_cloak: LintSeverity | None = None
     rule_invalid_attribute_value: LintSeverity | None = None
     rule_i18n_cross_language_fallback: LintSeverity | None = None
+    # Read by the render-time input type check, not by template analysis,
+    # so it never reaches TemplateLintInfo.
+    check_input_types: bool | None = None
 
 
 def _application_lint_info(citry: Citry) -> TemplateLintInfo:
@@ -469,9 +472,15 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
     )
 
 
-def _validate_component_lint(component_class: type) -> None:
-    """Reject malformed nested Lint declarations while defining a component."""
-    _component_lint_overrides(component_class)
+def _validate_component_lint(component_class: type) -> bool | None:
+    """
+    Reject malformed nested Lint declarations while defining a component.
+
+    Return the component's own ``Lint.check_input_types``, or ``None`` to
+    follow the application's ``LintSettings``. ComponentMeta stores it on the
+    class, so a render never walks the Lint declarations again.
+    """
+    return _component_lint_overrides(component_class).check_input_types
 
 
 def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
@@ -490,6 +499,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
     alpine_cloak_rule: LintSeverity | None = None
     attribute_value_rule: LintSeverity | None = None
     cross_language_fallback_rule: LintSeverity | None = None
+    check_input_types: bool | None = None
     component_js_globals: dict[str, object] = {}
     component_js_global_owners: dict[str, type] = {}
     declarations = _active_nested_class_declarations(component_class, "Lint")
@@ -517,6 +527,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             "rule_alpine_cloak",
             "rule_invalid_attribute_value",
             "rule_i18n_cross_language_fallback",
+            "check_input_types",
         }
         if unknown:
             rendered = ", ".join(sorted(unknown))
@@ -617,6 +628,17 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
                 )
                 raise ValueError(msg)
             cross_language_fallback_rule = cast("LintSeverity", candidate_rule)
+        if "check_input_types" in public_values:
+            candidate_check = public_values["check_input_types"]
+            # Every render reads this flag, so a truthy string such as "no"
+            # must fail when the class is defined, not keep the check on.
+            if type(candidate_check) is not bool:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.check_input_types "
+                    f"must be True or False, got {candidate_check!r}"
+                )
+                raise TypeError(msg)
+            check_input_types = candidate_check
         if "template_variables" in public_values:
             candidate_variables = public_values["template_variables"]
             try:
@@ -666,6 +688,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         alpine_cloak_rule,
         attribute_value_rule,
         cross_language_fallback_rule,
+        check_input_types,
     )
 
 

@@ -134,6 +134,10 @@ class CPagination(LibraryComponent):
     class Slots:
         pass
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         pages = _integer("pages", kwargs.pages, minimum=1)
         page = _integer("page", kwargs.page, minimum=1, maximum=pages)

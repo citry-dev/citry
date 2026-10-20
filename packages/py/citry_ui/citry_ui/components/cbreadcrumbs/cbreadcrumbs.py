@@ -122,6 +122,10 @@ class CBreadcrumbs(LibraryComponent):
         item: SlotInput[CBreadcrumbsItemSlotData] | None = None
         separator: SlotInput[CBreadcrumbsSeparatorSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if isinstance(kwargs.items, (str, bytes, bytearray)) or not isinstance(kwargs.items, Sequence):
             raise TypeError("CBreadcrumbs items must be a sequence of CBreadcrumbItem values.")

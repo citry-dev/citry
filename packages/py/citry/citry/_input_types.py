@@ -163,10 +163,11 @@ def _check_input_types(
     component's code will read. ``role`` names the schema in the error
     (``"Kwargs"``, ``"TemplateData"``, ...).
     """
-    # The component's own setting wins; None defers to its Citry engine.
-    enabled = component_class.check_input_types
+    # The component's own Lint.check_input_types wins; None defers to its
+    # Citry engine's LintSettings.
+    enabled = component_class._citry_input_types
     if enabled is None:
-        enabled = component_class.citry.settings.check_input_types
+        enabled = component_class.citry.settings.lint.check_input_types
     if not enabled:
         return
 

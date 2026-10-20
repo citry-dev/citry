@@ -387,6 +387,10 @@ class CCommandPalette(LibraryComponent):
         item_end: SlotInput[CCommandPaletteItemSlotData] | None = None
         empty: SlotInput[_CCommandPaletteEmptySlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_command_palette_snapshot", None)
         if cached is not None:

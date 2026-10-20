@@ -371,6 +371,10 @@ class CSplitButton(LibraryComponent):
         end: SlotInput[CSplitButtonEndSlotData] | None = None
         loading: SlotInput[CSplitButtonLoadingSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_split_button_snapshot", None)
         if cached is not None:

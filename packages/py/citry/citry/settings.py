@@ -177,9 +177,29 @@ class LintSettings:
             Set ``"error"`` to require complete translations. A
             ``<c-trans>`` message is always an error, because rendering it
             in another language fails. The default is ``"warning"``.
+        check_input_types: Check that each value a component receives has
+            the type its annotation names. On by default, in development and
+            in production. Unlike the ``rule_*`` settings, this check runs
+            when a component renders, not in ``citry check`` or the editor.
+            Citry compares each field of the component's ``Kwargs``,
+            ``TemplateData``, ``JsData``, ``CssData``, and ``State`` with the
+            field's annotation and raises ``TypeError`` for a value of the
+            wrong type, so ``Card(title=123)`` against ``title: str`` fails
+            with a message that names the component, the field, the expected
+            type, and the value. Only the outer type is checked:
+            ``list[str]`` accepts any ``list``. A field's own default always
+            passes. Annotations Citry cannot test while the page runs, such
+            as ``Any``, a type variable, or a name imported only for type
+            checkers, are not checked, and Pydantic models and dataclasses
+            that write their own ``__init__`` keep their own rules. [Inputs
+            and validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
+            lists what each annotation accepts. A component overrides this
+            for itself with ``check_input_types`` in its nested
+            [`Lint`][citry.Component.Lint] class.
 
     Raises:
-        TypeError: If a variable or global collection is not a mapping.
+        TypeError: If a variable or global collection is not a mapping, or
+            ``check_input_types`` is not a ``bool``.
         ValueError: If a severity or variable name is invalid.
 
     """
@@ -197,6 +217,7 @@ class LintSettings:
     rule_alpine_cloak: LintSeverity = "error"
     rule_invalid_attribute_value: LintSeverity = "warning"
     rule_i18n_cross_language_fallback: LintSeverity = "warning"
+    check_input_types: bool = True
 
     # Hidden from type checkers so they keep checking calls against the
     # generated __init__ signature.
@@ -320,6 +341,11 @@ class LintSettings:
             if type(severity) is not str or severity not in _ALLOWED_LINT_SEVERITIES:
                 msg = f"{rule_name} must be one of {_ALLOWED_LINT_SEVERITIES}, got {severity!r}"
                 raise ValueError(msg)
+        # Every render reads this flag, so a truthy string such as "false"
+        # must fail here rather than silently keep the check on.
+        if type(self.check_input_types) is not bool:
+            msg = f"LintSettings.check_input_types must be a bool, got {type(self.check_input_types).__name__}."
+            raise TypeError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -467,26 +493,6 @@ class CitrySettings:
             string is stored as a one-element list. ``None`` (the default)
             means no secret is set. Django projects can reuse their existing
             key by passing ``citry.contrib.django.secret()``.
-        check_input_types: Check that each value a component receives has
-            the type its annotation names. On by default, in development and
-            in production. When a component renders, Citry compares each
-            field of its ``Kwargs``, ``TemplateData``, ``JsData``,
-            ``CssData``, and ``State`` with the field's annotation and raises
-            ``TypeError`` for a value of the wrong type, so
-            ``Card(title=123)`` against ``title: str`` fails with a message
-            that names the component, the field, the expected type, and the
-            value. Only the outer type is checked: ``list[str]`` accepts any
-            ``list``. A field's own default always passes. Annotations Citry
-            cannot test while the page runs, such as ``Any``, a type
-            variable, or a name imported only for type checkers, are not
-            checked, and Pydantic models and dataclasses that write their own
-            ``__init__`` keep their own rules. [Inputs and
-            validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
-            lists what each annotation accepts. A component can turn the
-            check off for itself with
-            [`check_input_types`][citry.Component.check_input_types]. Must be
-            a ``bool``: another type raises ``TypeError`` when the settings
-            are created.
         event_result_resolvers: Result resolvers for the Events extension.
             When an event handler returns a value, citry converts it into the
             actions sent back to the browser (the instructions the client
@@ -526,7 +532,6 @@ class CitrySettings:
     ssr_element_threshold: int = 0
     vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES
     max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH
-    check_input_types: bool = True
 
     def __post_init__(self) -> None:
         # Copy every input into its immutable stored shape, so a direct
@@ -547,10 +552,6 @@ class CitrySettings:
         _validate_security_script_integrity(self.security_script_integrity)
         if type(self.ssr) is not bool:
             raise TypeError("Citry ssr must be a bool.")
-        # Every render reads this flag, so a truthy string such as "false"
-        # must fail here rather than silently keep the check on.
-        if type(self.check_input_types) is not bool:
-            raise TypeError(f"Citry check_input_types must be a bool, got {type(self.check_input_types).__name__}.")
         # An exact int check keeps True/False and floats from passing as a
         # count, and a negative count has no meaning as a page size.
         if type(self.ssr_element_threshold) is not int:

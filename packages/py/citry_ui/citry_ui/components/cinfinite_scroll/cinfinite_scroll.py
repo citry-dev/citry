@@ -123,6 +123,10 @@ class CInfiniteScroll(LibraryComponent):
         # Keep this camelCase spelling in sync with the JavaScript data key.
         serverDefaults: dict[str, object]  # noqa: N815
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_infinite_scroll_snapshot", None)
         if cached is not None:

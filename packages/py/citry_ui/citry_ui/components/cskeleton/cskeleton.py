@@ -106,6 +106,10 @@ class CSkeleton(LibraryComponent):
     class Slots:
         pass
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(
         self,
         kwargs: Kwargs,

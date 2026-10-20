@@ -4,8 +4,8 @@ Citry checks the outer type of each value a component receives.
 A wrong value raises ``TypeError`` naming the component, the field, the
 expected type and the value. Only the outer type is checked (``list[str]``
 accepts any list), annotations that ``isinstance`` cannot test are skipped,
-and ``Citry(check_input_types=False)`` or ``Component.check_input_types``
-turns the check off.
+and ``Citry(lint=LintSettings(check_input_types=False))`` or a nested
+``class Lint:`` with ``check_input_types = False`` turns the check off.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import wrapt
 from pydantic import BaseModel
 
 import citry._input_types as input_types
-from citry import Citry, Component, ComponentLibrary, Const, LibraryComponent, Markup
+from citry import Citry, Component, ComponentLibrary, Const, LibraryComponent, LintSettings, Markup
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.tokens import mint_state_token
 
@@ -655,61 +655,158 @@ class TestSwitches:
             assert not _renders(_card(app, int), value="1")
 
     def test_engine_setting_turns_the_check_off(self):
-        app = Citry(check_input_types=False)
-        assert app.settings.check_input_types is False
+        app = Citry(lint=LintSettings(check_input_types=False))
+        assert app.settings.lint.check_input_types is False
         assert _renders(_card(app, int), value="1")
 
-    def test_component_setting_wins_over_the_engine_and_inherits(self):
+    def test_engine_setting_defaults_to_checking(self):
         app = Citry()
-        card = _card(app, int)
-        card.check_input_types = False
-        subclass = type("SubCard", (card,), {"__module__": __name__})
+        assert app.settings.lint.check_input_types is True
+        assert not _renders(_card(app, int), value="1")
 
-        assert _renders(card, value="1")
-        assert _renders(subclass, value="1")
+    def test_lint_class_turns_the_check_off(self):
+        app = Citry()
 
-        strict_app = Citry(check_input_types=False)
-        strict_card = _card(strict_app, int)
-        strict_card.check_input_types = True
-        assert not _renders(strict_card, value="1")
+        class Card(Component):
+            citry = app
+
+            class Kwargs:
+                value: int
+
+            class Lint:
+                check_input_types = False
+
+            template = """
+              <span>{{ value }}</span>
+            """
+
+        assert _renders(Card, value="1")
+
+    def test_lint_class_turns_the_check_on_when_the_engine_turns_it_off(self):
+        app = Citry(lint=LintSettings(check_input_types=False))
+
+        class Card(Component):
+            citry = app
+
+            class Kwargs:
+                value: int
+
+            class Lint:
+                check_input_types = True
+
+            template = """
+              <span>{{ value }}</span>
+            """
+
+        assert not _renders(Card, value="1")
+
+    def test_subclass_inherits_overrides_and_resets_the_lint_class(self):
+        app = Citry()
+
+        class Card(Component):
+            citry = app
+
+            class Kwargs:
+                value: int
+
+            class Lint:
+                check_input_types = False
+
+            template = """
+              <span>{{ value }}</span>
+            """
+
+        class InheritsCard(Card):
+            pass
+
+        class StrictCard(Card):
+            class Lint:
+                check_input_types = True
+
+        class OtherLintCard(Card):
+            # A Lint class that sets only a rule keeps the parent's choice.
+            class Lint:
+                rule_unknown_template_variable = "warning"
+
+        class ResetCard(Card):
+            Lint = None
+
+        assert _renders(InheritsCard, value="1")
+        assert not _renders(StrictCard, value="1")
+        assert _renders(OtherLintCard, value="1")
+        # None stops inheritance and follows the engine, which checks.
+        assert not _renders(ResetCard, value="1")
+
+    def test_lint_class_on_a_separate_base_class_applies(self):
+        app = Citry()
+
+        class Base(Component):
+            citry = app
+
+            class Lint:
+                check_input_types = False
+
+        class Card(Base):
+            class Kwargs:
+                value: int
+
+            template = """
+              <span>{{ value }}</span>
+            """
+
+        assert _renders(Card, value="1")
 
     def test_engine_setting_must_be_a_bool(self):
-        with pytest.raises(TypeError, match="check_input_types must be a bool, got str"):
-            Citry(check_input_types="false")  # type: ignore[arg-type]
+        with pytest.raises(TypeError, match=r"LintSettings\.check_input_types must be a bool, got str"):
+            LintSettings(check_input_types="false")  # type: ignore[arg-type]
 
-    def test_component_setting_must_be_a_bool_or_none(self):
+    def test_lint_class_setting_must_be_a_bool(self):
         app = Citry()
-        with pytest.raises(ValueError, match=r"Card\.check_input_types must be True, False, or None; got 'no'"):
+        with pytest.raises(TypeError, match=r"Card\.Lint\.check_input_types must be True or False, got 'no'"):
 
             class Card(Component):
                 citry = app
-                check_input_types = "no"  # type: ignore[assignment]
 
-        card = _card(app, int)
-        with pytest.raises(ValueError, match="must be True, False, or None; got 0"):
-            card.check_input_types = 0  # type: ignore[assignment]
+                class Lint:
+                    check_input_types = "no"
 
-    def test_library_component_setting(self):
+    def test_lint_class_still_rejects_a_misspelled_setting(self):
+        app = Citry()
+        with pytest.raises(ValueError, match=r"Component Card\.Lint has unknown setting\(s\): check_input_type$"):
+
+            class Card(Component):
+                citry = app
+
+                class Lint:
+                    check_input_type = False
+
+    def test_library_component_lint_class(self):
         class Badge(LibraryComponent):
             class Kwargs:
                 count: int
+
+            class Lint:
+                check_input_types = False
 
             template = """
               <span>{{ count }}</span>
             """
 
-        with pytest.raises(ValueError, match=r"Library component Loose\.check_input_types must be True, False"):
+        class Loose(LibraryComponent):
+            class Lint:
+                check_input_types = 1
 
-            class Loose(LibraryComponent):
-                check_input_types = 1  # type: ignore[assignment]
+            template = """
+              <span></span>
+            """
 
-        with pytest.raises(ValueError, match=r"Library component Badge\.check_input_types must be True, False"):
-            Badge.check_input_types = "off"  # type: ignore[assignment]
-
-        Badge.check_input_types = False
         app = Citry()
         app.register_library(ComponentLibrary(name="badges", components=(Badge,)))
         assert _renders(app.get("Badge"), count="1")
+
+        # A library definition is checked when an engine installs it.
+        with pytest.raises(TypeError, match=r"Loose\.Lint\.check_input_types must be True or False, got 1"):
+            Citry().register_library(ComponentLibrary(name="loose", components=(Loose,)))
 
 
 def test_django_lazy_text_is_accepted_for_str():

@@ -184,6 +184,10 @@ class CCheckbox(LibraryComponent):
         default: SlotInput[CCheckboxDefaultSlotData] | None = None
         description: SlotInput[CCheckboxDescriptionSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(
         self,
         kwargs: Kwargs,

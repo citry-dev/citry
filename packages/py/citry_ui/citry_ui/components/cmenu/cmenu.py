@@ -834,6 +834,10 @@ class CMenu(LibraryComponent):
         activator: SlotInput[CMenuActivatorSlotData]
         default: SlotInput[CMenuDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         return _build_menu_root_snapshot(self, kwargs)
 
@@ -3952,6 +3956,10 @@ class CMenuItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _item_snapshot(self, "CMenuItem", kwargs, kind="item")
 
@@ -4049,6 +4057,10 @@ class CMenuCheckboxItem(LibraryComponent):
         start: SlotInput[CMenuItemStartSlotData] | None = None
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         snapshot = _item_snapshot(self, "CMenuCheckboxItem", kwargs, kind="checkbox")
@@ -4166,6 +4178,10 @@ class CMenuRadioItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _item_snapshot(self, "CMenuRadioItem", kwargs, kind="radio")
 
@@ -4260,6 +4276,10 @@ class CMenuGroup(LibraryComponent):
     class Slots:
         label: SlotInput[CMenuGroupLabelSlotData]
         default: SlotInput[CMenuGroupDefaultSlotData]
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self, "CMenuGroup")
@@ -4381,6 +4401,10 @@ class CMenuRadioGroup(LibraryComponent):
     class Slots:
         default: SlotInput[CMenuRadioGroupDefaultSlotData]
         label: SlotInput[CMenuRadioGroupLabelSlotData] | None = None
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_menu_radio_group_snapshot", None)
@@ -4705,6 +4729,10 @@ class CMenuSeparator(LibraryComponent):
     class Slots:
         pass
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self, "CMenuSeparator")
         if context.registry.kind == "radio":
@@ -4784,6 +4812,10 @@ class CMenuSubmenu(LibraryComponent):
         start: SlotInput[CMenuSubmenuStartSlotData] | None = None
         description: SlotInput[CMenuSubmenuDescriptionSlotData] | None = None
         end: SlotInput[CMenuSubmenuEndSlotData] | None = None
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_menu_submenu_snapshot", None)
@@ -5406,6 +5438,10 @@ class CInternalMenuSurface(LibraryComponent):
     class Slots:
         default: SlotInput[object]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     template = """
       <div
         class="cui-menu"
@@ -5448,6 +5484,10 @@ class CInternalMenuCollection(LibraryComponent):
     class Slots:
         default: SlotInput[object]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -5473,6 +5513,10 @@ class CInternalMenuContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[object]
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(
         self,

@@ -244,6 +244,10 @@ class CNavigationMenu(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_navigation_menu_snapshot", None)
         if cached is not None:
@@ -786,6 +790,10 @@ class CNavigationMenuLink(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuLinkDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self)
         context.count += 1
@@ -836,6 +844,10 @@ class CNavigationMenuItem(LibraryComponent):
     class Slots:
         label: SlotInput[CNavigationMenuItemLabelSlotData]
         default: SlotInput[CNavigationMenuItemDefaultSlotData]
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context = _context(self)

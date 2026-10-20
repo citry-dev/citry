@@ -223,11 +223,6 @@ class ComponentMeta(LibraryComponentMeta):
             msg = f"Cannot change simple component {cls.__name__}.{name}; define a new subclass."
             raise AttributeError(msg)
         class_name = _safe_class_text(cls, "__name__") or "Component"
-        if name == "check_input_types" and value is not None and type(value) is not bool:
-            # Renders read the flag as-is, so it gets the same rule as the
-            # class body declaration.
-            msg = f"Component {class_name}.check_input_types must be True, False, or None; got {value!r}."
-            raise ValueError(msg)
         if name == "_citry_builtin_token" and name in namespace:
             if value is namespace[name]:
                 return
@@ -413,12 +408,6 @@ class ComponentMeta(LibraryComponentMeta):
         if type(pure) is not bool:
             msg = f"Component {name}.pure must be an exact bool; got {pure!r}."
             raise ValueError(msg)
-        # Every render reads this flag, so a truthy string such as "no" must
-        # fail at class definition rather than silently keep the check on.
-        check_input_types = attrs.get("check_input_types")
-        if check_input_types is not None and type(check_input_types) is not bool:
-            msg = f"Component {name}.check_input_types must be True, False, or None; got {check_input_types!r}."
-            raise ValueError(msg)
 
         # Extensions replace nested declarations with effective runtime
         # classes later in this method. Keep the authored objects so every
@@ -476,13 +465,19 @@ class ComponentMeta(LibraryComponentMeta):
             raise ValueError(msg)
 
         extensions = citry_instance.extensions
-        nested_names = {*_DATA_SCHEMA_NAMES, "Lint", "State", *(ext.class_name for ext in extensions._extensions)}
+        nested_names = {
+            *_DATA_SCHEMA_NAMES,
+            "Lint",
+            "State",
+            *(ext.class_name for ext in extensions._extensions),
+        }
         _capture_nested_declarations(cls, authored_namespace, nested_names)
         type.__setattr__(cls, "_citry_nested_declaration_names", frozenset(nested_names))
 
         # Lint is configuration rather than render data, so validate its C3
-        # declarations without converting it into a runtime dataclass.
-        _validate_component_lint(cls)
+        # declarations without converting it into a runtime dataclass. Every
+        # render reads its check_input_types choice, so store it once here.
+        type.__setattr__(cls, "_citry_input_types", _validate_component_lint(cls))
 
         # Data shapes resolve to their nearest declaration, unlike extension
         # configs, which combine every declaration. Plain field classes become
@@ -681,33 +676,9 @@ class Component(metaclass=ComponentMeta):
     full contract.
     """
 
-    check_input_types: ClassVar[bool | None] = None
-    """Whether Citry checks the type of each value this component receives.
-
-    ``None`` (the default) follows the [`Citry`][citry.Citry] app's
-    ``check_input_types`` setting, which is on by default. ``False`` skips
-    the check for this component and its subclasses, for example in a
-    component library that checks its own inputs with more specific errors,
-    or that accepts values its annotations do not name. ``True`` checks this
-    component even when the app turns the check off. Any other value raises
-    ``ValueError`` when the class is defined or the attribute is set.
-
-    The check compares the outer type of each ``Kwargs``, ``TemplateData``,
-    ``JsData``, ``CssData``, and ``State`` field with its annotation, and
-    raises ``TypeError`` for a wrong one. To accept more values for one
-    field, widen its annotation instead, for example ``title: str | int``.
-
-    Example:
-        ```python
-        class Card(Component):
-            class Kwargs:
-                title: str
-
-        card = Card(title=123)
-        card.render()
-        # TypeError: Card.Kwargs.title expects str, got int (123). ...
-        ```
-    """
+    # The component's own Lint.check_input_types choice, which ComponentMeta
+    # resolves once per class; None follows the app's LintSettings.
+    _citry_input_types: ClassVar[bool | None] = None
 
     name: ClassVar[str | None] = None
     """Override the name under which this component is registered.
@@ -819,8 +790,7 @@ class Component(metaclass=ComponentMeta):
     checks each value's outer type against its annotation, so
     ``Card(title=123)`` raises ``TypeError``. ``list[str]`` accepts any
     list without looking at its items. See
-    [`check_input_types`][citry.Component.check_input_types] to turn the
-    type check off.
+    [`Lint`][citry.Component.Lint] to turn the type check off.
 
     A subclass inherits its parent's ``Kwargs`` unless it declares its own.
     Its own plain ``class Kwargs:`` replaces the parent's class, like any
@@ -907,13 +877,31 @@ class Component(metaclass=ComponentMeta):
     """
 
     Lint: ClassVar[type | None] = None
-    """Optional per-component template-lint settings.
+    """Optional per-component template-lint and input type check settings.
 
     Define a nested ``Lint`` class with any of the rule severities
-    (``rule_*``) and variable mappings that [`LintSettings`][citry.LintSettings]
-    accepts. Nested declarations compose in the same order Python uses to
-    resolve methods across base classes. Assign ``None`` to
-    return to the Citry instance's application lint policy.
+    (``rule_*``), variable mappings, and ``check_input_types`` that
+    [`LintSettings`][citry.LintSettings] accepts. Nested declarations
+    compose in the same order Python uses to resolve methods across base
+    classes. Assign ``None`` to return to the Citry instance's application
+    lint policy. When the class is defined, an unknown setting raises
+    ``ValueError`` and a ``check_input_types`` that is not a ``bool``
+    raises ``TypeError``.
+
+    ``check_input_types = False`` skips the render-time check of each
+    input's type for this component and its subclasses, for example in a
+    component library that checks its own inputs with more specific
+    errors, or that accepts values its annotations do not name.
+    ``check_input_types = True`` checks this component even when the app
+    turns the check off. To accept more values for one field, widen its
+    annotation instead, for example ``title: str | int``.
+
+    Example:
+        ```python
+        class LegacyCard(Component):
+            class Lint:
+                check_input_types = False
+        ```
     """
 
     TemplateData: ClassVar[type | None] = None

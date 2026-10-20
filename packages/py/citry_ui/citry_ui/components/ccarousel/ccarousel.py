@@ -181,6 +181,10 @@ class CCarousel(LibraryComponent):
     class Slots:
         default: SlotInput[CCarouselDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_carousel_snapshot", None)
         if cached is not None:
@@ -728,6 +732,10 @@ class CCarouselSlide(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CCarouselSlideDefaultSlotData]
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         provided = self.inject(_CONTEXT_KEY, None)

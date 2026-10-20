@@ -76,6 +76,10 @@ class CDialog(LibraryComponent):
         actions: SlotInput[CDialogActionsSlotData] | None = None
         close: SlotInput[CDialogCloseSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(
         self,
         kwargs: Kwargs,

@@ -130,10 +130,6 @@ def make_mark_component(citry_instance: Citry) -> type[Component]:
 
         citry = citry_instance
         name = "mark"
-        # validate_mark_name() rejects a wrong name with an error that names
-        # the <c-mark> tag and the accepted pattern, which says more than the
-        # general type check would.
-        check_input_types = False
         template = "<c-slot />"
 
         class Kwargs:
@@ -141,6 +137,12 @@ def make_mark_component(citry_instance: Citry) -> type[Component]:
 
         class Slots:
             default: SlotInput | None = None
+
+        # validate_mark_name() rejects a wrong name with an error that names
+        # the <c-mark> tag and the accepted pattern, which says more than the
+        # general type check would.
+        class Lint:
+            check_input_types = False
 
         def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:  # noqa: ARG002
             if set(self.raw_kwargs) != {"name"}:

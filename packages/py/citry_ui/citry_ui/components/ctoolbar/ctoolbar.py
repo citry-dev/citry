@@ -98,6 +98,10 @@ class CToolbar(LibraryComponent):
     class Slots:
         default: SlotInput[CToolbarDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         label = _plain("label", kwargs.label)
         orientation = _choice("orientation", kwargs.orientation, _ORIENTATIONS)

@@ -174,6 +174,10 @@ class CPopover(LibraryComponent):
         description: SlotInput[CPopoverDescriptionSlotData] | None = None
         actions: SlotInput[CPopoverActionsSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_popover_snapshot", None)
         if cached is not None:

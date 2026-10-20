@@ -440,6 +440,10 @@ class CDataGrid(LibraryComponent):
         empty: SlotInput[CDataGridEmptySlotData] | None = None
         error: SlotInput[CDataGridErrorSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     @classmethod
     def _columns(
         cls, value: Sequence[CDataGridColumn], sort: tuple[CDataGridSort, ...]

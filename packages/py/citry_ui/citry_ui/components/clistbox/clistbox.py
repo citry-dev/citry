@@ -369,6 +369,10 @@ class CListbox(LibraryComponent):
     class Slots:
         default: SlotInput[CListboxDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_CONTEXT, None) is not None:
             raise ValueError("CListbox cannot be nested inside a CListbox declaration collection.")
@@ -1002,6 +1006,10 @@ class CListboxOption(LibraryComponent):
         description: SlotInput[CListboxOptionDescriptionSlotData] | None = None
         end: SlotInput[CListboxOptionStateSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_listbox_option_snapshot", None)
         if cached is not None:
@@ -1195,6 +1203,10 @@ class CListboxGroup(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CListboxGroupDefaultSlotData]
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         provided = self.inject(_CONTEXT, None)

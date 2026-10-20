@@ -81,6 +81,10 @@ class CDrawer(LibraryComponent):
         actions: SlotInput[CDrawerActionsSlotData] | None = None
         close: SlotInput[CDrawerCloseSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         validate_html_id("CDrawer", kwargs.id)
         if kwargs.id is not None and "\0" in kwargs.id:

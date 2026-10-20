@@ -510,6 +510,10 @@ class CDisclosure(LibraryComponent):
         default: SlotInput[CDisclosureDefaultSlotData]
         actions: SlotInput[CDisclosureActionsSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_disclosure_snapshot", None)
         if cached is not None:
@@ -1520,6 +1524,10 @@ class CInternalDisclosureTitleContent(LibraryComponent):
     class Slots:
         default: SlotInput[CDisclosureTitleSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -1544,6 +1552,10 @@ class CInternalDisclosureActionsContent(LibraryComponent):
     class Slots:
         default: SlotInput[CDisclosureActionsSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -1567,6 +1579,10 @@ class CInternalDisclosurePanelContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CDisclosureDefaultSlotData]
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(
         self,

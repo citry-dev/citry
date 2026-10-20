@@ -143,23 +143,35 @@ Write `c-amount="18"` to pass the number instead.
 ### Turn the check off
 
 To turn the check off for one component and its subclasses, set
-[`check_input_types`][citry.Component.check_input_types] to `False`:
+`check_input_types = False` in its nested
+[`Lint`][citry.Component.Lint] class:
 
 ```citry
 from citry import Component
 
 
 class LegacyCard(Component):
-    check_input_types = False
+    class Lint:
+        check_input_types = False
 
     template = """
       <div class="legacy-card"></div>
     """
 ```
 
-To turn it off for a whole application, pass `check_input_types=False` to
-[`Citry`][citry.Citry]. A component can still turn it on with
-`check_input_types = True`.
+To turn it off for a whole application, pass it in
+[`LintSettings`][citry.LintSettings]:
+
+```python
+from citry import Citry, LintSettings
+
+app = Citry(
+    lint=LintSettings(check_input_types=False),
+)
+```
+
+A component can still turn the check on for itself with
+`check_input_types = True` in its `Lint` class.
 
 ### What each type accepts
 

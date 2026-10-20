@@ -88,6 +88,10 @@ class CSpinner(LibraryComponent):
     class Slots:
         pass
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _normalized(self, kwargs: Kwargs) -> dict[str, str]:
         return {
             "label": _plain_string("label", kwargs.label),

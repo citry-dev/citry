@@ -785,6 +785,18 @@ def test_data_method_signatures_use_component_specific_input_types():
         assert signature.parameters["slots"].default is inspect.Parameter.empty
 
 
+def test_every_component_turns_off_the_general_input_type_check():
+    # Each component checks its own inputs with clearer errors and accepts
+    # values such as heading_level="2" that its annotations do not name, so
+    # a new definition that forgets the opt-out would reject valid input.
+    missing = [
+        definition.__name__
+        for definition in COMPONENTS
+        if getattr(definition.__dict__.get("Lint"), "check_input_types", None) is not False
+    ]
+    assert missing == []
+
+
 def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():
     requirements = importlib.metadata.requires("citry-ui")
     resources = importlib.resources.files("citry_ui")

@@ -200,6 +200,11 @@ app = Citry(
 and `rule_i18n_cross_language_fallback`
 ([Change fallback warnings](/i18n/workflow/#change-fallback-warnings)).
 
+`LintSettings` and `Lint` also hold `check_input_types`. It is not a lint
+rule: it turns off the type check that runs on each component input
+when the component renders, and `citry check` does not read it
+([Turn the check off](/concepts/inputs-and-validation/#turn-the-check-off)).
+
 ## Override one component
 
 When one component works differently, give it a nested `Lint` class with the

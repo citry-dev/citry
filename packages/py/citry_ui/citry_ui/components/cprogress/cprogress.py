@@ -127,6 +127,10 @@ class CProgress(LibraryComponent):
     class Slots:
         pass
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _normalized(self, kwargs: Kwargs) -> dict[str, object]:
         maximum = _number("max", kwargs.max)
         if maximum <= 0:

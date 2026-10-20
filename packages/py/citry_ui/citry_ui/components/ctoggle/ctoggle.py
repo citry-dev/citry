@@ -171,6 +171,10 @@ class CToggleGroup(LibraryComponent):
     class Slots:
         default: SlotInput[CToggleGroupDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         label = _plain("CToggleGroup label", kwargs.label)
         validate_boolean("CToggleGroup", "multiple", kwargs.multiple)
@@ -380,6 +384,10 @@ class CToggle(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CToggleDefaultSlotData]
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         context_value = self.inject(_TOGGLE_CONTEXT_KEY, None)

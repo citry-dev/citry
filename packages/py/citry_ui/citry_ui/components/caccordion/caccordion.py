@@ -491,6 +491,10 @@ class CAccordion(LibraryComponent):
     class Slots:
         default: SlotInput[CAccordionDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(
         self,
         kwargs: Kwargs,
@@ -1280,6 +1284,10 @@ class CAccordionItem(LibraryComponent):
         default: SlotInput[CAccordionItemDefaultSlotData]
         actions: SlotInput[CAccordionItemActionsSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(
         self,
         kwargs: Kwargs,
@@ -1546,6 +1554,10 @@ class CInternalAccordionItems(LibraryComponent):
     class Slots:
         default: SlotInput[CAccordionDefaultSlotData]
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -1571,6 +1583,10 @@ class CInternalAccordionPanelContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CAccordionItemDefaultSlotData]
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(
         self,

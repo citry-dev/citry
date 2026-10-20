@@ -102,6 +102,10 @@ class CField(LibraryComponent):
         description: SlotInput[CFieldDescriptionSlotData] | None = None
         error: SlotInput[CFieldErrorSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def template_data(
         self,
         kwargs: Kwargs,
@@ -518,6 +522,10 @@ class CInput(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
 
     def template_data(
         self,

@@ -7,7 +7,7 @@ attribute or the ``fallback`` fill instead.
 
 import pytest
 
-from citry import AlreadyRegistered, Citry, Component, Markup
+from citry import AlreadyRegistered, Citry, Component, LintSettings, Markup
 
 
 def _make_failing(c):
@@ -164,7 +164,7 @@ class TestErrorFallback:
     def test_non_string_fallback_renders_as_text_without_the_input_type_check(self):
         # With the check off, the boundary must still show the value instead
         # of failing while it handles an error.
-        c = Citry(check_input_types=False)
+        c = Citry(lint=LintSettings(check_input_types=False))
         _make_failing(c)
 
         class Page(Component):

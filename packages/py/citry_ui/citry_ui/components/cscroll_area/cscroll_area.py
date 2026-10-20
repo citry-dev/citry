@@ -140,6 +140,10 @@ class CScrollArea(LibraryComponent):
     class Slots:
         default: SlotInput[_CScrollAreaDefaultSlotData] | None = None
 
+    # This component checks its own inputs with errors that list the accepted values.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_scroll_area_snapshot", None)
         if cached is not None:
