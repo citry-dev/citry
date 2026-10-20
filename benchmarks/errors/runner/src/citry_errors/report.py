@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 from . import html_report
-from .config import OUTCOMES, REPO_ROOT, STATIC_STAGES, load_catalogue, load_frameworks
+from .config import CACHE, OUTCOMES, REPO_ROOT, STATIC_STAGES, load_catalogue, load_frameworks
 
 # One short letter per outcome keeps the matrix readable at 24 x 6 cells.
 # A runtime warning shares R with a runtime error; the `w` mark tells them apart.
@@ -129,9 +129,18 @@ def _cell(record: dict, column: str, *, warning: bool = False) -> str:
     return SHORT[record[column]] + ("w" if warning else "") + mark
 
 
+# An absolute or home-relative folder path that ends in a benchmark cache.
+_CACHE_FOLDER = re.compile(r"(?<![\w.~-])~?/[^\s'\"()]*?/\.benchmarks/errors/")
+
+
 def _public(text: str) -> str:
     """Make one evidence line fit to publish: no local folders, and short enough to read on hover."""
     # A traceback names the machine's folders, which say nothing about the result.
+    # A run can keep its cache outside this checkout (CITRY_ERRORS_CACHE, here or
+    # when the run was made), so any folder that holds a `.benchmarks/errors`
+    # cache is cut back to that name, the way the default cache reads.
+    text = text.replace(str(CACHE) + "/", ".benchmarks/errors/")
+    text = _CACHE_FOLDER.sub(".benchmarks/errors/", text)
     text = text.replace(str(REPO_ROOT) + "/", "").replace(str(Path.home()), "~")
     # Each dev server listens on a random port, which would change every rerun's file.
     text = re.sub(r"127\.0\.0\.1:\d+", "127.0.0.1:<port>", text)

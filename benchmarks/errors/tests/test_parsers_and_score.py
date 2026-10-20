@@ -155,6 +155,17 @@ def test_published_evidence_drops_local_folders_and_long_tails() -> None:
     assert len(text) == 300
 
 
+def test_published_evidence_drops_a_cache_folder_outside_the_checkout() -> None:
+    # A run made with CITRY_ERRORS_CACHE in another checkout names that folder,
+    # whether the path is absolute or already shortened to the home folder.
+    other = "/Users/someone/repos/other-checkout/.benchmarks/errors/envs/next/x.js"
+    assert report._public(f"error: at {other}:3") == "error: at .benchmarks/errors/envs/next/x.js:3"
+    assert report._public("at ~/elsewhere/.benchmarks/errors/envs/a.py") == "at .benchmarks/errors/envs/a.py"
+    assert report._public(f"x {report.CACHE}/runs/r1/log") == "x .benchmarks/errors/runs/r1/log"
+    # A relative path is not a local folder, so it stays as written.
+    assert report._public("see app/.benchmarks/errors/x") == "see app/.benchmarks/errors/x"
+
+
 def test_paths_relative_to_a_parent_folder_are_mapped_to_the_working_copy() -> None:
     findings = tsc("./work/m02-input-name/app/card.tsx:22:1\nParsing ecmascript source code failed", "", 1, WORK)
     assert [(f.file, f.line) for f in findings] == [("app/card.tsx", 22)]
