@@ -1,0 +1,67 @@
+key = "jinja"
+name = "Jinja + HTMX + Alpine"
+notes = """
+Starlette 1.6.0 serves the page with Jinja2 3.1.6 through Starlette's
+Jinja2Templates(directory="templates"), which builds a default Jinja
+Environment: autoescaping on for .html files, the default Undefined (not StrictUndefined), and
+no extensions. uvicorn 0.52.4 runs the app, as Starlette's docs show, and
+the app sets Starlette(debug=True) as the docs' first example does.
+HTMX 2.0.10 and Alpine 3.17.2 are served from baseline/static, copied from
+the npm packages (htmx.org dist/htmx.min.js, alpinejs dist/cdn.min.js).
+
+Neither Starlette nor Jinja ships a project starter, a linter or a check
+command. The check stage is the two linters most projects add: ruff with
+its default rules for the Python files, and djLint with its Jinja profile
+for the templates. A linter finding fails its command, so it counts as an
+error.
+
+editor: VS Code with Pylance and type checking turned on, measured with the
+pyright 1.1.414 command line in typeCheckingMode "standard" (Pylance's own
+default is "off"). pyright is a measurement-only dev dependency. The app
+reads a form field with `int(str(...))`, because Starlette types a form
+field as text or an uploaded file. pyright reads only the
+Python files; Pylance does not check Jinja templates or the HTMX and Alpine
+attributes in them. VS Code's built-in HTML support checks only <script>
+and <style> blocks inside a page, and this page has no inline script or style. Pylance's default diagnosticMode "openFilesOnly" reports
+only on open files, while the command line checks every file, which can only
+add findings.
+"""
+
+[setup]
+manifests = ["pyproject.toml", "uv.lock"]
+command = ["uv", "sync", "--frozen"]
+
+[[stages]]
+stage = "editor"
+label = "Pylance, type checking on (pyright 1.1.414, standard)"
+argv = ["{venv}/bin/pyright", "--outputjson", "--pythonpath", "{venv}/bin/python"]
+parser = "pyright-json"
+timeout = 300
+
+
+[[stages]]
+stage = "check"
+label = "ruff 0.15.5 (default rules)"
+# --isolated: a real project's ruff reads only its own settings, not those of
+# a repository it happens to sit in.
+argv = ["{venv}/bin/ruff", "check", "--isolated", "--no-respect-gitignore", "--output-format", "json", "."]
+parser = "ruff-json"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "djLint 1.46.6 (--lint, jinja profile)"
+argv = ["{venv}/bin/djlint", "templates", "--lint", "--profile=jinja"]
+parser = "djlint"
+timeout = 300
+
+[runtime]
+argv = ["{venv}/bin/uvicorn", "app:app", "--host", "127.0.0.1", "--port", "{port}"]
+page_path = "/"
+ready_timeout = 90
+steps = [
+  { action = "click", selector = "button:text-is('Add')" },
+  { action = "wait", ms = 500 },
+  { action = "click", selector = "button:text-is('Details')" },
+  { action = "click", selector = "button:text-is('Hide')" },
+]

@@ -16,6 +16,7 @@ from markupsafe import Markup
 from citry._linting import TemplateLintInfo, TemplateVariableInfo
 from citry._nested_declarations import NestedSchemaReplacedWarning
 from citry.analysis import (
+    ComponentSourceLint,
     LspPosition,
     LspRange,
     PythonComponentAssetDiscovery,
@@ -249,6 +250,7 @@ __all__ = [
     "ComponentLike",
     "ComponentNode",
     "ComponentSchemas",
+    "ComponentSourceLint",
     "Const",
     "CurrencyFormat",
     "DateFormat",

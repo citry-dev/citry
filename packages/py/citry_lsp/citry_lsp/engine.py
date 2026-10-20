@@ -53,6 +53,8 @@ from citry.analysis import (
     BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
+    MisspelledDirectiveFinding,
+    MisspelledDirectiveLintConsumer,
     ShadowPythonDocument,
     TemplateLintConsumer,
     TemplatePythonControl,
@@ -96,6 +98,7 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_misspelled_directives,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -151,6 +154,7 @@ from citry_lsp.regions import (
     standalone_region,
 )
 from citry_lsp.root_element import TAG_ELEMENT_TYPEDEF, UNKNOWN_ROOT, template_root_element_type
+from citry_lsp.type_analysis import is_project_source_file
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
@@ -378,7 +382,13 @@ class _JsDataNamespace:
 
 @dataclass(frozen=True, slots=True)
 class ExpressionShadow:
-    """One analyzer document for one proven template consumer."""
+    """
+    One analyzer document for one proven template consumer.
+
+    `source_file` is the module the document copies, which may be an
+    inherited base class in another package. `anchor_file` is the consuming
+    component's own file, and the document is placed next to it.
+    """
 
     identity: str
     source_file: Path
@@ -386,6 +396,7 @@ class ExpressionShadow:
     document: ShadowPythonDocument
     query: TemplatePythonQuery
     cursor_offset: int
+    anchor_file: Path
 
 
 @dataclass(frozen=True, slots=True)
@@ -410,6 +421,7 @@ class _ExpressionShadowConsumer:
 
     identity: str
     source_file: Path
+    anchor_file: Path
     source: str
     source_kind: Literal["schema", "inferred"]
     source_module: str | None
@@ -610,8 +622,9 @@ def template_lint_diagnostics(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> tuple[types.Diagnostic, ...]:
     """Apply portable root linting only where current component ownership is proven."""
-    # The Alpine and attribute-value rules need no component namespace, so
-    # they run even before the project analysis is available.
+    # The Alpine, attribute-value, and misspelled-directive rules need no
+    # component namespace, so they run even before the project analysis is
+    # available.
     diagnostics = list(_html_attribute_lint_diagnostics(document, project, open_documents))
     if project.catalog is None or project.analysis is None:
         return tuple(diagnostics)
@@ -675,7 +688,7 @@ def _html_attribute_lint_diagnostics(
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> tuple[types.Diagnostic, ...]:
-    """Report leftover Alpine ``x-*`` attributes and invalid enumerated values with each owner's severities."""
+    """Report Alpine leftovers, invalid enumerated values, and misspelled directives with each owner's severities."""
     analysis = project.analysis
     parser = analysis.parse_template if analysis is not None else parse_template
     diagnostics: list[types.Diagnostic] = []
@@ -685,6 +698,7 @@ def _html_attribute_lint_diagnostics(
             continue
         consumers: list[AlpineAttributeLintConsumer] = []
         value_consumers: list[AttributeValueLintConsumer] = []
+        directive_consumers: list[MisspelledDirectiveLintConsumer] = []
         if analysis is not None:
             for owner in _template_consumers(document, region, project, open_documents):
                 # An owner missing from the analysis still belongs to this
@@ -692,6 +706,7 @@ def _html_attribute_lint_diagnostics(
                 lint = analysis.component_lint.get(owner.definition_id, analysis.lint)
                 consumers.append(AlpineAttributeLintConsumer(lint.rule_alpine_attribute, lint.rule_alpine_cloak))
                 value_consumers.append(AttributeValueLintConsumer(lint.rule_invalid_attribute_value))
+                directive_consumers.append(MisspelledDirectiveLintConsumer(lint.rule_misspelled_directive))
             if not consumers:
                 # No proven owner: the application policy still applies,
                 # which is closer to the author's intent than the defaults.
@@ -699,9 +714,18 @@ def _html_attribute_lint_diagnostics(
                     AlpineAttributeLintConsumer(analysis.lint.rule_alpine_attribute, analysis.lint.rule_alpine_cloak)
                 )
                 value_consumers.append(AttributeValueLintConsumer(analysis.lint.rule_invalid_attribute_value))
-        findings: list[AlpineAttributeFinding | AttributeValueFinding] = [
+                directive_consumers.append(MisspelledDirectiveLintConsumer(analysis.lint.rule_misspelled_directive))
+        else:
+            # Before the application loads, the owners' own Lint classes,
+            # read from the current text, are all that is known. With no
+            # owner the lint functions use their no-application severities.
+            consumers.extend(lint.alpine_consumer() for lint in region.owner_lint)
+            value_consumers.extend(lint.attribute_value_consumer() for lint in region.owner_lint)
+            directive_consumers.extend(lint.directive_consumer() for lint in region.owner_lint)
+        findings: list[AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding] = [
             *lint_alpine_attributes(parsed.template, consumers, parse_nested=parser),
             *lint_attribute_values(parsed.template, value_consumers, parse_nested=parser),
+            *lint_misspelled_directives(parsed.template, directive_consumers, parse_nested=parser),
         ]
         for finding in findings:
             try:
@@ -4653,8 +4677,16 @@ def _expression_shadow_consumers(
         return None
     consumers: list[_ExpressionShadowConsumer] = []
     for owner, context in zip(owners, contexts, strict=True):
+        # ty checks only files in its project, and the copied module may be a
+        # base class outside it, so the copy is placed next to the
+        # component's own file. A component with no known Python file falls
+        # back to its template file, which ty also checks. Without either,
+        # no consumer of this template is checked, because every query must
+        # hold for all of them.
+        anchor_file = owner.python_file or owner.template_file
         if (
             context is None
+            or anchor_file is None
             or context.source_file is None
             or context.source is None
             or context.source_kind not in {"schema", "inferred"}
@@ -4677,6 +4709,7 @@ def _expression_shadow_consumers(
             _ExpressionShadowConsumer(
                 identity=owner.definition_id,
                 source_file=context.source_file,
+                anchor_file=anchor_file,
                 source=context.source,
                 source_kind=cast("Literal['schema', 'inferred']", context.source_kind),
                 source_module=context.source_module,
@@ -4874,6 +4907,7 @@ def _build_expression_shadows(
                 document=shadow,
                 query=query,
                 cursor_offset=cursor_offset,
+                anchor_file=consumer.anchor_file,
             )
         )
     return tuple(shadows)
@@ -8460,11 +8494,13 @@ def js_data_inference_requests(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> tuple[JsDataInferenceRequest, ...]:
     """
-    Return the `js_data()` methods in `workspace` whose values Citry's rules leave partly unknown.
+    Return the `js_data()` methods of components in `workspace` whose values Citry's rules leave partly unknown.
 
     Each request names the expressions to ask ty about: the largest parts of
     each value that the rules could not type. A method whose current source
-    ty has already answered for is left out.
+    ty has already answered for is left out. The method may be inherited
+    from a base class outside the workspace; the component that uses it
+    must be the user's own source.
     """
     catalog = project.catalog
     source_analysis = project.source_analysis
@@ -8480,7 +8516,16 @@ def js_data_inference_requests(
             continue
         owner = chain[-1]
         source_file = owner.source_file.resolve()
-        if not source_file.is_relative_to(workspace) or (source_file, owner.qualname) in requests:
+        # ty answers only for a copy placed next to the user's own file, so
+        # an installed component, whose authors check it, is skipped.
+        anchor_file = component.python_file
+        # The duplicate check comes first, because the project-file check
+        # looks at the folders on disk.
+        if (
+            (source_file, owner.qualname) in requests
+            or anchor_file is None
+            or not is_project_source_file(anchor_file, workspace)
+        ):
             continue
         found, source = (
             _synchronized_document_source(owner.source_file, open_documents)
@@ -8521,6 +8566,7 @@ def js_data_inference_requests(
             qualname=owner.qualname,
             module=owner.module,
             spans=spans,
+            anchor_file=anchor_file,
         )
     return tuple(requests.values())
 
@@ -8545,6 +8591,9 @@ class JsDataInferenceRequest:
         qualname: The qualified name of the class that defines the method.
         module: The importable module name of the file.
         spans: Start and end string offsets in `source` of each part to type.
+        anchor_file: The file of a component in the workspace that uses the
+            method. The copy ty checks is placed next to it, because ty
+            reports nothing for a file outside its project.
 
     """
 
@@ -8553,6 +8602,7 @@ class JsDataInferenceRequest:
     qualname: str
     module: str
     spans: tuple[tuple[int, int], ...]
+    anchor_file: Path
 
 
 def _projected_type(value: JsonWireType | str) -> str:

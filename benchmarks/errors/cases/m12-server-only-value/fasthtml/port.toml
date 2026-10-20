@@ -1,0 +1,7 @@
+# Browser code names the server's Python constant, as if it were available
+# in the page, the same mistake the other ports make. Interpolating the
+# secret's value into the script instead would be a different mistake: it
+# sends the secret to the browser.
+status = "ported"
+files = { "main.py" = "main.py" }
+mistake = { file = "main.py", contains = "'API: ' + SECRET_TOKEN" }

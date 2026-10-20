@@ -1,0 +1,6 @@
+# Browser code (a Vue binding) reads the server-only Python constant by name,
+# as the Next and Nuxt ports read a server-only name. Putting SECRET_TOKEN
+# into js_data() instead would be a different mistake: it leaks the secret.
+status = "ported"
+files = { "app/components/board_page.py" = "board_page.py" }
+mistake = { file = "app/components/board_page.py", contains = "v-text=\"SECRET_TOKEN\"" }

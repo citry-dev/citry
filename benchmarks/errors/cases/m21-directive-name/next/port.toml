@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """React has no template directives. The details text is shown with a plain JavaScript expression, `{open && <p>...</p>}`, so there is no directive name to misspell; misspelling `open` there is the undefined-variable mistake (m07) and a broken `&&` is m19."""

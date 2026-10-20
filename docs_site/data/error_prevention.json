@@ -1,0 +1,2060 @@
+{
+  "generated_by": "docs_site/scripts/error_benchmark_data.py",
+  "run": "20261020T094732Z",
+  "frameworks": [
+    {
+      "key": "citry",
+      "name": "Citry"
+    },
+    {
+      "key": "django",
+      "name": "Django + HTMX + Alpine"
+    },
+    {
+      "key": "jinja",
+      "name": "Jinja + HTMX + Alpine"
+    },
+    {
+      "key": "fasthtml",
+      "name": "FastHTML"
+    },
+    {
+      "key": "nuxt",
+      "name": "Nuxt (TypeScript)"
+    },
+    {
+      "key": "next",
+      "name": "Next.js (TypeScript)"
+    }
+  ],
+  "categories": [
+    {
+      "id": "naming",
+      "heading": "Names: components, inputs, slots, variables"
+    },
+    {
+      "id": "types",
+      "heading": "Types"
+    },
+    {
+      "id": "templates",
+      "heading": "Template and script syntax"
+    },
+    {
+      "id": "html",
+      "heading": "HTML and CSS"
+    },
+    {
+      "id": "events",
+      "heading": "Events and server requests"
+    },
+    {
+      "id": "server-browser",
+      "heading": "Server and browser"
+    }
+  ],
+  "buckets": [
+    {
+      "id": "static-error",
+      "label": "Static/IDE error"
+    },
+    {
+      "id": "static-warning",
+      "label": "Static/IDE warning"
+    },
+    {
+      "id": "runtime-error",
+      "label": "Runtime error"
+    },
+    {
+      "id": "runtime-warning",
+      "label": "Runtime warning"
+    },
+    {
+      "id": "missed",
+      "label": "Missed"
+    }
+  ],
+  "mistakes": [
+    {
+      "id": "m01-component-name",
+      "title": "Misspelled component name",
+      "category": "naming"
+    },
+    {
+      "id": "m02-input-name",
+      "title": "Misspelled input name",
+      "category": "naming"
+    },
+    {
+      "id": "m03-input-type-literal",
+      "title": "Wrong-typed input written in markup",
+      "category": "types"
+    },
+    {
+      "id": "m04-missing-required-input",
+      "title": "Missing required input",
+      "category": "naming"
+    },
+    {
+      "id": "m05-slot-name",
+      "title": "Misspelled slot name",
+      "category": "naming"
+    },
+    {
+      "id": "m06-server-handler-name",
+      "title": "Misspelled server handler name",
+      "category": "events"
+    },
+    {
+      "id": "m07-undefined-variable",
+      "title": "Undefined template variable",
+      "category": "naming"
+    },
+    {
+      "id": "m08-attribute-typo",
+      "title": "Misspelled attribute on a template object",
+      "category": "naming"
+    },
+    {
+      "id": "m09-attribute-value",
+      "title": "Invalid HTML attribute value",
+      "category": "html"
+    },
+    {
+      "id": "m10-attribute-name",
+      "title": "Misspelled HTML attribute name",
+      "category": "html"
+    },
+    {
+      "id": "m11-element-name",
+      "title": "Misspelled HTML element",
+      "category": "html"
+    },
+    {
+      "id": "m12-server-only-value",
+      "title": "Server-only value read in browser code",
+      "category": "server-browser"
+    },
+    {
+      "id": "m13-state-field-typo",
+      "title": "State field typo in an update handler",
+      "category": "events"
+    },
+    {
+      "id": "m14-hydration-mismatch",
+      "title": "Server and browser render different content",
+      "category": "server-browser"
+    },
+    {
+      "id": "m15-i18n-key",
+      "title": "Unknown translation message key",
+      "category": "naming"
+    },
+    {
+      "id": "m16-css-class",
+      "title": "Misspelled CSS class",
+      "category": "html"
+    },
+    {
+      "id": "m17-input-type-code",
+      "title": "Wrong-typed input computed in code",
+      "category": "types"
+    },
+    {
+      "id": "m18-payload-field",
+      "title": "Misspelled field in a request payload",
+      "category": "events"
+    },
+    {
+      "id": "m19-client-expression-syntax",
+      "title": "Syntax error in a browser expression",
+      "category": "templates"
+    },
+    {
+      "id": "m20-component-script-syntax",
+      "title": "Syntax error in component JavaScript",
+      "category": "templates"
+    },
+    {
+      "id": "m21-directive-name",
+      "title": "Misspelled template directive",
+      "category": "naming"
+    },
+    {
+      "id": "m22-unclosed-tag",
+      "title": "Unclosed element in a template",
+      "category": "templates"
+    },
+    {
+      "id": "m23-expression-type",
+      "title": "Wrong-typed operation in a template expression",
+      "category": "types"
+    },
+    {
+      "id": "m24-undeclared-event",
+      "title": "Child emits an event the parent does not listen for",
+      "category": "events"
+    }
+  ],
+  "codes": [
+    {
+      "code": "E",
+      "meaning": "reported in the editor"
+    },
+    {
+      "code": "C",
+      "meaning": "reported by a command-line check, type check or linter"
+    },
+    {
+      "code": "B",
+      "meaning": "reported by the production build"
+    },
+    {
+      "code": "R",
+      "meaning": "reported at runtime by a server error, an error response or a browser error (Rw: only a warning)"
+    },
+    {
+      "code": "w",
+      "meaning": "after a letter: that stage gave only a warning, such as Ew for a warning in the editor"
+    },
+    {
+      "code": "M",
+      "meaning": "missed: nothing reports it"
+    },
+    {
+      "code": "?",
+      "meaning": "the runtime check was skipped and no tool reported it"
+    },
+    {
+      "code": "P",
+      "meaning": "the framework's design prevents the mistake"
+    },
+    {
+      "code": "-",
+      "meaning": "no case was written for this framework"
+    },
+    {
+      "code": "n/a",
+      "meaning": "the mistake has no natural equivalent in this framework"
+    },
+    {
+      "code": "!",
+      "meaning": "the clean app reported problems in this run, so the cell is unreliable"
+    },
+    {
+      "code": "~",
+      "meaning": "a tool timed out or skipped this case, so it may have caught the mistake earlier"
+    },
+    {
+      "code": "\u00b0",
+      "meaning": "the report points away from the change, and the case explains why it still counts"
+    }
+  ],
+  "results": [
+    {
+      "framework": "citry",
+      "mistake": "m01-component-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.unknown-component Component <c-Crad> is not registered.",
+        "citry check: citry.template.unknown-component Component <c-Crad> is not registered.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m02-input-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'c-if', 'c-elif', 'c-else', 'c-...",
+        "citry check: citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'c-if', 'c-elif', 'c-else', 'c-for', 'c-empty'. Found invalid a...",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m03-input-type-literal",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.python.invalid-assignment Object of type `Literal[\"project.count\"]` is not assignable to `int`"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m04-missing-required-input",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n21 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'.",
+        "citry check: citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n21 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m05-slot-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 23:13\n   |\n23 |             <c-fill name=\"fotter\">\n   |             ^--------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'.",
+        "citry check: citry.parse.syntax Parse error:   --> 23:13\n   |\n23 |             <c-fill name=\"fotter\">\n   |             ^--------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m06-server-handler-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.unknown-server-event Server event 'sav' is not declared by this component.",
+        "citry check: citry.browser.unknown-server-event Server event 'sav' is not declared by this component.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m07-undefined-variable",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.unknown-variable Template variable 'ownr' is not available in this template.",
+        "citry check: citry.template.unknown-variable Template variable 'ownr' is not available in this template.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m08-attribute-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.python.unresolved-attribute Object of type `Owner` has no attribute `nmae`",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m09-attribute-value",
+      "status": "ported",
+      "bucket": "static-warning",
+      "cell": "Ew",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.invalid-attribute-value 'sumbit' is not a valid value for 'type' on <button>. Did you mean 'submit'? Valid values: 'submit', 'reset', 'button'.",
+        "citry check: citry.template.invalid-attribute-value 'sumbit' is not a valid value for 'type' on <button>. Did you mean 'submit'? Valid values: 'submit', 'reset', 'button'."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m10-attribute-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m11-element-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m12-server-only-value",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.vue.unknown-variable Vue variable 'SECRET_TOKEN' is not available in this component.",
+        "citry check: citry.vue.unknown-variable Vue variable 'SECRET_TOKEN' is not available in this component."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m13-state-field-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"cuont\" for class \"State\"\n\u00a0\u00a0Attribute \"cuont\" is unknown",
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot assign to attribute \"cuont\" for class \"State\"\n\u00a0\u00a0Attribute \"cuont\" is unknown",
+        "error: Traceback (most recent call last):",
+        "error: AttributeError: 'State' object has no attribute 'cuont'. Did you mean: 'count'?"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m14-hydration-mismatch",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Hydration completed but contains mismatches.",
+        "error: Hydration completed but contains mismatches."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m15-i18n-key",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.i18n.unknown-message Unknown i18n message ID 'board-titel'; no component or configured catalog package defines it.",
+        "citry check: citry.i18n.unknown-message Unknown i18n message ID 'board-titel'; no component or configured catalog package defines it.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m16-css-class",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m17-input-type-code",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"str\" cannot be assigned to parameter \"count\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0\"str\" is not assignable to \"int\""
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m18-payload-field",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m19-client-expression-syntax",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m20-component-script-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.typescript.ts1005 ';' expected.",
+        "error: pageerror: Unexpected token 'this'",
+        "error: pageerror: _ctx.toggle is not a function",
+        "error: pageerror: Unexpected token 'this'"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m21-directive-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: pageerror: Component Details_05bc14 uses the directive 'v-iff', but no directive named 'iff' is registered. Check the spelling, or register it: in the 'directives' option of the component's $component() call, or for every component with Citry.vue.use(plugin), where the plugin's install(app...",
+        "error: pageerror: Citry Vue app failed during initialization"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m22-unclosed-tag",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:  --> 7:1\n  |\n7 | </article>\n  | ^--------^\n  |\n  = Mismatched tags: expected closing tag '</footer>', found '</article>'",
+        "citry check: citry.parse.syntax Parse error:  --> 7:1\n  |\n7 | </article>\n  | ^--------^\n  |\n  = Mismatched tags: expected closing tag '</footer>', found '</article>'",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m23-expression-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.python.unsupported-operator Operator `+` is not supported between objects of type `str` and `Literal[1]`",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m24-undeclared-event",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.undeclared-emit Event 'hdie' is not declared in this component's emits option.",
+        "citry check: citry.browser.undeclared-emit Event 'hdie' is not declared in this component's emits option."
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m01-component-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: Internal Server Error: /",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m02-input-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m03-input-type-literal",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m04-missing-required-input",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m05-slot-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m06-server-handler-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: Internal Server Error: /",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m07-undefined-variable",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m08-attribute-typo",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m09-attribute-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m10-attribute-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m11-element-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m12-server-only-value",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Cannot read properties of null (reading 'textContent')",
+        "error: pageerror: Illegal invocation",
+        "error: pageerror: api is not defined",
+        "error: pageerror: toggle is not defined",
+        "error: pageerror: Cannot read properties of null (reading 'textContent')"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m13-state-field-typo",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m14-hydration-mismatch",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Django sends finished HTML. Alpine starts on that HTML and sets x-text and x-show without comparing them to what the server wrote, so there is no server render and first browser render that could disagree.",
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m15-i18n-key",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m16-css-class",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m17-input-type-code",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"str\" cannot be assigned to parameter \"count\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0\"str\" is not assignable to \"int\""
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m18-payload-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Response Status Error Code 500 from /save/, [object HTMLSpanElement]",
+        "error: 500 http://127.0.0.1:<port>/save/",
+        "error: Internal Server Error: /save/",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m19-client-expression-syntax",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Unexpected token '}'",
+        "error: pageerror: Unexpected token '}'",
+        "warning: Alpine Expression Error: Unexpected token '}'\n\nExpression: \"open &&\"\n\n JSHandle@node",
+        "warning: Alpine Expression Error: Unexpected token '}'\n\nExpression: \"open &&\"\n\n JSHandle@node"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m20-component-script-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "VS Code JavaScript syntax check (tsc 6.0.3 --allowJs): TS1005 ',' expected.",
+        "error: pageerror: Unexpected identifier 'toggle'",
+        "error: pageerror: Illegal invocation",
+        "error: pageerror: board is not defined",
+        "error: pageerror: api is not defined",
+        "error: pageerror: toggle is not defined"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m21-directive-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m22-unclosed-tag",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. <div class=\"card\">"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m23-expression-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m24-undeclared-event",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m01-component-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m02-input-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m03-input-type-literal",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m04-missing-required-input",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m05-slot-name",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Jinja's reusable component is a macro, and the page fills it with a {% call %} block that the macro inserts with caller(). A call block fills one unnamed region, so the page has no footer name to misspell. Jinja's named blocks belong to template inheritance, which Jinja's docs use for page layouts; for repeated markup they present macros. A misspelled macro name is m01 and a misspelled argument name is m02.",
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m06-server-handler-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "error: Response Status Error Code 404 from /sav, [object HTMLDivElement]",
+        "error: 404 http://127.0.0.1:<port>/sav"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m07-undefined-variable",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m08-attribute-typo",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m09-attribute-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m10-attribute-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m11-element-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m12-server-only-value",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: SECRET_TOKEN is not defined",
+        "error: pageerror: SECRET_TOKEN is not defined",
+        "warning: Alpine Expression Error: SECRET_TOKEN is not defined\n\nExpression: \"SECRET_TOKEN\"\n\n JSHandle@node",
+        "warning: Alpine Expression Error: SECRET_TOKEN is not defined\n\nExpression: \"SECRET_TOKEN\"\n\n JSHandle@node"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m13-state-field-typo",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Response Status Error Code 500 from /save, [object HTMLDivElement]",
+        "error: 500 http://127.0.0.1:<port>/save",
+        "error: INFO:     127.0.0.1:<port> - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m14-hydration-mismatch",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The page is plain Jinja output. Alpine does not render components on the server: in the browser it runs on the HTML the server sent and overwrites x-text content without comparing it to the server's text. Nothing renders the same component on both sides, so there is no mismatch for any tool to report.",
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m15-i18n-key",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Starlette's docs cover no translations, and its Jinja2Templates creates a Jinja Environment with no extensions. Jinja's i18n extension works only after the developer adds it and installs gettext translations, which this stack's standard setup does not do, so the heading is literal text and there is no message key to misspell.",
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m16-css-class",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m17-input-type-code",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"str\" cannot be assigned to parameter \"count\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0\"str\" is not assignable to \"int\""
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m18-payload-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Response Status Error Code 500 from /save, [object HTMLDivElement]",
+        "error: 500 http://127.0.0.1:<port>/save",
+        "error: INFO:     127.0.0.1:<port> - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m19-client-expression-syntax",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Unexpected token '}'",
+        "error: pageerror: Unexpected token '}'",
+        "warning: Alpine Expression Error: Unexpected token '}'\n\nExpression: \"open = !open &&\"\n\n JSHandle@node",
+        "warning: Alpine Expression Error: Unexpected token '}'\n\nExpression: \"open = !open &&\"\n\n JSHandle@node"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m20-component-script-syntax",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Unexpected token ')'",
+        "error: pageerror: Illegal invocation",
+        "error: pageerror: Unexpected token ')'",
+        "error: pageerror: Illegal invocation",
+        "warning: Alpine Expression Error: Unexpected token ')'\n\nExpression: \"{ open: false\"\n\n JSHandle@node"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m21-directive-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m22-unclosed-tag",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, jinja profile): H025 Tag seems to be an orphan. <footer>"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m23-expression-type",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m24-undeclared-event",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m01-component-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"Crad\" is not defined",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m02-input-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"title\"",
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"titel\"",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m03-input-type-literal",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "FastHTML has no markup. A component's inputs are Python call arguments, so passing the count as a string is a value computed in code, which is mistake m17.",
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m04-missing-required-input",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"title\"",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m05-slot-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"footer\"",
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"fotter\"",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m06-server-handler-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "error: Response Status Error Code 404 from /sav",
+        "error: 404 http://127.0.0.1:<port>/sav"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m07-undefined-variable",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"ownr\" is not defined",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m08-attribute-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"nmae\" for class \"Owner\"\n\u00a0\u00a0Attribute \"nmae\" is unknown",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m09-attribute-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m10-attribute-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m11-element-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"Dvi\" is not defined",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m12-server-only-value",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: SECRET_TOKEN is not defined",
+        "error: pageerror: SECRET_TOKEN is not defined"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m13-state-field-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUnboundVariable \"cuont\" is unbound",
+        "ruff 0.15.5 (default rules): F841 Local variable `cuont` is assigned to but never used",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Response Status Error Code 500 from /save",
+        "error: 500 http://127.0.0.1:<port>/save",
+        "error: INFO:     127.0.0.1:<port> - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m14-hydration-mismatch",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "FastHTML renders the page only on the server and sends plain HTML. No browser-side component renders that markup a second time, so there is no first browser render to disagree with the server's.\n",
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m15-i18n-key",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "FastHTML's starter and docs set up no translations, so the heading is a plain Python string and there is no message key to misspell.\n",
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m16-css-class",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m17-input-type-code",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"str\" cannot be assigned to parameter \"count\" of type \"int\" in function \"Card\"\n\u00a0\u00a0\"str\" is not assignable to \"int\""
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m18-payload-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 400 (Bad Request)",
+        "error: Response Status Error Code 400 from /save",
+        "error: 400 http://127.0.0.1:<port>/save"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m19-client-expression-syntax",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Unexpected end of input"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m20-component-script-syntax",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Unexpected token ';'",
+        "error: pageerror: toggleDetails is not defined",
+        "error: pageerror: Unexpected token ';'"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m21-directive-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m22-unclosed-tag",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright \"(\" was not closed",
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright Statements must be separated by newlines or semicolons",
+        "interaction: the development server did not answer",
+        "the development server did not answer"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m23-expression-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportOperatorIssue Operator \"+\" not supported for types \"str\" and \"Literal[1]\"",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m24-undeclared-event",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m01-component-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Hydration completed but contains mismatches.",
+        "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
+        "warning: %cssr:warn%c [Vue warn]: Failed to resolve component: Crad\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n     ...",
+        "warning: %cssr:warn%c [Vue warn]: Non-function value encountered for default slot. Prefer function slots for better performance. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Anonymous>\nat <App>\nat <NuxtRoot>"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m02-input-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2345 Argument of type '{ key: string; titel: string; count: number; onHide: any; }' is not assignable to parameter of type '{ readonly title: string; readonly count: number; readonly onHide?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & ComponentCu...",
+        "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
+        "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
+        "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
+        "warning: [Vue warn]: Missing required prop: \"title\" \n  at <Card key=\"Alpha\" titel=\"Alpha\" count=3  ... > \n  at <App key=4 > \n  at <NuxtRoot>",
+        "warning: [Vue warn]: Missing required prop: \"title\" \n  at <Card key=\"Beta\" titel=\"Beta\" count=5  ... > \n  at <App key=4 > \n  at <NuxtRoot>"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m03-input-type-literal",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2322 Type 'string' is not assignable to type 'number'.",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat...",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat...",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat...",
+        "warning: [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n  at <Card key=\"Alpha\" title=\"Alpha\" count=\"card.count\"  ... > \n  at <App key=4 > \n  at <NuxtRoot>",
+        "warning: [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n  at <Card key=\"Beta\" title=\"Beta\" count=\"card.count\"  ... > \n  at <App key=4 > \n  at <NuxtRoot>"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m04-missing-required-input",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2345 Argument of type '{ key: string; count: number; onHide: any; }' is not assignable to parameter of type '{ readonly title: string; readonly count: number; readonly onHide?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & ComponentCustomProps & Rec...",
+        "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
+        "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
+        "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
+        "warning: [Vue warn]: Missing required prop: \"title\" \n  at <Card key=\"Alpha\" count=3 onHide=fn<onHide> > \n  at <App key=4 > \n  at <NuxtRoot>",
+        "warning: [Vue warn]: Missing required prop: \"title\" \n  at <Card key=\"Beta\" count=5 onHide=fn<onHide> > \n  at <App key=4 > \n  at <NuxtRoot>"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m05-slot-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m06-server-handler-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E\u00b0",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS18046 'result' is of type 'unknown'."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m07-undefined-variable",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2339 Property 'bord' does not exist on type 'ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string, ComponentProvideOptions>, ... 4 more ..., any>'.",
+        "warning: %cssr:warn%c [Vue warn]: Property \"bord\" was accessed during render but is not defined on instance. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <App>\nat <NuxtRoot>",
+        "warning: [Vue warn]: Property \"bord\" was accessed during render but is not defined on instance. \n  at <App key=4 > \n  at <NuxtRoot>",
+        "warning: [Vue warn]: Property \"bord\" was accessed during render but is not defined on instance. \n  at <App key=4 > \n  at <NuxtRoot>",
+        "warning: [Vue warn]: Property \"bord\" was accessed during render but is not defined on instance. \n  at <App key=4 > \n  at <NuxtRoot>",
+        "warning: [Vue warn]: Property \"bord\" was accessed during render but is not defined on instance. \n  at <App key=4 > \n  at <NuxtRoot>"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m08-attribute-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2339 Property 'nmae' does not exist on type '{ name: string; }'."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m09-attribute-value",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2820 Type '\"sumbit\"' is not assignable to type '\"button\" | \"submit\" | \"reset\" | undefined'. Did you mean '\"submit\"'?"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m10-attribute-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m11-element-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Hydration completed but contains mismatches.",
+        "error: Hydration completed but contains mismatches.",
+        "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
+        "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
+        "warning: %cssr:warn%c [Vue warn]: Failed to resolve component: dvi\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      ..."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m12-server-only-value",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Hydration completed but contains mismatches.",
+        "error: Hydration completed but contains mismatches.",
+        "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
+        "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
+        "warning: [NUXT_E1003] Could not access `secretToken`. The only available runtime config keys on the client side are `public` and `app`.\n\u2570\u25b6 fix: Move `secretToken` under `runtimeConfig.public` in `nuxt.config` to make it available on the client side."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m13-state-field-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?",
+        "vue-tsc (Vue - Official): TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m14-hydration-mismatch",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Hydration completed but contains mismatches.",
+        "error: Hydration completed but contains mismatches.",
+        "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
+        "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
+        "warning: [Vue warn]: Hydration text content mismatch on JSHandle@node \n  - rendered on server: Loading details\n  - expected on client: Details \n  at <App key=4 > \n  at <NuxtRoot>"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m15-i18n-key",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The minimal starter that `npm create nuxt@latest` sets up has no translations. Its only dependencies are nuxt, vue and vue-router. Translations need the @nuxtjs/i18n module, which the starter's module prompt does not select by default. The heading is plain text, so there is no message key to misspell.",
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m16-css-class",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m17-input-type-code",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E\u00b0",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2322 Type 'string' is not assignable to type 'number'.",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 3, got String with value \"3\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <...",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 5, got String with value \"5\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <...",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 8, got String with value \"8\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <...",
+        "warning: [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 3, got String with value \"3\". \n  at <Card key=\"Alpha\" title=\"Alpha\" count=\"3\"  ... > \n  at <App key=4 > \n  at <NuxtRoot>",
+        "warning: [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 5, got String with value \"5\". \n  at <Card key=\"Beta\" title=\"Beta\" count=\"5\"  ... > \n  at <App key=4 > \n  at <NuxtRoot>"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m18-payload-field",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m19-client-expression-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-parsing-error Parsing error: Unexpected end of expression.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:<port>/",
+        "error: \u001b[31m\u2139 Error: /app.vue \u2014 Error parsing JavaScript expression: Unexpected token (1:8)\u001b[39m"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m20-component-script-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS1005 ';' expected.",
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): eslint Parsing error: ';' expected.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:<port>/",
+        "error: \u001b[31m\u2139 Error: /app.vue \u2014 Missing semicolon. (22:26)\u001b[39m"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m21-directive-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "warning: An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.",
+        "warning: WARN  [Vue warn]: Failed to resolve directive: iff at <App>"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m22-unclosed-tag",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Vue compiler diagnostics (Vue - Official): vue-compiler-dom-errors/24 Element is missing end tag.",
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/html-end-tags '<footer>' should have end tag.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:<port>/",
+        "error: \u001b[31m\u2139 Error: /components/Card.vue \u2014 Element is missing end tag.\u001b[39m"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m23-expression-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m24-undeclared-event",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2345 Argument of type '\"hdie\"' is not assignable to parameter of type '\"hide\"'.",
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/require-explicit-emits The \"hdie\" event has been triggered but not declared on `defineEmits`.",
+        "warning: [Vue warn]: Component emitted event \"hdie\" but it is neither declared in the emits option nor as an \"onHdie\" prop.",
+        "warning:  WARN  [console.warn] [Vue warn]: Component emitted event \"hdie\" but it is neither declared in the emits option nor as an \"onHdie\" prop."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m01-component-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2304 Cannot find name 'Crad'.",
+        "eslint (npm run lint): react/jsx-no-undef 'Crad' is not defined.",
+        "next build: TS2304 Cannot find name 'Crad'.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: Crad is not defined",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: \u2a2f ReferenceError: Crad is not defined"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m02-input-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ key: string; titel: string; count: number; footer: Element; onHide: () => void; }' is not assignable to type 'IntrinsicAttributes & CardProps'.",
+        "next build: TS2322 Type '{ key: string; titel: string; count: number; footer: Element; onHide: () => void; }' is not assignable to type 'IntrinsicAttributes & CardProps'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m03-input-type-literal",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type 'string' is not assignable to type 'number'.",
+        "next build: TS2322 Type 'string' is not assignable to type 'number'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m04-missing-required-input",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2741 Property 'title' is missing in type '{ key: string; count: number; footer: Element; onHide: () => void; }' but required in type 'CardProps'.",
+        "next build: TS2741 Property 'title' is missing in type '{ key: string; count: number; footer: Element; onHide: () => void; }' but required in type 'CardProps'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m05-slot-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ key: string; title: string; count: number; fotter: Element; onHide: () => void; }' is not assignable to type 'IntrinsicAttributes & CardProps'.",
+        "next build: TS2322 Type '{ key: string; title: string; count: number; fotter: Element; onHide: () => void; }' is not assignable to type 'IntrinsicAttributes & CardProps'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m06-server-handler-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name 'sav'. Did you mean 'save'?",
+        "next build: TS2552 Cannot find name 'sav'. Did you mean 'save'?",
+        "error: pageerror: sav is not defined",
+        "error: [browser] \u2a2f unhandledRejection: ReferenceError: sav is not defined"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m07-undefined-variable",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name 'ownr'. Did you mean 'owner'?",
+        "next build: TS2552 Cannot find name 'ownr'. Did you mean 'owner'?",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: ownr is not defined",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: \u2a2f ReferenceError: ownr is not defined"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m08-attribute-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2339 Property 'nmae' does not exist on type 'Owner'.",
+        "next build: TS2339 Property 'nmae' does not exist on type 'Owner'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m09-attribute-value",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2820 Type '\"sumbit\"' is not assignable to type '\"button\" | \"submit\" | \"reset\" | undefined'. Did you mean '\"submit\"'?",
+        "next build: TS2820 Type '\"sumbit\"' is not assignable to type '\"button\" | \"submit\" | \"reset\" | undefined'. Did you mean '\"submit\"'?"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m10-attribute-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ children: Element[]; className: string; titel: string; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.",
+        "next build: TS2322 Type '{ children: Element[]; className: string; titel: string; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m11-element-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2339 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'.",
+        "next build: TS2339 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m12-server-only-value",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
+        "error: pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
+        "error: [browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:",
+        "error: [browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m13-state-field-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?",
+        "next build: TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m14-hydration-mismatch",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
+        "error: pageerror: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
+        "error: [browser] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:",
+        "error: [browser] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m15-i18n-key",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "create-next-app installs no translation library and the App Router has no built-in translation API, so the page has no message keys to misspell. The heading is plain JSX text. The dictionary approach in the Next.js internationalization guide is an opt-in the starter does not include.",
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m16-css-class",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m17-input-type-code",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ count: string; title: string; }[]' is not assignable to type 'Project[]'.",
+        "next build: TS2322 Type '{ count: string; title: string; }[]' is not assignable to type 'Project[]'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m18-payload-field",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2561 Object literal may only specify known properties, but 'amont' does not exist in type '{ amount: number; }'. Did you mean to write 'amount'?",
+        "next build: TS2561 Object literal may only specify known properties, but 'amont' does not exist in type '{ amount: number; }'. Did you mean to write 'amount'?"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m19-client-expression-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS1109 Expression expected.",
+        "eslint (npm run lint): eslint Parsing error: Expression expected.",
+        "next build: build Error: Expected '</', got '}'",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nPars...",
+        "error: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nParsing ecmascr...",
+        "error: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nParsing ecmascr..."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m20-component-script-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS1005 ')' expected.",
+        "eslint (npm run lint): eslint Parsing error: ')' expected.",
+        "next build: build Error: Expected ',', got ';'",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |...",
+        "error: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |   async fu...",
+        "error: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |   async fu..."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m21-directive-name",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "React has no template directives. The details text is shown with a plain JavaScript expression, `{open && <p>...</p>}`, so there is no directive name to misspell; misspelling `open` there is the undefined-variable mistake (m07) and a broken `&&` is m19.",
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m22-unclosed-tag",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E\u00b0",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS17008 JSX element 'div' has no corresponding closing tag.",
+        "tsc --noEmit (VS Code TypeScript): TS1381 Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "tsc --noEmit (VS Code TypeScript): TS1005 '</' expected.",
+        "eslint (npm run lint): eslint Parsing error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "next build: build Error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.t...",
+        "error: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.tsx [Client ...",
+        "error: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.tsx [Client ..."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m23-expression-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m24-undeclared-event",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name 'onHdie'. Did you mean 'onHide'?",
+        "next build: TS2552 Cannot find name 'onHdie'. Did you mean 'onHide'?",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: onHdie is not defined",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: \u2a2f ReferenceError: onHdie is not defined"
+      ]
+    }
+  ]
+}

@@ -2581,8 +2581,10 @@ body.djc-drawer-open .djc-drawer-overlay {
   background: color-mix(in oklab, var(--c-fg) 14%, transparent);
 }
 
-/* The dashed line at the first row's total lets a reader see which bars end
-   before it (faster) and which end after it (slower). */
+/* The dashed line marks a reference value on the bar track: the first
+   row's total in the speed chart, so a reader sees which bars end before
+   it (faster) and after it (slower), and the first framework's static
+   count in the error chart. */
 .bench-chart__reference {
   position: absolute;
   /* Starts just under its label, which sits in the plot's top padding. */
@@ -2712,4 +2714,73 @@ body.djc-drawer-open .djc-drawer-overlay {
   .bench-chart__tick:nth-child(even) {
     visibility: hidden;
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Error benchmark (<c-error-benchmark-chart />, <c-error-benchmark-table />) */
+/* ------------------------------------------------------------------ */
+/* The error chart reuses the bench-chart rules above. Its bars are short
+   counts, so it needs no axis; the total column holds a two-digit count.
+   These rules come after the phone rules above so they win at every
+   width. */
+.bench-chart--counts {
+  --bench-axis: 0.25rem;
+  --bench-total: 1.5rem;
+}
+
+/* The code meanings are sentences, which read better one per line than
+   wrapped side by side like the chart's short legend labels. */
+.prose .error-bench-table__codes {
+  flex-direction: column;
+}
+
+.prose .error-bench-table__codes code {
+  font-weight: 700;
+}
+
+.prose .error-bench-table__heading th {
+  padding-top: 0.75rem;
+  text-align: left;
+}
+
+/* The (caught/total) counts are a summary of the rows below, so they stay
+   in the regular weight and a muted color. */
+.prose .error-bench-table__heading td,
+.prose .error-bench-table__counts td {
+  padding-top: 0.75rem;
+  color: var(--c-fg-muted);
+  font-weight: 400;
+  text-align: center;
+}
+
+/* The mistake names stay in place while the framework columns scroll
+   sideways, so a reader on a narrow screen always sees which row a cell
+   belongs to. A sticky cell needs a solid background to hide the cells
+   sliding under it, and the inset shadow redraws its right border, which
+   the collapsed table border would otherwise leave behind. */
+.prose .error-bench-table tr > :first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--c-surface-2);
+  box-shadow: inset -1px 0 0 var(--c-border);
+}
+
+/* On a phone the names wrap in a narrower column, so part of the
+   framework columns stays in view beside them. */
+@media (max-width: 640px) {
+  .prose .error-bench-table tr > :first-child {
+    min-width: 8rem;
+    max-width: 10rem;
+  }
+}
+
+/* Each cell is tinted with its outcome's chart colour, mixed with the
+   page background so the text stays readable in both themes. A cell
+   without an outcome colour mixes with nothing and stays plain. */
+.prose .bench-chart__table-wrap .error-bench-table__cell {
+  background: color-mix(in oklab, var(--error-bench-tint, transparent) 35%, transparent);
+  font-variant-numeric: normal;
+  text-align: center;
+  white-space: nowrap;
 }

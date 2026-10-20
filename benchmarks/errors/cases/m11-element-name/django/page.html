@@ -1,0 +1,48 @@
+{% load i18n static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Board</title>
+  <link rel="stylesheet" href="{% static 'board/board.css' %}">
+  <script src="{% static 'board/htmx.min.js' %}" defer></script>
+  <script src="{% static 'board/board.js' %}" defer></script>
+  <script src="{% static 'board/alpine.min.js' %}" defer></script>
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  {{ api_base|json_script:"api-base" }}
+  <dvi class="board" title="Board" x-data="board">
+    <h1>{% translate "Projects" %}</h1>
+    <p>Owner: {{ owner.name }}</p>
+    <p>API: <span x-text="api"></span></p>
+
+    {% for card in cards %}
+      <div x-data="{ shown: true }" x-show="shown" @hide="shown = false">
+        {% include "board/project_card.html" with title=card.title count=card.count %}
+      </div>
+    {% endfor %}
+
+    <p>
+      {% partialdef saved inline %}
+        <span id="saved">Saved: {{ count }}</span>
+      {% endpartialdef %}
+      <button
+        type="button"
+        hx-post="{% url 'save' %}"
+        hx-vals='{"amount": 1}'
+        hx-target="#saved"
+        hx-swap="outerHTML"
+      >
+        Add
+      </button>
+    </p>
+
+    <button type="button" @click="toggle">Details</button>
+    <p x-show="open">Details are visible</p>
+
+    <form role="search">
+      <button type="submit">Search</button>
+    </form>
+  </dvi>
+</body>
+</html>

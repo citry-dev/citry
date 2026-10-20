@@ -11,6 +11,11 @@ finishes the same server actions in Citry and thirteen other framework setups,
 plus a client-rendered Nuxt control, with each application installed in its
 own environment.
 
+The [error-prevention suite](errors/README.md) in `errors/` writes the same
+developer mistakes in Citry and other frameworks, and records how early each
+framework reports them: in the editor, from a check or build, at runtime, or
+not at all.
+
 Citry's graph-first browser workload has a separate runner because browser
 startup, fragment adoption, morph, heap, and client payloads are not comparable
 to server render time. Run it with:
@@ -284,6 +289,7 @@ benchmarks/
     utils.py     marker slicing shared by runners
     results/     the compact report of the 2026-09-10 rendering results
     web/         the framework interaction suite (see web/README.md)
+    errors/      the error-prevention suite (see errors/README.md)
 ```
 
 Still ahead: asv adoption (per-commit tracking, dashboards, memory

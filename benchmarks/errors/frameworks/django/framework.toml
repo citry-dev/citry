@@ -1,0 +1,110 @@
+key = "django"
+name = "Django + HTMX + Alpine"
+notes = """
+The app is what `django-admin startproject mysite` and `manage.py startapp board` \
+make with Django 6.1.1, without the board app's unused admin.py, models.py, \
+tests.py and migrations folder. The generated settings are unchanged \
+(DEBUG=True, default logging, no string_if_invalid) apart from adding the board \
+app, API_BASE and SECRET_TOKEN. HTMX 2.0.10 and Alpine 3.17.2 are served as \
+local static files (board/static/board/sources.json records where they came \
+from).
+
+The card is a template that the page pulls in with `{% include %}`. An include \
+cannot take markup from the page that includes it, so board/project_card.html \
+extends the reusable board/card.html and fills its `{% block footer %}` with \
+the link. The page includes project_card.html once per card. The heading uses \
+Django's built-in `{% translate %}` with the English text as the message id, \
+which is how Django's docs and gettext name messages. The page has no message \
+catalog, so no .po or .mo file is needed.
+
+The save view reads the count, adds the amount and stores it, then renders the \
+total it computed, as the MDN Django tutorial's session counter does. A typo in \
+the stored field name therefore shows only after a reload, which the runner \
+does after its clicks.
+
+editor: Django's docs recommend no editor. The editor here is VS Code, which is \
+free and widely used. The popular Django extension for VS Code \
+(`batisteo.vscode-django`) adds highlighting and snippets but no diagnostics, so \
+the diagnostics come from two parts of VS Code in their default settings:
+- Pylance with type checking turned on, measured with pyright 1.1.414 in \
+typeCheckingMode "standard" (Pylance's own default is "off"). Pylance checks \
+only open files by default, while the command line checks every file; with \
+one case per run this can only add findings.
+- VS Code's built-in JavaScript support, which reports syntax errors in plain \
+.js files. It is measured with tsc from TypeScript 6.0.3 (the version VS Code \
+ships) with --allowJs and no checkJs, on the one hand-written script \
+board/static/board/board.js.
+pyright and TypeScript are measurement-only dev dependencies. In the editor, \
+nothing checks the templates, the HTMX attributes, or the Alpine expressions \
+inside them. \
+PyCharm Professional (paid) would also report unknown `{% include %}` template \
+names and `{% url %}` names; it is not measured.
+
+check: `python manage.py check`, which the Django tutorial tells developers to \
+run, plus the two linters most Django projects add (startproject installs \
+none): ruff with its default rules for the Python files, and djLint with its \
+Django profile for the templates. A linter finding fails its command, so it \
+counts as an error. There is no build stage.
+
+runtime: `manage.py migrate`, because sessions are stored in the database and \
+need their table (the Django tutorial runs it too), then `manage.py runserver \
+--noreload`, so the runner stops a single process.
+"""
+
+[setup]
+manifests = [".python-version", "pyproject.toml", "uv.lock", "package.json", "package-lock.json"]
+command = ["sh", "-c", "uv sync --frozen && npm ci --no-audit --no-fund"]
+
+[[stages]]
+stage = "editor"
+label = "Pylance, type checking on (pyright 1.1.414, standard)"
+argv = ["{venv}/bin/pyright", "--outputjson", "--pythonpath", "{venv}/bin/python"]
+parser = "pyright-json"
+timeout = 300
+env = { PYRIGHT_PYTHON_IGNORE_WARNINGS = "1" }
+
+[[stages]]
+stage = "editor"
+label = "VS Code JavaScript syntax check (tsc 6.0.3 --allowJs)"
+argv = ["{env}/node_modules/.bin/tsc", "--allowJs", "--noEmit", "--pretty", "false", "board/static/board/board.js"]
+parser = "tsc"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "manage.py check"
+argv = ["{venv}/bin/python", "manage.py", "check"]
+parser = "exit"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "ruff 0.15.5 (default rules)"
+# --isolated: a real project's ruff reads only its own settings, not those of
+# a repository it happens to sit in.
+argv = ["{venv}/bin/ruff", "check", "--isolated", "--no-respect-gitignore", "--output-format", "json", "."]
+parser = "ruff-json"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "djLint 1.46.6 (--lint, django profile)"
+argv = ["{venv}/bin/djlint", "board/templates", "--lint", "--profile=django"]
+parser = "djlint"
+timeout = 300
+
+[runtime]
+argv = [
+  "sh", "-c",
+  "{venv}/bin/python manage.py migrate --noinput -v 0 && exec {venv}/bin/python manage.py runserver 127.0.0.1:{port} --noreload",
+]
+page_path = "/"
+ready_timeout = 180
+env = { PYTHONUNBUFFERED = "1" }
+steps = [
+  { action = "click", selector = "button:has-text('Add')" },
+  { action = "wait", ms = 500 },
+  { action = "click", selector = "button:has-text('Details')" },
+  { action = "wait", ms = 300 },
+  { action = "click", selector = "button:has-text('Hide')" },
+]

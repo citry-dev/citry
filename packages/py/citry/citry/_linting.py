@@ -162,6 +162,13 @@ class VueVariableInfo:
         )
 
 
+# TemplateLintInfo fields that a record may leave out. They were added after
+# the record's first release, and the app worker can import a different
+# citry than the language server, for example when the project's environment
+# file puts another copy on PYTHONPATH.
+_OPTIONAL_LINT_INFO_FIELDS = frozenset({"rule_misspelled_directive"})
+
+
 @dataclass(frozen=True, slots=True)
 class TemplateLintInfo:
     """Carry one component's effective lint rule and known global variables."""
@@ -178,8 +185,9 @@ class TemplateLintInfo:
     rule_vue_python_variable: LintSeverity = "warning"
     rule_alpine_attribute: LintSeverity = "warning"
     rule_alpine_cloak: LintSeverity = "error"
-    rule_invalid_attribute_value: LintSeverity = "warning"
+    rule_invalid_attribute_value: LintSeverity = "error"
     rule_i18n_cross_language_fallback: LintSeverity = "warning"
+    rule_misspelled_directive: LintSeverity = "error"
 
     def __post_init__(self) -> None:
         if (
@@ -242,6 +250,9 @@ class TemplateLintInfo:
         ):
             msg = f"Unknown attribute-value lint severity: {self.rule_invalid_attribute_value!r}"
             raise ValueError(msg)
+        if type(self.rule_misspelled_directive) is not str or self.rule_misspelled_directive not in _RULE_SEVERITIES:
+            msg = f"Unknown misspelled-directive lint severity: {self.rule_misspelled_directive!r}"
+            raise ValueError(msg)
         if (
             type(self.rule_i18n_cross_language_fallback) is not str
             or self.rule_i18n_cross_language_fallback not in _RULE_SEVERITIES
@@ -278,12 +289,16 @@ class TemplateLintInfo:
             "rule_alpine_cloak": self.rule_alpine_cloak,
             "rule_invalid_attribute_value": self.rule_invalid_attribute_value,
             "rule_i18n_cross_language_fallback": self.rule_i18n_cross_language_fallback,
+            "rule_misspelled_directive": self.rule_misspelled_directive,
         }
 
     @classmethod
     def from_dict(cls, value: object) -> TemplateLintInfo:
         """Validate and restore one detached lint record."""
-        if type(value) is not dict or set(value) != {
+        # A record from an older citry has no field added later, so that
+        # field gets its default; every other field must be present, and no
+        # unknown field is accepted.
+        if type(value) is not dict or set(value) - _OPTIONAL_LINT_INFO_FIELDS != {
             "rule_unknown_template_variable",
             "template_variables",
             "rule_i18n_missing_param_type",
@@ -328,6 +343,8 @@ class TemplateLintInfo:
             rule_alpine_cloak=value["rule_alpine_cloak"],  # type: ignore[arg-type]
             rule_invalid_attribute_value=value["rule_invalid_attribute_value"],  # type: ignore[arg-type]
             rule_i18n_cross_language_fallback=value["rule_i18n_cross_language_fallback"],  # type: ignore[arg-type]
+            # A missing optional rule takes the field's own default.
+            **{name: value[name] for name in _OPTIONAL_LINT_INFO_FIELDS if name in value},  # type: ignore[arg-type]
         )
 
 
@@ -351,6 +368,7 @@ class _ComponentLintOverrides:
     rule_alpine_cloak: LintSeverity | None = None
     rule_invalid_attribute_value: LintSeverity | None = None
     rule_i18n_cross_language_fallback: LintSeverity | None = None
+    rule_misspelled_directive: LintSeverity | None = None
     # Read by the render-time input type check, not by template analysis,
     # so it never reaches TemplateLintInfo.
     check_input_types: bool | None = None
@@ -387,6 +405,7 @@ def _application_lint_info(citry: Citry) -> TemplateLintInfo:
         rule_alpine_cloak=citry.settings.lint.rule_alpine_cloak,
         rule_invalid_attribute_value=citry.settings.lint.rule_invalid_attribute_value,
         rule_i18n_cross_language_fallback=citry.settings.lint.rule_i18n_cross_language_fallback,
+        rule_misspelled_directive=citry.settings.lint.rule_misspelled_directive,
     )
 
 
@@ -469,6 +488,11 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
             if overrides.rule_i18n_cross_language_fallback is not None
             else application.rule_i18n_cross_language_fallback
         ),
+        rule_misspelled_directive=(
+            overrides.rule_misspelled_directive
+            if overrides.rule_misspelled_directive is not None
+            else application.rule_misspelled_directive
+        ),
     )
 
 
@@ -499,6 +523,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
     alpine_cloak_rule: LintSeverity | None = None
     attribute_value_rule: LintSeverity | None = None
     cross_language_fallback_rule: LintSeverity | None = None
+    misspelled_directive_rule: LintSeverity | None = None
     check_input_types: bool | None = None
     component_js_globals: dict[str, object] = {}
     component_js_global_owners: dict[str, type] = {}
@@ -526,6 +551,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             "rule_alpine_attribute",
             "rule_alpine_cloak",
             "rule_invalid_attribute_value",
+            "rule_misspelled_directive",
             "rule_i18n_cross_language_fallback",
             "check_input_types",
         }
@@ -628,6 +654,15 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
                 )
                 raise ValueError(msg)
             cross_language_fallback_rule = cast("LintSeverity", candidate_rule)
+        if "rule_misspelled_directive" in public_values:
+            candidate_rule = public_values["rule_misspelled_directive"]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = (
+                    f"Component {component_class.__name__}.Lint.rule_misspelled_directive "
+                    "must be 'ignore', 'warning', or 'error'"
+                )
+                raise ValueError(msg)
+            misspelled_directive_rule = cast("LintSeverity", candidate_rule)
         if "check_input_types" in public_values:
             candidate_check = public_values["check_input_types"]
             # Every render reads this flag, so a truthy string such as "no"
@@ -688,6 +723,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         alpine_cloak_rule,
         attribute_value_rule,
         cross_language_fallback_rule,
+        misspelled_directive_rule,
         check_input_types,
     )
 

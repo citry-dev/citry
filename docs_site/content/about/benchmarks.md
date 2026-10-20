@@ -1,9 +1,16 @@
 ---
 title: Benchmarks
-description: How long a page with 1,400 rendered entries takes to become usable in Citry and eleven other frameworks.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and five others report the same 24 developer mistakes.
 ---
 
 # Benchmarks
+
+- [Performance](#performance): how long a page with 1,400 entries
+  takes to become usable.
+- [Catching errors](#catching-errors): how early each framework
+  reports the same 24 developer mistakes.
+
+## Performance
 
 These charts show how long a page with 1,400 rendered entries takes to
 become usable in Citry and eleven other frameworks. Shorter bars are
@@ -19,7 +26,7 @@ faster.
   title="Second load: time until usable, 1,400 entries"
 />
 
-## What the charts show
+### What the charts show
 
 - Every framework serves the same project page with 1,400 entries:
   repeated blocks of content, each with its own data.
@@ -37,7 +44,7 @@ faster.
   [Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
   an experimental Rust version of Django's template engine.
 
-## Where Citry stands
+### Where Citry stands
 
 - First load: Citry takes 400 ms. Nuxt, Rusty + HTMX + Alpine, and
   Jinja + HTMX + Alpine are about 100 ms faster. Django + HTMX + Alpine,
@@ -50,7 +57,7 @@ faster.
 - Citry spends more time on the server than most frameworks here, and,
   with Nuxt, the least time in the browser.
 
-## How we measured { #how-the-numbers-were-taken }
+### How we measured { #how-the-numbers-were-taken }
 
 Measured on 2026-10-19 with Citry 0.6.0 and citry-core 1.8.0 from PyPI,
 using Citry's Vue runtime and
@@ -61,9 +68,106 @@ its own server time, so the work it covers can differ a little. Each bar
 is a single measurement, so treat a gap of a few tens of milliseconds as
 noise.
 
+## Catching errors
+
+The earlier a mistake is reported, the less time it costs you.
+
+We wrote the same small app in Citry and five other frameworks, made
+the same 24 mistakes in each (a misspelled component name, a
+wrong-typed input, an unclosed tag, and so on), and recorded **where
+each mistake was first reported**.
+
+<c-error-benchmark-chart
+  title="How the 24 mistakes ended in each framework"
+/>
+
+### Read the error chart { #errors-what-the-chart-shows }
+
+- **Static/IDE error** (best): the editor, a command-line check, or
+  the production build, before the app runs.
+- **Static/IDE warning**: the same, but only a warning. Easy to miss.
+- **Runtime error**: only once the app runs, from the server, an error
+  response, or the browser.
+- **Runtime warning**: the running app only prints a warning.
+- **N/A or prevented**: no equivalent in this framework, or its
+  design prevents the mistake.
+- **Missed** (worst): nothing reports it, whether or not the page
+  looks different.
+- **Number on the right**: static/IDE errors plus warnings.
+- **Dashed line**: Citry's number.
+
+### Where Citry stands { #errors-where-citry-stands }
+
+- **Before the app runs: 17 of 24** (16 errors, 1 warning). Next.js
+  18, Nuxt 13, FastHTML 11, Django + HTMX + Alpine 3, Jinja + HTMX +
+  Alpine 2.
+- **Missed: 4**, the page is wrong with no message:
+    - a misspelled HTML element, HTML attribute name, or CSS class
+    - a misspelled field in the data a button sends to the server
+- **Warning only: 1**, an invalid attribute value such as
+  `type="sumbit"`.
+- **Only at runtime: 3**:
+    - a misspelled template directive: fails in the browser
+    - the server and browser render different content: fails in the
+      browser
+    - a syntax error in a browser expression: the server fails to render
+      the page
+- **Needs `template_data()`**: 3 of these reports (a wrong-typed
+  input in markup, a misspelled attribute on a template object, a
+  wrong-typed operation in a template expression) appear only when the
+  component defines it. Without it they go unreported; this is a Citry
+  bug ([#202](https://github.com/citry-dev/citry/issues/202)). The
+  starter's components define it; components written from
+  [Getting Started](/getting-started/installation/) often don't.
+- **Similar mistakes can go unreported.** Three cases are written
+  where a Citry check exists; a similar mistake isn't checked:
+    - a misspelled event name in the parent's listener (the child's
+      misspelled emit is caught)
+    - a misspelled server-side `c-if` (the case misspells a Vue
+      directive)
+    - a server-only value sent to the browser through `js_data()`
+      (reading it in browser code is caught). In the Next.js and Nuxt
+      versions of this case, the server-only value does reach the page.
+- **Why Next.js leads**: TypeScript checks its HTML elements, attribute
+  names and values, and its server actions take typed arguments.
+
+### How we measured { #errors-how-we-measured }
+
+- **When**: 2026-10-20, Citry 0.6.0 and citry-core 1.8.0 from PyPI.
+  Every framework's versions are pinned in its app's lockfile.
+- **Citry**: the editor extension's language server (measured with
+  `citry check --types`) and `citry check`.
+- **Every Python stack** (Citry, Django, Jinja, FastHTML): Pylance
+  with type checking on (measured with pyright in standard mode), and
+  ruff with its default rules.
+- **Django and Jinja**: djLint with the Django or Jinja profile,
+  `manage.py check` for Django, and VS Code's JavaScript syntax check
+  for Django's one script file.
+- **Next.js and Nuxt**: the editor's TypeScript checks (tsc for
+  Next.js; vue-tsc and the Vue compiler's errors for Nuxt), ESLint, and
+  the production build.
+- **The running app**: each framework's server, started as its docs
+  say, driven in Chromium through the same clicks. Server errors, error
+  responses, and browser errors and warnings are recorded.
+- **Setup**: the project layout from each framework's docs or starter,
+  with default settings unless the
+  [benchmark notes](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)
+  say otherwise.
+
+### Every mistake
+
+Each cell is a short code for where the mistake was first reported.
+Cells in the five outcomes are tinted with their chart color. On a computer, hover over a cell to see
+what the tools printed, or why the mistake doesn't apply.
+
+<c-error-benchmark-table />
+
 ## Related pages
 
 - [Performance overview](/performance/) compares the ways to make
   rendering faster.
 - [Simple components](/performance/simple-components/) explains how to
   render repeated components with less overhead.
+- The [error benchmark source](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)
+  has every mistake, every framework's app, and the notes on how each
+  tool was set up.

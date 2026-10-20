@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from citry_lsp.engine import DocumentState
 from citry_lsp.semantic import infer_js_data_value_types, semantic_diagnostics
-from citry_lsp.type_analysis import TyAnalyzer, TyUnavailableError
+from citry_lsp.type_analysis import TyAnalyzer, TyUnavailableError, is_project_source_file
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
@@ -40,7 +40,8 @@ def project_documents(project: ProjectState, workspace: Path) -> dict[str, Docum
     Read every authored file in `workspace` that holds a component's template or JavaScript.
 
     Components installed from another package are skipped, because their
-    authors check them. Each file is read from disk and prepared the way the
+    authors check them; that includes a package in a virtual environment
+    inside `workspace`. Each file is read from disk and prepared the way the
     editor prepares an open file.
     """
     catalog = project.catalog
@@ -56,7 +57,7 @@ def project_documents(project: ProjectState, workspace: Path) -> dict[str, Docum
                 languages.setdefault(asset.resolved_path.resolve(), language)
     documents: dict[str, DocumentState] = {}
     for path, language in sorted(languages.items()):
-        if not path.is_relative_to(workspace):
+        if not is_project_source_file(path, workspace):
             continue
         try:
             raw = path.read_bytes()

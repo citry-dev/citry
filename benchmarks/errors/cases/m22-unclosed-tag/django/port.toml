@@ -1,0 +1,4 @@
+status = "ported"
+files = { "board/templates/board/card.html" = "card.html" }
+mistake = { file = "board/templates/board/card.html", contains = 'class="card-footer"' }
+

@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "Starlette's docs cover no translations, and its Jinja2Templates creates a Jinja Environment with no extensions. Jinja's i18n extension works only after the developer adds it and installs gettext translations, which this stack's standard setup does not do, so the heading is literal text and there is no message key to misspell."

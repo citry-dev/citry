@@ -1,9 +1,9 @@
 """
-Valid values of enumerated HTML attributes. Generated; do not edit.
+HTML attribute names and the valid values of enumerated HTML attributes. Generated; do not edit.
 
 Run python scripts/generate_html_attribute_values.py to refresh it.
 Source: https://html.spec.whatwg.org/multipage/indices.html
-WHATWG HTML Standard, Last Updated 29 September 2026; retrieved 2026-10-01.
+WHATWG HTML Standard, Last Updated 20 October 2026; retrieved 2026-10-20.
 """
 
 # ruff: noqa: E501, Q000
@@ -152,7 +152,7 @@ ENUMERATED_VALUES: Final[dict[str, dict[str, tuple[str, ...]]]] = {'accept-chars
           'li': ('1', 'a', 'A', 'i', 'I', 'none', 'disc', 'circle', 'square'),
           'ol': ('1', 'a', 'A', 'i', 'I'),
           'ul': ('none', 'disc', 'circle', 'square')},
- 'wrap': {'textarea': ('soft', 'hard')},
+ 'wrap': {'textarea': ('soft', 'hard', 'off')},
  'writingsuggestions': {'*': ('true', 'false', '')}}
 
 # (element, attribute) -> the keywords that compare with letter case.
@@ -164,3 +164,89 @@ NAVIGABLE_TARGET_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'formtarget': 
 
 # Elements whose `name` may not start with "_" at all.
 FRAME_NAME_ELEMENTS: Final[tuple[str, ...]] = ('iframe', 'object')
+
+# Attribute names every HTML element accepts, including event handlers.
+# `data-*` and `aria-*` names are open families, not listed here.
+GLOBAL_ATTRIBUTES: Final[frozenset[str]] = frozenset(('accesskey', 'autocapitalize', 'autocorrect', 'autofocus', 'class', 'contenteditable', 'dir', 'draggable',
+ 'enterkeyhint', 'headingoffset', 'headingreset', 'hidden', 'id', 'inert', 'inputmode', 'is', 'itemid',
+ 'itemprop', 'itemref', 'itemscope', 'itemtype', 'lang', 'nonce', 'onauxclick', 'onbeforeinput',
+ 'onbeforematch', 'onbeforetoggle', 'onblur', 'oncancel', 'oncanplay', 'oncanplaythrough', 'onchange',
+ 'onclick', 'onclose', 'oncommand', 'oncontextlost', 'oncontextmenu', 'oncontextrestored', 'oncopy',
+ 'oncuechange', 'oncut', 'ondblclick', 'ondrag', 'ondragend', 'ondragenter', 'ondragleave', 'ondragover',
+ 'ondragstart', 'ondrop', 'ondurationchange', 'onemptied', 'onended', 'onerror', 'onfocus', 'onformdata',
+ 'oninput', 'oninvalid', 'onkeydown', 'onkeypress', 'onkeyup', 'onload', 'onloadeddata', 'onloadedmetadata',
+ 'onloadstart', 'onmousedown', 'onmouseenter', 'onmouseleave', 'onmousemove', 'onmouseout', 'onmouseover',
+ 'onmouseup', 'onpaste', 'onpause', 'onplay', 'onplaying', 'onprogress', 'onratechange', 'onreset',
+ 'onresize', 'onscroll', 'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect',
+ 'onslotchange', 'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle', 'onvolumechange',
+ 'onwaiting', 'onwheel', 'popover', 'role', 'slot', 'spellcheck', 'style', 'tabindex', 'title', 'translate',
+ 'writingsuggestions'))
+
+# element -> the attribute names only that element accepts.
+ELEMENT_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'a': ('download', 'href', 'hreflang', 'ping', 'referrerpolicy', 'rel', 'target', 'type'),
+ 'abbr': ('title',),
+ 'area': ('alt', 'coords', 'download', 'href', 'ping', 'referrerpolicy', 'rel', 'shape', 'target'),
+ 'audio': ('autoplay', 'controls', 'crossorigin', 'loading', 'loop', 'muted', 'preload', 'src'),
+ 'base': ('href', 'target'),
+ 'bdo': ('dir',),
+ 'blockquote': ('cite',),
+ 'body': ('onafterprint', 'onbeforeprint', 'onbeforeunload', 'onhashchange', 'onlanguagechange', 'onmessage',
+          'onmessageerror', 'onoffline', 'ononline', 'onpagehide', 'onpagereveal', 'onpageshow', 'onpageswap',
+          'onpopstate', 'onrejectionhandled', 'onstorage', 'onunhandledrejection', 'onunload'),
+ 'button': ('command', 'commandfor', 'disabled', 'form', 'formaction', 'formenctype', 'formmethod',
+            'formnovalidate', 'formtarget', 'name', 'popovertarget', 'popovertargetaction', 'type', 'value'),
+ 'canvas': ('height', 'width'),
+ 'col': ('span',),
+ 'colgroup': ('span',),
+ 'data': ('value',),
+ 'del': ('cite', 'datetime'),
+ 'details': ('name', 'open'),
+ 'dfn': ('title',),
+ 'dialog': ('closedby', 'open'),
+ 'embed': ('height', 'src', 'type', 'width'),
+ 'fieldset': ('disabled', 'form', 'name'),
+ 'form': ('accept-charset', 'action', 'autocomplete', 'enctype', 'method', 'name', 'novalidate', 'target'),
+ 'iframe': ('allow', 'allowfullscreen', 'height', 'loading', 'name', 'referrerpolicy', 'sandbox', 'src',
+            'srcdoc', 'width'),
+ 'img': ('alt', 'controls', 'crossorigin', 'decoding', 'fetchpriority', 'height', 'ismap', 'loading',
+         'referrerpolicy', 'sizes', 'src', 'srcset', 'usemap', 'width'),
+ 'input': ('accept', 'alpha', 'alt', 'autocomplete', 'checked', 'colorspace', 'dirname', 'disabled', 'form',
+           'formaction', 'formenctype', 'formmethod', 'formnovalidate', 'formtarget', 'height', 'list', 'max',
+           'maxlength', 'min', 'minlength', 'multiple', 'name', 'pattern', 'placeholder', 'popovertarget',
+           'popovertargetaction', 'readonly', 'required', 'size', 'src', 'step', 'title', 'type', 'value',
+           'width'),
+ 'ins': ('cite', 'datetime'),
+ 'label': ('for',),
+ 'li': ('value',),
+ 'link': ('as', 'blocking', 'color', 'crossorigin', 'disabled', 'fetchpriority', 'href', 'hreflang',
+          'imagesizes', 'imagesrcset', 'integrity', 'media', 'referrerpolicy', 'rel', 'sizes', 'title',
+          'type'),
+ 'map': ('name',),
+ 'meta': ('charset', 'content', 'http-equiv', 'media', 'name'),
+ 'meter': ('high', 'low', 'max', 'min', 'optimum', 'value'),
+ 'object': ('data', 'form', 'height', 'name', 'type', 'width'),
+ 'ol': ('reversed', 'start', 'type'),
+ 'optgroup': ('disabled', 'label'),
+ 'option': ('disabled', 'label', 'selected', 'value'),
+ 'output': ('for', 'form', 'name'),
+ 'progress': ('max', 'value'),
+ 'q': ('cite',),
+ 'script': ('async', 'blocking', 'crossorigin', 'defer', 'fetchpriority', 'integrity', 'nomodule',
+            'referrerpolicy', 'src', 'type'),
+ 'select': ('autocomplete', 'disabled', 'form', 'multiple', 'name', 'required', 'size'),
+ 'slot': ('name',),
+ 'source': ('height', 'media', 'sizes', 'src', 'srcset', 'type', 'width'),
+ 'style': ('blocking', 'media', 'title'),
+ 'td': ('colspan', 'headers', 'rowspan'),
+ 'template': ('for', 'shadowrootclonable', 'shadowrootcustomelementregistry', 'shadowrootdelegatesfocus',
+              'shadowrootmode', 'shadowrootserializable', 'shadowrootslotassignment'),
+ 'textarea': ('autocomplete', 'cols', 'dirname', 'disabled', 'form', 'maxlength', 'minlength', 'name',
+              'placeholder', 'readonly', 'required', 'rows', 'wrap'),
+ 'th': ('abbr', 'colspan', 'headers', 'rowspan', 'scope'),
+ 'time': ('datetime',),
+ 'track': ('default', 'kind', 'label', 'src', 'srclang'),
+ 'video': ('autoplay', 'controls', 'crossorigin', 'height', 'loading', 'loop', 'muted', 'playsinline',
+           'poster', 'preload', 'src', 'width')}
+
+# Attribute names a form-associated custom element accepts.
+CUSTOM_ELEMENT_ATTRIBUTES: Final[tuple[str, ...]] = ('disabled', 'form', 'name', 'readonly')

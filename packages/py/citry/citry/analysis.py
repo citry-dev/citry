@@ -96,6 +96,7 @@ from citry._diagnostic_catalog import (
     TEMPLATE_ALPINE_ATTRIBUTE,
     TEMPLATE_ALPINE_CLOAK,
     TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+    TEMPLATE_MISSPELLED_DIRECTIVE,
     TEMPLATE_UNKNOWN_VARIABLE,
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
@@ -105,10 +106,19 @@ from citry._html_attribute_values import (
     CASE_SENSITIVE_KEYWORDS as _CASE_SENSITIVE_KEYWORDS,
 )
 from citry._html_attribute_values import (
+    CUSTOM_ELEMENT_ATTRIBUTES as _CUSTOM_ELEMENT_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
+    ELEMENT_ATTRIBUTES as _ELEMENT_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
     ENUMERATED_VALUES as _ENUMERATED_ATTRIBUTE_VALUES,
 )
 from citry._html_attribute_values import (
     FRAME_NAME_ELEMENTS as _FRAME_NAME_ELEMENTS,
+)
+from citry._html_attribute_values import (
+    GLOBAL_ATTRIBUTES as _GLOBAL_ATTRIBUTES,
 )
 from citry._html_attribute_values import (
     HTML_ELEMENTS as _HTML_ELEMENTS,
@@ -345,6 +355,13 @@ class AlpineAttributeFinding:
     end_index: int
 
 
+# Severity of an invalid attribute value when no setting chooses one, as in
+# `citry check --static` for a component whose source Lint class does not
+# set the rule. The application's LintSettings cannot be read there, so a
+# warning keeps a value that a page script reads from failing the check.
+_NO_SETTINGS_ATTRIBUTE_VALUE_SEVERITY: Literal["warning"] = "warning"
+
+
 @dataclass(frozen=True, slots=True)
 class AttributeValueLintConsumer:
     """
@@ -352,17 +369,122 @@ class AttributeValueLintConsumer:
 
     Attributes:
         rule_invalid_attribute_value: Configured severity for a static value
-            outside an enumerated HTML attribute's keywords.
+            outside an enumerated HTML attribute's keywords. The default,
+            ``"error"``, matches ``LintSettings``.
 
     """
 
-    rule_invalid_attribute_value: Literal["ignore", "warning", "error"] = "warning"
+    rule_invalid_attribute_value: Literal["ignore", "warning", "error"] = "error"
 
     def __post_init__(self) -> None:
         severity = self.rule_invalid_attribute_value
         if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
             msg = f"Unknown rule_invalid_attribute_value severity: {severity!r}"
             raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class MisspelledDirectiveLintConsumer:
+    """
+    Carry one consuming component's severity for a ``c-*`` attribute that looks like a misspelled directive.
+
+    Attributes:
+        rule_misspelled_directive: Configured severity for a name such as
+            ``c-iff`` that Citry renders as an ordinary HTML attribute.
+
+    """
+
+    rule_misspelled_directive: Literal["ignore", "warning", "error"] = "error"
+
+    def __post_init__(self) -> None:
+        severity = self.rule_misspelled_directive
+        if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
+            msg = f"Unknown rule_misspelled_directive severity: {severity!r}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class MisspelledDirectiveFinding:
+    """Report one ``c-*`` attribute that looks like a misspelled Citry directive, spanning its name."""
+
+    name: str
+    suggestion: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+# The rules a check can run without importing the application. They need
+# no component data, only the template and each owner's severity.
+_SOURCE_LINT_RULES = (
+    "rule_alpine_attribute",
+    "rule_alpine_cloak",
+    "rule_invalid_attribute_value",
+    "rule_misspelled_directive",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentSourceLint:
+    """
+    Hold the severities a component's ``Lint`` class sets, read from its Python source.
+
+    ``citry check --static`` and an editor that has not loaded the
+    application cannot read ``LintSettings``, but they can read the string
+    literals a component writes in its ``Lint`` class, so the component's
+    own choice still applies there. Values a ``Lint`` inherits from a
+    component class in the same file are included, nearest first. Only the
+    rules those tools run are read.
+
+    A field is ``None`` when the component does not set that rule, or when
+    the value cannot be read from the source, such as a name imported from
+    another module. The rule then keeps the severity it has without an
+    application: the ``LintSettings`` default, except that an invalid
+    attribute value is a warning.
+
+    Attributes:
+        rule_alpine_attribute: ``Lint.rule_alpine_attribute``, when readable.
+        rule_alpine_cloak: ``Lint.rule_alpine_cloak``, when readable.
+        rule_invalid_attribute_value: ``Lint.rule_invalid_attribute_value``,
+            when readable.
+        rule_misspelled_directive: ``Lint.rule_misspelled_directive``, when
+            readable.
+
+    """
+
+    rule_alpine_attribute: Literal["ignore", "warning", "error"] | None = None
+    rule_alpine_cloak: Literal["ignore", "warning", "error"] | None = None
+    rule_invalid_attribute_value: Literal["ignore", "warning", "error"] | None = None
+    rule_misspelled_directive: Literal["ignore", "warning", "error"] | None = None
+
+    def __post_init__(self) -> None:
+        for rule_name in _SOURCE_LINT_RULES:
+            severity = getattr(self, rule_name)
+            if severity is not None and (type(severity) is not str or severity not in {"ignore", "warning", "error"}):
+                msg = f"Unknown {rule_name} severity: {severity!r}"
+                raise ValueError(msg)
+
+    def alpine_consumer(self) -> AlpineAttributeLintConsumer:
+        """Return this component's severities for the Alpine rules, with the defaults for unset ones."""
+        defaults = AlpineAttributeLintConsumer()
+        return AlpineAttributeLintConsumer(
+            self.rule_alpine_attribute or defaults.rule_alpine_attribute,
+            self.rule_alpine_cloak or defaults.rule_alpine_cloak,
+        )
+
+    def attribute_value_consumer(self) -> AttributeValueLintConsumer:
+        """Return this component's severity for invalid attribute values, a warning when unset."""
+        # Unset matches what lint_attribute_values does with no consumers,
+        # so a template keeps one severity whether or not its owner is known.
+        return AttributeValueLintConsumer(self.rule_invalid_attribute_value or _NO_SETTINGS_ATTRIBUTE_VALUE_SEVERITY)
+
+    def directive_consumer(self) -> MisspelledDirectiveLintConsumer:
+        """Return this component's severity for misspelled directives, the default when unset."""
+        if self.rule_misspelled_directive is None:
+            return MisspelledDirectiveLintConsumer()
+        return MisspelledDirectiveLintConsumer(self.rule_misspelled_directive)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1014,9 +1136,13 @@ def lint_attribute_values(
 
     A finding is reported unless every consumer ignores the rule, and it is an
     error when any reporting consumer says ``"error"``. The check needs no
-    component namespace, so an empty ``consumers`` uses the default
-    ``"warning"``, as ``citry check --static`` and an editor without project
-    analysis do.
+    component namespace, so it also runs with an empty ``consumers``, as
+    ``citry check --static`` and an editor without project analysis call it
+    for a template whose owner they cannot find. Findings are then warnings,
+    because the application's ``LintSettings``, which might turn the rule
+    off, cannot be read there.
+    [`ComponentSourceLint`][citry.ComponentSourceLint] builds the consumers
+    for an owner those tools can read.
 
     Args:
         template: Parsed Citry template AST.
@@ -1028,7 +1154,7 @@ def lint_attribute_values(
         Findings in source order.
 
     """
-    effective = tuple(consumers) or (AttributeValueLintConsumer(),)
+    effective = tuple(consumers) or (AttributeValueLintConsumer(_NO_SETTINGS_ATTRIBUTE_VALUE_SEVERITY),)
     active = [consumer.rule_invalid_attribute_value for consumer in effective]
     active = [severity for severity in active if severity != "ignore"]
     if not active:
@@ -1252,6 +1378,273 @@ def _attribute_value_message(
         suggestion=suggestion,
         allowed=listed,
     )
+
+
+def lint_misspelled_directives(
+    template: Template,
+    consumers: Sequence[MisspelledDirectiveLintConsumer],
+    *,
+    parse_nested: Callable[[str], Template] = _parse_template,
+) -> tuple[MisspelledDirectiveFinding, ...]:
+    """
+    Report ``c-*`` attributes that look like a misspelled Citry directive.
+
+    Citry reads only its fixed directive names, such as ``c-if``. Any other
+    ``c-*`` name on an HTML element binds an ordinary attribute, so
+    ``<div c-iff="show">`` renders ``<div iff>`` and the element shows up
+    whatever ``show`` is. A name is reported when the part after ``c-`` is
+    not an HTML attribute that the element accepts and it:
+
+    - is ``if``, ``elif``, ``else``, ``for``, ``empty``, or ``bind`` with
+      two neighboring letters swapped (``c-fro``), one letter typed twice
+      (``c-iff``), or one letter left out (``c-ele``);
+    - is one of those names in other letter case, such as ``c-If``;
+    - is a spelled-out ``elif``, such as ``c-else-if``; or
+    - is ``show`` or ``model``, directive names from Vue, or ``key`` or
+      ``ignore``, which Citry spells ``#c-key`` and ``#c-ignore``.
+
+    An attribute of the element is not reported, in any letter case, so
+    ``c-id``, ``c-ID``, ``c-form`` on ``<input>``, and ``c-data-*`` or
+    ``c-aria-*`` names pass. ``<c-element>``, whose tag is chosen at render
+    time, accepts the attributes of every element. A custom element accepts
+    the global attributes and those of a form-associated custom element, and
+    because it may define its own, such as ``show``, a name from the last
+    bullet is not reported there.
+
+    A replaced letter, or an added letter that is not a double, does not
+    count as a typo, because it mostly gives an ordinary word, such as
+    ``kind`` for ``bind`` or ``form`` for ``for``. Neither does a missing
+    letter that leaves a one-letter name or the word ``or``, ``bid``, or
+    ``bin``.
+    Component tags, the other ``c-*`` tags, PascalCase Vue components, and
+    elements inside ``<svg>`` or ``<math>`` are skipped.
+
+    A finding is reported unless every consumer ignores the rule, and it is an
+    error when any reporting consumer says ``"error"``. The check needs no
+    component namespace. With an empty ``consumers``, which ``citry check
+    --static`` and an editor without project analysis pass for a template
+    whose owner they cannot find, findings use the default ``"error"``. An
+    attribute that is really meant for the browser can go through
+    ``c-bind``, which this rule does not read.
+
+    Args:
+        template: Parsed Citry template AST.
+        consumers: Every proven component that consumes this physical template.
+        parse_nested: Parser for template-valued attributes, so nested
+            templates use the same parse options as the outer one.
+
+    Returns:
+        Findings in source order, each spanning the attribute name.
+
+    """
+    effective = tuple(consumers) or (MisspelledDirectiveLintConsumer(),)
+    active = [consumer.rule_misspelled_directive for consumer in effective]
+    active = [severity for severity in active if severity != "ignore"]
+    if not active:
+        return ()
+    severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
+    found: list[MisspelledDirectiveFinding] = []
+    _collect_misspelled_directives(template, found, severity, parse_nested=parse_nested, base_index=0)
+    return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
+
+
+# The directives an author writes as `c-<name>` on an element. A name one
+# typing mistake from one of these is the likely typo.
+_ELEMENT_DIRECTIVES = ("if", "elif", "else", "for", "empty", "bind")
+# Spellings an author brings from other languages for `c-elif`.
+_SPELLED_OUT_ELIF = frozenset({"else-if", "elseif", "elsif", "else_if"})
+# Names that are a directive elsewhere but not in Citry, with what to write
+# instead. `c-show` keeps its Python condition with `c-if`; `v-model` has no
+# Python form, so the message names Vue's directive.
+_FOREIGN_DIRECTIVES: dict[str, tuple[str, Literal["default", "vue"]]] = {
+    "show": ("c-if", "default"),
+    "model": ("v-model", "vue"),
+    "key": ("#c-key", "default"),
+    "ignore": ("#c-ignore", "default"),
+}
+
+
+def _collect_misspelled_directives(
+    template: Template,
+    found: list[MisspelledDirectiveFinding],
+    severity: Literal["warning", "error"],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    """Check each ``c-*`` attribute of each HTML element in one template and its nested templates."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        tag = node.start_tag.name.content
+        # SVG and MathML elements have their own attribute names, so their
+        # whole subtree is left unchecked.
+        if _ascii_lower(tag) in {"svg", "math"}:
+            continue
+        accepted = _accepted_attribute_names(tag)
+        # A custom element defines its own attributes, such as `show` on a
+        # disclosure widget, so `show`, `model`, `key`, and `ignore` pass there.
+        custom_element = tag not in _HTML_ELEMENTS and tag != "c-element"
+        for attr in node.start_tag.attrs:
+            if accepted is not None:
+                finding = _misspelled_directive_finding(
+                    attr,
+                    accepted,
+                    severity,
+                    base_index,
+                    custom_element=custom_element,
+                )
+                if finding is not None:
+                    found.append(finding)
+            # A template-valued attribute holds more HTML, whose offsets are
+            # relative to the nested source, so shift them into this template.
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_misspelled_directives(
+                        parsed,
+                        found,
+                        severity,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_misspelled_directives(body, found, severity, parse_nested=parse_nested, base_index=base_index)
+
+
+def _accepted_attribute_names(tag: str) -> tuple[Collection[str], ...] | None:
+    """Return the groups of HTML attribute names one tag accepts, or ``None`` when ``c-*`` names there are inputs."""
+    # The groups are returned as they are, without merging them into one
+    # set, because most elements have no `c-*` attribute to look up.
+    if tag in _HTML_ELEMENTS:
+        return _GLOBAL_ATTRIBUTES, _ELEMENT_ATTRIBUTES.get(tag, ())
+    if tag == "c-element":
+        # The rendered tag is chosen at render time, so any element's
+        # attribute may be meant.
+        return (_ALL_ELEMENT_ATTRIBUTES,)
+    # A custom element is lowercase with a hyphen. Other `c-*` tags are Citry
+    # components or built-in tags, whose `c-*` names are inputs, and
+    # PascalCase names are Vue components, whose names are props.
+    if tag.startswith("c-") or "-" not in tag or tag != _ascii_lower(tag):
+        return None
+    return _GLOBAL_ATTRIBUTES, _CUSTOM_ELEMENT_ATTRIBUTES
+
+
+_ALL_ELEMENT_ATTRIBUTES = _GLOBAL_ATTRIBUTES.union(
+    _CUSTOM_ELEMENT_ATTRIBUTES,
+    *_ELEMENT_ATTRIBUTES.values(),
+)
+
+
+def _misspelled_directive_finding(
+    attr: HtmlAttr,
+    accepted: tuple[Collection[str], ...],
+    severity: Literal["warning", "error"],
+    base_index: int,
+    *,
+    custom_element: bool,
+) -> MisspelledDirectiveFinding | None:
+    """Return a finding for one ``c-*`` attribute that looks like a directive but renders as an attribute."""
+    name = attr.key.content
+    # The parser binds only a lowercase `c-` prefix; `C-if` is a static
+    # attribute, and an exact directive name is the directive itself.
+    if not name.startswith("c-"):
+        return None
+    attribute = name[2:]
+    if attribute in _ELEMENT_DIRECTIVES:
+        return None
+    lowered = _ascii_lower(attribute)
+    # HTML attribute names ignore letter case, so `c-ID` still sets `id`.
+    if any(lowered in names for names in accepted) or lowered.startswith(("data-", "aria-")):
+        return None
+    suggestion = _directive_suggestion(lowered, custom_element=custom_element)
+    if suggestion is None:
+        return None
+    target, variant = suggestion
+    return MisspelledDirectiveFinding(
+        name=name,
+        suggestion=target,
+        message=render_diagnostic(
+            TEMPLATE_MISSPELLED_DIRECTIVE,
+            variant=variant,
+            name=name,
+            attribute=attribute,
+            suggestion=target,
+        ),
+        code=TEMPLATE_MISSPELLED_DIRECTIVE,
+        severity=severity,
+        start_index=base_index + attr.key.start_index,
+        end_index=base_index + attr.key.end_index,
+    )
+
+
+def _directive_suggestion(
+    lowered: str,
+    *,
+    custom_element: bool,
+) -> tuple[str, Literal["default", "vue"]] | None:
+    """
+    Return the directive a lowercased ``c-*`` suffix most likely meant, with its message variant.
+
+    On a custom element, ``show``, ``model``, ``key``, and ``ignore`` may be
+    the element's own attributes, so only typos, other letter case, and a
+    spelled-out ``elif`` are reported there.
+    """
+    if lowered in _SPELLED_OUT_ELIF:
+        return "c-elif", "default"
+    if lowered in _FOREIGN_DIRECTIVES:
+        return None if custom_element else _FOREIGN_DIRECTIVES[lowered]
+    # A name in other letter case, such as `If`, equals the directive here,
+    # so the same loop finds it. The first directive in the list wins a tie,
+    # which keeps the suggestion stable.
+    for directive in _ELEMENT_DIRECTIVES:
+        if lowered == directive or _is_directive_typo(lowered, directive):
+            return f"c-{directive}", "default"
+    return None
+
+
+# Words one letter short of a directive that are ordinary names an author
+# may give an attribute, such as `bid` on an auction item, so they are not
+# read as a missing letter in `bind` or `for`.
+_WORDS_ONE_LETTER_SHORT = frozenset({"or", "bid", "bin"})
+
+
+def _is_directive_typo(written: str, expected: str) -> bool:
+    """
+    Return whether ``written`` is ``expected`` with one common typing slip.
+
+    The slips are two neighboring letters swapped (``fro``), one letter
+    typed twice (``iff``), and one letter left out (``ele``). A replaced or
+    an added letter that is not a double is not a slip here, because it
+    mostly gives a real word, such as ``kind`` for ``bind`` or ``form`` for
+    ``for``.
+    """
+    if len(written) == len(expected):
+        differences = [
+            index for index, (left, right) in enumerate(zip(written, expected, strict=True)) if left != right
+        ]
+        return (
+            len(differences) == 2
+            and differences[1] == differences[0] + 1
+            and written[differences[0]] == expected[differences[1]]
+            and written[differences[1]] == expected[differences[0]]
+        )
+    if len(written) == len(expected) + 1:
+        # Dropping one letter of a doubled pair gives the directive back.
+        return any(
+            written[index] == written[index + 1] and written[:index] + written[index + 1 :] == expected
+            for index in range(len(written) - 1)
+        )
+    if len(written) + 1 == len(expected):
+        # A single letter, such as `c-f`, is too short to read as a typo.
+        if len(written) < 2 or written in _WORDS_ONE_LETTER_SHORT:
+            return False
+        return any(expected[:index] + expected[index + 1 :] == written for index in range(len(expected)))
+    return False
 
 
 def lint_unknown_component_js_variables(
@@ -2859,10 +3252,24 @@ def _lsp_position_to_offset(
 
 @dataclass(frozen=True, slots=True)
 class PythonTemplateRegion:
-    """One definite direct literal template on a Citry component class."""
+    """
+    One definite direct literal template on a Citry component class.
+
+    Attributes:
+        component_name: Name of the class that declares the template.
+        source_map: Maps template offsets back to the Python source.
+        owner_lint: The ``Lint`` severities read from the source of each
+            class in the module that renders this template: the declaring
+            class, and each subclass with that one component base that sets
+            neither ``template`` nor ``template_file`` and keeps native Citry
+            as the template language. Empty when the classes cannot be read,
+            as for a template in Python that does not parse yet.
+
+    """
 
     component_name: str
     source_map: PythonTemplateSourceMap
+    owner_lint: tuple[ComponentSourceLint, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -4048,7 +4455,10 @@ def _ast_template_regions(
     regions: list[PythonTemplateRegion] = []
     notices: list[PythonTemplateNotice] = []
 
-    for statement, language in _ast_component_declarations(module):
+    parents: dict[ast.ClassDef, object] = {}
+    declarations = _ast_component_declarations(module, parents)
+    owner_lint = _template_owner_lint(declarations, parents)
+    for statement, language in declarations:
         node, notice = _literal_template_node(
             statement,
             language,
@@ -4068,8 +4478,152 @@ def _ast_template_regions(
                         ),
                     )
                 continue
-            regions.append(PythonTemplateRegion(statement.name, source_map))
+            regions.append(PythonTemplateRegion(statement.name, source_map, owner_lint.get(statement, ())))
     return regions, notices
+
+
+# A class with more than one base, such as a mixin next to the component
+# base, may get a `Lint` from a base the source does not show.
+_UNKNOWN_COMPONENT_BASE = object()
+# A `Lint` value the source does not show, such as a name imported from
+# another module. It hides what a base component sets for the same rule.
+_UNREADABLE_LINT_VALUE = object()
+_TEMPLATE_SOURCE_NAMES = frozenset({"template", "template_file"})
+
+
+def _template_owner_lint(
+    declarations: list[tuple[ast.ClassDef, object]],
+    parents: dict[ast.ClassDef, object],
+) -> dict[ast.ClassDef, tuple[ComponentSourceLint, ...]]:
+    """
+    Map each class that declares a template to the ``Lint`` of every class in the module that renders it.
+
+    A subclass renders its base's template when it sets neither
+    ``template`` nor ``template_file``, so it is an owner of that template
+    too, and the strictest severity among the owners applies, as it does
+    with a loaded application. A subclass whose template language is not
+    proven to be native Citry, a subclass with a mixin, and subclasses in
+    other modules are not counted.
+    """
+    resolved: dict[ast.ClassDef, dict[str, object]] = {}
+    owners: dict[ast.ClassDef, list[ComponentSourceLint]] = {}
+    for declaration, language in declarations:
+        # Another template language renders something other than this
+        # Citry template, and an unknown one is not proven to render it.
+        if language is not None:
+            continue
+        owner = _template_declaring_class(declaration, parents)
+        if owner is None:
+            continue
+        values = _resolved_source_lint(declaration, parents, resolved)
+        owners.setdefault(owner, []).append(
+            ComponentSourceLint(
+                **{rule: value for rule, value in values.items() if value is not _UNREADABLE_LINT_VALUE},  # type: ignore[arg-type]
+            ),
+        )
+    return {owner: tuple(lint) for owner, lint in owners.items()}
+
+
+def _template_declaring_class(declaration: ast.ClassDef, parents: dict[ast.ClassDef, object]) -> ast.ClassDef | None:
+    """Return the class whose template this class renders, or ``None`` when the source does not prove one."""
+    current: ast.ClassDef = declaration
+    while True:
+        if _binds_template_source(current):
+            return current
+        parent = parents.get(current)
+        if not isinstance(parent, ast.ClassDef):
+            return None
+        current = parent
+
+
+def _binds_template_source(class_node: ast.ClassDef) -> bool:
+    """Return whether a class body sets ``template`` or ``template_file`` in any way."""
+    for statement in class_node.body:
+        # A bare annotation such as `template: str` sets nothing.
+        if isinstance(statement, ast.AnnAssign) and statement.value is None:
+            continue
+        if _template_statement_bound_names(statement) & _TEMPLATE_SOURCE_NAMES:
+            return True
+    return False
+
+
+def _resolved_source_lint(
+    class_node: ast.ClassDef,
+    parents: dict[ast.ClassDef, object],
+    resolved: dict[ast.ClassDef, dict[str, object]],
+) -> dict[str, object]:
+    """Combine a class's own ``Lint`` with its bases' the way Citry does, nearest setting first."""
+    if class_node in resolved:
+        return resolved[class_node]
+    values, rest = _own_source_lint(class_node)
+    combined = dict(values)
+    parent = parents.get(class_node)
+    if rest == "inherit" and isinstance(parent, ast.ClassDef):
+        for rule, value in _resolved_source_lint(parent, parents, resolved).items():
+            combined.setdefault(rule, value)
+    elif rest == "unreadable" or (rest == "inherit" and parent is _UNKNOWN_COMPONENT_BASE):
+        # Something the source does not show may set the remaining rules,
+        # so a base component's literal value would be a guess.
+        for rule in _SOURCE_LINT_RULES:
+            combined.setdefault(rule, _UNREADABLE_LINT_VALUE)
+    resolved[class_node] = combined
+    return combined
+
+
+def _own_source_lint(class_node: ast.ClassDef) -> tuple[dict[str, object], Literal["inherit", "stop", "unreadable"]]:
+    """
+    Read the rules one class's own ``Lint`` binding sets, and what happens to the rules it leaves out.
+
+    ``"inherit"`` reads them from the base component, ``"stop"`` follows
+    ``Lint = None``, which drops every inherited ``Lint``, and
+    ``"unreadable"`` means the source does not show them.
+    """
+    binding: ast.stmt | None = None
+    for statement in class_node.body:
+        if isinstance(statement, ast.ClassDef) and statement.name == "Lint":
+            binding = statement
+            continue
+        assignment = _direct_template_assignment(statement)
+        if assignment is not None and assignment[0] == "Lint":
+            if assignment[1] is not None:
+                binding = statement
+            continue
+        # `Lint` bound inside an `if`, a loop, or an import may be anything.
+        if "Lint" in _template_statement_bound_names(statement):
+            return {}, "unreadable"
+    if binding is None:
+        return {}, "inherit"
+    if not isinstance(binding, ast.ClassDef):
+        value = binding.value if isinstance(binding, (ast.Assign, ast.AnnAssign)) else None
+        if isinstance(value, ast.Constant) and value.value is None:
+            return {}, "stop"
+        return {}, "unreadable"
+    # A decorator may return a different class.
+    if binding.decorator_list:
+        return {}, "unreadable"
+    values: dict[str, object] = {}
+    for statement in binding.body:
+        assignment = _direct_template_assignment(statement)
+        if assignment is not None and assignment[0] in _SOURCE_LINT_RULES:
+            name, value = assignment
+            if value is None:
+                continue
+            # Only a literal severity can be read here: a name or a call
+            # needs the code to run, and Citry rejects an unknown string
+            # when the class is created.
+            if (
+                isinstance(value, ast.Constant)
+                and type(value.value) is str
+                and value.value in {"ignore", "warning", "error"}
+            ):
+                values[name] = value.value
+            else:
+                values[name] = _UNREADABLE_LINT_VALUE
+            continue
+        for name in _template_statement_bound_names(statement) & set(_SOURCE_LINT_RULES):
+            values[name] = _UNREADABLE_LINT_VALUE
+    # A `Lint` class with bases inherits rules this body does not show.
+    return values, ("unreadable" if binding.bases or binding.keywords else "inherit")
 
 
 _COMPONENT_ASSET_NAMES = frozenset(
@@ -4243,8 +4797,18 @@ def _discover_python_template_files(source: str) -> _PythonTemplateFileDiscovery
     return _PythonTemplateFileDiscovery(tuple(declarations), tuple(notices))
 
 
-def _ast_component_declarations(module: ast.Module) -> list[tuple[ast.ClassDef, object]]:
-    """Track definite Citry component classes and their statically known template language."""
+def _ast_component_declarations(
+    module: ast.Module,
+    parents: dict[ast.ClassDef, object] | None = None,
+) -> list[tuple[ast.ClassDef, object]]:
+    """
+    Track definite Citry component classes and their statically known template language.
+
+    When ``parents`` is given, it receives each class's one same-module
+    component base, ``None`` for Citry's own base, or
+    ``_UNKNOWN_COMPONENT_BASE`` for a class with more than one base.
+    """
+    class_nodes: dict[str, ast.ClassDef] = {}
     component_symbols: set[str] = set()
     citry_modules: set[str] = set()
     component_classes: set[str] = set()
@@ -4289,6 +4853,13 @@ def _ast_component_declarations(module: ast.Module) -> list[tuple[ast.ClassDef, 
                 if len(statement.bases) == 1 and len(component_bases) == 1
                 else _UNKNOWN_TEMPLATE_LANGUAGE
             )
+            # Read the base before this statement rebinds its own name. A
+            # name still in component_classes is bound to the class
+            # statement recorded for it, because any rebinding drops it.
+            parent: object = _UNKNOWN_COMPONENT_BASE
+            if len(statement.bases) == 1:
+                base = statement.bases[0]
+                parent = class_nodes[base.id] if isinstance(base, ast.Name) and base.id in component_classes else None
             _discard_template_binding(
                 statement.name,
                 component_symbols,
@@ -4297,6 +4868,9 @@ def _ast_component_declarations(module: ast.Module) -> list[tuple[ast.ClassDef, 
                 component_languages,
             )
             if component_bases and not statement.decorator_list:
+                class_nodes[statement.name] = statement
+                if parents is not None:
+                    parents[statement] = parent
                 component_classes.add(statement.name)
                 language = _class_template_language(statement, inherited_language)
                 component_languages[statement.name] = language
@@ -4993,6 +5567,7 @@ __all__ = [
     "ComponentJsLintConsumer",
     "ComponentJsLintFinding",
     "ComponentNameMatch",
+    "ComponentSourceLint",
     "CssDataCompletion",
     "CssDataReference",
     "JsonWireField",
@@ -5001,6 +5576,8 @@ __all__ = [
     "LspPosition",
     "LspRange",
     "MarkLiteralFinding",
+    "MisspelledDirectiveFinding",
+    "MisspelledDirectiveLintConsumer",
     "PythonComponentAssetDiscovery",
     "PythonComponentAssetFile",
     "PythonComponentAssetFormatResult",
@@ -5075,6 +5652,7 @@ __all__ = [
     "json_wire_type_from_expression",
     "lint_alpine_attributes",
     "lint_attribute_values",
+    "lint_misspelled_directives",
     "lint_undeclared_component_js_emits",
     "lint_undeclared_component_listeners",
     "lint_undeclared_template_emits",
