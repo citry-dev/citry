@@ -178,7 +178,7 @@ class TestCitryInstance:
         assert (lint.rule_alpine_attribute, lint.rule_alpine_cloak) == ("ignore", "warning")
         assert (LintSettings().rule_alpine_attribute, LintSettings().rule_alpine_cloak) == ("warning", "error")
         assert lint.rule_invalid_attribute_value == "error"
-        assert LintSettings().rule_invalid_attribute_value == "warning"
+        assert LintSettings().rule_invalid_attribute_value == "error"
         assert lint.rule_i18n_cross_language_fallback == "error"
         assert LintSettings().rule_i18n_cross_language_fallback == "warning"
         assert lint.component_js_globals == {

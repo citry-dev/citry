@@ -345,6 +345,13 @@ class AlpineAttributeFinding:
     end_index: int
 
 
+# Severity of an invalid attribute value when no component is known. A
+# component's Lint "ignore" cannot reach this case, so a warning keeps a
+# script-owned attribute value from failing `citry check --static` with no
+# way to turn the finding off.
+_UNOWNED_ATTRIBUTE_VALUE_SEVERITY: Literal["warning"] = "warning"
+
+
 @dataclass(frozen=True, slots=True)
 class AttributeValueLintConsumer:
     """
@@ -352,11 +359,12 @@ class AttributeValueLintConsumer:
 
     Attributes:
         rule_invalid_attribute_value: Configured severity for a static value
-            outside an enumerated HTML attribute's keywords.
+            outside an enumerated HTML attribute's keywords. The default,
+            ``"error"``, matches ``LintSettings``.
 
     """
 
-    rule_invalid_attribute_value: Literal["ignore", "warning", "error"] = "warning"
+    rule_invalid_attribute_value: Literal["ignore", "warning", "error"] = "error"
 
     def __post_init__(self) -> None:
         severity = self.rule_invalid_attribute_value
@@ -1014,9 +1022,11 @@ def lint_attribute_values(
 
     A finding is reported unless every consumer ignores the rule, and it is an
     error when any reporting consumer says ``"error"``. The check needs no
-    component namespace, so an empty ``consumers`` uses the default
-    ``"warning"``, as ``citry check --static`` and an editor without project
-    analysis do.
+    component namespace, so it also runs with an empty ``consumers``, as
+    ``citry check --static`` and an editor without project analysis call it.
+    Findings are then warnings: no component's ``Lint`` setting can apply,
+    so an error would fail a check that the documented ``"ignore"`` override
+    cannot turn off.
 
     Args:
         template: Parsed Citry template AST.
@@ -1028,7 +1038,7 @@ def lint_attribute_values(
         Findings in source order.
 
     """
-    effective = tuple(consumers) or (AttributeValueLintConsumer(),)
+    effective = tuple(consumers) or (AttributeValueLintConsumer(_UNOWNED_ATTRIBUTE_VALUE_SEVERITY),)
     active = [consumer.rule_invalid_attribute_value for consumer in effective]
     active = [severity for severity in active if severity != "ignore"]
     if not active:

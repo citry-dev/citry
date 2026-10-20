@@ -1,5 +1,15 @@
 # Release notes
 
+## Unreleased
+
+### Changed
+
+- `citry check` now fails, and the editor shows an error, on an HTML
+  attribute value the browser does not accept, such as
+  `<button type="sumbit">`, because `rule_invalid_attribute_value` defaults
+  to `"error"`; set it to `"warning"` in `LintSettings` to keep the previous
+  behavior.
+
 ## v0.6.0
 
 Citry 0.6.0 replaces Alpine with Vue. Most Python components, templates,

@@ -178,7 +178,7 @@ class TemplateLintInfo:
     rule_vue_python_variable: LintSeverity = "warning"
     rule_alpine_attribute: LintSeverity = "warning"
     rule_alpine_cloak: LintSeverity = "error"
-    rule_invalid_attribute_value: LintSeverity = "warning"
+    rule_invalid_attribute_value: LintSeverity = "error"
     rule_i18n_cross_language_fallback: LintSeverity = "warning"
 
     def __post_init__(self) -> None:

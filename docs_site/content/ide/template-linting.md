@@ -25,7 +25,7 @@ them. There is no separate editor setting.
 | [`citry.vue.python-variable`](/ide/diagnostics/#citry.vue.python-variable) | A Vue expression that reads a Python loop variable | warning |
 | [`citry.template.alpine-attribute`](/ide/diagnostics/#citry.template.alpine-attribute) | A leftover Alpine `x-*` attribute | warning |
 | [`citry.template.alpine-cloak`](/ide/diagnostics/#citry.template.alpine-cloak) | A leftover `x-cloak`, which hides the element for good | error |
-| [`citry.template.invalid-attribute-value`](/ide/diagnostics/#citry.template.invalid-attribute-value) | An HTML attribute value the browser does not accept | warning |
+| [`citry.template.invalid-attribute-value`](/ide/diagnostics/#citry.template.invalid-attribute-value) | An HTML attribute value the browser does not accept | error |
 
 ## Fix unknown names
 
@@ -189,7 +189,7 @@ app = Citry(
         rule_vue_python_variable="warning",
         rule_alpine_attribute="warning",
         rule_alpine_cloak="error",
-        rule_invalid_attribute_value="warning",
+        rule_invalid_attribute_value="error",
     ),
 )
 ```
@@ -282,14 +282,14 @@ Some HTML attributes accept only a few keywords. `draggable` takes `"true"` or
 `"false"`, and `<input type>` takes a type the browser knows. The browser
 ignores any other value or falls back to a default, so the attribute silently
 does nothing. Citry reports such a value as a
-`citry.template.invalid-attribute-value` warning and suggests the closest
+`citry.template.invalid-attribute-value` error and suggests the closest
 valid keyword:
 
 ```citry-html
-{# Warning: 'treu' is not a valid value; did you mean 'true'? #}
+{# Error: 'treu' is not a valid value; did you mean 'true'? #}
 <div draggable="treu">Drag me</div>
 
-{# Warning: did you mean 'datetime-local'? #}
+{# Error: did you mean 'datetime-local'? #}
 <input type="datetime" name="start">
 ```
 
@@ -315,12 +315,12 @@ A Vue binding whose value is one JavaScript string is checked too, because it
 sets the same text:
 
 ```citry-html
-{# Warning: 'rlt' is not a valid value; did you mean 'rtl'? #}
+{# Error: 'rlt' is not a valid value; did you mean 'rtl'? #}
 <div :dir="'rlt'">...</div>
 ```
 
 When a script on the page reads its own values from one of these attributes,
-turn the warning off for the components that use it:
+turn the rule off for the components that use it:
 
 ```citry
 from citry import Component
@@ -355,8 +355,10 @@ rules.
 They still run the Alpine and attribute-value rules, which need no component
 data, but they cannot read your settings, so they use the default
 severities. A leftover `x-cloak` is then an error even if your settings
-ignore it. They also cannot tell which values an extension's template syntax
-produces, so they may report a value that `citry --app ... check` does not.
+ignore it. An invalid attribute value is a warning there, not an error,
+because a component's `"ignore"` setting cannot reach it. They also cannot
+tell which values an extension's template syntax produces, so they may
+report a value that `citry --app ... check` does not.
 
 ### Shared templates
 
@@ -401,7 +403,7 @@ different list markers.
 
 When the editor or `citry check --types` also runs TypeScript, a bound value
 that Vue's types reject is reported once, by this rule, at this rule's
-severity. Set the rule to `"error"` if such a value should fail a check.
+severity.
 
 ### Window names, meta tags
 
@@ -413,10 +415,10 @@ that start with an underscore. The valid ones are `_blank`, `_self`,
 `http-equiv` on `<meta>` is checked against the values browsers act on:
 `content-type`, `default-style`, `refresh`, `x-ua-compatible`, and
 `content-security-policy`. Browsers ignore a header name such as
-`Cache-Control` there, so the warning says to send it as an HTTP header:
+`Cache-Control` there, so the message says to send it as an HTTP header:
 
 ```citry-html
-{# Warning: browsers ignore this; send Cache-Control as a header. #}
+{# Error: browsers ignore this; send Cache-Control as a header. #}
 <meta http-equiv="Cache-Control" content="no-cache">
 ```
 

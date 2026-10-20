@@ -2119,7 +2119,7 @@ def test_static_check_reports_leftover_alpine_attributes_with_default_severities
 
 
 def test_registry_check_reports_invalid_attribute_values_with_component_severities(tmp_path):
-    engine = Citry(autodiscover=False, lint=LintSettings(rule_invalid_attribute_value="error"))
+    engine = Citry(autodiscover=False)
 
     class Card(Component):
         citry = engine
@@ -2143,12 +2143,12 @@ def test_registry_check_reports_invalid_attribute_values_with_component_severiti
         if item.code == "citry.template.invalid-attribute-value"
     ]
 
-    # The application raised the rule to an error, and Legacy ignores it.
+    # A known component gets the default error, and Legacy ignores the rule.
     # Each finding spans the value inside its quotes.
     assert findings == [("error", 1, 16, 20), ("error", 2, 15, 23)]
 
 
-def test_static_check_reports_invalid_attribute_values_with_the_default_severity(tmp_path):
+def test_static_check_reports_invalid_attribute_values_as_warnings(tmp_path):
     (tmp_path / "card.py").write_text(
         "from citry import Component\nclass Card(Component):\n    template = '<a target=\"_new\">a</a>'\n",
         encoding="utf-8",
@@ -2156,6 +2156,8 @@ def test_static_check_reports_invalid_attribute_values_with_the_default_severity
 
     report = check_project(CheckAppSelection(), tmp_path)
 
+    # Static mode knows no component, so a Lint "ignore" could not reach the
+    # finding; it stays a warning and the check still exits 0.
     assert [(item.code, item.severity) for item in report.findings] == [
         ("citry.template.invalid-attribute-value", "warning"),
     ]

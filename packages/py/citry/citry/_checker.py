@@ -643,7 +643,8 @@ def _check_template(
     # Static mode has no consumers here, and the Alpine rules then use their
     # built-in severities because they need no component namespace.
     # The attribute-value rule likewise needs no namespace, so static mode
-    # checks enumerated HTML attribute values with the default severity.
+    # checks enumerated HTML attribute values too, as warnings, because no
+    # component's Lint override can reach them here.
     attribute_findings: list[AlpineAttributeFinding | AttributeValueFinding] = [
         *lint_alpine_attributes(template, alpine_lint_consumers, parse_nested=nested_parser),
         *lint_attribute_values(template, attribute_value_lint_consumers, parse_nested=nested_parser),

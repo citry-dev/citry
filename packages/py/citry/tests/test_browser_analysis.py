@@ -1310,6 +1310,10 @@ def test_attribute_value_lint_maps_nested_template_offsets_into_the_outer_source
 
 def test_attribute_value_lint_severity_across_consumers():
     source = '<div draggable="nope"></div>'
+    # A known component reports an error by default; with no component at
+    # all (the empty tuple) the finding is a warning.
+    assert _attribute_values(source, (AttributeValueLintConsumer(),)) == [("draggable", "error", "nope")]
+    assert _attribute_values(source) == [("draggable", "warning", "nope")]
     ignore = AttributeValueLintConsumer("ignore")
     assert _attribute_values(source, (ignore,)) == []
     # One consumer that still reports is enough, and "error" wins over "warning".

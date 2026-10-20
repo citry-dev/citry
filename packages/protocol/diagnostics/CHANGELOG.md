@@ -20,3 +20,5 @@
 - Added `citry.i18n.missing-param-type`, the configurable `citry check`
   warning for a message variable without a `# @param` type, which the i18n
   compiler already reported.
+- `citry.template.invalid-attribute-value` defaults to `error`. It stays a
+  warning where no component is known, such as `citry check --static`.

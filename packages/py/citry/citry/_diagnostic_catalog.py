@@ -819,7 +819,7 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
  'citry.template.invalid-attribute-value': {'code': 'citry.template.invalid-attribute-value',
                                             'configurableSeverity': True,
                                             'constant': 'TEMPLATE_INVALID_ATTRIBUTE_VALUE',
-                                            'defaultSeverity': 'warning',
+                                            'defaultSeverity': 'error',
                                             'documentationPath': '/ide/diagnostics/#citry.template.invalid-attribute-value',
                                             'examples': [{'language': 'citry-html',
                                                           'source': '<div draggable="treu">Drag me</div>',
@@ -864,7 +864,10 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                     'whose value is one JavaScript string, such as :dir="\'rtl\'", is '
                                                     'checked too. Other bound values, component tags, <c-element>, '
                                                     'custom elements, elements inside <svg> or <math>, and attributes '
-                                                    'that take a list of words, such as rel, are not checked.'},
+                                                    'that take a list of words, such as rel, are not checked. citry '
+                                                    'check --static and an editor that has not loaded your application '
+                                                    "report it as a warning, because a component's "
+                                                    'rule_invalid_attribute_value setting cannot reach them.'},
  'citry.template.marker-name-invalid': {'code': 'citry.template.marker-name-invalid',
                                         'constant': 'TEMPLATE_MARKER_NAME_INVALID',
                                         'defaultSeverity': 'error',

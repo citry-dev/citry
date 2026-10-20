@@ -228,9 +228,9 @@
       "constant": "TEMPLATE_INVALID_ATTRIBUTE_VALUE",
       "title": "HTML attribute value the browser does not accept",
       "summary": "An HTML attribute that accepts only certain keywords, such as draggable or type, has another value. The browser ignores it or falls back to a default, with no error.",
-      "when": "The value is not one of the keywords the HTML Standard lists for that attribute on that element. Letter case does not matter, except for list markers in type on <ol> and <li>. A Vue binding whose value is one JavaScript string, such as :dir=\"'rtl'\", is checked too. Other bound values, component tags, <c-element>, custom elements, elements inside <svg> or <math>, and attributes that take a list of words, such as rel, are not checked.",
+      "when": "The value is not one of the keywords the HTML Standard lists for that attribute on that element. Letter case does not matter, except for list markers in type on <ol> and <li>. A Vue binding whose value is one JavaScript string, such as :dir=\"'rtl'\", is checked too. Other bound values, component tags, <c-element>, custom elements, elements inside <svg> or <math>, and attributes that take a list of words, such as rel, are not checked. citry check --static and an editor that has not loaded your application report it as a warning, because a component's rule_invalid_attribute_value setting cannot reach them.",
       "fix": "Use one of the valid values the message lists. If a script on the page reads its own values from the attribute, set rule_invalid_attribute_value to \"ignore\" for that component.",
-      "defaultSeverity": "warning",
+      "defaultSeverity": "error",
       "configurableSeverity": true,
       "surfaces": [
         "check",

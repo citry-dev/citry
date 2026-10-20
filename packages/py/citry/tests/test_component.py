@@ -106,7 +106,7 @@ class TestComponentFields:
         assert reset_lint.rule_unknown_component_js_member == "error"
         assert reset_lint.rule_vue_python_variable == "warning"
         assert (reset_lint.rule_alpine_attribute, reset_lint.rule_alpine_cloak) == ("warning", "error")
-        assert reset_lint.rule_invalid_attribute_value == "warning"
+        assert reset_lint.rule_invalid_attribute_value == "error"
         assert reset_lint.rule_i18n_cross_language_fallback == "warning"
         assert reset_lint.component_js_globals == ()
 
