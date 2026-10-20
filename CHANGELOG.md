@@ -238,6 +238,11 @@
   web framework code that called Citry, because your handler has already
   returned.
 
+### Performance
+
+- Pages that repeat a `simple = "vue"` component many times render about
+  10% faster on the server.
+
 ## v0.6.0
 
 Citry 0.6.0 replaces Alpine with Vue. Most Python components, templates,
