@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import pytest
-from citry_errors import parallel, runtime
+from citry_errors import parallel, report, runtime
 from citry_errors.config import ConfigError, Framework, Runtime, Step, load_framework
 from conftest import MISTAKES
 
@@ -169,6 +169,7 @@ def test_a_run_on_several_workers_writes_the_same_records_as_one_worker(toy: Toy
         "m04-same": "never",
         "m05-changed-again": "silent",
         "m06-bad-third": "check",
+        "m07-meh": "silent",
     }
 
 
@@ -207,3 +208,31 @@ def test_observe_runs_on_several_threads_at_once_with_a_real_browser(tmp_path: P
         page = json.dumps(observation.snapshot)
         assert f"Site {number}" in page
         assert "done" in page
+
+
+def test_a_static_error_skips_the_browser_check_and_a_warning_does_not(toy: Toy) -> None:
+    records = {record["mistake"]: record for record in toy.records(toy.run(jobs=3))}
+    caught = {"m01-bad", "m03-bad-again", "m06-bad-third"}
+    # The clean app and every case no static stage reported as an error ran in the browser.
+    assert sorted(toy.observed) == sorted(["baseline", *(set(MISTAKES) - caught)])
+    for mistake in caught:
+        assert records[mistake]["runtime"] is None
+        assert records[mistake]["runtime_skipped"] == "caught by toy check"
+        assert (records[mistake]["strict"], records[mistake]["lenient"]) == ("check", "check")
+    # A warning decides only the lenient column, so the browser check still ran for the strict one.
+    meh = records["m07-meh"]
+    assert (meh["strict"], meh["lenient"], meh["runtime_skipped"]) == ("silent", "editor", "")
+    assert meh["runtime"]["output_differs"]
+
+
+def test_a_case_whose_browser_check_was_skipped_is_scored_as_a_static_error(toy: Toy, tmp_path: Path) -> None:
+    run_dir = toy.run(jobs=2)
+    report.write(run_dir, tmp_path / "report")
+    summary = json.loads((tmp_path / "report" / "results.json").read_text())
+    by_mistake = {row["mistake"]: row for row in summary["results"]}
+    assert (by_mistake["m01-bad"]["bucket"], by_mistake["m01-bad"]["cell"]) == ("static-error", "C")
+    assert by_mistake["m01-bad"]["runtime_skipped"] == "caught by toy check"
+    matrix = (tmp_path / "report" / "matrix.md").read_text()
+    # Only a run with the browser check turned off has unscored cases.
+    assert "Not scored" not in matrix
+    assert "Not scored" not in (tmp_path / "report" / "report.html").read_text()

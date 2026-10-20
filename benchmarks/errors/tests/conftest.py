@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import pytest
-from citry_errors import cli, work
+from citry_errors import cli, report, work
 from citry_errors.config import load_catalogue, load_frameworks, load_ports
 from citry_errors.runtime import Observation
 
@@ -32,6 +32,16 @@ _CHECK = (
     "    print('app.txt: BAD found'); sys.exit(1)\n"
 )
 
+# The editor stage warns, at the changed line, when the app text holds MEH.
+# Its braces are doubled in the definition, because the runner fills in
+# placeholders such as {work} in every argument.
+_WARN = (
+    "import json\n"
+    "text = open('app.txt').read()\n"
+    "messages = [{'line': 1, 'severity': 1, 'ruleId': 'meh', 'message': 'meh'}] if 'MEH' in text else []\n"
+    "print(json.dumps([{'filePath': 'app.txt', 'messages': messages}]))\n"
+)
+
 FRAMEWORK = f"""\
 key = "toy"
 name = "Toy"
@@ -39,6 +49,12 @@ name = "Toy"
 [setup]
 manifests = ["app.txt"]
 command = ["true"]
+
+[[stages]]
+stage = "editor"
+label = "toy editor"
+argv = [{json.dumps(sys.executable)}, "-c", {json.dumps(_WARN.replace("{", "{{").replace("}", "}}"))}]
+parser = "eslint-json"
 
 [[stages]]
 stage = "check"
@@ -55,8 +71,9 @@ action = "click"
 selector = "button"
 """
 
-# Each mistake's new text: BAD is reported by the check, CHANGED only shows
-# on the page, and SAME changes nothing anyone can see.
+# Each mistake's new text: BAD is reported by the check, MEH gets a warning
+# in the editor and shows on the page, CHANGED only shows on the page, and
+# SAME changes nothing anyone can see.
 MISTAKES = {
     "m01-bad": "BAD",
     "m02-changed": "CHANGED",
@@ -64,6 +81,7 @@ MISTAKES = {
     "m04-same": "SAME",
     "m05-changed-again": "CHANGED again",
     "m06-bad-third": "BAD third",
+    "m07-meh": "MEH",
 }
 
 
@@ -126,5 +144,8 @@ def toy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Toy:
     monkeypatch.setattr(cli, "load_frameworks", lambda: load_frameworks(root / "frameworks"))
     monkeypatch.setattr(cli, "load_ports", lambda: load_ports(root / "cases"))
     monkeypatch.setattr(cli, "load_catalogue", lambda: load_catalogue(root / "catalogue.toml"))
+    # The report reads the definitions too, to name the frameworks and mistakes.
+    monkeypatch.setattr(report, "load_frameworks", lambda: load_frameworks(root / "frameworks"))
+    monkeypatch.setattr(report, "load_catalogue", lambda: load_catalogue(root / "catalogue.toml"))
     monkeypatch.setattr(cli, "observe", _fake_observe(found))
     return found

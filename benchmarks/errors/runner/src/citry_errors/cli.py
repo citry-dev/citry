@@ -19,6 +19,7 @@ from .config import (
     BENCH_ROOT,
     CACHE,
     REPO_ROOT,
+    STATIC_STAGES,
     ConfigError,
     Framework,
     Port,
@@ -182,7 +183,12 @@ def _run_case(framework: Framework, port: Port, baseline: Baseline, run_dir: Pat
         for index, stage in enumerate(framework.stages)
     ]
     runtime_result = None
-    if baseline.runtime is not None:
+    caught_by = _static_catch(stages)
+    # The benchmark scores only where a mistake is first reported. A static
+    # error decides both columns, because the lenient one counts errors too,
+    # so the browser check could not change the cell and is skipped. A static
+    # warning alone leaves the strict column to the browser check, which runs.
+    if baseline.runtime is not None and not caught_by:
         observation = observe(framework, env_dir(framework), copy.path, out / "server.log")
         (out / "runtime.json").write_text(observation.to_json())
         runtime_result = compare(baseline.runtime, observation)
@@ -215,9 +221,29 @@ def _run_case(framework: Framework, port: Port, baseline: Baseline, run_dir: Pat
         ],
         "stages": [asdict(stage) for stage in stages],
         "runtime": asdict(runtime_result) if runtime_result else None,
+        # Says why `runtime` is empty for a case a static stage already
+        # reported, so it is not read as a run with the browser check off.
+        "runtime_skipped": f"caught by {caught_by}" if caught_by and baseline.runtime is not None else "",
     }
     print(f"{framework.key:10} {port.mistake:32} {record['strict']:16} {record['lenient']}", flush=True)
     return record
+
+
+def _static_catch(stages: list[StageResult]) -> str:
+    """
+    Name the first static stage whose error reports the mistake, or give "" when none does.
+
+    It counts the findings the strict column counts: errors at the change and
+    errors a case's note accepts, in the order a developer meets the stages.
+    """
+    if earliest(stages, None, count_warnings=False, accept_indirect=True) not in STATIC_STAGES:
+        return ""
+    return next(
+        stage.label
+        for name in STATIC_STAGES
+        for stage in stages
+        if stage.stage == name and (stage.error or stage.indirect_error)
+    )
 
 
 def default_jobs() -> int:

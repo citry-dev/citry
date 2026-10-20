@@ -35,11 +35,16 @@ framework, the earliest stage that reported it.
    the report marks that cell `°`. Every finding elsewhere that no note
    confirms is listed in `results.json`, so a reader can check what was left
    out.
-4. The runner then starts the app's development server, drives the page in
-   Chromium through the framework's journeys (see
-   [The browser check](#the-browser-check)), and compares what it records
-   with the clean app's. This decides the outcome when no tool reported the
-   mistake:
+4. When no tool reported the mistake as an error, the runner then starts
+   the app's development server, drives the page in Chromium through the
+   framework's journeys (see [The browser check](#the-browser-check)), and
+   compares what it records with the clean app's. A tool's error already
+   decides the cell, because the report keeps only the earliest report, so
+   such a case skips this step and its record says which tool caught it
+   (`runtime_skipped`). A tool's warning alone does not: the record also
+   keeps where the mistake is first reported as an error, which the browser
+   check can still decide. The browser check decides the outcome when no
+   tool reported the mistake:
    - a server error, an error response or a browser error is a runtime error;
    - a browser or server warning is a runtime warning;
    - a different page with no message is "silently wrong";

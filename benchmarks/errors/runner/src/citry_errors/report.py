@@ -200,6 +200,7 @@ def write(run_dir: Path, output: Path) -> None:
                 "baseline_clean",
                 "timed_out",
                 "indirect",
+                "runtime_skipped",
             )
         }
         | {

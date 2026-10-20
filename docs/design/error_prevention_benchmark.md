@@ -34,6 +34,15 @@ outcomes:
    differently.
 7. **Never:** nothing reports it, and the page looks the same.
 
+The runner stops looking once one of the first three outcomes is reached
+with an error: a case that a tool reported as an error skips the browser
+check, because no later stage can change where it was first reported. Its
+record says which tool caught it. A tool's warning alone does not skip the
+browser check, because the record also keeps the earliest error, and the
+browser check can still be the first to report one. In the run of
+2026-10-20, 63 of 134 cases would have skipped it, which would have taken
+about 38% off the run's time.
+
 There is no combined score across mistakes. A single number would hide which
 mistakes each framework catches, the same reason the interaction benchmarks
 publish separate tables
