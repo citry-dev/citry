@@ -147,6 +147,14 @@ django-unicorn adds no system checks; its one management command, \
 runtime: as in the Django app, `manage.py migrate` (Django's session \
 middleware and auth app stay installed), then `manage.py runserver \
 --noreload`.
+
+Stricter settings: none changed from the default. The benchmark turns on a \
+framework's stricter check when other frameworks here have the same kind of \
+check, and none of django-unicorn's settings turns on a check: they choose \
+caching, how the page is updated, where its script goes and whether its HTML \
+is minified. Its one extra check, that a component's HTML is well formed, \
+runs whenever Django's DEBUG is on, as it is here. The Django app's notes \
+cover Django's own options and the tools this app shares with it.
 """
 
 [setup]
