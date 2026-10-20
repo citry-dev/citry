@@ -1,3 +1,7 @@
 status = "ported"
-files = { "server/api/save.post.ts" = "save.post.ts" }
 mistake = { file = "server/api/save.post.ts", contains = "cuont" }
+
+[[edits]]
+file = "server/api/save.post.ts"
+old = "state.count += amount"
+new = "state.cuont += amount"

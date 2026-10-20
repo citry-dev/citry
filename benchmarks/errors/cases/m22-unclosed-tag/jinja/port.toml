@@ -1,3 +1,7 @@
 status = "ported"
-files = { "templates/card.html" = "card.html" }
 mistake = { file = "templates/card.html", contains = "<footer>" }
+
+[[edits]]
+file = "templates/card.html"
+old = "<footer>{{ caller() }}</footer>"
+new = "<footer>{{ caller() }}"

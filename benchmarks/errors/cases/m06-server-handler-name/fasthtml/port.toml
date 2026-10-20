@@ -1,3 +1,7 @@
 status = "ported"
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = '"/sav"' }
+
+[[edits]]
+file = "main.py"
+old = 'Button("Add", hx_post="/save", hx_vals=json.dumps({"amount": 1}), hx_target="#saved"),'
+new = 'Button("Add", hx_post="/sav", hx_vals=json.dumps({"amount": 1}), hx_target="#saved"),'

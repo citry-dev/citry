@@ -1,3 +1,7 @@
 status = "ported"
-files = { "templates/counter.html" = "counter.html" }
 mistake = { file = "templates/counter.html", contains = "hx-post=\"/sav\"" }
+
+[[edits]]
+file = "templates/counter.html"
+old = 'hx-post="/save"'
+new = 'hx-post="/sav"'

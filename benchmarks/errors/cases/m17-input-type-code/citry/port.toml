@@ -1,4 +1,8 @@
 # Server code builds the records and passes the count as a string.
 status = "ported"
-files = { "app/data.py" = "data.py" }
 mistake = { file = "app/data.py", contains = "str(count)" }
+
+[[edits]]
+file = "app/data.py"
+old = "PROJECTS = tuple(Project(title, count, title.lower()) for title, count in TASK_COUNTS.items())"
+new = "PROJECTS = tuple(Project(title, str(count), title.lower()) for title, count in TASK_COUNTS.items())"

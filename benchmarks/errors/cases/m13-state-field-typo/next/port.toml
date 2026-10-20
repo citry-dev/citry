@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/actions.ts" = "actions.ts" }
 mistake = { file = "app/actions.ts", contains = 'state.cuont' }
+
+[[edits]]
+file = "app/actions.ts"
+old = "state.count += payload.amount;"
+new = "state.cuont += payload.amount;"

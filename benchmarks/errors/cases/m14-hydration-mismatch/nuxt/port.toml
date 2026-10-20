@@ -1,3 +1,17 @@
 status = "ported"
-files = { "app/app.vue" = "app.vue" }
 mistake = { file = "app/app.vue", contains = "import.meta.client" }
+
+[[edits]]
+file = "app/app.vue"
+old = '''
+const open = ref(false)
+'''
+new = '''
+const open = ref(false)
+const detailsLabel = import.meta.client ? 'Details' : 'Loading details'
+'''
+
+[[edits]]
+file = "app/app.vue"
+old = '<button type="button" @click="toggleDetails">Details</button>'
+new = '<button type="button" @click="toggleDetails">{{ detailsLabel }}</button>'

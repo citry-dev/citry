@@ -1,3 +1,7 @@
 status = "ported"
-files = { "board/templates/board/card.html" = "card.html" }
 mistake = { file = "board/templates/board/card.html", contains = "$dispatch('hdie')" }
+
+[[edits]]
+file = "board/templates/board/card.html"
+old = '''<button type="button" @click="$dispatch('hide')">Hide</button>'''
+new = '''<button type="button" @click="$dispatch('hdie')">Hide</button>'''

@@ -1,3 +1,7 @@
 status = "ported"
-files = { "templates/counter.html" = "counter.html" }
 mistake = { file = "templates/counter.html", contains = "amont" }
+
+[[edits]]
+file = "templates/counter.html"
+old = "hx-vals='{\"amount\": 1}'"
+new = "hx-vals='{\"amont\": 1}'"

@@ -1,3 +1,7 @@
 status = "ported"
-files = { "board/views.py" = "views.py" }
 mistake = { file = "board/views.py", contains = 'str(count)' }
+
+[[edits]]
+file = "board/views.py"
+old = "cards = [Project(title=title, count=count) for title, count in PROJECTS]"
+new = "cards = [Project(title=title, count=str(count)) for title, count in PROJECTS]"

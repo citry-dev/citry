@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/components/board_page.py" = "board_page.py" }
 mistake = { file = "app/components/board_page.py", contains = "ownr.name" }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = "<p>Owner: {{ owner.name }}</p>"
+new = "<p>Owner: {{ ownr.name }}</p>"

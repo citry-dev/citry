@@ -1,3 +1,13 @@
 status = "ported"
-files = { "app/board.tsx" = "board.tsx" }
 mistake = { file = "app/board.tsx", contains = 'typeof window' }
+
+[[edits]]
+file = "app/board.tsx"
+old = '''
+      <button type="button" onClick={toggle}>
+        Details
+'''
+new = '''
+      <button type="button" onClick={toggle}>
+        {typeof window === "undefined" ? "Loading" : "Details"}
+'''

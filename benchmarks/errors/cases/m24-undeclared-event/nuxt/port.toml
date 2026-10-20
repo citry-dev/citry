@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/components/Card.vue" = "Card.vue" }
 mistake = { file = "app/components/Card.vue", contains = "hdie" }
+
+[[edits]]
+file = "app/components/Card.vue"
+old = '''<button type="button" @click="$emit('hide')">Hide</button>'''
+new = '''<button type="button" @click="$emit('hdie')">Hide</button>'''

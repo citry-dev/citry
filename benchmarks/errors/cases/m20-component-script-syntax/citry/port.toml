@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/components/details.py" = "details.py" }
 mistake = { file = "app/components/details.py", contains = "not this.open" }
+
+[[edits]]
+file = "app/components/details.py"
+old = "this.open = !this.open;"
+new = "this.open = not this.open;"

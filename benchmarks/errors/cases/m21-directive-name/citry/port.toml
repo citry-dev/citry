@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/components/details.py" = "details.py" }
 mistake = { file = "app/components/details.py", contains = "v-iff=\"open\"" }
+
+[[edits]]
+file = "app/components/details.py"
+old = '<p v-if="open">Details are visible</p>'
+new = '<p v-iff="open">Details are visible</p>'

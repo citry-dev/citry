@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/board.tsx" = "board.tsx" }
 mistake = { file = "app/board.tsx", contains = 'titel=' }
+
+[[edits]]
+file = "app/board.tsx"
+old = "title={project.title}"
+new = "titel={project.title}"

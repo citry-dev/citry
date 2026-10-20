@@ -2,5 +2,9 @@
 # as the Next and Nuxt ports read a server-only name. Putting SECRET_TOKEN
 # into js_data() instead would be a different mistake: it leaks the secret.
 status = "ported"
-files = { "app/components/board_page.py" = "board_page.py" }
 mistake = { file = "app/components/board_page.py", contains = "v-text=\"SECRET_TOKEN\"" }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = '<p>API: <span v-text="apiBase"></span></p>'
+new = '<p>API: <span v-text="SECRET_TOKEN"></span></p>'

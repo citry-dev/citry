@@ -1,3 +1,7 @@
 status = "ported"
-files = { "templates/card.html" = "card.html" }
 mistake = { file = "templates/card.html", contains = "title + 1" }
+
+[[edits]]
+file = "templates/card.html"
+old = "<h2>{{ title }}: {{ count }} tasks</h2>"
+new = "<h2>{{ title + 1 }}: {{ count }} tasks</h2>"

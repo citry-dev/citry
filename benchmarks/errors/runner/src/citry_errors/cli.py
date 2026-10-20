@@ -25,7 +25,7 @@ from .config import (
 from .parsers import PARSE, Finding, ToolUnavailable
 from .runtime import Observation, compare, observe, problems
 from .score import StageResult, earliest, score_stage
-from .work import command_env, env_dir, materialize, placeholder, prepare
+from .work import changed_files, command_env, env_dir, materialize, mistake_lines, placeholder, prepare
 
 
 def _run_stages(framework: Framework, work: Path, out: Path) -> list[list[Finding] | None]:
@@ -82,17 +82,27 @@ def validate(frameworks: dict[str, Framework], ports: dict[tuple[str, str], Port
             if port is None:
                 problems.append(f"{framework_key} has no port for {mistake.id}")
                 continue
-            if port.status != "ported":
-                continue
-            for published in port.files:
-                if not (framework.baseline / published).is_file():
-                    problems.append(f"{port.root}: {published} is not a baseline file")
-            source = port.files.get(port.mistake_file)
-            if source is not None:
-                count = sum(port.mistake_contains in line for line in source.read_text().splitlines())
-                if count != 1:
-                    problems.append(f"{port.root}: mistake text is on {count} lines, expected 1")
+            if port.status == "ported":
+                problems += port_problems(framework, port)
     return problems
+
+
+def port_problems(framework: Framework, port: Port) -> list[str]:
+    """
+    Check one ported case against the current baseline.
+
+    An edit is checked against the baseline as it is now, so when a baseline
+    change removes or repeats an edit's old text, `validate` names every case
+    that needs a look before a run starts.
+    """
+    try:
+        changed = changed_files(framework, port)
+    except ConfigError as error:
+        return [str(error)]
+    count = len(mistake_lines(changed[port.mistake_file].decode("utf-8"), port.mistake_contains))
+    if count != 1:
+        return [f"{port.root}: mistake text is on {count} lines, expected 1"]
+    return []
 
 
 def _source() -> dict:

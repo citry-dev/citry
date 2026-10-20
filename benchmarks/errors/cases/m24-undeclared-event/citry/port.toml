@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/components/card.py" = "card.py" }
 mistake = { file = "app/components/card.py", contains = "$emit('hdie'" }
+
+[[edits]]
+file = "app/components/card.py"
+old = '''<button type="button" @click="$emit('hide', title)">Hide</button>'''
+new = '''<button type="button" @click="$emit('hdie', title)">Hide</button>'''

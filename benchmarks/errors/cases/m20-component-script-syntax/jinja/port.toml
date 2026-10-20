@@ -1,3 +1,7 @@
 status = "ported"
-files = { "templates/index.html" = "index.html" }
 mistake = { file = "templates/index.html", contains = "x-data=\"{ open: false\"" }
+
+[[edits]]
+file = "templates/index.html"
+old = '<div x-data="{ open: false }">'
+new = '<div x-data="{ open: false">'

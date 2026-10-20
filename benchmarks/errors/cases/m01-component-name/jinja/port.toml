@@ -1,3 +1,7 @@
 status = "ported"
-files = { "templates/index.html" = "index.html" }
 mistake = { file = "templates/index.html", contains = "crad(" }
+
+[[edits]]
+file = "templates/index.html"
+old = "{% call card(title=project.title, count=project.count) %}"
+new = "{% call crad(title=project.title, count=project.count) %}"

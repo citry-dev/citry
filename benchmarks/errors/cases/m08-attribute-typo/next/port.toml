@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/page.tsx" = "page.tsx" }
 mistake = { file = "app/page.tsx", contains = 'owner.nmae' }
+
+[[edits]]
+file = "app/page.tsx"
+old = "<p>Owner: {owner.name}</p>"
+new = "<p>Owner: {owner.nmae}</p>"

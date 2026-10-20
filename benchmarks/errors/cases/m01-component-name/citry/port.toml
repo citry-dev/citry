@@ -1,3 +1,12 @@
 status = "ported"
-files = { "app/components/board_page.py" = "board_page.py" }
 mistake = { file = "app/components/board_page.py", contains = "<c-Crad" }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = "<c-Card"
+new = "<c-Crad"
+
+[[edits]]
+file = "app/components/board_page.py"
+old = "</c-Card>"
+new = "</c-Crad>"

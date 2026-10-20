@@ -3,23 +3,27 @@
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from .config import CACHE, REPO_ROOT, ConfigError
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
-    from .config import Framework, Port
+    from .config import Edit, Framework, Port
 
 # Build output and installed dependencies never belong in a working copy: the
 # environment is shared, and stale build output would hide the case's change.
-_IGNORED = shutil.ignore_patterns("node_modules", ".venv", ".next", ".nuxt", ".output", "__pycache__", "dist")
+_IGNORED_NAMES = ("node_modules", ".venv", ".next", ".nuxt", ".output", "__pycache__", "dist")
+_IGNORED = shutil.ignore_patterns(*_IGNORED_NAMES)
 
 
 def env_dir(framework: Framework) -> Path:
@@ -95,9 +99,93 @@ class WorkCopy:
     mistake_line: int | None
 
 
+def apply_edits(text: str, edits: Sequence[Edit], where: str) -> str:
+    """
+    Replace each edit's old text in the clean file's text.
+
+    Every old text is looked up in the clean text, never in the result of an
+    earlier edit, so the order of the edits does not matter and one edit
+    cannot create or hide the text another one needs.
+    """
+    spans = []
+    for edit in edits:
+        start = text.find(edit.old)
+        if start < 0:
+            raise ConfigError(f"{where}: edit old text {edit.old!r} is not in {edit.file}")
+        # Searching again from the next character also finds an overlapping
+        # repeat, such as "aa" in "aaa", which str.count would miss.
+        if text.find(edit.old, start + 1) >= 0:
+            raise ConfigError(f"{where}: edit old text {edit.old!r} appears more than once in {edit.file}")
+        spans.append((start, start + len(edit.old), edit))
+    spans.sort(key=lambda span: span[0])
+    for (_, end, first), (start, _, second) in itertools.pairwise(spans):
+        # Two replacements of the same characters have no single result.
+        if start < end:
+            raise ConfigError(f"{where}: edits {first.old!r} and {second.old!r} overlap in {first.file}")
+    pieces = []
+    position = 0
+    for start, end, edit in spans:
+        pieces += [text[position:start], edit.new]
+        position = end
+    pieces.append(text[position:])
+    return "".join(pieces)
+
+
+def _inside(baseline: Path, published: str, port: Port) -> Path:
+    """
+    Join a case's path to the baseline and confirm it still points inside it.
+
+    Loading already rejects "..", absolute paths and drive letters; this also
+    catches a symbolic link in the baseline that leads out of it, because the
+    case's edits would be applied to a file read through that link.
+    """
+    path = baseline / published
+    if not path.resolve().is_relative_to(baseline.resolve()):
+        raise ConfigError(f"{port.root} names {published!r}, which resolves outside the baseline")
+    # The working copy leaves these folders out, so a change there would pass
+    # validate and then fail in the middle of a run.
+    if any(part in _IGNORED_NAMES for part in PurePosixPath(published).parts):
+        raise ConfigError(f"{port.root} names {published!r}, inside a folder the working copy leaves out")
+    return path
+
+
+def changed_files(framework: Framework, port: Port) -> dict[str, bytes]:
+    """
+    Give the new content of every file the case changes, keyed by its path in the baseline.
+
+    Raises ConfigError when the case names a file the baseline does not have,
+    or an edit does not match the baseline's text exactly once.
+    """
+    changed = {}
+    for published, source in port.files.items():
+        _inside(framework.baseline, published, port)
+        if not (framework.baseline / published).is_file():
+            # A case may only change files the clean app has, so its
+            # difference stays visible next to the baseline.
+            raise ConfigError(f"{port.root} replaces {published!r}, which the baseline does not have")
+        changed[published] = source.read_bytes()
+    by_file: dict[str, list[Edit]] = {}
+    for edit in port.edits:
+        by_file.setdefault(edit.file, []).append(edit)
+    for published, edits in by_file.items():
+        path = _inside(framework.baseline, published, port)
+        if not path.is_file():
+            raise ConfigError(f"{port.root} edits {published!r}, which the baseline does not have")
+        # Bytes are decoded by hand, because read_text would turn CRLF line
+        # endings into LF and the working copy would no longer match the file.
+        text = path.read_bytes().decode("utf-8")
+        changed[published] = apply_edits(text, edits, str(port.root)).encode("utf-8")
+    return changed
+
+
+def mistake_lines(text: str, needle: str) -> list[int]:
+    """Give the 1-based numbers of the lines that contain the mistake text."""
+    return [number for number, line in enumerate(text.splitlines(), start=1) if needle in line]
+
+
 def materialize(framework: Framework, port: Port | None) -> WorkCopy:
     """
-    Copy the clean app and lay the case's files over it.
+    Copy the clean app and apply the case's changes to it.
 
     The copy sits inside the environment folder, so Node's module lookup,
     which walks up the parent folders, finds the shared node_modules.
@@ -110,19 +198,16 @@ def materialize(framework: Framework, port: Port | None) -> WorkCopy:
     shutil.copytree(framework.baseline, work, ignore=_IGNORED)
     mistake_line = None
     if port is not None:
-        for published, source in port.files.items():
-            target = work / published
-            if not (framework.baseline / published).is_file():
-                # A case may only change files the clean app has, so its
-                # difference stays visible next to the baseline.
-                raise ConfigError(f"{port.root} replaces {published!r}, which the baseline does not have")
-            shutil.copy2(source, target)
-        mistake_line = locate(work / port.mistake_file, port.mistake_contains, port)
+        changed = changed_files(framework, port)
+        for published, content in changed.items():
+            # Writing into the copied file keeps its permissions.
+            (work / published).write_bytes(content)
+        mistake_line = locate(changed[port.mistake_file].decode("utf-8"), port.mistake_contains, port)
     return WorkCopy(work, mistake_line)
 
 
-def locate(path: Path, needle: str, port: Port) -> int:
-    lines = [number for number, line in enumerate(path.read_text().splitlines(), start=1) if needle in line]
+def locate(text: str, needle: str, port: Port) -> int:
+    lines = mistake_lines(text, needle)
     if len(lines) != 1:
         raise ConfigError(f"{port.root}: mistake text {needle!r} must appear on exactly one line, found {len(lines)}")
     return lines[0]

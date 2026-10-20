@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/app.vue" = "app.vue" }
 mistake = { file = "app/app.vue", contains = "bord?." }
+
+[[edits]]
+file = "app/app.vue"
+old = "<p>Owner: {{ board?.owner.name }}</p>"
+new = "<p>Owner: {{ bord?.owner.name }}</p>"

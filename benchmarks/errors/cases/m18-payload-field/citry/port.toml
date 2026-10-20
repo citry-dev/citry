@@ -2,5 +2,9 @@
 # response and hands it to $error('save'). The reference page has no error
 # display, so nothing appears on screen.
 status = "ported"
-files = { "app/components/counter.py" = "counter.py" }
 mistake = { file = "app/components/counter.py", contains = "amont: 1" }
+
+[[edits]]
+file = "app/components/counter.py"
+old = '<button type="button" @c-click="save({amount: 1})">Add</button>'
+new = '<button type="button" @c-click="save({amont: 1})">Add</button>'

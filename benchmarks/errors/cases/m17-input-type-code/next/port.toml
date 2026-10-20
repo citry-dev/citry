@@ -1,5 +1,9 @@
 # The server component turns each count into a string while it hands the
 # projects to the board, the same place the other ports compute the value.
 status = "ported"
-files = { "app/page.tsx" = "page.tsx" }
 mistake = { file = "app/page.tsx", contains = "count: String(project.count)" }
+
+[[edits]]
+file = "app/page.tsx"
+old = "<Board apiBase={API_BASE} projects={projects} initialSaved={state.count} />"
+new = "<Board apiBase={API_BASE} projects={projects.map((project) => ({ ...project, count: String(project.count) }))} initialSaved={state.count} />"

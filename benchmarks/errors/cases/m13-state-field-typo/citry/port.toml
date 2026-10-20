@@ -1,3 +1,7 @@
 status = "ported"
-files = { "app/components/counter.py" = "counter.py" }
 mistake = { file = "app/components/counter.py", contains = "state.cuont" }
+
+[[edits]]
+file = "app/components/counter.py"
+old = "state.count += data.amount"
+new = "state.cuont += data.amount"

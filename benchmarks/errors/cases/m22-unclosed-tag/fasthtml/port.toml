@@ -1,9 +1,13 @@
 # FastHTML elements are Python calls, so an element left open is a call
 # whose closing parenthesis is missing.
 status = "ported"
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = 'Footer(footer,' }
 
 [indirect]
 reason = "In FastHTML an unclosed element is an unclosed call. pyright reports the open parenthesis at the start of the call and the statements it swallows below, and ruff reports where the parenthesis should close."
 codes = ["pyright", "invalid-syntax"]
+
+[[edits]]
+file = "main.py"
+old = "Footer(footer),"
+new = "Footer(footer,"

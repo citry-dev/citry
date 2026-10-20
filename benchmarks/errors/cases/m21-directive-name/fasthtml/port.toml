@@ -1,5 +1,9 @@
 status = "ported"
 # FastHTML has no template directives of its own; its htmx attributes play
 # that part, as Alpine's do in the Django and Jinja ports.
-files = { "main.py" = "main.py" }
 mistake = { file = "main.py", contains = 'hx_tagret=' }
+
+[[edits]]
+file = "main.py"
+old = 'Button("Add", hx_post="/save", hx_vals=json.dumps({"amount": 1}), hx_target="#saved"),'
+new = 'Button("Add", hx_post="/save", hx_vals=json.dumps({"amount": 1}), hx_tagret="#saved"),'
