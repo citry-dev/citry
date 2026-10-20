@@ -98,6 +98,10 @@ class CToolbar(LibraryComponent):
     class Slots:
         default: SlotInput[CToolbarDefaultSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         label = _plain("label", kwargs.label)
         orientation = _choice("orientation", kwargs.orientation, _ORIENTATIONS)

@@ -195,6 +195,10 @@ class CFormCollection(LibraryComponent):
         # Keep this camelCase spelling in sync with the JavaScript data key.
         serverDefaults: dict[str, bool]  # noqa: N815
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_form_collection_snapshot", None)
         if cached is not None:
@@ -305,6 +309,10 @@ class CFormCollectionItem(LibraryComponent):
     class Slots:
         default: SlotInput[CFormCollectionItemSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "default" not in self.raw_slots:
             raise ValueError("CFormCollectionItem requires field-group content.")
@@ -352,6 +360,10 @@ class CInternalFormCollectionDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CFormCollectionDefaultSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -390,6 +402,10 @@ class CInternalFormCollection(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         count = len(kwargs.registry.items)
@@ -507,6 +523,10 @@ class CInternalFormCollectionItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item

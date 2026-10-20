@@ -255,6 +255,10 @@ class CTour(LibraryComponent):
         activator: SlotInput[CTourActivatorSlotData] | None = None
         close: SlotInput[CTourCloseSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tour_snapshot", None)
         if cached is not None:
@@ -412,6 +416,10 @@ class CTourStep(LibraryComponent):
         default: SlotInput[CTourStepDefaultSlotData]
         media: SlotInput[CTourStepMediaSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "title" not in self.raw_slots or "default" not in self.raw_slots:
             raise ValueError("CTourStep requires title and default content slots.")
@@ -454,6 +462,10 @@ class CInternalTourDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTourDefaultSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -488,6 +500,10 @@ class CInternalTour(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if not kwargs.registry.steps:
@@ -620,6 +636,10 @@ class CInternalTourStep(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item

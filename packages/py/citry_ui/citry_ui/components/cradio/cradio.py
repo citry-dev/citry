@@ -226,6 +226,10 @@ class CRadioGroup(LibraryComponent):
         default: SlotInput[CRadioGroupDefaultSlotData]
         label: SlotInput[CRadioGroupLabelSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(
         self,
         kwargs: Kwargs,
@@ -714,6 +718,10 @@ class CRadio(LibraryComponent):
     class Slots:
         default: SlotInput[CRadioDefaultSlotData]
         description: SlotInput[CRadioDescriptionSlotData] | None = None
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(
         self,

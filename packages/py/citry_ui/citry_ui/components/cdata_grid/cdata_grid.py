@@ -440,6 +440,10 @@ class CDataGrid(LibraryComponent):
         empty: SlotInput[CDataGridEmptySlotData] | None = None
         error: SlotInput[CDataGridErrorSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     @classmethod
     def _columns(
         cls, value: Sequence[CDataGridColumn], sort: tuple[CDataGridSort, ...]
