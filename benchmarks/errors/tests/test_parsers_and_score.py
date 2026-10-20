@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from citry_errors import report
+from citry_errors import html_report, report
 from citry_errors.config import ConfigError, load_port
 from citry_errors.parsers import (
     Finding,
@@ -348,3 +348,40 @@ def test_djlint_findings_take_the_file_printed_above_them() -> None:
         Finding("board/templates/board/card.html", 1, "error", "H025", 'Tag seems to be an orphan. <div class="card">')
     ]
     assert djlint("Linted 3 files, found 0 errors.\n", "", 0, WORK) == []
+
+
+def test_the_html_report_draws_every_framework_and_escapes_tool_output() -> None:
+    summary = {
+        "run": "r1",
+        "source": {"commit": "abc", "benchmark_files_changed": False},
+        "frameworks": [{"key": "citry", "name": "Citry"}, {"key": "next", "name": "Next.js"}],
+        "categories": [{"id": "naming", "heading": "Names"}],
+        "buckets": [{"id": key, "label": key} for key in html_report.BUCKET_COLORS],
+        "codes": [{"code": "E", "meaning": "reported in the editor"}],
+        "mistakes": [{"id": "m1", "title": "Misspelled name", "category": "naming"}],
+        "results": [
+            {
+                "framework": "citry",
+                "mistake": "m1",
+                "status": "ported",
+                "bucket": "static-error",
+                "cell": "E",
+                "evidence": ["editor: <c-Crad> is not registered"],
+            },
+            {
+                "framework": "next",
+                "mistake": "m1",
+                "status": "not-applicable",
+                "bucket": None,
+                "cell": "n/a",
+                "reason": "No equivalent",
+                "evidence": [],
+            },
+        ],
+    }
+    page = html_report.render(summary)
+    assert page.startswith("<!doctype html>")
+    assert "&lt;c-Crad&gt;" in page
+    assert "<c-Crad>" not in page
+    assert "Does not apply or prevented by design" in page
+    assert "<script" not in page

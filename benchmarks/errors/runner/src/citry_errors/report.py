@@ -6,6 +6,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
+from . import html_report
 from .config import OUTCOMES, REPO_ROOT, STATIC_STAGES, load_catalogue, load_frameworks
 
 # One short letter per outcome keeps the matrix readable at 24 x 6 cells.
@@ -178,9 +179,11 @@ def write(run_dir: Path, output: Path) -> None:
                 "baseline_clean",
                 "timed_out",
                 "indirect",
-                "accepted_indirect",
-                "unconfirmed_indirect",
             )
+        }
+        | {
+            key: [_public(line) for line in record.get(key) or []]
+            for key in ("accepted_indirect", "unconfirmed_indirect")
         }
         | {
             "category": titles[record["mistake"]].category,
@@ -207,3 +210,5 @@ def write(run_dir: Path, output: Path) -> None:
         "results": compact,
     }
     (output / "results.json").write_text(json.dumps(summary, indent=2) + "\n")
+    # The same data as a page that opens from disk, with no docs site to start.
+    html_report.write(summary, output)

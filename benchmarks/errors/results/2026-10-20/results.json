@@ -1,5 +1,9 @@
 {
-  "run": "20261020T090617Z",
+  "run": "20261020T094732Z",
+  "source": {
+    "commit": "b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be",
+    "benchmark_files_changed": false
+  },
   "frameworks": [
     {
       "key": "citry",
@@ -93,11 +97,11 @@
     },
     {
       "code": "R",
-      "meaning": "reported at runtime: a server error, an error response, or a browser error or warning"
+      "meaning": "reported at runtime by a server error, an error response or a browser error (Rw: only a warning)"
     },
     {
       "code": "w",
-      "meaning": "after a stage letter: that stage gave only a warning; after the comma: the first error, if any"
+      "meaning": "the stage before it gave only a warning; after the comma, the first stage that gave an error, or S or N"
     },
     {
       "code": "S",
@@ -125,7 +129,7 @@
     },
     {
       "code": "!",
-      "meaning": "the unchanged app reported problems in this run, so the cell is unreliable"
+      "meaning": "the clean app reported problems in this run, so the cell is unreliable"
     },
     {
       "code": "~",
@@ -269,6 +273,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -278,7 +283,7 @@
         "citry check: citry.template.unknown-component Component <c-Crad> is not registered.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52146/",
+        "error: 500 http://127.0.0.1:53771/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -293,16 +298,17 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count'",
-        "citry check: citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count'",
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'c-if', 'c-elif', 'c-else', 'c-...",
+        "citry check: citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'c-if', 'c-elif', 'c-else', 'c-for', 'c-empty'. Found invalid a...",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52150/",
+        "error: 500 http://127.0.0.1:53775/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -317,6 +323,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
@@ -335,6 +342,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -344,7 +352,7 @@
         "citry check: citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n21 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52168/",
+        "error: 500 http://127.0.0.1:53789/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -359,6 +367,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -368,7 +377,7 @@
         "citry check: citry.parse.syntax Parse error:   --> 23:13\n   |\n23 |             <c-fill name=\"fotter\">\n   |             ^--------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52184/",
+        "error: 500 http://127.0.0.1:53794/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -383,6 +392,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",
@@ -392,7 +402,7 @@
         "citry check: citry.browser.unknown-server-event Server event 'sav' is not declared by this component.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52190/",
+        "error: 500 http://127.0.0.1:53799/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -407,6 +417,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -416,7 +427,7 @@
         "citry check: citry.template.unknown-variable Template variable 'ownr' is not available in this template.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52199/",
+        "error: 500 http://127.0.0.1:53867/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -431,6 +442,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -439,7 +451,7 @@
         "Citry language server (citry check --types): citry.python.unresolved-attribute Object of type `Owner` has no attribute `nmae`",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52212/",
+        "error: 500 http://127.0.0.1:53871/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -454,6 +466,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "static-warning",
@@ -473,6 +486,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -489,6 +503,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -505,6 +520,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": "static-error",
@@ -524,6 +540,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",
@@ -545,6 +562,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": "runtime-error",
@@ -564,6 +582,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -573,7 +592,7 @@
         "citry check: citry.i18n.unknown-message Unknown i18n message ID 'board-titel'; no component or configured catalog package defines it.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52274/",
+        "error: 500 http://127.0.0.1:53938/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -588,6 +607,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -604,6 +624,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
@@ -622,6 +643,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "silent",
@@ -638,6 +660,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "runtime-error",
@@ -645,7 +668,7 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52308/",
+        "error: 500 http://127.0.0.1:53977/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -660,6 +683,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
@@ -681,13 +705,14 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "runtime-error",
       "cell": "R",
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "error: pageerror: Component Details_05bc14 uses the directive 'v-iff', but no directive named 'iff' is registered. Check the spelling, or register it: in the 'directives' option of the component's $component() call, or for every component with Citry.vue.use(plugin), where the plugin's install(app) calls app.directive(\"iff\", ...).",
+        "error: pageerror: Component Details_05bc14 uses the directive 'v-iff', but no directive named 'iff' is registered. Check the spelling, or register it: in the 'directives' option of the component's $component() call, or for every component with Citry.vue.use(plugin), where the plugin's install(app...",
         "error: pageerror: Citry Vue app failed during initialization"
       ]
     },
@@ -701,6 +726,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
@@ -710,7 +736,7 @@
         "citry check: citry.parse.syntax Parse error:  --> 7:1\n  |\n7 | </article>\n  | ^--------^\n  |\n  = Mismatched tags: expected closing tag '</footer>', found '</article>'",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52343/",
+        "error: 500 http://127.0.0.1:54003/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -725,6 +751,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
@@ -733,7 +760,7 @@
         "Citry language server (citry check --types): citry.python.unsupported-operator Operator `+` is not supported between objects of type `str` and `Literal[1]`",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52348/",
+        "error: 500 http://127.0.0.1:54007/",
         "error: ERROR:    Exception in ASGI application",
         "error: Traceback (most recent call last):"
       ]
@@ -748,6 +775,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",
@@ -767,6 +795,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "runtime-error",
@@ -774,7 +803,7 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52368/",
+        "error: 500 http://127.0.0.1:54032/",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):"
       ]
@@ -789,6 +818,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -805,6 +835,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "silent",
@@ -821,6 +852,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -837,6 +869,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -853,6 +886,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "runtime-error",
@@ -860,7 +894,7 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52404/",
+        "error: 500 http://127.0.0.1:54073/",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):"
       ]
@@ -875,6 +909,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -891,6 +926,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -907,6 +943,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "never",
@@ -923,6 +960,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -934,20 +972,17 @@
       "mistake": "m11-element-name",
       "status": "ported",
       "reason": null,
-      "strict": "check",
-      "lenient": "check",
+      "strict": "silent",
+      "lenient": "silent",
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
-      "unconfirmed_indirect": [
-        "djLint 1.46.6 (--lint, django profile): board/templates/board/page.html:46 Tag seems to be an orphan. </div>"
-      ],
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "static-error",
-      "cell": "C",
-      "evidence": [
-        "djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. <dvi class=\"board\" t"
-      ]
+      "bucket": "silent",
+      "cell": "S",
+      "evidence": []
     },
     {
       "framework": "django",
@@ -959,6 +994,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": "runtime-error",
@@ -981,6 +1017,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "silent",
@@ -997,7 +1034,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": null,
       "cell": "n/a",
@@ -1013,6 +1051,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -1029,6 +1068,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -1040,16 +1080,19 @@
       "mistake": "m17-input-type-code",
       "status": "ported",
       "reason": null,
-      "strict": "never",
-      "lenient": "never",
+      "strict": "editor",
+      "lenient": "editor",
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
-      "bucket": "never",
-      "cell": "N",
-      "evidence": []
+      "bucket": "static-error",
+      "cell": "E",
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"str\" cannot be assigned to parameter \"count\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0\"str\" is not assignable to \"int\""
+      ]
     },
     {
       "framework": "django",
@@ -1061,6 +1104,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "runtime-error",
@@ -1068,7 +1112,7 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: Response Status Error Code 500 from /save/, [object HTMLSpanElement]",
-        "error: 500 http://127.0.0.1:52495/save/",
+        "error: 500 http://127.0.0.1:54203/save/",
         "error: Internal Server Error: /save/",
         "error: Traceback (most recent call last):"
       ]
@@ -1083,6 +1127,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "runtime-error",
@@ -1104,6 +1149,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
@@ -1127,6 +1173,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -1143,6 +1190,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
@@ -1161,6 +1209,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "silent",
@@ -1177,6 +1226,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "silent",
@@ -1193,6 +1243,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -1201,8 +1252,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"Crad\" is not defined",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52564/",
-        "error: INFO:     127.0.0.1:52566 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54295/",
+        "error: INFO:     127.0.0.1:54297 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1216,6 +1267,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -1225,8 +1277,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"titel\"",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52568/",
-        "error: INFO:     127.0.0.1:52570 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54301/",
+        "error: INFO:     127.0.0.1:54303 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1240,7 +1292,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "types",
       "bucket": null,
       "cell": "n/a",
@@ -1256,6 +1309,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -1264,8 +1318,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"title\"",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52573/",
-        "error: INFO:     127.0.0.1:52575 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54306/",
+        "error: INFO:     127.0.0.1:54308 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1279,6 +1333,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -1288,8 +1343,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"fotter\"",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52577/",
-        "error: INFO:     127.0.0.1:52579 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54310/",
+        "error: INFO:     127.0.0.1:54312 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1303,6 +1358,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "runtime-error",
@@ -1310,7 +1366,7 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Response Status Error Code 404 from /sav",
-        "error: 404 http://127.0.0.1:52581/sav"
+        "error: 404 http://127.0.0.1:54320/sav"
       ]
     },
     {
@@ -1323,6 +1379,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -1331,8 +1388,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"ownr\" is not defined",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52590/",
-        "error: INFO:     127.0.0.1:52592 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54329/",
+        "error: INFO:     127.0.0.1:54331 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1346,6 +1403,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -1354,8 +1412,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"nmae\" for class \"Owner\"\n\u00a0\u00a0Attribute \"nmae\" is unknown",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52594/",
-        "error: INFO:     127.0.0.1:52596 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54333/",
+        "error: INFO:     127.0.0.1:54335 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1369,6 +1427,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "never",
@@ -1385,6 +1444,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -1401,6 +1461,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "static-error",
@@ -1409,8 +1470,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"Dvi\" is not defined",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52618/",
-        "error: INFO:     127.0.0.1:52620 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54358/",
+        "error: INFO:     127.0.0.1:54360 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1424,6 +1485,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": "runtime-error",
@@ -1443,6 +1505,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",
@@ -1452,8 +1515,8 @@
         "ruff 0.15.5 (default rules): F841 Local variable `cuont` is assigned to but never used",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: Response Status Error Code 500 from /save",
-        "error: 500 http://127.0.0.1:52631/save",
-        "error: INFO:     127.0.0.1:52634 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54371/save",
+        "error: INFO:     127.0.0.1:54374 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1467,7 +1530,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": null,
       "cell": "n/a",
@@ -1483,7 +1547,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": null,
       "cell": "n/a",
@@ -1499,6 +1564,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -1515,6 +1581,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
@@ -1533,6 +1600,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "runtime-error",
@@ -1540,7 +1608,7 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 400 (Bad Request)",
         "error: Response Status Error Code 400 from /save",
-        "error: 400 http://127.0.0.1:52659/save"
+        "error: 400 http://127.0.0.1:54399/save"
       ]
     },
     {
@@ -1553,6 +1621,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "runtime-error",
@@ -1571,6 +1640,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "runtime-error",
@@ -1584,17 +1654,18 @@
     {
       "framework": "fasthtml",
       "mistake": "m21-directive-name",
-      "status": "not-applicable",
-      "reason": "FastHTML has no template directives. A condition is a Python `if` that runs while the server builds the page, and the Details toggle is plain JavaScript that sets the element's `hidden` property. The page uses htmx attributes (`hx_post`, `hx_target`), but no other framework's case misspells one, so they are not measured here. Breaking the toggle script is m20.\n",
-      "strict": null,
-      "lenient": null,
-      "baseline_clean": null,
-      "timed_out": null,
-      "indirect": null,
-      "unconfirmed_indirect": null,
+      "status": "ported",
+      "reason": null,
+      "strict": "silent",
+      "lenient": "silent",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": null,
-      "cell": "n/a",
+      "bucket": "silent",
+      "cell": "S",
       "evidence": []
     },
     {
@@ -1607,15 +1678,18 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [
+        "Pylance, type checking on (pyright 1.1.414, standard): main.py:99 pyright Statements must be separated by newlines or semicolons"
+      ],
       "unconfirmed_indirect": [
-        "Pylance, type checking on (pyright 1.1.414, standard): main.py:99 Statements must be separated by newlines or semicolons",
-        "ruff 0.15.5 (default rules): main.py:58 Expected `)`, found newline"
+        "ruff 0.15.5 (default rules): main.py:58 invalid-syntax Expected `)`, found newline"
       ],
       "category": "templates",
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
         "Pylance, type checking on (pyright 1.1.414, standard): pyright \"(\" was not closed",
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright Statements must be separated by newlines or semicolons",
         "interaction: the development server did not answer",
         "the development server did not answer"
       ]
@@ -1630,6 +1704,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
@@ -1638,8 +1713,8 @@
         "Pylance, type checking on (pyright 1.1.414, standard): reportOperatorIssue Operator \"+\" not supported for types \"str\" and \"Literal[1]\"",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52690/",
-        "error: INFO:     127.0.0.1:52692 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54441/",
+        "error: INFO:     127.0.0.1:54443 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1653,6 +1728,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "silent",
@@ -1669,6 +1745,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "runtime-error",
@@ -1676,8 +1753,8 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52709/",
-        "error: INFO:     127.0.0.1:52711 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54462/",
+        "error: INFO:     127.0.0.1:54465 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1691,6 +1768,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "runtime-error",
@@ -1698,8 +1776,8 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52713/",
-        "error: INFO:     127.0.0.1:52715 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54467/",
+        "error: INFO:     127.0.0.1:54469 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1713,6 +1791,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "silent",
@@ -1729,6 +1808,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -1745,7 +1825,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": null,
       "cell": "n/a",
@@ -1761,6 +1842,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "runtime-error",
@@ -1768,7 +1850,7 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Response Status Error Code 404 from /sav, [object HTMLDivElement]",
-        "error: 404 http://127.0.0.1:52727/sav"
+        "error: 404 http://127.0.0.1:54481/sav"
       ]
     },
     {
@@ -1781,6 +1863,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "runtime-error",
@@ -1788,8 +1871,8 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52735/",
-        "error: INFO:     127.0.0.1:52737 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54486/",
+        "error: INFO:     127.0.0.1:54488 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1803,6 +1886,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -1819,6 +1903,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "never",
@@ -1835,6 +1920,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -1851,6 +1937,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -1867,6 +1954,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": "runtime-error",
@@ -1888,6 +1976,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "runtime-error",
@@ -1895,8 +1984,8 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: Response Status Error Code 500 from /save, [object HTMLDivElement]",
-        "error: 500 http://127.0.0.1:52768/save",
-        "error: INFO:     127.0.0.1:52771 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54581/save",
+        "error: INFO:     127.0.0.1:54585 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1910,7 +1999,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": null,
       "cell": "n/a",
@@ -1926,7 +2016,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": null,
       "cell": "n/a",
@@ -1942,6 +2033,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -1958,6 +2050,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
@@ -1976,6 +2069,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "runtime-error",
@@ -1983,8 +2077,8 @@
       "evidence": [
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: Response Status Error Code 500 from /save, [object HTMLDivElement]",
-        "error: 500 http://127.0.0.1:52783/save",
-        "error: INFO:     127.0.0.1:52788 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54622/save",
+        "error: INFO:     127.0.0.1:54625 - \"POST /save HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -1998,6 +2092,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "runtime-error",
@@ -2019,6 +2114,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "runtime-error",
@@ -2041,6 +2137,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -2057,6 +2154,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
@@ -2075,6 +2173,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "runtime-error",
@@ -2082,8 +2181,8 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: 500 http://127.0.0.1:52812/",
-        "error: INFO:     127.0.0.1:52814 - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: 500 http://127.0.0.1:54647/",
+        "error: INFO:     127.0.0.1:54649 - \"GET / HTTP/1.1\" 500 Internal Server Error",
         "error: ERROR:    Exception in ASGI application"
       ]
     },
@@ -2097,6 +2196,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "silent",
@@ -2113,8 +2213,9 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "eslint (npm run lint): app/board.tsx:5 'Card' is defined but never used."
+        "eslint (npm run lint): app/board.tsx:5 @typescript-eslint/no-unused-vars 'Card' is defined but never used."
       ],
       "category": "naming",
       "bucket": "static-error",
@@ -2126,7 +2227,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: pageerror: Crad is not defined",
-        "error: 500 http://127.0.0.1:52842/",
+        "error: 500 http://127.0.0.1:54691/",
         "error: \u2a2f ReferenceError: Crad is not defined"
       ]
     },
@@ -2140,6 +2241,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -2159,6 +2261,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
@@ -2178,6 +2281,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -2197,6 +2301,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -2216,8 +2321,9 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "eslint (npm run lint): app/board.tsx:4 'save' is defined but never used."
+        "eslint (npm run lint): app/board.tsx:4 @typescript-eslint/no-unused-vars 'save' is defined but never used."
       ],
       "category": "events",
       "bucket": "static-error",
@@ -2239,8 +2345,9 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "eslint (npm run lint): app/page.tsx:2 'owner' is defined but never used."
+        "eslint (npm run lint): app/page.tsx:2 @typescript-eslint/no-unused-vars 'owner' is defined but never used."
       ],
       "category": "naming",
       "bucket": "static-error",
@@ -2251,7 +2358,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: pageerror: ownr is not defined",
-        "error: 500 http://127.0.0.1:52942/",
+        "error: 500 http://127.0.0.1:54790/",
         "error: \u2a2f ReferenceError: ownr is not defined"
       ]
     },
@@ -2265,6 +2372,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -2284,6 +2392,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "static-error",
@@ -2303,6 +2412,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "static-error",
@@ -2322,9 +2432,10 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "tsc --noEmit (VS Code TypeScript): app/page.tsx:17 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'.",
-        "next build: app/page.tsx:17 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'."
+        "tsc --noEmit (VS Code TypeScript): app/page.tsx:17 TS2339 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'.",
+        "next build: app/page.tsx:17 TS2339 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'."
       ],
       "category": "html",
       "bucket": "static-error",
@@ -2344,15 +2455,16 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "eslint (npm run lint): app/board.tsx:14 'apiBase' is defined but never used."
+        "eslint (npm run lint): app/board.tsx:14 @typescript-eslint/no-unused-vars 'apiBase' is defined but never used."
       ],
       "category": "server-browser",
       "bucket": "runtime-error",
       "cell": "R",
       "evidence": [
-        "error: pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <ScrollAndMaybeFocusHandler cacheNode={{rsc:{...}, ...}}>\n      <InnerScrollHandlerNew focusAndScrollRef={{scrollRef:null, ...}} cacheNode={{rsc:{...}, ...}}>\n        <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>\n          <LoadingBoundary name=\"/\" loading={null}>\n            <HTTPAccessFallbackBoundary notFound={{...}} forbidden={undefined} unauthorized={undefined}>\n              <HTTPAccessFallbackErrorBoundary pathname=\"/\" notFound={{...}} forbidden={undefined} ...>\n                <RedirectBoundary>\n                  <RedirectErrorBoundary router={{...}}>\n                    <InnerLayoutRouter url=\"/\" tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} segmentPath={[...]} ...>\n                      <SegmentViewNode type=\"page\" pagePath=\"page.tsx\">\n                        <SegmentTrieNode>\n                        <Home>\n                          <div className=\"board\" title=\"Board\">\n                            <h1>\n                            <p>\n                            <Board apiBase=\"/api\" projects={[...]} initialSaved={0}>\n                              <p>\n-                               s3cr3t\n                              ...\n                            ...\n                      ...\n                    ...\n        ...\n",
-        "error: pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <ScrollAndMaybeFocusHandler cacheNode={{rsc:{...}, ...}}>\n      <InnerScrollHandlerNew focusAndScrollRef={{scrollRef:null, ...}} cacheNode={{rsc:{...}, ...}}>\n        <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>\n          <LoadingBoundary name=\"/\" loading={null}>\n            <HTTPAccessFallbackBoundary notFound={{...}} forbidden={undefined} unauthorized={undefined}>\n              <HTTPAccessFallbackErrorBoundary pathname=\"/\" notFound={{...}} forbidden={undefined} ...>\n                <RedirectBoundary>\n                  <RedirectErrorBoundary router={{...}}>\n                    <InnerLayoutRouter url=\"/\" tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} segmentPath={[...]} ...>\n                      <SegmentViewNode type=\"page\" pagePath=\"page.tsx\">\n                        <SegmentTrieNode>\n                        <Home>\n                          <div className=\"board\" title=\"Board\">\n                            <h1>\n                            <p>\n                            <Board apiBase=\"/api\" projects={[...]} initialSaved={1}>\n                              <p>\n-                               s3cr3t\n                              ...\n                            ...\n                      ...\n                    ...\n        ...\n",
+        "error: pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
+        "error: pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
         "error: [browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:",
         "error: [browser] Uncaught Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:"
       ]
@@ -2367,6 +2479,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",
@@ -2386,13 +2499,14 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": "runtime-error",
       "cell": "R",
       "evidence": [
-        "error: pageerror: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <ScrollAndMaybeFocusHandler cacheNode={{rsc:{...}, ...}}>\n      <InnerScrollHandlerNew focusAndScrollRef={{scrollRef:null, ...}} cacheNode={{rsc:{...}, ...}}>\n        <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>\n          <LoadingBoundary name=\"/\" loading={null}>\n            <HTTPAccessFallbackBoundary notFound={{...}} forbidden={undefined} unauthorized={undefined}>\n              <HTTPAccessFallbackErrorBoundary pathname=\"/\" notFound={{...}} forbidden={undefined} ...>\n                <RedirectBoundary>\n                  <RedirectErrorBoundary router={{...}}>\n                    <InnerLayoutRouter url=\"/\" tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} segmentPath={[...]} ...>\n                      <SegmentViewNode type=\"page\" pagePath=\"page.tsx\">\n                        <SegmentTrieNode>\n                        <Home>\n                          <div className=\"board\" title=\"Board\">\n                            <h1>\n                            <p>\n                            <Board apiBase=\"/api\" projects={[...]} initialSaved={0}>\n                              <p>\n                              <Card>\n                              <Card>\n                              <Card>\n                              <p>\n                              <button>\n                              <button type=\"button\" onClick={function toggle}>\n+                               Details\n-                               Loading\n                            ...\n                      ...\n                    ...\n        ...\n",
-        "error: pageerror: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <ScrollAndMaybeFocusHandler cacheNode={{rsc:{...}, ...}}>\n      <InnerScrollHandlerNew focusAndScrollRef={{scrollRef:null, ...}} cacheNode={{rsc:{...}, ...}}>\n        <ErrorBoundary errorComponent={undefined} errorStyles={undefined} errorScripts={undefined}>\n          <LoadingBoundary name=\"/\" loading={null}>\n            <HTTPAccessFallbackBoundary notFound={{...}} forbidden={undefined} unauthorized={undefined}>\n              <HTTPAccessFallbackErrorBoundary pathname=\"/\" notFound={{...}} forbidden={undefined} ...>\n                <RedirectBoundary>\n                  <RedirectErrorBoundary router={{...}}>\n                    <InnerLayoutRouter url=\"/\" tree={[...]} params={{}} cacheNode={{rsc:{...}, ...}} segmentPath={[...]} ...>\n                      <SegmentViewNode type=\"page\" pagePath=\"page.tsx\">\n                        <SegmentTrieNode>\n                        <Home>\n                          <div className=\"board\" title=\"Board\">\n                            <h1>\n                            <p>\n                            <Board apiBase=\"/api\" projects={[...]} initialSaved={1}>\n                              <p>\n                              <Card>\n                              <Card>\n                              <Card>\n                              <p>\n                              <button>\n                              <button type=\"button\" onClick={function toggle}>\n+                               Details\n-                               Loading\n                            ...\n                      ...\n                    ...\n        ...\n",
+        "error: pageerror: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
+        "error: pageerror: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
         "error: [browser] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:",
         "error: [browser] Uncaught Error: Hydration failed because the server rendered text didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:"
       ]
@@ -2407,7 +2521,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": null,
       "cell": "n/a",
@@ -2423,6 +2538,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -2439,6 +2555,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
@@ -2458,6 +2575,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",
@@ -2477,6 +2595,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
@@ -2487,9 +2606,9 @@
         "next build: build Error: Expected '</', got '}'",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: pageerror: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nParsing ecmascript source code failed\n\nImport trace:\n  Server Component:\n    ./work/m19-client-expression-syntax/app/board.tsx\n    ./work/m19-client-expression-syntax/app/page.tsx\n\n",
-        "error: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nParsing ecmascript source code failed\n\nImport trace:\n  Server Component:\n    ./work/m19-client-expression-syntax/app/board.tsx\n    ./work/m19-client-expression-syntax/app/page.tsx",
-        "error: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nParsing ecmascript source code failed\n\nImport trace:\n  Server Component:\n    ./work/m19-client-expression-syntax/app/board.tsx\n    ./work/m19-client-expression-syntax/app/page.tsx"
+        "error: pageerror: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nPars...",
+        "error: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nParsing ecmascr...",
+        "error: ./work/m19-client-expression-syntax/app/board.tsx:52:45\nError: Expected '</', got '}'\n  50 |         Details\n  51 |       </button>\n> 52 |       {open && <p>Details are visible</p> &&}\n     |                                             ^\n  53 |     </>\n  54 |   );\n  55 | }\n\nParsing ecmascr..."
       ]
     },
     {
@@ -2502,6 +2621,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
@@ -2512,9 +2632,9 @@
         "next build: build Error: Expected ',', got ';'",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: pageerror: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |   async function add() {\n  23 |     // The server action returns the stored total, which the counter shows.\n\nParsing ecmascript source code failed\n\nImport trace:\n  Server Component:\n    ./work/m20-component-script-syntax/app/board.tsx\n    ./work/m20-component-script-syntax/app/page.tsx\n\n",
-        "error: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |   async function add() {\n  23 |     // The server action returns the stored total, which the counter shows.\n\nParsing ecmascript source code failed\n\nImport trace:\n  Server Component:\n    ./work/m20-component-script-syntax/app/board.tsx\n    ./work/m20-component-script-syntax/app/page.tsx",
-        "error: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |   async function add() {\n  23 |     // The server action returns the stored total, which the counter shows.\n\nParsing ecmascript source code failed\n\nImport trace:\n  Server Component:\n    ./work/m20-component-script-syntax/app/board.tsx\n    ./work/m20-component-script-syntax/app/page.tsx"
+        "error: pageerror: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |...",
+        "error: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |   async fu...",
+        "error: ./work/m20-component-script-syntax/app/board.tsx:20:49\nError: Expected ',', got ';'\n  18 |   const [hidden, setHidden] = useState<string[]>([]);\n  19 |\n> 20 |   const toggle = () => setOpen((value) => !value;\n     |                                                 ^\n  21 |\n  22 |   async fu..."
       ]
     },
     {
@@ -2527,7 +2647,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": null,
       "cell": "n/a",
@@ -2542,17 +2663,29 @@
       "lenient": "editor",
       "baseline_clean": true,
       "timed_out": [],
-      "indirect": "The unclosed footer div takes the card's closing `</div>`, so TypeScript reports the outer element that is left without a closing tag.",
+      "indirect": "The unclosed footer div takes the card's closing `</div>`, so TypeScript reports the outer element that is left without a closing tag, and the parsers report the end of the component that no longer parses.",
+      "accepted_indirect": [
+        "tsc --noEmit (VS Code TypeScript): app/card.tsx:12 TS17008 JSX element 'div' has no corresponding closing tag.",
+        "tsc --noEmit (VS Code TypeScript): app/card.tsx:22 TS1381 Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "tsc --noEmit (VS Code TypeScript): app/card.tsx:23 TS1005 '</' expected.",
+        "eslint (npm run lint): app/card.tsx:22 eslint Parsing error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "next build: app/card.tsx:22 build Error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?"
+      ],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
       "cell": "E\u00b0",
       "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS17008 JSX element 'div' has no corresponding closing tag.",
+        "tsc --noEmit (VS Code TypeScript): TS1381 Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "tsc --noEmit (VS Code TypeScript): TS1005 '</' expected.",
+        "eslint (npm run lint): eslint Parsing error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "next build: build Error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
-        "error: pageerror: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.tsx [Client Component Browser]\n    ./work/m22-unclosed-tag/app/board.tsx [Client Component Browser]\n    ./work/m22-unclosed-tag/app/board.tsx [Server Component]\n    ./work/m22-unclosed-tag/app/page.tsx [Server Component]\n\n  Client Component SSR:\n    ./work/m22-unclosed-tag/app/card.tsx [Client Component SSR]\n    ./work/m22-unclosed-tag/app/board.tsx [Client Component SSR]\n    ./work/m22-unclosed-tag/app/board.tsx [Server Component]\n    ./work/m22-unclosed-tag/app/page.tsx [Server Component]\n\n",
-        "error: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.tsx [Client Component Browser]\n    ./work/m22-unclosed-tag/app/board.tsx [Client Component Browser]\n    ./work/m22-unclosed-tag/app/board.tsx [Server Component]\n    ./work/m22-unclosed-tag/app/page.tsx [Server Component]\n\n  Client Component SSR:\n    ./work/m22-unclosed-tag/app/card.tsx [Client Component SSR]\n    ./work/m22-unclosed-tag/app/board.tsx [Client Component SSR]\n    ./work/m22-unclosed-tag/app/board.tsx [Server Component]\n    ./work/m22-unclosed-tag/app/page.tsx [Server Component]",
-        "error: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.tsx [Client Component Browser]\n    ./work/m22-unclosed-tag/app/board.tsx [Client Component Browser]\n    ./work/m22-unclosed-tag/app/board.tsx [Server Component]\n    ./work/m22-unclosed-tag/app/page.tsx [Server Component]\n\n  Client Component SSR:\n    ./work/m22-unclosed-tag/app/card.tsx [Client Component SSR]\n    ./work/m22-unclosed-tag/app/board.tsx [Client Component SSR]\n    ./work/m22-unclosed-tag/app/board.tsx [Server Component]\n    ./work/m22-unclosed-tag/app/page.tsx [Server Component]"
+        "error: pageerror: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.t...",
+        "error: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.tsx [Client ...",
+        "error: ./work/m22-unclosed-tag/app/card.tsx:22:1\nError: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?\n  20 |     </div>\n  21 |   );\n> 22 | }\n     | ^\n  23 |\n\nParsing ecmascript source code failed\n\nImport traces:\n  Client Component Browser:\n    ./work/m22-unclosed-tag/app/card.tsx [Client ..."
       ]
     },
     {
@@ -2565,6 +2698,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "silent",
@@ -2581,8 +2715,9 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "eslint (npm run lint): app/card.tsx:10 'onHide' is defined but never used."
+        "eslint (npm run lint): app/card.tsx:10 @typescript-eslint/no-unused-vars 'onHide' is defined but never used."
       ],
       "category": "events",
       "bucket": "static-error",
@@ -2593,7 +2728,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
         "error: pageerror: onHdie is not defined",
-        "error: 500 http://127.0.0.1:53207/",
+        "error: 500 http://127.0.0.1:55167/",
         "error: \u2a2f ReferenceError: onHdie is not defined"
       ]
     },
@@ -2607,6 +2742,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "runtime-error",
@@ -2615,7 +2751,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Hydration completed but contains mismatches.",
         "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
-        "warning: %cssr:warn%c [Vue warn]: Failed to resolve component: Crad\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <App>\nat <NuxtRoot>",
+        "warning: %cssr:warn%c [Vue warn]: Failed to resolve component: Crad\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n     ...",
         "warning: %cssr:warn%c [Vue warn]: Non-function value encountered for default slot. Prefer function slots for better performance. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Anonymous>\nat <App>\nat <NuxtRoot>"
       ]
     },
@@ -2629,12 +2765,13 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
-        "vue-tsc (Vue - Official): TS2345 Argument of type '{ key: string; titel: string; count: number; onHide: any; }' is not assignable to parameter of type '{ readonly title: string; readonly count: number; readonly onHide?: (() => any) |",
+        "vue-tsc (Vue - Official): TS2345 Argument of type '{ key: string; titel: string; count: number; onHide: any; }' is not assignable to parameter of type '{ readonly title: string; readonly count: number; readonly onHide?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & ComponentCu...",
         "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
         "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
         "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
@@ -2652,15 +2789,16 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
         "vue-tsc (Vue - Official): TS2322 Type 'string' is not assignable to type 'number'.",
-        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
-        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
-        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat...",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat...",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat...",
         "warning: [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n  at <Card key=\"Alpha\" title=\"Alpha\" count=\"card.count\"  ... > \n  at <App key=4 > \n  at <NuxtRoot>",
         "warning: [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value NaN, got String with value \"card.count\". \n  at <Card key=\"Beta\" title=\"Beta\" count=\"card.count\"  ... > \n  at <App key=4 > \n  at <NuxtRoot>"
       ]
@@ -2675,12 +2813,13 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
-        "vue-tsc (Vue - Official): TS2345 Argument of type '{ key: string; count: number; onHide: any; }' is not assignable to parameter of type '{ readonly title: string; readonly count: number; readonly onHide?: (() => any) | undefined; } &",
+        "vue-tsc (Vue - Official): TS2345 Argument of type '{ key: string; count: number; onHide: any; }' is not assignable to parameter of type '{ readonly title: string; readonly count: number; readonly onHide?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & ComponentCustomProps & Rec...",
         "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
         "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
         "warning: %cssr:warn%c [Vue warn]: Missing required prop: \"title\" \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
@@ -2698,6 +2837,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "silent",
@@ -2714,11 +2854,16 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "$fetch of a route Nuxt does not know returns `unknown`, so TypeScript reports TS18046 where the result is read (`result.count`), four lines below the misspelled route.",
+      "accepted_indirect": [
+        "vue-tsc (Vue - Official): app/app.vue:18 TS18046 'result' is of type 'unknown'."
+      ],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",
       "cell": "E\u00b0",
-      "evidence": []
+      "evidence": [
+        "vue-tsc (Vue - Official): TS18046 'result' is of type 'unknown'."
+      ]
     },
     {
       "framework": "nuxt",
@@ -2730,12 +2875,13 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
-        "vue-tsc (Vue - Official): TS2339 Property 'bord' does not exist on type 'ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, str",
+        "vue-tsc (Vue - Official): TS2339 Property 'bord' does not exist on type 'ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string, ComponentProvideOptions>, ... 4 more ..., any>'.",
         "warning: %cssr:warn%c [Vue warn]: Property \"bord\" was accessed during render but is not defined on instance. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <App>\nat <NuxtRoot>",
         "warning: [Vue warn]: Property \"bord\" was accessed during render but is not defined on instance. \n  at <App key=4 > \n  at <NuxtRoot>",
         "warning: [Vue warn]: Property \"bord\" was accessed during render but is not defined on instance. \n  at <App key=4 > \n  at <NuxtRoot>",
@@ -2753,6 +2899,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "static-error",
@@ -2771,6 +2918,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "static-error",
@@ -2789,6 +2937,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -2805,6 +2954,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "runtime-error",
@@ -2814,7 +2964,7 @@
         "error: Hydration completed but contains mismatches.",
         "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
         "error:  ERROR  [console.error] Hydration completed but contains mismatches.",
-        "warning: %cssr:warn%c [Vue warn]: Failed to resolve component: dvi\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <App>\nat <NuxtRoot>"
+        "warning: %cssr:warn%c [Vue warn]: Failed to resolve component: dvi\nIf this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      ..."
       ]
     },
     {
@@ -2827,6 +2977,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": "runtime-error",
@@ -2849,6 +3000,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",
@@ -2868,6 +3020,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "server-browser",
       "bucket": "runtime-error",
@@ -2890,7 +3043,8 @@
       "baseline_clean": null,
       "timed_out": null,
       "indirect": null,
-      "unconfirmed_indirect": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": null,
       "cell": "n/a",
@@ -2906,6 +3060,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "silent",
@@ -2922,14 +3077,18 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "The route's return type flows to the page through $fetch, so vue-tsc reports the string where it is bound to Card's number input (`:count` in app/app.vue), not in the route.",
+      "accepted_indirect": [
+        "vue-tsc (Vue - Official): app/app.vue:42 TS2322 Type 'string' is not assignable to type 'number'."
+      ],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "static-error",
       "cell": "E\u00b0",
       "evidence": [
-        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 3, got String with value \"3\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
-        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 5, got String with value \"5\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
-        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 8, got String with value \"8\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <NuxtRoot>",
+        "vue-tsc (Vue - Official): TS2322 Type 'string' is not assignable to type 'number'.",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 3, got String with value \"3\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <...",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 5, got String with value \"5\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <...",
+        "warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 8, got String with value \"8\". \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <App>\nat <...",
         "warning: [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 3, got String with value \"3\". \n  at <Card key=\"Alpha\" title=\"Alpha\" count=\"3\"  ... > \n  at <App key=4 > \n  at <NuxtRoot>",
         "warning: [Vue warn]: Invalid prop: type check failed for prop \"count\". Expected Number with value 5, got String with value \"5\". \n  at <Card key=\"Beta\" title=\"Beta\" count=\"5\"  ... > \n  at <App key=4 > \n  at <NuxtRoot>"
       ]
@@ -2944,6 +3103,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "silent",
@@ -2960,17 +3120,19 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
-      "unconfirmed_indirect": [],
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [
+        "nuxt build: None:None exit-1 \u2502  SyntaxError: Error parsing JavaScript expression: Unexpected token (1:8)\n\u2502      at createCompilerError (.benchmarks/errors"
+      ],
       "category": "templates",
       "bucket": "static-error",
       "cell": "C",
       "evidence": [
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-parsing-error Parsing error: Unexpected end of expression.",
-        "nuxt build: exit-1 \u2502  SyntaxError: Error parsing JavaScript expression: Unexpected token (1:8)\n\u2502      at createCompilerError (/Users/mac/repos/citry-error-bench/.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
-        "error: 500 http://127.0.0.1:53488/",
-        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:53488/",
+        "error: 500 http://127.0.0.1:55418/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55418/",
         "error: \u001b[31m\u2139 Error: /app.vue \u2014 Error parsing JavaScript expression: Unexpected token (1:8)\u001b[39m"
       ]
     },
@@ -2984,18 +3146,20 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
-      "unconfirmed_indirect": [],
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [
+        "nuxt build: None:None exit-1 \u2502  24 |  \n\u2502      at constructor (.benchmarks/errors/envs/nuxt/node_modules/@babel/parser/lib/index.js:369:19)\n\u2502      at TypeS"
+      ],
       "category": "templates",
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
         "vue-tsc (Vue - Official): TS1005 ';' expected.",
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): eslint Parsing error: ';' expected.",
-        "nuxt build: exit-1 \u2502  24 |  \n\u2502      at constructor (/Users/mac/repos/citry-error-bench/.benchmarks/errors/envs/nuxt/node_modules/@babel/parser/lib/index.js:369:19)\n\u2502      at TypeScriptParserMixin.raise (/Users/mac/repos",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
-        "error: 500 http://127.0.0.1:53493/",
-        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:53493/",
+        "error: 500 http://127.0.0.1:55422/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55422/",
         "error: \u001b[31m\u2139 Error: /app.vue \u2014 Missing semicolon. (22:26)\u001b[39m"
       ]
     },
@@ -3009,6 +3173,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
       "bucket": "runtime-error",
@@ -3016,7 +3181,7 @@
       "evidence": [
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Server Error)",
-        "error: 500 http://127.0.0.1:53497/",
+        "error: 500 http://127.0.0.1:55426/",
         "warning: An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.",
         "warning: WARN  [Vue warn]: Failed to resolve directive: iff at <App>"
       ]
@@ -3031,18 +3196,20 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
-      "unconfirmed_indirect": [],
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [
+        "nuxt build: None:None exit-1 \u2502  SyntaxError: Element is missing end tag.\n\u2502      at createCompilerError (.benchmarks/errors/envs/nuxt/node_modules/vue/node"
+      ],
       "category": "templates",
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
         "Vue compiler diagnostics (Vue - Official): vue-compiler-dom-errors/24 Element is missing end tag.",
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/html-end-tags '<footer>' should have end tag.",
-        "nuxt build: exit-1 \u2502  SyntaxError: Element is missing end tag.\n\u2502      at createCompilerError (/Users/mac/repos/citry-error-bench/.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules/@vue/compiler-core/dist/compile",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
-        "error: 500 http://127.0.0.1:53508/",
-        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:53508/",
+        "error: 500 http://127.0.0.1:55437/",
+        "error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55437/",
         "error: \u001b[31m\u2139 Error: /components/Card.vue \u2014 Element is missing end tag.\u001b[39m"
       ]
     },
@@ -3056,6 +3223,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
       "bucket": "silent",
@@ -3072,6 +3240,7 @@
       "baseline_clean": true,
       "timed_out": [],
       "indirect": "",
+      "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
       "bucket": "static-error",

@@ -68,7 +68,9 @@ uv run --no-sync citry-errors report \
 the matrix, and `--skip-runtime` to run the static stages only. Installed
 environments, working copies and the raw output of every tool are kept under
 `.benchmarks/errors/` at the repository root. Only the compact report in
-`results/` is committed.
+`results/` is committed: `report.html`, a self-contained page with the chart
+and the full table that opens straight from disk, plus `matrix.md` and
+`results.json`.
 
 A full run takes tens of minutes, mostly production builds and development
 servers. It is not part of routine CI. Run it at each Citry release, and
@@ -76,10 +78,11 @@ when a framework's pinned versions change.
 
 ## Latest result
 
-[`results/2026-10-20/matrix.md`](results/2026-10-20/matrix.md) is the run
-published on the docs site's Error prevention page; `results.json` beside it
-has the first few findings behind each cell, and the findings that pointed
-away from the change without an `indirect` note. Some differences between cells come from
+[`results/2026-10-20/`](results/2026-10-20/) is the run published on the docs
+site's Error prevention page. Open `report.html` there in a browser for the
+chart and the full table; `results.json` has the first few findings behind
+each cell, and the findings that pointed away from the change without an
+`indirect` note. Some differences between cells come from
 how each framework naturally writes a part of the page, not from its tools:
 
 - **m20:** Django's toggle script is a `.js` file, which VS Code's

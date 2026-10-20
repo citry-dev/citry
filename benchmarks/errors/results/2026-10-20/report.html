@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Error-prevention results</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1a202c; --muted: #4a5568; --line: #e2e8f0; --head: #f7fafc;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #171923; --fg: #e2e8f0; --muted: #a0aec0; --line: #2d3748; --head: #1f2533; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 1.6rem; margin: 0 0 4px; }
+h2 { font-size: 1.2rem; margin: 32px 0 8px; }
+.meta { color: var(--muted); margin: 0 0 20px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 0; margin: 0 0 12px; list-style: none; }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.row { display: grid; grid-template-columns: 190px 1fr 36px; gap: 10px; align-items: center; margin: 6px 0; }
+.row .name { text-align: right; }
+.row.reference .name { font-weight: 700; }
+.bar { display: flex; height: 26px; border-radius: 4px; overflow: hidden; background: var(--line); }
+.part { display: flex; align-items: center; justify-content: center; font-size: 12px; color: #fff; }
+.part.light { color: #1a202c; }
+.total { font-weight: 700; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: center; }
+th:first-child, td:first-child { text-align: left; }
+thead th { background: var(--head); position: sticky; top: 0; }
+tr.group th { background: var(--head); text-align: left; font-weight: 700; }
+td.cell { white-space: nowrap; }
+.wrap { overflow-x: auto; }
+dl.codes { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 12px; }
+dl.codes dt { font-weight: 700; font-family: ui-monospace, monospace; }
+dl.codes dd { margin: 0; }
+@media (max-width: 640px) {
+  .row { grid-template-columns: 1fr 36px; }
+  .row .name { grid-column: 1 / -1; text-align: left; }
+}
+</style></head><body><main>
+<h1>Error-prevention results</h1>
+<p class="meta">Run 20261020T094732Z, cases and tools from commit <code>b0ef345dcc7a</code>. The same 24 mistakes in each framework; earlier is better.</p>
+<h2>How each mistake ended</h2>
+<ul class="legend">
+<li><span class="swatch" style="background:#2f855a"></span>Error before running</li>
+<li><span class="swatch" style="background:#9ae6b4"></span>Warning before running</li>
+<li><span class="swatch" style="background:#dd6b20"></span>Error at runtime</li>
+<li><span class="swatch" style="background:#f6c177"></span>Warning at runtime</li>
+<li><span class="swatch" style="background:#c53030"></span>Missed, page wrong</li>
+<li><span class="swatch" style="background:#4a5568"></span>Missed, no visible change</li>
+<li><span class="swatch" style="background:#cbd5e0"></span>Does not apply or prevented by design</li>
+</ul>
+<div role="img" aria-label="Stacked bars of how each mistake ended, per framework">
+<div class="row reference"><span class="name">Citry</span><span class="bar">
+<span class="part" style="width:66.667%;background:#2f855a" title="Error before running: 16">16</span>
+<span class="part light" style="width:4.167%;background:#9ae6b4" title="Warning before running: 1">1</span>
+<span class="part" style="width:12.500%;background:#dd6b20" title="Error at runtime: 3">3</span>
+<span class="part" style="width:16.667%;background:#c53030" title="Missed, page wrong: 4">4</span>
+</span><span class="total" title="Error before running">16</span></div>
+<div class="row"><span class="name">Django + HTMX + Alpine</span><span class="bar">
+<span class="part" style="width:12.500%;background:#2f855a" title="Error before running: 3">3</span>
+<span class="part" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
+<span class="part" style="width:58.333%;background:#c53030" title="Missed, page wrong: 14">14</span>
+<span class="part" style="width:4.167%;background:#4a5568" title="Missed, no visible change: 1">1</span>
+<span class="part light" style="width:4.167%;background:#cbd5e0" title="Does not apply or prevented by design: 1">1</span>
+</span><span class="total" title="Error before running">3</span></div>
+<div class="row"><span class="name">Jinja + HTMX + Alpine</span><span class="bar">
+<span class="part" style="width:8.333%;background:#2f855a" title="Error before running: 2">2</span>
+<span class="part" style="width:41.667%;background:#dd6b20" title="Error at runtime: 10">10</span>
+<span class="part" style="width:33.333%;background:#c53030" title="Missed, page wrong: 8">8</span>
+<span class="part" style="width:4.167%;background:#4a5568" title="Missed, no visible change: 1">1</span>
+<span class="part light" style="width:12.500%;background:#cbd5e0" title="Does not apply or prevented by design: 3">3</span>
+</span><span class="total" title="Error before running">2</span></div>
+<div class="row"><span class="name">FastHTML</span><span class="bar">
+<span class="part" style="width:45.833%;background:#2f855a" title="Error before running: 11">11</span>
+<span class="part" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
+<span class="part" style="width:16.667%;background:#c53030" title="Missed, page wrong: 4">4</span>
+<span class="part" style="width:4.167%;background:#4a5568" title="Missed, no visible change: 1">1</span>
+<span class="part light" style="width:12.500%;background:#cbd5e0" title="Does not apply or prevented by design: 3">3</span>
+</span><span class="total" title="Error before running">11</span></div>
+<div class="row"><span class="name">Nuxt (TypeScript)</span><span class="bar">
+<span class="part" style="width:54.167%;background:#2f855a" title="Error before running: 13">13</span>
+<span class="part" style="width:20.833%;background:#dd6b20" title="Error at runtime: 5">5</span>
+<span class="part" style="width:20.833%;background:#c53030" title="Missed, page wrong: 5">5</span>
+<span class="part light" style="width:4.167%;background:#cbd5e0" title="Does not apply or prevented by design: 1">1</span>
+</span><span class="total" title="Error before running">13</span></div>
+<div class="row"><span class="name">Next.js (TypeScript)</span><span class="bar">
+<span class="part" style="width:75.000%;background:#2f855a" title="Error before running: 18">18</span>
+<span class="part" style="width:8.333%;background:#dd6b20" title="Error at runtime: 2">2</span>
+<span class="part" style="width:8.333%;background:#c53030" title="Missed, page wrong: 2">2</span>
+<span class="part light" style="width:8.333%;background:#cbd5e0" title="Does not apply or prevented by design: 2">2</span>
+</span><span class="total" title="Error before running">18</span></div>
+</div>
+<div class="wrap"><table><thead><tr><th>Outcome</th>
+<th>Citry</th>
+<th>Django + HTMX + Alpine</th>
+<th>Jinja + HTMX + Alpine</th>
+<th>FastHTML</th>
+<th>Nuxt (TypeScript)</th>
+<th>Next.js (TypeScript)</th>
+</tr></thead><tbody>
+<tr><td>Error before running</td>
+<td>16</td>
+<td>3</td>
+<td>2</td>
+<td>11</td>
+<td>13</td>
+<td>18</td>
+</tr>
+<tr><td>Warning before running</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr><td>Error at runtime</td>
+<td>3</td>
+<td>5</td>
+<td>10</td>
+<td>5</td>
+<td>5</td>
+<td>2</td>
+</tr>
+<tr><td>Warning at runtime</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr><td>Missed, page wrong</td>
+<td>4</td>
+<td>14</td>
+<td>8</td>
+<td>4</td>
+<td>5</td>
+<td>2</td>
+</tr>
+<tr><td>Missed, no visible change</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr><td>Does not apply or prevented by design</td>
+<td>0</td>
+<td>1</td>
+<td>3</td>
+<td>3</td>
+<td>1</td>
+<td>2</td>
+</tr>
+</tbody></table></div>
+<h2>Every mistake</h2>
+<dl class="codes">
+<dt>E</dt><dd>reported in the editor</dd>
+<dt>C</dt><dd>reported by a command-line check, type check or linter</dd>
+<dt>B</dt><dd>reported by the production build</dd>
+<dt>R</dt><dd>reported at runtime by a server error, an error response or a browser error (Rw: only a warning)</dd>
+<dt>w</dt><dd>the stage before it gave only a warning; after the comma, the first stage that gave an error, or S or N</dd>
+<dt>S</dt><dd>nothing reports it, and the page looks or behaves differently</dd>
+<dt>N</dt><dd>nothing reports it, and the page looks the same</dd>
+<dt>?</dt><dd>the runtime check was skipped and no tool reported it</dd>
+<dt>P</dt><dd>the framework&#x27;s design prevents the mistake</dd>
+<dt>-</dt><dd>no case was written for this framework</dd>
+<dt>n/a</dt><dd>the mistake has no natural equivalent in this framework</dd>
+<dt>!</dt><dd>the clean app reported problems in this run, so the cell is unreliable</dd>
+<dt>~</dt><dd>a tool timed out or skipped this case, so it may have caught the mistake earlier</dd>
+<dt>°</dt><dd>the report points away from the change, and the case explains why it still counts</dd>
+</dl>
+<p class="meta">Hover over a cell to see what the tools printed, or why the mistake does not apply.</p>
+<div class="wrap"><table><thead><tr><th>Mistake</th>
+<th>Citry</th>
+<th>Django + HTMX + Alpine</th>
+<th>Jinja + HTMX + Alpine</th>
+<th>FastHTML</th>
+<th>Nuxt (TypeScript)</th>
+<th>Next.js (TypeScript)</th>
+</tr></thead><tbody>
+<tr class="group"><th colspan="7" scope="rowgroup">
+Names: components, inputs, slots, variables</th></tr>
+<tr><th scope="row" style="font-weight:400">Misspelled component name</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.template.unknown-component Component &lt;c-Crad&gt; is not registered.
+citry check: citry.template.unknown-component Component &lt;c-Crad&gt; is not registered.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53771/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54032/
+error: Internal Server Error: /
+error: Traceback (most recent call last):">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54462/
+error: INFO:     127.0.0.1:54465 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable &quot;Crad&quot; is not defined
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54295/
+error: INFO:     127.0.0.1:54297 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Hydration completed but contains mismatches.
+error:  ERROR  [console.error] Hydration completed but contains mismatches.
+warning: %cssr:warn%c [Vue warn]: Failed to resolve component: Crad
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+     ...
+warning: %cssr:warn%c [Vue warn]: Non-function value encountered for default slot. Prefer function slots for better performance. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Anonymous&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2304 Cannot find name &#x27;Crad&#x27;.
+eslint (npm run lint): react/jsx-no-undef &#x27;Crad&#x27; is not defined.
+next build: TS2304 Cannot find name &#x27;Crad&#x27;.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: pageerror: Crad is not defined
+error: 500 http://127.0.0.1:54691/
+error: ⨯ ReferenceError: Crad is not defined">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Misspelled input name</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.parse.syntax Parse error:   --&gt; 16:11
+   |
+16 |           &lt;c-Card
+   | ...
+22 |           &gt;␊
+   |           ^
+   |
+   = Tag &#x27;&lt;c-Card&gt;&#x27; can only have the following attributes: &#x27;title&#x27;, &#x27;c-title&#x27;, &#x27;count&#x27;, &#x27;c-count&#x27;, &#x27;c-if&#x27;, &#x27;c-elif&#x27;, &#x27;c-else&#x27;, &#x27;c-...
+citry check: citry.parse.syntax Parse error:   --&gt; 16:11
+   |
+16 |           &lt;c-Card
+   | ...
+22 |           &gt;␊
+   |           ^
+   |
+   = Tag &#x27;&lt;c-Card&gt;&#x27; can only have the following attributes: &#x27;title&#x27;, &#x27;c-title&#x27;, &#x27;count&#x27;, &#x27;c-count&#x27;, &#x27;c-if&#x27;, &#x27;c-elif&#x27;, &#x27;c-else&#x27;, &#x27;c-for&#x27;, &#x27;c-empty&#x27;. Found invalid a...
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53775/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54467/
+error: INFO:     127.0.0.1:54469 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter &quot;title&quot;
+Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named &quot;titel&quot;
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54301/
+error: INFO:     127.0.0.1:54303 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2345 Argument of type &#x27;{ key: string; titel: string; count: number; onHide: any; }&#x27; is not assignable to parameter of type &#x27;{ readonly title: string; readonly count: number; readonly onHide?: (() =&gt; any) | undefined; } &amp; VNodeProps &amp; AllowedComponentProps &amp; ComponentCu...
+warning: %cssr:warn%c [Vue warn]: Missing required prop: &quot;title&quot; 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;
+warning: %cssr:warn%c [Vue warn]: Missing required prop: &quot;title&quot; 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;
+warning: %cssr:warn%c [Vue warn]: Missing required prop: &quot;title&quot; 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Missing required prop: &quot;title&quot; 
+  at &lt;Card key=&quot;Alpha&quot; titel=&quot;Alpha&quot; count=3  ... &gt; 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Missing required prop: &quot;title&quot; 
+  at &lt;Card key=&quot;Beta&quot; titel=&quot;Beta&quot; count=5  ... &gt; 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2322 Type &#x27;{ key: string; titel: string; count: number; footer: Element; onHide: () =&gt; void; }&#x27; is not assignable to type &#x27;IntrinsicAttributes &amp; CardProps&#x27;.
+next build: TS2322 Type &#x27;{ key: string; titel: string; count: number; footer: Element; onHide: () =&gt; void; }&#x27; is not assignable to type &#x27;IntrinsicAttributes &amp; CardProps&#x27;.">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Missing required input</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.parse.syntax Parse error:   --&gt; 16:11
+   |
+16 |           &lt;c-Card
+   | ...
+21 |           &gt;␊
+   |           ^
+   |
+   = Tag &#x27;&lt;c-Card&gt;&#x27; must have one of the following attributes: &#x27;title&#x27;, &#x27;c-title&#x27;.
+citry check: citry.parse.syntax Parse error:   --&gt; 16:11
+   |
+16 |           &lt;c-Card
+   | ...
+21 |           &gt;␊
+   |           ^
+   |
+   = Tag &#x27;&lt;c-Card&gt;&#x27; must have one of the following attributes: &#x27;title&#x27;, &#x27;c-title&#x27;.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53789/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter &quot;title&quot;
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54306/
+error: INFO:     127.0.0.1:54308 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2345 Argument of type &#x27;{ key: string; count: number; onHide: any; }&#x27; is not assignable to parameter of type &#x27;{ readonly title: string; readonly count: number; readonly onHide?: (() =&gt; any) | undefined; } &amp; VNodeProps &amp; AllowedComponentProps &amp; ComponentCustomProps &amp; Rec...
+warning: %cssr:warn%c [Vue warn]: Missing required prop: &quot;title&quot; 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;
+warning: %cssr:warn%c [Vue warn]: Missing required prop: &quot;title&quot; 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;
+warning: %cssr:warn%c [Vue warn]: Missing required prop: &quot;title&quot; 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Missing required prop: &quot;title&quot; 
+  at &lt;Card key=&quot;Alpha&quot; count=3 onHide=fn&lt;onHide&gt; &gt; 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Missing required prop: &quot;title&quot; 
+  at &lt;Card key=&quot;Beta&quot; count=5 onHide=fn&lt;onHide&gt; &gt; 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2741 Property &#x27;title&#x27; is missing in type &#x27;{ key: string; count: number; footer: Element; onHide: () =&gt; void; }&#x27; but required in type &#x27;CardProps&#x27;.
+next build: TS2741 Property &#x27;title&#x27; is missing in type &#x27;{ key: string; count: number; footer: Element; onHide: () =&gt; void; }&#x27; but required in type &#x27;CardProps&#x27;.">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Misspelled slot name</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.parse.syntax Parse error:   --&gt; 23:13
+   |
+23 |             &lt;c-fill name=&quot;fotter&quot;&gt;
+   |             ^--------------------^
+   |
+   = Tag &#x27;&lt;c-Card&gt;&#x27; does not allow a slot named &#x27;fotter&#x27;.
+citry check: citry.parse.syntax Parse error:   --&gt; 23:13
+   |
+23 |             &lt;c-fill name=&quot;fotter&quot;&gt;
+   |             ^--------------------^
+   |
+   = Tag &#x27;&lt;c-Card&gt;&#x27; does not allow a slot named &#x27;fotter&#x27;.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53794/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" title="Jinja&#x27;s reusable component is a macro, and the page fills it with a {% call %} block that the macro inserts with caller(). A call block fills one unnamed region, so the page has no footer name to misspell. Jinja&#x27;s named blocks belong to template inheritance, which Jinja&#x27;s docs use for page layouts; for repeated markup they present macros. A misspelled macro name is m01 and a misspelled argument name is m02.">n/a</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter &quot;footer&quot;
+Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named &quot;fotter&quot;
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54310/
+error: INFO:     127.0.0.1:54312 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2322 Type &#x27;{ key: string; title: string; count: number; fotter: Element; onHide: () =&gt; void; }&#x27; is not assignable to type &#x27;IntrinsicAttributes &amp; CardProps&#x27;.
+next build: TS2322 Type &#x27;{ key: string; title: string; count: number; fotter: Element; onHide: () =&gt; void; }&#x27; is not assignable to type &#x27;IntrinsicAttributes &amp; CardProps&#x27;.">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Undefined template variable</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.template.unknown-variable Template variable &#x27;ownr&#x27; is not available in this template.
+citry check: citry.template.unknown-variable Template variable &#x27;ownr&#x27; is not available in this template.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53867/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54486/
+error: INFO:     127.0.0.1:54488 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable &quot;ownr&quot; is not defined
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54329/
+error: INFO:     127.0.0.1:54331 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2339 Property &#x27;bord&#x27; does not exist on type &#x27;ComponentPublicInstance&lt;{}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase&lt;any, any, any, any, any, any, any, any, any, {}, {}, string, {}, {}, {}, string, ComponentProvideOptions&gt;, ... 4 more ..., any&gt;&#x27;.
+warning: %cssr:warn%c [Vue warn]: Property &quot;bord&quot; was accessed during render but is not defined on instance. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;App&gt;
+at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Property &quot;bord&quot; was accessed during render but is not defined on instance. 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Property &quot;bord&quot; was accessed during render but is not defined on instance. 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Property &quot;bord&quot; was accessed during render but is not defined on instance. 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Property &quot;bord&quot; was accessed during render but is not defined on instance. 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name &#x27;ownr&#x27;. Did you mean &#x27;owner&#x27;?
+next build: TS2552 Cannot find name &#x27;ownr&#x27;. Did you mean &#x27;owner&#x27;?
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: pageerror: ownr is not defined
+error: 500 http://127.0.0.1:54790/
+error: ⨯ ReferenceError: ownr is not defined">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Misspelled attribute on a template object</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.python.unresolved-attribute Object of type `Owner` has no attribute `nmae`
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53871/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute &quot;nmae&quot; for class &quot;Owner&quot;
+  Attribute &quot;nmae&quot; is unknown
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54333/
+error: INFO:     127.0.0.1:54335 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2339 Property &#x27;nmae&#x27; does not exist on type &#x27;{ name: string; }&#x27;.">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2339 Property &#x27;nmae&#x27; does not exist on type &#x27;Owner&#x27;.
+next build: TS2339 Property &#x27;nmae&#x27; does not exist on type &#x27;Owner&#x27;.">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Unknown translation message key</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.i18n.unknown-message Unknown i18n message ID &#x27;board-titel&#x27;; no component or configured catalog package defines it.
+citry check: citry.i18n.unknown-message Unknown i18n message ID &#x27;board-titel&#x27;; no component or configured catalog package defines it.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53938/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" title="Starlette&#x27;s docs cover no translations, and its Jinja2Templates creates a Jinja Environment with no extensions. Jinja&#x27;s i18n extension works only after the developer adds it and installs gettext translations, which this stack&#x27;s standard setup does not do, so the heading is literal text and there is no message key to misspell.">n/a</td>
+<td class="cell" title="FastHTML&#x27;s starter and docs set up no translations, so the heading is a plain Python string and there is no message key to misspell.">n/a</td>
+<td class="cell" title="The minimal starter that `npm create nuxt@latest` sets up has no translations. Its only dependencies are nuxt, vue and vue-router. Translations need the @nuxtjs/i18n module, which the starter&#x27;s module prompt does not select by default. The heading is plain text, so there is no message key to misspell.">n/a</td>
+<td class="cell" title="create-next-app installs no translation library and the App Router has no built-in translation API, so the page has no message keys to misspell. The heading is plain JSX text. The dictionary approach in the Next.js internationalization guide is an opt-in the starter does not include.">n/a</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Misspelled template directive</th>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: pageerror: Component Details_05bc14 uses the directive &#x27;v-iff&#x27;, but no directive named &#x27;iff&#x27; is registered. Check the spelling, or register it: in the &#x27;directives&#x27; option of the component&#x27;s $component() call, or for every component with Citry.vue.use(plugin), where the plugin&#x27;s install(app...
+error: pageerror: Citry Vue app failed during initialization">R</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Server Error)
+error: 500 http://127.0.0.1:55426/
+warning: An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.
+warning: WARN  [Vue warn]: Failed to resolve directive: iff at &lt;App&gt;">R</td>
+<td class="cell" title="React has no template directives. The details text is shown with a plain JavaScript expression, `{open &amp;&amp; &lt;p&gt;...&lt;/p&gt;}`, so there is no directive name to misspell; misspelling `open` there is the undefined-variable mistake (m07) and a broken `&amp;&amp;` is m19.">n/a</td>
+</tr>
+<tr class="group"><th colspan="7" scope="rowgroup">
+Types</th></tr>
+<tr><th scope="row" style="font-weight:400">Wrong-typed input written in markup</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.python.invalid-assignment Object of type `Literal[&quot;project.count&quot;]` is not assignable to `int`">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" title="FastHTML has no markup. A component&#x27;s inputs are Python call arguments, so passing the count as a string is a value computed in code, which is mistake m17.">n/a</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2322 Type &#x27;string&#x27; is not assignable to type &#x27;number&#x27;.
+warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value NaN, got String with value &quot;card.count&quot;. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at...
+warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value NaN, got String with value &quot;card.count&quot;. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at...
+warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value NaN, got String with value &quot;card.count&quot;. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at...
+warning: [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value NaN, got String with value &quot;card.count&quot;. 
+  at &lt;Card key=&quot;Alpha&quot; title=&quot;Alpha&quot; count=&quot;card.count&quot;  ... &gt; 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value NaN, got String with value &quot;card.count&quot;. 
+  at &lt;Card key=&quot;Beta&quot; title=&quot;Beta&quot; count=&quot;card.count&quot;  ... &gt; 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2322 Type &#x27;string&#x27; is not assignable to type &#x27;number&#x27;.
+next build: TS2322 Type &#x27;string&#x27; is not assignable to type &#x27;number&#x27;.">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Wrong-typed input computed in code</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type &quot;str&quot; cannot be assigned to parameter &quot;count&quot; of type &quot;int&quot; in function &quot;__init__&quot;
+  &quot;str&quot; is not assignable to &quot;int&quot;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type &quot;str&quot; cannot be assigned to parameter &quot;count&quot; of type &quot;int&quot; in function &quot;__init__&quot;
+  &quot;str&quot; is not assignable to &quot;int&quot;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type &quot;str&quot; cannot be assigned to parameter &quot;count&quot; of type &quot;int&quot; in function &quot;__init__&quot;
+  &quot;str&quot; is not assignable to &quot;int&quot;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type &quot;str&quot; cannot be assigned to parameter &quot;count&quot; of type &quot;int&quot; in function &quot;Card&quot;
+  &quot;str&quot; is not assignable to &quot;int&quot;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2322 Type &#x27;string&#x27; is not assignable to type &#x27;number&#x27;.
+warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value 3, got String with value &quot;3&quot;. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;...
+warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value 5, got String with value &quot;5&quot;. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;...
+warning: %cssr:warn%c [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value 8, got String with value &quot;8&quot;. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;App&gt;
+at &lt;...
+warning: [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value 3, got String with value &quot;3&quot;. 
+  at &lt;Card key=&quot;Alpha&quot; title=&quot;Alpha&quot; count=&quot;3&quot;  ... &gt; 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;
+warning: [Vue warn]: Invalid prop: type check failed for prop &quot;count&quot;. Expected Number with value 5, got String with value &quot;5&quot;. 
+  at &lt;Card key=&quot;Beta&quot; title=&quot;Beta&quot; count=&quot;5&quot;  ... &gt; 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;">E°</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2322 Type &#x27;{ count: string; title: string; }[]&#x27; is not assignable to type &#x27;Project[]&#x27;.
+next build: TS2322 Type &#x27;{ count: string; title: string; }[]&#x27; is not assignable to type &#x27;Project[]&#x27;.">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Wrong-typed operation in a template expression</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.python.unsupported-operator Operator `+` is not supported between objects of type `str` and `Literal[1]`
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54007/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54647/
+error: INFO:     127.0.0.1:54649 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportOperatorIssue Operator &quot;+&quot; not supported for types &quot;str&quot; and &quot;Literal[1]&quot;
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54441/
+error: INFO:     127.0.0.1:54443 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+</tr>
+<tr class="group"><th colspan="7" scope="rowgroup">
+Template and script syntax</th></tr>
+<tr><th scope="row" style="font-weight:400">Syntax error in a browser expression</th>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53977/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Unexpected token &#x27;}&#x27;
+error: pageerror: Unexpected token &#x27;}&#x27;
+warning: Alpine Expression Error: Unexpected token &#x27;}&#x27;
+
+Expression: &quot;open &amp;&amp;&quot;
+
+ JSHandle@node
+warning: Alpine Expression Error: Unexpected token &#x27;}&#x27;
+
+Expression: &quot;open &amp;&amp;&quot;
+
+ JSHandle@node">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Unexpected token &#x27;}&#x27;
+error: pageerror: Unexpected token &#x27;}&#x27;
+warning: Alpine Expression Error: Unexpected token &#x27;}&#x27;
+
+Expression: &quot;open = !open &amp;&amp;&quot;
+
+ JSHandle@node
+warning: Alpine Expression Error: Unexpected token &#x27;}&#x27;
+
+Expression: &quot;open = !open &amp;&amp;&quot;
+
+ JSHandle@node">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Unexpected end of input">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-parsing-error Parsing error: Unexpected end of expression.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Vite Error)
+error: 500 http://127.0.0.1:55418/
+error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55418/
+error: [31mℹ Error: /app.vue — Error parsing JavaScript expression: Unexpected token (1:8)[39m">C</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS1109 Expression expected.
+eslint (npm run lint): eslint Parsing error: Expression expected.
+next build: build Error: Expected &#x27;&lt;/&#x27;, got &#x27;}&#x27;
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: pageerror: ./work/m19-client-expression-syntax/app/board.tsx:52:45
+Error: Expected &#x27;&lt;/&#x27;, got &#x27;}&#x27;
+  50 |         Details
+  51 |       &lt;/button&gt;
+&gt; 52 |       {open &amp;&amp; &lt;p&gt;Details are visible&lt;/p&gt; &amp;&amp;}
+     |                                             ^
+  53 |     &lt;/&gt;
+  54 |   );
+  55 | }
+
+Pars...
+error: ./work/m19-client-expression-syntax/app/board.tsx:52:45
+Error: Expected &#x27;&lt;/&#x27;, got &#x27;}&#x27;
+  50 |         Details
+  51 |       &lt;/button&gt;
+&gt; 52 |       {open &amp;&amp; &lt;p&gt;Details are visible&lt;/p&gt; &amp;&amp;}
+     |                                             ^
+  53 |     &lt;/&gt;
+  54 |   );
+  55 | }
+
+Parsing ecmascr...
+error: ./work/m19-client-expression-syntax/app/board.tsx:52:45
+Error: Expected &#x27;&lt;/&#x27;, got &#x27;}&#x27;
+  50 |         Details
+  51 |       &lt;/button&gt;
+&gt; 52 |       {open &amp;&amp; &lt;p&gt;Details are visible&lt;/p&gt; &amp;&amp;}
+     |                                             ^
+  53 |     &lt;/&gt;
+  54 |   );
+  55 | }
+
+Parsing ecmascr...">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Syntax error in component JavaScript</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.typescript.ts1005 &#x27;;&#x27; expected.
+error: pageerror: Unexpected token &#x27;this&#x27;
+error: pageerror: _ctx.toggle is not a function
+error: pageerror: Unexpected token &#x27;this&#x27;">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="VS Code JavaScript syntax check (tsc 6.0.3 --allowJs): TS1005 &#x27;,&#x27; expected.
+error: pageerror: Unexpected identifier &#x27;toggle&#x27;
+error: pageerror: Illegal invocation
+error: pageerror: board is not defined
+error: pageerror: api is not defined
+error: pageerror: toggle is not defined">E</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Unexpected token &#x27;)&#x27;
+error: pageerror: Illegal invocation
+error: pageerror: Unexpected token &#x27;)&#x27;
+error: pageerror: Illegal invocation
+warning: Alpine Expression Error: Unexpected token &#x27;)&#x27;
+
+Expression: &quot;{ open: false&quot;
+
+ JSHandle@node">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Unexpected token &#x27;;&#x27;
+error: pageerror: toggleDetails is not defined
+error: pageerror: Unexpected token &#x27;;&#x27;">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS1005 &#x27;;&#x27; expected.
+ESLint 10.13.0 (@nuxt/eslint 1.17.0): eslint Parsing error: &#x27;;&#x27; expected.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Vite Error)
+error: 500 http://127.0.0.1:55422/
+error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55422/
+error: [31mℹ Error: /app.vue — Missing semicolon. (22:26)[39m">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS1005 &#x27;)&#x27; expected.
+eslint (npm run lint): eslint Parsing error: &#x27;)&#x27; expected.
+next build: build Error: Expected &#x27;,&#x27;, got &#x27;;&#x27;
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: pageerror: ./work/m20-component-script-syntax/app/board.tsx:20:49
+Error: Expected &#x27;,&#x27;, got &#x27;;&#x27;
+  18 |   const [hidden, setHidden] = useState&lt;string[]&gt;([]);
+  19 |
+&gt; 20 |   const toggle = () =&gt; setOpen((value) =&gt; !value;
+     |                                                 ^
+  21 |
+  22 |...
+error: ./work/m20-component-script-syntax/app/board.tsx:20:49
+Error: Expected &#x27;,&#x27;, got &#x27;;&#x27;
+  18 |   const [hidden, setHidden] = useState&lt;string[]&gt;([]);
+  19 |
+&gt; 20 |   const toggle = () =&gt; setOpen((value) =&gt; !value;
+     |                                                 ^
+  21 |
+  22 |   async fu...
+error: ./work/m20-component-script-syntax/app/board.tsx:20:49
+Error: Expected &#x27;,&#x27;, got &#x27;;&#x27;
+  18 |   const [hidden, setHidden] = useState&lt;string[]&gt;([]);
+  19 |
+&gt; 20 |   const toggle = () =&gt; setOpen((value) =&gt; !value;
+     |                                                 ^
+  21 |
+  22 |   async fu...">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Unclosed element in a template</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.parse.syntax Parse error:  --&gt; 7:1
+  |
+7 | &lt;/article&gt;
+  | ^--------^
+  |
+  = Mismatched tags: expected closing tag &#x27;&lt;/footer&gt;&#x27;, found &#x27;&lt;/article&gt;&#x27;
+citry check: citry.parse.syntax Parse error:  --&gt; 7:1
+  |
+7 | &lt;/article&gt;
+  | ^--------^
+  |
+  = Mismatched tags: expected closing tag &#x27;&lt;/footer&gt;&#x27;, found &#x27;&lt;/article&gt;&#x27;
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54003/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. &lt;div class=&quot;card&quot;&gt;">C</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="djLint 1.46.6 (--lint, jinja profile): H025 Tag seems to be an orphan. &lt;footer&gt;">C</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): pyright &quot;(&quot; was not closed
+Pylance, type checking on (pyright 1.1.414, standard): pyright Statements must be separated by newlines or semicolons
+interaction: the development server did not answer
+the development server did not answer">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Vue compiler diagnostics (Vue - Official): vue-compiler-dom-errors/24 Element is missing end tag.
+ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/html-end-tags &#x27;&lt;footer&gt;&#x27; should have end tag.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Vite Error)
+error: 500 http://127.0.0.1:55437/
+error: ERROR  [request error] [unhandled] [GET] http://127.0.0.1:55437/
+error: [31mℹ Error: /components/Card.vue — Element is missing end tag.[39m">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS17008 JSX element &#x27;div&#x27; has no corresponding closing tag.
+tsc --noEmit (VS Code TypeScript): TS1381 Unexpected token. Did you mean `{&#x27;}&#x27;}` or `&amp;rbrace;`?
+tsc --noEmit (VS Code TypeScript): TS1005 &#x27;&lt;/&#x27; expected.
+eslint (npm run lint): eslint Parsing error: Unexpected token. Did you mean `{&#x27;}&#x27;}` or `&amp;rbrace;`?
+next build: build Error: Unexpected token. Did you mean `{&#x27;}&#x27;}` or `&amp;rbrace;`?
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: pageerror: ./work/m22-unclosed-tag/app/card.tsx:22:1
+Error: Unexpected token. Did you mean `{&#x27;}&#x27;}` or `&amp;rbrace;`?
+  20 |     &lt;/div&gt;
+  21 |   );
+&gt; 22 | }
+     | ^
+  23 |
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./work/m22-unclosed-tag/app/card.t...
+error: ./work/m22-unclosed-tag/app/card.tsx:22:1
+Error: Unexpected token. Did you mean `{&#x27;}&#x27;}` or `&amp;rbrace;`?
+  20 |     &lt;/div&gt;
+  21 |   );
+&gt; 22 | }
+     | ^
+  23 |
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./work/m22-unclosed-tag/app/card.tsx [Client ...
+error: ./work/m22-unclosed-tag/app/card.tsx:22:1
+Error: Unexpected token. Did you mean `{&#x27;}&#x27;}` or `&amp;rbrace;`?
+  20 |     &lt;/div&gt;
+  21 |   );
+&gt; 22 | }
+     | ^
+  23 |
+
+Parsing ecmascript source code failed
+
+Import traces:
+  Client Component Browser:
+    ./work/m22-unclosed-tag/app/card.tsx [Client ...">E°</td>
+</tr>
+<tr class="group"><th colspan="7" scope="rowgroup">
+HTML and CSS</th></tr>
+<tr><th scope="row" style="font-weight:400">Invalid HTML attribute value</th>
+<td class="cell" style="background: color-mix(in srgb, #9ae6b4 35%, var(--bg))" title="Citry language server (citry check --types): citry.template.invalid-attribute-value &#x27;sumbit&#x27; is not a valid value for &#x27;type&#x27; on &lt;button&gt;. Did you mean &#x27;submit&#x27;? Valid values: &#x27;submit&#x27;, &#x27;reset&#x27;, &#x27;button&#x27;.
+citry check: citry.template.invalid-attribute-value &#x27;sumbit&#x27; is not a valid value for &#x27;type&#x27; on &lt;button&gt;. Did you mean &#x27;submit&#x27;? Valid values: &#x27;submit&#x27;, &#x27;reset&#x27;, &#x27;button&#x27;.">Ew, N</td>
+<td class="cell" style="background: color-mix(in srgb, #4a5568 35%, var(--bg))">N</td>
+<td class="cell" style="background: color-mix(in srgb, #4a5568 35%, var(--bg))">N</td>
+<td class="cell" style="background: color-mix(in srgb, #4a5568 35%, var(--bg))">N</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2820 Type &#x27;&quot;sumbit&quot;&#x27; is not assignable to type &#x27;&quot;button&quot; | &quot;submit&quot; | &quot;reset&quot; | undefined&#x27;. Did you mean &#x27;&quot;submit&quot;&#x27;?">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2820 Type &#x27;&quot;sumbit&quot;&#x27; is not assignable to type &#x27;&quot;button&quot; | &quot;submit&quot; | &quot;reset&quot; | undefined&#x27;. Did you mean &#x27;&quot;submit&quot;&#x27;?
+next build: TS2820 Type &#x27;&quot;sumbit&quot;&#x27; is not assignable to type &#x27;&quot;button&quot; | &quot;submit&quot; | &quot;reset&quot; | undefined&#x27;. Did you mean &#x27;&quot;submit&quot;&#x27;?">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Misspelled HTML attribute name</th>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2322 Type &#x27;{ children: Element[]; className: string; titel: string; }&#x27; is not assignable to type &#x27;DetailedHTMLProps&lt;HTMLAttributes&lt;HTMLDivElement&gt;, HTMLDivElement&gt;&#x27;.
+next build: TS2322 Type &#x27;{ children: Element[]; className: string; titel: string; }&#x27; is not assignable to type &#x27;DetailedHTMLProps&lt;HTMLAttributes&lt;HTMLDivElement&gt;, HTMLDivElement&gt;&#x27;.">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Misspelled HTML element</th>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable &quot;Dvi&quot; is not defined
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54358/
+error: INFO:     127.0.0.1:54360 - &quot;GET / HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Hydration completed but contains mismatches.
+error: Hydration completed but contains mismatches.
+error:  ERROR  [console.error] Hydration completed but contains mismatches.
+error:  ERROR  [console.error] Hydration completed but contains mismatches.
+warning: %cssr:warn%c [Vue warn]: Failed to resolve component: dvi
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      ...">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2339 Property &#x27;dvi&#x27; does not exist on type &#x27;JSX.IntrinsicElements&#x27;.
+next build: TS2339 Property &#x27;dvi&#x27; does not exist on type &#x27;JSX.IntrinsicElements&#x27;.">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Misspelled CSS class</th>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+</tr>
+<tr class="group"><th colspan="7" scope="rowgroup">
+Events and server requests</th></tr>
+<tr><th scope="row" style="font-weight:400">Misspelled server handler name</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.browser.unknown-server-event Server event &#x27;sav&#x27; is not declared by this component.
+citry check: citry.browser.unknown-server-event Server event &#x27;sav&#x27; is not declared by this component.
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:53799/
+error: ERROR:    Exception in ASGI application
+error: Traceback (most recent call last):">E</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: 500 http://127.0.0.1:54073/
+error: Internal Server Error: /
+error: Traceback (most recent call last):">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 404 (Not Found)
+error: Response Status Error Code 404 from /sav, [object HTMLDivElement]
+error: 404 http://127.0.0.1:54481/sav">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 404 (Not Found)
+error: Response Status Error Code 404 from /sav
+error: 404 http://127.0.0.1:54320/sav">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS18046 &#x27;result&#x27; is of type &#x27;unknown&#x27;.">E°</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name &#x27;sav&#x27;. Did you mean &#x27;save&#x27;?
+next build: TS2552 Cannot find name &#x27;sav&#x27;. Did you mean &#x27;save&#x27;?
+error: pageerror: sav is not defined
+error: [browser] ⨯ unhandledRejection: ReferenceError: sav is not defined">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">State field typo in an update handler</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute &quot;cuont&quot; for class &quot;State&quot;
+  Attribute &quot;cuont&quot; is unknown
+Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot assign to attribute &quot;cuont&quot; for class &quot;State&quot;
+  Attribute &quot;cuont&quot; is unknown
+error: Traceback (most recent call last):
+error: AttributeError: &#x27;State&#x27; object has no attribute &#x27;cuont&#x27;. Did you mean: &#x27;count&#x27;?">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: Response Status Error Code 500 from /save, [object HTMLDivElement]
+error: 500 http://127.0.0.1:54581/save
+error: INFO:     127.0.0.1:54585 - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">R</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Pylance, type checking on (pyright 1.1.414, standard): reportUnboundVariable &quot;cuont&quot; is unbound
+ruff 0.15.5 (default rules): F841 Local variable `cuont` is assigned to but never used
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: Response Status Error Code 500 from /save
+error: 500 http://127.0.0.1:54371/save
+error: INFO:     127.0.0.1:54374 - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2551 Property &#x27;cuont&#x27; does not exist on type &#x27;{ count: number; }&#x27;. Did you mean &#x27;count&#x27;?
+vue-tsc (Vue - Official): TS2551 Property &#x27;cuont&#x27; does not exist on type &#x27;{ count: number; }&#x27;. Did you mean &#x27;count&#x27;?">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2551 Property &#x27;cuont&#x27; does not exist on type &#x27;{ count: number; }&#x27;. Did you mean &#x27;count&#x27;?
+next build: TS2551 Property &#x27;cuont&#x27; does not exist on type &#x27;{ count: number; }&#x27;. Did you mean &#x27;count&#x27;?">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Misspelled field in a request payload</th>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: Response Status Error Code 500 from /save/, [object HTMLSpanElement]
+error: 500 http://127.0.0.1:54203/save/
+error: Internal Server Error: /save/
+error: Traceback (most recent call last):">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: Response Status Error Code 500 from /save, [object HTMLDivElement]
+error: 500 http://127.0.0.1:54622/save
+error: INFO:     127.0.0.1:54625 - &quot;POST /save HTTP/1.1&quot; 500 Internal Server Error
+error: ERROR:    Exception in ASGI application">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Failed to load resource: the server responded with a status of 400 (Bad Request)
+error: Response Status Error Code 400 from /save
+error: 400 http://127.0.0.1:54399/save">R</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2561 Object literal may only specify known properties, but &#x27;amont&#x27; does not exist in type &#x27;{ amount: number; }&#x27;. Did you mean to write &#x27;amount&#x27;?
+next build: TS2561 Object literal may only specify known properties, but &#x27;amont&#x27; does not exist in type &#x27;{ amount: number; }&#x27;. Did you mean to write &#x27;amount&#x27;?">E</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Child emits an event the parent does not listen for</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.browser.undeclared-emit Event &#x27;hdie&#x27; is not declared in this component&#x27;s emits option.
+citry check: citry.browser.undeclared-emit Event &#x27;hdie&#x27; is not declared in this component&#x27;s emits option.">E</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #c53030 35%, var(--bg))">S</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="vue-tsc (Vue - Official): TS2345 Argument of type &#x27;&quot;hdie&quot;&#x27; is not assignable to parameter of type &#x27;&quot;hide&quot;&#x27;.
+ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/require-explicit-emits The &quot;hdie&quot; event has been triggered but not declared on `defineEmits`.
+warning: [Vue warn]: Component emitted event &quot;hdie&quot; but it is neither declared in the emits option nor as an &quot;onHdie&quot; prop.
+warning:  WARN  [console.warn] [Vue warn]: Component emitted event &quot;hdie&quot; but it is neither declared in the emits option nor as an &quot;onHdie&quot; prop.">E</td>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name &#x27;onHdie&#x27;. Did you mean &#x27;onHide&#x27;?
+next build: TS2552 Cannot find name &#x27;onHdie&#x27;. Did you mean &#x27;onHide&#x27;?
+interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
+error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)
+error: pageerror: onHdie is not defined
+error: 500 http://127.0.0.1:55167/
+error: ⨯ ReferenceError: onHdie is not defined">E</td>
+</tr>
+<tr class="group"><th colspan="7" scope="rowgroup">
+Server and browser</th></tr>
+<tr><th scope="row" style="font-weight:400">Server-only value read in browser code</th>
+<td class="cell" style="background: color-mix(in srgb, #2f855a 35%, var(--bg))" title="Citry language server (citry check --types): citry.vue.unknown-variable Vue variable &#x27;SECRET_TOKEN&#x27; is not available in this component.
+citry check: citry.vue.unknown-variable Vue variable &#x27;SECRET_TOKEN&#x27; is not available in this component.">E</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Cannot read properties of null (reading &#x27;textContent&#x27;)
+error: pageerror: Illegal invocation
+error: pageerror: api is not defined
+error: pageerror: toggle is not defined
+error: pageerror: Cannot read properties of null (reading &#x27;textContent&#x27;)">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: SECRET_TOKEN is not defined
+error: pageerror: SECRET_TOKEN is not defined
+warning: Alpine Expression Error: SECRET_TOKEN is not defined
+
+Expression: &quot;SECRET_TOKEN&quot;
+
+ JSHandle@node
+warning: Alpine Expression Error: SECRET_TOKEN is not defined
+
+Expression: &quot;SECRET_TOKEN&quot;
+
+ JSHandle@node">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: SECRET_TOKEN is not defined
+error: pageerror: SECRET_TOKEN is not defined">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Hydration completed but contains mismatches.
+error: Hydration completed but contains mismatches.
+error:  ERROR  [console.error] Hydration completed but contains mismatches.
+error:  ERROR  [console.error] Hydration completed but contains mismatches.
+warning: [NUXT_E1003] Could not access `secretToken`. The only available runtime config keys on the client side are `public` and `app`.
+╰▶ fix: Move `secretToken` under `runtimeConfig.public` in `nuxt.config` to make it available on the client side.">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Hydration failed because the server rendered HTML didn&#x27;t match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== &#x27;undefined&#x27;)`.
+- Variable input such as `Date.n...
+error: pageerror: Hydration failed because the server rendered HTML didn&#x27;t match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== &#x27;undefined&#x27;)`.
+- Variable input such as `Date.n...
+error: [browser] Uncaught Error: Hydration failed because the server rendered HTML didn&#x27;t match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+error: [browser] Uncaught Error: Hydration failed because the server rendered HTML didn&#x27;t match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:">R</td>
+</tr>
+<tr><th scope="row" style="font-weight:400">Server and browser render different content</th>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Hydration completed but contains mismatches.
+error: Hydration completed but contains mismatches.">R</td>
+<td class="cell" title="Django sends finished HTML. Alpine starts on that HTML and sets x-text and x-show without comparing them to what the server wrote, so there is no server render and first browser render that could disagree.">n/a</td>
+<td class="cell" title="The page is plain Jinja output. Alpine does not render components on the server: in the browser it runs on the HTML the server sent and overwrites x-text content without comparing it to the server&#x27;s text. Nothing renders the same component on both sides, so there is no mismatch for any tool to report.">n/a</td>
+<td class="cell" title="FastHTML renders the page only on the server and sends plain HTML. No browser-side component renders that markup a second time, so there is no first browser render to disagree with the server&#x27;s.">n/a</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: Hydration completed but contains mismatches.
+error: Hydration completed but contains mismatches.
+error:  ERROR  [console.error] Hydration completed but contains mismatches.
+error:  ERROR  [console.error] Hydration completed but contains mismatches.
+warning: [Vue warn]: Hydration text content mismatch on JSHandle@node 
+  - rendered on server: Loading details
+  - expected on client: Details 
+  at &lt;App key=4 &gt; 
+  at &lt;NuxtRoot&gt;">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 35%, var(--bg))" title="error: pageerror: Hydration failed because the server rendered text didn&#x27;t match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== &#x27;undefined&#x27;)`.
+- Variable input such as `Date.n...
+error: pageerror: Hydration failed because the server rendered text didn&#x27;t match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== &#x27;undefined&#x27;)`.
+- Variable input such as `Date.n...
+error: [browser] Uncaught Error: Hydration failed because the server rendered text didn&#x27;t match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:
+error: [browser] Uncaught Error: Hydration failed because the server rendered text didn&#x27;t match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:">R</td>
+</tr>
+</tbody></table></div>
+</main></body></html>
