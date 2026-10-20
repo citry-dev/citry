@@ -1,5 +1,6 @@
 # The page route reads the saved total for the counter's text; the save
-# route still reads and writes `count` correctly.
+# route still reads and writes `count` correctly. A misspelled name in the
+# template itself would be m07.
 status = "ported"
 mistake = { file = "app.py", contains = "request.app.state.cuont" }
 

@@ -1,5 +1,5 @@
-# Without a fill the card has no content, so it closes itself, as a
-# developer who never wrote the fill would write it.
+# Without a fill the card tag has no content, so it is written as a
+# self-closing tag, as a developer who never wrote the fill would write it.
 status = "ported"
 mistake = { file = "app/app.vue", contains = "<Card" }
 

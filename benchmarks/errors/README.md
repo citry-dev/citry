@@ -120,12 +120,12 @@ every framework.
 | Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title` | m15 |
 | Board wrapper | A `<div class="board" title="Board">` around everything below. The stylesheet makes `.board` text `rgb(0, 128, 0)` | m10, m11, m16 |
 | Owner | `Owner: Ada`, read in the template from a server object `owner` with a `name` attribute | m07, m08 |
-| Public setting | `API: /api`. The server passes the public value `/api` to browser-side code, which renders it. The server also holds `SECRET_TOKEN = "s3cr3t"`, which never reaches the browser | m12 |
-| Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks` | m01 to m04, m17, m22, m23 |
-| Card footer | The page fills the card's `footer` slot (or block, or child region) with a link `Open Alpha` to `#alpha` | m05 |
-| Card hide | Each card has a `Hide` button. It tells the page through an event or callback named `hide`, and the page then hides that card | m24 |
-| Counter | `Saved: 0` and an `Add` button. Add sends `{amount: 1}` to a server handler, route or action named `save`. The server adds `amount` to a value kept in a state field named `count`, and the page then shows `Saved: 1` | m06, m13, m18 |
-| Details | A `Details` button toggles browser-side state named `open`. While open, the text `Details are visible` shows | m14, m19, m20, m21 |
+| Public setting | `API: /api`. The server passes the public value `/api` to browser-side code, which renders it. The server also holds `SECRET_TOKEN = "s3cr3t"`, which never reaches the browser | m12, m40, m41, m42 |
+| Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks` | m01 to m04, m17, m22, m23, m47 |
+| Card footer | The page fills the card's `footer` slot (or block, or child region) with a link `Open Alpha` to `#alpha` | m05, m35 |
+| Card hide | Each card has a `Hide` button. It tells the page through an event or callback named `hide`, and the page then hides that card | m24, m29, m30 |
+| Counter | `Saved: 0` and an `Add` button. Add sends `{amount: 1}` to a server handler, route or action named `save`. The server adds `amount` to a value kept in a state field named `count`, and the page then shows `Saved: 1` | m06, m13, m18, m32, m33, m34, m38, m39 |
+| Details | A `Details` button toggles browser-side state named `open`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31 |
 | Search form | `<form role="search"><button type="submit">Search</button></form>` | m09 |
 
 Each card's footer link names its own project.
