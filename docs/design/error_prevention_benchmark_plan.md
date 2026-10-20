@@ -11,7 +11,8 @@ so each of those PRs also adds its page changes and cases to the Rusty
 app. PR 6 has added django-components, with PR 3's reference-page parts
 and a case for each of the 44 mistakes in the catalogue after PR 3; PRs 4
 and 5 cover it too. The other PRs in section 8 are planned. The published
-results include 1b, PR 2, PR 3, PR 9 and PR 6. The benchmark itself is described in
+results include 1b, PR 2, PR 3, PR 9 and PR 6. The benchmark itself is
+described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
 
@@ -813,10 +814,10 @@ Recommended order:
    direct test of Citry's main claim. Cost is medium. The baseline is the
    Django one with the card turned into a component, and the tools are the
    same as Django's. Nothing extra needs installing.
-   Done in PR 6: the page, the card and the counter are components. One
-   package was installed after all: djc-ext-pydantic, for the type checks
-   the decision on stricter settings turns on. The 37 cases ran in about 76
-   seconds with 5 cases at a time.
+   Done in PR 6: the page, the card, the counter and the status line are
+   components. One package was installed after all: djc-ext-pydantic, for
+   the type checks the decision on stricter settings turns on. The 44 cases
+   ran in about 95 seconds with 5 cases at a time.
 2. **Reflex.** It is the Python framework with the strongest checks before
    running: its compile step checks value types, handler arguments and prop
    values. Part 3 cares most about this, because it catches things Citry
@@ -993,7 +994,7 @@ change per baseline, plus re-checking the clean page.
 | 3. Browser components and slot data (done; the run changed one existing cell, Citry m14, from runtime error to missed, because the details panel now passes `open` to `Status`) | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
 | 4. Forms, links, assets, CSS variables, i18n arguments | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 30 + 24 baseline changes | ~5 min | ~46 min |
 | 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 78 + 6 baseline changes | ~12 min | ~58 min |
-| 6. django-components (app and the 37 cases of the current catalogue done; the cases of PRs 3 to 5 come with those PRs) | framework, baseline, one case per mistake | ~62 | ~8 min | ~66 min |
+| 6. django-components (app and the 44 cases of the catalogue after PR 3 done; the cases of PRs 4 and 5 come with those PRs) | framework, baseline, one case per mistake | ~62 | ~8 min | ~66 min |
 | 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first | ~62 | unknown: 30-95 min if every case builds the frontend | see open question 4 |
 | 8. ReactPy | | ~62 | ~6 min | |
 | 9. Django Rusty Templates (done, after PR 3 and before PRs 4 and 5) | starts from the Django baseline. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); its first 37 cases ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~7 min) | ~8.5 min for seven frameworks, measured |
@@ -1113,7 +1114,10 @@ count, unless Reflex needs a `max_jobs` limit.
   the nested component reads `open` through Alpine's shared scope, so m25
   misspells that read, m26 and m27 do not apply (Alpine has no required or
   typed inputs), and m28 is prevented (the child's assignment changes the
-  parent's value as intended).
+  parent's value as intended). The django-components app (PR 6) writes its
+  status line the same way and gets the same three outcomes, because a
+  django-components component receives its inputs only when the server
+  renders it.
 - **Lint warnings (question 5):** Next.js's jsx-a11y warnings score
   "Static/IDE warning", as proposed.
 - **Changed numbers:** expected. Turning on the stricter settings changes

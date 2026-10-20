@@ -219,24 +219,36 @@ view, which fails at runtime.
 django-components has an app and cases
 ([`frameworks/django-components/`](frameworks/django-components/) holds the
 app and its notes), but it is not in the run above; it joins the next
-published run. Its app is the
-Django app with the card, the counter and the page turned into components.
-Where its cells differ from Django's, the reason is:
+published run. Its app is the Django app with the card, the counter, the
+status line and the page turned into components. Where its cells differ
+from Django's, the reason is:
 
 - **m02, m04, m05 and m35:** django-components checks each component's
   inputs and slots when it renders, so a misspelled or missing input or
   slot gives a server error on the first page load, where the Django app
   shows a different page with no error. Nothing reports these before the
   app runs.
-- **m03:** the wrong-type input gives a server error on the first page
-  load, but only because the app turns on django-components' documented
-  type checking (Pydantic models with the djc-ext-pydantic extension),
-  following the rule on stricter settings below. Without it,
-  `count="card.count"` would print the text.
+- **m03 and m49:** the wrong-type input and the misspelled `tone` choice
+  give a server error on the first page load, but only because the app
+  turns on django-components' documented type checking (Pydantic models
+  with the djc-ext-pydantic extension), following the rule on stricter
+  settings below. Without it, `count="card.count"` would print the text
+  and the first card would silently lose its border.
 - **m12:** the page's script reads values only from the data
   `get_js_data()` sends it, so reading a `secret_token` that was never sent
   leaves the API line blank, with no error. The Django app's script looks
   the value up by element id and fails when the element is missing.
+- **m36 and m37:** unlike a Django block, a django-components slot hands
+  data to its fill (`{% slot "footer" title=title count=count %}`), which
+  the fill reads through `data="footer"`, so both mistakes apply. Nothing
+  checks what a template fill reads from that data, so a misspelled field
+  prints as empty text and a count joined with text through `add` prints
+  an empty value in place of the count; both are missed.
+
+m25 to m28 end as in the Django app. django-components hands a component
+its inputs once, when the server renders it, and `open` changes in the
+browser, so the status line stays the Django app's nested Alpine
+component.
 
 Tetra, django-unicorn, Reflex and ReactPy are not
 measured yet.
