@@ -130,6 +130,10 @@ def make_mark_component(citry_instance: Citry) -> type[Component]:
 
         citry = citry_instance
         name = "mark"
+        # validate_mark_name() rejects a wrong name with an error that names
+        # the <c-mark> tag and the accepted pattern, which says more than the
+        # general type check would.
+        check_input_types = False
         template = "<c-slot />"
 
         class Kwargs:

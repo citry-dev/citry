@@ -163,7 +163,7 @@ print(card_list)
 Run `python two_cards.py`. Both cards use the same HTML and CSS, but one is
 blue and the other orange, each with its own text.
 
-## Leave out an input
+## Catch input mistakes { #leave-out-an-input }
 
 If you forget the color, Citry cannot render the card:
 
@@ -187,8 +187,8 @@ Leaving out the default slot fails the same way. The error appears when the
 card turns into HTML, at `str()` or `print()`, not when Python first runs
 `Card(...)`.
 
-A value of the wrong type fails the same way. `accent: str` rejects a
-number:
+A value of the wrong type also fails when the card renders. `accent: str`
+rejects a number:
 
 ```python
 card = Card(accent=123, slots={"default": "Wrong color."})
@@ -196,8 +196,8 @@ str(card)
 # TypeError: Card.Kwargs.accent expects str, got int (123). ...
 ```
 
-Citry checks only the outer type of each input, so `list[str]` accepts any
-list. [Inputs and validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
+Citry checks that `accent` is a string, not what the string says.
+[Inputs and validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
 explains what each annotation accepts and how to check more.
 
 ## Next steps
@@ -207,7 +207,8 @@ You now have a card that:
 - asks for an accent color;
 - places text or HTML where `<c-slot />` appears;
 - can have a different color each time you use it; and
-- reports an error when required information is missing.
+- reports an error when required information is missing or has the
+  wrong type.
 
 You can [open the Card recipe](/examples/card/) to compare the component,
 complete page, and live result. To continue, [use Python data in

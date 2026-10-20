@@ -24,7 +24,7 @@ The lines to notice:
 
 If a template leaves out `accent` or the content, Citry raises an error
 that names what is missing as soon as it compiles that template. The `accent: str` annotation helps
-your editor and type checker, and Citry also checks it when the card
+your editor and type checker, and Citry checks the value when the card
 renders: `accent=123` raises a `TypeError` that names `Card.Kwargs.accent`.
 
 For a guided walkthrough, read

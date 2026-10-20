@@ -690,9 +690,10 @@ from citry_ui.components import (
 )
 
 # Every Citry UI component checks its own inputs with an error that names the
-# input and the accepted values (for example "CTabs loop must be a bool" or
-# "variant must be one of ..."). Citry's general input type check would raise
-# first with a less specific message, so these components turn it off. The
+# input and the accepted values (for example "Tabs loop must be a bool, got
+# 'x'."), and some accept values their annotations do not name, such as
+# heading_level="2". Citry's general input type check would replace those
+# messages and reject such values, so these components turn it off. The
 # manifest below seals the definitions, so this must run before it.
 for _definition in COMPONENTS:
     _definition.check_input_types = False

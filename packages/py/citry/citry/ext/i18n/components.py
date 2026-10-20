@@ -138,6 +138,10 @@ $component({});
         citry = citry_instance
         name = "i18n"
         _citry_i18n_provider_component = True
+        # template_data checks every attribute with an error that names the
+        # <c-i18n> tag, so the general type check would only replace those
+        # messages with one that names this internal class.
+        check_input_types = False
 
         class Kwargs:
             context: LocaleContext | None = None

@@ -8,25 +8,30 @@
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old
   behavior, set `check_input_types = False` on a component or pass
-  `Citry(check_input_types=False)`.
+  `Citry(check_input_types=False)`. If you use Citry UI, upgrade it at the
+  same time: earlier Citry UI releases reject some valid inputs under this
+  check.
 
   ```python
   class Card(Component):
       class Kwargs:
           title: str
 
-  str(Card(title=123))
+  card = Card(title=123)
+  str(card)
   # TypeError: Card.Kwargs.title expects str, got int (123). ...
   ```
 
-  Citry checks only the outer type (`list[str]` accepts any list) of each
-  `Kwargs`, `TemplateData`, `JsData`, `CssData`, and Events `State` field.
-  `int` accepts `bool` and numpy integers, `float` accepts `int` but not
-  `Decimal`, `str` accepts Django's lazy translation strings, and a field's
-  own default always passes, so `title: str = None` keeps working.
-  Pydantic models, `Any`, and names imported only under `TYPE_CHECKING`
-  are not checked
+  Citry checks only the outer type of each `Kwargs`, `TemplateData`,
+  `JsData`, `CssData`, and Events `State` field, so `list[str]` accepts
+  any list. A field's own default always passes, so `title: str = None`
+  keeps working, and Pydantic models keep their own rules
   ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
+
+### Fixes
+
+- An Events `State` field annotated as a tuple is a tuple again in event
+  handlers, instead of the list that JSON turned it into.
 
 ## v0.6.0
 

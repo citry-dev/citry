@@ -11,9 +11,8 @@ also fills in defaults and tells readers, editors, and type checkers how to
 use the component.
 
 Citry also checks that each value has the type its annotation names, so
-`title: str` rejects a number. Add a validating model such as Pydantic when
-you need more, such as checking the items of a list or turning a form's
-text into a number.
+`title: str` rejects a number. Add a validating model such as Pydantic to
+check the items of a list or to turn a form's text into a number.
 
 ## `Kwargs` keyword inputs
 
@@ -97,47 +96,25 @@ and raises `TypeError` for a value of the wrong type:
 button = Button(label=42)
 
 # TypeError: Button.Kwargs.label expects str, got int (42).
+# Pass a value of the expected type, or change the annotation
+# to accept int.
 str(button)
 ```
 
 The message names the component, the input, the type the annotation
 expects, and the value it got. The check runs on every render, in
-development and in production, so data from a form, an API, or a
-database is checked too.
+development and in production, so a value of the wrong type from a form,
+an API, or a database fails here too.
 
-Citry checks only the outer type. `tags: list[str]` rejects a tuple
-or a string, but it does not look at the items, so a list of numbers
-passes. Checking every item would slow down every render in proportion to
-the data.
+Citry checks only the outer type. `tags: list[str]` rejects a tuple or a
+string, but it does not look at the items, so a list of numbers passes.
+To check the contents of data you do not control, use Pydantic
+([below](#check-more-with-pydantic)).
 
 The same check applies to `TemplateData`, `JsData`, and `CssData` (see
-[below](#templatedata-jsdata-cssdata)), and to Events
-[`State`][citry.Component.State] built when the page renders.
-
-### Values each annotation accepts
-
-Each annotation accepts what a type checker would accept:
-
-- `int` accepts `bool` and other integer types, such as numpy integers.
-- `float` accepts `int`, `Fraction`, and numpy floats. It rejects
-  `Decimal`, as type checkers do; write `float | Decimal` to accept it.
-- `str` accepts subclasses such as [`Markup`][citry.Markup], and Django's
-  lazy translation strings from `gettext_lazy()`.
-- `X | None` and `Optional[X]` accept `None`. So does a field whose
-  default is `None`, such as `title: str = None` in code ported from
-  django-components.
-- A field's own default always passes, so `tags: list[str] = ()` works
-  when the input is left out. Another tuple still fails.
-- `Literal["a", "b"]` accepts only those values, and `type[Row]` accepts
-  the class `Row` or a subclass.
-
-Citry skips an annotation it cannot test while the page runs: `Any`,
-`object`, a type variable, a `Protocol` without `@runtime_checkable`, and
-a name imported only under `if TYPE_CHECKING:`. Import a type normally when
-you want its inputs checked.
-
-A `Mock` from `unittest.mock` fails the check unless it is created with
-`spec=`, which makes it pass for that class.
+[below](#templatedata-jsdata-cssdata)), and to the Events
+[`State`][citry.Component.State] a component builds when the page renders.
+State sent back with an event call is not checked again.
 
 ### Accept more values
 
@@ -160,17 +137,59 @@ class Price(Component):
     """
 ```
 
+In a template, a plain attribute such as `amount="18"` always passes text.
+Write `c-amount="18"` to pass the number instead.
+
+### Turn the check off
+
 To turn the check off for one component and its subclasses, set
 [`check_input_types`][citry.Component.check_input_types] to `False`:
 
-```python
+```citry
+from citry import Component
+
+
 class LegacyCard(Component):
     check_input_types = False
+
+    template = """
+      <div class="legacy-card"></div>
+    """
 ```
 
 To turn it off for a whole application, pass `check_input_types=False` to
 [`Citry`][citry.Citry]. A component can still turn it on with
 `check_input_types = True`.
+
+### What each type accepts
+
+Each annotation accepts about what a type checker would accept, with a
+few allowances:
+
+- `int` accepts `bool` and other integer types, such as numpy integers.
+- `float` accepts `int`, `Fraction`, and numpy floats. It rejects
+  `Decimal`, as type checkers do; write `float | Decimal` to accept it.
+- `str` accepts subclasses such as [`Markup`][citry.Markup], and Django's
+  lazy translation strings from `gettext_lazy()`.
+- `X | None` and `Optional[X]` accept `None`. So does a field whose
+  default is `None`, such as `title: str = None`.
+- A field's own default value always passes, so `tags: list[str] = ()`
+  works when the input is left out. A non-empty tuple such as `("a",)`
+  still fails, and so does a wrong value from a `default_factory`.
+- `Literal["a", "b"]` accepts only those values, and `type[Row]` accepts
+  the class `Row` or a subclass.
+
+Citry skips an annotation it cannot test while the page runs: `Any`,
+`object`, a type variable, a `Protocol` without `@runtime_checkable`, and a
+name Python cannot find while the page runs. That last case covers a name
+imported only under `if TYPE_CHECKING:`, and a class defined inside a
+function in a module that uses `from __future__ import annotations`. A
+union with one such member, such as `Row | None` where `Row` is imported
+only for type checkers, is not checked at all. Import a type normally when
+you want its inputs checked.
+
+A `Mock` from `unittest.mock` fails the check unless it is created with
+`spec=`, which makes it pass for that class.
 
 ### Check more with Pydantic
 

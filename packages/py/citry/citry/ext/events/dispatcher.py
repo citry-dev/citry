@@ -40,6 +40,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Literal
 
+from citry._input_types import _restore_json_tuples
 from citry._protocol.events import (
     CAPABILITIES_BASELINE_V1,
     PROTOCOL,
@@ -753,12 +754,18 @@ class EventsDispatcher:
                 # class: the version-skew case (the class changed across a
                 # deploy), which is the stale-token story (design 4.5).
                 return build_error_result(build_error(409, "stale_state", _MSG_STALE_STATE), send_sequence)
+            # JSON has no tuple, so a tuple field comes back from the token as
+            # a list. Restore it before the fingerprint, so the handler and any
+            # component it renders from this State see the declared type.
+            _restore_json_tuples(state, info.state_cls)
             state_fingerprint = _state_fingerprint(state)
             if updates and info.state_meta is not None:
                 try:
                     apply_state_updates(state, updates, model_fields=info.state_meta.model)
                 except StateUpdateError as err:
                     return build_error_result(build_error(422, "invalid_args", err.message, err.fields), send_sequence)
+                # A browser update for a tuple field also arrives as a list.
+                _restore_json_tuples(state, info.state_cls)
 
         # Args validation against the handler's data schema (design 3.3, WP9).
         args = call.get("args") or {}

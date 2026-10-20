@@ -23,8 +23,10 @@ from unittest.mock import Mock
 
 import pytest
 import typing_extensions
+import wrapt
 from pydantic import BaseModel
 
+import citry._input_types as input_types
 from citry import Citry, Component, ComponentLibrary, Const, LibraryComponent, Markup
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.tokens import mint_state_token
@@ -596,6 +598,55 @@ class TestState:
 
         assert result["results"][0]["ok"] is True, result
 
+    def test_event_handler_sees_a_tuple_and_can_render_from_it(self):
+        # The token and browser updates carry JSON lists. Citry turns them back
+        # into tuples, so a re-render that passes the State on to Kwargs
+        # declared as a tuple passes the check.
+        app = self._app()
+        seen: list[object] = []
+
+        class Tags(Component):
+            citry = app
+
+            class Kwargs:
+                tags: tuple[str, ...] = ()
+
+            class State:
+                tags: tuple[str, ...] = ()
+                _model = ("tags",)
+
+            class Events:
+                def touch(self, state: Any) -> object:
+                    seen.append(state.tags)
+                    return Tags(tags=state.tags)
+
+            template = """
+              <button @c-click="touch">{{ tags }}</button>
+            """
+
+        token = mint_state_token(
+            Tags.State(tags=("a", "b")),
+            class_id=Tags.class_id,
+            secret=SIGNING_KEY,
+            max_age=None,
+            max_bytes=8192,
+        )
+        for updates in (None, {"tags": ["c"]}):
+            call: dict[str, object] = {
+                "componentClassId": Tags.class_id,
+                "handlerName": "touch",
+                "callerRenderId": "r1",
+                "args": {},
+                "stateToken": token,
+            }
+            if updates is not None:
+                call["stateUpdates"] = updates
+            envelope = {"protocol": "citry-events/1", "requestId": "r1", "calls": [call]}
+            result = EventsDispatcher().dispatch(envelope, TransportContext(transport="http", citry=app))
+            assert result["results"][0]["ok"] is True, result
+
+        assert seen == [("a", "b"), ("c",)]
+
 
 class TestSwitches:
     def test_check_runs_in_both_modes(self):
@@ -672,3 +723,86 @@ def test_django_lazy_text_is_accepted_for_str():
     assert not isinstance(lazy_text, str)
     assert _renders(card, value=lazy_text)
     assert not _renders(_card(Citry(), int), value=lazy_text)
+
+
+class TestErrorHints:
+    def test_literal_asks_for_one_of_the_allowed_values(self):
+        card = _card(Citry(), Literal["a", "b"])
+
+        with pytest.raises(TypeError, match=r"expects Literal\['a', 'b'\], got str \('c'\)\. Use one of the values"):
+            str(card(value="c"))
+
+    def test_none_is_written_as_none(self):
+        card = _card(Citry(), int)
+
+        with pytest.raises(TypeError, match=r"expects int, got None \(None\)\. .* to accept None\."):
+            str(card(value=None))
+
+    def test_same_class_name_shows_the_module(self):
+        other = type("Row", (), {"__module__": "elsewhere"})
+        card = _card(Citry(), Row)
+
+        with pytest.raises(TypeError, match=r"expects Row, got elsewhere\.Row"):
+            str(card(value=other()))
+
+    def test_text_from_a_template_attribute_suggests_c_prefix(self):
+        app = Citry()
+        _card(app, int)
+
+        class Page(Component):
+            citry = app
+
+            template = """
+              <c-Card value="18" />
+            """
+
+        with pytest.raises(TypeError, match=r'write c-value="\.\.\." to pass a Python value'):
+            str(Page())
+
+
+class TestRememberedTypes:
+    def test_one_check_per_schema_per_render(self, monkeypatch: pytest.MonkeyPatch):
+        app = Citry()
+
+        class Card(Component):
+            citry = app
+
+            class Kwargs:
+                count: int
+
+            class TemplateData:
+                count: int
+
+            def template_data(self, kwargs: Any, slots: Any) -> dict[str, object]:
+                return {"count": kwargs.count}
+
+            template = """
+              <span>{{ count }}</span>
+            """
+
+        calls: list[type] = []
+        original = input_types._schema_checks_for
+
+        def count_calls(schema: type) -> object:
+            calls.append(schema)
+            return original(schema)
+
+        monkeypatch.setattr(input_types, "_schema_checks_for", count_calls)
+        str(Card(count=1))
+
+        assert calls == [Card.Kwargs, Card.TemplateData]
+
+    def test_remembered_types_are_bounded(self):
+        card = _card(Citry(), Row)
+        subclasses = [type(f"Row{index}", (Row,), {}) for index in range(40)]
+        for subclass in subclasses:
+            assert _renders(card, value=subclass())
+
+        [check] = card.Kwargs.__dict__["_citry_input_type_checks"]
+        assert len(check.accepted) <= 33
+
+    def test_proxy_type_is_not_remembered_for_what_it_wraps(self):
+        card = _card(Citry(), str)
+
+        assert _renders(card, value=wrapt.ObjectProxy("text"))
+        assert not _renders(card, value=wrapt.ObjectProxy(1))

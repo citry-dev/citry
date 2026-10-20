@@ -684,27 +684,29 @@ class Component(metaclass=ComponentMeta):
     check_input_types: ClassVar[bool | None] = None
     """Whether Citry checks the type of each value this component receives.
 
-    ``None`` (the default) follows the owning engine's
-    ``Citry(check_input_types=...)`` setting, which is on by default. Set
-    ``False`` to skip the check for this component and its subclasses, for
-    example in a component library whose annotations are looser than the
-    values its users pass. Set ``True`` to check this component even when the
-    engine turns the check off. Any other value raises ``ValueError`` when the
-    class is defined.
+    ``None`` (the default) follows the [`Citry`][citry.Citry] app's
+    ``check_input_types`` setting, which is on by default. ``False`` skips
+    the check for this component and its subclasses, for example in a
+    component library that checks its own inputs with more specific errors,
+    or that accepts values its annotations do not name. ``True`` checks this
+    component even when the app turns the check off. Any other value raises
+    ``ValueError`` when the class is defined or the attribute is set.
 
     The check compares the outer type of each ``Kwargs``, ``TemplateData``,
-    ``JsData``, ``CssData``, and ``State`` field with its annotation and
-    raises ``TypeError`` for a wrong one::
+    ``JsData``, ``CssData``, and ``State`` field with its annotation, and
+    raises ``TypeError`` for a wrong one. To accept more values for one
+    field, widen its annotation instead, for example ``title: str | int``.
 
+    Example:
+        ```python
         class Card(Component):
             class Kwargs:
                 title: str
 
-        Card(title=123).render()
+        card = Card(title=123)
+        card.render()
         # TypeError: Card.Kwargs.title expects str, got int (123). ...
-
-    To accept more values for one field, widen its annotation instead, for
-    example ``title: str | int``.
+        ```
     """
 
     name: ClassVar[str | None] = None

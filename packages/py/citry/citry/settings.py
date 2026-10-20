@@ -468,23 +468,22 @@ class CitrySettings:
             means no secret is set. Django projects can reuse their existing
             key by passing ``citry.contrib.django.secret()``.
         check_input_types: Check that each value a component receives has
-            the type its annotation names. On by default, in both modes. When a
-            component renders, Citry compares each field of its ``Kwargs``,
-            ``TemplateData``, ``JsData``, ``CssData``, and ``State`` with the
-            field's annotation and raises ``TypeError`` for a value of the
-            wrong type, so ``Card(title=123)`` against ``title: str`` fails
-            and the message names the component, the field, the expected type,
-            and the value. Only the outer type is checked: ``list[str]``
-            accepts any ``list`` without looking at its items. ``int`` also
-            accepts ``bool`` and other integer types such as numpy integers,
-            ``float`` accepts ``int`` and other real numbers but not
-            ``Decimal``, and ``str`` accepts ``str`` subclasses and Django lazy
-            translation strings. A field whose default is ``None`` also accepts
-            ``None``. Annotations that ``isinstance`` cannot test, such as
-            ``Any``, a type variable, or a name imported only for type
-            checkers, are not checked. Pydantic models check values
-            themselves and are skipped. A component can turn the check off
-            for itself with
+            the type its annotation names. On by default, in development and
+            in production. When a component renders, Citry compares each
+            field of its ``Kwargs``, ``TemplateData``, ``JsData``,
+            ``CssData``, and ``State`` with the field's annotation and raises
+            ``TypeError`` for a value of the wrong type, so
+            ``Card(title=123)`` against ``title: str`` fails with a message
+            that names the component, the field, the expected type, and the
+            value. Only the outer type is checked: ``list[str]`` accepts any
+            ``list``. A field's own default always passes. Annotations Citry
+            cannot test while the page runs, such as ``Any``, a type
+            variable, or a name imported only for type checkers, are not
+            checked, and Pydantic models and dataclasses that write their own
+            ``__init__`` keep their own rules. [Inputs and
+            validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
+            lists what each annotation accepts. A component can turn the
+            check off for itself with
             [`check_input_types`][citry.Component.check_input_types]. Must be
             a ``bool``: another type raises ``TypeError`` when the settings
             are created.

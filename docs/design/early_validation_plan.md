@@ -57,10 +57,10 @@ from existing design prose.
   fields, while adapters such as Pydantic follow their own extra-field and
   alias configuration. The constructed schema object is then discarded and
   the original mapping is returned. Defaults, coercions, aliases, and ignored
-  extras therefore do not produce a canonical output mapping. Since the
-  input type check landed, generated dataclasses, user dataclasses, and
-  NamedTuples also have the outer type of each field checked against its
-  annotation on every render, in both modes
+  extras therefore do not produce a canonical output mapping. Generated
+  dataclasses, user dataclasses, and NamedTuples also have the outer type
+  of each field checked against its annotation on every render, in
+  development and in production
   ([`_input_types.py`](../../packages/py/citry/citry/_input_types.py));
   container items are not checked, and Pydantic applies its own rules.
 - Engine template globals and per-render template globals are merged before

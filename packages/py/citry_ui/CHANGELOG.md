@@ -4,9 +4,10 @@
 
 ### Changed
 
-- Citry UI components keep reporting their own input errors, such as
-  "CTabs loop must be a bool", when Citry checks input types: they turn
-  Citry's general check off with `check_input_types = False`.
+- Citry UI components work with the input type check in the next Citry
+  release and accept the same values as before, such as
+  `heading_level="2"`. Earlier Citry UI releases reject some valid inputs
+  under that check, so upgrade Citry UI and Citry together.
 
 ## [0.3.0] - 2026-10-19
 

@@ -13,8 +13,8 @@ to the data on every render.
 
 The first check of a schema class reads its annotations once and stores a
 tuple of prepared field checks on the class. Each later check first compares
-the value's exact type with a set of accepted types (a few nanoseconds) and
-runs the slower ``isinstance`` test only when that fails.
+the value's exact type with a set of accepted types, which is much cheaper
+than ``isinstance``, and runs the slower test only when that fails.
 """
 
 from __future__ import annotations
@@ -44,8 +44,7 @@ if TYPE_CHECKING:
 
     from citry.component import Component
 
-# The prepared checks live on the schema class itself, read through its own
-# namespace so a subclass schema never reuses its parent's (narrower) list.
+# The prepared checks live on the schema class itself.
 _CHECKS_ATTR = "_citry_input_type_checks"
 
 # A schema class that refuses a new class attribute keeps its checks here
@@ -171,10 +170,7 @@ def _check_input_types(
     if not enabled:
         return
 
-    checks = _static_class_dict(schema).get(_CHECKS_ATTR)
-    if checks is None:
-        checks = _schema_checks(schema)
-    for name, accepted, matcher, expected in cast("tuple[_FieldCheck, ...]", checks):
+    for name, accepted, matcher, expected in _schema_checks_for(schema):
         value = getattr(instance, name, _MISSING)
         # The exact-type test answers almost every render; the rest only runs
         # for a subclass, an abstract annotation, or a wrong value.
@@ -188,7 +184,7 @@ def _check_input_types(
             if type(value) in accepted:
                 continue
         if not matcher.slow_match(value):
-            _raise_type_error(component_class, role, name, expected, value)
+            _raise_type_error(component_class, role, _FieldCheck(name, accepted, matcher, expected), value)
 
 
 class _MissingValue:
@@ -201,17 +197,55 @@ _MISSING = _MissingValue()
 def _raise_type_error(
     component_class: type[Component],
     role: str,
-    name: str,
-    expected: str,
+    check: _FieldCheck,
     value: object,
 ) -> typing.NoReturn:
-    """Raise the error that names the component, field, expected type, and value."""
-    type_name = type(value).__name__
-    msg = (
-        f"{component_class.__name__}.{role}.{name} expects {expected}, got {type_name} ({_short_repr(value)}). "
-        f"Pass a value of the expected type, or change the annotation to accept {type_name}."
-    )
+    """Raise the error that names the component, field, expected type, and value, and says what to do."""
+    name, _accepted, matcher, expected = check
+    type_name = _class_label(type(value))
+    # Two different classes with the same name would read "expects Row, got
+    # Row", so the module tells them apart.
+    if type_name in expected.replace("|", " ").replace("[", " ").replace("]", " ").split():
+        type_name = f"{type(value).__module__}.{type_name}"
+    if not matcher.type_tests and matcher.accepted <= {_NONE_TYPE} and matcher.value_tests:
+        # Literal and type[...] fail on the value itself, so a wider type
+        # would not help.
+        fix = f"Use one of the values that {expected} allows."
+    else:
+        verb = "Pass" if role == "Kwargs" else "Use"
+        fix = f"{verb} a value of the expected type, or change the annotation to accept {type_name}."
+        if role == "Kwargs" and isinstance(value, str):
+            # A plain template attribute always passes text.
+            fix += f' In a template, write c-{name}="..." to pass a Python value instead of text.'
+    msg = f"{component_class.__name__}.{role}.{name} expects {expected}, got {type_name} ({_short_repr(value)}). {fix}"
     raise TypeError(msg)
+
+
+def _class_label(cls: type) -> str:
+    """Name a class as its source does: ``None`` for NoneType, ``Card.Kwargs`` for a nested class."""
+    if cls is _NONE_TYPE:
+        return "None"
+    qualname = getattr(cls, "__qualname__", None)
+    # A class defined inside a function has "<locals>" in its qualified name,
+    # which means nothing to the reader, so its plain name is used.
+    if isinstance(qualname, str) and "<locals>" not in qualname:
+        return qualname
+    return cls.__name__
+
+
+def _restore_json_tuples(instance: object, schema: type) -> None:
+    """
+    Turn a list back into a tuple for each field whose annotation accepts a tuple but not a list.
+
+    Events State travels to the browser and back as JSON, which has no
+    tuple, so a ``tuple[str, ...]`` field comes back as a list. Restoring the
+    declared outer type keeps the handler, and any component it renders
+    from the State, working with the type the field names.
+    """
+    for check in _schema_checks_for(schema):
+        value = getattr(instance, check.name, _MISSING)
+        if type(value) is list and check.matcher.accepts_now(()) and not check.matcher.accepts_now([]):
+            object.__setattr__(instance, check.name, tuple(value))
 
 
 def _short_repr(value: object) -> str:
@@ -223,6 +257,16 @@ def _short_repr(value: object) -> str:
     if len(text) > _MAX_VALUE_REPR:
         return text[: _MAX_VALUE_REPR - 3] + "..."
     return text
+
+
+def _schema_checks_for(schema: type) -> tuple[_FieldCheck, ...]:
+    """Return the prepared checks for a schema class, preparing them on first use."""
+    # Read the class's own namespace, so a subclass schema never reuses its
+    # parent's list, which lacks the subclass's own fields.
+    checks = schema.__dict__.get(_CHECKS_ATTR)
+    if checks is None:
+        return _schema_checks(schema)
+    return cast("tuple[_FieldCheck, ...]", checks)
 
 
 def _schema_checks(schema: type) -> tuple[_FieldCheck, ...]:
@@ -371,6 +415,12 @@ def _matcher_for_inner(annotation: object) -> _Matcher | None:
         return _class_object_matcher(get_args(annotation))
     if origin is AbcCallable:
         return _Matcher(set(), type_tests=(callable,))
+    if origin is not None:
+        # A generic alias such as ``type Pair[T] = tuple[T, T]`` used as
+        # ``Pair[int]``: check the outer type the alias stands for.
+        alias_value = _type_alias_value(origin)
+        if alias_value is not None:
+            return _matcher_for_inner(alias_value)
     if isinstance(origin, type):
         # ``list[str]``, ``dict[str, int]``, ``Sequence[Row]``: only the
         # outer class is checked, never the items.
@@ -498,7 +548,11 @@ def _is_django_lazy_text(value: object) -> bool:
     """
     functional = sys.modules.get("django.utils.functional")
     promise = getattr(functional, "Promise", None)
-    return isinstance(promise, type) and isinstance(value, promise)
+    if not isinstance(promise, type) or not isinstance(value, promise):
+        return False
+    # Django copies the result type's methods onto each lazy class, so a lazy
+    # str has str-only methods such as ``casefold`` while a lazy int does not.
+    return hasattr(type(value), "casefold")
 
 
 def _annotation_label(annotation: object) -> str:
@@ -506,7 +560,7 @@ def _annotation_label(annotation: object) -> str:
     if annotation is None or annotation is _NONE_TYPE:
         return "None"
     if isinstance(annotation, type) and get_origin(annotation) is None:
-        return annotation.__name__
+        return _class_label(annotation)
     if get_origin(annotation) in _UNION_ORIGINS:
         return " | ".join(_annotation_label(member) for member in get_args(annotation))
     text = repr(annotation)
