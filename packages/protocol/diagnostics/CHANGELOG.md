@@ -20,3 +20,8 @@
 - Added `citry.i18n.missing-param-type`, the configurable `citry check`
   warning for a message variable without a `# @param` type, which the i18n
   compiler already reported.
+- `citry.template.invalid-attribute-value` defaults to `error`. It stays a
+  warning where no setting chooses its severity, such as
+  `citry check --static` for a component whose `Lint` class does not set it.
+- Added `citry.template.misspelled-directive`, the configurable error for a
+  `c-*` attribute that looks like a misspelled Citry directive.

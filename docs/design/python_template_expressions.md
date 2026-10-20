@@ -122,11 +122,18 @@ distinct authored definitions. No result silently chooses the first consumer.
 ## Synchronized source
 
 The Citry LSP forwards open Python documents to the child and opens shadow
-documents as unsaved virtual files beside the source module they copy. Because
-`ty` does not assign package identity to a `didOpen`-only sibling, the portable
-builder also mirrors direct module imports and rewrites method-local relative
-imports to their absolute spelling from proven module provenance. Relative star
-imports are declined conservatively. No shadow file is written into the project.
+documents as unsaved virtual files in the directory of the consuming
+component's own Python file (or its template file when the class has no known
+file). The copied module may be a base class from Citry itself, an installed
+package, or a `.venv` inside the workspace, and `ty` reports diagnostics only
+for its own project files, so a shadow placed beside such a module would come
+back empty. When the copied module lives in another directory, the shadow's
+name adds a hash of that module's path, so copies of two bases with one file
+name stay apart. Because `ty` does not assign package identity to a
+`didOpen`-only file, the portable builder also mirrors direct module imports
+and rewrites relative imports to their absolute spelling from proven module
+provenance. Relative star imports are declined conservatively. No shadow file
+is written into the project.
 
 The pinned `ty` server currently resolves imports from a virtual shadow against
 disk even when the imported module also has an open `didChange` generation.
@@ -135,7 +142,7 @@ Citry therefore uses synchronized text for the copied schema or
 Python file differs from disk. This is deliberately broader than an import
 dependency scan and prevents stale imported types from reaching the editor.
 
-Each virtual sibling keeps a stable URI for one component definition while its
+Each shadow document keeps a stable URI for one component definition while its
 LSP document version advances whenever the current module, template query, or
 consumer context changes. Citry builds every request from the current project
 generation and synchronized sources; it does not cache a semantic answer
@@ -258,7 +265,7 @@ Revisit the child-process decision if any of these becomes true:
    `citry-lsp`;
 2. a clean workspace consistently exceeds 200 ms for ordinary member
    completion after startup;
-3. virtual sibling documents cannot preserve real project and relative-import
+3. shadow documents cannot preserve real project and relative-import
    resolution;
 4. the public LSP surface cannot return a required structured operation without
    parsing display text;

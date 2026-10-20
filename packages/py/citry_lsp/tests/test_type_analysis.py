@@ -21,11 +21,10 @@ from citry_lsp.type_analysis import (
     TyDocument,
     TyUnavailableError,
     _bounded_client_request,
-    _different_filesystem_roots,
     _is_ty_vendored_stdlib_path,
     _safe_completion_item,
     _stop_client,
-    _virtual_document_parent,
+    is_project_source_file,
     offset_at_position,
     position_at_offset,
     virtual_document_uri,
@@ -422,42 +421,41 @@ async def test_builtin_str_expression_shapes_hide_format_methods(tmp_path: Path,
 def test_virtual_document_is_a_deterministic_python_sibling(tmp_path: Path) -> None:
     source_file = tmp_path / "components" / "card.py"
 
-    first = virtual_document_uri(source_file, "def:card/value")
-    second = virtual_document_uri(source_file, "def:card/value")
+    first = virtual_document_uri(source_file, "def:card/value", anchor_file=source_file)
+    second = virtual_document_uri(source_file, "def:card/value", anchor_file=source_file)
 
     assert first == second
     assert first.startswith(source_file.parent.resolve().as_uri())
-    assert first.rsplit("/", 1)[-1].startswith("__citry_")
-    assert first.endswith(".py")
+    assert first.rsplit("/", 1)[-1] == "__citry_card_def_card_value.py"
 
 
-def test_analyzer_recognizes_a_cross_drive_editable_environment() -> None:
-    assert _different_filesystem_roots(
-        PureWindowsPath("C:/workspace"),
-        PureWindowsPath("D:/checkout"),
-    )
-    assert not _different_filesystem_roots(
-        PureWindowsPath("C:/workspace"),
-        PureWindowsPath("C:/checkout"),
-    )
-    assert _virtual_document_parent(
-        PureWindowsPath("D:/checkout/package/component.py"),
-        PureWindowsPath("C:/workspace"),
-    ) == PureWindowsPath("C:/workspace")
+def test_virtual_document_of_an_inherited_base_sits_next_to_the_component(tmp_path: Path) -> None:
+    # A base class in an installed package is outside ty's project, so the
+    # copy goes next to the component that inherits from it.
+    base = tmp_path / ".venv" / "lib" / "site-packages" / "lib" / "component.py"
+    other_base = tmp_path / "elsewhere" / "component.py"
+    component = tmp_path / "app" / "card.py"
+
+    uri = virtual_document_uri(base, "card", anchor_file=component)
+    other = virtual_document_uri(other_base, "card", anchor_file=component)
+
+    assert uri.rsplit("/", 1)[0] == component.parent.resolve().as_uri()
+    assert uri.rsplit("/", 1)[-1].startswith("__citry_component_")
+    # Two bases with one file name get different copies.
+    assert uri != other
 
 
-def test_cross_drive_virtual_document_moves_inside_the_workspace(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    source_file = tmp_path / "installed" / "component.py"
-    workspace = tmp_path / "workspace"
-    monkeypatch.setattr(type_analysis, "_different_filesystem_roots", lambda *_args: True)
+def test_project_source_files_exclude_installed_packages(tmp_path: Path) -> None:
+    environment = tmp_path / "env"
+    environment.mkdir()
+    (environment / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
 
-    uri = virtual_document_uri(source_file, "component", workspace=workspace)
-
-    assert uri.startswith(workspace.resolve().as_uri())
-    assert "component" in uri.rsplit("/", 1)[-1]
+    assert is_project_source_file(tmp_path / "app" / "card.py", tmp_path)
+    assert not is_project_source_file(tmp_path / ".venv" / "lib" / "card.py", tmp_path)
+    assert not is_project_source_file(tmp_path / "vendor" / "site-packages" / "lib" / "card.py", tmp_path)
+    # A virtual environment is found by its pyvenv.cfg, whatever its name.
+    assert not is_project_source_file(environment / "lib" / "card.py", tmp_path)
+    assert not is_project_source_file(tmp_path.parent / "card.py", tmp_path)
 
 
 @pytest.mark.asyncio
@@ -691,7 +689,7 @@ async def test_ty_adapter_resolves_relative_imports_from_a_virtual_package_sibli
         source_module="pkg.component",
     )
     assert shadow is not None
-    document = TyDocument(virtual_document_uri(source_file, "component"), shadow.source)
+    document = TyDocument(virtual_document_uri(source_file, "component", anchor_file=source_file), shadow.source)
     cursor = shadow.copies[0].shadow_end
     analyzer = TyAnalyzer(tmp_path)
     try:

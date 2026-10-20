@@ -24,7 +24,10 @@ lint settings are `LintSettings.rule_unknown_vue_variable` and
 attributes (`citry.template.alpine-attribute`,
 `citry.template.alpine-cloak`). `rule_invalid_attribute_value` reports a
 static HTML attribute value outside the keywords the HTML Standard allows
-(`citry.template.invalid-attribute-value`). Steps below that describe Alpine attributes,
+(`citry.template.invalid-attribute-value`), and `rule_misspelled_directive`
+reports a `c-*` name that is not an HTML attribute of its element but looks
+like a misspelled directive, such as `c-iff`
+(`citry.template.misspelled-directive`). Steps below that describe Alpine attributes,
 magics, and scope record the earlier Alpine design; where they conflict with
 the Vue runtime, [`vue.md`](vue.md) and the code win.
 

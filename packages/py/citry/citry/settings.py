@@ -168,7 +168,9 @@ class LintSettings:
             value outside the keywords that attribute accepts, such as
             ``draggable="treu"`` or ``<input type="datetime">``. The browser
             ignores such a value or falls back to a default. The default is
-            ``"warning"``.
+            ``"error"``. ``citry check --static`` and an editor that has not
+            loaded the application report it as a warning, because they
+            cannot read your settings.
         rule_i18n_cross_language_fallback: Severity for a ``tr()`` call, a
             ``self.i18n.tr()`` call, or a message in
             ``I18n.client_messages`` that has no translation in some
@@ -177,6 +179,13 @@ class LintSettings:
             Set ``"error"`` to require complete translations. A
             ``<c-trans>`` message is always an error, because rendering it
             in another language fails. The default is ``"warning"``.
+        rule_misspelled_directive: Severity for a ``c-*`` attribute on an
+            HTML element or custom element that looks like a misspelled
+            Citry directive, such as ``c-iff`` for ``c-if``, or ``c-show``,
+            which Citry writes as ``c-if``. Citry renders it as an ordinary attribute,
+            so the directive never runs; with ``c-iff`` the element always
+            shows up. An attribute of the element, such as ``c-id``, is not
+            reported. The default is ``"error"``.
 
     Raises:
         TypeError: If a variable or global collection is not a mapping.
@@ -195,8 +204,9 @@ class LintSettings:
     rule_vue_python_variable: LintSeverity = "warning"
     rule_alpine_attribute: LintSeverity = "warning"
     rule_alpine_cloak: LintSeverity = "error"
-    rule_invalid_attribute_value: LintSeverity = "warning"
+    rule_invalid_attribute_value: LintSeverity = "error"
     rule_i18n_cross_language_fallback: LintSeverity = "warning"
+    rule_misspelled_directive: LintSeverity = "error"
 
     # Hidden from type checkers so they keep checking calls against the
     # generated __init__ signature.
@@ -314,6 +324,7 @@ class LintSettings:
             "rule_alpine_attribute",
             "rule_alpine_cloak",
             "rule_invalid_attribute_value",
+            "rule_misspelled_directive",
             "rule_i18n_cross_language_fallback",
         ):
             severity = getattr(self, rule_name)

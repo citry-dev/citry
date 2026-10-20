@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.generate_html_attribute_values import build_table, render
+from scripts.generate_html_attribute_values import build_attribute_names, build_table, render
 
 # A small copy of the standard's layout. Like the real page, it omits the
 # optional </td> and </tr> end tags.
@@ -36,6 +36,20 @@ _PAGE = """<!DOCTYPE html>
   <td><code>form</code>
   <td>Charset
   <td>ASCII case-insensitive match for "<code>UTF-8</code>"
+ <tr><th><code>form</code>
+  <td><code>a</code>; form-associated custom elements
+  <td>Form owner
+  <td>ID
+ <tr><th><code>width</code>
+  <td><code>h1</code>; <code>source</code> (in <code>a</code>); <code>h2</code> <code>a</code>
+  <td>Width
+  <td>Number
+</table>
+<table id=ix-event-handlers>
+ <thead><tr><th>Attribute<th>Element(s)<th>Description<th>Value
+ <tbody>
+ <tr><th><code>onclick</code><td>HTML elements<td>Click<td>Event handler
+ <tr><th><code>onunload</code><td><code>body</code><td>Unload<td>Event handler
 </table>
 """
 
@@ -58,6 +72,18 @@ def test_build_table_keeps_closed_keyword_sets_only():
     # The hand-added sets the index names only in words are present.
     assert "email" in table["type"]["input"]
     assert "no-referrer" in table["referrerpolicy"]["img"]
+
+
+def test_build_attribute_names_splits_global_element_and_custom_element_names():
+    global_names, by_element, custom_names = build_attribute_names(_PAGE)
+
+    # Event handlers count as attributes, and `role` is added by hand.
+    assert global_names == ("draggable", "hidden", "onclick", "role")
+    # Only names in the page's element list count, so `img` and `body` are
+    # left out here. A note in parentheses names no owner, and owners written
+    # without a separator still count.
+    assert by_element == {"a": ("form", "width"), "h1": ("width",), "h2": ("width",)}
+    assert custom_names == ("form",)
 
 
 def test_render_writes_an_importable_module():

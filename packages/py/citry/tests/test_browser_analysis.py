@@ -10,6 +10,7 @@ from citry.analysis import (
     AlpineAttributeLintConsumer,
     AttributeValueLintConsumer,
     ComponentJsLintConsumer,
+    MisspelledDirectiveLintConsumer,
     VueLintConsumer,
     analyze_browser_component_source,
     analyze_browser_expression,
@@ -32,6 +33,7 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_misspelled_directives,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -1161,6 +1163,8 @@ def _attribute_values(
         '<img loading="lazy" decoding="async" fetchpriority="high" crossorigin referrerpolicy="no-referrer">',
         '<video preload crossorigin="use-credentials"></video><track kind="captions">',
         '<textarea wrap="hard"></textarea><table><tr><th scope="colgroup"></th></tr></table>',
+        # Browsers support `wrap="off"` though the standard does not list it.
+        '<textarea wrap="off"></textarea>',
         '<ol type="I"><li type="DISC">x</li></ol><ul type="Square"></ul><bdo dir="rtl">x</bdo>',
         # The browser decodes character references before it reads the keyword.
         '<div draggable="&#116;rue" dir="&#x61;uto"></div>',
@@ -1310,12 +1314,137 @@ def test_attribute_value_lint_maps_nested_template_offsets_into_the_outer_source
 
 def test_attribute_value_lint_severity_across_consumers():
     source = '<div draggable="nope"></div>'
+    # A known component reports an error by default; with no component at
+    # all (the empty tuple) the finding is a warning.
+    assert _attribute_values(source, (AttributeValueLintConsumer(),)) == [("draggable", "error", "nope")]
+    assert _attribute_values(source) == [("draggable", "warning", "nope")]
     ignore = AttributeValueLintConsumer("ignore")
     assert _attribute_values(source, (ignore,)) == []
     # One consumer that still reports is enough, and "error" wins over "warning".
     assert _attribute_values(source, (ignore, AttributeValueLintConsumer("error"))) == [
         ("draggable", "error", "nope"),
     ]
+
+
+def _directives(
+    source: str,
+    consumers: tuple[MisspelledDirectiveLintConsumer, ...] = (),
+) -> list[tuple[str, str, str]]:
+    """Return (spanned name, suggestion, severity) for each misspelled-directive finding."""
+    encoded = source.encode("utf-8")
+    return [
+        (encoded[finding.start_index : finding.end_index].decode("utf-8"), finding.suggestion, finding.severity)
+        for finding in lint_misspelled_directives(parse_template(source), consumers)
+    ]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # HTML attribute names one edit from a directive, compared without
+        # letter case, on the elements that accept them.
+        '<p c-id="1" c-is="2"></p><span c-ID="1"></span><label c-For="x"></label>',
+        '<input c-form="f"><button c-form="f"></button><track c-kind="k">',
+        # Open attribute families and names far from any directive.
+        '<div c-data-if="1" c-aria-label="2" c-my-attr="3" c-title="4" c-hx-get="5"></div>',
+        # A custom element accepts form-associated attributes, and
+        # <c-element> any element's attributes.
+        '<my-input c-form="f" c-id="1"></my-input><c-element c-is="\'track\'" c-kind="k"></c-element>',
+        # Component tags, Vue components, and SVG take other names.
+        '<c-Card c-iff="1" /><MyCard c-iff="1"></MyCard><svg><g c-iff="1"></g></svg>',
+        # Only a lowercase `c-` prefix binds, and c-bind entries are not read.
+        '<div C-iff="1" c-bind="{\'iff\': 1}"></div>',
+        # The directives themselves.
+        '<div c-if="a"></div><div c-elif="b"></div><div c-else></div>',
+        # Ordinary words near a directive, on an element that has no such
+        # attribute.
+        '<div c-kind="1" c-elsa="2" c-find="3" c-of="4" c-form="5" c-fork="6" c-four="7" c-blind="8"></div>',
+        # Words and single letters one letter short of a directive.
+        '<div c-or="1" c-bid="2" c-bin="3" c-f="4" c-i="5"></div>',
+    ],
+)
+def test_misspelled_directive_lint_accepts_real_attributes_and_directives(source):
+    assert _directives(source) == []
+
+
+def test_misspelled_directive_lint_reports_near_misses_of_each_directive():
+    source = (
+        '<div c-iff="a" c-fi="b" c-If="c" c-elfi="d" c-ele="e" c-fro="f" c-emty="g" c-bnid="h"></div>'
+        '<div c-else-if="i" c-elseif="j" c-bidn="k" c-forr="l" c-IFF="m" c-fr="n" c-elf="o"></div>'
+        '<my-el c-iff="p"></my-el><c-element c-is="\'p\'" c-iff="q"></c-element>'
+    )
+    assert _directives(source) == [
+        ("c-iff", "c-if", "error"),
+        ("c-fi", "c-if", "error"),
+        ("c-If", "c-if", "error"),
+        ("c-elfi", "c-elif", "error"),
+        ("c-ele", "c-else", "error"),
+        ("c-fro", "c-for", "error"),
+        ("c-emty", "c-empty", "error"),
+        ("c-bnid", "c-bind", "error"),
+        ("c-else-if", "c-elif", "error"),
+        ("c-elseif", "c-elif", "error"),
+        ("c-bidn", "c-bind", "error"),
+        ("c-forr", "c-for", "error"),
+        ("c-IFF", "c-if", "error"),
+        ("c-fr", "c-for", "error"),
+        ("c-elf", "c-elif", "error"),
+        ("c-iff", "c-if", "error"),
+        ("c-iff", "c-if", "error"),
+    ]
+
+
+def test_misspelled_directive_lint_names_vue_and_hash_spellings():
+    # `c-show` keeps its Python condition as `c-if`; `c-html` is left alone,
+    # because no spelling inserts a Python value as HTML safely.
+    source = '<div c-show="a" c-model="b" c-html="c" c-key="d" c-ignore="e"></div>'
+    assert [suggestion for _name, suggestion, _severity in _directives(source)] == [
+        "c-if",
+        "v-model",
+        "#c-key",
+        "#c-ignore",
+    ]
+    model, key = (
+        lint_misspelled_directives(parse_template(text), ()) for text in ('<p c-model="a"></p>', '<p c-key="d"></p>')
+    )
+    assert model[0].message == (
+        "'c-model' is not a Citry directive, so it renders an HTML attribute named 'model'. "
+        "For Vue's directive, write 'v-model'."
+    )
+    assert key[0].message == (
+        "'c-key' is not a Citry directive, so it renders an HTML attribute named 'key'. Did you mean '#c-key'?"
+    )
+    assert model[0].code == "citry.template.misspelled-directive"
+
+
+def test_misspelled_directive_lint_reports_only_typos_on_custom_elements():
+    # A custom element may define `show` or `model` itself, so a name from
+    # another framework passes there; a doubled, dropped, or swapped letter,
+    # other letter case, and a spelled-out `c-elif` are still reported.
+    accepted = '<cds-button c-kind="k" c-show="s" c-model="m" c-key="y" c-of="o"></cds-button>'
+    assert _directives(accepted) == []
+    reported = '<my-el c-iff="a" c-fi="b" c-If="c" c-fro="d" c-else-if="e"></my-el>'
+    assert [suggestion for _name, suggestion, _severity in _directives(reported)] == [
+        "c-if",
+        "c-if",
+        "c-if",
+        "c-for",
+        "c-elif",
+    ]
+
+
+def test_misspelled_directive_lint_maps_nested_template_offsets_into_the_outer_source():
+    source = "<c-card c-header=\"<><i c-iff='x'></i></>\" /><p>ok</p>"
+    assert _directives(source) == [("c-iff", "c-if", "error")]
+
+
+def test_misspelled_directive_lint_severity_across_consumers():
+    source = '<div c-iff="x"></div>'
+    ignore = MisspelledDirectiveLintConsumer("ignore")
+    assert _directives(source, (ignore,)) == []
+    assert _directives(source, (ignore, MisspelledDirectiveLintConsumer("warning"))) == [("c-iff", "c-if", "warning")]
+    with pytest.raises(ValueError, match="rule_misspelled_directive"):
+        MisspelledDirectiveLintConsumer(rule_misspelled_directive="fatal")  # type: ignore[arg-type]
 
 
 def test_attribute_value_lint_consumer_rejects_an_unknown_severity():

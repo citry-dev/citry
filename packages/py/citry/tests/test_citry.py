@@ -156,6 +156,7 @@ class TestCitryInstance:
             rule_alpine_attribute="ignore",
             rule_alpine_cloak="warning",
             rule_invalid_attribute_value="error",
+            rule_misspelled_directive="warning",
             rule_i18n_cross_language_fallback="error",
         )
         app = Citry(lint=lint)
@@ -178,7 +179,9 @@ class TestCitryInstance:
         assert (lint.rule_alpine_attribute, lint.rule_alpine_cloak) == ("ignore", "warning")
         assert (LintSettings().rule_alpine_attribute, LintSettings().rule_alpine_cloak) == ("warning", "error")
         assert lint.rule_invalid_attribute_value == "error"
-        assert LintSettings().rule_invalid_attribute_value == "warning"
+        assert LintSettings().rule_invalid_attribute_value == "error"
+        assert lint.rule_misspelled_directive == "warning"
+        assert LintSettings().rule_misspelled_directive == "error"
         assert lint.rule_i18n_cross_language_fallback == "error"
         assert LintSettings().rule_i18n_cross_language_fallback == "warning"
         assert lint.component_js_globals == {
@@ -205,6 +208,8 @@ class TestCitryInstance:
             LintSettings(rule_alpine_cloak=severity)
         with pytest.raises(ValueError, match="rule_invalid_attribute_value"):
             LintSettings(rule_invalid_attribute_value=severity)
+        with pytest.raises(ValueError, match="rule_misspelled_directive"):
+            LintSettings(rule_misspelled_directive=severity)
         with pytest.raises(ValueError, match="rule_i18n_cross_language_fallback"):
             LintSettings(rule_i18n_cross_language_fallback=severity)
 

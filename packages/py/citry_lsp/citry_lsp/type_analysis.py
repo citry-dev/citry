@@ -619,20 +619,56 @@ def _consume_late_response(future: asyncio.Future[Any]) -> None:
         future.result()
 
 
-def virtual_document_uri(source_file: Path, identity: str, *, workspace: Path | None = None) -> str:
-    """Return a deterministic unsaved URI that ty can resolve on the workspace filesystem."""
+def virtual_document_uri(source_file: Path, identity: str, *, anchor_file: Path) -> str:
+    """
+    Return a deterministic unsaved URI for a generated copy of `source_file`, placed next to `anchor_file`.
+
+    ty reports findings only for its own project files: files inside its
+    workspace that it does not exclude. A file under a `.venv`, or outside
+    the workspace, gets no findings. `source_file` may be an inherited base class in an
+    installed package, so the copy goes next to `anchor_file`, the component
+    being checked, which is a file the user has ty check. The copy's relative
+    imports are already absolute, so its directory does not change what they
+    import.
+    """
     source_file = source_file.resolve()
-    parent = _virtual_document_parent(source_file, workspace.resolve() if workspace is not None else None)
+    parent = anchor_file.resolve().parent
     safe_identity = "".join(char if char.isalnum() else "_" for char in identity)[:48]
-    # A valid module stem normally lets ty assign the sibling to the source
-    # package, so copied relative imports retain their ordinary package context.
-    # On a different Windows drive, a source marker keeps the workspace-local
-    # fallback collision-free.
+    # Copies of files from other directories can share a name, such as two
+    # bases both called component.py, so a hash of the copied file's path
+    # keeps their names apart once they land in one directory.
     source_marker = ""
     if parent != source_file.parent:
         source_marker = f"_{uuid.uuid5(uuid.NAMESPACE_URL, source_file.as_uri()).hex[:12]}"
     name = f"__citry_{source_file.stem}{source_marker}_{safe_identity}.py"
     return Path(parent, name).as_uri()
+
+
+# Directories that hold installed packages or a virtual environment. ty does
+# not report findings for files under them, and their authors check them.
+_INSTALLED_PACKAGE_DIRECTORIES = frozenset({".venv", "venv", "site-packages", "dist-packages", "__pypackages__"})
+
+
+def is_project_source_file(path: Path, workspace: Path) -> bool:
+    """
+    Return whether `path` is the user's own source in `workspace`, not an installed package's.
+
+    A file outside the workspace, or under a virtual environment or a
+    `site-packages` directory inside it, is not one. ty reports nothing for
+    such a file, so a check of it would always come back empty.
+    """
+    path = path.resolve()
+    workspace = workspace.resolve()
+    if not path.is_relative_to(workspace):
+        return False
+    directory = path.parent
+    # Only the directories between the workspace and the file count; the
+    # workspace itself is the user's project even if it has an odd name.
+    while directory != workspace:
+        if directory.name in _INSTALLED_PACKAGE_DIRECTORIES or (directory / "pyvenv.cfg").is_file():
+            return False
+        directory = directory.parent
+    return True
 
 
 def position_at_offset(source: str, offset: int) -> types.Position:
@@ -730,18 +766,6 @@ def _initialize_params(workspace: Path, python_prefix: Path) -> types.Initialize
         workspace_folders=[types.WorkspaceFolder(workspace_uri, workspace.name or "workspace")],
         initialization_options=_ty_workspace_options(python_prefix),
     )
-
-
-def _virtual_document_parent(source_file: PurePath, workspace: PurePath | None) -> PurePath:
-    """Keep a cross-drive synthetic document inside ty's configured workspace."""
-    if workspace is not None and _different_filesystem_roots(source_file, workspace):
-        return workspace
-    return source_file.parent
-
-
-def _different_filesystem_roots(first: PurePath, second: PurePath) -> bool:
-    """Return whether two paths occupy distinct Windows drives or shares."""
-    return bool(first.drive or second.drive) and first.drive.casefold() != second.drive.casefold()
 
 
 def _ty_workspace_options(python_prefix: Path) -> dict[str, object]:
@@ -944,6 +968,7 @@ __all__ = [
     "TyDocument",
     "TyHover",
     "TyUnavailableError",
+    "is_project_source_file",
     "offset_at_position",
     "position_at_offset",
     "virtual_document_uri",
