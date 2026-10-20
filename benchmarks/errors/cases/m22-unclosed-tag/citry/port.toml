@@ -1,0 +1,4 @@
+status = "ported"
+files = { "app/components/card.py" = "card.py" }
+mistake = { file = "app/components/card.py", contains = "<footer class=\"card__footer\">" }
+

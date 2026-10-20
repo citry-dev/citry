@@ -1,0 +1,7 @@
+status = "ported"
+files = { "app/card.tsx" = "card.tsx" }
+mistake = { file = "app/card.tsx", contains = 'card-footer' }
+
+[indirect]
+reason = "The unclosed footer div takes the card's closing `</div>`, so TypeScript reports the outer element that is left without a closing tag, and the parsers report the end of the component that no longer parses."
+codes = ["TS17008", "TS1381", "TS1005", "build", "eslint"]

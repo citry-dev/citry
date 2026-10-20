@@ -1,0 +1,3 @@
+status = "ported"
+files = { "board/static/board/board.js" = "board.js" }
+mistake = { file = "board/static/board/board.js", contains = 'open: false' }

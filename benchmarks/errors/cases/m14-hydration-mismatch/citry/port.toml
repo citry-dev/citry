@@ -1,0 +1,7 @@
+# The browser opens the details on wide screens before Vue takes over the
+# server-rendered HTML, so the first browser render differs from the server's.
+# It shows only on a window at least 60rem wide; the runner's Chromium
+# window is 1280px. It changes whether the details text shows, not a label.
+status = "ported"
+files = { "app/components/details.py" = "details.py" }
+mistake = { file = "app/components/details.py", contains = "window.matchMedia" }

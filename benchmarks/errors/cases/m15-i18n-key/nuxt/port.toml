@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """The minimal starter that `npm create nuxt@latest` sets up has no translations. Its only dependencies are nuxt, vue and vue-router. Translations need the @nuxtjs/i18n module, which the starter's module prompt does not select by default. The heading is plain text, so there is no message key to misspell."""

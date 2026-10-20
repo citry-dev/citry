@@ -1,0 +1,100 @@
+key = "next"
+name = "Next.js (TypeScript)"
+notes = """
+The baseline follows `npx create-next-app@latest` 16.3.5 with the recommended
+defaults: TypeScript, ESLint (eslint-config-next core-web-vitals and
+typescript presets), Tailwind CSS, the App Router, no src/ folder, the @/*
+alias and no React Compiler. tsconfig.json, eslint.config.mjs and
+postcss.config.mjs are the template's own. The differences from the
+starter:
+- react and react-dom are 19.3.0, matching the other benchmarks' Next.js app;
+  create-next-app 16.3.5 itself writes 19.2.8. The App Router renders with
+  the React copy bundled inside next, so this should not change a result.
+- The layout leaves out the Geist fonts. next/font/google fetches them from
+  Google when the app compiles, and every case starts without a cache, so
+  every build and dev start would depend on Google's servers. The matching
+  --font-sans and --font-mono lines are left out of globals.css.
+- The .board style is plain CSS in globals.css.
+- next.config.ts sets turbopack.root to the environment folder, two levels
+  above the working copy, because node_modules is installed there once.
+  Without it Turbopack takes the repository root as its root, because the
+  repository has a pnpm-workspace.yaml.
+The secret lives in .env, as the Next.js environment-variable docs describe.
+
+Versions come from the lockfile: next 16.3.5, react and react-dom 19.3.0,
+typescript 5.9.3, @types/react and @types/react-dom 19.3.0, @types/node
+20.19.43, eslint 9.39.5, eslint-config-next 16.3.5, tailwindcss and
+@tailwindcss/postcss 4.3.3. Measured with the system Node 26.5.0 and npm
+11.17.0.
+
+editor: VS Code's TypeScript service with the workspace TypeScript version
+selected, as the Next.js TypeScript docs tell developers to do. It is
+measured with `tsc --noEmit` from the project's own typescript 5.9.3.
+`next typegen` runs first because the editor works on a project where
+`next dev` (or create-next-app itself) has already written next-env.d.ts and
+the route types under .next/types; without them the layout's global
+LayoutProps type is missing. The Next.js TypeScript plugin named in
+tsconfig runs only inside the editor, so its extra checks are not measured.
+Its main check is that a server component passes only serializable props
+to a "use client" file; in these cases that file is board.tsx, whose props
+stay serializable in every case. The plugin was not run.
+
+check: `eslint` (the starter's `npm run lint`; ESLint 9 lints the current
+folder by default), run as `eslint . -f json` with the starter's
+eslint.config.mjs. Next.js 16 has no separate check command.
+
+build: `next build`, which type-checks the app and fails on a type error by
+default. It does not run ESLint.
+
+runtime: `next dev` (Turbopack), with the browser check driving the page.
+Reading process.env.SECRET_TOKEN in a client component (m12) is scored as a
+runtime error from the hydration mismatch, but by then the server has
+already sent the secret in the page's HTML.
+"""
+
+[setup]
+manifests = ["package.json", "package-lock.json"]
+command = ["npm", "ci", "--no-audit", "--no-fund"]
+
+[[stages]]
+stage = "editor"
+label = "tsc --noEmit (VS Code TypeScript)"
+argv = ["sh", "-c", "next typegen > /dev/null 2>&1; exec tsc --noEmit"]
+parser = "tsc"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "eslint (npm run lint)"
+argv = ["eslint", ".", "-f", "json"]
+parser = "eslint-json"
+timeout = 300
+
+[[stages]]
+stage = "build"
+label = "next build"
+argv = ["next", "build"]
+parser = "tsc"
+timeout = 900
+
+[runtime]
+argv = ["next", "dev", "-p", "{port}", "-H", "127.0.0.1"]
+page_path = "/"
+ready_timeout = 300
+settle_ms = 1500
+
+[[runtime.steps]]
+action = "click"
+selector = "button:text-is('Add')"
+
+[[runtime.steps]]
+action = "wait"
+ms = 500
+
+[[runtime.steps]]
+action = "click"
+selector = "button:text-is('Details')"
+
+[[runtime.steps]]
+action = "click"
+selector = "button:text-is('Hide')"

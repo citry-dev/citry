@@ -1,0 +1,3 @@
+status = "ported"
+files = { "board/templates/board/page.html" = "page.html" }
+mistake = { file = "board/templates/board/page.html", contains = 'ownr.name' }

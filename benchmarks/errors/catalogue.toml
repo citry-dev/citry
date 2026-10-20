@@ -1,0 +1,203 @@
+# The mistakes the error-prevention benchmark writes into every framework.
+#
+# Each entry describes the mistake in framework-neutral words. A framework's
+# version of it lives in cases/<id>/<framework>/port.toml. `origin` records
+# where the mistake came from, so a reader can check that the set is not
+# chosen to suit Citry: "neutral" entries come from issue #158 and from a
+# survey of what other frameworks' tools check, "citry-inventory" entries
+# from the list of mistakes Citry itself checks or misses. At least half must be "neutral".
+#
+# Freeze this file before a published run. Changing a mistake after seeing which
+# framework catches it would bias the result.
+
+[[mistake]]
+id = "m01-component-name"
+title = "Misspelled component name"
+category = "naming"
+origin = "neutral"
+description = "The page uses the card component under a misspelled name, for example `Crad` instead of `Card`."
+correct = "The page renders three project cards."
+
+[[mistake]]
+id = "m02-input-name"
+title = "Misspelled input name"
+category = "naming"
+origin = "neutral"
+description = "The page passes the card's title under a misspelled input name, for example `titel` instead of `title`."
+correct = "Each card shows its project title."
+
+[[mistake]]
+id = "m03-input-type-literal"
+title = "Wrong-typed input written in markup"
+category = "types"
+origin = "neutral"
+description = "The page passes the card's numeric `count` input as a string literal in the markup, for example `count=\"3\"` where a number is declared."
+correct = "Each card shows its numeric task count."
+
+[[mistake]]
+id = "m04-missing-required-input"
+title = "Missing required input"
+category = "naming"
+origin = "neutral"
+description = "The page leaves out the card's required `title` input."
+correct = "Each card shows its project title."
+
+[[mistake]]
+id = "m05-slot-name"
+title = "Misspelled slot name"
+category = "naming"
+origin = "neutral"
+description = "The page fills the card's `footer` slot (or block, or child region) under a misspelled name, for example `fotter`."
+correct = "Each card shows the footer link the page passed in."
+
+[[mistake]]
+id = "m06-server-handler-name"
+title = "Misspelled server handler name"
+category = "events"
+origin = "neutral"
+description = "The Add button sends its request to a misspelled server handler, route or action name, for example `sav` instead of `save`."
+correct = "Clicking Add increases the saved count from 0 to 1."
+
+[[mistake]]
+id = "m07-undefined-variable"
+title = "Undefined template variable"
+category = "naming"
+origin = "neutral"
+description = "The page reads a template variable that the server never provides, for example `ownr.name` instead of `owner.name`."
+correct = "The page shows the owner's name."
+
+[[mistake]]
+id = "m08-attribute-typo"
+title = "Misspelled attribute on a template object"
+category = "naming"
+origin = "neutral"
+description = "The page reads a field that does not exist on an object the server does provide, for example `owner.nmae`."
+correct = "The page shows the owner's name."
+
+[[mistake]]
+id = "m09-attribute-value"
+title = "Invalid HTML attribute value"
+category = "html"
+origin = "neutral"
+description = "A form button is written with an invalid keyword value, `type=\"sumbit\"` instead of `type=\"submit\"`."
+correct = "The search button is a submit button."
+
+[[mistake]]
+id = "m10-attribute-name"
+title = "Misspelled HTML attribute name"
+category = "html"
+origin = "neutral"
+description = "An element's `title` attribute is written as `titel`."
+correct = "The board element has the tooltip `Board`."
+
+[[mistake]]
+id = "m11-element-name"
+title = "Misspelled HTML element"
+category = "html"
+origin = "neutral"
+description = "A block element is written as `<dvi>` instead of `<div>`."
+correct = "The board wrapper is a block element."
+
+[[mistake]]
+id = "m12-server-only-value"
+title = "Server-only value read in browser code"
+category = "server-browser"
+origin = "neutral"
+description = "Browser-side code reads a value that exists only on the server (a secret token) instead of the public value the server passes to it."
+correct = "The page shows the public API base `/api`, and the secret never reaches the browser."
+
+[[mistake]]
+id = "m13-state-field-typo"
+title = "State field typo in an update handler"
+category = "events"
+origin = "neutral"
+description = "The code that runs when Add is clicked writes the new total to a misspelled state field, for example `cuont` instead of `count`."
+correct = "Clicking Add increases the saved count from 0 to 1."
+
+[[mistake]]
+id = "m14-hydration-mismatch"
+title = "Server and browser render different content"
+category = "server-browser"
+origin = "neutral"
+description = "A component renders different text on the server than in its first browser render, for example by branching on whether it runs in the browser."
+correct = "The details section shows the same content before and after the page becomes interactive."
+
+[[mistake]]
+id = "m15-i18n-key"
+title = "Unknown translation message key"
+category = "naming"
+origin = "neutral"
+description = "The page heading asks for a translation message under a misspelled key, for example `board.titel`."
+correct = "The heading reads `Projects`."
+
+[[mistake]]
+id = "m16-css-class"
+title = "Misspelled CSS class"
+category = "html"
+origin = "neutral"
+description = "The board element uses the class `bord` instead of the styled class `board`."
+correct = "The board text is green."
+
+[[mistake]]
+id = "m17-input-type-code"
+title = "Wrong-typed input computed in code"
+category = "types"
+origin = "citry-inventory"
+description = "Server or component code passes the card's numeric `count` as a string value it computed, for example `str(n)`."
+correct = "Each card shows its numeric task count."
+
+[[mistake]]
+id = "m18-payload-field"
+title = "Misspelled field in a request payload"
+category = "events"
+origin = "citry-inventory"
+description = "The Add button sends its payload with a misspelled field, `amont` instead of `amount`."
+correct = "Clicking Add increases the saved count from 0 to 1."
+
+[[mistake]]
+id = "m19-client-expression-syntax"
+title = "Syntax error in a browser expression"
+category = "templates"
+origin = "citry-inventory"
+description = "A browser-side expression in the markup (a Vue binding, a JSX expression, an Alpine directive) has a syntax error, for example a trailing `&&`."
+correct = "Clicking Details shows the details text."
+
+[[mistake]]
+id = "m20-component-script-syntax"
+title = "Syntax error in component JavaScript"
+category = "templates"
+origin = "citry-inventory"
+description = "The JavaScript that defines the toggle's behavior has a syntax error."
+correct = "Clicking Details shows the details text."
+
+[[mistake]]
+id = "m21-directive-name"
+title = "Misspelled template directive"
+category = "naming"
+origin = "citry-inventory"
+description = "A conditional or binding directive is misspelled, for example `c-iff`, `v-iff` or `x-shwo`."
+correct = "The details text is hidden until Details is clicked."
+
+[[mistake]]
+id = "m22-unclosed-tag"
+title = "Unclosed element in a template"
+category = "templates"
+origin = "citry-inventory"
+description = "An element in the card's markup is opened but never closed."
+correct = "Each card's footer sits inside the card."
+
+[[mistake]]
+id = "m23-expression-type"
+title = "Wrong-typed operation in a template expression"
+category = "types"
+origin = "citry-inventory"
+description = "A template expression adds a number to the card's string title, for example `title + 1`."
+correct = "Each card shows its project title."
+
+[[mistake]]
+id = "m24-undeclared-event"
+title = "Child emits an event the parent does not listen for"
+category = "events"
+origin = "citry-inventory"
+description = "The card's Hide control emits or calls a misspelled event, for example `hdie` instead of `hide`, so the page's listener never runs."
+correct = "Clicking Hide on the first card hides that card."

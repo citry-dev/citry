@@ -1,0 +1,7 @@
+status = "ported"
+files = { "app/app.vue" = "app.vue" }
+mistake = { file = "app/app.vue", contains = "/api/sav'" }
+
+[indirect]
+reason = "$fetch of a route Nuxt does not know returns `unknown`, so TypeScript reports TS18046 where the result is read (`result.count`), four lines below the misspelled route."
+codes = ["TS18046"]

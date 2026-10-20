@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """create-next-app installs no translation library and the App Router has no built-in translation API, so the page has no message keys to misspell. The heading is plain JSX text. The dictionary approach in the Next.js internationalization guide is an opt-in the starter does not include."""

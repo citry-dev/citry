@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The page is plain Jinja output. Alpine does not render components on the server: in the browser it runs on the HTML the server sent and overwrites x-text content without comparing it to the server's text. Nothing renders the same component on both sides, so there is no mismatch for any tool to report."

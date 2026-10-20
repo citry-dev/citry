@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = 'Django sends finished HTML. Alpine starts on that HTML and sets x-text and x-show without comparing them to what the server wrote, so there is no server render and first browser render that could disagree.'

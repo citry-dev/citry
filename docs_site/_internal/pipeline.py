@@ -58,6 +58,7 @@ from docs_site._internal.components import (  # noqa: F401
     community_packages,
     diagnostic_catalog,
     docstring,
+    error_benchmark,
     example_card,
     image,
     include_file,
