@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261020T192437Z",
+  "run": "20261020T194609Z",
   "frameworks": [
     {
       "key": "citry",
@@ -9,6 +9,10 @@
     {
       "key": "django",
       "name": "Django + HTMX + Alpine"
+    },
+    {
+      "key": "rusty",
+      "name": "Rusty + HTMX + Alpine"
     },
     {
       "key": "jinja",
@@ -1297,6 +1301,474 @@
     },
     {
       "framework": "django",
+      "mistake": "m49-input-choice",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m01-component-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m02-input-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m03-input-type-literal",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m04-missing-required-input",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m05-slot-name",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. The page could hand the card a template name for `{% include %}` to render as its footer, but that needs a separate template file for each fill, so this app keeps the footer in the card. The page therefore fills no footer under any name.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m06-server-handler-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m07-undefined-variable",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m08-attribute-typo",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m09-attribute-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m10-attribute-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m11-element-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m12-server-only-value",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Cannot read properties of null (reading 'textContent')",
+        "error: pageerror: Illegal invocation",
+        "error: pageerror: Illegal invocation",
+        "error: pageerror: api is not defined",
+        "error: pageerror: toggle is not defined"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m13-state-field-typo",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m14-hydration-mismatch",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Django sends finished HTML. Alpine starts on that HTML and sets x-text and x-show without comparing them to what the server wrote, so there is no server render and first browser render that could disagree.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m15-i18n-key",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m16-css-class",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m17-input-type-code",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"str\" cannot be assigned to parameter \"count\" of type \"int\" in function \"__init__\"\n\u00a0\u00a0\"str\" is not assignable to \"int\""
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m18-payload-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Response Status Error Code 500 from /save/, [object HTMLSpanElement]",
+        "error: 500 http://127.0.0.1:<port>/save/",
+        "error: Internal Server Error: /save/",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m19-client-expression-syntax",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Unexpected token '}'",
+        "error: pageerror: Unexpected token '}'",
+        "error: pageerror: Unexpected token '}'",
+        "warning: Alpine Expression Error: Unexpected token '}'\n\nExpression: \"open &&\"\n\n JSHandle@node",
+        "warning: Alpine Expression Error: Unexpected token '}'\n\nExpression: \"open &&\"\n\n JSHandle@node"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m20-component-script-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "VS Code JavaScript syntax check (tsc 6.0.3 --allowJs): TS1005 ',' expected."
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m21-directive-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m22-unclosed-tag",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. <div class=\"card car"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m23-expression-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m24-undeclared-event",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m25-browser-input-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: opne is not defined",
+        "error: pageerror: opne is not defined",
+        "error: pageerror: opne is not defined",
+        "warning: Alpine Expression Error: opne is not defined\n\nExpression: \"opne ? 'Status: open' : 'Status: closed'\"\n\n JSHandle@node",
+        "warning: Alpine Expression Error: opne is not defined\n\nExpression: \"opne ? 'Status: open' : 'Status: closed'\"\n\n JSHandle@node"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m26-browser-input-missing",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Alpine has no required or typed component inputs: an `Alpine.data` factory can take arguments, but nothing declares which ones a component needs or their types. This baseline's status line reads `open` through the scope Alpine shares with the component that owns it, so the page passes it no input it could leave out.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m27-browser-input-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Alpine has no required or typed component inputs: an `Alpine.data` factory can take arguments, but nothing declares which ones a component needs or their types. This baseline's status line reads `open` through the scope Alpine shares with the component that owns it, so the page passes it no input it could give the wrong type.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m28-input-written-by-child",
+      "status": "prevented",
+      "bucket": null,
+      "cell": "P",
+      "reason": "An Alpine component nested inside another shares its parent's scope instead of receiving a copy of the parent's values. Assigning `open = false` in the status line therefore changes the parent's own `open` and closes the details correctly, so the code this mistake describes works as intended.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m29-listener-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m30-event-payload-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The card dispatches `hide` with no value (`$dispatch('hide')`). Each card sits in its own Alpine wrapper, and that wrapper's listener hides itself, so the page already knows which card the event came from and the event carries no payload whose type could be wrong.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m31-dom-event-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m32-payload-type",
+      "status": "prevented",
+      "bucket": null,
+      "cell": "P",
+      "reason": "The mistake cannot be written: HTMX sends `hx-vals` as ordinary form fields, and a form field is always text, so `hx-vals='{\"amount\": \"1\"}'` sends exactly the same request as `{\"amount\": 1}`. The view turns the field into a whole number with `int(request.POST['amount'])`, as it must for any form field, so the counter works.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m33-payload-missing-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Response Status Error Code 500 from /save/, [object HTMLSpanElement]",
+        "error: 500 http://127.0.0.1:<port>/save/",
+        "error: Internal Server Error: /save/",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m34-reply-field",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The save view replies with the HTML of board/saved.html, which HTMX swaps in for `#saved`. No browser code reads a field of the reply.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m35-required-slot-missing",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. The page could hand the card a template name for `{% include %}` to render as its footer, but that needs a separate template file for each fill, so this app keeps the footer in the card. The page therefore has no footer to leave out.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m36-slot-data-name",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. Even a footer the page handed over as a template name to `{% include %}` would read the card's own context, as a Django block does, so the card hands a fill no slot data of its own and there is no slot-data name to misspell. A misspelled variable in the card's link is m07.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m37-slot-data-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. Even a footer the page handed over as a template name to `{% include %}` would read the card's own context, as a Django block does, so the card hands a fill no slot data of its own and there is no slot data whose type a fill could get wrong. A wrong-typed use of a variable in the card's link is m23.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m38-state-read-typo",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m39-state-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m40-browser-value-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Cannot read properties of null (reading 'textContent')",
+        "error: pageerror: Illegal invocation",
+        "error: pageerror: Illegal invocation",
+        "error: pageerror: api is not defined",
+        "error: pageerror: toggle is not defined"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m41-browser-value-not-json",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m42-secret-sent-to-browser",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m47-template-path",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/"
+      ]
+    },
+    {
+      "framework": "rusty",
       "mistake": "m49-input-choice",
       "status": "ported",
       "bucket": "missed",

@@ -95,9 +95,7 @@ Six more were chosen before any result was seen: Django Rusty Templates,
 django-components, Tetra, django-unicorn, Reflex and ReactPy. Django Rusty
 Templates, an experimental Rust version of Django's template engine, is
 measured as the Django app with its template backend switched
-(`frameworks/rusty`), but it is not in the published results yet. The
-others are not measured yet, and the published report covers only the six
-above.
+(`frameworks/rusty`). The others are not measured yet.
 
 ### Fairness rules
 
@@ -272,11 +270,10 @@ FastHTML together (42 cases) took 211 seconds with `--jobs 1` and 54 seconds
 with `--jobs 5` on a 10-core machine. Running every browser check as well,
 one case at a time, took about 280 seconds. A rerun with nothing changed
 took 8 seconds, because the browser checks of the 4 cases whose journey
-stops on an error page are never stored and run again. The Next.js and Nuxt
-cases have not been timed side by side yet; from the per-case times of the
-2026-10-20 run, a full run of the first six frameworks should take about 5
-minutes, most of it the Nuxt cases, which run one at a time. Django Rusty
-Templates' 37 cases, run on their own with `--jobs 5`, took about 1
-minute. It is not part of routine CI. Its result changes only when a case, a pinned version or
-Citry changes, so it is run at each Citry release. The runner's own tests
-run in seconds on small made-up tool output and need no network.
+stops on an error page are never stored and run again. A full run of the
+seven frameworks (308 cases) with nothing stored took about 8.5 minutes
+with the default `--jobs 5`, most of it the Nuxt cases, which run one at
+a time. It is not part of routine CI. Its result changes only when a
+case, a pinned version or Citry changes, so it is run at each Citry
+release. The runner's own tests run in seconds on small made-up tool
+output and need no network.

@@ -382,7 +382,7 @@ class ErrorBenchmarkTableMarkup(Component):
 
     # Each category is its own <tbody> with a heading row, so a screen reader
     # announces the heading as the start of a group. The table scrolls
-    # sideways on a phone rather than squeezing six framework columns. The
+    # sideways on a phone rather than squeezing every framework column. The
     # header and data cells keep their text against the tags, so the text
     # gets no leading or trailing space.
     template = """

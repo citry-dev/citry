@@ -79,7 +79,8 @@ uv run --no-sync citry-errors report \
 ```
 
 `prepare` installs every framework's locked dependencies. Django Rusty
-Templates has no release on PyPI, so its app's lockfile pins it to a git
+Templates, an experimental Rust version of Django's template engine, has
+no release on PyPI, so its app's lockfile pins it to a git
 commit, and `prepare` builds its Rust extension. That needs a Rust
 compiler (https://rustup.rs/) unless uv has already built it.
 
@@ -123,10 +124,10 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 Rerunning them with nothing changed took 8 seconds: it repeated only the
 browser checks of the 4 cases whose journey stops on an error page, which
 are never stored. Every framework repeats such cases on each run. A full run
-of the six frameworks' 264 cases with nothing stored (`--no-cache`) took
-7.5 minutes on the same machine; most of it is the Nuxt cases, which run
-one at a time, and the Next.js builds. It is not part of routine CI. Run it at
-each Citry release, and when a framework's pinned versions change.
+of the seven frameworks' 308 cases with nothing stored (`--no-cache`) took
+about 8.5 minutes on the same machine; most of it is the Nuxt cases, which
+run one at a time, and the Next.js builds. It is not part of routine CI. Run
+it at each Citry release, and when a framework's pinned versions change.
 
 ## Latest result
 
@@ -134,12 +135,18 @@ each Citry release, and when a framework's pinned versions change.
 "Catching errors" section of the docs site's Benchmarks page. Open
 `report.html` there in a browser for the chart and the full table;
 `results.json` has the first few findings behind each cell, and the
-findings that pointed away from the change without an `indirect` note. Some differences between cells come from
-how each framework naturally writes a part of the page, not from its tools:
+findings that pointed away from the change without an `indirect` note.
 
-- **m20:** Django's toggle script is a `.js` file, which VS Code's
-  JavaScript check reads; Jinja's is written inline in an Alpine attribute,
-  which nothing checks before the browser.
+"Rusty + HTMX + Alpine" is the Django app with its templates rendered by
+[Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
+an experimental Rust version of Django's template engine.
+
+Some differences between cells come from how each framework naturally
+writes a part of the page, not from its tools:
+
+- **m20:** the Django and Rusty apps' toggle script is a `.js` file,
+  which VS Code's JavaScript check reads; Jinja's is written inline in an
+  Alpine attribute, which nothing checks before the browser.
 - **m13:** some apps read the state field before writing it, so a
   misspelled field fails at runtime; others only write it, so the page is
   silently wrong.
@@ -151,13 +158,13 @@ how each framework naturally writes a part of the page, not from its tools:
 - **m17:** where the wrong type is computed differs (a Python data class,
   a server route, a page component), and so does where the type checker
   reports it.
-- **m25 to m28:** Django and Jinja write `Status` as an Alpine component
-  nested inside the one that owns `open`. Alpine has no required or typed
-  component inputs, so the status line reads `open` from the scope it
-  shares with its parent. m25 misspells that read, which fails in the
-  browser; m26 and m27 do not apply; and m28 is "prevented", because
-  assigning `open` from the nested component changes the parent's value
-  as intended. FastHTML's page uses plain scripts with no browser-side
+- **m25 to m28:** Django, Rusty and Jinja write `Status` as an Alpine
+  component nested inside the one that owns `open`. Alpine has no required
+  or typed component inputs, so the status line reads `open` from the
+  scope it shares with its parent. m25 misspells that read, which fails in
+  the browser; m26 and m27 do not apply; and m28 is "prevented", because
+  assigning `open` from the nested component changes the parent's value as
+  intended. FastHTML's page uses plain scripts with no browser-side
   components, so it has no status line and m25 to m28 do not apply. In
   Citry, m27 passes the prop an expression, and Citry checks a prop's type
   only when the value is written as a literal; nothing checks a child that
@@ -166,8 +173,9 @@ how each framework naturally writes a part of the page, not from its tools:
   never read the server's reply as data, so each applies to one framework
   only: Citry's card sends its title with the hide event (m30), and Nuxt's
   page reads `count` from the reply (m34). The other cells are n/a.
-- **m32:** Django, Jinja and FastHTML are "prevented": HTMX sends form
-  fields, which are always text, so `"1"` and `1` send the same request.
+- **m32:** Django, Rusty, Jinja and FastHTML are "prevented": HTMX sends
+  form fields, which are always text, so `"1"` and `1` send the same
+  request.
 - **m35:** Citry, FastHTML and Next.js declare the card's footer as
   required, so leaving it out is reported. A Django block is always
   optional, and so is a Nuxt slot whose type does not mark it required, so
@@ -180,9 +188,9 @@ how each framework naturally writes a part of the page, not from its tools:
   the data (`data="{ title, count }"`), and does not check the type in
   either form, so both mistakes show only when the page renders. Jinja
   prints a misspelled name as empty text, so its m36 is missed.
-- **m38:** Django reads the session with a default value, so a misspelled
-  field quietly shows 0, while the Jinja app reads its state without a
-  default, so the misspelled field raises an error.
+- **m38:** Django and Rusty read the session with a default value, so a
+  misspelled field quietly shows 0, while the Jinja app reads its state
+  without a default, so the misspelled field raises an error.
 - **m42:** no framework's tools report a secret sent to the browser, and
   the page looks the same, so every cell is missed.
 
@@ -190,11 +198,7 @@ The gaps the earlier 24-mistake run found in Citry are tracked in
 [#207](https://github.com/citry-dev/citry/issues/207); the gaps the
 mistakes measured since (m25 to m42, m47 and m49) found are not in it yet.
 
-Django Rusty Templates, an experimental Rust version of Django's template
-engine, is measured as "Rusty + HTMX + Alpine": the Django app with its
-template backend switched. It has a clean app and a case for every
-mistake, but is not in the published run yet. Its cells match Django's
-except three:
+Rusty's cells match Django's except three:
 
 - **m08:** Django Rusty Templates raises an error when the page reads a
   misspelled attribute of an existing object (`owner.nmae`), where Django
@@ -202,7 +206,9 @@ except three:
   engines handle differently.
 - **m05 and m35:** n/a. The version this benchmark pins has no
   `{% extends %}` or `{% block %}`, so the card writes its own footer
-  link, and the page has no footer to misspell or leave out.
+  link, and the page has no footer to misspell or leave out. For the
+  same reason the page fills nothing in the card, so m36 and m37 are n/a
+  in both apps.
 
 Two cases are written differently but end as Django's do. With no
 `{% translate %}` tag, the view translates the heading with Django's
