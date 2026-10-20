@@ -314,6 +314,13 @@ def test_named_errors_and_bracketed_statuses_are_server_errors() -> None:
     assert compare(Observation(), Observation(server_log=["[500] GET /"])).error
 
 
+def test_a_process_id_that_looks_like_a_status_is_not_a_server_error() -> None:
+    # uvicorn's startup and shutdown lines name the process id in brackets.
+    log = ["INFO:     Started server process [521]", "INFO:     Finished server process [521]"]
+    assert problems(Observation(server_log=log)) == []
+    assert not compare(Observation(), Observation(server_log=log)).error
+
+
 def test_a_new_status_on_a_known_failing_url_counts() -> None:
     clean = Observation(bad_responses=["404 http://127.0.0.1:1/a"])
     assert not compare(clean, Observation(bad_responses=["404 http://127.0.0.1:2/a"])).error
