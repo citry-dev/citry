@@ -689,6 +689,15 @@ from citry_ui.components import (
     CVirtualWindow,
 )
 
+# Every Citry UI component checks its own inputs with an error that names the
+# input and the accepted values (for example "CTabs loop must be a bool" or
+# "variant must be one of ..."). Citry's general input type check would raise
+# first with a less specific message, so these components turn it off. The
+# manifest below seals the definitions, so this must run before it.
+for _definition in COMPONENTS:
+    _definition.check_input_types = False
+del _definition
+
 __citry_library__ = ComponentLibrary(
     name="citry-ui",
     components=COMPONENTS,

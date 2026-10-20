@@ -175,6 +175,7 @@ class Citry:
         ssr_element_threshold: int = 0,
         vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES,
         max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH,
+        check_input_types: bool = True,
     ) -> None:
         self._engine_id = _new_engine_id()
         # CitrySettings.__post_init__ copies every field into its immutable
@@ -203,6 +204,7 @@ class Citry:
             ssr_element_threshold=ssr_element_threshold,
             vue_asset_max_bytes=vue_asset_max_bytes,
             max_component_depth=max_component_depth,
+            check_input_types=check_input_types,
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,

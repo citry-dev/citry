@@ -36,6 +36,11 @@ def make_cache_component(citry_instance: Citry) -> type[Component]:
         citry = citry_instance
         name = "cache"
         transparent = True
+        # The cache controls check their own values more strictly than the
+        # annotations (an exact non-empty string key, no bool for ttl) and
+        # raise ValueError with a message for each control, so the general
+        # type check would only replace those messages with vaguer ones.
+        check_input_types = False
 
         class Kwargs:
             key: str

@@ -45,6 +45,7 @@ if TYPE_CHECKING:
         transparent: ClassVar[bool]
         simple: ClassVar[bool | Literal["vue"]]
         pure: ClassVar[bool]
+        check_input_types: ClassVar[bool | None]
         name: ClassVar[str | None]
         template: ClassVar[str | None]
         template_file: ClassVar[str | None]
@@ -200,6 +201,15 @@ class LibraryComponentMeta(type):
             if type(pure) is not bool:
                 msg = f"Library component {name}.pure must be an exact bool; got {pure!r}."
                 raise ValueError(msg)
+            # The concrete component inherits this flag from the definition,
+            # so reject a value such as "no" when the library defines it.
+            check_input_types = attrs.get("check_input_types")
+            if check_input_types is not None and type(check_input_types) is not bool:
+                msg = (
+                    f"Library component {name}.check_input_types must be True, False, or None;"
+                    f" got {check_input_types!r}."
+                )
+                raise ValueError(msg)
 
         cls = super().__new__(mcs, name, bases, attrs, **kwargs)
         type.__setattr__(cls, _DEFINITION_FLAG, is_definition)
@@ -226,6 +236,9 @@ class LibraryComponentMeta(type):
         is_definition = cls.__dict__.get(_DEFINITION_FLAG, False)
         if is_definition and name == "pure" and type(value) is not bool:
             msg = f"Library component {cls.__name__}.pure must be an exact bool; got {value!r}."
+            raise ValueError(msg)
+        if is_definition and name == "check_input_types" and value is not None and type(value) is not bool:
+            msg = f"Library component {cls.__name__}.check_input_types must be True, False, or None; got {value!r}."
             raise ValueError(msg)
         if is_definition and name == "simple" and not _is_valid_simple_declaration(value):
             msg = f"Library component {cls.__name__}.simple must be False, True, or 'vue'; got {value!r}."

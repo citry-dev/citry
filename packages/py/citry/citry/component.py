@@ -67,6 +67,7 @@ from citry._class_introspection import (
     _static_class_dict,
     _static_class_mro,
 )
+from citry._input_types import _check_input_types
 from citry._linting import _validate_component_lint
 from citry._nested_declarations import (
     _ancestor_with_same_declaration,
@@ -222,6 +223,11 @@ class ComponentMeta(LibraryComponentMeta):
             msg = f"Cannot change simple component {cls.__name__}.{name}; define a new subclass."
             raise AttributeError(msg)
         class_name = _safe_class_text(cls, "__name__") or "Component"
+        if name == "check_input_types" and value is not None and type(value) is not bool:
+            # Renders read the flag as-is, so it gets the same rule as the
+            # class body declaration.
+            msg = f"Component {class_name}.check_input_types must be True, False, or None; got {value!r}."
+            raise ValueError(msg)
         if name == "_citry_builtin_token" and name in namespace:
             if value is namespace[name]:
                 return
@@ -406,6 +412,12 @@ class ComponentMeta(LibraryComponentMeta):
         pure = attrs.get("pure", False)
         if type(pure) is not bool:
             msg = f"Component {name}.pure must be an exact bool; got {pure!r}."
+            raise ValueError(msg)
+        # Every render reads this flag, so a truthy string such as "no" must
+        # fail at class definition rather than silently keep the check on.
+        check_input_types = attrs.get("check_input_types")
+        if check_input_types is not None and type(check_input_types) is not bool:
+            msg = f"Component {name}.check_input_types must be True, False, or None; got {check_input_types!r}."
             raise ValueError(msg)
 
         # Extensions replace nested declarations with effective runtime
@@ -669,6 +681,32 @@ class Component(metaclass=ComponentMeta):
     full contract.
     """
 
+    check_input_types: ClassVar[bool | None] = None
+    """Whether Citry checks the type of each value this component receives.
+
+    ``None`` (the default) follows the owning engine's
+    ``Citry(check_input_types=...)`` setting, which is on by default. Set
+    ``False`` to skip the check for this component and its subclasses, for
+    example in a component library whose annotations are looser than the
+    values its users pass. Set ``True`` to check this component even when the
+    engine turns the check off. Any other value raises ``ValueError`` when the
+    class is defined.
+
+    The check compares the outer type of each ``Kwargs``, ``TemplateData``,
+    ``JsData``, ``CssData``, and ``State`` field with its annotation and
+    raises ``TypeError`` for a wrong one::
+
+        class Card(Component):
+            class Kwargs:
+                title: str
+
+        Card(title=123).render()
+        # TypeError: Card.Kwargs.title expects str, got int (123). ...
+
+    To accept more values for one field, widen its annotation instead, for
+    example ``title: str | int``.
+    """
+
     name: ClassVar[str | None] = None
     """Override the name under which this component is registered.
 
@@ -774,6 +812,13 @@ class Component(metaclass=ComponentMeta):
             class Kwargs:
                 title: str
                 body: str = ""
+
+    When the component renders, Citry rejects a missing or unknown name, and
+    checks each value's outer type against its annotation, so
+    ``Card(title=123)`` raises ``TypeError``. ``list[str]`` accepts any
+    list without looking at its items. See
+    [`check_input_types`][citry.Component.check_input_types] to turn the
+    type check off.
 
     A subclass inherits its parent's ``Kwargs`` unless it declares its own.
     Its own plain ``class Kwargs:`` replaces the parent's class, like any
@@ -1104,6 +1149,10 @@ class Component(metaclass=ComponentMeta):
             if cls.Kwargs is not None:
                 _enrich_unexpected_schema_key(error, cls.Kwargs, self.raw_kwargs)
             raise
+        if cls.Kwargs is not None:
+            # After construction, so defaults and factories are filled in and
+            # Const markers removed: the check sees what template_data reads.
+            _check_input_types(typed_kwargs, cls.Kwargs, cls, "Kwargs")
         # An input hook or schema default may establish a newer explicit
         # promise for a name. Keep original candidates too: final template data
         # may deliberately return that original object after an intermediate

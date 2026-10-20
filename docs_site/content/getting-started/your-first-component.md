@@ -187,13 +187,18 @@ Leaving out the default slot fails the same way. The error appears when the
 card turns into HTML, at `str()` or `print()`, not when Python first runs
 `Card(...)`.
 
-!!! note "Type annotations do not check values at runtime"
+A value of the wrong type fails the same way. `accent: str` rejects a
+number:
 
-    `accent: str` helps your editor and type checker, but it does not
-    reject `accent=123` while your program runs. If values come from a
-    form, an API, or another source you do not control, read
-    [Inputs and validation](/concepts/inputs-and-validation/) to add
-    runtime checks.
+```python
+card = Card(accent=123, slots={"default": "Wrong color."})
+str(card)
+# TypeError: Card.Kwargs.accent expects str, got int (123). ...
+```
+
+Citry checks only the outer type of each input, so `list[str]` accepts any
+list. [Inputs and validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
+explains what each annotation accepts and how to check more.
 
 ## Next steps
 

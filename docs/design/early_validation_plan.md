@@ -57,8 +57,12 @@ from existing design prose.
   fields, while adapters such as Pydantic follow their own extra-field and
   alias configuration. The constructed schema object is then discarded and
   the original mapping is returned. Defaults, coercions, aliases, and ignored
-  extras therefore do not produce a canonical output mapping. Generated
-  dataclass annotations do not enforce field value types.
+  extras therefore do not produce a canonical output mapping. Since the
+  input type check landed, generated dataclasses, user dataclasses, and
+  NamedTuples also have the outer type of each field checked against its
+  annotation on every render, in both modes
+  ([`_input_types.py`](../../packages/py/citry/citry/_input_types.py));
+  container items are not checked, and Pydantic applies its own rules.
 - Engine template globals and per-render template globals are merged before
   component data, then extensions receive the mutable template, JS, and CSS
   dictionaries
@@ -328,7 +332,7 @@ considered sound.
 |---|---|---|---|
 | Kwarg and slot field set | Typed input construction after input hooks | Static component-tag and fill checks where names are known | Proposed in `ide_integration.md` |
 | Template-data field set | `TemplateData` construction before extensions; missing use raises only on an executed expression | No availability check against template demand | None |
-| Template-data value types | Adapter-dependent; generated dataclasses do not enforce annotations | None | Ordinary Python annotations only where user code exposes them |
+| Template-data value types | Outer type of each field checked against its annotation for dataclass and NamedTuple schemas; Pydantic applies its own rules | None | Ordinary Python annotations only where user code exposes them |
 | Template globals | Actual mapping lookup | None; names may change after compilation or arrive per render | None |
 | Extension data effects | Hook executes; no post-hook schema validation | No declared effect model | None |
 | Slot-data source field | Positioned runtime error for dynamic cases | Positioned parser error for statically known cases | Available once the planned analyzer invokes the same parser rules |
@@ -575,8 +579,9 @@ It will answer:
 ### 6.6 Checker, editor, and diagnostic architecture
 
 The leading architecture hypothesis is a reusable analyzer library.
-`citry check`, a future LSP, class-creation checks, and development runtime
-checks would adapt the same fact and rule definitions rather than implement
+`citry check`, a future LSP, class-creation checks, and runtime checks
+(such as the render-time input type check, which runs in every mode) would
+adapt the same fact and rule definitions rather than implement
 parallel validators. L1 will compare that hypothesis with separate
 stage-specific implementations before the final design selects it.
 

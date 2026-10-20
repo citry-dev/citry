@@ -467,6 +467,27 @@ class CitrySettings:
             string is stored as a one-element list. ``None`` (the default)
             means no secret is set. Django projects can reuse their existing
             key by passing ``citry.contrib.django.secret()``.
+        check_input_types: Check that each value a component receives has
+            the type its annotation names. On by default, in both modes. When a
+            component renders, Citry compares each field of its ``Kwargs``,
+            ``TemplateData``, ``JsData``, ``CssData``, and ``State`` with the
+            field's annotation and raises ``TypeError`` for a value of the
+            wrong type, so ``Card(title=123)`` against ``title: str`` fails
+            and the message names the component, the field, the expected type,
+            and the value. Only the outer type is checked: ``list[str]``
+            accepts any ``list`` without looking at its items. ``int`` also
+            accepts ``bool`` and other integer types such as numpy integers,
+            ``float`` accepts ``int`` and other real numbers but not
+            ``Decimal``, and ``str`` accepts ``str`` subclasses and Django lazy
+            translation strings. A field whose default is ``None`` also accepts
+            ``None``. Annotations that ``isinstance`` cannot test, such as
+            ``Any``, a type variable, or a name imported only for type
+            checkers, are not checked. Pydantic models check values
+            themselves and are skipped. A component can turn the check off
+            for itself with
+            [`check_input_types`][citry.Component.check_input_types]. Must be
+            a ``bool``: another type raises ``TypeError`` when the settings
+            are created.
         event_result_resolvers: Result resolvers for the Events extension.
             When an event handler returns a value, citry converts it into the
             actions sent back to the browser (the instructions the client
@@ -506,6 +527,7 @@ class CitrySettings:
     ssr_element_threshold: int = 0
     vue_asset_max_bytes: int | None = DEFAULT_VUE_ASSET_MAX_BYTES
     max_component_depth: int = DEFAULT_MAX_COMPONENT_DEPTH
+    check_input_types: bool = True
 
     def __post_init__(self) -> None:
         # Copy every input into its immutable stored shape, so a direct
@@ -526,6 +548,10 @@ class CitrySettings:
         _validate_security_script_integrity(self.security_script_integrity)
         if type(self.ssr) is not bool:
             raise TypeError("Citry ssr must be a bool.")
+        # Every render reads this flag, so a truthy string such as "false"
+        # must fail here rather than silently keep the check on.
+        if type(self.check_input_types) is not bool:
+            raise TypeError(f"Citry check_input_types must be a bool, got {type(self.check_input_types).__name__}.")
         # An exact int check keeps True/False and floats from passing as a
         # count, and a negative count has no meaning as a page size.
         if type(self.ssr_element_threshold) is not int:

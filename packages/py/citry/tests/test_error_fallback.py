@@ -148,10 +148,23 @@ class TestErrorFallback:
         assert trusted_html.endswith(">trusted</b>")
         assert "&lt;b" not in trusted_html
 
-    def test_non_string_fallback_renders_as_text(self):
-        # Kwargs types are not enforced at runtime; the boundary must still
-        # show the value instead of failing while it handles an error.
+    def test_non_string_fallback_is_rejected_by_the_input_type_check(self):
+        # The fallback attribute is declared as text, so a number fails when
+        # the boundary is built, before any content can fail inside it.
         c = Citry()
+        _make_failing(c)
+
+        class Page(Component):
+            citry = c
+            template = '<c-error-fallback c-fallback="42"><c-failing /></c-error-fallback>'
+
+        with pytest.raises(TypeError, match=r"ErrorFallback\.Kwargs\.fallback expects str \| None, got int \(42\)"):
+            Page().render()
+
+    def test_non_string_fallback_renders_as_text_without_the_input_type_check(self):
+        # With the check off, the boundary must still show the value instead
+        # of failing while it handles an error.
+        c = Citry(check_input_types=False)
         _make_failing(c)
 
         class Page(Component):

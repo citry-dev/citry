@@ -44,6 +44,7 @@ from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
 
 from citry._class_introspection import _component_declaration_generation, _static_class_dict, _static_class_mro
+from citry._input_types import _check_input_types
 from citry._pure import (
     PureBodyPlan,
     PureInteriorBody,
@@ -610,14 +611,21 @@ def _render_simple_vue_leaf(
             component_class.Kwargs,
             provenance_only=True,
         )
+        if component_class.Kwargs is not None:
+            _check_input_types(kwargs, component_class.Kwargs, component_class, "Kwargs")
         # Callbacks run in the ordinary order: template_data, js_data, css_data.
         template_data_callback = admission.template_data_callback
         template_data = kwargs if template_data_callback is None else template_data_callback(kwargs, {})
-        template_data = _normalize_data(template_data, component_class.TemplateData)
+        template_data = _normalize_data(
+            template_data,
+            component_class.TemplateData,
+            checked_for=(component_class, "TemplateData"),
+        )
         js_data_callback = admission.js_data_callback
         js_data = _normalize_data(
             None if js_data_callback is None else js_data_callback(kwargs, {}),
             component_class.JsData,
+            checked_for=(component_class, "JsData"),
         )
         # This path skips on_component_data, so the callback's own keys are
         # the final ones the browser will receive.
@@ -626,6 +634,7 @@ def _render_simple_vue_leaf(
         css_data = _normalize_data(
             None if css_data_callback is None else css_data_callback(kwargs, {}),
             component_class.CssData,
+            checked_for=(component_class, "CssData"),
         )
         instance_globals = component_class.citry.template_globals
         render_globals = _render_globals.get()
@@ -1884,9 +1893,18 @@ def _render_one(
             template_data_callback(component.kwargs, component.slots),
             comp_cls.TemplateData,
             preserve=component._kwargs_const if default_template_data else None,
+            checked_for=(comp_cls, "TemplateData"),
         )
-        js_data = _normalize_data(component.js_data(component.kwargs, component.slots), comp_cls.JsData)
-        css_data = _normalize_data(component.css_data(component.kwargs, component.slots), comp_cls.CssData)
+        js_data = _normalize_data(
+            component.js_data(component.kwargs, component.slots),
+            comp_cls.JsData,
+            checked_for=(comp_cls, "JsData"),
+        )
+        css_data = _normalize_data(
+            component.css_data(component.kwargs, component.slots),
+            comp_cls.CssData,
+            checked_for=(comp_cls, "CssData"),
+        )
 
     # 3.5 Overlay template globals: variables exposed to every component's
     #     template without being returned from each template_data(). Two layers,
@@ -2913,6 +2931,7 @@ def _normalize_data(
     schema_cls: type | None,
     *,
     preserve: _ConstMapping | None = None,
+    checked_for: tuple[type[Component], str] | None = None,
 ) -> _ConstMapping:
     """
     Normalize and validate one data method's result as a named mapping.
@@ -2959,8 +2978,15 @@ def _normalize_data(
     if schema_cls is None:
         return data
     if isinstance(maybe_data, schema_cls):
-        return _normalize_data_schema_instance(maybe_data, schema_cls, preserve=data)
-    _validated, normalized = _construct_data_schema(data, schema_cls)
+        normalized = _normalize_data_schema_instance(maybe_data, schema_cls, preserve=data)
+        instance = maybe_data
+    else:
+        instance, normalized = _construct_data_schema(data, schema_cls)
+    # ``checked_for`` names the component and the schema's role for the
+    # input type check, which runs on the final instance, after Const markers
+    # are removed.
+    if checked_for is not None:
+        _check_input_types(instance, schema_cls, checked_for[0], checked_for[1])
     return normalized
 
 

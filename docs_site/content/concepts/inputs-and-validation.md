@@ -10,8 +10,10 @@ a missing value with an error before the component renders. The declaration
 also fills in defaults and tells readers, editors, and type checkers how to
 use the component.
 
-Plain nested classes check input names. Add a validating model such as
-Pydantic when the values themselves must be checked too.
+Citry also checks that each value has the type its annotation names, so
+`title: str` rejects a number. Add a validating model such as Pydantic when
+you need more, such as checking the items of a list or turning a form's
+text into a number.
 
 ## `Kwargs` keyword inputs
 
@@ -86,22 +88,94 @@ button.render()
 Inputs added with a `c-bind` spread are also checked when the child renders,
 because their names are known only then.
 
-## Typed `Kwargs` checks
+## Check value types { #typed-kwargs-checks }
 
-A plain `Kwargs` class checks that required names are present and unknown
-names are absent. Its type annotations are not checked when the page runs:
+When a component renders, Citry checks each input against its annotation
+and raises `TypeError` for a value of the wrong type:
 
 ```python
-# The name is valid, so a plain Kwargs class accepts 42.
 button = Button(label=42)
-html = str(button)
+
+# TypeError: Button.Kwargs.label expects str, got int (42).
+str(button)
 ```
 
-The annotations still help readers, editors, and type checkers. Do not rely
-on them to check data from a form, request, database, or other untrusted
-source.
+The message names the component, the input, the type the annotation
+expects, and the value it got. The check runs on every render, in
+development and in production, so data from a form, an API, or a
+database is checked too.
 
-To check values, base `Kwargs` on a validating model such as
+Citry checks only the outer type. `tags: list[str]` rejects a tuple
+or a string, but it does not look at the items, so a list of numbers
+passes. Checking every item would slow down every render in proportion to
+the data.
+
+The same check applies to `TemplateData`, `JsData`, and `CssData` (see
+[below](#templatedata-jsdata-cssdata)), and to Events
+[`State`][citry.Component.State] built when the page renders.
+
+### Values each annotation accepts
+
+Each annotation accepts what a type checker would accept:
+
+- `int` accepts `bool` and other integer types, such as numpy integers.
+- `float` accepts `int`, `Fraction`, and numpy floats. It rejects
+  `Decimal`, as type checkers do; write `float | Decimal` to accept it.
+- `str` accepts subclasses such as [`Markup`][citry.Markup], and Django's
+  lazy translation strings from `gettext_lazy()`.
+- `X | None` and `Optional[X]` accept `None`. So does a field whose
+  default is `None`, such as `title: str = None` in code ported from
+  django-components.
+- A field's own default always passes, so `tags: list[str] = ()` works
+  when the input is left out. Another tuple still fails.
+- `Literal["a", "b"]` accepts only those values, and `type[Row]` accepts
+  the class `Row` or a subclass.
+
+Citry skips an annotation it cannot test while the page runs: `Any`,
+`object`, a type variable, a `Protocol` without `@runtime_checkable`, and
+a name imported only under `if TYPE_CHECKING:`. Import a type normally when
+you want its inputs checked.
+
+A `Mock` from `unittest.mock` fails the check unless it is created with
+`spec=`, which makes it pass for that class.
+
+### Accept more values
+
+Widen the annotation when a field should take more than one type:
+
+```citry
+from citry import Component
+
+
+class Price(Component):
+    class Kwargs:
+        # Wrong: an int amount from the database fails.
+        # amount: str
+
+        # Right: the annotation names every type the field takes.
+        amount: str | int
+
+    template = """
+      <span class="price">{{ amount }}</span>
+    """
+```
+
+To turn the check off for one component and its subclasses, set
+[`check_input_types`][citry.Component.check_input_types] to `False`:
+
+```python
+class LegacyCard(Component):
+    check_input_types = False
+```
+
+To turn it off for a whole application, pass `check_input_types=False` to
+[`Citry`][citry.Citry]. A component can still turn it on with
+`check_input_types = True`.
+
+### Check more with Pydantic
+
+To check the items of a list, or to convert values, base `Kwargs` on a
+validating model such as
 [Pydantic](https://docs.pydantic.dev/){: target="_blank" rel="noopener"}:
 
 ```citry
@@ -120,13 +194,16 @@ class AgeBadge(Component):
     """
 ```
 
-Now `AgeBadge(age="unknown").render()` raises Pydantic's validation error.
-The model's own settings decide which values pass. Here,
-`extra="forbid"` also makes Pydantic reject unknown names passed from
-Python.
+Now `AgeBadge(age="unknown").render()` raises Pydantic's validation error,
+while `AgeBadge(age="42")` passes because Pydantic turns the text into a
+number. The model's own settings decide which values pass, so Citry does
+not check a Pydantic model's fields again. Here, `extra="forbid"` also
+makes Pydantic reject unknown names passed from Python.
 
-You can also use a `@dataclass` or a `NamedTuple` as `Kwargs`. Like a plain
-class, these check names but not value types.
+You can also use a `@dataclass` or a `NamedTuple` as `Kwargs`. Citry
+checks their names and value types like a plain class. A dataclass that
+writes its own `__init__` controls its own values, so Citry skips the type
+check for it.
 
 ## `field()` defaults
 
@@ -225,10 +302,10 @@ class Counter(Component):
         return self.JsData(initial_count=kwargs.initial_count)
 ```
 
-A missing or unexpected field raises an error during the render. As with
-`Kwargs`, a plain class checks names and a validating model also checks
-values. Citry passes the checked result on, with defaults filled in and any
-conversions the model made.
+A missing or unexpected field, or a value of the wrong type, raises an
+error during the render. As with `Kwargs`, a validating model such as
+Pydantic checks values by its own rules instead. Citry passes the checked
+result on, with defaults filled in and any conversions the model made.
 
 [Component options](/vue/component-options/#seed-browser-data-from-python)
 shows how the browser reads `js_data()`.

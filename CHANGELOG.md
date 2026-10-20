@@ -1,5 +1,33 @@
 # Release notes
 
+## Unreleased
+
+### Changed
+
+- **Breaking:** a component input of the wrong type now raises
+  `TypeError` when the component renders, in development and in
+  production. Fix the value or widen the annotation; to keep the old
+  behavior, set `check_input_types = False` on a component or pass
+  `Citry(check_input_types=False)`.
+
+  ```python
+  class Card(Component):
+      class Kwargs:
+          title: str
+
+  str(Card(title=123))
+  # TypeError: Card.Kwargs.title expects str, got int (123). ...
+  ```
+
+  Citry checks only the outer type (`list[str]` accepts any list) of each
+  `Kwargs`, `TemplateData`, `JsData`, `CssData`, and Events `State` field.
+  `int` accepts `bool` and numpy integers, `float` accepts `int` but not
+  `Decimal`, `str` accepts Django's lazy translation strings, and a field's
+  own default always passes, so `title: str = None` keeps working.
+  Pydantic models, `Any`, and names imported only under `TYPE_CHECKING`
+  are not checked
+  ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
+
 ## v0.6.0
 
 Citry 0.6.0 replaces Alpine with Vue. Most Python components, templates,
