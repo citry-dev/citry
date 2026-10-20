@@ -32,6 +32,9 @@
 
 - An Events `State` field annotated as a tuple is a tuple again in event
   handlers, instead of the list that JSON turned it into.
+- On Python 3.10, a browser update to an Events `State` field annotated as
+  a parameterized container, such as `tuple[str, ...]` or `set[str]`, no
+  longer fails with a server error.
 
 ## v0.6.0
 
