@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
 
+import citry.citry_render as render_module
 from citry.attrs import (
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
@@ -1671,14 +1672,23 @@ class _SimpleJsonCodegen:
         self,
         operations: tuple[_SimpleJsonOperation, ...],
         local_names: tuple[tuple[str, str], ...] = (),
+        *,
+        sets_value_context: bool = False,
     ) -> str:
         name = self._new_name("evaluate")
         lines = [
             f"def {name}(context, variables, data, root_data, vue_errors, special, resolved_opens"
             f"{self._local_call_args(local_names)}):",
-            "    value_token = _VALUE_CONTEXT.set(context)",
-            "    try:",
         ]
+        if not sets_value_context:
+            # Branch and loop-body functions run only inside the root function,
+            # which already made this same `context` current, and any other
+            # code that sets `_VALUE_CONTEXT` resets it before returning.
+            body_lines = self._evaluate_lines(operations, local_names, 4)
+            lines.extend(body_lines or ["    pass"])
+            self.functions.append("\n".join(lines))
+            return name
+        lines.extend(("    value_token = _VALUE_CONTEXT.set(context)", "    try:"))
         body_lines = self._evaluate_lines(operations, local_names, 8)
         lines.extend(body_lines or ["        pass"])
         lines.extend(("    finally:", "        _VALUE_CONTEXT.reset(value_token)"))
@@ -1686,7 +1696,7 @@ class _SimpleJsonCodegen:
         return name
 
     def build(self) -> _SimpleJsonProgram:
-        evaluate_root = self._evaluate_function(self._root_operations)
+        evaluate_root = self._evaluate_function(self._root_operations, sets_value_context=True)
         source = "\n\n".join(self.functions)
         namespace: dict[str, object] = {
             "_ConstMapping": _ConstMapping,
@@ -2104,8 +2114,6 @@ _SIMPLE_JSON_PLAIN_SCALAR_CACHE = _SimpleJsonScalarCache()
 
 def _simple_json_plain_scalar_types() -> frozenset[type[object]]:
     """Return scalars still using default renderer dispatch, keyed by ABC state."""
-    import citry.citry_render as render_module  # noqa: PLC0415
-
     cache = _SIMPLE_JSON_PLAIN_SCALAR_CACHE
     cache_key = (
         abc.get_cache_token(),

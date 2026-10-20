@@ -81,6 +81,50 @@ cached component or region. Once a cached entry exists, Citry reuses it
 and skips everything inside, including nested caches. Give an outer
 entry an expiry no longer than any content inside it can tolerate.
 
+## Garbage collection
+
+A Python setting outside Citry can take a few milliseconds off each
+large render. A large page makes many short-lived objects, so Python's
+garbage collector runs many times during each render. Its occasional
+full collection also walks every long-lived object the process made at
+startup: your modules, component classes, and templates.
+
+Python's [`gc.freeze()`](https://docs.python.org/3/library/gc.html#gc.freeze)
+tells the collector to skip, in every later collection, all objects
+that exist when you call it. Citry never calls it for you. Call it
+once in each server process, after your app has started:
+
+```python
+import gc
+
+citry_app.initialize()
+# If you warm up by rendering a page, do that here first.
+# Collect first so the warm-up's garbage is not frozen.
+gc.collect()
+gc.freeze()
+```
+
+On the project page from the [benchmarks](/about/benchmarks/), with
+1,400 entries, rendering and serializing the page in a warmed-up
+process took 109.1 ms with normal collection and 100.5 ms after
+`gc.freeze()` (CPython 3.12). Turning the collector off entirely
+gave 92.3 ms, but then objects that refer to each other in a cycle
+are never freed, so memory grows.
+
+Before you add it, know what it changes:
+
+- **Frozen objects in cycles are never freed.** An object that existed
+  at the freeze is still freed when nothing refers to it. But if it is
+  part of a reference cycle, as classes and modules usually are, its
+  memory stays in use until the process exits or you call
+  `gc.unfreeze()`. Call `gc.freeze()` once after startup, never per
+  request.
+- **It affects the whole process.** Every library in the process
+  shares the one collector, so the setting applies to all of them.
+- **Measure your own pages.** The saving depends on how many objects
+  your process holds, how much each request creates, and your Python
+  version, since newer versions collect differently.
+
 ## Related pages
 
 - [Benchmarks](/about/benchmarks/) compares how long a large page takes

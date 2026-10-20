@@ -89,7 +89,7 @@ from citry.attrs import (
     vue_code_error,
 )
 from citry.citry_context import CitryContext
-from citry.citry_element import CitryElement, _ElementMorphMetadata
+from citry.citry_element import CitryElement, _ElementMorphMetadata, _PreparedCallMetadata
 from citry.citry_render import (
     CitryRender,
     DeferredComponent,
@@ -1643,8 +1643,6 @@ class ComponentNode(Node):
             from citry.components.dynamic import _DynamicSelectorElement  # noqa: PLC0415
 
             element_type = _DynamicSelectorElement
-        from citry.citry_element import _PreparedCallMetadata  # noqa: PLC0415
-
         # Element-locus keys travel through _ElementMorphMetadata to the
         # selected native root. They are not also keys for a transparent
         # component-call range.

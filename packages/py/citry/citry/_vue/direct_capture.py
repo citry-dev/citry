@@ -22,6 +22,7 @@ from citry.attrs import (
     validate_html_attr_name,
     vue_code_error,
 )
+from citry.citry_element import _PreparedCallMetadata
 from citry.citry_render import (
     CitryRender,
     Placeholder,
@@ -106,7 +107,6 @@ from .prepared import (
 if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.citry_context import CitryContext
-    from citry.citry_element import _PreparedCallMetadata
     from citry.component import Component
 
 TagForType = Callable[[str], str]
@@ -232,8 +232,6 @@ def _matches_cache_replay_identity(
 def _run_eligible_component(value: object) -> TypeGuard[CitryRender | SimpleVueRecord]:
     """Whether one selected child has the exact bounded call-run proof."""
     if type(value) is SimpleVueRecord:
-        from citry.citry_element import _PreparedCallMetadata  # noqa: PLC0415
-
         metadata = value.call_metadata
         return bool(
             value.component_class.simple == "vue"
@@ -833,14 +831,18 @@ def assemble_typed_render(
             if isinstance(value, SimpleVueRecord)
             else _prepared_root_markers((*value.frame.root_markers, *value.context._get_root_markers()))
         )
-        root_marker_values = dict(own_root_markers)
-        marker_identities = {_html_attr_identity(name) for name in root_marker_values}
-        for name, marker_value in inherited_root_markers:
-            identity = _html_attr_identity(name)
-            if identity not in marker_identities:
-                root_marker_values[name] = marker_value
-                marker_identities.add(identity)
-        root_markers = tuple(root_marker_values.items())
+        if not own_root_markers and not inherited_root_markers:
+            # Most rows carry no markers; skip building the merge tables.
+            root_markers: tuple[tuple[str, object], ...] = ()
+        else:
+            root_marker_values = dict(own_root_markers)
+            marker_identities = {_html_attr_identity(name) for name in root_marker_values}
+            for name, marker_value in inherited_root_markers:
+                identity = _html_attr_identity(name)
+                if identity not in marker_identities:
+                    root_marker_values[name] = marker_value
+                    marker_identities.add(identity)
+            root_markers = tuple(root_marker_values.items())
 
         value_parts = [value.leaf] if isinstance(value, SimpleVueRecord) else value.parts
         if (
@@ -873,9 +875,11 @@ def assemble_typed_render(
                     if existing_definition is not None:
                         attach_leaf_data(candidate_leaf, prepared_values)
                         existing_input = compile_inputs.get(candidate_artifact.definition_id)
-                        if (
-                            existing_definition.type_key != type_key
-                            or existing_input != candidate_artifact.compile_input
+                        # Both normally hold the same object, so test identity
+                        # before comparing every field.
+                        if existing_definition.type_key != type_key or (
+                            existing_input is not candidate_artifact.compile_input
+                            and existing_input != candidate_artifact.compile_input
                         ):
                             raise AssertionError("prepared definition hash collision")
                         occurrence_definition_ids[occurrence_index] = candidate_artifact.definition_id
@@ -1069,8 +1073,8 @@ def assemble_typed_render(
                 call_node = call_run.call_node
                 matching = not root_markers and all(
                     _run_eligible_component(candidate)
-                    and (member_type := _run_member_metadata(candidate)[0]) == call_run.child_type_key
-                    and (member_metadata := _run_member_metadata(candidate)[1]) is not None
+                    and (member_info := _run_member_metadata(candidate))[0] == call_run.child_type_key
+                    and (member_metadata := member_info[1]) is not None
                     and member_metadata.source is call_node.source
                     and member_metadata.source_span == call_node.position
                     for candidate in parts
@@ -1088,7 +1092,8 @@ def assemble_typed_render(
                         projected_data=projected_data,
                     )
                 if parts:
-                    run_first[0] = [candidate for candidate in parts if _run_eligible_component(candidate)]
+                    # `matching` has just proven every part eligible, so the run is all of them.
+                    run_first[0] = cast("list[CitryRender | SimpleVueRecord]", list(parts))
                     run_followers.update(range(1, len(parts)))
                 else:
                     run_values = call_values.setdefault("callRuns", {})
@@ -1608,6 +1613,18 @@ def assemble_typed_render(
                         run_id = f"citryRun{len(run_values)}"
                         members: list[tuple[str, str, str, tuple[_FillFragment, ...]]] = []
                         run_component_tag: str | None = None
+                        # Every row's child id starts with this occurrence's id.
+                        child_id_prefix = _DigestPrefix(occurrence_id)
+                        # Rows of one run normally share their call site: the same
+                        # source and span objects from one template node, and the
+                        # same class id. Their placement digests then differ only
+                        # in the key, so the shared part is hashed once. When a
+                        # row does not share them, the checks below start a new
+                        # prefix from that row.
+                        placement_prefix: _DigestPrefix | None = None
+                        prefix_source: object = None
+                        prefix_span: object = None
+                        prefix_type: str | None = None
                         for member in run_group:
                             member_type, member_metadata = _run_member_metadata(member)
                             if member_metadata is None:
@@ -1630,9 +1647,23 @@ def assemble_typed_render(
                                     _duplicate_key_message(member_metadata, member_key, citry)
                                 )
                             local_identity_keys.add(member_identity)
-                            member_placement_digest = _digest(member_base, placement_route, ("explicit", member_key))
+                            # Same object and same exact-str class id mean the same
+                            # JSON text, so the cached prefix hashes what
+                            # `_digest(member_base, placement_route, ...)` would.
+                            if (
+                                placement_prefix is None
+                                or member_metadata.source is not prefix_source
+                                or member_metadata.source_span is not prefix_span
+                                or type(member_type) is not str
+                                or member_type != prefix_type
+                            ):
+                                placement_prefix = _DigestPrefix(member_base, placement_route)
+                                prefix_source = member_metadata.source
+                                prefix_span = member_metadata.source_span
+                                prefix_type = member_type if type(member_type) is str else None
+                            member_placement_digest = placement_prefix.digest(("explicit", member_key))
                             member_placement_key = f"citryPlacement{member_placement_digest[:24]}"
-                            member_child_id = f"citryOccurrence{_digest(occurrence_id, member_placement_key)[:24]}"
+                            member_child_id = f"citryOccurrence{child_id_prefix.digest(member_placement_key)[:24]}"
                             transform_component(
                                 member,
                                 occurrence_id,
@@ -2898,8 +2929,46 @@ def _duplicate_key_message(call: _PreparedCallMetadata | None, key: str, citry: 
     )
 
 
+# Holds the settings that ``json.dumps(values, sort_keys=True, separators=(",", ":"))``
+# would otherwise rebuild on every call. One shared encoder is safe across threads because
+# ``encode()`` keeps no state between calls.
+_DIGEST_JSON = json.JSONEncoder(sort_keys=True, separators=(",", ":"))
+
+
 def _digest(*values: object) -> str:
-    return hashlib.sha256(json.dumps(values, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    """
+    Return the SHA-256 hex digest of the compact JSON list of ``values``.
+
+    Occurrence, placement, and call ids use its leading characters.
+    """
+    return hashlib.sha256(_DIGEST_JSON.encode(values).encode()).hexdigest()
+
+
+class _DigestPrefix:
+    """
+    Compute ``_digest(*prefix, *rest)`` for many ``rest`` values that share one ``prefix``.
+
+    The hashed text is the JSON list ``[p1,...,pn,r1,...,rm]``. JSON encodes each
+    list item without regard to its neighbors, so that text is the prefix items' list without its
+    closing bracket, a comma, then the rest items' list without its opening
+    bracket. A repeated call run hashes its constant leading values (the whole
+    authored template source among them) once, then copies that hash state for
+    each row. Both value lists must be non-empty.
+    """
+
+    __slots__ = ("_state",)
+
+    def __init__(self, *prefix: object) -> None:
+        if not prefix:
+            raise ValueError("a digest prefix needs at least one value")
+        # Drop the closing bracket so the rest can continue the same list.
+        self._state = hashlib.sha256(_DIGEST_JSON.encode(prefix)[:-1].encode())
+
+    def digest(self, first: object, *rest: object) -> str:
+        state = self._state.copy()
+        # Drop the opening bracket; the comma joins the rest to the prefix items.
+        state.update(("," + _DIGEST_JSON.encode((first, *rest))[1:]).encode())
+        return state.hexdigest()
 
 
 def _definition_id(type_key: str, compile_input: DefinitionCompileInput) -> str:

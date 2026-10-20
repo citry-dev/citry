@@ -109,13 +109,19 @@ def prepared_manifest(
         marker_occurrences.add(occurrence_id)
         prior_marker = order
         markers.append({"ownerId": owner_id, "name": name, "occurrenceId": occurrence_id})
+    # The declared keys depend only on the compiled asset, so each set is built
+    # once, at the first occurrence that uses it.
+    declared_keys_by_asset: dict[str, set[object]] = {}
     for occurrence in view.occurrences:
-        asset = assets_by_id[compiled_ids[occurrence.definition_id]]
+        asset_id = compiled_ids[occurrence.definition_id]
+        asset = assets_by_id[asset_id]
         opaque = occurrence.prepared_data.get("opaqueHtml", {})
         if type(opaque) is not dict:
             raise ValueError("prepared opaque HTML values must be an exact object")
-        declared = {item["key"]: item for item in asset.opaque_html_sites}
-        if set(opaque) != set(declared):
+        declared_keys = declared_keys_by_asset.get(asset_id)
+        if declared_keys is None:
+            declared_keys = declared_keys_by_asset[asset_id] = {item["key"] for item in asset.opaque_html_sites}
+        if opaque.keys() != declared_keys:
             raise ValueError("prepared opaque HTML values do not match definition declarations")
         for key, record in opaque.items():
             # The browser mounts each record as one static vnode: its HTML and the number of

@@ -62,7 +62,7 @@ from citry._vue.capture import (
     typed_render_scope,
     vue_render_active,
 )
-from citry._vue.direct import direct_render_scope
+from citry._vue.direct import active_execution, direct_execution_scope, direct_render_scope
 from citry._vue_loop_errors import vue_loop_variable_error
 from citry.assets import _TEMPLATE_CACHE, load_template
 from citry.citry_context import CitryContext
@@ -92,6 +92,10 @@ from citry.constness import (
     extract_const_vars,
     precompute_const_parts,
 )
+from citry.ext.dependencies.emission import EXTRA_KEY
+from citry.ext.dependencies.extension import _DependencyCacheCapture
+from citry.ext.dependencies.scripts import has_component_asset
+from citry.ext.dependencies.types import DependencyRecord
 from citry.nodes import (
     ComponentNode,
     ElementAttrsNode,
@@ -551,11 +555,6 @@ def _render_simple_vue_leaf(
     if component_class.simple != "vue":
         return None
 
-    from citry.ext.dependencies.emission import EXTRA_KEY  # noqa: PLC0415
-    from citry.ext.dependencies.extension import _DependencyCacheCapture  # noqa: PLC0415
-    from citry.ext.dependencies.scripts import has_component_asset  # noqa: PLC0415
-    from citry.ext.dependencies.types import DependencyRecord  # noqa: PLC0415
-
     try:
         # The call shape belongs to this invocation, so it is checked every time.
         # A pure class takes this path too: it records template values, not
@@ -603,10 +602,9 @@ def _render_simple_vue_leaf(
 
         # Match Component.__init__: allocate and validate the render ID before
         # the typed schema can reject this occurrence.
-        render_id = (
-            component_class.citry.id_generator() if component_class.citry.id_generator is not None else gen_render_id()
-        )
-        render_id = validate_render_id(render_id)
+        # The built-in generator only makes valid ids; a custom one is checked.
+        id_generator = component_class.citry.id_generator
+        render_id = gen_render_id() if id_generator is None else validate_render_id(id_generator())
         kwargs, _kwargs_const = _construct_data_schema(
             element.kwargs,
             component_class.Kwargs,
@@ -726,8 +724,6 @@ def _defer_simple_vue_calls(
     the root); ``simple_vue_callers`` keeps the skipped names for error
     messages.
     """
-    from citry._vue.direct import active_execution  # noqa: PLC0415
-
     children = cast("LeafCallChildren", leaf.call_children)
     registered = component_class.citry._registry._name_to_cls
     for call in leaf.fragment.calls:
@@ -1147,8 +1143,6 @@ def _settle_render(
 
     def settle_in_invocation_region(task: _FinalizeTask, error: Exception | None) -> CitryRender | None:
         """Finalize under the direct placement captured for deferred work."""
-        from citry._vue.direct import direct_execution_scope  # noqa: PLC0415
-
         with direct_execution_scope(task.direct_parent_execution):
             return settle(task, error)
 
@@ -1206,8 +1200,6 @@ def _settle_render(
                 # out of the render; no ancestor hook can swallow it.
                 if task.depth > task.deferred.element.comp_cls.citry.settings.max_component_depth:
                     raise _nesting_depth_error(task)
-                from citry._vue.direct import direct_execution_scope  # noqa: PLC0415
-
                 with direct_execution_scope(task.deferred.direct_parent_execution):
                     simple_record = _render_simple_vue_leaf(
                         task.deferred.element,
@@ -2797,8 +2789,6 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     """
     value_token = _VALUE_CONTEXT.set(context)
     try:
-        from citry._vue.capture import vue_render_active  # noqa: PLC0415
-
         direct_prepared = vue_render_active()
         parts: list[RenderPart] = []
         tracing = is_tracing()  # hoisted: one level check per body walk, not per node

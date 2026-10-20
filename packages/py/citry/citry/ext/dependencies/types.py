@@ -180,7 +180,10 @@ class Dependency:
         # inside JS content would terminate the tag early in the browser.
         tag_name = type(self).__name__.lower()
         end_tag_substr = f"</{tag_name}"
-        if self.content and end_tag_substr in self.content.lower():
+        # Lowercasing never produces "<" or "/", so content without "</" cannot
+        # contain the end tag, and large inline scripts such as the page
+        # configuration skip building a lowercased copy.
+        if self.content and "</" in self.content and end_tag_substr in self.content.lower():
             msg = f"{self._err_msg()} contains a '{end_tag_substr}>' end tag. This is not allowed."
             raise ValueError(msg)
 

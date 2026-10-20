@@ -11,6 +11,7 @@ from citry.citry_render import CitryRender, RenderPart, SimpleVueRecord
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+    from contextvars import Token
 
     from citry.citry_context import CitryContext
     from citry.slots import Slot
@@ -268,13 +269,30 @@ def direct_render_scope() -> Iterator[DirectRenderSession]:
         _DIRECT_SESSION.reset(token)
 
 
-@contextmanager
-def direct_execution_scope(execution: DirectExecutionFrame | None) -> Iterator[None]:
-    token = _ACTIVE_EXECUTION.set(execution)
-    try:
-        yield
-    finally:
-        _ACTIVE_EXECUTION.reset(token)
+class _DirectExecutionScope:
+    """
+    Make one direct execution frame current until the ``with`` block ends.
+
+    The renderer enters this once per child component, so it is a small class:
+    a generator-based context manager costs about four times as much.
+    """
+
+    __slots__ = ("_execution", "_token")
+    _token: Token[DirectExecutionFrame | None]
+
+    def __init__(self, execution: DirectExecutionFrame | None) -> None:
+        self._execution = execution
+
+    def __enter__(self) -> None:
+        self._token = _ACTIVE_EXECUTION.set(self._execution)
+
+    def __exit__(self, *exc_info: object) -> None:
+        _ACTIVE_EXECUTION.reset(self._token)
+
+
+# Keep the function-style name so callers write `with direct_execution_scope(frame):`
+# like the other scopes in this module.
+direct_execution_scope = _DirectExecutionScope
 
 
 def bind_template_fill(

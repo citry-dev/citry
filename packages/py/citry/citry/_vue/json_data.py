@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from typing import cast
 
 from citry.constness import const_value, is_const
+from citry.ext.i18n.bindings import CapturedTranslationText
 from citry.secret import Secret
 from citry.util.html import decode_attribute_entities
 
@@ -26,8 +27,6 @@ def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
     """Detach one value into exact JSON scalars, objects, and arrays."""
     if is_const(value):
         return _json_plain(const_value(value), _ancestors)
-    from citry.ext.i18n.bindings import CapturedTranslationText  # noqa: PLC0415
-
     if type(value) is CapturedTranslationText:
         return str(value)
     if value is None or type(value) in {bool, int, str}:

@@ -44,6 +44,10 @@ if TYPE_CHECKING:
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
     from citry_core.template_parser import Template
 
+# The lookup as Citry defines it, taken at import time, so a later replacement
+# of the method is recognized as user code.
+_BUILT_IN_CLASS_ID_LOOKUP = Citry.get_component_by_class_id
+
 
 # A page links compiled definitions and stylesheets by digest, and the browser
 # may ask for them long after the render. Each engine keeps them in this
@@ -826,9 +830,22 @@ class DirectVueEventsProducer:
             )
             type_policies.append({"typeKey": type_key, "lazyAllowed": lazy_allowed})
         dependency_records = cast("dict[DependencyRecord, object]", render.context.extra.get("dependencies", {}))
+        # Nothing in this loop changes the registry, so with the built-in
+        # lookup, checking each (class id, class) pair once gives the same
+        # answer as checking each record. A lookup replaced on a subclass, the
+        # class, or the instance is user code that may count or react to each
+        # call, so it still gets one call per record.
+        lookup = getattr(citry.get_component_by_class_id, "__func__", None)
+        checks_each_record = lookup is not _BUILT_IN_CLASS_ID_LOOKUP
+        checked_classes: set[tuple[str, type[Component]]] = set()
         for record in dependency_records:
             if record.component_id not in selected_ids or record.component_class is None:
                 continue
+            if not checks_each_record:
+                pair = (record.class_id, record.component_class)
+                if pair in checked_classes:
+                    continue
+                checked_classes.add(pair)
             if citry.get_component_by_class_id(record.class_id) is not record.component_class:
                 raise ValueError("component class changed before Vue metadata preparation")
         # Resolve the public Dependencies surface through the same ordered
@@ -1318,6 +1335,9 @@ def check_directive_roots(assembly: Assembly, compiled: Mapping[str, CompiledRen
 
 
 def _validate_style_assets(styles: list[dict[str, object]], view: PreparedViewMetadata) -> None:
+    # Most pages have no styles, so skip building the occurrence table for them.
+    if not styles:
+        return
     occurrences = {item.id: item.type_key for item in view.occurrences}
     urls: dict[str, dict[str, object]] = {}
     expected_keys = {"owner", "source", "lazyAllowed"}

@@ -100,15 +100,26 @@ class _LifecycleCoordinator:
     @contextmanager
     def read(self, operation: str) -> Iterator[None]:
         """Hold the short state lock across one readiness check and raw read."""
-        thread_id = threading.get_ident()
         with self._state_lock:
-            state = self._state
-            if state is not None and state.owner_thread_id != thread_id:
-                self._raise_competing_thread(operation, state.root_operation)
-            if state is not None and state.root_blocks_nested:
-                msg = f"{operation} cannot run while {state.root_operation} is active on this thread."
-                raise RuntimeError(msg)
+            self.check_read(operation)
             yield
+
+    def check_read(self, operation: str) -> None:
+        """
+        Raise unless this thread may read lifecycle state now.
+
+        The caller must hold ``_state_lock``. ``read()`` does both steps; the
+        component lookups that run several times per rendered row write
+        ``with coordinator._state_lock: coordinator.check_read(...)`` inline,
+        because entering a generator-based context manager costs several
+        times as much as a plain ``with`` on the lock.
+        """
+        state = self._state
+        if state is not None and state.owner_thread_id != threading.get_ident():
+            self._raise_competing_thread(operation, state.root_operation)
+        if state is not None and state.root_blocks_nested:
+            msg = f"{operation} cannot run while {state.root_operation} is active on this thread."
+            raise RuntimeError(msg)
 
     @staticmethod
     def _raise_competing_thread(operation: str, active: str) -> None:
