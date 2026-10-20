@@ -237,8 +237,9 @@
   a line inside Citry. A warning from an Events response points at the
   web framework code that called Citry, because your handler has already
   returned.
-- A component's `on_dependencies()` now runs once per rendered instance on
-  an interactive page, as documented, instead of twice.
+- A component's `on_dependencies()` now runs once per rendered instance
+  each time an interactive page is serialized, as documented, instead of
+  twice.
 - Serializing a render again with `deps_strategy="simple"`, after an
   interactive `"document"` or `"fragment"` serialization of it, now writes
   its scripts and stylesheets like a fresh render instead of leaving them
