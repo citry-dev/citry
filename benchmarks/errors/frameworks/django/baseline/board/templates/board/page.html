@@ -5,6 +5,10 @@
   <meta charset="utf-8">
   <title>Board</title>
   <link rel="stylesheet" href="{% static 'board/board.css' %}">
+  {# The server picks the heading color; board.css reads it as --accent. #}
+  <style>
+    :root { --accent: {{ accent }}; }
+  </style>
   <script src="{% static 'board/htmx.min.js' %}" defer></script>
   <script src="{% static 'board/board.js' %}" defer></script>
   <script src="{% static 'board/alpine.min.js' %}" defer></script>
@@ -13,6 +17,8 @@
   {{ api_base|json_script:"api-base" }}
   <div class="board" title="Board" x-data="board" @close="open = false">
     <h1>{% translate "Projects" %}</h1>
+    <p>{% blocktranslate with name=owner.name %}Owned by {{ name }}{% endblocktranslate %}</p>
+    <img src="{% static 'board/avatar.svg' %}" alt="{{ owner.name }}" width="32" height="32">
     <p>Owner: {{ owner.name }}</p>
     <p>API: <span x-text="api"></span></p>
 
@@ -44,9 +50,17 @@
       <button type="button" @click="close">Close</button>
     </p>
 
-    <form role="search">
+    <form role="search" x-data="{ query: '' }">
+      <input type="search" name="q" x-model="query">
       <button type="submit">Search</button>
+      <p>Searching for: <span x-text="query"></span></p>
     </form>
+    {% if searched %}<p>Searched: {{ searched }}</p>{% endif %}
+
+    <nav>
+      <a href="{% url 'about' %}">About</a>
+      <a href="{% url 'project' 1 %}">Project 1</a>
+    </nav>
   </div>
 </body>
 </html>

@@ -1,5 +1,5 @@
 from app.citry_app import citry_app
-from app.data import API_BASE, Owner, Project
+from app.data import ACCENT, API_BASE, Owner, Project
 from citry import Component
 
 
@@ -23,6 +23,10 @@ class BoardPage(Component):
         # Only the public API base goes to the browser.
         return {"apiBase": API_BASE, "hiddenTitles": []}
 
+    def css_data(self, kwargs: Kwargs, slots: Slots):
+        # The server picks the heading color; the stylesheet reads it as --accent.
+        return {"accent": ACCENT}
+
     template = """
       <!DOCTYPE html>
       <html lang="en">
@@ -33,7 +37,14 @@ class BoardPage(Component):
         </head>
         <body>
           <h1>{{ tr("board-title") }}</h1>
+          <p>{{ tr("board-subtitle", name=owner.name) }}</p>
           <div class="board" title="Board">
+            <img
+              src="/static/avatar.svg"
+              c-alt="owner.name"
+              width="32"
+              height="32"
+            />
             <p>Owner: {{ owner.name }}</p>
             <p>API: <span v-text="apiBase"></span></p>
             <div class="cards">
@@ -54,9 +65,11 @@ class BoardPage(Component):
             </div>
             <c-Counter />
             <c-Details />
-            <form role="search">
-              <button type="submit">Search</button>
-            </form>
+            <c-Search />
+            <nav>
+              <a href="/about">About</a>
+              <a href="/projects/1">Project 1</a>
+            </nav>
           </div>
           <c-js />
         </body>
@@ -74,6 +87,10 @@ class BoardPage(Component):
     """
 
     css = """
+      h1 {
+        color: var(--accent);
+      }
+
       .board {
         color: rgb(0, 128, 0);
       }
@@ -81,4 +98,7 @@ class BoardPage(Component):
 
     messages = """
       board-title = Projects
+
+      # @param {str} $name - The board owner's name.
+      board-subtitle = Owned by { $name }
     """

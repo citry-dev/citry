@@ -12,6 +12,8 @@ from starlette.templating import Jinja2Templates
 # token is a server secret that no template is given.
 API_BASE = "/api"
 SECRET_TOKEN = "s3cr3t"
+# The heading's color, which the stylesheet reads as the CSS variable --accent.
+ACCENT = "rgb(0, 0, 255)"
 
 templates = Jinja2Templates(directory="templates")
 
@@ -43,10 +45,21 @@ async def homepage(request: Request):
         {
             "owner": OWNER,
             "api_base": API_BASE,
+            "accent": ACCENT,
             "projects": projects,
             "count": request.app.state.count,
+            # The search form submits back to this page with its text in `q`.
+            "searched": request.query_params.get("q", ""),
         },
     )
+
+
+async def about(request: Request):
+    return templates.TemplateResponse(request, "about.html")
+
+
+async def project(request: Request):
+    return templates.TemplateResponse(request, "project.html", {"project_id": request.path_params["project_id"]})
 
 
 async def save(request: Request):
@@ -65,6 +78,8 @@ app = Starlette(
     routes=[
         Route("/", homepage),
         Route("/save", save, methods=["POST"]),
+        Route("/about", about, name="about"),
+        Route("/projects/{project_id:int}", project, name="project"),
         Mount("/static", app=StaticFiles(directory="static"), name="static"),
     ],
 )

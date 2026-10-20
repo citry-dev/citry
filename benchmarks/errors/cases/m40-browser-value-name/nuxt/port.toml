@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "config.public.apiBsae" }
+mistake = { file = "app/pages/index.vue", contains = "config.public.apiBsae" }
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = "{{ config.public.apiBase }}"
 new = "{{ config.public.apiBsae }}"

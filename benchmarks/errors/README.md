@@ -268,8 +268,10 @@ every framework.
 
 | Part | What the page does | Used by |
 | --- | --- | --- |
-| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title` | m15 |
+| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title`. The server sets its color, blue, as the CSS variable `--accent`, which the stylesheet reads (Nuxt's stylesheet reads the server's value with Vue's `v-bind()` instead) | m15, m43 |
+| Subtitle | `Owned by Ada` under the heading. Where translations are built in, it comes from a message that takes the owner's name as an argument | m46 |
 | Board wrapper | A `<div class="board" title="Board">` around everything below. The stylesheet makes `.board` text `rgb(0, 128, 0)` | m10, m11, m16 |
+| Avatar | An `<img>` of the owner from the app's static files, `avatar.svg`, with the alt text `Ada` | m48 |
 | Owner | `Owner: Ada`, read in the template from a server object `owner` with a `name` attribute | m07, m08 |
 | Public setting | `API: /api`. The server passes the public value `/api` to browser-side code, which renders it. The server also holds `SECRET_TOKEN = "s3cr3t"`, which never reaches the browser | m12, m40, m41, m42 |
 | Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks` | m01 to m04, m17, m22, m23, m47 |
@@ -279,7 +281,8 @@ every framework.
 | Counter | `Saved: 0` and an `Add` button. Add sends `{amount: 1}` to a server handler, route or action named `save`. The server adds `amount` to a value kept in a state field named `count`, and the page then shows `Saved: 1` | m06, m13, m18, m32, m33, m34, m38, m39 |
 | Details | A `Details` button toggles browser-side state named `open` and reports it through `aria-expanded`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31 |
 | Status | Inside Details, a browser-side `Status` component with a required boolean input `open` shows `Status: open` or `Status: closed`. Its `Close` button tells Details to close through an event or callback named `close` | m25 to m28 |
-| Search form | `<form role="search"><button type="submit">Search</button></form>` | m09 |
+| Search form | `<form role="search">` with a search field named `q` and `<button type="submit">Search</button>`. A line `Searching for: ...` repeats what is typed, and submitting `alpha` shows `Searched: alpha` | m09, m44 |
+| Links | An `About` link to the route `about` at `/about`, whose page reads `About this board`, and a `Project 1` link to `/projects/1`, whose page reads `Project 1` | m45 |
 
 Each card's footer link names its own project.
 
@@ -310,15 +313,16 @@ the count. Journeys run in the order `framework.toml` lists them, after the
 default one, so the clean app and the case start each journey from the same
 server state, apart from what the mistake itself changed. Every case runs
 every journey of its framework, so a mistake is compared on every part of
-the page any journey reaches. Every framework except FastHTML, which has
-no status line, also lists a `status` journey, which clicks `Details`,
-`Close`, and `Details` again.
+the page any journey reaches. Every framework lists three more journeys:
+`search` types `alpha` into the search field and presses Enter, and
+`about` and `project` click the `About` and `Project 1` links. Every
+framework except FastHTML, which has no status line, also lists a `status`
+journey, which clicks `Details`, `Close`, and `Details` again.
 
 A framework lists its journeys in `framework.toml`, by name, because the
-selectors differ between frameworks. In this example, which is not taken
-from any framework here, `search` is a second journey that types into a
-search field and submits it (the real default journeys also click `Details`
-and `Hide`):
+selectors differ between frameworks. In this shortened example, `search`
+is a second journey that types into the search field and submits it (the
+real default journeys also click `Details` and `Hide`):
 
 ```toml
 [runtime.journeys]
@@ -327,8 +331,8 @@ default = [
   { action = "wait", ms = 500 },
 ]
 search = [
-  { action = "fill", selector = "input[name=q]", text = "alpha" },
-  { action = "press", selector = "input[name=q]", key = "Enter" },
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
 ]
 ```
 

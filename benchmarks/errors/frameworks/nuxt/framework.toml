@@ -9,10 +9,17 @@ max_jobs = 1
 notes = """
 The baseline is the `npm create nuxt@latest` minimal starter (create-nuxt 4.0.1, template
 `minimal`, no modules selected), pinned to nuxt 4.5.2, vue 3.5.42 and vue-router 5.3.1. On top
-of the starter it adds the reference page: `app/app.vue` and `app/components/Card.vue`, written
-as `<script setup lang="ts">`, a global stylesheet listed in `css`, the public and private
-`runtimeConfig` keys, two server routes in `server/api/`, and the saved total in
-`server/utils/state.ts`. Node is the system Node, v26.5.0 with npm 11.17.0 (nuxt 4.5.2 accepts
+of the starter it adds the reference page, written as `<script setup lang="ts">`: the board in
+`app/pages/index.vue`, the About and project pages in `app/pages/about.vue` and
+`app/pages/projects/[id].vue`, `app/components/Card.vue` and `Status.vue`, a global stylesheet
+listed in `css`, the public and private `runtimeConfig` keys, two server routes in `server/api/`,
+and the saved total in `server/utils/state.ts`. With more than one page, `app/app.vue` renders
+`<NuxtPage />`, as Nuxt's routing docs show, and the page links to the others with
+`<NuxtLink>`.
+
+The board data carries the heading's color, and the page's `<style>` reads it with Vue's
+`v-bind()`, the way Vue's docs link CSS to component state. The search form submits back to the
+page with GET, and the page reads `route.query.q`. Node is the system Node, v26.5.0 with npm 11.17.0 (nuxt 4.5.2 accepts
 Node ^22.19.0, ^24.11.0 or >=26.0.0).
 
 The benchmark adds typescript 6.0.3 and vue-tsc 3.3.13 as dev dependencies, only to run the
@@ -27,9 +34,9 @@ recommends. It first runs `nuxi prepare`, as the starter's postinstall script do
 `vueCompilerOptions` stay at their defaults, so `strictTemplates` and the `checkUnknown*`
 options are off. vue-tsc checks every file, while the editor shows diagnostics only for open
 files. A type error is reported where the wrong value is used: in m17 the server route returns a
-string, and vue-tsc reports TS2322 at the `:count` binding in `app/app.vue`. The case's
+string, and vue-tsc reports TS2322 at the `:count` binding in `app/pages/index.vue`. The case's
 `indirect` note records why that finding still counts. A developer editing the route sees no
-error there; the editor shows it only with `app/app.vue` open.
+error there; the editor shows it only with `app/pages/index.vue` open.
 
 vue-tsc reports only TypeScript's diagnostics. The extension also shows the Vue compiler's own
 errors for a single-file component (SFC), such as "Element is missing end tag", through the
@@ -109,4 +116,17 @@ status = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "click", selector = "button:has-text('Close')" },
   { action = "click", selector = "button:has-text('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:has-text('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:has-text('Project 1')" },
 ]

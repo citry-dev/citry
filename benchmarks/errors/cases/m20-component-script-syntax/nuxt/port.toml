@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "!open.value)" }
+mistake = { file = "app/pages/index.vue", contains = "!open.value)" }
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = "open.value = !open.value"
 new = "open.value = !open.value)"

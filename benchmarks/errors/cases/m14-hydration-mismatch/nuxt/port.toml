@@ -1,8 +1,8 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "import.meta.client" }
+mistake = { file = "app/pages/index.vue", contains = "import.meta.client" }
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = '''
 const open = ref(false)
 '''
@@ -12,7 +12,7 @@ const detailsLabel = import.meta.client ? 'Details' : 'Loading details'
 '''
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = '''
       <button type="button" :aria-expanded="open" @click="toggleDetails">
         Details

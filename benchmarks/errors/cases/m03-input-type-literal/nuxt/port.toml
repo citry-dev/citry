@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "count=\"card.count\"" }
+mistake = { file = "app/pages/index.vue", contains = "count=\"card.count\"" }
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = ':count="card.count"'
 new = 'count="card.count"'

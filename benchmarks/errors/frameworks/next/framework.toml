@@ -20,6 +20,13 @@ starter:
   Without it Turbopack takes the repository root as its root, because the
   repository has a pnpm-workspace.yaml.
 The secret lives in .env, as the Next.js environment-variable docs describe.
+The search form is next/form's `<Form action="/">` in a client component
+that keeps the text typed so far in state, and the page reads `q` from its
+`searchParams`. The About and project pages are App Router pages that the
+page links to with next/link. The avatar is a next/image `<Image>` of a
+file in public/, because the starter's ESLint config warns on a plain
+`<img>` (@next/next/no-img-element). The board sets the heading's color as
+the CSS variable `--accent` in an inline style, which globals.css reads.
 
 Versions come from the lockfile: next 16.3.5, react and react-dom 19.3.0,
 typescript 5.9.3, @types/react and @types/react-dom 19.3.0, @types/node
@@ -111,3 +118,24 @@ selector = "button:text-is('Close')"
 [[runtime.journeys.status]]
 action = "click"
 selector = "button:text-is('Details')"
+
+# Types into the search field and submits the form.
+[[runtime.journeys.search]]
+action = "fill"
+selector = "form[role=search] input"
+text = "alpha"
+
+[[runtime.journeys.search]]
+action = "press"
+selector = "form[role=search] input"
+key = "Enter"
+
+# Follows the About link to its page.
+[[runtime.journeys.about]]
+action = "click"
+selector = "a:text-is('About')"
+
+# Follows the project link to its page.
+[[runtime.journeys.project]]
+action = "click"
+selector = "a:text-is('Project 1')"

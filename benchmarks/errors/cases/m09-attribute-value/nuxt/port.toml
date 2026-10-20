@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "sumbit" }
+mistake = { file = "app/pages/index.vue", contains = "sumbit" }
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = '<button type="submit">Search</button>'
 new = '<button type="sumbit">Search</button>'

@@ -31,6 +31,8 @@ the reference page's status line (the browser-side `Status` component inside \
 Details) and lists no journey for it. The Details button still reports its \
 state through `aria-expanded`, which the page's script updates.
 
+The search form submits back to the page with GET, and the page's route function takes `q: str = ""`, which FastHTML fills from the query string. The board sets the heading's color as the CSS variable `--accent` in its `style`, and app.css reads it. The About and project pages are routes written as `@rt("/about")` on functions named after them, since a second function named `get` would redefine the first, which ruff reports. The page links to them with path strings, as it names its other routes.
+
 editor: FastHTML's docs name no editor. VS Code with Pylance is used as the \
 most common Python setup, with type checking turned on. It is measured with \
 pyright 1.1.414, the engine Pylance runs, from the command line with \
@@ -103,4 +105,17 @@ default = [
   { action = "wait", ms = 500 },
   { action = "click", selector = "button:text-is('Details')" },
   { action = "click", selector = "button:text-is('Hide')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:text-is('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:text-is('Project 1')" },
 ]

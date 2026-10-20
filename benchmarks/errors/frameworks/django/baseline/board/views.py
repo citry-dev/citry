@@ -29,8 +29,19 @@ def page(request):
         'cards': cards,
         # The template hands this to Alpine through the json_script filter.
         'api_base': settings.API_BASE,
+        'accent': settings.ACCENT,
         'count': request.session.get('count', 0),
+        # The search form submits back to this page with its text in `q`.
+        'searched': request.GET.get('q', ''),
     })
+
+
+def about(request):
+    return render(request, 'board/about.html')
+
+
+def project(request, project_id):
+    return render(request, 'board/project.html', {'project_id': project_id})
 
 
 @require_POST

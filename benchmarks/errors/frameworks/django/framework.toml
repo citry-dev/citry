@@ -58,6 +58,8 @@ none): ruff with its default rules for the Python files, and djLint with its \
 Django profile for the templates. A linter finding fails its command, so it \
 counts as an error. There is no build stage.
 
+The view passes the heading's color as `accent`, and the page writes it into a `<style>` block in its head as the CSS variable `--accent`, which board.css reads. A `style` attribute would be the shorter form, but djLint flags inline styles (H021). The subtitle passes the owner's name to its message with `{% blocktranslate with name=owner.name %}`, Django's way to give a translated message an argument. The search form submits back to the page with GET, and the view reads `q`. The About and project pages have their own views and templates, and the page links to them with `{% url %}`; the project page's URL takes the number as `<int:project_id>`.
+
 runtime: `manage.py migrate`, because sessions are stored in the database and \
 need their table (the Django tutorial runs it too), then `manage.py runserver \
 --noreload`, so the runner stops a single process.
@@ -126,4 +128,17 @@ status = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "click", selector = "button:has-text('Close')" },
   { action = "click", selector = "button:has-text('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:has-text('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:has-text('Project 1')" },
 ]

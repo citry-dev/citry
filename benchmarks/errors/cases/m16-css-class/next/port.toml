@@ -3,5 +3,5 @@ mistake = { file = "app/page.tsx", contains = 'className="bord"' }
 
 [[edits]]
 file = "app/page.tsx"
-old = '<div className="board" title="Board">'
-new = '<div className="bord" title="Board">'
+old = '<div className="board" title="Board" style='
+new = '<div className="bord" title="Board" style='
