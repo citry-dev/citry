@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'Status(open="open"' }
+
+[[edits]]
+file = "main.py"
+old = 'Status(open=open,'
+new = 'Status(open="open" if open else "closed",'

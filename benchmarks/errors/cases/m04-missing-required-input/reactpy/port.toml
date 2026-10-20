@@ -1,0 +1,9 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'Card(' }
+
+[[edits]]
+file = "main.py"
+old = '''
+                        title=project.title,
+'''
+new = ''

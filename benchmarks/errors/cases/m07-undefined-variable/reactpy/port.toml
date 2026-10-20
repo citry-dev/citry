@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'ownr.name' }
+
+[[edits]]
+file = "main.py"
+old = 'html.p(f"Owner: {owner.name}"),'
+new = 'html.p(f"Owner: {ownr.name}"),'

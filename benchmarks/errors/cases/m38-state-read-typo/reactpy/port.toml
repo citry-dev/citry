@@ -1,0 +1,9 @@
+# The counter's text reads a misspelled name; `save` still reads and sets
+# `count` correctly.
+status = "ported"
+mistake = { file = "main.py", contains = '{cuont}' }
+
+[[edits]]
+file = "main.py"
+old = 'html.p(f"Saved: {count}"),'
+new = 'html.p(f"Saved: {cuont}"),'

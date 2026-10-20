@@ -1,0 +1,216 @@
+key = "reactpy"
+name = "ReactPy"
+notes = """
+The app follows ReactPy's docs: components are Python functions marked \
+`@component`, elements are built with `reactpy.html` (`html.div`, \
+`html.button`) and a dict of attributes, state is kept with \
+`hooks.use_state`, and event handlers are Python functions given as \
+`on_click`. main.py builds a Starlette app and lets \
+`reactpy.backend.starlette.configure` add ReactPy's routes; uvicorn serves \
+it. This is how ReactPy's guide to running an app does it, and how the \
+ReactPy app in benchmarks/web runs. ReactPy 1.1.0, Starlette 0.52.1, uvicorn \
+0.52.4 and websockets 17.1 match the ReactPy app in benchmarks/web, and so \
+do the other resolved versions it shares; ReactPy-Router 2.0.0 is added \
+for the extra pages; all are locked in baseline/uv.lock for \
+Python 3.12. Starlette stays on 0.x because ReactPy's Starlette backend \
+calls `add_websocket_route`, which Starlette 1.x does not have. ReactPy has \
+no project generator and installs no type checker or linter, so the static \
+stages are the tools most Python projects add.
+
+How the page runs: the server sends the browser an HTML page with an empty \
+body. ReactPy's browser code then opens a WebSocket, the server runs the \
+components in Python and sends the elements they return as JSON, and the \
+browser builds the page from them. A click goes back over the WebSocket, the \
+server runs the Python handler, and it sends the parts of the page that \
+changed. So every value the reference page calls browser-side state (the \
+details panel's `open`, the hidden cards, the saved count) is component \
+state held on the server, one copy for each open page. A reload opens a new \
+page, so the clean page shows `Saved: 0` again after the reload, as Citry's \
+does.
+
+The parts of the page:
+- Page (main.py) holds the hidden cards' titles and renders the heading, the \
+board and the other parts. The cards sit in a wrapper of their own, because \
+ReactPy matches children without a key by position: if the cards sat \
+directly in the board, hiding one would move the counter and the details \
+panel up one place, and ReactPy would start them again with fresh state.
+- Card (card.py) takes `title: str`, `count: int`, \
+`tone: Literal["plain", "accent"]`, a `footer` function and an `on_hide` \
+function. It hands its title and count back to the page by calling \
+`footer(title, count)`, and the page passes a lambda that builds the link, \
+as the FastHTML app does. Hide calls `on_hide()` with no value. The page \
+builds each card's handler with `make_hide(project.title)`, a function \
+that returns a handler for one title, the way ReactPy's docs build one \
+handler per list item. (A lambda written in the loop would see only the \
+last project, because a Python closure reads a loop variable when it runs.)
+- Counter (main.py) keeps `count` with `use_state`. Add calls \
+`save(amount=1)`, a plain Python function in the component. The browser \
+sends only the click, and the amount is a Python argument that never \
+crosses the network. The reference page asks for a `save` handler that \
+receives an amount, so the request-payload mistakes (m18, m32, m33) are \
+written in that call, and they score as editor errors because pyright \
+checks it.
+- Details (main.py) keeps `open` with `use_state` and passes it to the \
+status line. Status (status.py) takes `open: bool` and an `on_close` \
+function, which its Close button calls.
+- The API line is the one part written as browser code: a ReactPy \
+JavaScript component in api_line.js, loaded with `web.module_from_file` \
+and given the API base as a prop. JavaScript components are how ReactPy's \
+docs add browser code to a page. ReactPy turns a prop's snake_case name \
+into camelCase on the way, so Python passes `api_base` and the script \
+reads `props.apiBase`. ReactPy's docs example loads Preact from a CDN. \
+This script instead implements ReactPy's `bind`, `create` and `render` \
+interface itself, as the web app's disclosure.js does, so every run works \
+offline. A ReactPy developer who only needs to show the value \
+would write `html.p(f"API: {API_BASE}")`, with no browser code at all; the \
+reference page asks for browser code here because m12 and m40 to m42 test \
+what passes between the server and browser code.
+- Search (main.py) is a form with no submit handler, so the browser \
+submits it the ordinary way, back to `/` with the text as `q` in the URL. \
+Page reads it with ReactPy-Router's `use_search_params()`. The field is \
+controlled by `use_state`, so the `Searching for:` line repeats what is \
+typed. A ReactPy developer could instead handle `on_submit` and keep the \
+text in state, so no field name would be read and m44 would not apply; \
+the page submits the form because the reference page has the server read \
+the field `q`.
+- The About and project pages come from ReactPy-Router 2.0.0, the router \
+the ReactPy project publishes for ReactPy 1.1: App lists the routes with \
+`browser_router` and `route`, the project page reads its `{id:int}` part \
+with `use_params()`, and the page links to both with the router's `link`, \
+which changes the page in the browser without a new page load. A last \
+route catches every other URL with a `Page not found` heading, as the \
+router's docs show; without it, a URL that matches no route would leave \
+the page empty, with no error either.
+- Static files: Starlette's `StaticFiles` serves static/ at `/static`, \
+mounted before ReactPy's routes, because ReactPy answers every other path \
+with its page. The stylesheet, static/app.css, and the page title go in \
+the document head through the backend's `Options(head=...)`. The page's \
+outer element sets the heading's color as the CSS variable `--accent` in \
+its `style`, and app.css reads it. The owner's avatar, static/avatar.svg, \
+is an `html.img`. The subtitle `Owned by Ada` is a Python f-string, since \
+ReactPy has no translations (m15 and m46 do not apply).
+
+What pyright sees: ReactPy types `@component` as returning \
+`Callable[..., Component]`, so pyright accepts any arguments in a call to a \
+component. A misspelled, missing or wrong-typed input (m02, m04, m05, m17, \
+m25 to m27, m29, m35, m49) is not reported before the app runs. Inside a \
+component, pyright checks the code against the parameters' types, so a \
+wrong operation on `title` (m23) and a misspelled callback (m24) are editor \
+errors. Because pyright does not check the call to `Card`, the page's \
+footer lambda gets no parameter types either, so treating `count` as text \
+(m37) fails only when the card renders. A call with an unknown or missing \
+argument raises a `TypeError` when ReactPy renders the component; ReactPy \
+logs it with a traceback and draws the component empty, or, in debug mode \
+as here, shows the error text in its place. Nothing checks argument types \
+at runtime. ReactPy has no setting or typed \
+alternative that lets pyright check component arguments.
+
+editor: ReactPy ships no editor extension. VS Code with Pylance is used as \
+the most common Python setup, with type checking turned on. It is measured \
+with pyright 1.1.414, the engine Pylance runs, from the command line with \
+`typeCheckingMode = "standard"` set in pyproject.toml, which Pylance reads \
+too (Pylance's own default is "off"). The baseline adds pyright as a dev \
+dependency only to take this measurement. VS Code's own JavaScript check \
+would see api_line.js, but no case puts a syntax error there (m20's toggle \
+is Python in ReactPy), so it is not a stage.
+
+check: ruff with its default rules. A ruff finding fails the command, so it \
+counts as an error. ReactPy has no check command. Its hooks docs recommend \
+a flake8 plugin, flake8-reactpy-hooks, that checks where hooks are called; \
+no package of that name is on PyPI. The plugin the ReactPy project does \
+publish, reactpy-flake8 0.7.0 (2023), fails to load with flake8 7.4.1, \
+because it imports `pkg_resources`, which neither a fresh environment nor \
+setuptools 84.2.1, the current release, provides. No mistake in the \
+catalogue calls a hook in the wrong place, so it would report nothing here \
+either. There is no build stage.
+
+runtime: `uvicorn main:app`. ReactPy's guide also shows `reactpy.run()`, \
+which it calls a development server: it builds the same Starlette app with \
+Starlette's `debug` flag on and serves it with uvicorn. That flag changes \
+only the HTTP error pages, which no case reaches (every runtime error here \
+happens while ReactPy renders over the WebSocket), so the app keeps the \
+guide's `configure` form, which lets the runner pass the port on the \
+uvicorn command line. The one setting changed from ReactPy's defaults is debug mode, turned on with `REACTPY_DEBUG_MODE=1` (its default \
+is off). In debug mode ReactPy checks each element it sends against its \
+element format, checks that every attribute can be sent as JSON, warns \
+about a list child without a key, checks that each JavaScript component a \
+page asks for is exported by its file, logs more, and shows a component's \
+render error in the page in place of the component. The benchmark runs \
+each framework's development mode, and Next.js, through React, gives the \
+same kind of development warnings, so the rule on stricter settings turns \
+it on. It changes no cell: runs with `REACTPY_DEBUG_MODE=0` gave the same \
+49 cells. Each error it shows in the page is also logged without it, and \
+m41 fails either way (in debug mode when the element is built, otherwise \
+when the update is sent, which leaves the page blank while the browser \
+keeps reconnecting).
+
+Two cases changed after their first results, before any run was published, \
+because their first form did not match ReactPy's natural one. The page \
+first had the card pass its title to `on_hide`, which made m30 a ported \
+case; it now builds one handler per card, as ReactPy's docs do, so m30 does \
+not apply. m28 first assigned the input with `nonlocal open`, which no tool \
+reports; it now writes the plain `open = False`, the literal form of the \
+mistake, which ruff reports as an unused local name.
+"""
+
+[setup]
+manifests = [".python-version", "pyproject.toml", "uv.lock"]
+# `pyright --version` downloads pyright's npm package once, so the first
+# measured run does not spend its timeout on a download.
+command = ["sh", "-c", "uv sync --frozen && .venv/bin/pyright --version"]
+
+[[stages]]
+stage = "editor"
+label = "Pylance, type checking on (pyright 1.1.414, standard)"
+argv = ["{venv}/bin/pyright", "--outputjson", "--pythonpath", "{venv}/bin/python"]
+parser = "pyright-json"
+timeout = 300
+env = { PYRIGHT_PYTHON_IGNORE_WARNINGS = "1" }
+
+[[stages]]
+stage = "check"
+label = "ruff 0.15.5 (default rules)"
+# --isolated: a real project's ruff reads only its own settings, not those of
+# a repository it happens to sit in.
+argv = ["{venv}/bin/ruff", "check", "--isolated", "--no-respect-gitignore", "--output-format", "json", "."]
+parser = "ruff-json"
+timeout = 300
+
+[runtime]
+# The app is a Starlette app that ReactPy's backend configures, served by
+# uvicorn, as ReactPy's guide to running it shows.
+argv = ["{venv}/bin/uvicorn", "main:app", "--host", "127.0.0.1", "--port", "{port}"]
+# ReactPy's debug mode adds its development checks and logs; see the notes.
+env = { REACTPY_DEBUG_MODE = "1", PYTHONUNBUFFERED = "1" }
+page_path = "/"
+ready_timeout = 180
+settle_ms = 1000
+[runtime.journeys]
+default = [
+  { action = "click", selector = "button:text-is('Add')" },
+  { action = "wait", ms = 500 },
+  { action = "click", selector = "button:text-is('Details')" },
+  { action = "wait", ms = 300 },
+  { action = "click", selector = "button:text-is('Hide')" },
+]
+# Opens the details, closes them from the status line, and opens them again.
+status = [
+  { action = "click", selector = "button:text-is('Details')" },
+  { action = "wait", ms = 300 },
+  { action = "click", selector = "button:text-is('Close')" },
+  { action = "wait", ms = 300 },
+  { action = "click", selector = "button:text-is('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:text-is('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:text-is('Project 1')" },
+]

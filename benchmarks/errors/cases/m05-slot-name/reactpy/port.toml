@@ -1,0 +1,9 @@
+# The card's footer is a function the page passes in; the card calls it with
+# its title and count.
+status = "ported"
+mistake = { file = "main.py", contains = 'fotter=' }
+
+[[edits]]
+file = "main.py"
+old = 'footer=lambda title, count:'
+new = 'fotter=lambda title, count:'

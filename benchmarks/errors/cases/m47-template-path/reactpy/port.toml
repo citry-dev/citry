@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'from crad import Card' }
+
+[[edits]]
+file = "main.py"
+old = 'from card import Card'
+new = 'from crad import Card'

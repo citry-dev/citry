@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = '"on_clik"' }
+
+[[edits]]
+file = "main.py"
+old = '"on_click": toggle'
+new = '"on_clik": toggle'

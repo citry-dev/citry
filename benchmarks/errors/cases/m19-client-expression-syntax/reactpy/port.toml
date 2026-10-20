@@ -1,0 +1,9 @@
+# ReactPy writes the page's markup as Python, so the conditional that shows the
+# details text is a Python expression; here it has lost its `else` value.
+status = "ported"
+mistake = { file = "main.py", contains = 'if open else,' }
+
+[[edits]]
+file = "main.py"
+old = 'html.p("Details are visible") if open else None,'
+new = 'html.p("Details are visible") if open else,'

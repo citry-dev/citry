@@ -1,0 +1,9 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'Card(' }
+
+[[edits]]
+file = "main.py"
+old = '''
+                        footer=lambda title, count: html.a({"href": f"#{title.lower()}"}, f"Open {title} ({count})"),
+'''
+new = ''

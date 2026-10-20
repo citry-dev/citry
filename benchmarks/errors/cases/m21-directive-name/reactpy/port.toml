@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+ReactPy has no template directives. The page shows the details text with a Python conditional expression (`html.p(...) if open else None`), so there is no directive name to misspell; misspelling `open` there is an undefined name (m07), and a broken conditional is m19.
+"""

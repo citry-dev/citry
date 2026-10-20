@@ -1,0 +1,13 @@
+# ReactPy elements are Python calls, so an element left open is a call whose
+# closing parenthesis is missing.
+status = "ported"
+mistake = { file = "card.py", contains = 'html.footer(footer(title, count),' }
+
+[indirect]
+reason = 'In ReactPy an unclosed element is an unclosed call. pyright reports the outer `html.article(` call as unclosed, and both pyright and ruff report the end of the file, where the parser runs out of input looking for the closing parenthesis.'
+codes = ["pyright", "invalid-syntax"]
+
+[[edits]]
+file = "card.py"
+old = 'html.footer(footer(title, count)),'
+new = 'html.footer(footer(title, count),'

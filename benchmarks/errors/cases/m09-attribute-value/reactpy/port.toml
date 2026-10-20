@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = '"sumbit"' }
+
+[[edits]]
+file = "main.py"
+old = 'html.button({"type": "submit"}, "Search")'
+new = 'html.button({"type": "sumbit"}, "Search")'

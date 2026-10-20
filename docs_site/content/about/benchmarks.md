@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and seven others report the same 49 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and eight others report the same 49 developer mistakes.
 ---
 
 # Benchmarks
@@ -72,7 +72,7 @@ noise.
 
 The earlier a mistake is reported, the less time it costs you.
 
-We wrote the same small app in Citry and seven other frameworks, made
+We wrote the same small app in Citry and eight other frameworks, made
 the same 49 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**. Rusty is the Django app with its
@@ -83,6 +83,9 @@ django-components is the Django app with its page, cards, counter and
 status line rewritten as components of
 [django-components](https://github.com/django-components/django-components),
 the Django library Citry grew out of.
+[ReactPy](https://github.com/reactive-python/reactpy) lets you write
+React-style components in Python: the server runs them and sends the
+browser the page to show.
 
 <c-error-benchmark-chart
   title="How the 49 mistakes ended in each framework"
@@ -107,7 +110,7 @@ the Django library Citry grew out of.
 
 - **Before the app runs: 25 of 47** (24 errors, 1 warning). Two of
   the 49 mistakes don't apply to Citry. Next.js 34 of 43, Nuxt 25 of
-  44, FastHTML 17 of 36, Django + HTMX + Alpine 3 of 40,
+  44, ReactPy 19 of 42, FastHTML 17 of 36, Django + HTMX + Alpine 3 of 40,
   Rusty + HTMX + Alpine 3 of 38, django-components + HTMX + Alpine 3
   of 42, Jinja + HTMX + Alpine 2 of 39.
 - **Missed: 15**, nothing tells you:
@@ -172,7 +175,7 @@ the Django library Citry grew out of.
 - **Citry**: the editor extension's language server (measured with
   `citry check --types`) and `citry check`.
 - **Every Python stack** (Citry, Django, Rusty, Jinja,
-  django-components, FastHTML):
+  django-components, FastHTML, ReactPy):
   Pylance with type checking on (measured with pyright in standard mode), and
   ruff with its default rules.
 - **Django, Rusty, Jinja and django-components**: djLint with the
@@ -193,8 +196,12 @@ the Django library Citry grew out of.
   turns this on. Without it, django-components checks only that input
   and slot names are known and that required ones are given, and two
   of its runtime errors (a wrong-typed input in markup, an input value
-  outside its allowed choices) would be missed. The other frameworks
-  keep their default settings for now.
+  outside its allowed choices) would be missed.
+- **ReactPy**: the app turns on ReactPy's debug mode, which is off by
+  default. It adds development checks, such as a warning for a list
+  item without a key, like the ones React gives in development. With it
+  off, every ReactPy result here stays the same.
+- **Other frameworks**: default settings.
 - **Setup**: the project layout from each framework's docs or starter,
   with default settings unless the
   [benchmark notes](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)

@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+ReactPy runs the Add button's click handler on the server, and the handler updates the counter's state; ReactPy then sends the browser the parts of the page that changed. No browser code reads a reply to the click, so there is no reply field to misspell.
+"""

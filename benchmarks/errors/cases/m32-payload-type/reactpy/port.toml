@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'save(amount="1")' }
+
+[[edits]]
+file = "main.py"
+old = 'lambda event: save(amount=1)'
+new = 'lambda event: save(amount="1")'

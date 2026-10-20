@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "card.py", contains = 'title + 1' }
+
+[[edits]]
+file = "card.py"
+old = 'html.p(f"{title}: {count} tasks"),'
+new = 'html.p(f"{title + 1}: {count} tasks"),'

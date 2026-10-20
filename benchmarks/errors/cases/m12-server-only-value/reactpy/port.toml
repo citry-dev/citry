@@ -1,0 +1,9 @@
+# Browser code reads the secret through the props, the way it reads the
+# public setting, as if the server had passed it.
+status = "ported"
+mistake = { file = "api_line.js", contains = 'props.secretToken' }
+
+[[edits]]
+file = "api_line.js"
+old = 'return "API: " + props.apiBase;'
+new = 'return "API: " + props.secretToken;'

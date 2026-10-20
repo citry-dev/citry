@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = '"/abuot"' }
+
+[[edits]]
+file = "main.py"
+old = 'link({"to": "/about"}, "About")'
+new = 'link({"to": "/abuot"}, "About")'
