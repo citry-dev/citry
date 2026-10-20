@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and six others report the same 44 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and seven others report the same 44 developer mistakes.
 ---
 
 # Benchmarks
@@ -72,13 +72,17 @@ noise.
 
 The earlier a mistake is reported, the less time it costs you.
 
-We wrote the same small app in Citry and six other frameworks, made
+We wrote the same small app in Citry and seven other frameworks, made
 the same 44 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**. Rusty is the Django app with its
 templates rendered by
 [Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
 an experimental Rust version of Django's template engine.
+django-components is the Django app with its page, cards, counter and
+status line rewritten as components of
+[django-components](https://github.com/django-components/django-components),
+the Django library Citry grew out of.
 
 <c-error-benchmark-chart
   title="How the 44 mistakes ended in each framework"
@@ -104,7 +108,8 @@ an experimental Rust version of Django's template engine.
 - **Before the app runs: 24 of 42** (23 errors, 1 warning). Two of
   the 44 mistakes don't apply to Citry. Next.js 34 of 39, Nuxt 23 of
   40, FastHTML 17 of 32, Django + HTMX + Alpine 3 of 35,
-  Rusty + HTMX + Alpine 3 of 33, Jinja + HTMX + Alpine 2 of 35.
+  Rusty + HTMX + Alpine 3 of 33, django-components + HTMX + Alpine 3
+  of 37, Jinja + HTMX + Alpine 2 of 35.
 - **Missed: 13**, nothing tells you:
     - a misspelled HTML element, HTML attribute name, or CSS class: the
       page looks wrong
@@ -161,19 +166,30 @@ an experimental Rust version of Django's template engine.
   Every framework's versions are pinned in its app's lockfile.
 - **Citry**: the editor extension's language server (measured with
   `citry check --types`) and `citry check`.
-- **Every Python stack** (Citry, Django, Rusty, Jinja, FastHTML):
+- **Every Python stack** (Citry, Django, Rusty, Jinja,
+  django-components, FastHTML):
   Pylance with type checking on (measured with pyright in standard mode), and
   ruff with its default rules.
-- **Django, Rusty and Jinja**: djLint with the Django or Jinja
-  profile, `manage.py check` for Django and Rusty, and VS Code's
-  JavaScript syntax check for the one script file in the Django and
-  Rusty apps.
+- **Django, Rusty, Jinja and django-components**: djLint with the
+  Django or Jinja profile, `manage.py check` for Django, Rusty and
+  django-components, and VS Code's JavaScript syntax check for the
+  script files in the Django, Rusty and django-components apps.
 - **Next.js and Nuxt**: the editor's TypeScript checks (tsc for
   Next.js; vue-tsc and the Vue compiler's errors for Nuxt), ESLint, and
   the production build.
 - **The running app**: each framework's server, started as its docs
   say, driven in Chromium through the same clicks. Server errors, error
   responses, and browser errors and warnings are recorded.
+- **django-components**: the app turns on one check that is off by
+  default. django-components' docs show how to check the types of a
+  component's inputs: declare them as Pydantic models and install
+  djc-ext-pydantic, an extension the django-components project
+  publishes. Other frameworks here check input types, so the benchmark
+  turns this on. Without it, django-components checks only that input
+  and slot names are known and that required ones are given, and two
+  of its runtime errors (a wrong-typed input in markup, an input value
+  outside its allowed choices) would be missed. The other frameworks
+  keep their default settings for now.
 - **Setup**: the project layout from each framework's docs or starter,
   with default settings unless the
   [benchmark notes](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)
