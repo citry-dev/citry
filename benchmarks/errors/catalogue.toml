@@ -210,6 +210,38 @@ description = "The card's Hide control emits or calls a misspelled event, for ex
 correct = "Clicking Hide on the first card hides that card."
 
 [[mistake]]
+id = "m25-browser-input-name"
+title = "Misspelled input on a browser-side component"
+category = "naming"
+origin = "neutral"
+description = "The details panel passes its open state to the browser-side `Status` component under a misspelled input name, for example `opne` instead of `open`. Where the component reads its parent's state through a shared scope instead of receiving it as an input, as an Alpine component nested inside another does, the misspelled name is the one the component reads."
+correct = "Clicking Details changes the status line from `Status: closed` to `Status: open`."
+
+[[mistake]]
+id = "m26-browser-input-missing"
+title = "Missing required input on a browser-side component"
+category = "naming"
+origin = "neutral"
+description = "The details panel renders the browser-side `Status` component without its required `open` input."
+correct = "Clicking Details changes the status line from `Status: closed` to `Status: open`."
+
+[[mistake]]
+id = "m27-browser-input-type"
+title = "Wrong-typed input on a browser-side component"
+category = "types"
+origin = "neutral"
+description = "The details panel passes `Status` its boolean `open` input as text, for example `\"open\"` or `\"closed\"` instead of `true` or `false`."
+correct = "Clicking Details changes the status line from `Status: closed` to `Status: open`."
+
+[[mistake]]
+id = "m28-input-written-by-child"
+title = "Child component changes an input it received"
+category = "events"
+origin = "neutral"
+description = "The `Status` component's Close button closes the panel by assigning `false` to its `open` input, instead of telling the parent through an event."
+correct = "Clicking Close in the status line hides the details text and the Details button opens it again."
+
+[[mistake]]
 id = "m29-listener-name"
 title = "Parent listens for a misspelled event"
 category = "events"
@@ -266,6 +298,22 @@ description = "The page renders a card without filling its required `footer` slo
 correct = "Each card shows the footer link the page passed in."
 
 [[mistake]]
+id = "m36-slot-data-name"
+title = "Slot fill reads a misspelled slot-data field"
+category = "naming"
+origin = "neutral"
+description = "The card hands its title and count to the `footer` slot, and the page's fill reads the title under a misspelled name, for example `titel` instead of `title`."
+correct = "Each card's footer link reads `Open Alpha (3)`, `Open Beta (5)`, `Open Gamma (8)`."
+
+[[mistake]]
+id = "m37-slot-data-type"
+title = "Slot fill uses slot data as the wrong type"
+category = "types"
+origin = "neutral"
+description = "The page's footer fill treats the card's numeric `count`, which the slot hands back, as text, for example `count + \" tasks\"` in Python or a string method such as `count.padStart(2, \"0\")`."
+correct = "Each card's footer link reads `Open Alpha (3)`, `Open Beta (5)`, `Open Gamma (8)`."
+
+[[mistake]]
 id = "m38-state-read-typo"
 title = "Template reads a misspelled state field"
 category = "naming"
@@ -312,3 +360,11 @@ category = "templates"
 origin = "neutral"
 description = "The page names the file of its layout or of the card's script with a typo, for example an `extends` target, a `template_file`, or an import path such as `./crad`. Django's m01 port is already an include-path typo, so Django's m47 port misspells the `extends` target instead."
 correct = "The page renders three project cards."
+
+[[mistake]]
+id = "m49-input-choice"
+title = "Component input given a value outside its allowed choices"
+category = "types"
+origin = "neutral"
+description = "The card's `tone` input accepts only `plain` or `accent`, and the page passes a misspelled choice, for example `acent`."
+correct = "The first card has the accent border."
