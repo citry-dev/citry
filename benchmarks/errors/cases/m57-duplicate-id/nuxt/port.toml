@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = '<h1 id="board">' }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = '<h1>Projects</h1>'
+new = '<h1 id="board">Projects</h1>'

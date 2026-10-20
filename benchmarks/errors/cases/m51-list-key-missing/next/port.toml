@@ -1,0 +1,12 @@
+status = "ported"
+mistake = { file = 'app/board.tsx', contains = '<Card' }
+
+[[edits]]
+file = 'app/board.tsx'
+old = '''
+          <Card
+            key={project.title}
+'''
+new = '''
+          <Card
+'''

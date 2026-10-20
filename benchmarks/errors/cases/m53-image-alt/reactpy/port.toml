@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'html.img({"src": "/static/avatar.svg"' }
+
+[[edits]]
+file = 'main.py'
+old = '"src": "/static/avatar.svg", "alt": owner.name, '
+new = '"src": "/static/avatar.svg", '

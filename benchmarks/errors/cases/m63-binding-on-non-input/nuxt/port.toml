@@ -1,0 +1,23 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = 'v-model="query"' }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = '''
+      <form role="search">
+        <input
+          v-model="query"
+          type="search"
+          name="q"
+        >
+'''
+new = '''
+      <form
+        v-model="query"
+        role="search"
+      >
+        <input
+          type="search"
+          name="q"
+        >
+'''

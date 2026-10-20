@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'H1("Projects", id="board")' }
+
+[[edits]]
+file = 'main.py'
+old = 'H1("Projects"),'
+new = 'H1("Projects", id="board"),'

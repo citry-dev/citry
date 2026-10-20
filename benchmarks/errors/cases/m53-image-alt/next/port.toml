@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/page.tsx', contains = '<Image src="/avatar.svg"' }
+
+[[edits]]
+file = 'app/page.tsx'
+old = '<Image src="/avatar.svg" alt={owner.name} '
+new = '<Image src="/avatar.svg" '

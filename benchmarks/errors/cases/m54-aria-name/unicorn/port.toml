@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/details.html', contains = 'aria-expandd=' }
+
+[[edits]]
+file = 'board/templates/unicorn/details.html'
+old = 'aria-expanded='
+new = 'aria-expandd='

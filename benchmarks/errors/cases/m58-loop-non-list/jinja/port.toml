@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'templates/index.html', contains = 'projects[0].count' }
+
+[[edits]]
+file = 'templates/index.html'
+old = '{% for project in projects %}'
+new = '{% for project in projects[0].count %}'

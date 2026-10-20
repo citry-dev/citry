@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = '/projects/alpha' }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = '<NuxtLink to="/projects/1">'
+new = '<NuxtLink to="/projects/alpha">'

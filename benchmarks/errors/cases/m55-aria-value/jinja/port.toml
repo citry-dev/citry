@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'templates/index.html', contains = "'yes' : 'no'" }
+
+[[edits]]
+file = 'templates/index.html'
+old = ':aria-expanded="open"'
+new = ":aria-expanded=\"open ? 'yes' : 'no'\""

@@ -1,0 +1,30 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'oninput=' }
+
+[[edits]]
+file = 'main.py'
+old = '''
+            Input(
+                type="search",
+                name="q",
+                oninput="document.getElementById('query').textContent = this.value",
+            ),
+'''
+new = '''
+            Input(
+                type="search",
+                name="q",
+            ),
+'''
+
+[[edits]]
+file = 'main.py'
+old = '''
+            role="search",
+        ),
+'''
+new = '''
+            role="search",
+            oninput="document.getElementById('query').textContent = this.value",
+        ),
+'''

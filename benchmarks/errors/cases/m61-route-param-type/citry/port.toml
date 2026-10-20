@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/components/board_page.py', contains = '/projects/alpha' }
+
+[[edits]]
+file = 'app/components/board_page.py'
+old = '<a href="/projects/1">'
+new = '<a href="/projects/alpha">'

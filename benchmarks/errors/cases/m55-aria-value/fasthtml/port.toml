@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = "open ? 'yes' : 'no'" }
+
+[[edits]]
+file = 'main.py'
+old = "setAttribute('aria-expanded', String(open))"
+new = "setAttribute('aria-expanded', open ? 'yes' : 'no')"

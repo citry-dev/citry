@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = '"class_name": "cards", "class_name": "board"' }
+
+[[edits]]
+file = 'main.py'
+old = '{"class_name": "board", "id": "board"'
+new = '{"class_name": "cards", "class_name": "board", "id": "board"'

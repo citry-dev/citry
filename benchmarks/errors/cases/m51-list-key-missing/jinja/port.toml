@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The server renders the cards in a template loop, and the browser never updates the list in place: Hide only hides the card's own Alpine wrapper (`x-show`), and HTMX swaps in only the counter. A Jinja loop has no key to leave out."

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/board/page.html', contains = 'disabled="false"' }
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = '<button type="submit">Search</button>'
+new = '<button type="submit" disabled="false">Search</button>'

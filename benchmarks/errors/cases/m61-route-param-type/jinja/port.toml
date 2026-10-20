@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'templates/index.html', contains = "project_id='alpha'" }
+
+[[edits]]
+file = 'templates/index.html'
+old = "url_for('project', project_id=1)"
+new = "url_for('project', project_id='alpha')"

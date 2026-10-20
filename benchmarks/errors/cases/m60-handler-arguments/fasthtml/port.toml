@@ -1,0 +1,12 @@
+status = "ported"
+mistake = { file = 'main.py', contains = '(event, reason) =>' }
+
+[[edits]]
+file = 'main.py'
+old = '''
+            document.addEventListener('hide', (event) => {
+'''
+new = '''
+            document.addEventListener('hide', (event, reason) => {
+                console.info(`Hid a card: ${reason}`);
+'''

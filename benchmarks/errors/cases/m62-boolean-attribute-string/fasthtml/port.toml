@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'disabled="false"' }
+
+[[edits]]
+file = 'main.py'
+old = 'Button("Search", type="submit")'
+new = 'Button("Search", type="submit", disabled="false")'

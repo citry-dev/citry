@@ -1,0 +1,18 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'def hide(reason: str)' }
+
+[indirect]
+reason = "`make_hide` declares that it returns a handler that takes no arguments, which is what the card calls, so pyright reports the new `reason` parameter where `make_hide` returns `hide`, a few lines below the changed signature."
+codes = ["reportReturnType"]
+
+[[edits]]
+file = 'main.py'
+old = '''
+        def hide() -> None:
+            set_hidden([*hidden, title])
+'''
+new = '''
+        def hide(reason: str) -> None:
+            print(f"Hid {title}: {reason}")
+            set_hidden([*hidden, title])
+'''

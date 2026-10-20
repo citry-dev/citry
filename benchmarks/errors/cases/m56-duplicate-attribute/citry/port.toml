@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/components/board_page.py', contains = 'class="cards" class="board"' }
+
+[[edits]]
+file = 'app/components/board_page.py'
+old = '<div class="board" id="board"'
+new = '<div class="cards" class="board" id="board"'

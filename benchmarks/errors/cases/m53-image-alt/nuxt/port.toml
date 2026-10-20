@@ -1,0 +1,12 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = 'src="/avatar.svg"' }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = '''
+        src="/avatar.svg"
+        :alt="board?.owner.name"
+'''
+new = '''
+        src="/avatar.svg"
+'''

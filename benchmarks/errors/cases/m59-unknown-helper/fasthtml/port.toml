@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'length(projects)' }
+
+[[edits]]
+file = 'main.py'
+old = '{len(projects)}'
+new = '{length(projects)}'

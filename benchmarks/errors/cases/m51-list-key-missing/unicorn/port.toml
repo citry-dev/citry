@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/project-list.html', contains = '{% unicorn "card"' }
+
+[[edits]]
+file = 'board/templates/unicorn/project-list.html'
+old = '{% unicorn "card" key=card.title title=card.title'
+new = '{% unicorn "card" title=card.title'

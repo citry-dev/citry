@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = 'cards.lenght' }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = '{{ board?.cards.length }}'
+new = '{{ board?.cards.lenght }}'

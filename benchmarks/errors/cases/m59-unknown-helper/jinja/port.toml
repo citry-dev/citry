@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'templates/index.html', contains = 'projects|lenght' }
+
+[[edits]]
+file = 'templates/index.html'
+old = '{{ projects|length }}'
+new = '{{ projects|lenght }}'

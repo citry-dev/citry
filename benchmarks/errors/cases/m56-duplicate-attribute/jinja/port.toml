@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'templates/index.html', contains = 'class="cards" class="board"' }
+
+[[edits]]
+file = 'templates/index.html'
+old = '<div class="board" id="board"'
+new = '<div class="cards" class="board" id="board"'

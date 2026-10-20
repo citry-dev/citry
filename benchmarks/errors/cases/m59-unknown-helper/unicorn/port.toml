@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/project-list.html', contains = 'cards|lenght' }
+
+[[edits]]
+file = 'board/templates/unicorn/project-list.html'
+old = '{{ cards|length }}'
+new = '{{ cards|lenght }}'

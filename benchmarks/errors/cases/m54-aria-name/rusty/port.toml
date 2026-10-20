@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/board/page.html', contains = 'aria-expandd' }
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = ':aria-expanded="open"'
+new = ':aria-expandd="open"'

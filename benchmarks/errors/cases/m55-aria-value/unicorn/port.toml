@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/details.html', contains = "yesno:'yes,no'" }
+
+[[edits]]
+file = 'board/templates/unicorn/details.html'
+old = "yesno:'true,false'"
+new = "yesno:'yes,no'"

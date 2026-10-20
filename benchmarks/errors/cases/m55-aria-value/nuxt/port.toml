@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = "'yes' : 'no'" }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = ':aria-expanded="open"'
+new = ":aria-expanded=\"open ? 'yes' : 'no'\""

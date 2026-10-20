@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "Each card sits in its own Alpine wrapper, whose listener for the card's `hide` event is the inline statement `@hide=\"shown = false\"`, not a function with parameters, and the event carries no value. There is no handler that could take more arguments than the event sends."
