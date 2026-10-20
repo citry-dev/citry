@@ -48,7 +48,8 @@ def _render_page(path: str) -> str | None:
 
 def _static_file(path: str) -> Path | None:
     """Find the file in app/static that a /static/ URL names, refusing a path that leaves the folder."""
-    if not path.startswith("/static/"):
+    # A null byte cannot be part of a file name, and resolve() raises on one.
+    if not path.startswith("/static/") or "\x00" in path:
         return None
     file = (STATIC_DIR / path.removeprefix("/static/")).resolve()
     if not file.is_relative_to(STATIC_DIR) or not file.is_file():

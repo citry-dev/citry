@@ -31,7 +31,15 @@ the reference page's status line (the browser-side `Status` component inside \
 Details) and lists no journey for it. The Details button still reports its \
 state through `aria-expanded`, which the page's script updates.
 
-The search form submits back to the page with GET, and the page's route function takes `q: str = ""`, which FastHTML fills from the query string. The board sets the heading's color as the CSS variable `--accent` in its `style`, and app.css reads it. The About and project pages are routes written as `@rt("/about")` on functions named after them, since a second function named `get` would redefine the first, which ruff reports. The page links to them with path strings, as it names its other routes.
+The search form submits back to the page with GET, and the page's route \
+function takes `q: str = ""`, which FastHTML fills from the query string. \
+The board sets the heading's color as the CSS variable `--accent` in its \
+`style`, and app.css reads it. The About and project pages are routes \
+written as `@rt("/about")` on functions named after them, since a second \
+function named `get` would redefine the first, which ruff reports. The page \
+links to them with path strings, as it names its other routes. Passing \
+the route function itself (`href=about`) would make a misspelled link \
+(m45) an undefined name, as for m06.
 
 editor: FastHTML's docs name no editor. VS Code with Pylance is used as the \
 most common Python setup, with type checking turned on. It is measured with \

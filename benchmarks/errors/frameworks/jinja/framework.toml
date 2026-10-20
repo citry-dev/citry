@@ -22,7 +22,9 @@ reads a form field with `int(str(...))`, because Starlette types a form
 field as text or an uploaded file. pyright reads only the
 Python files; Pylance does not check Jinja templates or the HTMX and Alpine
 attributes in them. VS Code's built-in HTML support checks only <script>
-and <style> blocks inside a page, and this page has no inline script or style. Pylance's default diagnosticMode "openFilesOnly" reports
+and <style> blocks inside a page. The page's one <style> block, which sets
+`--accent`, gives no finding in VS Code's CSS check (tried with
+vscode-css-languageservice 6.3.2), so the editor stage leaves it out. Pylance's default diagnosticMode "openFilesOnly" reports
 only on open files, while the command line checks every file, which can only
 add findings.
 

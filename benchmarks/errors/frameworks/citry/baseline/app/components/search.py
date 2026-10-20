@@ -31,7 +31,11 @@ class Search(Component):
     template = """
       <section class="search">
         <form role="search" @c-submit.prevent="search">
-          <input type="search" name="q" v-model="query" />
+          <input
+            type="search"
+            name="q"
+            v-model="query"
+          />
           <button type="submit">Search</button>
         </form>
         <p>Searching for: <span v-text="query"></span></p>
