@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "FastHTML builds the page from Python functions in main.py, as its docs do. The page has no template files, and the card is a function in the same file, so the page names no template or component file to misspell. Misspelling the card function's name is m01."

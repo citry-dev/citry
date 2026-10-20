@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "templates/index.html", contains = '@clik="open = !open"' }
+
+[[edits]]
+file = "templates/index.html"
+old = '@click="open = !open"'
+new = '@clik="open = !open"'

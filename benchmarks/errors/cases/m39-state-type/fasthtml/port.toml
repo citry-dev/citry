@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = "count = str(count + amount)" }
+
+[[edits]]
+file = "main.py"
+old = "count += amount"
+new = "count = str(count + amount)"

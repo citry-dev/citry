@@ -1,0 +1,12 @@
+status = "ported"
+mistake = { file = "app/components/board_page.py", contains = '"secretToken": SECRET_TOKEN' }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = "from app.data import API_BASE, Owner, Project"
+new = "from app.data import API_BASE, SECRET_TOKEN, Owner, Project"
+
+[[edits]]
+file = "app/components/board_page.py"
+old = 'return {"apiBase": API_BASE, "hiddenTitles": []}'
+new = 'return {"apiBase": API_BASE, "hiddenTitles": [], "secretToken": SECRET_TOKEN}'

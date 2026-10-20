@@ -1,0 +1,9 @@
+# The page reads the saved total from server state for the counter's first
+# text; the server action still reads and writes `count` correctly.
+status = "ported"
+mistake = { file = "app/page.tsx", contains = "state.cuont" }
+
+[[edits]]
+file = "app/page.tsx"
+old = "initialSaved={state.count}"
+new = "initialSaved={state.cuont}"

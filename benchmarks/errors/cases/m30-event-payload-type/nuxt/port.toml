@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "Card declares its `hide` event with no value (`hide: []`) and emits it that way. The page's listener sits inside the loop and already knows the card (`@hide=\"hide(card.title)\"`), so the event carries no payload whose type could be wrong."

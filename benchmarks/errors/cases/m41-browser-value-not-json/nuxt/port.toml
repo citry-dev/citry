@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The public setting lives in `runtimeConfig` in nuxt.config.ts, where the API base `/api` is a plain string. JavaScript has no path type, and its URL class takes only an absolute address, so a developer would not wrap a relative path in one; the page reads the same string the config holds."

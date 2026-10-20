@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/board_page.py", contains = 'v-text="apiBsae"' }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = 'v-text="apiBase"'
+new = 'v-text="apiBsae"'

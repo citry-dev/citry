@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The server action replies with the new total as a bare number, which the page stores as it is (`setSaved(await save(...))`). The reply has no field to misspell."

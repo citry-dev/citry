@@ -1,0 +1,14 @@
+# The setting is defined as a path object where it is declared; the route
+# and the template pass it on unchanged, as in the clean app.
+status = "ported"
+mistake = { file = "app.py", contains = 'API_BASE = PurePosixPath("/api")' }
+
+[[edits]]
+file = "app.py"
+old = "from dataclasses import dataclass\n"
+new = "from dataclasses import dataclass\nfrom pathlib import PurePosixPath\n"
+
+[[edits]]
+file = "app.py"
+old = 'API_BASE = "/api"'
+new = 'API_BASE = PurePosixPath("/api")'

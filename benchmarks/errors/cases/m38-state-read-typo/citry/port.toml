@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/counter.py", contains = "$state.cuont" }
+
+[[edits]]
+file = "app/components/counter.py"
+old = 'v-text="$state.count"'
+new = 'v-text="$state.cuont"'

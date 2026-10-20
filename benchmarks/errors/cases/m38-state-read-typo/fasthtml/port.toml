@@ -1,0 +1,9 @@
+# The page reads the saved total for the counter's text; the save route
+# still reads and writes `count` correctly.
+status = "ported"
+mistake = { file = "main.py", contains = '{cuont}' }
+
+[[edits]]
+file = "main.py"
+old = 'P(f"Saved: {count}", id="saved"),'
+new = 'P(f"Saved: {cuont}", id="saved"),'

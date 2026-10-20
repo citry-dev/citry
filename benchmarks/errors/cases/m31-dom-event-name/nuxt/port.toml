@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/app.vue", contains = '@clik="toggleDetails"' }
+
+[[edits]]
+file = "app/app.vue"
+old = '@click="toggleDetails"'
+new = '@clik="toggleDetails"'

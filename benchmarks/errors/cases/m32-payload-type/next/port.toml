@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/board.tsx", contains = 'save({ amount: "1" })' }
+
+[[edits]]
+file = "app/board.tsx"
+old = "save({ amount: 1 })"
+new = 'save({ amount: "1" })'

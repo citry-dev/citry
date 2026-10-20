@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'Button("Add", hx_post="/save", hx_target="#saved")' }
+
+[[edits]]
+file = "main.py"
+old = 'Button("Add", hx_post="/save", hx_vals=json.dumps({"amount": 1}), hx_target="#saved"),'
+new = 'Button("Add", hx_post="/save", hx_target="#saved"),'

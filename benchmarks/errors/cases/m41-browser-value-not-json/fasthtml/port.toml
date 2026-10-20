@@ -1,0 +1,14 @@
+# The setting is defined as a path object where it is declared; the page
+# passes it to the browser unchanged, as in the clean app.
+status = "ported"
+mistake = { file = "main.py", contains = 'API_BASE = PurePosixPath("/api")' }
+
+[[edits]]
+file = "main.py"
+old = "from dataclasses import dataclass\n"
+new = "from dataclasses import dataclass\nfrom pathlib import PurePosixPath\n"
+
+[[edits]]
+file = "main.py"
+old = 'API_BASE = "/api"'
+new = 'API_BASE = PurePosixPath("/api")'

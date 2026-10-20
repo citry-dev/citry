@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The counter shows the saved total from `$state.count`, which Citry updates in the browser from the handler's state. The Add handler returns nothing, so no browser code reads a field of the server's reply. Misspelling the state field the counter reads is m38."

@@ -1,0 +1,14 @@
+status = "ported"
+mistake = { file = "templates/index.html", contains = "secret_token|tojson" }
+
+[[edits]]
+file = "app.py"
+old = '"api_base": API_BASE,'
+new = '''
+"api_base": API_BASE,
+            "secret_token": SECRET_TOKEN,'''
+
+[[edits]]
+file = "templates/index.html"
+old = "x-data='{ api: {{ api_base|tojson }} }'"
+new = "x-data='{ api: {{ api_base|tojson }}, token: {{ secret_token|tojson }} }'"

@@ -1,0 +1,16 @@
+status = "ported"
+mistake = { file = "board/templates/board/page.html", contains = 'json_script:"secret-token"' }
+
+[[edits]]
+file = "board/views.py"
+old = "'api_base': settings.API_BASE,"
+new = '''
+'api_base': settings.API_BASE,
+        'secret_token': settings.SECRET_TOKEN,'''
+
+[[edits]]
+file = "board/templates/board/page.html"
+old = '{{ api_base|json_script:"api-base" }}'
+new = '''
+{{ api_base|json_script:"api-base" }}
+  {{ secret_token|json_script:"secret-token" }}'''

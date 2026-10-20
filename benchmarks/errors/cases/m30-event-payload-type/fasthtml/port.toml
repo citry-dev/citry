@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The card's Hide button dispatches a `hide` event with no value. The page's listener finds the card from the element that sent the event (`event.target.closest('.card')`), so the event carries no payload whose type could be wrong."

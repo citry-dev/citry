@@ -1,0 +1,22 @@
+# The secret moves under `public`, the runtimeConfig keys Nuxt sends to the
+# browser. No browser code reads it.
+status = "ported"
+mistake = { file = "nuxt.config.ts", contains = "secretToken: 's3cr3t'" }
+
+[[edits]]
+file = "nuxt.config.ts"
+old = '''
+    // Private keys are only available on the server.
+    secretToken: 's3cr3t',
+    // Keys within public are also exposed to the browser.
+    public: {
+      apiBase: '/api',
+    },
+'''
+new = '''
+    // Keys within public are also exposed to the browser.
+    public: {
+      apiBase: '/api',
+      secretToken: 's3cr3t',
+    },
+'''

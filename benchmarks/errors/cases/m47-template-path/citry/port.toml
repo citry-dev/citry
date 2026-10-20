@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The page and the card keep their templates and browser code inside their Python classes, as Citry's starter writes them, and the page uses the card by its tag name, `<c-Card>`, which Citry finds without a path. The page names no template or script file, so there is no path to misspell; misspelling the tag name is m01."

@@ -1,0 +1,9 @@
+# The page route reads the saved total for the counter's text; the save
+# route still reads and writes `count` correctly.
+status = "ported"
+mistake = { file = "app.py", contains = "request.app.state.cuont" }
+
+[[edits]]
+file = "app.py"
+old = '"count": request.app.state.count,'
+new = '"count": request.app.state.cuont,'
