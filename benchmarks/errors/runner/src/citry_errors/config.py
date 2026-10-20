@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import tomllib
 import unicodedata
@@ -14,9 +15,11 @@ if TYPE_CHECKING:
 
 BENCH_ROOT = Path(__file__).resolve().parents[3]
 REPO_ROOT = BENCH_ROOT.parents[1]
-# Installed environments, per-case working copies and raw run evidence stay
-# out of the repository, next to the other benchmarks' caches.
-CACHE = REPO_ROOT / ".benchmarks" / "errors"
+# Installed environments, per-case working copies, raw run evidence and the
+# stored output of earlier runs stay out of the repository, next to the other
+# benchmarks' caches. CITRY_ERRORS_CACHE moves them, for example to share one
+# set of installed frameworks between two checkouts that do not run at once.
+CACHE = Path(os.environ.get("CITRY_ERRORS_CACHE") or REPO_ROOT / ".benchmarks" / "errors").resolve()
 
 # Static stages in the order a developer meets them. The runtime stages and
 # the two "not reported" outcomes follow, so a lower index means earlier.

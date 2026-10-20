@@ -157,8 +157,9 @@ def test_max_jobs_must_be_a_whole_number_of_cases(tmp_path: Path, value: str, ac
 
 
 def test_a_run_on_several_workers_writes_the_same_records_as_one_worker(toy: Toy) -> None:
-    one = toy.records(toy.run(jobs=1))
-    several = toy.records(toy.run(jobs=4))
+    # Without the cache, so the second run runs every case again.
+    one = toy.records(toy.run(jobs=1, no_cache=True))
+    several = toy.records(toy.run(jobs=4, no_cache=True))
     assert one == several
     # Catalogue order, whatever order the workers finished in.
     assert [record["mistake"] for record in several] == list(MISTAKES)

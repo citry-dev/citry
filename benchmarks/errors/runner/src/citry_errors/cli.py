@@ -6,15 +6,16 @@ import argparse
 import itertools
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypeVar
 
-from . import parallel, report
+from . import cache, parallel, report
+from .compare import compare, problems
 from .config import (
     BENCH_ROOT,
     CACHE,
@@ -27,42 +28,36 @@ from .config import (
     load_frameworks,
     load_ports,
 )
+from .execute import StageOutput, run_stages
 from .parsers import PARSE, Finding, ToolUnavailable
-from .runtime import Observation, compare, observe, problems
+from .runtime import Observation, observe
 from .score import StageResult, earliest, score_stage
-from .work import changed_files, command_env, env_dir, materialize, mistake_lines, placeholder, prepare
-
-T = TypeVar("T")
+from .work import changed_files, env_dir, materialize, mistake_lines, prepare
 
 
-def _run_stages(framework: Framework, work: Path, out: Path) -> list[list[Finding] | None]:
-    """Run every static stage of one framework on one working copy and keep its raw output.
+def _record_stages(
+    framework: Framework, outputs: list[StageOutput], work: Path, out: Path
+) -> list[list[Finding] | None]:
+    """
+    Write each stage's raw output into the run folder and turn it into findings.
 
-    A stage that times out gives None: its missing output must neither count
+    The output may come from this run or from the cache; parsing it here, on
+    every run, lets a parser change take effect without running the tools again.
+    A stage that timed out gives None: its missing output must neither count
     as catching the mistake nor as missing it.
     """
-    env = env_dir(framework)
-    results = []
-    for index, stage in enumerate(framework.stages):
-        argv = [placeholder(part, framework, env, work) for part in stage.argv]
-        try:
-            completed = subprocess.run(
-                argv,
-                cwd=work,
-                env=command_env(framework, env, work, stage.env),
-                capture_output=True,
-                text=True,
-                timeout=stage.timeout,
-                check=False,
-            )
-            stdout, stderr, code = completed.stdout, completed.stderr, completed.returncode
-        except subprocess.TimeoutExpired:
-            (out / f"stage-{index}.out").write_text(f"$ {' '.join(argv)}\n# timed out after {stage.timeout} s\n")
+    results: list[list[Finding] | None] = []
+    for index, (stage, output) in enumerate(zip(framework.stages, outputs, strict=True)):
+        command = f"$ {' '.join(output.argv)}\n"
+        if output.exit_code is None:
+            (out / f"stage-{index}.out").write_text(f"{command}# timed out after {output.timeout} s\n")
             results.append(None)
             continue
-        (out / f"stage-{index}.out").write_text(f"$ {' '.join(argv)}\n# exit {code}\n{stdout}\n# stderr\n{stderr}")
+        (out / f"stage-{index}.out").write_text(
+            f"{command}# exit {output.exit_code}\n{output.stdout}\n# stderr\n{output.stderr}"
+        )
         try:
-            results.append(PARSE[stage.parser](stdout, stderr, code, work))
+            results.append(PARSE[stage.parser](output.stdout, output.stderr, output.exit_code, work))
         except ToolUnavailable as error:
             # Treated like a timeout: a tool that skipped its checks has no verdict.
             (out / f"stage-{index}.unavailable").write_text(str(error))
@@ -135,16 +130,76 @@ class Baseline:
     errors: list[str]
 
 
-def _run_baseline(framework: Framework, run_dir: Path, *, observe_runtime: bool) -> Baseline:
-    env = env_dir(framework)
-    base_out = run_dir / framework.key / "baseline"
+@dataclass
+class Context:
+    """What every case of one run shares."""
+
+    run_dir: Path
+    observe_runtime: bool
+    # False with --no-cache: run everything, and store the fresh output.
+    reuse: bool
+    environment: str
+    framework_digests: dict[str, str]
+    # Set on Ctrl-C. The child processes of running cases may have been
+    # killed by the same signal, so nothing finished after it is stored.
+    stop: threading.Event
+
+
+def _entry_folder(framework: Framework, name: str) -> Path:
+    return CACHE / "results" / framework.key / name
+
+
+def _stages_for(
+    context: Context, framework: Framework, port: Port | None, work: Path
+) -> tuple[str, cache.Entry | None, list[StageOutput]]:
+    """Give a working copy's raw stage output: stored when its inputs are unchanged, else from running the tools."""
+    key = cache.case_key(context.environment, context.framework_digests[framework.key], port, work)
+    folder = _entry_folder(framework, "baseline" if port is None else port.mistake)
+    entry = cache.load(folder, key) if context.reuse else None
+    return key, entry, entry.stages if entry else run_stages(framework, work)
+
+
+def _observe(framework: Framework, entry: cache.Entry | None, work: Path, out: Path) -> tuple[Observation, bool]:
+    """Give the browser check for a working copy, reusing a stored one, and say whether it was reused."""
+    log = out / "server.log"
+    if entry is not None and entry.observation is not None and entry.server_log is not None:
+        shutil.copyfile(entry.server_log, log)
+        observation, reused = entry.observation, True
+    else:
+        observation, reused = observe(framework, env_dir(framework), work, log), False
+    (out / "runtime.json").write_text(observation.to_json())
+    return observation, reused
+
+
+def _store(
+    context: Context,
+    folder: Path,
+    key: str,
+    stages: list[StageOutput],
+    observation: Observation | None,
+    log: bytes | None,
+) -> None:
+    """Store a case's fresh raw output for the next run, leaving out what says more about the machine than the case."""
+    if context.stop.is_set() or not cache.keeps(stages):
+        return
+    # A server that never answered may only have been slow under load, so
+    # the browser check runs again next time; the stage output is still kept.
+    kept = observation if observation is not None and observation.started else None
+    cache.store(folder, key, stages, kept, log if kept else None)
+
+
+def _run_baseline(context: Context, framework: Framework) -> tuple[Baseline, bool]:
+    """Run the clean app, or reuse its stored output, and say whether everything was reused."""
+    base_out = context.run_dir / framework.key / "baseline"
     base_out.mkdir(parents=True)
     base = materialize(framework, None)
-    findings = _run_stages(framework, base.path, base_out)
+    key, entry, outputs = _stages_for(context, framework, None, base.path)
+    findings = _record_stages(framework, outputs, base.path, base_out)
     runtime: Observation | None = None
-    if framework.runtime and observe_runtime:
-        runtime = observe(framework, env, base.path, base_out / "server.log")
-        (base_out / "runtime.json").write_text(runtime.to_json())
+    reused = entry is not None
+    if framework.runtime and context.observe_runtime:
+        runtime, runtime_reused = _observe(framework, entry, base.path, base_out)
+        reused = reused and runtime_reused
     # The clean app must pass every stage, or a case's finding could not be
     # told apart from noise that was already there.
     errors = [
@@ -160,15 +215,25 @@ def _run_baseline(framework: Framework, run_dir: Path, *, observe_runtime: bool)
     if runtime:
         errors += [f"runtime: {problem}" for problem in problems(runtime)]
     (base_out / "baseline-errors.json").write_text(json.dumps(errors, indent=2))
-    return Baseline(findings, runtime, errors)
+    # A clean app with problems is never stored: the problem may come from
+    # the machine, and every case of the framework is compared with it.
+    if not reused and not errors:
+        log = (base_out / "server.log").read_bytes() if runtime is not None else None
+        _store(context, _entry_folder(framework, "baseline"), key, outputs, runtime, log)
+    return Baseline(findings, runtime, errors), reused
 
 
-def _run_case(framework: Framework, port: Port, baseline: Baseline, run_dir: Path) -> dict:
-    """Run one case's stages and browser check and score them against the clean app; runs on a worker thread."""
-    out = run_dir / framework.key / port.mistake
+def _run_case(context: Context, framework: Framework, port: Port, baseline: Baseline) -> tuple[dict, bool]:
+    """
+    Run one case's stages and browser check, or reuse their stored output, and score them against the clean app.
+
+    Runs on a worker thread. Also says whether everything the case needed came from the cache.
+    """
+    out = context.run_dir / framework.key / port.mistake
     out.mkdir(parents=True)
     copy = materialize(framework, port)
-    findings = _run_stages(framework, copy.path, out)
+    key, entry, outputs = _stages_for(context, framework, port, copy.path)
+    findings = _record_stages(framework, outputs, copy.path, out)
     stages: list[StageResult] = [
         score_stage(
             stage.stage,
@@ -183,15 +248,26 @@ def _run_case(framework: Framework, port: Port, baseline: Baseline, run_dir: Pat
         for index, stage in enumerate(framework.stages)
     ]
     runtime_result = None
+    observation = None
+    reused = entry is not None
     caught_by = _static_catch(stages)
     # The benchmark scores only where a mistake is first reported. A static
     # error decides both columns, because the lenient one counts errors too,
     # so the browser check could not change the cell and is skipped. A static
     # warning alone leaves the strict column to the browser check, which runs.
+    # The decision is made again on every run, from the current scoring, so
+    # a stored case whose static catch no longer counts gets its browser check.
     if baseline.runtime is not None and not caught_by:
-        observation = observe(framework, env_dir(framework), copy.path, out / "server.log")
-        (out / "runtime.json").write_text(observation.to_json())
+        observation, runtime_reused = _observe(framework, entry, copy.path, out)
         runtime_result = compare(baseline.runtime, observation)
+        reused = reused and runtime_reused
+    if not reused:
+        log = (out / "server.log").read_bytes() if observation is not None else None
+        # A stored browser check this run did not need is kept with the
+        # entry, so a later change that needs it again does not rerun it.
+        if observation is None and entry is not None and entry.observation is not None and entry.server_log:
+            observation, log = entry.observation, entry.server_log.read_bytes()
+        _store(context, _entry_folder(framework, port.mistake), key, outputs, observation, log)
     record = {
         "status": "ported",
         "baseline_clean": not baseline.errors,
@@ -225,8 +301,9 @@ def _run_case(framework: Framework, port: Port, baseline: Baseline, run_dir: Pat
         # reported, so it is not read as a run with the browser check off.
         "runtime_skipped": f"caught by {caught_by}" if caught_by and baseline.runtime is not None else "",
     }
-    print(f"{framework.key:10} {port.mistake:32} {record['strict']:16} {record['lenient']}", flush=True)
-    return record
+    source = "(stored)" if reused else ""
+    print(f"{framework.key:10} {port.mistake:32} {record['strict']:16} {record['lenient']:16} {source}", flush=True)
+    return record, reused
 
 
 def _static_catch(stages: list[StageResult]) -> str:
@@ -251,7 +328,7 @@ def default_jobs() -> int:
     return max(1, min(8, (os.cpu_count() or 2) // 2))
 
 
-def _interleave(groups: list[list[T]]) -> list[T]:
+def _interleave[T](groups: list[list[T]]) -> list[T]:
     """Take one item from each group in turn, so the workers run several frameworks' cases side by side."""
     return [item for row in itertools.zip_longest(*groups) for item in row if item is not None]
 
@@ -279,17 +356,32 @@ def run(args: argparse.Namespace) -> Path:
     problems_found = validate(frameworks, ports)
     if problems_found:
         raise ConfigError("the cases do not validate:\n" + "\n".join(problems_found))
+    with cache.exclusive(CACHE):
+        return _run_locked(args, selected, ports, mistakes)
+
+
+def _run_locked(args: argparse.Namespace, selected: list[Framework], ports: dict, mistakes: list) -> Path:
     run_dir = _new_run_dir(datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"))
-    (run_dir / "run.json").write_text(json.dumps(_source() | {"jobs": args.jobs}, indent=2) + "\n")
+    source = _source() | {"jobs": args.jobs}
+    (run_dir / "run.json").write_text(json.dumps(source, indent=2) + "\n")
     for framework in selected:
         prepare(framework)
+    context = Context(
+        run_dir=run_dir,
+        observe_runtime=not args.skip_runtime,
+        reuse=not args.no_cache,
+        environment=cache.environment_digest(),
+        framework_digests={framework.key: cache.framework_digest(framework) for framework in selected},
+        stop=threading.Event(),
+    )
+    reused_baselines: list[str] = []
     # Each clean app runs alone, before any case: every case of its framework
     # is compared with it, so its timings must not suffer from other work
     # competing for the machine.
-    baselines = {
-        framework.key: _run_baseline(framework, run_dir, observe_runtime=not args.skip_runtime)
-        for framework in selected
-    }
+    baselines = {}
+    for framework in selected:
+        baselines[framework.key], from_cache = _run_baseline(context, framework)
+        reused_baselines += [f"{framework.key}/baseline"] if from_cache else []
     chosen = [mistake for mistake in mistakes if not args.mistake or mistake.id in args.mistake]
     tasks = _interleave(
         [
@@ -303,15 +395,16 @@ def run(args: argparse.Namespace) -> Path:
     )
     scored = parallel.run_all(
         tasks,
-        lambda task: _run_case(task[0], task[1], baselines[task[0].key], run_dir),
+        lambda task: _run_case(context, task[0], task[1], baselines[task[0].key]),
         jobs=args.jobs,
         group=lambda task: task[0].key,
         limits={framework.key: framework.max_jobs for framework in selected if framework.max_jobs},
-        stop=threading.Event(),
+        stop=context.stop,
     )
-    by_case = {(framework.key, port.mistake): record for (framework, port), record in zip(tasks, scored, strict=True)}
+    by_case = {(framework.key, port.mistake): result for (framework, port), result in zip(tasks, scored, strict=True)}
     # Records keep the framework and catalogue order, whatever order the cases finished in.
     records = []
+    reused_cases = []
     for framework in selected:
         for mistake in chosen:
             port = ports.get((mistake.id, framework.key))
@@ -319,9 +412,16 @@ def run(args: argparse.Namespace) -> Path:
             if port is None or port.status != "ported":
                 record |= {"status": port.status if port else "missing", "reason": port.reason if port else ""}
             else:
-                record |= by_case[(framework.key, mistake.id)]
+                scored_record, from_cache = by_case[(framework.key, mistake.id)]
+                record |= scored_record
+                reused_cases += [f"{framework.key}/{mistake.id}"] if from_cache else []
             records.append(record)
     (run_dir / "results.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records))
+    # Names the clean apps and cases whose every output came from an earlier
+    # run's stored output, so a reader can tell what this run ran itself.
+    (run_dir / "run.json").write_text(
+        json.dumps(source | {"reused": reused_baselines + reused_cases}, indent=2) + "\n"
+    )
     return run_dir
 
 
@@ -342,6 +442,9 @@ def main(argv: list[str] | None = None) -> int:
     run_cmd.add_argument("--framework", action="append")
     run_cmd.add_argument("--mistake", action="append")
     run_cmd.add_argument("--skip-runtime", action="store_true")
+    run_cmd.add_argument(
+        "--no-cache", action="store_true", help="run every case again instead of reusing stored output"
+    )
     run_cmd.add_argument(
         "--jobs",
         type=_positive,

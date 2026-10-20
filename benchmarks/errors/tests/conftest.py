@@ -90,10 +90,12 @@ class Toy:
     root: Path
     cache: Path
     observed: list[str] = field(default_factory=list)
+    # Working copies whose development server the fake browser check treats as never answering.
+    silent_servers: set[str] = field(default_factory=set)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def run(self, **options: object) -> Path:
-        args = argparse.Namespace(framework=None, mistake=None, skip_runtime=False, jobs=1)
+        args = argparse.Namespace(framework=None, mistake=None, skip_runtime=False, jobs=4, no_cache=False)
         for name, value in options.items():
             setattr(args, name, value)
         return cli.run(args)
@@ -109,6 +111,9 @@ def _fake_observe(toy: Toy):  # noqa: ANN202 - returns the replacement for runti
         text = (path / "app.txt").read_text()
         with toy.lock:
             toy.observed.append(path.name)
+        if path.name in toy.silent_servers:
+            log_path.write_text("")
+            return Observation(started=False, failure="the development server did not answer")
         log_path.write_text("GET / 200\n")
         # The page shows the app text, so a case that changes it reads as a different page.
         snapshot = {"elements": [], "text": text.replace("SAME", "Hello")}

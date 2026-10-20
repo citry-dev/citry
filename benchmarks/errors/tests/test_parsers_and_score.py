@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from citry_errors import html_report, report
+from citry_errors.compare import _normal, compare, problems
 from citry_errors.config import ConfigError, load_port
 from citry_errors.parsers import (
     Finding,
@@ -19,7 +20,7 @@ from citry_errors.parsers import (
     ruff_json,
     tsc,
 )
-from citry_errors.runtime import Observation, _normal, compare, problems
+from citry_errors.runtime import Observation
 from citry_errors.score import RuntimeResult, StageResult, earliest, new_findings, score_stage
 
 WORK = Path("/cache/envs/next/work/m02-input-name")

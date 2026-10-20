@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import threading
 from collections import Counter
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-T = TypeVar("T")
-R = TypeVar("R")
 
-
-def run_all(
+def run_all[T, R](
     tasks: Sequence[T],
     work: Callable[[T], R],
     *,
