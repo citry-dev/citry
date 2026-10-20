@@ -10,9 +10,8 @@ Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
 | Static warning | 1 | 0 | 0 | 0 | 0 | 0 |
 | Runtime error | 3 | 5 | 10 | 5 | 5 | 2 |
 | Runtime warning | 0 | 0 | 0 | 0 | 0 | 0 |
-| N/A or prevented by design | 0 | 1 | 3 | 3 | 1 | 2 |
-| Missed | 4 | 14 | 8 | 4 | 5 | 2 |
-| Missed, page unchanged | 0 | 1 | 1 | 1 | 0 | 0 |
+| N/A or prevented | 0 | 1 | 3 | 3 | 1 | 2 |
+| Missed | 4 | 15 | 9 | 5 | 5 | 2 |
 
 ## Every mistake
 
@@ -22,9 +21,8 @@ Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
 | C | reported by a command-line check, type check or linter |
 | B | reported by the production build |
 | R | reported at runtime by a server error, an error response or a browser error (Rw: only a warning) |
-| w | the stage before it gave only a warning; after the comma, the first stage that gave an error, or S or N |
-| S | nothing reports it, and the page looks or behaves differently |
-| N | nothing reports it, and the page looks the same |
+| w | the stage before it gave only a warning; after the comma, the first stage that gave an error, or M |
+| M | missed: nothing reports it |
 | ? | the runtime check was skipped and no tool reported it |
 | P | the framework's design prevents the mistake |
 | - | no case was written for this framework |
@@ -38,31 +36,31 @@ Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
 | (caught/total) | (20/24) | (8/23) | (12/21) | (16/21) | (18/23) | (20/22) |
 | **Names: components, inputs, slots, variables** | (8/8) | (1/8) | (3/6) | (6/7) | (6/7) | (6/6) |
 | Misspelled component name | E | R | R | E | R | E |
-| Misspelled input name | E | S | R | E | E | E |
-| Missing required input | E | S | S | E | E | E |
-| Misspelled slot name | E | S | n/a | E | S | E |
-| Undefined template variable | E | S | R | E | E | E |
-| Misspelled attribute on a template object | E | S | S | E | E | E |
-| Unknown translation message key | E | S | n/a | n/a | n/a | n/a |
-| Misspelled template directive | R | S | S | S | R | n/a |
+| Misspelled input name | E | M | R | E | E | E |
+| Missing required input | E | M | M | E | E | E |
+| Misspelled slot name | E | M | n/a | E | M | E |
+| Undefined template variable | E | M | R | E | E | E |
+| Misspelled attribute on a template object | E | M | M | E | E | E |
+| Unknown translation message key | E | M | n/a | n/a | n/a | n/a |
+| Misspelled template directive | R | M | M | M | R | n/a |
 | **Types** | (3/3) | (1/3) | (2/3) | (2/2) | (2/3) | (2/3) |
-| Wrong-typed input written in markup | E | S | S | n/a | E | E |
+| Wrong-typed input written in markup | E | M | M | n/a | E | E |
 | Wrong-typed input computed in code | E | E | E | E | E° | E |
-| Wrong-typed operation in a template expression | E | S | R | E | S | S |
+| Wrong-typed operation in a template expression | E | M | R | E | M | M |
 | **Template and script syntax** | (3/3) | (3/3) | (3/3) | (3/3) | (3/3) | (3/3) |
 | Syntax error in a browser expression | R | R | R | R | C | E |
 | Syntax error in component JavaScript | E | E | R | R | E | E |
 | Unclosed element in a template | E | C | C | E | E | E° |
 | **HTML and CSS** | (1/4) | (0/4) | (0/4) | (1/4) | (2/4) | (3/4) |
-| Invalid HTML attribute value | Ew, N | N | N | N | E | E |
-| Misspelled HTML attribute name | S | S | S | S | S | E |
-| Misspelled HTML element | S | S | S | E | R | E |
-| Misspelled CSS class | S | S | S | S | S | S |
+| Invalid HTML attribute value | Ew, M | M | M | M | E | E |
+| Misspelled HTML attribute name | M | M | M | M | M | E |
+| Misspelled HTML element | M | M | M | E | R | E |
+| Misspelled CSS class | M | M | M | M | M | M |
 | **Events and server requests** | (3/4) | (2/4) | (3/4) | (3/4) | (3/4) | (4/4) |
 | Misspelled server handler name | E | R | R | R | E° | E |
-| State field typo in an update handler | E | S | R | E | E | E |
-| Misspelled field in a request payload | S | R | R | R | S | E |
-| Child emits an event the parent does not listen for | E | S | S | S | E | E |
+| State field typo in an update handler | E | M | R | E | E | E |
+| Misspelled field in a request payload | M | R | R | R | M | E |
+| Child emits an event the parent does not listen for | E | M | M | M | E | E |
 | **Server and browser** | (2/2) | (1/1) | (1/1) | (1/1) | (2/2) | (2/2) |
 | Server-only value read in browser code | E | R | R | R | R | R |
 | Server and browser render different content | R | n/a | n/a | n/a | R | R |

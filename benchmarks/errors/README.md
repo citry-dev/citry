@@ -41,12 +41,13 @@ framework, the earliest stage that reported it.
    - a different page with no message is "silently wrong";
    - the same page is "never".
 
-The report puts each mistake in the first of six outcomes it reaches, from
-best to worst: an error before running (in the editor, a check, or the
-build), only a warning before running, an error at runtime, only a warning
-at runtime, missed with a wrong page, and missed with no visible change. A
-summary table counts these per framework (the docs page and `report.html`
-draw it as a chart), and a second table shows every mistake.
+The report puts each mistake in the first of five outcomes it reaches, from
+best to worst: a static error (in the editor, a check, or the build), a
+static warning, a runtime error, a runtime warning, and missed. A missed
+mistake counts the same whether or not the page visibly changed. A summary
+table counts these per framework, together with the mistakes that do not
+apply (the docs page and `report.html` draw it as a chart), and a second
+table shows every mistake.
 Many tools show warnings in the editor but let a build pass, so a warning
 is kept apart from an error. A linter that has no severity of its own, such
 as ruff or djLint, fails its command on any finding, so its findings count
@@ -96,6 +97,9 @@ how each framework naturally writes a part of the page, not from its tools:
 - **m17:** where the wrong type is computed differs (a Python data class,
   a server route, a page component), and so does where the type checker
   reports it.
+
+The gaps this run found in Citry are tracked in
+[#207](https://github.com/citry-dev/citry/issues/207).
 
 Django Rusty Templates, django-components, Tetra, django-unicorn, Reflex and
 ReactPy are not measured yet.

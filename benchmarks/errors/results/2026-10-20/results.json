@@ -74,12 +74,8 @@
       "label": "Runtime warning"
     },
     {
-      "id": "silent",
+      "id": "missed",
       "label": "Missed"
-    },
-    {
-      "id": "never",
-      "label": "Missed, page unchanged"
     }
   ],
   "codes": [
@@ -101,15 +97,11 @@
     },
     {
       "code": "w",
-      "meaning": "the stage before it gave only a warning; after the comma, the first stage that gave an error, or S or N"
+      "meaning": "the stage before it gave only a warning; after the comma, the first stage that gave an error, or M"
     },
     {
-      "code": "S",
-      "meaning": "nothing reports it, and the page looks or behaves differently"
-    },
-    {
-      "code": "N",
-      "meaning": "nothing reports it, and the page looks the same"
+      "code": "M",
+      "meaning": "missed: nothing reports it"
     },
     {
       "code": "?",
@@ -470,7 +462,7 @@
       "unconfirmed_indirect": [],
       "category": "html",
       "bucket": "static-warning",
-      "cell": "Ew, N",
+      "cell": "Ew, M",
       "evidence": [
         "Citry language server (citry check --types): citry.template.invalid-attribute-value 'sumbit' is not a valid value for 'type' on <button>. Did you mean 'submit'? Valid values: 'submit', 'reset', 'button'.",
         "citry check: citry.template.invalid-attribute-value 'sumbit' is not a valid value for 'type' on <button>. Did you mean 'submit'? Valid values: 'submit', 'reset', 'button'."
@@ -489,8 +481,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -506,8 +498,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -610,8 +602,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -646,8 +638,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -821,8 +813,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -838,8 +830,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -855,8 +847,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -872,8 +864,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -912,8 +904,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -929,8 +921,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -946,8 +938,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "never",
-      "cell": "N",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -963,8 +955,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -980,8 +972,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1020,8 +1012,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1054,8 +1046,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1071,8 +1063,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1176,8 +1168,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1212,8 +1204,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1229,8 +1221,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1430,8 +1422,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "never",
-      "cell": "N",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1447,8 +1439,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1567,8 +1559,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1664,8 +1656,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1731,8 +1723,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1794,8 +1786,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1811,8 +1803,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1889,8 +1881,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1906,8 +1898,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "never",
-      "cell": "N",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1923,8 +1915,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -1940,8 +1932,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -2036,8 +2028,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -2140,8 +2132,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -2199,8 +2191,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -2541,8 +2533,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -2701,8 +2693,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -2840,8 +2832,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "naming",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -2940,8 +2932,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -3063,8 +3055,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "html",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -3106,8 +3098,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "events",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {
@@ -3226,8 +3218,8 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
-      "bucket": "silent",
-      "cell": "S",
+      "bucket": "missed",
+      "cell": "M",
       "evidence": []
     },
     {

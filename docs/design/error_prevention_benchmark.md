@@ -47,9 +47,9 @@ publish separate tables
   follows [ai_development_benchmarks.md](ai_development_benchmarks.md): record
   the property, do not invent a contrived bug.
 - **Warnings.** The report keeps warnings apart from errors, both before
-  running and at runtime: the chart has six parts (error or warning before
-  running, error or warning at runtime, missed with a wrong page, missed
-  with no visible change), and the table marks a warning-only report with
+  running and at runtime: the chart has five outcomes (static error, static
+  warning, runtime error, runtime warning, missed) plus the mistakes that do
+  not apply, and the table marks a warning-only report with
   `w`. Counting only errors, or warnings like errors, would favor whichever
   framework reports at the chosen level: Citry's invalid-attribute rule is a
   warning by default, and many Vue and React problems are only

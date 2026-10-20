@@ -19,12 +19,11 @@ from docs_site._internal.components.error_benchmark import (
 from docs_site.scripts.error_benchmark_data import extract
 
 BUCKETS = [
-    {"id": "static-error", "label": "Error before running"},
-    {"id": "static-warning", "label": "Warning before running"},
-    {"id": "runtime-error", "label": "Error at runtime"},
-    {"id": "runtime-warning", "label": "Warning at runtime"},
-    {"id": "silent", "label": "Missed, page wrong"},
-    {"id": "never", "label": "Missed, no visible change"},
+    {"id": "static-error", "label": "Static error"},
+    {"id": "static-warning", "label": "Static warning"},
+    {"id": "runtime-error", "label": "Runtime error"},
+    {"id": "runtime-warning", "label": "Runtime warning"},
+    {"id": "missed", "label": "Missed"},
 ]
 
 
@@ -65,12 +64,12 @@ def _report() -> dict[str, Any]:
             # "strict" stands for a field the page does not draw.
             _record("alpha", "m1", "ported", "static-error", "E", evidence=["editor: one", "check: two"], strict="E"),
             _record("alpha", "m2", "ported", "static-error", "C"),
-            _record("alpha", "m3", "ported", "silent", "S"),
+            _record("alpha", "m3", "ported", "missed", "M"),
             _record("alpha", "m4", "not-applicable", None, "n/a", reason="No equivalent"),
             _record("beta", "m1", "ported", "runtime-error", "R"),
             _record("beta", "m2", "prevented", None, "P"),
             _record("beta", "m3", "ported", None, "?"),
-            _record("beta", "m4", "ported", "never", "N"),
+            _record("beta", "m4", "ported", "missed", "M"),
         ],
     }
 
@@ -102,7 +101,7 @@ def test_extract_keeps_what_the_page_draws_in_a_stable_order() -> None:
         (lambda report: report["results"].pop(), r"no record for: \['beta / m4'\]"),
         (lambda report: report["results"].append(dict(report["results"][0])), "alpha / m1: .*more than one record"),
         (lambda report: report["results"][0].update(bucket="sometimes"), "bucket 'sometimes' is unknown"),
-        (lambda report: report["results"][3].update(bucket="silent"), "set on a not-applicable record"),
+        (lambda report: report["results"][3].update(bucket="missed"), "set on a not-applicable record"),
         (lambda report: report["results"][0].update(status="skipped"), "unknown status 'skipped'"),
         (lambda report: report["results"][0].update(framework="gamma"), "does not list"),
         (lambda report: report["mistakes"][0].update(category="other"), r"categories it does not list: \['other'\]"),
@@ -119,41 +118,35 @@ def test_extract_rejects_records_the_page_cannot_draw(change: Any, message: str)
 def test_chart_view_stacks_buckets_in_order_then_extra_parts() -> None:
     view = chart_view(extract(_report(), allow_partial=True))
 
-    # Every bucket keeps its place even at zero, and extra parts follow. A
-    # mistake that does not apply is not drawn, so it has no legend entry.
+    # Every bucket keeps its place even at zero. "N/A or prevented" sits just
+    # before "Missed", and the other extra parts follow.
     assert [item["label"] for item in view["legend"]] == [
-        *(bucket["label"] for bucket in BUCKETS),
+        *(bucket["label"] for bucket in BUCKETS[:4]),
+        "N/A or prevented",
+        "Missed",
         "Not scored",
     ]
     alpha, beta = view["rows"]
     assert alpha["is_reference"] is True
     assert beta["is_reference"] is False
-    # Each part's width is its share of the most mistakes that apply to any
-    # framework: three here, for both.
+    # Each part's width is its share of all four mistakes, so every bar has
+    # the same length.
     assert [segment["title"] for segment in alpha["segments"]] == [
-        "Error before running: 2",
-        "Missed, page wrong: 1",
+        "Static error: 2",
+        "N/A or prevented: 1",
+        "Missed: 1",
     ]
-    assert alpha["segments"][0]["style"].startswith("width: 66.667%; background: #2f855a")
+    assert alpha["segments"][0]["style"].startswith("width: 50.000%; background: #2f855a")
     assert [segment["title"] for segment in beta["segments"]] == [
-        "Error at runtime: 1",
-        "Missed, no visible change: 1",
+        "Runtime error: 1",
+        "N/A or prevented: 1",
+        "Missed: 1",
         "Not scored: 1",
     ]
     for row in view["rows"]:
         widths = [float(segment["style"].split("%")[0].removeprefix("width: ")) for segment in row["segments"]]
         assert sum(widths) == pytest.approx(100, abs=0.01)
 
-    # With one more mistake that does not apply, Beta's bar is shorter than
-    # Alpha's, which still spans the full width.
-    report = _report()
-    report["results"][7].update(status="not-applicable", bucket=None, cell="n/a")
-    alpha, beta = chart_view(extract(report, allow_partial=True))["rows"]
-    lengths = [
-        sum(float(segment["style"].split("%")[0].removeprefix("width: ")) for segment in row["segments"])
-        for row in (alpha, beta)
-    ]
-    assert lengths == [pytest.approx(100, abs=0.01), pytest.approx(66.667, abs=0.01)]
 
 
 def test_chart_view_draws_a_record_without_a_case_as_its_own_part() -> None:
@@ -166,7 +159,7 @@ def test_chart_view_draws_a_record_without_a_case_as_its_own_part() -> None:
 
 def test_chart_view_leaves_out_extra_parts_nobody_has() -> None:
     report = _report()
-    report["results"][6].update(bucket="silent", cell="S")
+    report["results"][6].update(bucket="missed", cell="M")
     view = chart_view(extract(report, allow_partial=True))
     assert "Not scored" not in [item["label"] for item in view["legend"]]
 
@@ -224,8 +217,8 @@ def test_rendered_chart_draws_rows_and_table() -> None:
     # parts' titles, and the label screen readers hear lists every count.
     assert not figure.xpath(".//*[@class='bench-chart__total'] | .//table")
     label = figure.xpath(".//*[@role='img']")[0].attrib["aria-label"]
-    assert label.startswith("Mistakes. Stacked bar chart of 4 mistakes. Alpha: Error before running 2, ")
-    assert "Beta: Error at runtime 1, " in label
+    assert label.startswith("Mistakes. Stacked bar chart of 4 mistakes. Alpha: Static error 2, ")
+    assert "Beta: Runtime error 1, " in label
 
 
 def test_rendered_table_keeps_line_breaks_in_cell_titles(monkeypatch: pytest.MonkeyPatch) -> None:

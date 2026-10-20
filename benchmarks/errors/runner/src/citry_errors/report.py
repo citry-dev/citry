@@ -18,8 +18,9 @@ SHORT = {
     "build": "B",
     "runtime-error": "R",
     "runtime-warning": "R",
-    "silent": "S",
-    "never": "N",
+    # Nothing reported the mistake; whether the page changed does not matter.
+    "silent": "M",
+    "never": "M",
     "not-run": "?",
     "not-applicable": "n/a",
     "prevented": "P",
@@ -33,9 +34,8 @@ CODES = (
     ("C", "reported by a command-line check, type check or linter"),
     ("B", "reported by the production build"),
     ("R", "reported at runtime by a server error, an error response or a browser error (Rw: only a warning)"),
-    ("w", "the stage before it gave only a warning; after the comma, the first stage that gave an error, or S or N"),
-    ("S", "nothing reports it, and the page looks or behaves differently"),
-    ("N", "nothing reports it, and the page looks the same"),
+    ("w", "the stage before it gave only a warning; after the comma, the first stage that gave an error, or M"),
+    ("M", "missed: nothing reports it"),
     ("?", "the runtime check was skipped and no tool reported it"),
     ("P", "the framework's design prevents the mistake"),
     ("-", "no case was written for this framework"),
@@ -63,15 +63,15 @@ CATEGORIES = {
     "server-browser": "Server and browser",
 }
 
-# The six ways a mistake can end, from best to worst. A developer is better
-# off the earlier a mistake is reported and the louder the report.
+# The five ways a mistake can end, from best to worst. A developer is better
+# off the earlier a mistake is reported and the louder the report. A missed
+# mistake is a miss whether or not the page visibly changed.
 BUCKETS = {
     "static-error": "Static error",
     "static-warning": "Static warning",
     "runtime-error": "Runtime error",
     "runtime-warning": "Runtime warning",
-    "silent": "Missed",
-    "never": "Missed, page unchanged",
+    "missed": "Missed",
 }
 
 
@@ -92,7 +92,7 @@ def bucket(record: dict) -> str | None:
         return "runtime-error"
     if lenient == "runtime-warning":
         return "runtime-warning"
-    return strict if strict in {"silent", "never"} else None
+    return "missed" if strict in {"silent", "never"} else None
 
 
 def caught_total(by: dict, framework: str, mistake_ids: list[str]) -> str:
@@ -163,9 +163,8 @@ def write(run_dir: Path, output: Path) -> None:
         counts[key]["n/a"] = counts[key]["not-applicable"] + counts[key]["prevented"]
     for outcome, label in (
         *((bucket_id, BUCKETS[bucket_id]) for bucket_id in CAUGHT),
-        ("n/a", "N/A or prevented by design"),
-        ("silent", BUCKETS["silent"]),
-        ("never", BUCKETS["never"]),
+        ("n/a", "N/A or prevented"),
+        ("missed", BUCKETS["missed"]),
         ("ported", "Not scored (runtime skipped)"),
         ("missing", "No case written"),
     ):

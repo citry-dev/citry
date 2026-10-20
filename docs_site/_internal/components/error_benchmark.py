@@ -4,8 +4,8 @@ draw the error-prevention benchmark: the same developer mistakes written in
 each framework, and how early each framework reported them.
 
 The chart gives each framework one bar, split by how the mistakes ended, from
-"error before running" (best) to "missed, no visible change" (worst); the
-benchmark calls these six outcomes buckets. The table shows every mistake in
+"static error" (best) to "missed" (worst); the
+benchmark calls these five outcomes buckets. The table shows every mistake in
 every framework as the short code the benchmark report uses.
 
 The results come from ``docs_site/data/error_prevention.json``, which
@@ -31,24 +31,24 @@ from docs_site._internal.util import flatten_for_markdown
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "error_prevention.json"
 
 # One color per bucket the benchmark report defines. Greens mean the mistake
-# was reported before the app ran, oranges at runtime, and red and dark gray
-# that nothing reported it. In the green and orange pairs the lighter shade is
-# the warning, so a warning reads as a weaker form of the error beside it. The labels come from
-# the data file, which copies them from the report.
+# was reported before the app ran, oranges at runtime, and red that nothing
+# reported it. In the green and orange pairs the lighter shade is the
+# warning, so a warning reads as a weaker form of the error beside it. The
+# labels come from the data file, which copies them from the report.
 BUCKET_COLORS: dict[str, str] = {
     "static-error": "#2f855a",
     "static-warning": "#9ae6b4",
     "runtime-error": "#dd6b20",
     "runtime-warning": "#f6c177",
-    "silent": "#c53030",
-    "never": "#4a5568",
+    "missed": "#c53030",
 }
 
-# Records that sit outside the six buckets still take their share of the bar,
-# so every bar is as long as the number of mistakes. They follow the six
-# buckets, so every bar's green part starts at the left edge. A run that skips
-# the runtime check, or lacks a case, has "not scored" or "no case written"
-# records, and the page shows them rather than drawing short bars.
+# Records that sit outside the five buckets still take their share of the
+# bar, so every bar is as long as the number of mistakes. "N/A or prevented"
+# sits just before "Missed", and the rest follow it, so every bar's green
+# part starts at the left edge. A run that skips the runtime check, or lacks
+# a case, has "not scored" or "no case written" records, and the page shows
+# them rather than drawing short bars.
 NOT_SCORED = "not-scored"
 NO_CASE = "no-case"
 DOES_NOT_APPLY = "does-not-apply"
@@ -58,7 +58,7 @@ EXTRA_PARTS: dict[str, tuple[str, str]] = {
         "repeating-linear-gradient(135deg, #cbd5e0 0 3px, #edf2f7 3px 6px)",
     ),
     NO_CASE: ("No case written", "#a0aec0"),
-    DOES_NOT_APPLY: ("Does not apply", "#cbd5e0"),
+    DOES_NOT_APPLY: ("N/A or prevented", "#cbd5e0"),
 }
 
 
@@ -138,21 +138,15 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
     # Every bucket keeps its legend entry and table column even at zero, since
     # "no framework reached this bucket" is itself a result. An extra part
     # appears only when some framework has it.
-    parts = [(row["id"], row["label"], BUCKET_COLORS[row["id"]]) for row in buckets]
-    parts += [
+    extras = [
         (key, label, color)
         for key, (label, color) in EXTRA_PARTS.items()
         if any(count[key] for count in counts.values())
     ]
-    # A mistake that does not apply takes no room, so a bar is as long as the
-    # mistakes that apply to its framework, and only the longest bar spans the
-    # full width. The table below still counts the ones that do not apply.
-    drawn = [part for part in parts if part[0] != DOES_NOT_APPLY]
-    applicable = {
-        key: sum(count for part, count in framework_counts.items() if part != DOES_NOT_APPLY)
-        for key, framework_counts in counts.items()
-    }
-    axis = max(applicable.values())
+    parts = [(row["id"], row["label"], BUCKET_COLORS[row["id"]]) for row in buckets]
+    # "N/A or prevented" goes just before the last bucket, the misses.
+    not_applicable = [part for part in extras if part[0] == DOES_NOT_APPLY]
+    parts = parts[:-1] + not_applicable + parts[-1:] + [part for part in extras if part[0] != DOES_NOT_APPLY]
 
     rows = [
         {
@@ -160,10 +154,10 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
             "is_reference": index == 0,
             "segments": [
                 {
-                    "style": f"width: {_percent(counts[framework['key']][key], axis)}; background: {color}",
+                    "style": f"width: {_percent(counts[framework['key']][key], total)}; background: {color}",
                     "title": f"{label}: {counts[framework['key']][key]}",
                 }
-                for key, label, color in drawn
+                for key, label, color in parts
                 if counts[framework["key"]][key]
             ],
         }
@@ -179,7 +173,7 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
         for framework in data["frameworks"]
     )
     return {
-        "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in drawn],
+        "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in parts],
         "rows": rows,
         "summary": f"Stacked bar chart of {total} mistakes. {totals}.",
     }
@@ -192,7 +186,7 @@ def table_view(data: dict[str, Any]) -> dict[str, Any]:
     Mistakes are grouped under their category's heading, in the data's
     category order and then its mistake order. A category with no mistakes
     gets no heading. A cell's tint is its bucket's color; a cell outside the
-    six buckets stays plain.
+    five buckets stays plain.
     """
     buckets = {row["id"] for row in _checked_buckets(data)}
     records = _records(data)

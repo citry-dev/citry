@@ -19,10 +19,8 @@ The earlier a mistake is reported, the less time it costs you.
 
 ## What the chart shows
 
-- Each bar is one framework. Its length is the number of mistakes that
-  apply to that framework, so a framework where some mistakes cannot be
-  made has a shorter bar. Each colored part shows how many ended one
-  way.
+- Each bar is one framework, and covers all 24 mistakes. Each colored
+  part shows how many ended one way.
 - Dark green, "Static error": the editor, a command-line check, or the
   production build reported an error before the app ran. This is the
   best outcome.
@@ -33,11 +31,11 @@ The earlier a mistake is reported, the less time it costs you.
   an error.
 - Light orange, "Runtime warning": the running app only printed a
   warning.
-- Red, "Missed": nothing reported the mistake, and the page looks or
-  behaves wrongly.
-- Dark gray, "Missed, page unchanged": nothing reported the mistake, and
-  the page looks the same, so the mistake stays hidden until the case it
-  affects comes up.
+- Gray, "N/A or prevented": the mistake cannot be made in this
+  framework, either because it has no equivalent or because the
+  framework's design prevents it.
+- Red, "Missed": nothing reported the mistake, whether or not the page
+  looks different.
 
 ## Where Citry stands
 

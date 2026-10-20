@@ -129,7 +129,7 @@ def test_an_indirect_note_needs_a_reason_and_codes(tmp_path: Path) -> None:
     assert load_port(port).indirect_codes == ("TS2322",)
 
 
-def test_a_case_lands_in_the_first_of_the_six_buckets_it_reaches() -> None:
+def test_a_case_lands_in_the_first_of_the_five_buckets_it_reaches() -> None:
     def record(strict: str, lenient: str) -> dict:
         return {"status": "ported", "strict": strict, "lenient": lenient, "stages": []}
 
@@ -138,10 +138,12 @@ def test_a_case_lands_in_the_first_of_the_six_buckets_it_reaches() -> None:
     assert report.bucket(record("runtime-error", "check")) == "static-warning"
     assert report.bucket(record("runtime-error", "runtime-error")) == "runtime-error"
     assert report.bucket(record("never", "runtime-warning")) == "runtime-warning"
-    assert report.bucket(record("silent", "silent")) == "silent"
+    # A miss is a miss, whether or not the page changed.
+    assert report.bucket(record("silent", "silent")) == "missed"
+    assert report.bucket(record("never", "never")) == "missed"
     assert report.bucket(record("not-run", "not-run")) is None
     assert report.bucket({"status": "not-applicable"}) is None
-    assert report.cell(record("never", "editor")) == "Ew, N"
+    assert report.cell(record("never", "editor")) == "Ew, M"
     assert report.cell(record("check", "check") | {"indirect": "why"}) == "C°"
 
 
@@ -383,12 +385,13 @@ def test_the_html_report_draws_every_framework_and_escapes_tool_output() -> None
     assert page.startswith("<!doctype html>")
     assert "&lt;c-Crad&gt;" in page
     assert "<c-Crad>" not in page
-    # A mistake that does not apply takes no room: the bar is as long as what applies.
-    assert "1 N/A or prevented by design" in page
+    # A mistake that does not apply is drawn as its own part of the bar.
+    assert 'aria-label="Next.js, N/A or prevented: 1"' in page
     # Citry reported its one mistake; Next.js has none that apply.
     assert "<td>(1/1)</td>" in page
     assert "<td>(0/0)</td>" in page
-    assert page.count('<rect x="180.00" y="') == 1
+    # Both bars start at the axis, and each covers every mistake.
+    assert page.count('<rect x="180.00" y="') == 2
     assert 'download="error-outcomes.svg"' in page
     assert "<script" not in page
 
@@ -413,3 +416,10 @@ def test_the_working_folder_name_in_a_server_log_is_not_a_new_line() -> None:
 
 def test_published_evidence_blanks_dev_server_ports() -> None:
     assert report._public("404 http://127.0.0.1:51234/sav") == "404 http://127.0.0.1:<port>/sav"
+
+
+def test_chart_ticks_count_in_fives_from_ten_up() -> None:
+    assert html_report._ticks(24) == [0, 5, 10, 15, 20, 25]
+    assert html_report._ticks(10) == [0, 5, 10]
+    assert html_report._ticks(7) == [0, 2, 4, 6, 8]
+    assert html_report._ticks(60) == [0, 20, 40, 60]

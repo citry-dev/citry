@@ -18,8 +18,8 @@ from urllib.parse import quote
 if TYPE_CHECKING:
     from pathlib import Path
 
-# Greens: reported before the app ran; oranges: at runtime; red and dark gray:
-# nothing reported it. The lighter shade of each pair is the warning, so a
+# Greens: reported before the app ran; oranges: at runtime; red: nothing
+# reported it. The lighter shade of each pair is the warning, so a
 # warning reads as a weaker form of the error beside it. The docs page's
 # chart (docs_site/_internal/components/error_benchmark.py) uses the same colors.
 BUCKET_COLORS = {
@@ -27,16 +27,20 @@ BUCKET_COLORS = {
     "static-warning": "#9ae6b4",
     "runtime-error": "#dd6b20",
     "runtime-warning": "#f6c177",
-    "silent": "#c53030",
-    "never": "#4a5568",
+    "missed": "#c53030",
 }
+
+# A mistake that cannot be written in a framework still takes its share of
+# the bar, just before the misses, so every bar counts all the mistakes.
+NOT_APPLICABLE = ("N/A or prevented", "#cbd5e0")
 
 # The outcomes in which a tool or the running app reported the mistake.
 CAUGHT = ("static-error", "static-warning", "runtime-error", "runtime-warning")
 
 # A case the runtime check skipped still takes its share of the bar, drawn
 # apart, so a partial run cannot pass for a finished one.
-NOT_SCORED = ("Not scored (runtime check skipped)", "#cbd5e0")
+NOT_SCORED = ("Not scored (runtime check skipped)", "#e2e8f0")
+NO_CASE = ("No case written", "#a0aec0")
 
 # The interaction benchmark's report groups frameworks the same way, so a
 # reader of both finds each framework in the same place.
@@ -49,14 +53,14 @@ GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (
 
 # Segment colors on which dark text reads better than white; on the orange,
 # white text at this size would fall short of the WCAG AA contrast ratio.
-_DARK_TEXT = {"#9ae6b4", "#f6c177", "#cbd5e0", "#dd6b20"}
+_DARK_TEXT = {"#9ae6b4", "#f6c177", "#cbd5e0", "#dd6b20", "#e2e8f0", "#a0aec0"}
 
 # Chart geometry in SVG units, matching the interaction report's charts.
 _WIDTH = 700
 _LABEL_RIGHT = 168
 _BAR_LEFT = 180
 _BAR_WIDTH = 490
-_ROW = 56
+_ROW = 36
 _HEADING_ROW = 28
 _BAR_HEIGHT = 20
 
@@ -93,32 +97,35 @@ footer{font-size:12px;color:#526275;margin-top:20px}
 """
 
 
-def _part(record: dict[str, Any]) -> str | None:
-    """Return the bar part a record counts towards, or None when the mistake does not apply."""
-    if record["status"] != "ported":
-        return None
+def _part(record: dict[str, Any]) -> str:
+    """Return the bar part a record counts towards."""
+    if record["status"] in {"not-applicable", "prevented"}:
+        return "n/a"
+    if record["status"] == "missing":
+        return "no-case"
     return record["bucket"] or "not-scored"
 
 
 def _ticks(maximum: int) -> list[int]:
-    """Grid lines from 0 to exactly `maximum`, at most five intervals.
+    """Grid lines from 0 up to the first one at or above `maximum`, at most five intervals.
 
-    The axis ends at the largest bar, so that bar spans the full width; a
-    round step that divides it is preferred, and otherwise the last line
-    marks the end on its own.
+    From ten up the step is a multiple of 5, because readers count in fives
+    and tens more easily than in sixes; below ten it is 1 or 2.
     """
-    steps = (1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 50)
-    step = next((step for step in steps if maximum % step == 0 and maximum / step <= 5), None)
-    if step is None:
-        step = next(step for step in steps if step * 5 >= maximum)
-    ticks = list(range(0, maximum + 1, step))
-    return ticks if ticks[-1] == maximum else [*ticks, maximum]
+    steps = (1, 2) if maximum < 10 else (5, 10, 20, 25, 50, 100)
+    step = next((step for step in steps if step * 5 >= maximum), steps[-1])
+    return list(range(0, math.ceil(maximum / step) * step + 1, step))
 
 
 def chart_svg(summary: dict[str, Any]) -> str:
     """Draw the stacked outcome bars as a standalone SVG document."""
     labels = {row["id"]: row["label"] for row in summary["buckets"]}
-    parts = {key: (labels[key], color) for key, color in BUCKET_COLORS.items()} | {"not-scored": NOT_SCORED}
+    reported = {key: (labels[key], BUCKET_COLORS[key]) for key in CAUGHT}
+    parts = (
+        reported
+        | {"n/a": NOT_APPLICABLE, "missed": (labels["missed"], BUCKET_COLORS["missed"])}
+        | {"not-scored": NOT_SCORED, "no-case": NO_CASE}
+    )
     names = {row["key"]: row["name"] for row in summary["frameworks"]}
     counts = {
         key: {
@@ -128,8 +135,7 @@ def chart_svg(summary: dict[str, Any]) -> str:
         for key in names
     }
     shown = [part for part in parts if part in BUCKET_COLORS or any(counts[key][part] for key in names)]
-    # The axis ends at the framework with the most applicable mistakes, so
-    # its bar spans the full width and a shorter bar shows fewer that apply.
+    # Every bar counts all the mistakes; the axis ends at the next round tick.
     totals = {key: sum(counts[key].values()) for key in names}
     ticks = _ticks(max(totals.values()))
     scale = _BAR_WIDTH / ticks[-1]
@@ -180,14 +186,6 @@ def chart_svg(summary: dict[str, Any]) -> str:
                         f' style="fill:{fill}">{count}</text>'
                     )
                 x += width
-            # The mistakes that cannot be written in this framework take no room
-            # in the bar, so the note under it says how many there are.
-            not_applicable = sum(
-                1 for record in summary["results"] if record["framework"] == key and record["status"] != "ported"
-            )
-            if not_applicable:
-                note = f"{not_applicable} N/A or prevented by design"
-                rows.append(f'<text x="{_BAR_LEFT}" y="{y + 37}" style="fill:#526275">{note}</text>')
             y += _ROW
     bottom = y
     grid = []
@@ -249,8 +247,8 @@ def render(summary: dict[str, Any]) -> str:
     out.append('<section class="group"><details open><summary><h2>Outcomes</h2></summary><div class="group-body">')
     out.append('<article class="chart"><details open><summary><h3>How each mistake ended</h3></summary>')
     out.append(
-        '<p class="description">One bar per framework, as long as the number of mistakes that apply to it. '
-        "Green: reported before running; orange: at runtime; red and gray: never. "
+        '<p class="description">One bar per framework, covering every mistake. '
+        "Green: reported before running; orange: at runtime; gray: N/A or prevented; red: missed. "
         "The lighter shade of each pair is a warning.</p>"
     )
     out.append(svg)
