@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/card.html', contains = 'class="card-footer"' }
+
+[[edits]]
+file = 'board/templates/unicorn/card.html'
+old = '({{ count }})</a></div>'
+new = '({{ count }})</a>'

@@ -1,0 +1,30 @@
+{% load i18n static unicorn %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Board</title>
+  <link rel="stylesheet" href="{% static 'board/board.css' %}">
+  <script src="{% static 'board/board.js' %}" defer></script>
+</head>
+<body>
+  {% csrf_token %}
+  {{ api_base|json_script:"api-base" }}
+  <div class="board" title="Board">
+    <h1>{% translate "Projects" %}</h1>
+    <p>Owner: {{ owner.name }}</p>
+    <p>API: <span id="api"></span></p>
+
+    {% unicorn "project-list" %}
+
+    {% unicorn "counter" %}
+
+    {% unicorn "details" %}
+
+    <form role="search">
+      <button type="submit">Search</button>
+    </form>
+  </div>
+  {% unicorn_scripts %}
+</body>
+</html>

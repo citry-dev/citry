@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/project-list.html', contains = 'yesno:"acent,plain"' }
+
+[[edits]]
+file = 'board/templates/unicorn/project-list.html'
+old = 'yesno:"accent,plain"'
+new = 'yesno:"acent,plain"'

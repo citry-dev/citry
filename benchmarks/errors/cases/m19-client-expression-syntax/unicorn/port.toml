@@ -1,0 +1,9 @@
+# The Details button's action is the browser expression in the markup;
+# the case leaves out its closing parenthesis.
+status = "ported"
+mistake = { file = 'board/templates/unicorn/details.html', contains = "$toggle('open'\"" }
+
+[[edits]]
+file = 'board/templates/unicorn/details.html'
+old = "unicorn:click=\"$toggle('open')\""
+new = "unicorn:click=\"$toggle('open'\""

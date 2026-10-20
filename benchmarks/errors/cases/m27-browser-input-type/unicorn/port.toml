@@ -1,0 +1,9 @@
+# Quoting the value, as an HTML attribute is quoted, passes the text
+# "open" instead of the details' boolean, as m03 does with the count.
+status = "ported"
+mistake = { file = 'board/templates/unicorn/details.html', contains = 'open="open"' }
+
+[[edits]]
+file = 'board/templates/unicorn/details.html'
+old = '{% unicorn "status" open=open %}'
+new = '{% unicorn "status" open="open" %}'

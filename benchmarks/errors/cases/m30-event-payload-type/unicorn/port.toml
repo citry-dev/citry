@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/card.py', contains = 'self.parent.hide(self.count)' }
+
+[[edits]]
+file = 'board/components/card.py'
+old = 'self.parent.hide(self.title)'
+new = 'self.parent.hide(self.count)'

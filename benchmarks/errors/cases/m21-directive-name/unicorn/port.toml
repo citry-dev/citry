@@ -1,0 +1,9 @@
+# django-unicorn has no directive that shows or hides an element; the
+# details text is shown by Django's {% if %} tag, so the case misspells it.
+status = "ported"
+mistake = { file = 'board/templates/unicorn/details.html', contains = '{% iff open %}' }
+
+[[edits]]
+file = 'board/templates/unicorn/details.html'
+old = '{% if open %}<p>Details are visible</p>'
+new = '{% iff open %}<p>Details are visible</p>'

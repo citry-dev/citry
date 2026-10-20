@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "No JavaScript defines the toggle's behavior: the Details button names django-unicorn's built-in `$toggle('open')` action, which the server runs. The page's only script, board.js, writes the API line and does not take part in the toggle."

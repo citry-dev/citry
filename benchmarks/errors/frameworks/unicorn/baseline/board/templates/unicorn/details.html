@@ -1,0 +1,6 @@
+{% load unicorn %}
+<div>
+  <button type="button" aria-expanded="{{ open|yesno:'true,false' }}" unicorn:click="$toggle('open')">Details</button>
+  {% if open %}<p>Details are visible</p>{% endif %}
+  {% unicorn "status" open=open %}
+</div>

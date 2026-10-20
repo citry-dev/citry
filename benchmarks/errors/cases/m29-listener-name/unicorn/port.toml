@@ -1,0 +1,13 @@
+# The page's listener for the card's `hide` call is the method of that
+# name on the card list, the component that renders the cards.
+status = "ported"
+mistake = { file = 'board/components/project_list.py', contains = 'def hdie(' }
+
+[indirect]
+reason = "The card calls `self.parent.hide(...)` after narrowing its parent to the card list's class, so pyright reports the missing `hide` method at that call in card.py, not at the misspelled definition."
+codes = ["reportAttributeAccessIssue"]
+
+[[edits]]
+file = 'board/components/project_list.py'
+old = 'def hide(self, title: str):'
+new = 'def hdie(self, title: str):'

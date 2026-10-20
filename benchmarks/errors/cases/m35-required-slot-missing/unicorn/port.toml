@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = 'django-unicorn has no slots: the `{% unicorn %}` tag takes keyword arguments but no markup from the page, and a component renders only its own template. The card writes its own footer link, so there is no footer fill the page could leave out.'
