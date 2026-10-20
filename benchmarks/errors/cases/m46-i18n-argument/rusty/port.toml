@@ -1,0 +1,9 @@
+# The pinned parser has no {% blocktranslate %} tag, so the page view fills
+# the subtitle's message argument, as a named gettext placeholder.
+status = "ported"
+mistake = { file = "board/views.py", contains = "{'nmae': owner.name}" }
+
+[[edits]]
+file = "board/views.py"
+old = "% {'name': owner.name},"
+new = "% {'nmae': owner.name},"
