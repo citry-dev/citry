@@ -65,17 +65,20 @@ _STEP_TIMEOUT_MS = 5_000
 # operating system takes the local ends of outgoing connections from (49152
 # and up on macOS, 32768 and up on Linux), so the browser's or another
 # server's connections cannot take a port between its reservation here and
-# the server's start.
-_PORTS = range(20_000, 32_000)
+# the server's start. It also ends below 24678, where Vite and `nuxt dev`
+# look for a free hot-reload port on their own, so they never find one of
+# these free and then lose it to the server it was reserved for.
+_PORTS = range(20_000, 24_678)
 # Ports handed to a server that is still running in this process. Several
 # workers start servers at once, and checking that a port is free does not
 # keep it free, so a second worker must not be given the same port.
 _reserved_ports: set[int] = set()
 _ports_lock = threading.Lock()
-# How many times a server that could not listen on its port is started again
-# on another one, for a port another program took after it was checked.
+# How many ports a server gets in all: one, plus a new one each time it could
+# not listen because another program took its port after it was checked.
 _PORT_ATTEMPTS = 3
-_PORT_IN_USE = re.compile(r"address already in use|EADDRINUSE", re.IGNORECASE)
+# Python and Node print the first two; Django's runserver prints the third.
+_PORT_IN_USE = re.compile(r"address already in use|EADDRINUSE|port is already in use", re.IGNORECASE)
 
 
 @dataclass

@@ -23,6 +23,7 @@ from .config import (
     STATIC_STAGES,
     ConfigError,
     Framework,
+    Mistake,
     Port,
     load_catalogue,
     load_frameworks,
@@ -159,7 +160,7 @@ def _stages_for(
     key = cache.case_key(context.environment, context.framework_digests[framework.key], port, work)
     folder = _entry_folder(framework, "baseline" if port is None else port.mistake)
     entry = cache.load(folder, key) if context.reuse else None
-    return key, entry, entry.stages if entry else run_stages(framework, work)
+    return key, entry, entry.stages if entry else run_stages(framework, work, context.stop)
 
 
 def _observe(framework: Framework, entry: cache.Entry | None, work: Path, out: Path) -> tuple[Observation, bool]:
@@ -185,9 +186,10 @@ def _store(
     """Store a case's fresh raw output for the next run, leaving out what says more about the machine than the case."""
     if context.stop.is_set() or not cache.keeps(stages):
         return
-    # A server that never answered may only have been slow under load, so
-    # the browser check runs again next time; the stage output is still kept.
-    kept = observation if observation is not None and observation.started else None
+    # A server that never answered, or a journey that ran out of time, may
+    # only have been slow under load, so the browser check runs again next
+    # time; the stage output is still kept.
+    kept = observation if observation is not None and cache.keeps_observation(observation) else None
     cache.store(folder, key, stages, kept, log if kept else None)
 
 
@@ -201,6 +203,8 @@ def _run_baseline(context: Context, framework: Framework) -> tuple[Baseline, boo
     runtime: Observation | None = None
     reused = entry is not None
     if framework.runtime and context.observe_runtime:
+        # A fresh copy, as for every case's browser check.
+        base = materialize(framework, None)
         runtime, runtime_reused = _observe(framework, entry, base.path, base_out)
         reused = reused and runtime_reused
     # The clean app must pass every stage, or a case's finding could not be
@@ -261,15 +265,20 @@ def _run_case(context: Context, framework: Framework, port: Port, baseline: Base
     # The decision is made again on every run, from the current scoring, so
     # a stored case whose static catch no longer counts gets its browser check.
     if baseline.runtime is not None and not caught_by:
+        if context.stop.is_set():
+            raise parallel.Stopped
+        # The server starts from a fresh copy, without what the tools wrote
+        # (such as a production build), so the browser check sees the same
+        # files whether the tools ran in this run or an earlier one.
+        copy = materialize(framework, port)
         observation, runtime_reused = _observe(framework, entry, copy.path, out)
         runtime_result = compare(baseline.runtime, observation)
         reused = reused and runtime_reused
-    if not reused:
+    # A case compared with a clean app that had problems is not stored: the
+    # problem may come from the machine, such as a broken environment, and
+    # would then be reused after the machine is fixed.
+    if not reused and not baseline.errors:
         log = (out / "server.log").read_bytes() if observation is not None else None
-        # A stored browser check this run did not need is kept with the
-        # entry, so a later change that needs it again does not rerun it.
-        if observation is None and entry is not None and entry.observation is not None and entry.server_log:
-            observation, log = entry.observation, entry.server_log.read_bytes()
         _store(context, _entry_folder(framework, port.mistake), key, outputs, observation, log)
     record = {
         "status": "ported",
@@ -368,7 +377,9 @@ def run(args: argparse.Namespace) -> Path:
         return _run_locked(args, selected, ports, mistakes)
 
 
-def _run_locked(args: argparse.Namespace, selected: list[Framework], ports: dict, mistakes: list) -> Path:
+def _run_locked(
+    args: argparse.Namespace, selected: list[Framework], ports: dict[tuple[str, str], Port], mistakes: list[Mistake]
+) -> Path:
     run_dir = _new_run_dir(datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"))
     source = _source() | {"jobs": args.jobs}
     (run_dir / "run.json").write_text(json.dumps(source, indent=2) + "\n")
@@ -379,13 +390,15 @@ def _run_locked(args: argparse.Namespace, selected: list[Framework], ports: dict
         observe_runtime=not args.skip_runtime,
         reuse=not args.no_cache,
         environment=cache.environment_digest(),
-        framework_digests={framework.key: cache.framework_digest(framework) for framework in selected},
+        framework_digests={
+            framework.key: cache.framework_digest(framework, env_dir(framework)) for framework in selected
+        },
         stop=threading.Event(),
     )
     reused_baselines: list[str] = []
     # Each clean app runs alone, before any case: every case of its framework
-    # is compared with it, so its timings must not suffer from other work
-    # competing for the machine.
+    # is compared with it, so its page and logs are recorded without other
+    # work competing for the machine.
     baselines = {}
     for framework in selected:
         baselines[framework.key], from_cache = _run_baseline(context, framework)
@@ -470,9 +483,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(problem)
             return 1 if problems else 0
         if args.command == "prepare":
-            for key, framework in load_frameworks().items():
-                if not args.framework or key in args.framework:
-                    print(f"{key}: {prepare(framework)}")
+            # Installing into an environment a run is using would change its tools mid-run.
+            with cache.exclusive(CACHE):
+                for key, framework in load_frameworks().items():
+                    if not args.framework or key in args.framework:
+                        print(f"{key}: {prepare(framework)}")
             return 0
         if args.command == "run":
             print(run(args))

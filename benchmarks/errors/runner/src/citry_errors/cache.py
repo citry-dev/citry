@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import importlib.metadata
 import json
 import os
 import platform
@@ -47,6 +48,15 @@ _RUNNER_PROJECT = ("pyproject.toml", "uv.lock")
 # them does not rerun every case: the prose notes, and how many cases may
 # run at once.
 _UNUSED_KEYS = ("notes", "max_jobs")
+# Environment variables the tools pass on to what they print, such as
+# colors or Node's own options. The rest of the environment is not hashed,
+# because it differs between shells without changing any tool's output.
+_TOOL_VARIABLES = ("CI", "FORCE_COLOR", "NO_COLOR", "NODE_ENV", "NODE_OPTIONS", "PYTHONWARNINGS", "TERM")
+# Files an install writes into a framework's environment that name what was
+# installed: the Python the virtual environment uses, and npm's record of
+# every installed package. A reinstall from the same lockfile can still pick
+# a different Python patch release.
+_INSTALL_RECORDS = (".venv/pyvenv.cfg", "node_modules/.package-lock.json")
 
 
 def _hash_files(digest: hashlib._Hash, root: Path, names: tuple[str, ...]) -> None:
@@ -57,7 +67,7 @@ def _hash_files(digest: hashlib._Hash, root: Path, names: tuple[str, ...]) -> No
 
 def environment_digest() -> str:
     """
-    Hash what every case of a run shares: the runner code that makes raw output, the Node and Python versions.
+    Hash what every case of a run shares: the runner code, Playwright, Node, Python, the system and some variables.
 
     Node is not pinned by any lockfile here, and the Next.js and Nuxt tools
     run on whichever Node is first on PATH, so its version is part of the key.
@@ -65,6 +75,11 @@ def environment_digest() -> str:
     digest = hashlib.sha256(f"format {FORMAT}\0".encode())
     _hash_files(digest, Path(__file__).parent, _RUNNER_SOURCES)
     _hash_files(digest, BENCH_ROOT / "runner", _RUNNER_PROJECT)
+    # The Playwright actually installed, which picks the Chromium build; the
+    # lockfile above may belong to another checkout's environment.
+    digest.update(f"playwright {importlib.metadata.version('playwright')}\0".encode())
+    for name in _TOOL_VARIABLES:
+        digest.update(f"{name}={os.environ.get(name, '<unset>')}\0".encode())
     node = shutil.which("node")
     node_version = (
         subprocess.run([node, "--version"], capture_output=True, text=True, check=False).stdout.strip()
@@ -75,15 +90,20 @@ def environment_digest() -> str:
     return digest.hexdigest()
 
 
-def framework_digest(framework: Framework) -> str:
+def framework_digest(framework: Framework, env: Path) -> str:
     """
-    Hash every file of a framework's folder: the clean app, its lockfiles, helper scripts and framework.toml.
+    Hash every file of a framework's folder, and what its environment `env` has installed.
 
-    framework.toml is read and hashed without the keys in `_UNUSED_KEYS`, so
-    rewording its notes keeps the stored results. Comments are dropped by
-    the same reading.
+    The folder holds the clean app, its lockfiles, helper scripts and
+    framework.toml. framework.toml is read and hashed without the keys in
+    `_UNUSED_KEYS`, so rewording its notes keeps the stored results; comments
+    are dropped by the same reading. The folder's own location is hashed
+    too, because commands name helper scripts by their absolute path.
     """
-    digest = hashlib.sha256()
+    digest = hashlib.sha256(f"{framework.root}\0".encode())
+    for name in _INSTALL_RECORDS:
+        record = env / name
+        digest.update(name.encode() + b"\0" + (record.read_bytes() if record.is_file() else b"<none>") + b"\0")
     for path in sorted(framework.root.rglob("*")):
         relative = path.relative_to(framework.root)
         # Build output and installed packages never reach a working copy.
@@ -134,13 +154,18 @@ def load(folder: Path, key: str) -> Entry | None:
     and is not used.
     """
     marker = folder / "key"
-    if not marker.is_file() or marker.read_text() != key:
+    try:
+        if not marker.is_file() or marker.read_text() != key:
+            return None
+        stages = [StageOutput(**stage) for stage in json.loads((folder / "stages.json").read_text())]
+        runtime, log = folder / "runtime.json", folder / "server.log"
+        if not runtime.is_file() or not log.is_file():
+            return Entry(stages, None, None)
+        return Entry(stages, Observation.from_json(runtime.read_text()), log)
+    except (OSError, ValueError, TypeError, KeyError):
+        # A damaged or hand-edited entry is a miss: the case runs again and
+        # its entry is replaced, rather than the whole run stopping.
         return None
-    stages = [StageOutput(**stage) for stage in json.loads((folder / "stages.json").read_text())]
-    runtime = folder / "runtime.json"
-    if not runtime.is_file():
-        return Entry(stages, None, None)
-    return Entry(stages, Observation.from_json(runtime.read_text()), folder / "server.log")
 
 
 def keeps(stages: list[StageOutput]) -> bool:
@@ -153,6 +178,22 @@ def keeps(stages: list[StageOutput]) -> bool:
     runs again next time.
     """
     return all(stage.exit_code is not None and stage.exit_code >= 0 for stage in stages)
+
+
+def keeps_observation(observation: Observation) -> bool:
+    """
+    Tell whether a browser check is worth storing.
+
+    A server that never answered, or a journey that stopped (an element not
+    found in time, a page that did not load or go quiet), can come from the
+    mistake or from a busy machine. The two cannot be told apart here, so
+    such a check runs again on the next run.
+    """
+    return (
+        observation.started
+        and not observation.failure
+        and not any(record.failure for record in observation.journeys.values())
+    )
 
 
 def store(
@@ -187,13 +228,16 @@ def exclusive(cache: Path) -> Iterator[None]:
     ends, so a run that crashed leaves nothing to clean up.
     """
     cache.mkdir(parents=True, exist_ok=True)
-    with (cache / "run.lock").open("w") as lock:
+    # Opened for appending, so a second run that fails to get the lock does
+    # not wipe the first run's process id from the file.
+    with (cache / "run.lock").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ConfigError(
                 f"another run is using {cache}; wait for it to finish, or set CITRY_ERRORS_CACHE to another folder"
             ) from None
+        lock.truncate(0)
         lock.write(str(os.getpid()))
         lock.flush()
         try:

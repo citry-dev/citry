@@ -137,12 +137,43 @@ def test_a_server_that_never_answered_is_checked_again_next_run(toy: Toy) -> Non
     assert records["m02-changed"]["strict"] == "silent"
 
 
-def test_a_clean_app_with_problems_is_never_stored(toy: Toy) -> None:
+def test_nothing_is_stored_from_a_run_whose_clean_app_had_problems(toy: Toy) -> None:
+    # A clean app that fails can mean a broken environment, which would fail every case the same way.
     toy.silent_servers.add("baseline")
     toy.run()
     toy.silent_servers.clear()
-    # The clean app ran again, so every case is compared with a fresh one; the cases themselves were kept.
-    assert _reused(toy.run()) == [f"toy/{mistake}" for mistake in MISTAKES]
+    assert _reused(toy.run()) == []
+    assert _reused(toy.run()) == EVERYTHING
+
+
+def test_a_browser_check_whose_journey_stopped_is_run_again_next_time(toy: Toy) -> None:
+    toy.stopped_journeys.add("m02-changed")
+    toy.run()
+    toy.stopped_journeys.clear()
+    assert set(_reused(toy.run())) == set(EVERYTHING) - {"toy/m02-changed"}
+
+
+def test_a_run_without_browser_checks_leaves_them_to_the_next_run(toy: Toy) -> None:
+    toy.run(skip_runtime=True)
+    observed = len(toy.observed)
+    rerun = toy.run()
+    # The static output was reused everywhere; only the cases no tool reported needed their browser check.
+    caught = ["toy/m01-bad", "toy/m03-bad-again", "toy/m06-bad-third"]
+    assert _reused(rerun) == caught
+    assert len(toy.observed) == observed + 1 + len(MISTAKES) - len(caught)
+    assert _reused(toy.run()) == EVERYTHING
+
+
+def test_a_damaged_entry_is_run_again_instead_of_stopping_the_run(tmp_path: Path) -> None:
+    observation = Observation(server_log=["GET / 200"])
+    cache.store(tmp_path, "key", [StageOutput(["tool"], exit_code=0)], observation, b"GET / 200\n")
+    (tmp_path / "server.log").unlink()
+    entry = cache.load(tmp_path, "key")
+    # Without its log, the stored browser check is not used; the stage output still is.
+    assert entry is not None
+    assert entry.observation is None
+    (tmp_path / "stages.json").write_text("not json")
+    assert cache.load(tmp_path, "key") is None
 
 
 def test_an_entry_a_run_stopped_writing_is_not_used(tmp_path: Path) -> None:
@@ -199,7 +230,16 @@ def test_two_runs_cannot_use_one_cache_folder_at_once(tmp_path: Path) -> None:
 
 def test_the_framework_digest_skips_folders_a_working_copy_leaves_out(toy: Toy) -> None:
     framework = load_frameworks(toy.root / "frameworks")["toy"]
-    before = cache.framework_digest(framework)
+    before = cache.framework_digest(framework, toy.cache / "envs" / "toy")
     (framework.baseline / "node_modules").mkdir()
     (framework.baseline / "node_modules" / "pkg.js").write_text("installed")
-    assert cache.framework_digest(framework) == before
+    assert cache.framework_digest(framework, toy.cache / "envs" / "toy") == before
+
+
+def test_the_framework_digest_follows_what_the_environment_installed(toy: Toy) -> None:
+    framework = load_frameworks(toy.root / "frameworks")["toy"]
+    env = toy.cache / "envs" / "toy"
+    before = cache.framework_digest(framework, env)
+    (env / ".venv").mkdir(parents=True)
+    (env / ".venv" / "pyvenv.cfg").write_text("version_info = 3.12.9\n")
+    assert cache.framework_digest(framework, env) != before

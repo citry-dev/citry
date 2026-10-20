@@ -6,9 +6,11 @@ import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .parallel import Stopped
 from .work import command_env, env_dir, placeholder
 
 if TYPE_CHECKING:
+    import threading
     from pathlib import Path
 
     from .config import Framework
@@ -30,11 +32,18 @@ class StageOutput:
         return self.exit_code is None
 
 
-def run_stages(framework: Framework, work: Path) -> list[StageOutput]:
-    """Run every static stage of one framework on one working copy, in the order framework.toml lists them."""
+def run_stages(framework: Framework, work: Path, stop: threading.Event) -> list[StageOutput]:
+    """
+    Run every static stage of one framework on one working copy, in the order framework.toml lists them.
+
+    Raises Stopped before a stage when the run is ending on Ctrl-C, so a
+    worker does not start a build that may take minutes.
+    """
     env = env_dir(framework)
     outputs = []
     for stage in framework.stages:
+        if stop.is_set():
+            raise Stopped
         argv = [placeholder(part, framework, env, work) for part in stage.argv]
         try:
             completed = subprocess.run(

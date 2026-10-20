@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import signal
 import socket
 import sys
 import threading
@@ -79,6 +80,49 @@ def test_a_failing_task_stops_new_tasks_and_is_raised_after_the_running_ones_fin
     assert finished == [1]
 
 
+def test_ctrl_c_stops_new_tasks_sets_stop_and_waits_for_running_ones() -> None:
+    stop = threading.Event()
+    started: list[int] = []
+    finished: list[int] = []
+
+    def work(number: int) -> int:
+        started.append(number)
+        if number == 0:
+            # Ctrl-C reaches the main thread, which is waiting for the workers.
+            signal.pthread_kill(threading.main_thread().ident, signal.SIGINT)
+        # A running case notices `stop` at its next step and gives up its case.
+        for _ in range(100):
+            if stop.is_set():
+                raise parallel.Stopped
+            time.sleep(0.01)
+        finished.append(number)
+        return number
+
+    with pytest.raises(KeyboardInterrupt):
+        parallel.run_all(range(10), work, jobs=2, group=lambda _: "all", limits={}, stop=stop)
+    assert stop.is_set()
+    assert sorted(started) == [0, 1]
+    assert finished == []
+
+
+def test_a_task_whose_group_cannot_be_worked_out_fails_the_run() -> None:
+    def group(number: int) -> str:
+        if number == 2:
+            raise KeyError(number)
+        return "all"
+
+    with pytest.raises(KeyError):
+        parallel.run_all(range(5), lambda number: number, jobs=2, group=group, limits={}, stop=threading.Event())
+
+
+@pytest.mark.parametrize(("jobs", "limits"), [(0, {}), (2, {"all": 0})])
+def test_a_limit_of_zero_is_rejected_rather_than_waiting_forever(jobs: int, limits: dict[str, int]) -> None:
+    with pytest.raises(ValueError, match="must be 1 or more"):
+        parallel.run_all(
+            range(3), lambda n: n, jobs=jobs, group=lambda _: "all", limits=limits, stop=threading.Event()
+        )
+
+
 def test_concurrent_workers_never_share_a_port_and_a_finished_one_frees_it() -> None:
     barrier = threading.Barrier(8)
 
@@ -124,6 +168,18 @@ def test_a_server_whose_port_was_taken_is_started_again_on_another_port(
     observation = runtime.observe(framework, tmp_path, tmp_path, tmp_path / "server.log")
     assert observation.started
     assert len(ports) == 2
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "OSError: [Errno 48] Address already in use",
+        "Error: listen EADDRINUSE: address already in use 127.0.0.1:20001",
+        "Error: That port is already in use.",
+    ],
+)
+def test_each_servers_port_clash_message_is_recognised(line: str) -> None:
+    assert runtime._PORT_IN_USE.search(line)
 
 
 def test_a_server_that_fails_for_another_reason_is_not_started_again(

@@ -92,6 +92,8 @@ class Toy:
     observed: list[str] = field(default_factory=list)
     # Working copies whose development server the fake browser check treats as never answering.
     silent_servers: set[str] = field(default_factory=set)
+    # Working copies whose default journey the fake browser check treats as stopping early.
+    stopped_journeys: set[str] = field(default_factory=set)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def run(self, **options: object) -> Path:
@@ -117,7 +119,8 @@ def _fake_observe(toy: Toy):  # noqa: ANN202 - returns the replacement for runti
         log_path.write_text("GET / 200\n")
         # The page shows the app text, so a case that changes it reads as a different page.
         snapshot = {"elements": [], "text": text.replace("SAME", "Hello")}
-        return Observation(snapshot_loaded=snapshot, snapshot=snapshot, snapshot_reloaded=snapshot)
+        failure = "TimeoutError: locator.click: Timeout 5000ms exceeded." if path.name in toy.stopped_journeys else ""
+        return Observation(snapshot_loaded=snapshot, snapshot=snapshot, snapshot_reloaded=snapshot, failure=failure)
 
     return observe
 
