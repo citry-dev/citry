@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/board_page/board_page.css", contains = "var(--acent)" }
+
+[[edits]]
+file = "components/board_page/board_page.css"
+old = "color: var(--accent);"
+new = "color: var(--acent);"

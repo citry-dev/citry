@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = "with nmae=owner.name" }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = "{% blocktranslate with name=owner.name %}"
+new = "{% blocktranslate with nmae=owner.name %}"
