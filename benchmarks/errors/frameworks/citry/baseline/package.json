@@ -1,0 +1,8 @@
+{
+  "name": "citry-error-bench-baseline",
+  "private": true,
+  "devDependencies": {
+    "pyright": "1.1.414",
+    "typescript": "5.9.3"
+  }
+}

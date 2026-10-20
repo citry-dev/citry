@@ -2713,3 +2713,41 @@ body.djc-drawer-open .djc-drawer-overlay {
     visibility: hidden;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Error benchmark (<c-error-benchmark-chart />, <c-error-benchmark-table />) */
+/* ------------------------------------------------------------------ */
+/* The error chart reuses the bench-chart rules above. Its bars all have
+   the same length and its totals are short counts, so it needs no axis
+   or reference line, and a narrower total column. These rules come after
+   the phone rules above so they win at every width. */
+.bench-chart--counts {
+  --bench-top: 0.25rem;
+  --bench-axis: 0.25rem;
+  --bench-total: 2rem;
+}
+
+/* The code meanings are sentences, which read better one per line than
+   wrapped side by side like the chart's short legend labels. */
+.prose .error-bench-table__codes {
+  flex-direction: column;
+}
+
+.prose .error-bench-table__codes code {
+  font-weight: 700;
+}
+
+.prose .error-bench-table__heading th {
+  padding-top: 0.75rem;
+  text-align: left;
+}
+
+/* Each cell is tinted with its outcome's chart colour, mixed with the
+   page background so the text stays readable in both themes. A cell
+   without an outcome colour mixes with nothing and stays plain. */
+.prose .bench-chart__table-wrap .error-bench-table__cell {
+  background: color-mix(in oklab, var(--error-bench-tint, transparent) 35%, transparent);
+  font-variant-numeric: normal;
+  text-align: center;
+  white-space: nowrap;
+}

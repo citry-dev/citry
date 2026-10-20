@@ -1,0 +1,3 @@
+status = "ported"
+files = { "app/board.tsx" = "board.tsx" }
+mistake = { file = "app/board.tsx", contains = 'const toggle' }

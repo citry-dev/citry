@@ -1,0 +1,29 @@
+[project]
+name = "fasthtml-error-benchmark"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = ["python-fasthtml==0.14.13"]
+
+[dependency-groups]
+# The tools most projects add, which `pip install python-fasthtml`
+# does not install: pyright stands in for Pylance in the editor, and ruff lints
+# the Python files.
+dev = [
+    "pyright==1.1.414",
+    "ruff==0.15.5",
+]
+
+[tool.uv]
+package = false
+# The same resolved versions as the FastHTML app in benchmarks/web, so the two
+# benchmarks describe one FastHTML install.
+constraint-dependencies = [
+    "fastcore==2.2.23",
+    "starlette==1.6.0",
+    "uvicorn==0.52.4",
+]
+
+# Type checking on, as in most typed Python projects: Pylance's "standard"
+# mode, which is also the pyright command line's default.
+[tool.pyright]
+typeCheckingMode = "standard"

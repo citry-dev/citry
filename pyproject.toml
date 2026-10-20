@@ -96,6 +96,10 @@ exclude = [
     "docs_site/_internal/_vendor",
     # benchmark files, not linted.
     "packages/py/citry/tests/test_benchmark*.py",
+    # The error-prevention benchmark's apps follow each framework's own style,
+    # and its cases contain deliberate mistakes.
+    "benchmarks/errors/frameworks",
+    "benchmarks/errors/cases",
     "packages/py/citry_core/tests/benchmark*.py",
     # The snippets in docs_site are read as source and shown to a reader, so their
     # shape follows what the page needs to explain rather than house style.
@@ -208,7 +212,7 @@ extend-markup-names = [
     "T201",    # The comparison runner prints its results
 ]
 # The benchmark harness tests follow the same rules as the package tests.
-"benchmarks/web/**/test_*.py" = [
+"benchmarks/{web,errors}/**/test_*.py" = [
     "ARG001",  # Unused function argument (mock/callback signatures in tests)
     "ARG002",  # Unused method argument
     "ARG003",  # Unused classmethod argument
@@ -361,6 +365,9 @@ exclude = [
     # Other
     "docs_site/_internal/_vendor",
     "build",
+    # Deliberate mistakes would otherwise fill every editor's Problems panel.
+    "benchmarks/errors/frameworks",
+    "benchmarks/errors/cases",
 ]
 
 [tool.pytest.ini_options]

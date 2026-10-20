@@ -1,0 +1,3 @@
+status = "ported"
+files = { "app/app.vue" = "app.vue" }
+mistake = { file = "app/app.vue", contains = "nmae" }

@@ -1,0 +1,30 @@
+[project]
+name = "jinja-error-benchmark"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+# The packages Starlette's install and templates docs name: Starlette, the
+# uvicorn server, Jinja2 for Jinja2Templates and python-multipart for forms.
+dependencies = [
+  "Jinja2==3.1.6",
+  "starlette==1.6.0",
+  "uvicorn==0.52.4",
+  "python-multipart==0.0.32",
+]
+
+[dependency-groups]
+# The tools most projects add, which Starlette's docs do not install:
+# pyright stands in for Pylance in the editor, ruff lints the Python files
+# and djLint the Jinja templates.
+dev = [
+    "djlint==1.46.6",
+    "pyright==1.1.414",
+    "ruff==0.15.5",
+]
+
+[tool.uv]
+package = false
+
+# Type checking on, as in most typed Python projects: Pylance's "standard"
+# mode, which is also the pyright command line's default.
+[tool.pyright]
+typeCheckingMode = "standard"

@@ -1,0 +1,7 @@
+status = "ported"
+files = { "board/templates/board/card.html" = "card.html" }
+mistake = { file = "board/templates/board/card.html", contains = 'class="card-footer"' }
+
+[indirect]
+reason = "djLint reports an unclosed element as an orphan tag at the element that encloses it, the card's opening `<div>`, three lines above the change."
+codes = ["H025"]

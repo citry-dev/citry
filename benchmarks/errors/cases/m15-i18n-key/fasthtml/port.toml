@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+FastHTML's starter and docs set up no translations, so the heading is a plain Python string and there is no message key to misspell.
+"""

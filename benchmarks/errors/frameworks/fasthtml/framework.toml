@@ -1,0 +1,94 @@
+key = "fasthtml"
+name = "FastHTML"
+notes = """
+The app follows the FastHTML docs: one main.py with \
+`from fasthtml.common import *` and `fast_app()`, components as Python \
+functions that build elements with FastHTML's tag functions (`Div`, `P`, \
+`Button`), routes with `@rt`, htmx attributes for the server request, and a \
+small `Script` for the browser-side toggle and the card's hide event. \
+FastHTML has no project generator: its docs start from one main.py and \
+`pip install python-fasthtml`, which installs no type checker, linter or \
+check command, and the docs name none. The static stages are therefore the \
+tools most Python projects add: Pylance with type checking on, and ruff.
+
+Routes are written as the FastHTML README and docs home page write them: \
+`@rt("/save")` on a function named `post`, and `hx_post="/save"` as a \
+string. FastHTML also lets a page pass the route function itself \
+(`hx_post=save`). With that style a misspelled route (m06) is an undefined \
+Python name, which the editor reports as an error; with the string style it \
+shows nothing until a 404 at runtime. Components are typed Python \
+functions (`def Card(title: str, count: int, footer)`), so the type checker \
+sees a wrong argument as an ordinary call error.
+
+editor: FastHTML's docs name no editor. VS Code with Pylance is used as the \
+most common Python setup, with type checking turned on. It is measured with \
+pyright 1.1.414, the engine Pylance runs, from the command line with \
+`typeCheckingMode = "standard"` set in pyproject.toml, which Pylance reads \
+too (Pylance's own default is "off"). The baseline adds pyright as a dev \
+dependency only to take this measurement; a FastHTML install does not \
+include it. FastHTML's type hints take `hx_vals` as a JSON string, while its \
+code also accepts a dict, so the app passes `json.dumps(...)` to keep the \
+clean page free of type errors.
+
+check: ruff with its default rules. FastHTML apps import \
+`fasthtml.common` with `*`, which ruff's default rules flag at every use, so \
+main.py silences those two rules (F403, F405) once at the top, as a project \
+that adds ruff would. With them silenced, ruff cannot tell a misspelled name \
+from one the star import provides. A ruff finding fails the command, so it \
+counts as an error. There is no build stage.
+
+runtime: `python main.py`, which calls FastHTML's `serve()`, on the runner's \
+port through the PORT variable that `serve()` reads. `serve()` starts \
+uvicorn with reload on (its default), and `fast_app()` keeps debug \
+tracebacks off (its default).
+
+Browser files: `fast_app()` loads HTMX 2.0.7, fasthtml.js 1.0.12, Surreal, \
+css-scope-inline and Pico CSS from cdn.jsdelivr.net by default. The baseline \
+turns the default headers off with the documented `default_hdrs=False` and \
+adds the same files, in the same order, from static/, downloaded once: \
+htmx.org@2.0.7 dist/htmx.js, answerdotai/fasthtml-js@1.0.12, \
+answerdotai/surreal at commit c68a69a (the `@main` tip FastHTML loads, \
+Surreal 1.3.2), gnat/css-scope-inline at commit 14e835e (its `@main` tip on \
+the download date), and @anyblades/pico@2.5.0 (FastHTML loads `@latest`, \
+which was 2.5.0). The page behaves as it would with the CDN files.
+
+Python dependencies are locked in baseline/uv.lock; fastcore, starlette and \
+uvicorn are held to the versions the benchmarks/web FastHTML app uses.
+"""
+
+[setup]
+manifests = ["pyproject.toml", "uv.lock"]
+# `pyright --version` downloads pyright's npm package once, so the first
+# measured run does not spend its timeout on a download.
+command = ["sh", "-c", "uv sync --frozen && .venv/bin/pyright --version"]
+
+[[stages]]
+stage = "editor"
+label = "Pylance, type checking on (pyright 1.1.414, standard)"
+argv = ["{venv}/bin/pyright", "--outputjson", "--pythonpath", "{venv}/bin/python"]
+parser = "pyright-json"
+timeout = 300
+
+
+[[stages]]
+stage = "check"
+label = "ruff 0.15.5 (default rules)"
+# --isolated: a real project's ruff reads only its own settings, not those of
+# a repository it happens to sit in.
+argv = ["{venv}/bin/ruff", "check", "--isolated", "--no-respect-gitignore", "--output-format", "json", "."]
+parser = "ruff-json"
+timeout = 300
+
+[runtime]
+# `python main.py` calls FastHTML's `serve()`, the way its docs start an app.
+argv = ["{venv}/bin/python", "main.py"]
+env = { PORT = "{port}" }
+page_path = "/"
+ready_timeout = 180
+settle_ms = 800
+steps = [
+  { action = "click", selector = "button:text-is('Add')" },
+  { action = "wait", ms = 500 },
+  { action = "click", selector = "button:text-is('Details')" },
+  { action = "click", selector = "button:text-is('Hide')" },
+]

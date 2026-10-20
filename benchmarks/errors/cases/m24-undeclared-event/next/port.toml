@@ -1,0 +1,3 @@
+status = "ported"
+files = { "app/card.tsx" = "card.tsx" }
+mistake = { file = "app/card.tsx", contains = 'onHdie' }

@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "Jinja's reusable component is a macro, and the page fills it with a {% call %} block that the macro inserts with caller(). A call block fills one unnamed region, so the page has no footer name to misspell. Jinja's named blocks belong to template inheritance, which Jinja's docs use for page layouts; for repeated markup they present macros. A misspelled macro name is m01 and a misspelled argument name is m02."

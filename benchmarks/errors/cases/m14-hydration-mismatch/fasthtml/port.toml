@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+FastHTML renders the page only on the server and sends plain HTML. No browser-side component renders that markup a second time, so there is no first browser render to disagree with the server's.
+"""

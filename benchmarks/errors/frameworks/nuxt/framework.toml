@@ -1,0 +1,99 @@
+key = "nuxt"
+name = "Nuxt (TypeScript)"
+notes = """
+The baseline is the `npm create nuxt@latest` minimal starter (create-nuxt 4.0.1, template
+`minimal`, no modules selected), pinned to nuxt 4.5.2, vue 3.5.42 and vue-router 5.3.1. On top
+of the starter it adds the reference page: `app/app.vue` and `app/components/Card.vue`, written
+as `<script setup lang="ts">`, a global stylesheet listed in `css`, the public and private
+`runtimeConfig` keys, two server routes in `server/api/`, and the saved total in
+`server/utils/state.ts`. Node is the system Node, v26.5.0 with npm 11.17.0 (nuxt 4.5.2 accepts
+Node ^22.19.0, ^24.11.0 or >=26.0.0).
+
+The benchmark adds typescript 6.0.3 and vue-tsc 3.3.13 as dev dependencies, only to run the
+editor stage. The starter installs neither. Nuxt does not type-check during `nuxt dev` or
+`nuxt build` unless `typescript.typeCheck` is turned on, and it defaults to false.
+
+The editor stage stands in for the Vue - Official extension, which Nuxt's installation guide
+recommends. It first runs `nuxi prepare`, as the starter's postinstall script does, to write the
+`.nuxt` tsconfigs the editor reads. A failing prepare is ignored, because the editor keeps the
+`.nuxt` folder an earlier install wrote. It then runs `vue-tsc -b --noEmit`, the command
+`nuxt typecheck` runs when tsconfig.json lists project references, as the starter's does. The
+`vueCompilerOptions` stay at their defaults, so `strictTemplates` and the `checkUnknown*`
+options are off. vue-tsc checks every file, while the editor shows diagnostics only for open
+files. A type error is reported where the wrong value is used: in m17 the server route returns a
+string, and vue-tsc reports TS2322 at the `:count` binding in `app/app.vue`. The case's
+`indirect` note records why that finding still counts. A developer editing the route sees no
+error there; the editor shows it only with `app/app.vue` open.
+
+vue-tsc reports only TypeScript's diagnostics. The extension also shows the Vue compiler's own
+errors for a single-file component (SFC), such as "Element is missing end tag", through the
+`vue-sfc` and `vue-compiler-dom-errors` plugins of @vue/language-service 3.3.13, the version the Vue - Official extension ships. The second
+editor command, `vue-template-diagnostics.cjs` next to this file, calls the @vue/language-core
+3.3.13 parse and compile functions with the default options to report those errors. It skips
+two adjustments language-core makes while a developer types: it adds a closing `>` when the
+template ends inside an unfinished opening tag, and it reuses the previous result while an edit
+stays inside one expression. No case hits either, and the script was not compared against a
+running editor.
+
+check: ESLint through Nuxt's official `@nuxt/eslint` module 1.17.0 (ESLint 10.13.0), added with
+`nuxi module add eslint` as Nuxt's docs describe; the starter itself installs no linter. It
+keeps the module's default rules, except that eslint.config.mjs turns off
+`vue/multi-word-component-names`, because the page's component has a one-word name (Card), which
+most Nuxt projects allow. `nuxt typecheck`, which Nuxt's TypeScript docs
+describe, runs the same vue-tsc command as the editor stage, so it is not a separate stage.
+
+The runtime check runs `nuxt dev`, so Vue's development warnings stay on, and Nuxt DevTools
+stays enabled as in the starter. Two results depend on the starter's shape. With only
+`app/app.vue` and no `pages/` folder, Nuxt renders the page for every unknown path, so the
+misspelled route in m06 answers 200 with HTML instead of a 404. (The editor still reports m06
+indirectly: `$fetch` of an unknown route returns `unknown`, so reading `result.count` four
+lines below is TS18046.) And m11 renames both the opening
+and the closing tag; renaming only the opening tag is a template compile error that the editor
+reports.
+
+m12 reads the private `secretToken` in the page, so the server renders the
+secret into the HTML it sends; the hydration error comes after the leak.
+"""
+
+[setup]
+manifests = ["package.json", "package-lock.json"]
+command = ["npm", "ci", "--no-audit", "--no-fund"]
+
+[[stages]]
+stage = "editor"
+label = "vue-tsc (Vue - Official)"
+argv = ["sh", "-c", "nuxi prepare > /dev/null 2>&1; exec vue-tsc -b --noEmit --pretty false"]
+parser = "tsc"
+timeout = 600
+
+[[stages]]
+stage = "editor"
+label = "Vue compiler diagnostics (Vue - Official)"
+argv = ["node", "{framework}/vue-template-diagnostics.cjs"]
+parser = "eslint-json"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "ESLint 10.13.0 (@nuxt/eslint 1.17.0)"
+# nuxi prepare writes the generated config that eslint.config.mjs extends.
+argv = ["sh", "-c", "nuxi prepare > /dev/null 2>&1; exec eslint . -f json"]
+parser = "eslint-json"
+timeout = 300
+
+[[stages]]
+stage = "build"
+label = "nuxt build"
+argv = ["nuxt", "build"]
+parser = "exit"
+timeout = 900
+
+[runtime]
+argv = ["nuxt", "dev", "--port", "{port}", "--host", "127.0.0.1"]
+page_path = "/"
+ready_timeout = 240
+steps = [
+  { action = "click", selector = "button:has-text('Add')" },
+  { action = "click", selector = "button:has-text('Details')" },
+  { action = "click", selector = "button:has-text('Hide')" },
+]

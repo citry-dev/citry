@@ -1,0 +1,3 @@
+status = "ported"
+files = { "board/views.py" = "views.py" }
+mistake = { file = "board/views.py", contains = "request.session['cuont']" }

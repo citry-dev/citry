@@ -151,6 +151,7 @@ areas:
         items:
           - { title: Compatibility, path: /about/compatibility/ }
           - { title: Benchmarks, path: /about/benchmarks/ }
+          - { title: Error prevention, path: /about/error-prevention/ }
           - { title: Security, path: /security/, needs_review: true }
 
       - label: Release notes
