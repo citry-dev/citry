@@ -3,5 +3,5 @@ mistake = { file = "components/card/card.html", contains = 'class="card-footer"'
 
 [[edits]]
 file = "components/card/card.html"
-old = '<div class="card-footer">{% slot "footer" required %}{% endslot %}</div>'
-new = '<div class="card-footer">{% slot "footer" required %}{% endslot %}'
+old = '<div class="card-footer">{% slot "footer" required title=title count=count %}{% endslot %}</div>'
+new = '<div class="card-footer">{% slot "footer" required title=title count=count %}{% endslot %}'

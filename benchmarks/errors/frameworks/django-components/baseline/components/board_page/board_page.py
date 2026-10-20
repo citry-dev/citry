@@ -15,9 +15,11 @@ class Owner:
 class Project:
     title: str
     count: int
+    # The page draws a featured project's card with the accent border.
+    featured: bool
 
 
-PROJECTS = [('Alpha', 3), ('Beta', 5), ('Gamma', 8)]
+PROJECTS = [('Alpha', 3, True), ('Beta', 5, False), ('Gamma', 8, False)]
 
 
 @register('board_page')
@@ -39,7 +41,7 @@ class BoardPage(Component):
         api_base: str
 
     def get_template_data(self, args, kwargs: Kwargs, slots, context):
-        cards = [Project(title=title, count=count) for title, count in PROJECTS]
+        cards = [Project(title=title, count=count, featured=featured) for title, count, featured in PROJECTS]
         return {
             'owner': Owner(name='Ada'),
             'cards': cards,

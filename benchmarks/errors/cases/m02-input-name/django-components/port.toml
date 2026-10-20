@@ -3,5 +3,5 @@ mistake = { file = "components/board_page/board_page.html", contains = 'titel=ca
 
 [[edits]]
 file = "components/board_page/board_page.html"
-old = '{% component "card" title=card.title count=card.count %}'
-new = '{% component "card" titel=card.title count=card.count %}'
+old = '{% component "card" title=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}'
+new = '{% component "card" titel=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}'

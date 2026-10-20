@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The page gives a django-components component its inputs once, when the server renders the page, and `open` changes in the browser, so the status line cannot receive it as a component input. It is an Alpine component nested inside the board's and reads `open` through the scope Alpine shares with it. Alpine has no required or typed component inputs: an `Alpine.data` factory can take arguments, but nothing declares which ones a component needs or their types. So the page passes the status line no input it could leave out."

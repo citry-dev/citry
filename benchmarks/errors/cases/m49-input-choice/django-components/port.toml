@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = 'yesno:"acent,plain"' }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = 'yesno:"accent,plain"'
+new = 'yesno:"acent,plain"'

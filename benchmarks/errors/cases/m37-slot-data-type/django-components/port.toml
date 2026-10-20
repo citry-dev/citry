@@ -1,0 +1,9 @@
+# Django's template language has no `+`; its `add` filter is how a template
+# joins text, so the fill joins the numeric count to text with it.
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = 'footer.count|add:" tasks"' }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = "({{ footer.count }})"
+new = '({{ footer.count|add:" tasks" }})'

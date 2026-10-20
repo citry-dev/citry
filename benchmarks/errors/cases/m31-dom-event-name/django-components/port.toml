@@ -3,5 +3,5 @@ mistake = { file = "components/board_page/board_page.html", contains = '@clik="t
 
 [[edits]]
 file = "components/board_page/board_page.html"
-old = '<button type="button" @click="toggle">Details</button>'
-new = '<button type="button" @clik="toggle">Details</button>'
+old = '<button type="button" :aria-expanded="open" @click="toggle">Details</button>'
+new = '<button type="button" :aria-expanded="open" @clik="toggle">Details</button>'

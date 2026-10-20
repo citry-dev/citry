@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "components/board_page/board_page.html", contains = '{% fill "fotter" %}' }
+mistake = { file = "components/board_page/board_page.html", contains = '{% fill "fotter"' }
 
 [[edits]]
 file = "components/board_page/board_page.html"
-old = '{% fill "footer" %}'
-new = '{% fill "fotter" %}'
+old = '{% fill "footer" data="footer" %}'
+new = '{% fill "fotter" data="footer" %}'

@@ -1,0 +1,2 @@
+status = "prevented"
+reason = "The status line is an Alpine component nested inside the board's, and a nested Alpine component shares its parent's scope instead of receiving a copy of the parent's values. Assigning `open = false` in the status line therefore changes the board's own `open` and closes the details correctly, so the code this mistake describes works as intended."

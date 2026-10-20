@@ -9,7 +9,7 @@ django-components installs djc-core 1.3.1, its compiled helper package. \
 Django, HTMX, Alpine, the settings and the tools are otherwise the same as in \
 the Django app.
 
-The page is built from three components in the project's `components/` \
+The page is built from four components in the project's `components/` \
 folder, the folder django-components looks in by default. Each component is a \
 Python class in its own folder with its template in a separate .html file, as \
 the getting-started tutorial writes them, and is registered with `@register`:
@@ -22,10 +22,29 @@ with `defer` and has not started yet when the callback runs: django-components \
 runs the callback while the page is still being parsed, and a deferred \
 script starts only after that. So the script registers the data for Alpine \
 to find when it starts. The page's stylesheet is board_page.css.
-- Card declares the inputs `title: str` and `count: int` in `Kwargs` and its \
-required `footer` slot in `Slots`, and marks the slot `required` in its \
-template. The page fills the slot with `{% fill "footer" %}`. The Hide \
-button sends Alpine's `hide` event, as in the Django app.
+- Card declares the inputs `title: str`, `count: int` and \
+`tone: Literal['plain', 'accent']` in `Kwargs`, and its required `footer` \
+slot in `Slots`, typed with the data the slot hands back \
+(`SlotInput[FooterData]`). Its template marks the slot `required` and passes \
+it `title` and `count` as slot data, and its stylesheet, card.css, gives the \
+accent card its blue border. The page picks each card's `tone` with \
+`card.featured|yesno:"accent,plain"`, as the Django app does. Its fill, \
+`{% fill "footer" data="footer" %}`, reads the slot data through the \
+`data` keyword the slot docs show, naming it `footer`, as `footer.title` \
+and `footer.count`. The slot data's type is a hint for pyright in Python \
+code that fills the slot with a function or calls it. Neither \
+django-components nor djc-ext-pydantic, which checks only that each slot is \
+a slot, checks a template fill or the `{% slot %}` tag's data against it. \
+The Hide button sends Alpine's `hide` \
+event, as in the Django app.
+- Status is the status line inside Details. django-components renders a \
+component's markup on the server, so the page can give the status line \
+only the value `open` has at that moment, and `open` changes later in the \
+browser. As in the Django app, the status line \
+is an Alpine component (`Alpine.data('status')`, registered in status.js) \
+nested inside the board's, and its markup reads the board's `open` through \
+the scope Alpine shares with it. Its Close button dispatches a `close` \
+event, and a listener on the board sets `open` to false.
 - Counter shows the saved total. Its `View.post` handles Add: it adds the \
 posted amount to the session's `count` and replies with the counter's own \
 HTML, which HTMX swaps in. As in the Django app, the reply shows the total \
@@ -55,8 +74,9 @@ djc-ext-pydantic 1.1.0 (with Pydantic 2.14.1) is listed in \
 Pydantic's default mode converts text such as "3" to a number, and ignores \
 names a model does not declare: a misspelled input or slot name is reported \
 because the required name is then missing, but an extra unknown name next to \
-all the right ones would pass. Of the cases, only m03 ends differently \
-because of this setting.
+all the right ones would pass. Of the cases, m03 and m49 end differently \
+because of this setting: without it, nothing checks the input's type or \
+its allowed choices.
 
 `get_template_data()` and `get_js_data()` return plain dicts, which \
 django-components checks against those models. Its docs also show returning \
@@ -79,8 +99,8 @@ only open files by default, while the command line checks every file; with \
 one case per run this can only add findings.
 - VS Code's built-in JavaScript support, which reports syntax errors in plain \
 .js files. It is measured with tsc from TypeScript 6.0.3 (the version VS Code \
-ships) with --allowJs and no checkJs, on the one hand-written script \
-components/board_page/board_page.js.
+ships) with --allowJs and no checkJs, on the two hand-written scripts, \
+components/board_page/board_page.js and components/status/status.js.
 Nothing in the editor checks the component templates, the inputs given in \
 `{% component %}` tags, the HTMX attributes or the Alpine expressions.
 
@@ -118,7 +138,7 @@ env = { PYRIGHT_PYTHON_IGNORE_WARNINGS = "1" }
 [[stages]]
 stage = "editor"
 label = "VS Code JavaScript syntax check (tsc 6.0.3 --allowJs)"
-argv = ["{env}/node_modules/.bin/tsc", "--allowJs", "--noEmit", "--pretty", "false", "components/board_page/board_page.js"]
+argv = ["{env}/node_modules/.bin/tsc", "--allowJs", "--noEmit", "--pretty", "false", "components/board_page/board_page.js", "components/status/status.js"]
 parser = "tsc"
 timeout = 300
 
@@ -160,4 +180,10 @@ default = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "wait", ms = 300 },
   { action = "click", selector = "button:has-text('Hide')" },
+]
+# Opens the details, closes them from the status line, and opens them again.
+status = [
+  { action = "click", selector = "button:has-text('Details')" },
+  { action = "click", selector = "button:has-text('Close')" },
+  { action = "click", selector = "button:has-text('Details')" },
 ]

@@ -3,5 +3,5 @@ mistake = { file = "components/board_page/board_page.html", contains = 'titel="B
 
 [[edits]]
 file = "components/board_page/board_page.html"
-old = '<div class="board" title="Board" x-data="board">'
-new = '<div class="board" titel="Board" x-data="board">'
+old = '<div class="board" title="Board" x-data="board"'
+new = '<div class="board" titel="Board" x-data="board"'
