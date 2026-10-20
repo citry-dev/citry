@@ -7,6 +7,7 @@ requires-python = ">=3.12,<3.13"
 # `add_websocket_route`, which Starlette 1.x does not have.
 dependencies = [
     "reactpy==1.1.0",
+    "reactpy-router==2.0.0",
     "starlette==0.52.1",
     "uvicorn==0.52.4",
     "websockets==17.1",

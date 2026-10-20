@@ -10,7 +10,8 @@ The app follows ReactPy's docs: components are Python functions marked \
 it. This is how ReactPy's guide to running an app does it, and how the \
 ReactPy app in benchmarks/web runs. ReactPy 1.1.0, Starlette 0.52.1, uvicorn \
 0.52.4 and websockets 17.1 match the ReactPy app in benchmarks/web, and so \
-do the other resolved versions; all are locked in baseline/uv.lock for \
+do the other resolved versions it shares; ReactPy-Router 2.0.0 is added \
+for the extra pages; all are locked in baseline/uv.lock for \
 Python 3.12. Starlette stays on 0.x because ReactPy's Starlette backend \
 calls `add_websocket_route`, which Starlette 1.x does not have. ReactPy has \
 no project generator and installs no type checker or linter, so the static \
@@ -64,8 +65,27 @@ offline. A ReactPy developer who only needs to show the value \
 would write `html.p(f"API: {API_BASE}")`, with no browser code at all; the \
 reference page asks for browser code here because m12 and m40 to m42 test \
 what passes between the server and browser code.
-- The stylesheet and the page title go in the document head through the \
-backend's `Options(head=...)`, which its docs describe for both.
+- Search (main.py) is a form with no submit handler, so the browser \
+submits it the ordinary way, back to `/` with the text as `q` in the URL. \
+Page reads it with ReactPy-Router's `use_search_params()`. The field is \
+controlled by `use_state`, so the `Searching for:` line repeats what is \
+typed.
+- The About and project pages come from ReactPy-Router 2.0.0, the router \
+the ReactPy project publishes for ReactPy 1.1: App lists the routes with \
+`browser_router` and `route`, the project page reads its `{id:int}` part \
+with `use_params()`, and the page links to both with the router's `link`, \
+which changes the page in the browser without a new page load. A last \
+route catches every other URL with a `Page not found` heading, as the \
+router's docs show; without it, a URL that matches no route would leave \
+the page empty, with no error either.
+- Static files: Starlette's `StaticFiles` serves static/ at `/static`, \
+mounted before ReactPy's routes, because ReactPy answers every other path \
+with its page. The stylesheet, static/app.css, and the page title go in \
+the document head through the backend's `Options(head=...)`. The page's \
+outer element sets the heading's color as the CSS variable `--accent` in \
+its `style`, and app.css reads it. The owner's avatar, static/avatar.svg, \
+is an `html.img`. The subtitle `Owned by Ada` is a Python f-string, since \
+ReactPy has no translations (m15 and m46 do not apply).
 
 What pyright sees: ReactPy types `@component` as returning \
 `Callable[..., Component]`, so pyright accepts any arguments in a call to a \
@@ -177,4 +197,17 @@ status = [
   { action = "click", selector = "button:text-is('Close')" },
   { action = "wait", ms = 300 },
   { action = "click", selector = "button:text-is('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:text-is('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:text-is('Project 1')" },
 ]

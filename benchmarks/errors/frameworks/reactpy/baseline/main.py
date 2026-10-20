@@ -7,8 +7,11 @@ from typing import Any
 
 from reactpy import component, hooks, html, web
 from reactpy.backend.starlette import Options, configure
-from reactpy.types import VdomDict
+from reactpy.types import ComponentType, VdomDict
+from reactpy_router import browser_router, link, route, use_params, use_search_params
 from starlette.applications import Starlette
+from starlette.routing import Mount
+from starlette.staticfiles import StaticFiles
 
 from card import Card
 from status import Status
@@ -18,6 +21,8 @@ HERE = Path(__file__).parent
 # The browser receives API_BASE; SECRET_TOKEN stays on the server.
 API_BASE = "/api"
 SECRET_TOKEN = "s3cr3t"
+# The heading's color, which app.css reads as the CSS variable --accent.
+ACCENT = "rgb(0, 0, 255)"
 
 
 @dataclass
@@ -71,6 +76,28 @@ def Details() -> VdomDict:
 
 
 @component
+def Search() -> VdomDict:
+    # The text typed so far, which the line under the field repeats.
+    query, set_query = hooks.use_state("")
+
+    # The form has no submit handler, so the browser submits it the ordinary
+    # way: back to this page, with the text in the URL as `q`.
+    return html.form(
+        {"role": "search"},
+        html.input(
+            {
+                "type": "search",
+                "name": "q",
+                "value": query,
+                "on_change": lambda event: set_query(event["target"]["value"]),
+            }
+        ),
+        html.button({"type": "submit"}, "Search"),
+        html.p(f"Searching for: {query}"),
+    )
+
+
+@component
 def Page() -> VdomDict:
     # Cards are hidden in this page's state only; the project list stays the same.
     hidden, set_hidden = hooks.use_state([])
@@ -84,10 +111,16 @@ def Page() -> VdomDict:
 
         return hide
 
+    # What the search form submitted, read from the page's URL.
+    searched = use_search_params().get("q", [""])[0]
+
     return html.div(
+        {"style": {"--accent": ACCENT}},
         html.h1("Projects"),
         html.div(
             {"class_name": "board", "title": "Board"},
+            html.p(f"Owned by {owner.name}"),
+            html.img({"src": "/static/avatar.svg", "alt": owner.name, "width": 32, "height": 32}),
             html.p(f"Owner: {owner.name}"),
             html.p(ApiLine({"api_base": API_BASE})),
             # ReactPy matches unkeyed children by position, so the cards get a
@@ -111,17 +144,40 @@ def Page() -> VdomDict:
             ),
             Counter(),
             Details(),
-            html.form({"role": "search"}, html.button({"type": "submit"}, "Search")),
+            Search(),
+            html.p(f"Searched: {searched}") if searched else None,
+            # Links through the router change the page in the browser, without a new page load.
+            html.nav(link({"to": "/about"}, "About"), " ", link({"to": "/projects/1"}, "Project 1")),
         ),
     )
 
 
-# The page's stylesheet goes in the document head, where ReactPy's backend
-# options put the page title too.
-STYLES = """
-.board { color: rgb(0, 128, 0); }
-.card--accent { border: 2px solid rgb(0, 0, 255); }
-"""
+@component
+def ProjectPage() -> VdomDict:
+    # The router turns the `{id:int}` part of the path into a number.
+    project_id = use_params()["id"]
+    return html.h1(f"Project {project_id}")
 
-app = Starlette()
-configure(app, Page, Options(head=(html.title("Projects"), html.style(STYLES))))
+
+@component
+def App() -> ComponentType:
+    # ReactPy-Router, from the ReactPy project, picks the page for the URL in
+    # the browser; the last route catches every other URL.
+    return browser_router(
+        route("/", Page()),
+        route("/about", html.h1("About this board")),
+        route("/projects/{id:int}", ProjectPage()),
+        route("{404:any}", html.h1("Page not found")),
+    )
+
+
+# The static files are mounted before ReactPy's routes, because ReactPy answers
+# every other path with its page.
+app = Starlette(routes=[Mount("/static", StaticFiles(directory=HERE / "static"))])
+# The page's stylesheet and title go in the document head through the
+# backend's options.
+configure(
+    app,
+    App,
+    Options(head=(html.title("Projects"), html.link({"rel": "stylesheet", "href": "/static/app.css"}))),
+)
