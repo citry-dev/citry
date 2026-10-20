@@ -3,8 +3,8 @@ mistake = { file = "app/components/board_page.py", contains = "<dvi class=\"boar
 
 [[edits]]
 file = "app/components/board_page.py"
-old = '<div class="board" title="Board">'
-new = '<dvi class="board" title="Board">'
+old = '<div class="board" id="board" title="Board">'
+new = '<dvi class="board" id="board" title="Board">'
 
 [[edits]]
 file = "app/components/board_page.py"

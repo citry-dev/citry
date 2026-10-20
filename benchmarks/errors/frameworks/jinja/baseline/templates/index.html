@@ -14,11 +14,12 @@
   </style>
 </head>
 <body>
-  <div class="board" title="Board">
+  <div class="board" id="board" title="Board">
     <h1>Projects</h1>
     <p>Owned by {{ owner.name }}</p>
     <img src="{{ url_for('static', path='avatar.svg') }}" alt="{{ owner.name }}" width="32" height="32">
     <p>Owner: {{ owner.name }}</p>
+    <p>Projects: {{ projects|length }}</p>
     <p x-data='{ api: {{ api_base|tojson }} }'>API: <span x-text="api"></span></p>
 
     {% for project in projects %}

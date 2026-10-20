@@ -34,7 +34,7 @@ function hide(title: string) {
   <div>
     <h1>Projects</h1>
     <p>Owned by {{ board?.owner.name }}</p>
-    <div class="board" title="Board">
+    <div id="board" class="board" title="Board">
       <img
         src="/avatar.svg"
         :alt="board?.owner.name"
@@ -42,6 +42,7 @@ function hide(title: string) {
         height="32"
       >
       <p>Owner: {{ board?.owner.name }}</p>
+      <p>Projects: {{ board?.cards.length }}</p>
       <p>API: {{ config.public.apiBase }}</p>
 
       <Card

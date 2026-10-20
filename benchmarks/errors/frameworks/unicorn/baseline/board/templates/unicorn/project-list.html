@@ -1,5 +1,6 @@
 {% load unicorn %}
 <div>
+  <p>Projects: {{ cards|length }}</p>
   {% for card in cards %}
     {% if card.title not in hidden %}
       {% with tone=card.featured|yesno:"accent,plain" %}

@@ -3,5 +3,5 @@ mistake = { file = "app/components/board_page.py", contains = "titel=\"Board\"" 
 
 [[edits]]
 file = "app/components/board_page.py"
-old = '<div class="board" title="Board">'
-new = '<div class="board" titel="Board">'
+old = '<div class="board" id="board" title="Board">'
+new = '<div class="board" id="board" titel="Board">'

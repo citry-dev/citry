@@ -3,8 +3,8 @@ mistake = { file = "app/pages/index.vue", contains = "<dvi" }
 
 [[edits]]
 file = "app/pages/index.vue"
-old = '<div class="board" title="Board">'
-new = '<dvi class="board" title="Board">'
+old = '<div id="board" class="board" title="Board">'
+new = '<dvi id="board" class="board" title="Board">'
 
 [[edits]]
 file = "app/pages/index.vue"

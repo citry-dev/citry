@@ -70,6 +70,7 @@ def get(q: str = ""):
         P(f"Owned by {owner.name}"),
         Img(src="/static/avatar.svg", alt=owner.name, width="32", height="32"),
         P(f"Owner: {owner.name}"),
+        P(f"Projects: {len(projects)}"),
         P(id="api"),
         Script(f"document.getElementById('api').textContent = 'API: ' + {json.dumps(API_BASE)};"),
         *[
@@ -111,6 +112,7 @@ def get(q: str = ""):
         P(f"Searched: {q}") if q else None,
         Nav(A("About", href="/about"), A("Project 1", href="/projects/1")),
         cls="board",
+        id="board",
         title="Board",
         style=f"--accent: {ACCENT}",
     )

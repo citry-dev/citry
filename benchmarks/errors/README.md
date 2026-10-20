@@ -411,21 +411,22 @@ every framework.
 
 | Part | What the page does | Used by |
 | --- | --- | --- |
-| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title`. The server sets its color, blue, as the CSS variable `--accent`, which the stylesheet reads (Nuxt's stylesheet reads the server's value with Vue's `v-bind()` instead). This is unrelated to the card's `accent` tone | m15, m43 |
+| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title`. The server sets its color, blue, as the CSS variable `--accent`, which the stylesheet reads (Nuxt's stylesheet reads the server's value with Vue's `v-bind()` instead). This is unrelated to the card's `accent` tone | m15, m43, m57 |
 | Subtitle | `Owned by Ada` under the heading. Where translations are built in, it comes from a message that takes the owner's name as an argument | m46 |
-| Board wrapper | A `<div class="board" title="Board">` around everything below. The stylesheet makes `.board` text `rgb(0, 128, 0)` | m10, m11, m16 |
-| Avatar | An `<img>` of the owner from the app's static files, `avatar.svg`, with the alt text `Ada` | m48 |
-| Owner | `Owner: Ada`, read in the template from a server object `owner` with a `name` attribute | m07, m08 |
+| Board wrapper | A `<div class="board" id="board" title="Board">` around everything below. The stylesheet makes `.board` text `rgb(0, 128, 0)` | m10, m11, m16, m56, m57 |
+| Avatar | An `<img>` of the owner from the app's static files, `avatar.svg`, with the alt text `Ada` | m48, m53 |
+| Owner | `Owner: Ada`, read in the template from a server object `owner` with a `name` attribute | m07, m08, m52 |
+| Project count | `Projects: 3`, counted in the template with the template language's length filter or helper (`projects.length` in JavaScript) | m59 |
 | Public setting | `API: /api`. The server passes the public value `/api` to browser-side code, which renders it. The server also holds `SECRET_TOKEN = "s3cr3t"`, which never reaches the browser | m12, m40, m41, m42 |
-| Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks` | m01 to m04, m17, m22, m23, m47 |
+| Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks`. Where the framework matches list items by key when it updates the list in place, each card has a key made from its project | m01 to m04, m17, m22, m23, m47, m51, m58 |
 | Card tone | The card takes an input `tone` with the choices `plain` and `accent`. The server data marks Alpha as featured, the page passes `accent` for a featured project and `plain` for the others, and the stylesheet gives an accent card a blue border | m49 |
 | Card footer | The page fills the card's `footer` slot (or block, or child region) with a link `Open Alpha (3)` to `#alpha`. The card hands its `title` and `count` back to the fill, which builds the link text from them | m05, m35, m36, m37 |
-| Card hide | Each card has a `Hide` button. It tells the page through an event or callback named `hide`, and the page then hides that card | m24, m29, m30 |
+| Card hide | Each card has a `Hide` button. It tells the page through an event or callback named `hide`, and the page then hides that card | m24, m29, m30, m60 |
 | Counter | `Saved: 0` and an `Add` button. Add sends `{amount: 1}` to a server handler, route or action named `save`. The server adds `amount` to a value kept in a state field named `count`, and the page then shows `Saved: 1` | m06, m13, m18, m32, m33, m34, m38, m39 |
-| Details | A `Details` button toggles browser-side state named `open` and reports it through `aria-expanded`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31 |
+| Details | A `Details` button toggles browser-side state named `open` and reports it through `aria-expanded`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31, m54, m55 |
 | Status | Inside Details, a browser-side `Status` component with a required boolean input `open` shows `Status: open` or `Status: closed`. Its `Close` button tells Details to close through an event or callback named `close` | m25 to m28 |
-| Search form | `<form role="search">` with a search field named `q` and `<button type="submit">Search</button>`. A line `Searching for: ...` repeats what is typed, and submitting `alpha` shows `Searched: alpha` | m09, m44 |
-| Links | An `About` link to the route `about` at `/about`, whose page reads `About this board`, and a `Project 1` link to `/projects/1`, whose page reads `Project 1` | m45 |
+| Search form | `<form role="search">` with a search field named `q` and `<button type="submit">Search</button>`. A line `Searching for: ...` repeats what is typed, and submitting `alpha` shows `Searched: alpha` | m09, m44, m62, m63 |
+| Links | An `About` link to the route `about` at `/about`, whose page reads `About this board`, and a `Project 1` link to `/projects/1`, whose page reads `Project 1`. The project route takes a numeric id, declared as a number where the router can | m45, m61 |
 
 Each card's footer link names its own project.
 
