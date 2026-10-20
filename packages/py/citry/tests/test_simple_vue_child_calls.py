@@ -134,7 +134,7 @@ CONDITIONAL = """
 DIRECT_LOOP = """
     <p>
       <c-Badge c-for="tag in row['tags']" #c-key="tag" c-label="tag" />
-      <c-Badge #c-key="1" label="numbered" c-done="0" />
+      <c-Badge #c-key="1" label="numbered" c-done="False" />
     </p>
 """
 LOOPED = """

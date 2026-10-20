@@ -199,6 +199,10 @@ class CSortable(LibraryComponent):
     class Slots:
         default: SlotInput[CSortableDefaultSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_sortable_snapshot", None)
         if cached is not None:
@@ -326,6 +330,10 @@ class CSortableItem(LibraryComponent):
         default: SlotInput[CSortableItemSlotData] | None = None
         handle: SlotInput[CSortableItemSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         validate_boolean("CSortableItem", "disabled", kwargs.disabled)
         registry = _registry(self)
@@ -360,6 +368,10 @@ class CInternalSortableDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CSortableDefaultSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -392,6 +404,10 @@ class CInternalSortable(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declarations = kwargs.registry.items
@@ -494,6 +510,10 @@ class CInternalSortableItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item

@@ -14,10 +14,42 @@
 
 ### Changed
 
+- **Breaking:** a component input of the wrong type now raises
+  `TypeError` when the component renders, in development and in
+  production. Fix the value or widen the annotation; to keep the old
+  behavior, set `check_input_types = False` in a component's nested
+  `class Lint:`, or pass
+  `Citry(lint=LintSettings(check_input_types=False))`. If you use Citry
+  UI, upgrade it at the same time: earlier Citry UI releases reject some
+  valid inputs under this check.
+
+  ```python
+  class Card(Component):
+      class Kwargs:
+          title: str
+
+  card = Card(title=123)
+  str(card)
+  # TypeError: Card.Kwargs.title expects str, got int (123). ...
+  ```
+
+  Citry checks only the outer type of each `Kwargs`, `TemplateData`,
+  `JsData`, `CssData`, and Events `State` field, so `list[str]` accepts
+  any list. A field's own default always passes, so `title: str = None`
+  keeps working, and Pydantic models keep their own rules
+  ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
 - `citry check` now fails, and the editor shows an error, on an HTML
   attribute value the browser does not accept, such as
   `<button type="sumbit">`. Set `rule_invalid_attribute_value="warning"` in
   `LintSettings` to keep the previous behavior.
+
+### Fixes
+
+- An Events `State` field annotated as a tuple is a tuple again in event
+  handlers, instead of the list that JSON turned it into.
+- On Python 3.10, a browser update to an Events `State` field annotated as
+  a parameterized container, such as `tuple[str, ...]` or `set[str]`, no
+  longer fails with a server error.
 
 ## v0.6.0
 

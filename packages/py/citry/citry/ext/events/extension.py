@@ -16,6 +16,7 @@ from types import FunctionType
 from typing import TYPE_CHECKING, Any, Literal, cast
 from weakref import WeakKeyDictionary
 
+from citry._input_types import _check_input_types
 from citry._nested_declarations import (
     _active_nested_class_declarations,
     _ancestor_with_same_declaration,
@@ -492,7 +493,16 @@ class EventsExtension(Extension):
         info = self.resolve(comp_cls)
         if info.state_cls is None:
             return None
-        comp_name = comp_cls.__name__
+        state = self._build_state_value(component, info.state_cls)
+        # Only State built here, from this render's values, is checked. State
+        # rebuilt from an event call's signed token was checked when the token
+        # was made, and JSON turns a tuple field into a list on the way back.
+        _check_input_types(state, info.state_cls, comp_cls, "State")
+        return state
+
+    def _build_state_value(self, component: Component, state_cls: type) -> Any:
+        """Build State from ``state_data()`` or from same-named kwargs, without checking types."""
+        comp_name = type(component).__name__
         state_data = getattr(component, "state_data", None)
         if callable(state_data):
             result = state_data(component.kwargs, component.slots)
@@ -503,15 +513,15 @@ class EventsExtension(Extension):
                 )
                 raise ValueError(msg)
             if isinstance(result, dict):
-                return info.state_cls(**result)
-            if isinstance(result, info.state_cls):
+                return state_cls(**result)
+            if isinstance(result, state_cls):
                 return result
             msg = (
                 f"Component {comp_name}: state_data() must return the State instance"
                 f" ({comp_name}.State(...)) or a dict of its fields; got {type(result).__name__}."
             )
             raise ValueError(msg)
-        return build_state_instance(comp_name, info.state_cls, component.raw_kwargs)
+        return build_state_instance(comp_name, state_cls, component.raw_kwargs)
 
     # ----- Capture and validation (class definition time) -----
 

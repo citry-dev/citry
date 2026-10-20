@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from inspect import isasyncgen, isawaitable, isgenerator
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._input_types import _check_input_types
 from citry._pure import pure_body_lookup, store_pure_body
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
@@ -261,6 +262,8 @@ def render_simple(element: SimpleElement) -> SimpleRender:
         declaration.kwargs_schema,
         provenance_only=True,
     )
+    if declaration.kwargs_schema is not None:
+        _check_input_types(kwargs, declaration.kwargs_schema, cls, "Kwargs")
     const_candidates.update(kwargs_const._const_values)
     _restore_const_identities(kwargs_const, const_candidates)
     raw_slots = {"default": element.content.as_slot()} if element.content is not None else {}
@@ -275,6 +278,7 @@ def render_simple(element: SimpleElement) -> SimpleRender:
         data,
         declaration.data_schema,
         preserve=kwargs_const if declaration.callback is None else None,
+        checked_for=(cls, "TemplateData"),
     )
     _restore_const_identities(data, const_candidates)
     if cls.citry.template_globals or _render_globals.get():

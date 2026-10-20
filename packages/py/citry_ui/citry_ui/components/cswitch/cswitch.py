@@ -174,6 +174,10 @@ class CSwitch(LibraryComponent):
         default: SlotInput[CSwitchDefaultSlotData] | None = None
         description: SlotInput[CSwitchDescriptionSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         name = _canonical_string("name", kwargs.name, allow_none=True)
         if name == "":
