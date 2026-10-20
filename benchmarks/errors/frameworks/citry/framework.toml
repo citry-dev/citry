@@ -132,3 +132,16 @@ selector = "button:has-text('Hide')"
 [[runtime.journeys.default]]
 action = "wait"
 ms = 500
+
+# Opens the details, closes them from the status line, and opens them again.
+[[runtime.journeys.status]]
+action = "click"
+selector = "button:has-text('Details')"
+
+[[runtime.journeys.status]]
+action = "click"
+selector = "button:has-text('Close')"
+
+[[runtime.journeys.status]]
+action = "click"
+selector = "button:has-text('Details')"

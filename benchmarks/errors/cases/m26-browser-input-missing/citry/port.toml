@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/details.py", contains = "<c-Status" }
+
+[[edits]]
+file = "app/components/details.py"
+old = '<c-Status :open="open" @close="open = false" />'
+new = '<c-Status @close="open = false" />'

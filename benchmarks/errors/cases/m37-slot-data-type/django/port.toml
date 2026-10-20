@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "project_card.html extends card.html and fills its footer block, and Django renders that block with the same context the page's include gave the card. The fill reads `title` and `count` from that context. A Django block takes no arguments, so the card hands the fill nothing of its own and there is no slot data whose type the fill could get wrong. A wrong-typed use of a variable there is m23."

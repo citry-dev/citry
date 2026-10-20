@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and five others report the same 37 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and five others report the same 44 developer mistakes.
 ---
 
 # Benchmarks
@@ -8,7 +8,7 @@ description: How fast Citry and eleven other frameworks make a 1,400-entry page 
 - [Performance](#performance): how long a page with 1,400 entries
   takes to become usable.
 - [Catching errors](#catching-errors): how early each framework
-  reports the same 37 developer mistakes.
+  reports the same 44 developer mistakes.
 
 ## Performance
 
@@ -73,12 +73,12 @@ noise.
 The earlier a mistake is reported, the less time it costs you.
 
 We wrote the same small app in Citry and five other frameworks, made
-the same 37 mistakes in each (a misspelled component name, a
+the same 44 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**.
 
 <c-error-benchmark-chart
-  title="How the 37 mistakes ended in each framework"
+  title="How the 44 mistakes ended in each framework"
 />
 
 ### Read the error chart { #errors-what-the-chart-shows }
@@ -98,11 +98,11 @@ each mistake was first reported**.
 
 ### Where Citry stands { #errors-where-citry-stands }
 
-- **Before the app runs: 21 of 35** (20 errors, 1 warning). Two of
-  the 37 mistakes don't apply to Citry. Next.js 27 of 32, Nuxt 16 of
-  33, FastHTML 14 of 29, Django + HTMX + Alpine 3 of 33, Jinja + HTMX
-  + Alpine 2 of 31.
-- **Missed: 10**, nothing tells you:
+- **Before the app runs: 24 of 42** (23 errors, 1 warning). Two of
+  the 44 mistakes don't apply to Citry. Next.js 34 of 39, Nuxt 23 of
+  40, FastHTML 17 of 32, Django + HTMX + Alpine 3 of 35, Jinja + HTMX
+  + Alpine 2 of 35.
+- **Missed: 13**, nothing tells you:
     - a misspelled HTML element, HTML attribute name, or CSS class: the
       page looks wrong
     - the data a button sends to the server has a misspelled field, a
@@ -113,6 +113,13 @@ each mistake was first reported**.
       child's button changes nothing
     - a misspelled browser event such as `@clik`: the button does
       nothing
+    - a browser-side component gets text where it declares a boolean,
+      or changes an input it received instead of telling its parent:
+      the status shows the wrong value, or `Close` leaves the details
+      open
+    - the server and browser render different content in a part that
+      passes values to a child component: the page shows the browser's
+      version with no error
     - a secret sent to the browser through `js_data()`: the page looks
       right, but the secret is in what the browser receives. No
       framework here reports this one, and in Next.js and Nuxt even
@@ -120,14 +127,16 @@ each mistake was first reported**.
       before an error appears.
 - **Warning only: 1**, an invalid attribute value such as
   `type="sumbit"`.
-- **Only at runtime: 4**:
+- **Only at runtime: 5**:
     - a misspelled template directive: fails in the browser
-    - the server and browser render different content: fails in the
-      browser
     - a syntax error in a browser expression: the server fails to render
       the page
     - browser code is passed a value it can't receive, such as a path
       object: the server fails to render the page
+    - a slot fill reads a misspelled field of the data the component
+      hands it, or uses a number as text: the server fails to render
+      the page. Unpacking the data, as in `data="{ title, count }"`,
+      reports a misspelled field before the app runs
 - **Needs `template_data()`**: 3 of these reports (a wrong-typed
   input in markup, a misspelled attribute on a template object, a
   wrong-typed operation in a template expression) appear only when the

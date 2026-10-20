@@ -17,17 +17,25 @@
 
     {% for project in projects %}
     <div x-data="{ shown: true }" x-show="shown" @hide="shown = false">
-      {% call card(title=project.title, count=project.count) %}
-      <a href="#{{ project.title|lower }}">Open {{ project.title }}</a>
+      {% call(title, count) card(title=project.title, count=project.count, tone="accent" if project.featured else "plain") %}
+      <a href="#{{ project.title|lower }}">Open {{ title }} ({{ count }})</a>
       {% endcall %}
     </div>
     {% endfor %}
 
     {% include "counter.html" %}
 
-    <div x-data="{ open: false }">
-      <button type="button" @click="open = !open">Details</button>
+    <div x-data="{ open: false }" @close="open = false">
+      <button type="button" :aria-expanded="open" @click="open = !open">Details</button>
       <p x-show="open">Details are visible</p>
+      {# The status line is its own Alpine component. Alpine nests its scope
+         inside the details component's, so its markup reads `open` directly.
+         Its Close button leaves `open` to the details component and asks it
+         to close with an event. #}
+      <p x-data="{ close() { this.$dispatch('close') } }">
+        <span x-text="open ? 'Status: open' : 'Status: closed'"></span>
+        <button type="button" @click="close">Close</button>
+      </p>
     </div>
 
     <form role="search"><button type="submit">Search</button></form>

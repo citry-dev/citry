@@ -7,8 +7,8 @@ mistake = { file = "app/app.vue", contains = "<Card" }
 file = "app/app.vue"
 old = '''
       >
-        <template #footer>
-          <a :href="`#${card.title.toLowerCase()}`">Open {{ card.title }}</a>
+        <template #footer="footer">
+          <a :href="`#${card.title.toLowerCase()}`">Open {{ footer.title }} ({{ footer.count }})</a>
         </template>
       </Card>
 '''

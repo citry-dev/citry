@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "templates/index.html", contains = 'tone="acent"' }
+
+[[edits]]
+file = "templates/index.html"
+old = 'tone="accent" if'
+new = 'tone="acent" if'

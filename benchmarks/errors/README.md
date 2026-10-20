@@ -118,9 +118,9 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 Rerunning them with nothing changed took 8 seconds: it repeated only the
 browser checks of the 4 cases whose journey stops on an error page, which
 are never stored. Every framework repeats such cases on each run. A full run
-of the six frameworks with nothing stored is estimated at about 5 minutes;
-it has not been timed yet, and most of it is the Nuxt cases, which run one
-at a time, and the Next.js builds. It is not part of routine CI. Run it at
+of the six frameworks' 264 cases with nothing stored (`--no-cache`) took
+7.5 minutes on the same machine; most of it is the Nuxt cases, which run
+one at a time, and the Next.js builds. It is not part of routine CI. Run it at
 each Citry release, and when a framework's pinned versions change.
 
 ## Latest result
@@ -138,9 +138,25 @@ how each framework naturally writes a part of the page, not from its tools:
 - **m13:** some apps read the state field before writing it, so a
   misspelled field fails at runtime; others only write it, so the page is
   silently wrong.
+- **m14:** Citry 0.6.0 does not hydrate an element that passes values to
+  a child component; Vue builds that element's contents in the browser
+  and reports no mismatch there. The details panel passes `open` to
+  `Status`, so the case is missed. In Next.js and Nuxt the same mistake is a runtime
+  error.
 - **m17:** where the wrong type is computed differs (a Python data class,
   a server route, a page component), and so does where the type checker
   reports it.
+- **m25 to m28:** Django and Jinja write `Status` as an Alpine component
+  nested inside the one that owns `open`. Alpine has no required or typed
+  component inputs, so the status line reads `open` from the scope it
+  shares with its parent. m25 misspells that read, which fails in the
+  browser; m26 and m27 do not apply; and m28 is "prevented", because
+  assigning `open` from the nested component changes the parent's value
+  as intended. FastHTML's page uses plain scripts with no browser-side
+  components, so it has no status line and m25 to m28 do not apply. In
+  Citry, m27 passes the prop an expression, and Citry checks a prop's type
+  only when the value is written as a literal; nothing checks a child that
+  assigns to its own prop (m28).
 - **m30 and m34:** most pages need no value in the hide event, and most
   never read the server's reply as data, so each applies to one framework
   only: Citry's card sends its title with the hide event (m30), and Nuxt's
@@ -152,6 +168,13 @@ how each framework naturally writes a part of the page, not from its tools:
   optional, and so is a Nuxt slot whose type does not mark it required, so
   the cards silently lose their footer links; Jinja's macro fails when it
   calls the missing fill.
+- **m36 and m37:** a Django block takes no arguments, so the card hands
+  its footer no data of its own, and both cells are n/a. Citry's fill
+  names its slot data as one record (`data="card"`), the first form its
+  docs show. Citry reports a misspelled field only when the fill unpacks
+  the data (`data="{ title, count }"`), and does not check the type in
+  either form, so both mistakes show only when the page renders. Jinja
+  prints a misspelled name as empty text, so its m36 is missed.
 - **m38:** Django reads the session with a default value, so a misspelled
   field quietly shows 0, while the Jinja app reads its state without a
   default, so the misspelled field raises an error.
@@ -160,7 +183,7 @@ how each framework naturally writes a part of the page, not from its tools:
 
 The gaps the earlier 24-mistake run found in Citry are tracked in
 [#207](https://github.com/citry-dev/citry/issues/207); the gaps the
-hand-off mistakes (m29 to m47) found are not in it yet.
+mistakes measured since (m25 to m42, m47 and m49) found are not in it yet.
 
 Django Rusty Templates, django-components, Tetra, django-unicorn, Reflex and
 ReactPy are not measured yet.
@@ -179,10 +202,12 @@ every framework.
 | Owner | `Owner: Ada`, read in the template from a server object `owner` with a `name` attribute | m07, m08 |
 | Public setting | `API: /api`. The server passes the public value `/api` to browser-side code, which renders it. The server also holds `SECRET_TOKEN = "s3cr3t"`, which never reaches the browser | m12, m40, m41, m42 |
 | Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks` | m01 to m04, m17, m22, m23, m47 |
-| Card footer | The page fills the card's `footer` slot (or block, or child region) with a link `Open Alpha` to `#alpha` | m05, m35 |
+| Card tone | The card takes an input `tone` with the choices `plain` and `accent`. The server data marks Alpha as featured, the page passes `accent` for a featured project and `plain` for the others, and the stylesheet gives an accent card a blue border | m49 |
+| Card footer | The page fills the card's `footer` slot (or block, or child region) with a link `Open Alpha (3)` to `#alpha`. The card hands its `title` and `count` back to the fill, which builds the link text from them | m05, m35, m36, m37 |
 | Card hide | Each card has a `Hide` button. It tells the page through an event or callback named `hide`, and the page then hides that card | m24, m29, m30 |
 | Counter | `Saved: 0` and an `Add` button. Add sends `{amount: 1}` to a server handler, route or action named `save`. The server adds `amount` to a value kept in a state field named `count`, and the page then shows `Saved: 1` | m06, m13, m18, m32, m33, m34, m38, m39 |
-| Details | A `Details` button toggles browser-side state named `open`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31 |
+| Details | A `Details` button toggles browser-side state named `open` and reports it through `aria-expanded`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31 |
+| Status | Inside Details, a browser-side `Status` component with a required boolean input `open` shows `Status: open` or `Status: closed`. Its `Close` button tells Details to close through an event or callback named `close` | m25 to m28 |
 | Search form | `<form role="search"><button type="submit">Search</button></form>` | m09 |
 
 Each card's footer link names its own project.
@@ -214,8 +239,9 @@ the count. Journeys run in the order `framework.toml` lists them, after the
 default one, so the clean app and the case start each journey from the same
 server state, apart from what the mistake itself changed. Every case runs
 every journey of its framework, so a mistake is compared on every part of
-the page any journey reaches. Every framework in this benchmark currently
-lists only the default journey.
+the page any journey reaches. Every framework except FastHTML, which has
+no status line, also lists a `status` journey, which clicks `Details`,
+`Close`, and `Details` again.
 
 A framework lists its journeys in `framework.toml`, by name, because the
 selectors differ between frameworks. In this example, which is not taken

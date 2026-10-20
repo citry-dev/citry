@@ -8,4 +8,13 @@ document.addEventListener('alpine:init', () => {
       this.open = !this.open;
     },
   }));
+
+  // The status line inside Details. Alpine nests its scope inside the
+  // board's, so its markup reads the board's `open` directly. Its Close
+  // button leaves `open` to the board and asks it to close with an event.
+  Alpine.data('status', () => ({
+    close() {
+      this.$dispatch('close');
+    },
+  }));
 });

@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "templates/index.html", contains = "call card(count=" }
+mistake = { file = "templates/index.html", contains = "card(count=" }
 
 [[edits]]
 file = "templates/index.html"
-old = "{% call card(title=project.title, count=project.count) %}"
-new = "{% call card(count=project.count) %}"
+old = 'card(title=project.title, count=project.count,'
+new = 'card(count=project.count,'

@@ -1,15 +1,15 @@
 # The page's fill is the body of the {% call %} block, which the macro
 # inserts with caller(). Without the fill the page calls the macro directly.
 status = "ported"
-mistake = { file = "templates/index.html", contains = "{{ card(title=project.title, count=project.count) }}" }
+mistake = { file = "templates/index.html", contains = '{{ card(title=project.title, count=project.count, tone="accent" if project.featured else "plain") }}' }
 
 [[edits]]
 file = "templates/index.html"
 old = '''
-      {% call card(title=project.title, count=project.count) %}
-      <a href="#{{ project.title|lower }}">Open {{ project.title }}</a>
+      {% call(title, count) card(title=project.title, count=project.count, tone="accent" if project.featured else "plain") %}
+      <a href="#{{ project.title|lower }}">Open {{ title }} ({{ count }})</a>
       {% endcall %}
 '''
 new = '''
-      {{ card(title=project.title, count=project.count) }}
+      {{ card(title=project.title, count=project.count, tone="accent" if project.featured else "plain") }}
 '''

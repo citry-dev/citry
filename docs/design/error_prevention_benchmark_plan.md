@@ -3,9 +3,10 @@
 Status: approved by the maintainer on 2026-10-20, with the decisions listed
 at the end. Written against the benchmark as added in PR #205 (commit
 `9346c7131`). PRs 1a (case edits) and 1b (runner journeys and page
-comparison) are done, as described in section 7, and so is PR 2 (the
-hand-off mistakes on the current page); the other PRs in section 8 are
-planned. The published results include 1b and PR 2. The
+comparison) are done, as described in section 7, and so are PR 2 (the
+hand-off mistakes on the current page) and PR 3 (browser components and
+slot data); the other PRs in section 8 are planned. The published results
+include 1b, PR 2 and PR 3. The
 benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
@@ -960,7 +961,7 @@ change per baseline, plus re-checking the clean page.
 | 1a. Case edits | `edits` form for `port.toml` and a script that converts the 134 ported cases. Proof in seconds: apply each converted case to its baseline and compare the result byte for byte with the old copy. No benchmark run needed | 0 new (134 converted by script) | 0 | ~22 min |
 | 1b. Runner journeys and page comparison (done; the first full run after it, published with PR 2, changed no existing cell) | Named journeys with `fill`/`press` steps, and border color, `alt`, `id`, `aria-*`, `disabled` in the page comparison. One full run; any cell that changes is listed with the run, since a wider comparison can turn a "never" into "silently wrong" (both score as missed). The run was published with PR 2, and no existing cell changed | 0 | 0 | ~22 min |
 | 2. Hand-offs on the current page (done) | m29-m35, m38-m42, m47 (13 mistakes; part 2 mistakes that need no page change) | 78 (13 x 6), minus the cells that do not apply | ~12 min | ~34 min |
-| 3. Browser components and slot data | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
+| 3. Browser components and slot data (done; the run changed one existing cell, Citry m14, from runtime error to missed, because the details panel now passes `open` to `Status`) | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
 | 4. Forms, links, assets, CSS variables, i18n arguments | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 30 + 24 baseline changes | ~5 min | ~46 min |
 | 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 78 + 6 baseline changes | ~12 min | ~58 min |
 | 6. django-components | framework, baseline, one case per mistake | ~62 | ~8 min | ~66 min |
@@ -1066,7 +1067,11 @@ count, unless Reflex needs a `max_jobs` limit.
   this round. The full matrix does not run at every release.
 - **Browser-side components in Django and Jinja (question 1):** m25-m28
   use Alpine components (`x-data` with a nested component), the way those
-  stacks would write them.
+  stacks would write them. In PR 3 only m25 could be written naturally with Alpine:
+  the nested component reads `open` through Alpine's shared scope, so m25
+  misspells that read, m26 and m27 do not apply (Alpine has no required or
+  typed inputs), and m28 is prevented (the child's assignment changes the
+  parent's value as intended).
 - **Lint warnings (question 5):** Next.js's jsx-a11y warnings score
   "Static/IDE warning", as proposed.
 - **Changed numbers:** expected. Turning on the stricter settings changes

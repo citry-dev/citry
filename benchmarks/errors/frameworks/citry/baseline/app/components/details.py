@@ -16,8 +16,15 @@ class Details(Component):
 
     template = """
       <section class="details">
-        <button type="button" @click="toggle()">Details</button>
+        <button
+          type="button"
+          :aria-expanded="open"
+          @click="toggle()"
+        >
+          Details
+        </button>
         <p v-if="open">Details are visible</p>
+        <c-Status :open="open" @close="open = false" />
       </section>
     """
 

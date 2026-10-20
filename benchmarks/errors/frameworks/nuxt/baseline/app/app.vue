@@ -40,18 +40,22 @@ function hide(title: string) {
         :key="card.title"
         :title="card.title"
         :count="card.count"
+        :tone="card.featured ? 'accent' : 'plain'"
         @hide="hide(card.title)"
       >
-        <template #footer>
-          <a :href="`#${card.title.toLowerCase()}`">Open {{ card.title }}</a>
+        <template #footer="footer">
+          <a :href="`#${card.title.toLowerCase()}`">Open {{ footer.title }} ({{ footer.count }})</a>
         </template>
       </Card>
 
       <p>Saved: {{ count }}</p>
       <button type="button" @click="add">Add</button>
 
-      <button type="button" @click="toggleDetails">Details</button>
+      <button type="button" :aria-expanded="open" @click="toggleDetails">
+        Details
+      </button>
       <p v-if="open">Details are visible</p>
+      <Status :open="open" @close="open = false" />
 
       <form role="search">
         <button type="submit">Search</button>

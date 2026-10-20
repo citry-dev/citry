@@ -3,5 +3,5 @@ mistake = { file = "app.py", contains = "str(count)" }
 
 [[edits]]
 file = "app.py"
-old = "projects = [Project(title=title, count=count) for title, count in TASK_COUNTS.items()]"
-new = "projects = [Project(title=title, count=str(count)) for title, count in TASK_COUNTS.items()]"
+old = 'Project(title=title, count=count, featured=title == "Alpha")'
+new = 'Project(title=title, count=str(count), featured=title == "Alpha")'

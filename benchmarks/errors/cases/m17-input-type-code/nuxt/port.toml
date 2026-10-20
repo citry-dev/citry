@@ -7,5 +7,5 @@ codes = ["TS2322"]
 
 [[edits]]
 file = "server/api/board.get.ts"
-old = "cards: Object.entries(tasks).map(([title, count]) => ({ title, count })),"
-new = "cards: Object.entries(tasks).map(([title, count]) => ({ title, count: String(count) })),"
+old = "({ title, count, featured: title === 'Alpha' })"
+new = "({ title, count: String(count), featured: title === 'Alpha' })"

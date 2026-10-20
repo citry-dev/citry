@@ -42,11 +42,12 @@ class BoardPage(Component):
                   #c-key="project.slug"
                   c-title="project.title"
                   c-count="project.count"
+                  c-tone="'accent' if project.featured else 'plain'"
                   :hiddenTitles="hiddenTitles"
                   @hide="hideCard"
                 >
-                  <c-fill name="footer">
-                    <a c-href="'#' + project.slug">Open {{ project.title }}</a>
+                  <c-fill name="footer" data="card">
+                    <a c-href="'#' + project.slug">Open {{ card.title }} ({{ card.count }})</a>
                   </c-fill>
                 </c-Card>
               </c-for>

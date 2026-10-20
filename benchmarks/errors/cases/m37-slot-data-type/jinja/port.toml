@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "templates/index.html", contains = 'count + " tasks"' }
+
+[[edits]]
+file = "templates/index.html"
+old = "({{ count }})"
+new = '({{ count + " tasks" }})'

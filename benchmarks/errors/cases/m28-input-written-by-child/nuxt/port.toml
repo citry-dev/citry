@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/Status.vue", contains = '@click="open = false"' }
+
+[[edits]]
+file = "app/components/Status.vue"
+old = '''@click="$emit('close')"'''
+new = '@click="open = false"'

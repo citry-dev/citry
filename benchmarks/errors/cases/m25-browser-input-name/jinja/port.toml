@@ -1,0 +1,11 @@
+# Alpine has no declared component inputs: the status line is an Alpine
+# component nested inside the one that owns `open`, and its markup reads
+# `open` through the scope Alpine shares with it. The name it reads stands in
+# for the input's name, so the case misspells that read.
+status = "ported"
+mistake = { file = "templates/index.html", contains = "opne ?" }
+
+[[edits]]
+file = "templates/index.html"
+old = '''x-text="open ? 'Status: open' :'''
+new = '''x-text="opne ? 'Status: open' :'''

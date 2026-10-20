@@ -3,5 +3,5 @@ mistake = { file = "board/templates/board/project_card.html", contains = 'block 
 
 [[edits]]
 file = "board/templates/board/project_card.html"
-old = '{% block footer %}<a href="#{{ title|lower }}">Open {{ title }}</a>{% endblock %}'
-new = '{% block fotter %}<a href="#{{ title|lower }}">Open {{ title }}</a>{% endblock %}'
+old = '{% block footer %}<a href="#{{ title|lower }}">Open {{ title }} ({{ count }})</a>{% endblock %}'
+new = '{% block fotter %}<a href="#{{ title|lower }}">Open {{ title }} ({{ count }})</a>{% endblock %}'

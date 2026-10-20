@@ -4,6 +4,7 @@ import { useState } from "react";
 import { save } from "./actions";
 import Card from "./card";
 import type { Project } from "./data";
+import Status from "./status";
 
 type BoardProps = {
   apiBase: string;
@@ -34,11 +35,12 @@ export default function Board({ apiBase, projects, initialSaved }: BoardProps) {
             key={project.title}
             title={project.title}
             count={project.count}
-            footer={
+            tone={project.featured ? "accent" : "plain"}
+            footer={(card) => (
               <a href={`#${project.title.toLowerCase()}`}>
-                Open {project.title}
+                Open {card.title} ({card.count})
               </a>
-            }
+            )}
             onHide={() => setHidden([...hidden, project.title])}
           />
         ))}
@@ -46,10 +48,11 @@ export default function Board({ apiBase, projects, initialSaved }: BoardProps) {
       <button type="button" onClick={add}>
         Add
       </button>
-      <button type="button" onClick={toggle}>
+      <button type="button" aria-expanded={open} onClick={toggle}>
         Details
       </button>
       {open && <p>Details are visible</p>}
+      <Status open={open} onClose={() => setOpen(false)} />
     </>
   );
 }

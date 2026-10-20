@@ -25,6 +25,14 @@ attributes in them. VS Code's built-in HTML support checks only <script>
 and <style> blocks inside a page, and this page has no inline script or style. Pylance's default diagnosticMode "openFilesOnly" reports
 only on open files, while the command line checks every file, which can only
 add findings.
+
+The card macro hands its title and count back to the page's `{% call %}`
+block with `caller(title, count)`, the form Jinja's docs show. The status
+line inside Details is an Alpine component nested inside the Details
+component. Alpine has no required or typed component inputs, so the status
+line's markup reads `open` through the scope Alpine shares with it. Its
+Close button dispatches a `close` event, and a listener on the Details
+component sets `open` to false.
 """
 
 [setup]
@@ -65,4 +73,10 @@ default = [
   { action = "wait", ms = 500 },
   { action = "click", selector = "button:text-is('Details')" },
   { action = "click", selector = "button:text-is('Hide')" },
+]
+# Opens the details, closes them from the status line, and opens them again.
+status = [
+  { action = "click", selector = "button:text-is('Details')" },
+  { action = "click", selector = "button:text-is('Close')" },
+  { action = "click", selector = "button:text-is('Details')" },
 ]

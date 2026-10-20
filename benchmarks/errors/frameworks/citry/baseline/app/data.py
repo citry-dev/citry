@@ -15,6 +15,8 @@ class Project:
     title: str
     count: int
     slug: str
+    # The page draws a featured project's card with the accent border.
+    featured: bool
 
 
 OWNER = Owner("Ada")
@@ -22,4 +24,6 @@ OWNER = Owner("Ada")
 # Open tasks per project, as the task store reports them.
 TASK_COUNTS = {"Alpha": 3, "Beta": 5, "Gamma": 8}
 
-PROJECTS = tuple(Project(title, count, title.lower()) for title, count in TASK_COUNTS.items())
+PROJECTS = tuple(
+    Project(title, count, title.lower(), featured=title == "Alpha") for title, count in TASK_COUNTS.items()
+)

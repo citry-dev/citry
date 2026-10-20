@@ -4,9 +4,11 @@ mistake = { file = "app/components/Card.vue", contains = "<footer>" }
 [[edits]]
 file = "app/components/Card.vue"
 old = '''
-      <slot name="footer" />
+        :count="count"
+      />
     </footer>
 '''
 new = '''
-      <slot name="footer" />
+        :count="count"
+      />
 '''

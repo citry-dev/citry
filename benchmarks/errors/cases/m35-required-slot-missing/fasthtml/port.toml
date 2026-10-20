@@ -1,7 +1,10 @@
 status = "ported"
-mistake = { file = "main.py", contains = "Card(title=p.title, count=p.count)" }
+mistake = { file = "main.py", contains = '            Card(' }
 
 [[edits]]
 file = "main.py"
-old = 'Card(title=p.title, count=p.count, footer=A(f"Open {p.title}", href=f"#{p.title.lower()}"))'
-new = "Card(title=p.title, count=p.count)"
+old = '''
+                footer=lambda title, count: A(f"Open {title} ({count})", href=f"#{title.lower()}"),
+'''
+new = '''
+'''

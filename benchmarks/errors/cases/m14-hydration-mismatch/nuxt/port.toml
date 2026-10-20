@@ -13,5 +13,11 @@ const detailsLabel = import.meta.client ? 'Details' : 'Loading details'
 
 [[edits]]
 file = "app/app.vue"
-old = '<button type="button" @click="toggleDetails">Details</button>'
-new = '<button type="button" @click="toggleDetails">{{ detailsLabel }}</button>'
+old = '''
+      <button type="button" :aria-expanded="open" @click="toggleDetails">
+        Details
+'''
+new = '''
+      <button type="button" :aria-expanded="open" @click="toggleDetails">
+        {{ detailsLabel }}
+'''

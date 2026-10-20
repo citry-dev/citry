@@ -3,5 +3,5 @@ mistake = { file = "templates/index.html", contains = "titel=" }
 
 [[edits]]
 file = "templates/index.html"
-old = "{% call card(title=project.title, count=project.count) %}"
-new = "{% call card(titel=project.title, count=project.count) %}"
+old = 'card(title=project.title, count=project.count,'
+new = 'card(titel=project.title, count=project.count,'

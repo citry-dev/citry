@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/board.tsx", contains = "card.titel" }
+
+[[edits]]
+file = "app/board.tsx"
+old = "Open {card.title} ({card.count})"
+new = "Open {card.titel} ({card.count})"

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/app.vue", contains = ':open="open ?' }
+
+[[edits]]
+file = "app/app.vue"
+old = '<Status :open="open" @close="open = false" />'
+new = '''<Status :open="open ? 'open' : 'closed'" @close="open = false" />'''
