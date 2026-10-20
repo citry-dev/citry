@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 import tomllib
 from citry_errors import runtime
+from citry_errors.compare import comparable, compare, problems
 from citry_errors.config import (
     DEFAULT_JOURNEY,
     ConfigError,
@@ -17,7 +18,7 @@ from citry_errors.config import (
     load_frameworks,
     load_journeys,
 )
-from citry_errors.runtime import JourneyRecord, Observation, comparable, compare, problems
+from citry_errors.runtime import JourneyRecord, Observation
 from citry_errors.score import RuntimeResult
 
 if TYPE_CHECKING:

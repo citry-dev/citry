@@ -35,11 +35,18 @@ framework, the earliest stage that reported it.
    the report marks that cell `°`. Every finding elsewhere that no note
    confirms is listed in `results.json`, so a reader can check what was left
    out.
-4. The runner then starts the app's development server, drives the page in
-   Chromium through the framework's journeys (see
-   [The browser check](#the-browser-check)), and compares what it records
-   with the clean app's. This decides the outcome when no tool reported the
-   mistake:
+4. When no tool reported the mistake as an error, the runner starts the
+   app's development server in a new copy of the changed app, without what
+   the tools wrote, drives the page in Chromium through the
+   framework's journeys (see [The browser check](#the-browser-check)), and
+   compares what it records with the clean app's. A case a tool already
+   reported as an error skips this step: the report keeps only where a
+   mistake is first reported, so the browser check could not change its
+   result. Its line in `results.jsonl` names that tool under
+   `runtime_skipped`. A tool's warning does not skip the step, because the
+   results also record where the mistake is first reported as an error, and
+   the browser check may be the first to do that. The browser check
+   classifies what it sees:
    - a server error, an error response or a browser error is a runtime error;
    - a browser or server warning is a runtime warning;
    - a different page with no message is "silently wrong";
@@ -74,14 +81,47 @@ uv run --no-sync citry-errors report \
 `run` takes `--framework` and `--mistake`, each repeatable, to run part of
 the matrix, and `--skip-runtime` to run the static stages only. Installed
 environments, working copies and the raw output of every tool are kept under
-`.benchmarks/errors/` at the repository root. Only the compact report in
-`results/` is committed: `report.html`, a self-contained page with the chart
-and the full table that opens straight from disk, plus `matrix.md` and
-`results.json`.
+`.benchmarks/errors/` at the repository root; set `CITRY_ERRORS_CACHE` to
+keep them somewhere else. Only the compact report in `results/` is
+committed: `report.html`, a self-contained page with the chart and the full
+table that opens straight from disk, plus `matrix.md` and `results.json`.
 
-A full run takes tens of minutes, mostly production builds and development
-servers. It is not part of routine CI. Run it at each Citry release, and
-when a framework's pinned versions change.
+`run` runs several cases at once, from several frameworks side by side.
+`--jobs N` sets how many (by default half the CPUs, at most 8). Each clean
+app runs alone first, before any case, so the page that every case of its
+framework is compared with is recorded on a quiet machine. A framework can lower its own limit with `max_jobs` in
+`framework.toml`: Nuxt runs one case at a time, because two `nuxt dev`
+servers starting together can pick the same port for their hot reload.
+`results.jsonl` lists the cases in catalogue order, whatever order they
+finish in.
+
+`run` also reuses what earlier runs stored. It keeps each case's raw tool
+output and browser check in `.benchmarks/errors/results/` (not to be
+confused with the committed `results/` report folder), and a later run runs
+only the cases whose inputs changed: the case itself, its framework's
+folder, what that framework's environment installed, the runner code that
+runs the tools and the browser, the installed Playwright, the Node and
+Python versions, the operating system version, a few environment variables
+the tools read, or the cache folder's location. Output that may say more
+about the machine than the case is not kept: a tool that timed out or was
+killed, a server that never answered, a journey that stopped early, and
+everything from a run whose clean app for that framework had a problem.
+Scoring and the report are always worked out again from the stored output,
+so a change to them needs no rerun. `run.json` in the run's folder under
+`.benchmarks/errors/runs/` lists the clean apps and cases that came from
+earlier runs, and `--no-cache` runs everything again. Use it after changing
+something outside those inputs that could change a tool's output, such as a
+package installed by hand into `.benchmarks/errors/envs/`.
+
+On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
+`--jobs 1` and under a minute with the default of 5, with the same results.
+Rerunning them with nothing changed took 8 seconds: it repeated only the
+browser checks of the 4 cases whose journey stops on an error page, which
+are never stored. Every framework repeats such cases on each run. A full run
+of the six frameworks with nothing stored is estimated at about 5 minutes;
+it has not been timed yet, and most of it is the Nuxt cases, which run one
+at a time, and the Next.js builds. It is not part of routine CI. Run it at
+each Citry release, and when a framework's pinned versions change.
 
 ## Latest result
 

@@ -76,6 +76,8 @@ poetry.lock
 .venv/
 .DS_Store
 .python-version
+# The error benchmark's apps pin the Python their lockfile was made with.
+!benchmarks/errors/frameworks/*/baseline/.python-version
 site
 .direnv/
 .envrc

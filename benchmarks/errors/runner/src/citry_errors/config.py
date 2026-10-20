@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import tomllib
 import unicodedata
@@ -14,9 +15,13 @@ if TYPE_CHECKING:
 
 BENCH_ROOT = Path(__file__).resolve().parents[3]
 REPO_ROOT = BENCH_ROOT.parents[1]
-# Installed environments, per-case working copies and raw run evidence stay
-# out of the repository, next to the other benchmarks' caches.
-CACHE = REPO_ROOT / ".benchmarks" / "errors"
+# Installed environments, per-case working copies, raw run evidence and the
+# stored output of earlier runs stay out of the repository, next to the other
+# benchmarks' caches. CITRY_ERRORS_CACHE moves them, for example to share one
+# set of installed frameworks, and the stored output of frameworks whose
+# commands name no file in the checkout, between two checkouts that do not
+# run at once.
+CACHE = Path(os.environ.get("CITRY_ERRORS_CACHE") or REPO_ROOT / ".benchmarks" / "errors").resolve()
 
 # Static stages in the order a developer meets them. The runtime stages and
 # the two "not reported" outcomes follow, so a lower index means earlier.
@@ -103,6 +108,9 @@ class Framework:
     runtime: Runtime | None
     notes: str
     root: Path
+    # How many of this framework's cases may run at once, when fewer than the
+    # run's worker count; None means no limit of its own.
+    max_jobs: int | None = None
 
     @property
     def baseline(self) -> Path:
@@ -226,8 +234,12 @@ def load_framework(root: Path) -> Framework:
         tomllib.loads(path.read_text(encoding="utf-8")),
         str(path),
         {"key", "name", "setup", "stages"},
-        {"runtime", "notes"},
+        {"runtime", "notes", "max_jobs"},
     )
+    max_jobs = data.get("max_jobs")
+    # Python treats `true` as the int 1, so a bool is rejected explicitly.
+    if max_jobs is not None and (not isinstance(max_jobs, int) or isinstance(max_jobs, bool) or max_jobs < 1):
+        raise ConfigError(f"{path} max_jobs must be a whole number of cases, 1 or more")
     if data["key"] != root.name:
         raise ConfigError(f"{path} key {data['key']!r} must match its folder name {root.name!r}")
     setup = _table(data["setup"], f"{path} [setup]", {"manifests", "command"})
@@ -274,6 +286,7 @@ def load_framework(root: Path) -> Framework:
         runtime=runtime,
         notes=data.get("notes", ""),
         root=root,
+        max_jobs=max_jobs,
     )
 
 

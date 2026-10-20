@@ -1,0 +1,300 @@
+"""Running cases side by side must give the same records as running them one by one."""
+
+from __future__ import annotations
+
+import json
+import signal
+import socket
+import sys
+import threading
+import time
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
+
+import pytest
+from citry_errors import parallel, report, runtime
+from citry_errors.config import ConfigError, Framework, Runtime, Step, load_framework
+from conftest import MISTAKES
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from conftest import Toy
+
+
+def test_results_come_back_in_task_order_whatever_order_the_tasks_finish_in() -> None:
+    # The first task finishes last, so completion order is the reverse of task order.
+    def work(number: int) -> int:
+        time.sleep(0.02 * (5 - number))
+        return number * 10
+
+    results = parallel.run_all(range(5), work, jobs=5, group=lambda _: "all", limits={}, stop=threading.Event())
+    assert results == [0, 10, 20, 30, 40]
+
+
+def test_a_framework_limit_caps_its_cases_and_lets_other_frameworks_go_first() -> None:
+    running: Counter[str] = Counter()
+    highest: Counter[str] = Counter()
+    lock = threading.Lock()
+    started: list[str] = []
+
+    def work(task: str) -> str:
+        with lock:
+            running[task[0]] += 1
+            highest[task[0]] = max(highest[task[0]], running[task[0]])
+            started.append(task)
+        time.sleep(0.03)
+        with lock:
+            running[task[0]] -= 1
+        return task
+
+    tasks = ["n1", "n2", "n3", "j1", "j2", "j3"]
+    results = parallel.run_all(
+        tasks, work, jobs=4, group=lambda task: task[0], limits={"n": 1}, stop=threading.Event()
+    )
+    assert results == tasks
+    assert highest["n"] == 1
+    # While n2 and n3 wait for n1, the j tasks behind them start.
+    assert started.index("j1") < started.index("n2")
+    assert highest["j"] > 1
+
+
+def test_a_failing_task_stops_new_tasks_and_is_raised_after_the_running_ones_finish() -> None:
+    finished: list[int] = []
+    second_started = threading.Event()
+
+    def work(number: int) -> int:
+        if number == 0:
+            # Fail only once the second worker is busy, so it has a case to finish.
+            second_started.wait(timeout=5)
+            raise ValueError("case 0 broke")
+        second_started.set()
+        time.sleep(0.05)
+        finished.append(number)
+        return number
+
+    with pytest.raises(ValueError, match="case 0 broke"):
+        parallel.run_all(range(20), work, jobs=2, group=lambda _: "all", limits={}, stop=threading.Event())
+    # The task that was running beside the failing one finished; the rest never started.
+    assert finished == [1]
+
+
+def test_ctrl_c_stops_new_tasks_sets_stop_and_waits_for_running_ones() -> None:
+    stop = threading.Event()
+    both_running = threading.Barrier(2)
+    started: list[int] = []
+    gave_up: list[int] = []
+
+    def work(number: int) -> int:
+        started.append(number)
+        # Ctrl-C comes only once both workers are on a case.
+        both_running.wait(timeout=5)
+        if number == 0:
+            # Ctrl-C reaches the main thread, which is waiting for the workers.
+            signal.pthread_kill(threading.main_thread().ident, signal.SIGINT)
+        # A running case notices `stop` at its next step and gives up its case.
+        for _ in range(500):
+            if stop.is_set():
+                time.sleep(0.05)
+                gave_up.append(number)
+                raise parallel.Stopped
+            time.sleep(0.01)
+        return number
+
+    with pytest.raises(KeyboardInterrupt):
+        parallel.run_all(range(10), work, jobs=2, group=lambda _: "all", limits={}, stop=stop)
+    assert stop.is_set()
+    assert sorted(started) == [0, 1]
+    # Both workers had given up their case before run_all returned, so it waited for them.
+    assert sorted(gave_up) == [0, 1]
+
+
+def test_a_task_whose_group_cannot_be_worked_out_fails_the_run() -> None:
+    def group(number: int) -> str:
+        if number == 2:
+            raise KeyError(number)
+        return "all"
+
+    with pytest.raises(KeyError):
+        parallel.run_all(range(5), lambda number: number, jobs=2, group=group, limits={}, stop=threading.Event())
+
+
+@pytest.mark.parametrize(("jobs", "limits"), [(0, {}), (2, {"all": 0})])
+def test_a_limit_of_zero_is_rejected_rather_than_waiting_forever(jobs: int, limits: dict[str, int]) -> None:
+    with pytest.raises(ValueError, match="must be 1 or more"):
+        parallel.run_all(
+            range(3), lambda n: n, jobs=jobs, group=lambda _: "all", limits=limits, stop=threading.Event()
+        )
+
+
+def test_concurrent_workers_never_share_a_port_and_a_finished_one_frees_it() -> None:
+    barrier = threading.Barrier(8)
+
+    def hold() -> int:
+        with runtime.reserve_port() as port:
+            # Every worker holds its port until all eight have one.
+            barrier.wait(timeout=5)
+            return port
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        ports = list(pool.map(lambda _: hold(), range(8)))
+    assert len(set(ports)) == 8
+    assert all(port in runtime._PORTS for port in ports)
+    assert not runtime._reserved_ports
+
+
+def test_a_port_another_program_listens_on_is_never_handed_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        taken = busy.getsockname()[1]
+        # With the taken port as the only one in the range, there is nothing to hand out.
+        monkeypatch.setattr(runtime, "_PORTS", range(taken, taken + 1))
+        with pytest.raises(RuntimeError, match="no free port"), runtime.reserve_port():
+            pass
+
+
+def test_a_server_whose_port_was_taken_is_started_again_on_another_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ports: list[int] = []
+
+    def observe_on(framework, settings, env, work, log_path, port):
+        ports.append(port)
+        if len(ports) == 1:
+            log_path.write_text("OSError: [Errno 48] Address already in use\n")
+            return runtime.Observation(started=False, failure="the development server did not answer")
+        log_path.write_text("serving\n")
+        return runtime.Observation(server_log=["serving"])
+
+    monkeypatch.setattr(runtime, "_observe_on", observe_on)
+    framework = Framework("toy", "Toy", (), (), (), Runtime(("x",), "/", 5, {"default": ()}), "", tmp_path)
+    observation = runtime.observe(framework, tmp_path, tmp_path, tmp_path / "server.log")
+    assert observation.started
+    assert len(ports) == 2
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "OSError: [Errno 48] Address already in use",
+        "Error: listen EADDRINUSE: address already in use 127.0.0.1:20001",
+        "Error: That port is already in use.",
+    ],
+)
+def test_each_servers_port_clash_message_is_recognised(line: str) -> None:
+    assert runtime._PORT_IN_USE.search(line)
+
+
+def test_a_server_that_fails_for_another_reason_is_not_started_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[int] = []
+
+    def observe_on(framework, settings, env, work, log_path, port):
+        calls.append(port)
+        log_path.write_text("SyntaxError: invalid syntax\n")
+        return runtime.Observation(started=False, failure="the development server did not answer")
+
+    monkeypatch.setattr(runtime, "_observe_on", observe_on)
+    framework = Framework("toy", "Toy", (), (), (), Runtime(("x",), "/", 5, {"default": ()}), "", tmp_path)
+    assert not runtime.observe(framework, tmp_path, tmp_path, tmp_path / "server.log").started
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(("value", "accepted"), [("2", True), ("0", False), ("true", False), ('"2"', False)])
+def test_max_jobs_must_be_a_whole_number_of_cases(tmp_path: Path, value: str, accepted: bool) -> None:
+    root = tmp_path / "toy"
+    root.mkdir()
+    (root / "framework.toml").write_text(
+        f'key = "toy"\nname = "Toy"\nstages = []\nmax_jobs = {value}\n[setup]\nmanifests = []\ncommand = ["true"]\n'
+    )
+    if accepted:
+        assert load_framework(root).max_jobs == int(value)
+    else:
+        with pytest.raises(ConfigError, match="max_jobs"):
+            load_framework(root)
+
+
+def test_a_run_on_several_workers_writes_the_same_records_as_one_worker(toy: Toy) -> None:
+    # Without the cache, so the second run runs every case again.
+    one = toy.records(toy.run(jobs=1, no_cache=True))
+    several = toy.records(toy.run(jobs=4, no_cache=True))
+    assert one == several
+    # Catalogue order, whatever order the workers finished in.
+    assert [record["mistake"] for record in several] == list(MISTAKES)
+    assert {record["mistake"]: record["strict"] for record in several} == {
+        "m01-bad": "check",
+        "m02-changed": "silent",
+        "m03-bad-again": "check",
+        "m04-same": "never",
+        "m05-changed-again": "silent",
+        "m06-bad-third": "check",
+        "m07-meh": "silent",
+    }
+
+
+def test_observe_runs_on_several_threads_at_once_with_a_real_browser(tmp_path: Path) -> None:
+    """Each worker starts its own Playwright, so browser checks on several threads must not disturb each other."""
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    with playwright_api.sync_playwright() as playwright:
+        try:
+            playwright.chromium.launch().close()
+        except playwright_api.Error as error:
+            pytest.skip(f"Chromium is not installed: {error}")
+    sites = []
+    for number in range(3):
+        site = tmp_path / f"site{number}"
+        site.mkdir()
+        (site / "index.html").write_text(
+            f"<p>Site {number}</p><button onclick=\"this.textContent='done'\">go</button>"
+        )
+        sites.append(site)
+    settings = Runtime(
+        argv=(sys.executable, "-m", "http.server", "{port}", "--bind", "127.0.0.1"),
+        page_path="/",
+        ready_timeout=30,
+        journeys={"default": (Step("click", selector="button"),)},
+        settle_ms=50,
+    )
+    framework = Framework("toy", "Toy", (), (), (), settings, "", tmp_path)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        observations = list(
+            pool.map(lambda site: runtime.observe(framework, tmp_path, site, site.parent / f"{site.name}.log"), sites)
+        )
+    for number, observation in enumerate(observations):
+        assert observation.started, observation.failure
+        assert not observation.failure
+        # Each thread saw its own server's page, after its own click.
+        page = json.dumps(observation.snapshot)
+        assert f"Site {number}" in page
+        assert "done" in page
+
+
+def test_a_static_error_skips_the_browser_check_and_a_warning_does_not(toy: Toy) -> None:
+    records = {record["mistake"]: record for record in toy.records(toy.run(jobs=3))}
+    caught = {"m01-bad", "m03-bad-again", "m06-bad-third"}
+    # The clean app and every case no static stage reported as an error ran in the browser.
+    assert sorted(toy.observed) == sorted(["baseline", *(set(MISTAKES) - caught)])
+    for mistake in caught:
+        assert records[mistake]["runtime"] is None
+        assert records[mistake]["runtime_skipped"] == "caught by toy check"
+        assert (records[mistake]["strict"], records[mistake]["lenient"]) == ("check", "check")
+    # A warning decides only the lenient column, so the browser check still ran for the strict one.
+    meh = records["m07-meh"]
+    assert (meh["strict"], meh["lenient"], meh["runtime_skipped"]) == ("silent", "editor", "")
+    assert meh["runtime"]["output_differs"]
+
+
+def test_a_case_whose_browser_check_was_skipped_is_scored_as_a_static_error(toy: Toy, tmp_path: Path) -> None:
+    run_dir = toy.run(jobs=2)
+    report.write(run_dir, tmp_path / "report")
+    summary = json.loads((tmp_path / "report" / "results.json").read_text())
+    by_mistake = {row["mistake"]: row for row in summary["results"]}
+    assert (by_mistake["m01-bad"]["bucket"], by_mistake["m01-bad"]["cell"]) == ("static-error", "C")
+    assert by_mistake["m01-bad"]["runtime_skipped"] == "caught by toy check"
+    matrix = (tmp_path / "report" / "matrix.md").read_text()
+    # Only a run with the browser check turned off has unscored cases.
+    assert "Not scored" not in matrix
+    assert "Not scored" not in (tmp_path / "report" / "report.html").read_text()
