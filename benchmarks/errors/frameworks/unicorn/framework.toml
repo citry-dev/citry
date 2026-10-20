@@ -12,16 +12,16 @@ to the server and puts the HTML the server sends back in place of the old, \
 so the app needs neither HTMX nor Alpine and loads neither.
 
 The page is a plain Django view and template (board/views.py, \
-board/templates/board/page.html) with the heading, the owner, the API line \
-and the search form. Its interactive parts are django-unicorn components, \
-each a Python class in board/components/ with a template of the same name in \
-board/templates/unicorn/, the layout `manage.py startunicorn` creates. The \
-page renders them with the `{% unicorn %}` tag. Where the django-unicorn \
-docs show a form for a job, the app uses it; elsewhere it keeps the Django \
-app's form. Data goes down to a child through the tag's keyword arguments, \
-as the docs' `{% unicorn 'row' book=book key=book.id %}` does, and calls go \
-up through `self.parent`, as the docs' filter component calls \
-`self.parent.load_table()`:
+board/templates/board/page.html) with the heading, the subtitle, the avatar, \
+the owner, the API line and the links. Its interactive parts are \
+django-unicorn components, each a Python class in board/components/ with a \
+template of the same name in board/templates/unicorn/, the layout `manage.py \
+startunicorn` creates. The page renders them with the `{% unicorn %}` tag. \
+Where the django-unicorn docs show a way to write a part, the app uses it; \
+elsewhere it keeps the Django app's way. Data goes down to a child through \
+the tag's keyword arguments, as the docs' `{% unicorn 'row' book=book \
+key=book.id %}` does, and calls go up through `self.parent`, as the docs' \
+filter component calls `self.parent.load_table()`:
 - project-list renders the cards. It keeps the titles of the hidden cards in \
 a `hidden` field and has a `hide(title)` method. It builds the cards from \
 server data in `mount()` and lists them in `Meta.javascript_exclude`, the \
@@ -53,6 +53,19 @@ can all be written and are all missed; reading `self.parent.open` instead, \
 as the docs' filter component reads `self.parent.books`, would keep the \
 Django app's shape. Status's Close button runs its own `close()`, which \
 calls the details' `close()` through `self.parent`, as the card does.
+- search is the search form. Its input, named `q`, is bound to the \
+component's `query` field with `unicorn:model`, django-unicorn's way to keep \
+an input in step with a component field, and the `Searching for:` line shows \
+`query`. As in the Django app, the form submits to the page with GET, so the \
+input's `name` decides what the view receives: the view reads `q`, and the \
+page shows `Searched: ...`. This keeps m44 the same mistake as in the Django \
+app.
+
+The page parts that are plain template markup are written as in the Django \
+app: the heading color, set in a `<style>` block as the CSS variable \
+`--accent` that board.css reads; the subtitle's `{% blocktranslate with \
+name=owner.name %}`; the avatar's `{% static %}`; and the `{% url %}` links \
+to the About and project pages, which have their own views and templates.
 
 State lives in the page. django-unicorn writes each component's public \
 fields into its root element as JSON, the browser sends them back with each \
@@ -106,7 +119,11 @@ functions a component may call), so no setting is changed from its defaults.
 The default and status journeys send a server request on each click. The \
 status journey waits 500 ms between clicks, so one request comes back before \
 the next click acts on its result; the default journey already waits between \
-its clicks, which also go to three different components.
+its clicks, which also go to three different components. The search journey \
+presses Enter right after typing, before django-unicorn's 250 ms wait on \
+`unicorn:model` ends, so no component request is sent and the page goes \
+straight to `/?q=alpha`; no journey records the `Searching for:` line while \
+it changes, as in the Django app.
 
 editor: as in the Django app. This benchmark found no editor extension or \
 language server for django-unicorn. The diagnostics come from:
@@ -199,4 +216,17 @@ status = [
   { action = "click", selector = "button:has-text('Close')" },
   { action = "wait", ms = 500 },
   { action = "click", selector = "button:has-text('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:has-text('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:has-text('Project 1')" },
 ]

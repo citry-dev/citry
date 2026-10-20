@@ -1,7 +1,9 @@
+# The search form is the search component's template, so the button is
+# there.
 status = "ported"
-mistake = { file = 'board/templates/board/page.html', contains = 'type="sumbit"' }
+mistake = { file = 'board/templates/unicorn/search.html', contains = 'type="sumbit"' }
 
 [[edits]]
-file = 'board/templates/board/page.html'
+file = 'board/templates/unicorn/search.html'
 old = '<button type="submit">Search</button>'
 new = '<button type="sumbit">Search</button>'

@@ -9,10 +9,10 @@ new = '<dvi class="board" title="Board">'
 [[edits]]
 file = 'board/templates/board/page.html'
 old = '''
-    </form>
+    </nav>
   </div>
 '''
 new = '''
-    </form>
+    </nav>
   </dvi>
 '''
