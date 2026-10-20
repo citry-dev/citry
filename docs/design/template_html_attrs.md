@@ -303,6 +303,12 @@ usual).
 
 Keys inside a `c-bind` mapping are always literal and never get this treatment.
 
+Because any non-directive `c-*` name becomes an attribute, a typo such as
+`c-iff` renders `iff` without an error. The `citry.template.misspelled-directive`
+lint rule (in `analysis.py`, shared by `citry check` and the editor) reports a
+name one edit from a directive when it is not an HTML attribute of the
+element; rendering does not check it.
+
 Python data never sets a name that Vue reads as code. When the stripped name
 (or a `c-bind` key, or a name an `on_attrs_resolved` hook adds or changes)
 starts with `v-`, `:`, `.`, `^`, `@`, or `#` in any letter case, rendering

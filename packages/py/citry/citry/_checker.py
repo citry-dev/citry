@@ -60,6 +60,8 @@ from citry.analysis import (
     BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
+    MisspelledDirectiveFinding,
+    MisspelledDirectiveLintConsumer,
     TemplateLintConsumer,
     VueLintConsumer,
     analyze_browser_component_source,
@@ -82,6 +84,7 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_misspelled_directives,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -401,6 +404,10 @@ def _check_registry(
                 AttributeValueLintConsumer(_component_lint_info(engine, component).rule_invalid_attribute_value)
                 for component in source.consumers
             )
+            directive_lint_consumers = tuple(
+                MisspelledDirectiveLintConsumer(_component_lint_info(engine, component).rule_misspelled_directive)
+                for component in source.consumers
+            )
             foreign_options = _checker_foreign_options(
                 engine,
                 source,
@@ -438,6 +445,7 @@ def _check_registry(
                 vue_lint_consumers=vue_lint_consumers,
                 alpine_lint_consumers=alpine_lint_consumers,
                 attribute_value_lint_consumers=attribute_value_lint_consumers,
+                directive_lint_consumers=directive_lint_consumers,
                 i18n_manifest=i18n_manifest,
                 i18n_profiles=i18n_profiles,
                 i18n_configured=i18n_configured,
@@ -550,6 +558,7 @@ def _check_template(
     vue_lint_consumers: tuple[VueLintConsumer, ...] = (),
     alpine_lint_consumers: tuple[AlpineAttributeLintConsumer, ...] = (),
     attribute_value_lint_consumers: tuple[AttributeValueLintConsumer, ...] = (),
+    directive_lint_consumers: tuple[MisspelledDirectiveLintConsumer, ...] = (),
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None,
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None,
     i18n_configured: bool = False,
@@ -645,9 +654,12 @@ def _check_template(
     # The attribute-value rule likewise needs no namespace, so static mode
     # checks enumerated HTML attribute values too, as warnings, because no
     # component's Lint override can reach them here.
-    attribute_findings: list[AlpineAttributeFinding | AttributeValueFinding] = [
+    # The misspelled-directive rule needs no namespace either; static mode
+    # reports it with its default severity.
+    attribute_findings: list[AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding] = [
         *lint_alpine_attributes(template, alpine_lint_consumers, parse_nested=nested_parser),
         *lint_attribute_values(template, attribute_value_lint_consumers, parse_nested=nested_parser),
+        *lint_misspelled_directives(template, directive_lint_consumers, parse_nested=nested_parser),
     ]
     for attribute_finding in attribute_findings:
         line, column = _byte_offset_coordinates(source.content, attribute_finding.start_index)

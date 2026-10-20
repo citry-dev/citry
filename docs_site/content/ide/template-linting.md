@@ -1,6 +1,6 @@
 ---
 title: Template linting
-description: Find names that come from nowhere, Python variables read by Vue, leftover Alpine attributes, and invalid HTML attribute values, and choose how strict each check is.
+description: Find names that come from nowhere, Python variables read by Vue, leftover Alpine attributes, invalid HTML attribute values, and misspelled directives, and choose how strict each check is.
 ---
 
 # Template linting
@@ -26,6 +26,7 @@ them. There is no separate editor setting.
 | [`citry.template.alpine-attribute`](/ide/diagnostics/#citry.template.alpine-attribute) | A leftover Alpine `x-*` attribute | warning |
 | [`citry.template.alpine-cloak`](/ide/diagnostics/#citry.template.alpine-cloak) | A leftover `x-cloak`, which hides the element for good | error |
 | [`citry.template.invalid-attribute-value`](/ide/diagnostics/#citry.template.invalid-attribute-value) | An HTML attribute value the browser does not accept | error |
+| [`citry.template.misspelled-directive`](/ide/diagnostics/#citry.template.misspelled-directive) | A typo in a directive, such as `c-iff`, that renders as an attribute | error |
 
 ## Fix unknown names
 
@@ -190,6 +191,7 @@ app = Citry(
         rule_alpine_attribute="warning",
         rule_alpine_cloak="error",
         rule_invalid_attribute_value="error",
+        rule_misspelled_directive="error",
     ),
 )
 ```
@@ -331,6 +333,45 @@ class LegacyWidget(Component):
         rule_invalid_attribute_value = "ignore"
 ```
 
+## Misspelled directives { #find-misspelled-directives }
+
+Citry reads only its own directive names, such as `c-if` and `c-for`. Any
+other `c-` name binds an ordinary attribute, so a typo does not fail. The
+element below always shows up, and gets an `iff` attribute:
+
+```citry-html
+{# Error: 'c-iff' is not a Citry directive; did you mean 'c-if'? #}
+<div c-iff="show">Details</div>
+
+{# Right: the element renders only when show is true #}
+<div c-if="show">Details</div>
+```
+
+Citry reports a `c-` name as a `citry.template.misspelled-directive` error
+when the part after `c-` is not an attribute of that element and it looks
+like a directive:
+
+- one typing mistake away from `if`, `elif`, `else`, `for`, `empty`, or
+  `bind`, such as `c-iff`, `c-fro`, or `c-ele`;
+- a directive in other letter case, such as `c-If`;
+- a spelled-out `c-elif`, such as `c-else-if` or `c-elseif`;
+- a Vue directive with the wrong prefix, such as `c-show` or `c-model`,
+  which you write as `v-show` or `v-model`, or `c-key` and `c-ignore`,
+  which you write as `#c-key` and `#c-ignore`.
+
+Real attribute names never count, so `c-id`, `c-form` on `<input>`,
+`c-kind` on `<track>`, and every `c-data-*` and `c-aria-*` name pass. On a
+custom element such as `<my-input>`, the attributes every element takes
+and those of form controls pass. Component tags are skipped, because there
+a `c-` name is a Python keyword argument.
+
+When the attribute really is meant for the browser, pass it through
+`c-bind`, which this rule does not read:
+
+```citry-html
+<div c-bind="{'kind': variant}">...</div>
+```
+
 ## Check rules in CI
 
 Run the check against your application, so it knows every component and
@@ -352,9 +393,9 @@ the command. Any error exits with status 1. See
 cannot tell which component owns a template. They skip the unknown-name
 rules.
 
-They still run the Alpine and attribute-value rules, which need no component
-data, but they cannot read your settings, so they use the default
-severities. A leftover `x-cloak` is then an error even if your settings
+They still run the Alpine, attribute-value, and misspelled-directive rules,
+which need no component data, but they cannot read your settings, so they
+use the default severities. A leftover `x-cloak` is then an error even if your settings
 ignore it. An invalid attribute value is a warning there, not an error,
 because a component's `"ignore"` setting cannot reach it. They also cannot
 tell which values an extension's template syntax produces, so they may

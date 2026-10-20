@@ -53,6 +53,8 @@ from citry.analysis import (
     BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
+    MisspelledDirectiveFinding,
+    MisspelledDirectiveLintConsumer,
     ShadowPythonDocument,
     TemplateLintConsumer,
     TemplatePythonControl,
@@ -96,6 +98,7 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_misspelled_directives,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -684,7 +687,7 @@ def _html_attribute_lint_diagnostics(
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> tuple[types.Diagnostic, ...]:
-    """Report leftover Alpine ``x-*`` attributes and invalid enumerated values with each owner's severities."""
+    """Report Alpine leftovers, invalid enumerated values, and misspelled directives with each owner's severities."""
     analysis = project.analysis
     parser = analysis.parse_template if analysis is not None else parse_template
     diagnostics: list[types.Diagnostic] = []
@@ -694,6 +697,7 @@ def _html_attribute_lint_diagnostics(
             continue
         consumers: list[AlpineAttributeLintConsumer] = []
         value_consumers: list[AttributeValueLintConsumer] = []
+        directive_consumers: list[MisspelledDirectiveLintConsumer] = []
         if analysis is not None:
             for owner in _template_consumers(document, region, project, open_documents):
                 # An owner missing from the analysis still belongs to this
@@ -701,6 +705,7 @@ def _html_attribute_lint_diagnostics(
                 lint = analysis.component_lint.get(owner.definition_id, analysis.lint)
                 consumers.append(AlpineAttributeLintConsumer(lint.rule_alpine_attribute, lint.rule_alpine_cloak))
                 value_consumers.append(AttributeValueLintConsumer(lint.rule_invalid_attribute_value))
+                directive_consumers.append(MisspelledDirectiveLintConsumer(lint.rule_misspelled_directive))
             if not consumers:
                 # No proven owner: the application policy still applies,
                 # which is closer to the author's intent than the defaults.
@@ -708,9 +713,11 @@ def _html_attribute_lint_diagnostics(
                     AlpineAttributeLintConsumer(analysis.lint.rule_alpine_attribute, analysis.lint.rule_alpine_cloak)
                 )
                 value_consumers.append(AttributeValueLintConsumer(analysis.lint.rule_invalid_attribute_value))
-        findings: list[AlpineAttributeFinding | AttributeValueFinding] = [
+                directive_consumers.append(MisspelledDirectiveLintConsumer(analysis.lint.rule_misspelled_directive))
+        findings: list[AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding] = [
             *lint_alpine_attributes(parsed.template, consumers, parse_nested=parser),
             *lint_attribute_values(parsed.template, value_consumers, parse_nested=parser),
+            *lint_misspelled_directives(parsed.template, directive_consumers, parse_nested=parser),
         ]
         for finding in findings:
             try:

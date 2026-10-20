@@ -171,6 +171,12 @@ class LintSettings:
             ``"error"``. ``citry check --static`` and an editor that has not
             loaded the application report it as a warning, because this
             setting cannot reach them.
+        rule_misspelled_directive: Severity for a ``c-*`` attribute on an
+            HTML element that looks like a misspelled Citry directive, such
+            as ``c-iff`` for ``c-if`` or Vue's ``c-show``. Citry renders it as
+            an ordinary attribute, so the element shows up whatever the
+            condition says. Real HTML attribute names, such as ``c-id``, are
+            never reported. The default is ``"error"``.
         rule_i18n_cross_language_fallback: Severity for a ``tr()`` call, a
             ``self.i18n.tr()`` call, or a message in
             ``I18n.client_messages`` that has no translation in some
@@ -198,6 +204,7 @@ class LintSettings:
     rule_alpine_attribute: LintSeverity = "warning"
     rule_alpine_cloak: LintSeverity = "error"
     rule_invalid_attribute_value: LintSeverity = "error"
+    rule_misspelled_directive: LintSeverity = "error"
     rule_i18n_cross_language_fallback: LintSeverity = "warning"
 
     # Hidden from type checkers so they keep checking calls against the
@@ -316,6 +323,7 @@ class LintSettings:
             "rule_alpine_attribute",
             "rule_alpine_cloak",
             "rule_invalid_attribute_value",
+            "rule_misspelled_directive",
             "rule_i18n_cross_language_fallback",
         ):
             severity = getattr(self, rule_name)

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- `citry check` and the editor report a misspelled directive, such as
+  `<div c-iff="show">`, which Citry renders as an `iff` attribute, as the
+  `citry.template.misspelled-directive` error; real attribute names such as
+  `c-id` are never reported, and `rule_misspelled_directive` changes the
+  severity.
+
 ### Changed
 
 - `citry check` now fails, and the editor shows an error, on an HTML

@@ -44,6 +44,11 @@ Write the expression without `{{ }}`: `c-title="user.name"`, not
 `c-title=""` are errors. Only the `c-else` and `c-empty` markers from
 [Conditions and loops](/syntax/control-flow/) take no value.
 
+Any `c-` name that is not a directive becomes an attribute, typos included:
+`<div c-iff="show">` renders `<div iff>` and shows the element whatever
+`show` is. `citry check` and the editor report such a name as an error; see
+[Misspelled directives](/ide/template-linting/#find-misspelled-directives).
+
 Citry HTML-escapes attribute names and values, including a
 [`Markup`][citry.Markup] value, so a `"` in a value cannot end the
 attribute. Entities in `Markup` still stand for their characters:

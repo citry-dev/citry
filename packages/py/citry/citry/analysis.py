@@ -96,6 +96,7 @@ from citry._diagnostic_catalog import (
     TEMPLATE_ALPINE_ATTRIBUTE,
     TEMPLATE_ALPINE_CLOAK,
     TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+    TEMPLATE_MISSPELLED_DIRECTIVE,
     TEMPLATE_UNKNOWN_VARIABLE,
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
@@ -105,10 +106,19 @@ from citry._html_attribute_values import (
     CASE_SENSITIVE_KEYWORDS as _CASE_SENSITIVE_KEYWORDS,
 )
 from citry._html_attribute_values import (
+    CUSTOM_ELEMENT_ATTRIBUTES as _CUSTOM_ELEMENT_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
+    ELEMENT_ATTRIBUTES as _ELEMENT_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
     ENUMERATED_VALUES as _ENUMERATED_ATTRIBUTE_VALUES,
 )
 from citry._html_attribute_values import (
     FRAME_NAME_ELEMENTS as _FRAME_NAME_ELEMENTS,
+)
+from citry._html_attribute_values import (
+    GLOBAL_ATTRIBUTES as _GLOBAL_ATTRIBUTES,
 )
 from citry._html_attribute_values import (
     HTML_ELEMENTS as _HTML_ELEMENTS,
@@ -371,6 +381,39 @@ class AttributeValueLintConsumer:
         if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
             msg = f"Unknown rule_invalid_attribute_value severity: {severity!r}"
             raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class MisspelledDirectiveLintConsumer:
+    """
+    Carry one consuming component's severity for a ``c-*`` attribute that looks like a misspelled directive.
+
+    Attributes:
+        rule_misspelled_directive: Configured severity for a name such as
+            ``c-iff`` that Citry renders as an ordinary HTML attribute.
+
+    """
+
+    rule_misspelled_directive: Literal["ignore", "warning", "error"] = "error"
+
+    def __post_init__(self) -> None:
+        severity = self.rule_misspelled_directive
+        if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
+            msg = f"Unknown rule_misspelled_directive severity: {severity!r}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class MisspelledDirectiveFinding:
+    """Report one ``c-*`` attribute that looks like a misspelled Citry directive, spanning its name."""
+
+    name: str
+    suggestion: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -1262,6 +1305,229 @@ def _attribute_value_message(
         suggestion=suggestion,
         allowed=listed,
     )
+
+
+def lint_misspelled_directives(
+    template: Template,
+    consumers: Sequence[MisspelledDirectiveLintConsumer],
+    *,
+    parse_nested: Callable[[str], Template] = _parse_template,
+) -> tuple[MisspelledDirectiveFinding, ...]:
+    """
+    Report ``c-*`` attributes that look like a misspelled Citry directive.
+
+    Citry reads only its fixed directive names, such as ``c-if``. Any other
+    ``c-*`` name on an HTML element binds an ordinary attribute, so
+    ``<div c-iff="show">`` renders ``<div iff>`` and the element shows up
+    whatever ``show`` is. A name is reported when the part after ``c-`` is
+    not an HTML attribute that the element accepts and it:
+
+    - is one inserted, deleted, replaced, or swapped letter away from
+      ``if``, ``elif``, ``else``, ``for``, ``empty``, or ``bind``;
+    - is one of those names in other letter case, such as ``c-If``;
+    - is a spelled-out ``elif``, such as ``c-else-if``; or
+    - names a directive of Vue, such as ``c-show`` or ``c-model``, or one of
+      the ``#c-key`` and ``#c-ignore`` attributes without their ``#``.
+
+    HTML attribute names compare without letter case, so ``c-id``,
+    ``c-ID``, ``c-form`` on ``<input>``, and ``c-data-*`` or ``c-aria-*``
+    names are never reported. A custom element accepts the
+    global attributes and those of a form-associated custom element, and
+    ``<c-element>``, whose tag is chosen at render time, accepts the
+    attributes of every element. Component tags, the other ``c-*`` tags,
+    PascalCase Vue components, and elements inside ``<svg>`` or ``<math>``
+    are skipped.
+
+    A finding is reported unless every consumer ignores the rule, and it is an
+    error when any reporting consumer says ``"error"``. The check needs no
+    component namespace, so an empty ``consumers``, as ``citry check
+    --static`` and an editor without project analysis pass, uses the default
+    ``"error"``. An attribute that is really meant for the browser can go
+    through ``c-bind``, which this rule does not read.
+
+    Args:
+        template: Parsed Citry template AST.
+        consumers: Every proven component that consumes this physical template.
+        parse_nested: Parser for template-valued attributes, so nested
+            templates use the same parse options as the outer one.
+
+    Returns:
+        Findings in source order, each spanning the attribute name.
+
+    """
+    effective = tuple(consumers) or (MisspelledDirectiveLintConsumer(),)
+    active = [consumer.rule_misspelled_directive for consumer in effective]
+    active = [severity for severity in active if severity != "ignore"]
+    if not active:
+        return ()
+    severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
+    found: list[MisspelledDirectiveFinding] = []
+    _collect_misspelled_directives(template, found, severity, parse_nested=parse_nested, base_index=0)
+    return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
+
+
+# The directives an author writes as `c-<name>` on an element. A name one
+# typing mistake from one of these is the likely typo.
+_ELEMENT_DIRECTIVES = ("if", "elif", "else", "for", "empty", "bind")
+# Spellings an author brings from other languages for `c-elif`.
+_SPELLED_OUT_ELIF = frozenset({"else-if", "elseif", "elsif", "else_if"})
+# Names that are a directive elsewhere but not in Citry, with what to write
+# instead. The `vue` entries are Vue directives that work in a Citry template
+# with their `v-` prefix.
+_FOREIGN_DIRECTIVES: dict[str, tuple[str, Literal["default", "vue"]]] = {
+    "show": ("v-show", "vue"),
+    "model": ("v-model", "vue"),
+    "html": ("v-html", "vue"),
+    "key": ("#c-key", "default"),
+    "ignore": ("#c-ignore", "default"),
+}
+
+
+def _collect_misspelled_directives(
+    template: Template,
+    found: list[MisspelledDirectiveFinding],
+    severity: Literal["warning", "error"],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    """Check each ``c-*`` attribute of each HTML element in one template and its nested templates."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        tag = node.start_tag.name.content
+        # SVG and MathML elements have their own attribute names, so their
+        # whole subtree is left unchecked.
+        if _ascii_lower(tag) in {"svg", "math"}:
+            continue
+        accepted = _accepted_attribute_names(tag)
+        for attr in node.start_tag.attrs:
+            if accepted is not None:
+                finding = _misspelled_directive_finding(attr, accepted, severity, base_index)
+                if finding is not None:
+                    found.append(finding)
+            # A template-valued attribute holds more HTML, whose offsets are
+            # relative to the nested source, so shift them into this template.
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_misspelled_directives(
+                        parsed,
+                        found,
+                        severity,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_misspelled_directives(body, found, severity, parse_nested=parse_nested, base_index=base_index)
+
+
+def _accepted_attribute_names(tag: str) -> tuple[Collection[str], ...] | None:
+    """Return the groups of HTML attribute names one tag accepts, or ``None`` when ``c-*`` names there are inputs."""
+    # The groups are returned as they are, without merging them into one
+    # set, because most elements have no `c-*` attribute to look up.
+    if tag in _HTML_ELEMENTS:
+        return _GLOBAL_ATTRIBUTES, _ELEMENT_ATTRIBUTES.get(tag, ())
+    if tag == "c-element":
+        # The rendered tag is chosen at render time, so any element's
+        # attribute may be meant.
+        return (_ALL_ELEMENT_ATTRIBUTES,)
+    # A custom element is lowercase with a hyphen. Other `c-*` tags are Citry
+    # components or built-in tags, whose `c-*` names are inputs, and
+    # PascalCase names are Vue components, whose names are props.
+    if tag.startswith("c-") or "-" not in tag or tag != _ascii_lower(tag):
+        return None
+    return _GLOBAL_ATTRIBUTES, _CUSTOM_ELEMENT_ATTRIBUTES
+
+
+_ALL_ELEMENT_ATTRIBUTES = _GLOBAL_ATTRIBUTES.union(
+    _CUSTOM_ELEMENT_ATTRIBUTES,
+    *_ELEMENT_ATTRIBUTES.values(),
+)
+
+
+def _misspelled_directive_finding(
+    attr: HtmlAttr,
+    accepted: tuple[Collection[str], ...],
+    severity: Literal["warning", "error"],
+    base_index: int,
+) -> MisspelledDirectiveFinding | None:
+    """Return a finding for one ``c-*`` attribute that looks like a directive but renders as an attribute."""
+    name = attr.key.content
+    # The parser binds only a lowercase `c-` prefix; `C-if` is a static
+    # attribute, and an exact directive name is the directive itself.
+    if not name.startswith("c-"):
+        return None
+    attribute = name[2:]
+    if attribute in _ELEMENT_DIRECTIVES:
+        return None
+    lowered = _ascii_lower(attribute)
+    # HTML attribute names ignore letter case, so `c-ID` still sets `id`.
+    if any(lowered in names for names in accepted) or lowered.startswith(("data-", "aria-")):
+        return None
+    suggestion = _directive_suggestion(lowered)
+    if suggestion is None:
+        return None
+    target, variant = suggestion
+    return MisspelledDirectiveFinding(
+        name=name,
+        suggestion=target,
+        message=render_diagnostic(
+            TEMPLATE_MISSPELLED_DIRECTIVE,
+            variant=variant,
+            name=name,
+            attribute=attribute,
+            suggestion=target,
+        ),
+        code=TEMPLATE_MISSPELLED_DIRECTIVE,
+        severity=severity,
+        start_index=base_index + attr.key.start_index,
+        end_index=base_index + attr.key.end_index,
+    )
+
+
+def _directive_suggestion(lowered: str) -> tuple[str, Literal["default", "vue"]] | None:
+    """Return the directive a lowercased ``c-*`` suffix most likely meant, with its message variant."""
+    if lowered in _SPELLED_OUT_ELIF:
+        return "c-elif", "default"
+    if lowered in _FOREIGN_DIRECTIVES:
+        return _FOREIGN_DIRECTIVES[lowered]
+    # A name in other letter case, such as `If`, has distance zero here, so
+    # it is found by the same loop. The first directive in the list wins a
+    # tie, which keeps the suggestion stable.
+    for directive in _ELEMENT_DIRECTIVES:
+        if _within_one_edit(lowered, directive):
+            return f"c-{directive}", "default"
+    return None
+
+
+def _within_one_edit(written: str, expected: str) -> bool:
+    """Return whether one inserted, deleted, replaced, or swapped letter turns ``written`` into ``expected``."""
+    if written == expected:
+        return True
+    if abs(len(written) - len(expected)) > 1:
+        return False
+    if len(written) == len(expected):
+        differences = [
+            index for index, (left, right) in enumerate(zip(written, expected, strict=True)) if left != right
+        ]
+        if len(differences) == 1:
+            return True
+        # Two neighbouring letters typed in the wrong order, as in `fi`.
+        return (
+            len(differences) == 2
+            and differences[1] == differences[0] + 1
+            and written[differences[0]] == expected[differences[1]]
+            and written[differences[1]] == expected[differences[0]]
+        )
+    # One extra or missing letter: removing one letter from the longer name
+    # gives the shorter one.
+    longer, shorter = (written, expected) if len(written) > len(expected) else (expected, written)
+    return any(longer[:index] + longer[index + 1 :] == shorter for index in range(len(longer)))
 
 
 def lint_unknown_component_js_variables(
@@ -5011,6 +5277,8 @@ __all__ = [
     "LspPosition",
     "LspRange",
     "MarkLiteralFinding",
+    "MisspelledDirectiveFinding",
+    "MisspelledDirectiveLintConsumer",
     "PythonComponentAssetDiscovery",
     "PythonComponentAssetFile",
     "PythonComponentAssetFormatResult",
@@ -5085,6 +5353,7 @@ __all__ = [
     "json_wire_type_from_expression",
     "lint_alpine_attributes",
     "lint_attribute_values",
+    "lint_misspelled_directives",
     "lint_undeclared_component_js_emits",
     "lint_undeclared_component_listeners",
     "lint_undeclared_template_emits",

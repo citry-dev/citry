@@ -266,6 +266,42 @@
       "documentationPath": "/ide/diagnostics/#citry.template.invalid-attribute-value"
     },
     {
+      "code": "citry.template.misspelled-directive",
+      "constant": "TEMPLATE_MISSPELLED_DIRECTIVE",
+      "title": "Misspelled Citry directive",
+      "summary": "A c-* attribute on an HTML element looks like a Citry directive, such as c-iff for c-if, but is not one. Citry renders it as an ordinary attribute, so the element shows up whatever the condition says.",
+      "when": "The part after c- is not an HTML attribute that the element accepts, and it is one typing mistake away from if, elif, else, for, empty, or bind, the same name in other letter case, such as c-If, a spelled-out form such as c-else-if, or a directive name from Vue, such as c-show. Only HTML elements, custom elements, and <c-element> are checked, not component tags or elements inside <svg> or <math>. citry check --static and an editor that has not loaded your application report it too.",
+      "fix": "Use the directive the message names. If the attribute really is meant for the browser, set rule_misspelled_directive to \"ignore\" for that component, or pass it through c-bind, such as c-bind=\"{'iff': value}\".",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "Attribute name as written in the template.",
+        "attribute": "The attribute name the element renders, without c-.",
+        "suggestion": "The directive the author probably meant."
+      },
+      "messages": {
+        "default": "'{name}' is not a Citry directive, so it renders an HTML attribute named '{attribute}'. Did you mean '{suggestion}'?",
+        "vue": "'{name}' is not a Citry directive, so it renders an HTML attribute named '{attribute}'. For Vue's directive, write '{suggestion}'."
+      },
+      "examples": [
+        {
+          "title": "A typo in c-if",
+          "language": "citry-html",
+          "source": "<div c-iff=\"show\">Details</div>"
+        },
+        {
+          "title": "A directive name from Vue",
+          "language": "citry-html",
+          "source": "<div c-show=\"open\">Menu</div>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.misspelled-directive"
+    },
+    {
       "code": "citry.js-data.unsupported-type",
       "constant": "JS_DATA_UNSUPPORTED_TYPE",
       "title": "JsData field is not a JSON type",

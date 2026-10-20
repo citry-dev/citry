@@ -19,6 +19,7 @@ from citry import (
     discover_python_templates,
     lint_unknown_template_variables,
 )
+from citry._linting import TemplateLintInfo
 from citry.analysis import (
     component_name_match,
     css_data_completion_at,
@@ -186,6 +187,24 @@ class TestTemplateAnalysis:
         assert (card_lint.rule_alpine_attribute, card_lint.rule_alpine_cloak) == ("ignore", "warning")
         with pytest.raises(SyntaxError, match="must have one of the following attributes"):
             restored.parse_template("<c-portable-card />")
+
+    def test_lint_record_from_an_older_app_worker_gets_the_new_rule_default(self):
+        # An app worker running an older citry sends no misspelled-directive
+        # rule; the editor must still read the record, with the default.
+        record = TemplateLintInfo("warning", (), rule_misspelled_directive="ignore").to_dict()
+        assert TemplateLintInfo.from_dict(record).rule_misspelled_directive == "ignore"
+        del record["rule_misspelled_directive"]
+
+        restored = TemplateLintInfo.from_dict(record)
+
+        assert restored.rule_misspelled_directive == "error"
+        assert restored.rule_unknown_template_variable == "warning"
+        # Only that one field may be missing, and no field may be unknown.
+        with pytest.raises(ValueError, match="exact supported fields"):
+            TemplateLintInfo.from_dict({**record, "rule_from_the_future": "error"})
+        del record["rule_alpine_cloak"]
+        with pytest.raises(ValueError, match="exact supported fields"):
+            TemplateLintInfo.from_dict(record)
 
     def test_runtime_global_cycles_and_executable_annotation_text_drop_only_the_type(self):
         cyclic: list[object] = []

@@ -4,6 +4,11 @@ All notable changes to `citry-lsp` are documented here.
 
 ## Unreleased
 
+### Added
+
+- The editor reports a misspelled directive, such as `c-iff` for `c-if`,
+  with the severity your application's `rule_misspelled_directive` sets.
+
 ### Fixed
 
 - `citry check --types` and the editor now report type errors in a

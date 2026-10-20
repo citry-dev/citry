@@ -22,3 +22,5 @@
   compiler already reported.
 - `citry.template.invalid-attribute-value` defaults to `error`. It stays a
   warning where no component is known, such as `citry check --static`.
+- Added `citry.template.misspelled-directive`, the configurable error for a
+  `c-*` attribute that looks like a misspelled Citry directive.

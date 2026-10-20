@@ -2163,6 +2163,56 @@ def test_static_check_reports_invalid_attribute_values_as_warnings(tmp_path):
     ]
 
 
+def test_registry_check_reports_misspelled_directives_with_component_severities(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Panel(Component):
+        citry = engine
+        template = """
+          <div c-iff="True">a</div>
+          <input c-form="'f'">
+        """
+
+    class Widget(Component):
+        citry = engine
+        template = '<div c-show="True"></div>'
+
+        class Lint:
+            rule_misspelled_directive = "ignore"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [
+        (item.severity, item.line, item.column, item.end_column, item.message)
+        for item in report.findings
+        if item.code == "citry.template.misspelled-directive"
+    ]
+
+    # `c-form` binds a real attribute of <input>; Widget ignores the rule.
+    # The finding spans the attribute name.
+    assert findings == [
+        (
+            "error",
+            1,
+            5,
+            10,
+            "'c-iff' is not a Citry directive, so it renders an HTML attribute named 'iff'. Did you mean 'c-if'?",
+        ),
+    ]
+
+
+def test_static_check_reports_misspelled_directives_as_errors(tmp_path):
+    (tmp_path / "card.py").write_text(
+        "from citry import Component\nclass Card(Component):\n    template = '<p c-elseif=\"x\">a</p>'\n",
+        encoding="utf-8",
+    )
+
+    report = check_project(CheckAppSelection(), tmp_path)
+
+    assert [(item.code, item.severity) for item in report.findings] == [
+        ("citry.template.misspelled-directive", "error"),
+    ]
+
+
 def test_registry_check_reports_undeclared_emits_and_child_listeners(tmp_path):
     engine = Citry(autodiscover=False)
 

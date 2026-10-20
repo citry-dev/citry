@@ -35,6 +35,7 @@ _LINT_RULE_CODES = {
     "rule_alpine_attribute": "citry.template.alpine-attribute",
     "rule_alpine_cloak": "citry.template.alpine-cloak",
     "rule_invalid_attribute_value": "citry.template.invalid-attribute-value",
+    "rule_misspelled_directive": "citry.template.misspelled-directive",
     "rule_i18n_cross_language_fallback": "citry.i18n.cross-language-fallback",
 }
 

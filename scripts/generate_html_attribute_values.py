@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 """
-Generate Citry's table of valid values for enumerated HTML attributes.
+Generate Citry's tables of HTML attribute names and enumerated attribute values.
 
 The rule ``citry.template.invalid-attribute-value`` checks a static attribute
-value such as ``draggable="treu"`` against this table. The table is read from
-the WHATWG HTML Standard's attribute index, where the "Value" column lists the
-allowed keywords of an enumerated attribute, such as ``"true"; "false"``.
+value such as ``draggable="treu"`` against the value table. The table is read
+from the WHATWG HTML Standard's attribute index, where the "Value" column lists
+the allowed keywords of an enumerated attribute, such as ``"true"; "false"``.
+
+The rule ``citry.template.misspelled-directive`` reads the attribute names from
+the same index, plus its event handler attributes, so a ``c-*`` name that is a
+real HTML attribute, such as ``c-id`` or ``c-form``, is never reported.
 
 Only rows whose value cell is a closed list of keywords are kept. A row that
 also allows open text, such as ``"any"`` or a number for ``step``, a custom
@@ -99,6 +103,10 @@ CASE_SENSITIVE_KEYWORDS = {
     ("ol", "type"): ("1", "a", "A", "i", "I"),
     ("li", "type"): ("1", "a", "A", "i", "I"),
 }
+
+# Global attributes that another standard defines for every HTML element, so
+# the HTML index does not list them. `role` comes from ARIA in HTML.
+SUPPLEMENTAL_GLOBAL_ATTRIBUTES = ("role",)
 
 # Attributes whose value is a "valid navigable target name or keyword": any
 # name that does not start with "_", or one of these keywords (7.3.1.1).
@@ -225,12 +233,63 @@ def build_table(page: str) -> tuple[dict[str, dict[str, tuple[str, ...]]], tuple
     return ordered, tuple(sorted(elements)), (reader.updated or "unknown").strip()
 
 
+def build_attribute_names(
+    page: str,
+) -> tuple[tuple[str, ...], dict[str, tuple[str, ...]], tuple[str, ...]]:
+    """
+    Return the attribute names of the index: global, per element, and on custom elements.
+
+    Global names are those the index lists for "HTML elements". The custom
+    element names are those it lists for "form-associated custom elements";
+    a template cannot tell whether a custom element is form-associated, so
+    the rule accepts them on every custom element.
+    """
+    reader = _TableReader()
+    reader.feed(page)
+    attributes = reader.tables.get("attributes-1")
+    elements_table = reader.tables.get("table-1")
+    if not attributes or not elements_table:
+        msg = "the attribute or element index was not found; the page layout changed"
+        raise SystemExit(msg)
+    _table, elements, _updated = build_table(page)
+    known_elements = set(elements)
+    global_names: set[str] = set(SUPPLEMENTAL_GLOBAL_ATTRIBUTES)
+    custom_names: set[str] = set()
+    by_element: dict[str, set[str]] = {}
+    # The event handler table has the same columns, and its handlers, such as
+    # `onclick`, are attributes too.
+    rows = [*attributes[1:], *reader.tables.get("ix-event-handlers", [])[1:]]
+    for row in rows:
+        if len(row) < 2:
+            continue
+        attribute, owners = row[0], row[1]
+        for raw_owner in owners.split(";"):
+            owner = raw_owner.strip()
+            if owner == "HTML elements":
+                global_names.add(attribute)
+            elif owner == "form-associated custom elements":
+                custom_names.add(attribute)
+            else:
+                # An owner can carry a note, as in "source (in picture)", and
+                # one row lists "video img" without a separator, so each word
+                # outside the note that names an element counts.
+                for word in re.sub(r"\([^)]*\)", " ", owner).split():
+                    if word in known_elements:
+                        by_element.setdefault(word, set()).add(attribute)
+    return (
+        tuple(sorted(global_names)),
+        {element: tuple(sorted(by_element[element])) for element in sorted(by_element)},
+        tuple(sorted(custom_names)),
+    )
+
+
 def render(page: str, *, retrieved: str) -> str:
     """Render the generated Python module for one copy of the attribute index."""
     table, elements, updated = build_table(page)
+    global_names, element_names, custom_names = build_attribute_names(page)
     return (
         '"""\n'
-        "Valid values of enumerated HTML attributes. Generated; do not edit.\n\n"
+        "HTML attribute names and the valid values of enumerated HTML attributes. Generated; do not edit.\n\n"
         "Run python scripts/generate_html_attribute_values.py to refresh it.\n"
         f"Source: {SOURCE_URL}\n"
         f"WHATWG HTML Standard, Last Updated {updated}; retrieved {retrieved}.\n"
@@ -252,7 +311,15 @@ def render(page: str, *, retrieved: str) -> str:
         "NAVIGABLE_TARGET_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = "
         f"{pformat(NAVIGABLE_TARGET_ATTRIBUTES, width=110)}\n\n"
         '# Elements whose `name` may not start with "_" at all.\n'
-        f"FRAME_NAME_ELEMENTS: Final[tuple[str, ...]] = {pformat(FRAME_NAME_ELEMENTS)}\n"
+        f"FRAME_NAME_ELEMENTS: Final[tuple[str, ...]] = {pformat(FRAME_NAME_ELEMENTS)}\n\n"
+        "# Attribute names every HTML element accepts, including event handlers.\n"
+        "# `data-*` and `aria-*` names are open families, not listed here.\n"
+        f"GLOBAL_ATTRIBUTES: Final[frozenset[str]] = frozenset({pformat(global_names, width=110, compact=True)})\n\n"
+        "# element -> the attribute names only that element accepts.\n"
+        "ELEMENT_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = "
+        f"{pformat(element_names, width=110, compact=True)}\n\n"
+        "# Attribute names a form-associated custom element accepts.\n"
+        f"CUSTOM_ELEMENT_ATTRIBUTES: Final[tuple[str, ...]] = {pformat(custom_names, width=110, compact=True)}\n"
     )
 
 

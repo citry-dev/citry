@@ -19,6 +19,7 @@ TEMPLATE_MARKER_NAME_INVALID = 'citry.template.marker-name-invalid'
 TEMPLATE_ALPINE_ATTRIBUTE = 'citry.template.alpine-attribute'
 TEMPLATE_ALPINE_CLOAK = 'citry.template.alpine-cloak'
 TEMPLATE_INVALID_ATTRIBUTE_VALUE = 'citry.template.invalid-attribute-value'
+TEMPLATE_MISSPELLED_DIRECTIVE = 'citry.template.misspelled-directive'
 JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 JS_DATA_PUBLIC_NAME_COLLISION = 'citry.js-data.public-name-collision'
 VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
@@ -888,6 +889,45 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                         'title': 'Invalid <c-mark> tag',
                                         'when': 'A <c-mark> tag has no name attribute, a dynamic or invalid name, any '
                                                 'other attribute, or a named fill.'},
+ 'citry.template.misspelled-directive': {'code': 'citry.template.misspelled-directive',
+                                         'configurableSeverity': True,
+                                         'constant': 'TEMPLATE_MISSPELLED_DIRECTIVE',
+                                         'defaultSeverity': 'error',
+                                         'documentationPath': '/ide/diagnostics/#citry.template.misspelled-directive',
+                                         'examples': [{'language': 'citry-html',
+                                                       'source': '<div c-iff="show">Details</div>',
+                                                       'title': 'A typo in c-if'},
+                                                      {'language': 'citry-html',
+                                                       'source': '<div c-show="open">Menu</div>',
+                                                       'title': 'A directive name from Vue'}],
+                                         'fix': 'Use the directive the message names. If the attribute really is meant '
+                                                'for the browser, set rule_misspelled_directive to "ignore" for that '
+                                                'component, or pass it through c-bind, such as c-bind="{\'iff\': '
+                                                'value}".',
+                                         'messages': {'default': "'{name}' is not a Citry directive, so it renders an "
+                                                                 "HTML attribute named '{attribute}'. Did you mean "
+                                                                 "'{suggestion}'?",
+                                                      'vue': "'{name}' is not a Citry directive, so it renders an HTML "
+                                                             "attribute named '{attribute}'. For Vue's directive, "
+                                                             "write '{suggestion}'."},
+                                         'parameters': {'attribute': 'The attribute name the element renders, without '
+                                                                     'c-.',
+                                                        'name': 'Attribute name as written in the template.',
+                                                        'suggestion': 'The directive the author probably meant.'},
+                                         'summary': 'A c-* attribute on an HTML element looks like a Citry directive, '
+                                                    'such as c-iff for c-if, but is not one. Citry renders it as an '
+                                                    'ordinary attribute, so the element shows up whatever the '
+                                                    'condition says.',
+                                         'surfaces': ['check', 'lsp'],
+                                         'title': 'Misspelled Citry directive',
+                                         'when': 'The part after c- is not an HTML attribute that the element accepts, '
+                                                 'and it is one typing mistake away from if, elif, else, for, empty, '
+                                                 'or bind, the same name in other letter case, such as c-If, a '
+                                                 'spelled-out form such as c-else-if, or a directive name from Vue, '
+                                                 'such as c-show. Only HTML elements, custom elements, and <c-element> '
+                                                 'are checked, not component tags or elements inside <svg> or <math>. '
+                                                 'citry check --static and an editor that has not loaded your '
+                                                 'application report it too.'},
  'citry.template.unknown-component': {'code': 'citry.template.unknown-component',
                                       'constant': 'TEMPLATE_UNKNOWN_COMPONENT',
                                       'defaultSeverity': 'error',
