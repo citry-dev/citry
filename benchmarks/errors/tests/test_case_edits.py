@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -160,3 +162,107 @@ def test_a_case_can_still_replace_a_whole_file(tmp_path: Path, monkeypatch: pyte
     (framework.baseline / "templates" / "index.html").unlink()
     [problem] = port_problems(framework, port)
     assert problem == f"{port.root} replaces 'templates/index.html', which the baseline does not have"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/etc/passwd",
+        "../frameworks/next/baseline/app/page.tsx",
+        "templates/../../outside.html",
+        "./templates/index.html",
+        "templates//index.html",
+        "templates/",
+        "",
+        "templates\\..\\..\\outside.html",
+        "C:/outside.html",
+        "c:outside.html",
+        ".",
+        "..",
+        "templates/index\u0000.html",
+        "templates/index.html\n",
+        "templates/index.html.",
+        "templates /index.html",
+        ".. /outside.html",
+    ],
+)
+def test_a_path_that_could_leave_the_working_copy_is_rejected_when_the_port_loads(tmp_path: Path, path: str) -> None:
+    # A JSON string is also a valid TOML basic string, so backslashes reach the loader as written.
+    spelled = json.dumps(path)
+    named = re.escape(repr(path))
+    edited = EDITED.replace('file = "templates/index.html"', f"file = {spelled}")
+    with pytest.raises(ConfigError, match=f"edit 0 edits {named}, which must be a plain relative path"):
+        load_port(_port(tmp_path, edited))
+    head = 'status = "ported"\nmistake = { file = "a", contains = "x" }\n'
+    with pytest.raises(ConfigError, match=f"replaces {named}, which must be a plain relative path"):
+        load_port(_port(tmp_path, head + f"files = {{ {spelled} = 'index.html' }}\n"))
+    with pytest.raises(ConfigError, match=f"copies from {named}"):
+        load_port(_port(tmp_path, head + f"files = {{ a = {spelled} }}\n"))
+
+
+def test_a_nested_path_is_accepted_and_a_link_out_of_the_baseline_is_not(tmp_path: Path) -> None:
+    framework = _framework(tmp_path)
+    port = load_port(_port(tmp_path, EDITED))
+    assert port.edits[0].file == "templates/index.html"
+    assert port_problems(framework, port) == []
+    # A link inside the baseline passes the text check but would read a file from outside it.
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "index.html").write_text(PAGE)
+    (framework.baseline / "templates" / "index.html").unlink()
+    (framework.baseline / "templates").rmdir()
+    (framework.baseline / "templates").symlink_to(outside)
+    [problem] = port_problems(framework, port)
+    assert problem == f"{port.root} names 'templates/index.html', which resolves outside the baseline"
+
+
+def test_a_copy_may_sit_in_a_subfolder_but_not_link_out_of_the_case(tmp_path: Path) -> None:
+    head = 'status = "ported"\nmistake = { file = "templates/index.html", contains = "x" }\n'
+    path = _port(tmp_path, head + 'files = { "templates/index.html" = "sub/index.html" }\n')
+    (path.parent / "sub").mkdir()
+    (path.parent / "sub" / "index.html").write_text("x\n")
+    framework = _framework(tmp_path)
+    port = load_port(path)
+    assert port.files == {"templates/index.html": path.parent / "sub" / "index.html"}
+    assert port_problems(framework, port) == []
+    # A link next to port.toml would copy a file from anywhere into the working copy.
+    (tmp_path / "secret.txt").write_text("x\n")
+    (path.parent / "sub" / "index.html").unlink()
+    (path.parent / "sub" / "index.html").symlink_to(tmp_path / "secret.txt")
+    with pytest.raises(
+        ConfigError, match=re.escape("copies from 'sub/index.html', which resolves outside the case folder")
+    ):
+        load_port(path)
+    # The baseline side of a copy is resolved as well.
+    (path.parent / "sub" / "index.html").unlink()
+    (path.parent / "sub" / "index.html").write_text("x\n")
+    (framework.baseline / "templates" / "index.html").unlink()
+    (framework.baseline / "templates" / "index.html").symlink_to(tmp_path / "secret.txt")
+    [problem] = port_problems(framework, load_port(path))
+    assert problem.endswith("names 'templates/index.html', which resolves outside the baseline")
+
+
+def test_one_file_cannot_be_changed_under_two_spellings(tmp_path: Path) -> None:
+    (tmp_path / "cases" / "m08-attribute-typo" / "jinja").mkdir(parents=True)
+    (tmp_path / "cases" / "m08-attribute-typo" / "jinja" / "index.html").write_text(PAGE)
+    copied = EDITED.replace(
+        'status = "ported"', 'status = "ported"\nfiles = { "Templates/INDEX.html" = "index.html" }'
+    )
+    with pytest.raises(
+        ConfigError, match=re.escape("names 'templates/index.html', the same file as 'Templates/INDEX.html'")
+    ):
+        load_port(_port(tmp_path, copied))
+    second = EDITED + '\n[[edits]]\nfile = "templates/Index.html"\nold = "API"\nnew = "Api"\n'
+    with pytest.raises(
+        ConfigError, match=re.escape("edit 1 names 'templates/Index.html', the same file as 'templates/index.html'")
+    ):
+        load_port(_port(tmp_path, second))
+
+
+def test_a_change_inside_a_folder_the_working_copy_leaves_out_is_reported(tmp_path: Path) -> None:
+    framework = _framework(tmp_path)
+    (framework.baseline / "node_modules").mkdir()
+    (framework.baseline / "node_modules" / "x.js").write_text("owner.name\n")
+    port = load_port(_port(tmp_path, EDITED.replace("templates/index.html", "node_modules/x.js")))
+    [problem] = port_problems(framework, port)
+    assert problem.endswith("names 'node_modules/x.js', inside a folder the working copy leaves out")

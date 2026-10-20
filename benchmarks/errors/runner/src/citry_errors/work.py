@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from .config import CACHE, REPO_ROOT, ConfigError
@@ -21,7 +22,8 @@ if TYPE_CHECKING:
 
 # Build output and installed dependencies never belong in a working copy: the
 # environment is shared, and stale build output would hide the case's change.
-_IGNORED = shutil.ignore_patterns("node_modules", ".venv", ".next", ".nuxt", ".output", "__pycache__", "dist")
+_IGNORED_NAMES = ("node_modules", ".venv", ".next", ".nuxt", ".output", "__pycache__", "dist")
+_IGNORED = shutil.ignore_patterns(*_IGNORED_NAMES)
 
 
 def env_dir(framework: Framework) -> Path:
@@ -129,6 +131,24 @@ def apply_edits(text: str, edits: Sequence[Edit], where: str) -> str:
     return "".join(pieces)
 
 
+def _inside(baseline: Path, published: str, port: Port) -> Path:
+    """
+    Join a case's path to the baseline and confirm it still points inside it.
+
+    Loading already rejects "..", absolute paths and drive letters; this also
+    catches a symbolic link in the baseline that leads out of it, because the
+    case's edits would be applied to a file read through that link.
+    """
+    path = baseline / published
+    if not path.resolve().is_relative_to(baseline.resolve()):
+        raise ConfigError(f"{port.root} names {published!r}, which resolves outside the baseline")
+    # The working copy leaves these folders out, so a change there would pass
+    # validate and then fail in the middle of a run.
+    if any(part in _IGNORED_NAMES for part in PurePosixPath(published).parts):
+        raise ConfigError(f"{port.root} names {published!r}, inside a folder the working copy leaves out")
+    return path
+
+
 def changed_files(framework: Framework, port: Port) -> dict[str, bytes]:
     """
     Give the new content of every file the case changes, keyed by its path in the baseline.
@@ -138,6 +158,7 @@ def changed_files(framework: Framework, port: Port) -> dict[str, bytes]:
     """
     changed = {}
     for published, source in port.files.items():
+        _inside(framework.baseline, published, port)
         if not (framework.baseline / published).is_file():
             # A case may only change files the clean app has, so its
             # difference stays visible next to the baseline.
@@ -147,7 +168,7 @@ def changed_files(framework: Framework, port: Port) -> dict[str, bytes]:
     for edit in port.edits:
         by_file.setdefault(edit.file, []).append(edit)
     for published, edits in by_file.items():
-        path = framework.baseline / published
+        path = _inside(framework.baseline, published, port)
         if not path.is_file():
             raise ConfigError(f"{port.root} edits {published!r}, which the baseline does not have")
         # Bytes are decoded by hand, because read_text would turn CRLF line

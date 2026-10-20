@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
+import unicodedata
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 BENCH_ROOT = Path(__file__).resolve().parents[3]
@@ -124,6 +126,54 @@ def _table(data: Any, where: str, required: set[str], optional: set[str] = froze
     return data
 
 
+# A drive letter such as "C:" makes a path absolute on Windows.
+_DRIVE = re.compile(r"^[A-Za-z]:")
+
+
+def _relative_path(value: str, where: str, what: str) -> str:
+    """
+    Accept only a plain relative path, so a case's path text cannot point outside its folder or the baseline.
+
+    The text is checked here because the working copy a baseline path will
+    be joined to does not exist yet when a port is loaded; where the file
+    can be resolved, the caller also resolves it. Backslashes and drive
+    letters are rejected too: on Windows they would make the path absolute
+    or let ".." through as part of one name.
+    """
+    parts = PurePosixPath(value).parts
+    if (
+        not value
+        or value.startswith("/")
+        or "\\" in value
+        or _DRIVE.match(value)
+        or any(part == ".." for part in parts)
+        # A doubled or trailing slash, or a "." name, would name the same
+        # file a second way.
+        or "/".join(parts) != value
+        # A control character such as NUL makes the operating system reject
+        # the path later with a traceback instead of this message.
+        or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value)
+        # Windows drops a trailing dot or space from a name, so "x." would
+        # be a second spelling of "x" and ".. " a spelling of "..".
+        or any(part.endswith((".", " ")) for part in parts)
+    ):
+        raise ConfigError(
+            f"{where} {what} {value!r}, which must be a plain relative path: no leading '/', no '.' or '..' name,"
+            " no backslash, drive letter or control character, and no empty name or name ending in a dot or space"
+        )
+    return value
+
+
+def _same_file_key(value: str) -> str:
+    """
+    Spell a path the way a case-insensitive file system compares it.
+
+    macOS and Windows treat `Templates/INDEX.html` and `templates/index.html`,
+    and the composed and decomposed forms of an accented letter, as one file.
+    """
+    return unicodedata.normalize("NFC", value).casefold()
+
+
 def load_catalogue(path: Path = BENCH_ROOT / "catalogue.toml") -> list[Mistake]:
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     _table(data, str(path), {"mistake"})
@@ -229,10 +279,20 @@ def load_port(path: Path) -> Port:
         # an error that names the port file.
         if not isinstance(raw_files, dict) or not all(isinstance(value, str) for value in raw_files.values()):
             raise ConfigError(f"{where} files must be a table of baseline paths to copy file names")
+        # Each changed file once, by the spelling that file systems compare,
+        # so one file cannot be changed twice under two spellings.
+        spellings: dict[str, str] = {}
         for published, source in raw_files.items():
-            source_path = root / source
+            _relative_path(published, where, "replaces")
+            spellings[_same_file_key(published)] = published
+            source_path = root / _relative_path(source, where, "copies from")
             if not source_path.is_file():
                 raise ConfigError(f"{where} names a missing file {source!r}")
+            # A symbolic link next to port.toml would copy a file from
+            # anywhere into the working copy; the case folder exists now, so
+            # the link is followed and checked here.
+            if not source_path.resolve().is_relative_to(root.resolve()):
+                raise ConfigError(f"{where} copies from {source!r}, which resolves outside the case folder")
             files[published] = source_path
         if not isinstance(data.get("edits", []), list):
             raise ConfigError(f"{where} edits must be a list of tables")
@@ -240,6 +300,7 @@ def load_port(path: Path) -> Port:
             row = _table(raw, f"{where} edit {index}", {"file", "old", "new"})
             if not all(isinstance(row[key], str) for key in ("file", "old", "new")):
                 raise ConfigError(f"{where} edit {index} needs text for file, old and new")
+            _relative_path(row["file"], f"{where} edit {index}", "edits")
             # Empty text is found everywhere, and an edit that keeps the text
             # would leave the clean app unchanged, so both point at a typo.
             if not row["old"]:
@@ -250,6 +311,9 @@ def load_port(path: Path) -> Port:
                 # Edits to a file the case also replaces whole have no single
                 # meaning: they could apply to the clean file or to the copy.
                 raise ConfigError(f"{where} both replaces and edits {row['file']!r}")
+            known = spellings.setdefault(_same_file_key(row["file"]), row["file"])
+            if known != row["file"]:
+                raise ConfigError(f"{where} edit {index} names {row['file']!r}, the same file as {known!r}")
             edits.append(Edit(**row))
         # A ported case that changes nothing would score the clean app.
         if not files and not edits:

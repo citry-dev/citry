@@ -148,7 +148,9 @@ hydration, so m14 does not apply to it.
 - **One mistake per case.** Change only what the mistake needs, in files the
   baseline already has.
 - **Write the change as edits.** Each `[[edits]]` entry replaces the text
-  `old` in the baseline file `file` with `new`. `old` must appear exactly
+  `old` in the baseline file `file` with `new`. `file` is a path relative to
+  the baseline, with `/` between names and no `.` or `..` name; `files`
+  paths follow the same rule. `old` must appear exactly
   once in that file, so include enough of the surrounding line, or the line
   before it, to make it unique. Every `old` is looked up in the clean file,
   not in the result of another edit, so two edits of one case must not
