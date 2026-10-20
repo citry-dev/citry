@@ -1,8 +1,8 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "$fetch('/api/save'" }
+mistake = { file = "app/pages/index.vue", contains = "$fetch('/api/save'" }
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = '''
     body: { amount: 1 },
 '''

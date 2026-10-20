@@ -9,10 +9,10 @@ new = '<dvi class="board" title="Board">'
 [[edits]]
 file = "app/components/board_page.py"
 old = '''
-            </form>
+            </nav>
           </div>
 '''
 new = '''
-            </form>
+            </nav>
           </dvi>
 '''

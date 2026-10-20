@@ -23,6 +23,10 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+h1 {
+  color: var(--accent);
+}
+
 /* The benchmark checks for this green text to notice a misspelled class name. */
 .board {
   color: rgb(0, 128, 0);

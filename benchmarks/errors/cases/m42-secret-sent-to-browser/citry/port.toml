@@ -3,8 +3,8 @@ mistake = { file = "app/components/board_page.py", contains = '"secretToken": SE
 
 [[edits]]
 file = "app/components/board_page.py"
-old = "from app.data import API_BASE, Owner, Project"
-new = "from app.data import API_BASE, SECRET_TOKEN, Owner, Project"
+old = "from app.data import ACCENT, API_BASE, Owner, Project"
+new = "from app.data import ACCENT, API_BASE, SECRET_TOKEN, Owner, Project"
 
 [[edits]]
 file = "app/components/board_page.py"

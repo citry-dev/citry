@@ -6,5 +6,5 @@ mistake = { file = "components/board_page/board_page.py", contains = '''get('cuo
 
 [[edits]]
 file = "components/board_page/board_page.py"
-old = '''kwargs={'count': request.session.get('count', 0)},'''
-new = '''kwargs={'count': request.session.get('cuont', 0)},'''
+old = "'count': request.session.get('count', 0),"
+new = "'count': request.session.get('cuont', 0),"

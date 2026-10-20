@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/search.py", contains = 'name="qeury"' }
+
+[[edits]]
+file = "app/components/search.py"
+old = 'name="q"'
+new = 'name="qeury"'

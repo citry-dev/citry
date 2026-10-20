@@ -21,6 +21,18 @@ starter:
   repository has a pnpm-workspace.yaml.
 The secret lives in .env, as the Next.js environment-variable docs describe.
 
+The search form is next/form's `<Form action="/">` in a client component
+that keeps the text typed so far in state, and the page reads `q` from its
+`searchParams`. The About and project pages are App Router pages that the
+page links to with next/link. The board sets the heading's color as the CSS
+variable `--accent` in an inline style, which globals.css reads. The avatar
+is a next/image `<Image>`, because the starter's ESLint config warns on a
+plain `<img>` (@next/next/no-img-element), and its `src` is a path into
+public/, the first form the Next.js image docs show. So a misspelled file
+(m48) is a 404 at runtime; a static import of the file would fail
+`next build` instead. `typedRoutes`, which would type-check
+link paths such as m45's, is off, as it is by default.
+
 Versions come from the lockfile: next 16.3.5, react and react-dom 19.3.0,
 typescript 5.9.3, @types/react and @types/react-dom 19.3.0, @types/node
 20.19.43, eslint 9.39.5, eslint-config-next 16.3.5, tailwindcss and
@@ -111,3 +123,24 @@ selector = "button:text-is('Close')"
 [[runtime.journeys.status]]
 action = "click"
 selector = "button:text-is('Details')"
+
+# Types into the search field and submits the form.
+[[runtime.journeys.search]]
+action = "fill"
+selector = "form[role=search] input"
+text = "alpha"
+
+[[runtime.journeys.search]]
+action = "press"
+selector = "form[role=search] input"
+key = "Enter"
+
+# Follows the About link to its page.
+[[runtime.journeys.about]]
+action = "click"
+selector = "a:text-is('About')"
+
+# Follows the project link to its page.
+[[runtime.journeys.project]]
+action = "click"
+selector = "a:text-is('Project 1')"

@@ -8,10 +8,16 @@
   <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
   <script src="{{ url_for('static', path='htmx.min.js') }}"></script>
   <script defer src="{{ url_for('static', path='alpine.min.js') }}"></script>
+  {# The server picks the heading color; styles.css reads it as --accent. #}
+  <style>
+    :root { --accent: {{ accent }}; }
+  </style>
 </head>
 <body>
   <div class="board" title="Board">
     <h1>Projects</h1>
+    <p>Owned by {{ owner.name }}</p>
+    <img src="{{ url_for('static', path='avatar.svg') }}" alt="{{ owner.name }}" width="32" height="32">
     <p>Owner: {{ owner.name }}</p>
     <p x-data='{ api: {{ api_base|tojson }} }'>API: <span x-text="api"></span></p>
 
@@ -38,7 +44,17 @@
       </p>
     </div>
 
-    <form role="search"><button type="submit">Search</button></form>
+    <form role="search" x-data="{ query: '' }">
+      <input type="search" name="q" x-model="query">
+      <button type="submit">Search</button>
+      <p>Searching for: <span x-text="query"></span></p>
+    </form>
+    {% if searched %}<p>Searched: {{ searched }}</p>{% endif %}
+
+    <nav>
+      <a href="{{ url_for('about') }}">About</a>
+      <a href="{{ url_for('project', project_id=1) }}">Project 1</a>
+    </nav>
   </div>
 </body>
 </html>

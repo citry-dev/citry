@@ -14,8 +14,10 @@ from .score import RuntimeResult
 _STATUS = re.compile(r'(?:HTTP/[\d.]+"? |\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) \S+ )([1-5]\d\d)\b')
 # `\w*Error` also covers Python's and JavaScript's named errors, such as
 # `TypeError:`, and `[500]` is how some dev servers tag a failed request.
+# uvicorn prints its process id the same way (`Started server process [521]`),
+# so a bracketed number right after "process" is an id, not a status.
 _SERVER_ERROR = re.compile(
-    r'Traceback|Exception|\bERROR\b|\b\w*Error\b|\[5\d\d\]|HTTP/[\d.]+"? 5\d\d\b'
+    r'Traceback|Exception|\bERROR\b|\b\w*Error\b|(?<!process )\[5\d\d\]|HTTP/[\d.]+"? 5\d\d\b'
     r"|\b(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) \S+ 5\d\d\b"
 )
 _SERVER_WARNING = re.compile(r"\bWARN(ING)?\b|\bwarn\b|Warning")

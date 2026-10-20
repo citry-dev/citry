@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = 'name="qeury"' }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = '<input type="search" name="q"'
+new = '<input type="search" name="qeury"'

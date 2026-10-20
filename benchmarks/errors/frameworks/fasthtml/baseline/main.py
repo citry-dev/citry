@@ -27,6 +27,8 @@ app, rt = fast_app(default_hdrs=False, hdrs=hdrs)
 
 API_BASE = "/api"
 SECRET_TOKEN = "s3cr3t"
+# The heading's color, which app.css reads as the CSS variable --accent.
+ACCENT = "rgb(0, 0, 255)"
 
 
 @dataclass
@@ -60,10 +62,13 @@ def Card(title: str, count: int, tone: Literal["plain", "accent"], footer: Calla
     )
 
 
+# The search form submits back to this page with its text in `q`.
 @rt("/")
-def get():
+def get(q: str = ""):
     return Title("Projects"), Div(
         H1("Projects"),
+        P(f"Owned by {owner.name}"),
+        Img(src="/static/avatar.svg", alt=owner.name, width="32", height="32"),
         P(f"Owner: {owner.name}"),
         P(id="api"),
         Script(f"document.getElementById('api').textContent = 'API: ' + {json.dumps(API_BASE)};"),
@@ -93,10 +98,32 @@ def get():
                 event.target.closest('.card').hidden = true;
             });
         """),
-        Form(Button("Search", type="submit"), role="search"),
+        Form(
+            Input(
+                type="search",
+                name="q",
+                oninput="document.getElementById('query').textContent = this.value",
+            ),
+            Button("Search", type="submit"),
+            P("Searching for: ", Span(id="query")),
+            role="search",
+        ),
+        P(f"Searched: {q}") if q else None,
+        Nav(A("About", href="/about"), A("Project 1", href="/projects/1")),
         cls="board",
         title="Board",
+        style=f"--accent: {ACCENT}",
     )
+
+
+@rt("/about")
+def about():
+    return Title("About"), H1("About this board")
+
+
+@rt("/projects/{project_id}")
+def project(project_id: int):
+    return Title("Project"), H1(f"Project {project_id}")
 
 
 @rt("/save")

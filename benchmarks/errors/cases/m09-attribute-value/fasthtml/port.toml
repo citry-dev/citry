@@ -3,5 +3,5 @@ mistake = { file = "main.py", contains = 'type="sumbit"' }
 
 [[edits]]
 file = "main.py"
-old = 'Form(Button("Search", type="submit"), role="search"),'
-new = 'Form(Button("Search", type="sumbit"), role="search"),'
+old = 'Button("Search", type="submit"),'
+new = 'Button("Search", type="sumbit"),'

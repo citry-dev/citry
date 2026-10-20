@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/templates/board/page.html", contains = 'name="qeury"' }
+
+[[edits]]
+file = "board/templates/board/page.html"
+old = '<input type="search" name="q"'
+new = '<input type="search" name="qeury"'

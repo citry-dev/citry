@@ -140,4 +140,7 @@ MAILERS = {
 
 API_BASE = '/api'
 
+# The heading's color, which the stylesheet reads as the CSS variable --accent.
+ACCENT = 'rgb(0, 0, 255)'
+
 SECRET_TOKEN = 's3cr3t'

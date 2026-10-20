@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/pages/index.vue", contains = 'name="qeury"' }
+
+[[edits]]
+file = "app/pages/index.vue"
+old = 'name="q"'
+new = 'name="qeury"'

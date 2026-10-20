@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/pages/index.vue", contains = 'board?.acent' }
+
+[[edits]]
+file = "app/pages/index.vue"
+old = "color: v-bind('board?.accent');"
+new = "color: v-bind('board?.acent');"

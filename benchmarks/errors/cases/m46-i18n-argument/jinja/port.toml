@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """Starlette's docs cover no translations, and its Jinja2Templates creates a Jinja Environment with no extensions, as for m15. The subtitle is literal text with the owner's name inserted directly, so there is no message argument to misname."""

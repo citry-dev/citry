@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """The minimal Nuxt starter has no translations; they need the @nuxtjs/i18n module, as for m15. The subtitle is plain template text with the owner's name inserted directly, so there is no message argument to misname."""

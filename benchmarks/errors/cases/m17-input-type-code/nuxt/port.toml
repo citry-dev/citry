@@ -2,7 +2,7 @@ status = "ported"
 mistake = { file = "server/api/board.get.ts", contains = "String(count)" }
 
 [indirect]
-reason = "The route's return type flows to the page through $fetch, so vue-tsc reports the string where it is bound to Card's number input (`:count` in app/app.vue), not in the route."
+reason = "The route's return type flows to the page through $fetch, so vue-tsc reports the string where it is bound to Card's number input (`:count` in app/pages/index.vue), not in the route."
 codes = ["TS2322"]
 
 [[edits]]

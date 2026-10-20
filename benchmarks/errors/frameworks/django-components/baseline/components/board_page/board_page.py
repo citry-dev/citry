@@ -31,14 +31,20 @@ class BoardPage(Component):
     class Kwargs(BaseModel):
         # The saved total, which the View below reads from the session.
         count: int
+        # The text the search form submitted, or '' before any search.
+        searched: str
 
     class TemplateData(BaseModel):
         owner: Owner
         cards: list[Project]
         count: int
+        searched: str
 
     class JsData(BaseModel):
         api_base: str
+
+    class CssData(BaseModel):
+        accent: str
 
     def get_template_data(self, args, kwargs: Kwargs, slots, context):
         cards = [Project(title=title, count=count, featured=featured) for title, count, featured in PROJECTS]
@@ -46,11 +52,16 @@ class BoardPage(Component):
             'owner': Owner(name='Ada'),
             'cards': cards,
             'count': kwargs.count,
+            'searched': kwargs.searched,
         }
 
     def get_js_data(self, args, kwargs, slots, context):
         # board_page.js receives this in its $onComponent callback.
         return {'api_base': settings.API_BASE}
+
+    def get_css_data(self, args, kwargs, slots, context):
+        # The server picks the heading color; board_page.css reads it as --accent.
+        return {'accent': settings.ACCENT}
 
     # Written as django-components' docs write it. The library turns this
     # plain class into a ComponentView subclass when it creates the
@@ -60,5 +71,9 @@ class BoardPage(Component):
         def get(self, request, *args, **kwargs):
             return BoardPage.render_to_response(
                 request=request,
-                kwargs={'count': request.session.get('count', 0)},
+                kwargs={
+                    'count': request.session.get('count', 0),
+                    # The search form submits back to this page with its text in `q`.
+                    'searched': request.GET.get('q', ''),
+                },
             )

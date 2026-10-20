@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "app/components/board_page.py", contains = "type=\"sumbit\"" }
+mistake = { file = "app/components/search.py", contains = "type=\"sumbit\"" }
 
 [[edits]]
-file = "app/components/board_page.py"
+file = "app/components/search.py"
 old = '<button type="submit">Search</button>'
 new = '<button type="sumbit">Search</button>'

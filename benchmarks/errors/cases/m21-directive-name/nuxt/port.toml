@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "v-iff" }
+mistake = { file = "app/pages/index.vue", contains = "v-iff" }
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = '<p v-if="open">Details are visible</p>'
 new = '<p v-iff="open">Details are visible</p>'

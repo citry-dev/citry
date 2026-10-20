@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """FastHTML's docs set up no translations, as for m15. The subtitle is a Python f-string with the owner's name inserted directly, so there is no message argument to misname."""

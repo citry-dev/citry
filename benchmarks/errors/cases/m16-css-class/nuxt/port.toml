@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "app/app.vue", contains = "class=\"bord\"" }
+mistake = { file = "app/pages/index.vue", contains = "class=\"bord\"" }
 
 [[edits]]
-file = "app/app.vue"
+file = "app/pages/index.vue"
 old = '<div class="board" title="Board">'
 new = '<div class="bord" title="Board">'

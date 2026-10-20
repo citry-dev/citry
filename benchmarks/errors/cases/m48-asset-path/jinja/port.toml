@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "templates/index.html", contains = 'avtar.svg' }
+
+[[edits]]
+file = "templates/index.html"
+old = "path='avatar.svg'"
+new = "path='avtar.svg'"

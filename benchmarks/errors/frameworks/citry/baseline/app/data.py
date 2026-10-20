@@ -4,6 +4,9 @@ from dataclasses import dataclass
 API_BASE = "/api"
 SECRET_TOKEN = "s3cr3t"
 
+# The heading's color, which the page's stylesheet reads as a CSS variable.
+ACCENT = "rgb(0, 0, 255)"
+
 
 @dataclass(frozen=True, slots=True)
 class Owner:

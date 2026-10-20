@@ -9,11 +9,18 @@ max_jobs = 1
 notes = """
 The baseline is the `npm create nuxt@latest` minimal starter (create-nuxt 4.0.1, template
 `minimal`, no modules selected), pinned to nuxt 4.5.2, vue 3.5.42 and vue-router 5.3.1. On top
-of the starter it adds the reference page: `app/app.vue` and `app/components/Card.vue`, written
-as `<script setup lang="ts">`, a global stylesheet listed in `css`, the public and private
-`runtimeConfig` keys, two server routes in `server/api/`, and the saved total in
-`server/utils/state.ts`. Node is the system Node, v26.5.0 with npm 11.17.0 (nuxt 4.5.2 accepts
-Node ^22.19.0, ^24.11.0 or >=26.0.0).
+of the starter it adds the reference page, written as `<script setup lang="ts">`: the board in
+`app/pages/index.vue`, the About and project pages in `app/pages/about.vue` and
+`app/pages/projects/[id].vue`, `app/components/Card.vue` and `Status.vue`, a global stylesheet
+listed in `css`, the public and private `runtimeConfig` keys, two server routes in `server/api/`,
+and the saved total in `server/utils/state.ts`. An app with a `pages/` folder renders the
+current page from `app/app.vue` with `<NuxtPage />`, as Nuxt's routing docs show, and the board
+links to the other pages with `<NuxtLink>`. Node is the system Node, v26.5.0 with npm 11.17.0
+(nuxt 4.5.2 accepts Node ^22.19.0, ^24.11.0 or >=26.0.0).
+
+The board data carries the heading's color, and the page's `<style>` reads it with Vue's
+`v-bind()`, the way Vue's docs link CSS to component state. The search form submits back to the
+page with GET, and the page reads `route.query.q`.
 
 The benchmark adds typescript 6.0.3 and vue-tsc 3.3.13 as dev dependencies, only to run the
 editor stage. The starter installs neither. Nuxt does not type-check during `nuxt dev` or
@@ -27,9 +34,9 @@ recommends. It first runs `nuxi prepare`, as the starter's postinstall script do
 `vueCompilerOptions` stay at their defaults, so `strictTemplates` and the `checkUnknown*`
 options are off. vue-tsc checks every file, while the editor shows diagnostics only for open
 files. A type error is reported where the wrong value is used: in m17 the server route returns a
-string, and vue-tsc reports TS2322 at the `:count` binding in `app/app.vue`. The case's
+string, and vue-tsc reports TS2322 at the `:count` binding in `app/pages/index.vue`. The case's
 `indirect` note records why that finding still counts. A developer editing the route sees no
-error there; the editor shows it only with `app/app.vue` open.
+error there; the editor shows it only with `app/pages/index.vue` open.
 
 vue-tsc reports only TypeScript's diagnostics. The extension also shows the Vue compiler's own
 errors for a single-file component (SFC), such as "Element is missing end tag", through the
@@ -49,13 +56,18 @@ most Nuxt projects allow. `nuxt typecheck`, which Nuxt's TypeScript docs
 describe, runs the same vue-tsc command as the editor stage, so it is not a separate stage.
 
 The runtime check runs `nuxt dev`, so Vue's development warnings stay on, and Nuxt DevTools
-stays enabled as in the starter. Two results depend on the starter's shape. With only
-`app/app.vue` and no `pages/` folder, Nuxt renders the page for every unknown path, so the
-misspelled route in m06 answers 200 with HTML instead of a 404. (The editor still reports m06
-indirectly: `$fetch` of an unknown route returns `unknown`, so reading `result.count` four
-lines below is TS18046.) And m11 renames both the opening
-and the closing tag; renaming only the opening tag is a template compile error that the editor
-reports.
+stays enabled as in the starter. The editor reports m06 indirectly: `$fetch` of an unknown
+route returns `unknown`, so reading `result.count` four lines below is TS18046. m11 renames both
+the opening and the closing tag; renaming only the opening tag is a template compile error that
+the editor reports.
+
+Three results depend on how the page is written. The heading's color is read with `v-bind()`,
+so m43's misspelled name reads a property the board data does not have, which vue-tsc reports; a
+`style` binding that sets `--accent` for a `var(--accent)` in main.css would report nothing. The
+avatar is a path into public/, and Vite turns an absolute path in a template into an import, so
+m48's misspelled file fails `nuxt build`. And `experimental.typedPages` is off, as it is by
+default, so a `<NuxtLink>` to a misspelled path (m45) shows only vue-router's warning in the
+browser.
 
 m12 reads the private `secretToken` in the page, so the server renders the
 secret into the HTML it sends; the hydration error comes after the leak.
@@ -109,4 +121,17 @@ status = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "click", selector = "button:has-text('Close')" },
   { action = "click", selector = "button:has-text('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:has-text('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:has-text('Project 1')" },
 ]

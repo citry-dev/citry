@@ -22,9 +22,19 @@ reads a form field with `int(str(...))`, because Starlette types a form
 field as text or an uploaded file. pyright reads only the
 Python files; Pylance does not check Jinja templates or the HTMX and Alpine
 attributes in them. VS Code's built-in HTML support checks only <script>
-and <style> blocks inside a page, and this page has no inline script or style. Pylance's default diagnosticMode "openFilesOnly" reports
+and <style> blocks inside a page. The page's one <style> block, which sets
+`--accent`, gives no finding in VS Code's CSS check (tried with
+vscode-css-languageservice 6.3.2), so the editor stage does not run that
+check. Pylance's default diagnosticMode "openFilesOnly" reports
 only on open files, while the command line checks every file, which can only
 add findings.
+
+As in the Django app, the page writes the heading's color into a `<style>`
+block in its head, because djLint flags an inline style (H021); styles.css
+reads it as the CSS variable `--accent`. The search form submits back
+to the page with GET, and the route reads `q` from the query string. The
+About and project pages are named Starlette routes, which the page links to
+with `url_for`; the project route takes the number as `{project_id:int}`.
 
 The card macro hands its title and count back to the page's `{% call %}`
 block with `caller(title, count)`, the form Jinja's docs show. The status
@@ -79,4 +89,17 @@ status = [
   { action = "click", selector = "button:text-is('Details')" },
   { action = "click", selector = "button:text-is('Close')" },
   { action = "click", selector = "button:text-is('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:text-is('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:text-is('Project 1')" },
 ]

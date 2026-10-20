@@ -124,9 +124,11 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 Rerunning them with nothing changed took 8 seconds: it repeated only the
 browser checks of the 4 cases whose journey stops on an error page, which
 are never stored. Every framework repeats such cases on each run. A full run
-of the eight frameworks' 352 cases with nothing stored (`--no-cache`) took
-about 10 minutes on the same machine; most of it is the Nuxt cases, which
-run one at a time, and the Next.js builds. It is not part of routine CI. Run
+of the eight frameworks' 392 cases with nothing stored (`--no-cache`) took
+about 20 minutes on the same machine; most of it is the Nuxt cases, which
+run one at a time, and the Next.js builds. Each journey loads the page
+again in every browser check, and the `search`, `about` and `project`
+journeys bring each framework to five (FastHTML to four). It is not part of routine CI. Run
 it at each Citry release, and when a framework's pinned versions change.
 
 ## Latest result
@@ -201,17 +203,45 @@ writes a part of the page, not from its tools:
   an error.
 - **m42:** no framework's tools report a secret sent to the browser, and
   the page looks the same, so every cell is missed.
+- **m43:** only Nuxt reports a CSS variable whose name differs from the
+  one the server sets. Its page reads the server's value with Vue's
+  `v-bind('board?.accent')`, so the misspelled name reads a property the
+  board data does not have, which vue-tsc reports. Elsewhere the heading
+  silently changes color.
+- **m44:** nothing compares a form field's name with the name the server
+  reads, so the search shows no `Searched:` line. Citry's form calls a
+  server event, which rejects the call because `q` is missing, but the
+  error stays in `$error('search')`, which the page does not show.
+- **m45:** Django, Rusty, Jinja and django-components build the link from
+  the route's name, so the page fails to render. Citry, FastHTML and
+  Next.js link by path and get a 404 when the link is clicked; Nuxt's
+  router prints only a warning. Next.js's `typedRoutes` and Nuxt's
+  `typedPages`, which would check links before the app runs, are off,
+  as they are by default.
+- **m46:** Citry checks a message's arguments in the editor. Django's and
+  django-components' `{% blocktranslate %}` leaves the owner's name out,
+  so the subtitle reads `Owned by ` with no error, while Rusty's view
+  fills the gettext placeholder from a dictionary and raises a
+  `KeyError`. The other frameworks have no
+  translations built in, as for m15.
+- **m48:** the misspelled image is a 404 when the page loads, except in
+  Nuxt, whose build turns an image path in a template into an import and
+  fails on the missing file.
 
 The gaps the earlier 24-mistake run found in Citry are tracked in
 [#207](https://github.com/citry-dev/citry/issues/207); the gaps found by
-the mistakes added since (m25 to m42, m47 and m49) are not in it yet.
+the mistakes added since (m25 to m49) are not in it yet.
 
-Rusty's cells match Django's except three:
+Rusty's cells match Django's except four:
 
 - **m08:** Django Rusty Templates raises an error when the page reads a
   misspelled attribute of an existing object (`owner.nmae`), where Django
   prints an empty string. This is the only mistake the two template
   engines handle differently.
+- **m46:** with no `{% blocktranslate %}`, Rusty's view fills the
+  subtitle's gettext placeholder from a dictionary, so the misnamed
+  argument raises a `KeyError`; Django's tag prints the name as empty
+  text.
 - **m05 and m35:** n/a. The version this benchmark pins has no
   `{% extends %}` or `{% block %}`, so the card writes its own footer
   link, and the page has no footer to misspell or leave out. For the
@@ -268,8 +298,10 @@ every framework.
 
 | Part | What the page does | Used by |
 | --- | --- | --- |
-| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title` | m15 |
+| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title`. The server sets its color, blue, as the CSS variable `--accent`, which the stylesheet reads (Nuxt's stylesheet reads the server's value with Vue's `v-bind()` instead). This is unrelated to the card's `accent` tone | m15, m43 |
+| Subtitle | `Owned by Ada` under the heading. Where translations are built in, it comes from a message that takes the owner's name as an argument | m46 |
 | Board wrapper | A `<div class="board" title="Board">` around everything below. The stylesheet makes `.board` text `rgb(0, 128, 0)` | m10, m11, m16 |
+| Avatar | An `<img>` of the owner from the app's static files, `avatar.svg`, with the alt text `Ada` | m48 |
 | Owner | `Owner: Ada`, read in the template from a server object `owner` with a `name` attribute | m07, m08 |
 | Public setting | `API: /api`. The server passes the public value `/api` to browser-side code, which renders it. The server also holds `SECRET_TOKEN = "s3cr3t"`, which never reaches the browser | m12, m40, m41, m42 |
 | Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks` | m01 to m04, m17, m22, m23, m47 |
@@ -279,7 +311,8 @@ every framework.
 | Counter | `Saved: 0` and an `Add` button. Add sends `{amount: 1}` to a server handler, route or action named `save`. The server adds `amount` to a value kept in a state field named `count`, and the page then shows `Saved: 1` | m06, m13, m18, m32, m33, m34, m38, m39 |
 | Details | A `Details` button toggles browser-side state named `open` and reports it through `aria-expanded`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31 |
 | Status | Inside Details, a browser-side `Status` component with a required boolean input `open` shows `Status: open` or `Status: closed`. Its `Close` button tells Details to close through an event or callback named `close` | m25 to m28 |
-| Search form | `<form role="search"><button type="submit">Search</button></form>` | m09 |
+| Search form | `<form role="search">` with a search field named `q` and `<button type="submit">Search</button>`. A line `Searching for: ...` repeats what is typed, and submitting `alpha` shows `Searched: alpha` | m09, m44 |
+| Links | An `About` link to the route `about` at `/about`, whose page reads `About this board`, and a `Project 1` link to `/projects/1`, whose page reads `Project 1` | m45 |
 
 Each card's footer link names its own project.
 
@@ -310,15 +343,17 @@ the count. Journeys run in the order `framework.toml` lists them, after the
 default one, so the clean app and the case start each journey from the same
 server state, apart from what the mistake itself changed. Every case runs
 every journey of its framework, so a mistake is compared on every part of
-the page any journey reaches. Every framework except FastHTML, which has
-no status line, also lists a `status` journey, which clicks `Details`,
-`Close`, and `Details` again.
+the page any journey reaches. Every framework lists three more journeys:
+`search` types `alpha` into the search field and presses Enter, and
+`about` and `project` click the `About` and `Project 1` links. Every
+framework except FastHTML, which has no status line, also lists a `status`
+journey, which clicks `Details`, `Close`, and `Details` again.
 
 A framework lists its journeys in `framework.toml`, by name, because the
-selectors differ between frameworks. In this example, which is not taken
-from any framework here, `search` is a second journey that types into a
-search field and submits it (the real default journeys also click `Details`
-and `Hide`):
+selectors differ between frameworks. This shortened example lists the
+default journey and the search journey, which types into the search field
+and submits it (the real default journeys also click `Details` and
+`Hide`):
 
 ```toml
 [runtime.journeys]
@@ -327,8 +362,8 @@ default = [
   { action = "wait", ms = 500 },
 ]
 search = [
-  { action = "fill", selector = "input[name=q]", text = "alpha" },
-  { action = "press", selector = "input[name=q]", key = "Enter" },
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
 ]
 ```
 

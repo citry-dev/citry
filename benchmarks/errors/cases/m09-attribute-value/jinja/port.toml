@@ -3,5 +3,5 @@ mistake = { file = "templates/index.html", contains = "type=\"sumbit\"" }
 
 [[edits]]
 file = "templates/index.html"
-old = '<form role="search"><button type="submit">Search</button></form>'
-new = '<form role="search"><button type="sumbit">Search</button></form>'
+old = '<button type="submit">Search</button>'
+new = '<button type="sumbit">Search</button>'
