@@ -136,7 +136,7 @@ change.
 
 ## Latest result
 
-[`results/2026-10-20/`](results/2026-10-20/) is the run published in the
+[`results/2026-10-21/`](results/2026-10-21/) is the run published in the
 "Catching errors" section of the docs site's Benchmarks page. Open
 `report.html` there in a browser for the chart and the full table;
 `results.json` has the first few findings behind each cell, and the
@@ -584,7 +584,8 @@ pyright in standard mode (Pylance with type checking turned on) and ruff
 with its default rules; for Django, Rusty, django-components,
 django-unicorn and Jinja templates, djLint; for Nuxt, the official
 `@nuxt/eslint` module; for Next.js, the ESLint its starter installs.
-Each tool keeps its default rules, except for the stricter settings below
+Each tool keeps its default rules (for a linter, the rules its framework's
+preset turns on), except for the stricter settings below
 and three changes that the clean app needs and that such projects
 commonly make: FastHTML's main.py turns off ruff's star-import rules
 (F403, F405), Nuxt's ESLint config turns off
@@ -602,23 +603,25 @@ settings considered and left off, with the reason. These are on:
 | --- | --- | --- |
 | Jinja | `undefined=StrictUndefined` | Printing a name the template was not given, using it in `{% if %}` or looping over it raises an error, as Citry reports an unknown template name |
 | django-components | Pydantic models for `Kwargs`, `Slots` and the data classes, with djc-ext-pydantic and `extra='forbid'` | Input and data types are checked when a component renders (Citry, Next.js, Nuxt and FastHTML check them before the app runs); unknown input names are rejected, as with django-components' default classes |
-| Nuxt | `vueCompilerOptions.strictTemplates` | vue-tsc reports an unknown component, element, attribute, directive or component event, the same kinds of names Citry and Next.js's tsc check |
+| Nuxt | `vueCompilerOptions.strictTemplates` | vue-tsc reports an unknown component, element, attribute, directive or component event, the same kinds of names Next.js's tsc checks (Citry checks component names before the app runs) |
 | Nuxt | `experimental.typedPages` | vue-tsc checks a `<NuxtLink>` or router call that names a route against the app's routes |
-| Next.js | `typedRoutes` | tsc checks a link's path against the app's routes, as the Django, Rusty, django-components and Jinja apps check a link's route when the page renders |
-| ReactPy | `REACTPY_DEBUG_MODE=1` | ReactPy checks each element and attribute it sends and warns about a list item without a key, the development checks React makes in Next.js |
-| Next.js | `noUncheckedIndexedAccess` and `noImplicitOverride` in tsconfig.json | Two of the checks beyond `strict` that the tsconfig Nuxt generates turns on |
+| Next.js | `typedRoutes` | tsc checks a link's path against the app's routes, as the Django, Rusty, Jinja, django-unicorn and django-components apps check a link's route when the page renders |
+| Next.js | `noUncheckedIndexedAccess`, `noImplicitOverride` and `verbatimModuleSyntax` in tsconfig.json | tsc treats a value read by index as possibly missing, requires `override` on a method that replaces its parent's, and requires `import type` for an import used only as a type; the tsconfig Nuxt generates turns all three on |
+| ReactPy | `REACTPY_DEBUG_MODE=1` | ReactPy checks each element and attribute it sends and warns about a list item without a key, like React's development checks in Next.js |
 
-Citry, Django, Django Rusty Templates, FastHTML and django-unicorn have no
-such setting.
+In Citry, Django, Django Rusty Templates, FastHTML and django-unicorn,
+none of the settings adds a kind of check the other frameworks make, so
+they keep their defaults; their notes list the settings considered.
+
 Each linter keeps the rules its framework's preset turns on (or its own
 defaults, where the framework has no preset); a rule outside the preset
 is a project's own choice, not a framework setting. Every Python stack
-keeps pyright's standard mode. pyright's strict mode reports 43 errors in
-the clean Django app, 65 in the django-components app and 2 in the Citry
-app: mostly parameters written without a type, as django-components'
-docs write `get_template_data(self, args, kwargs, slots, context)`, and
-values whose type is unknown, which TypeScript's `strict` does not
-report. ruff's unused-argument rules (ARG), the counterpart of ESLint's
+keeps pyright's standard mode, because its strict mode fails code that
+the frameworks' docs write: it reports 43 errors in the clean Django
+app, 65 in the django-components app and 2 in the Citry app, mostly
+parameters written without a type, as django-components' docs write
+`get_template_data(self, args, kwargs, slots, context)`, and values
+whose type pyright cannot work out. ruff's unused-argument rules (ARG), the counterpart of ESLint's
 unused-variable check, would report arguments the frameworks require a
 method to accept, 14 times in the clean Citry app and 24 times in the
 django-components app.

@@ -14,9 +14,11 @@ before PR 4, so PR 4 added its page changes and cases to both apps, and
 PR 5 will too. PR 8 has added ReactPy, with a case for each of those 44
 mistakes, and then PR 4's page changes and cases. PR 10 has added
 django-unicorn the same way, with PR 4's page changes and a case for
-each of the 49 mistakes in the catalogue after PR 4. The other PRs in
-section 8 are planned. The published results include 1b, PR 2, PR 3,
-PR 9, PR 6, PR 4, PR 8 and PR 10. The benchmark itself is described in
+each of the 49 mistakes in the catalogue after PR 4. A later PR (the
+stricter-settings PR) applied the decision on stricter settings to the frameworks measured before PR 6
+(section 8). The other PRs in section 8 are planned. The published
+results include 1b, PR 2, PR 3, PR 9, PR 6, PR 4, PR 8, PR 10 and the
+stricter settings. The benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
 
@@ -465,9 +467,10 @@ benchmark's stage: editor, check, build, or runtime.
   Most of these rules have no Citry equivalent, because Citry does not split
   server and client components.
 - **Typed links (`typedRoutes`, editor and build).** Off by default. The
-  stricter-settings PR (section 8) turned it on, so
-  tsc checks a literal link path against the app's routes, and a misspelled
-  link (m45) is an editor error rather than a 404. Source: [Next.js TypeScript docs](https://nextjs.org/docs/app/api-reference/config/typescript).
+  stricter-settings PR (section 8) turned it on, so tsc checks a literal
+  link path against the app's routes, and a misspelled link (m45) is an
+  editor error rather than a 404. Source:
+  [Next.js TypeScript docs](https://nextjs.org/docs/app/api-reference/config/typescript).
 - **eslint-config-next (check).** Its rules come from
   [packages/eslint-config-next](https://github.com/vercel/next.js/blob/canary/packages/eslint-config-next/src/index.ts):
   - errors: `react/jsx-key` and `jsx-no-duplicate-props`, and
@@ -532,9 +535,8 @@ benchmark's stage: editor, check, build, or runtime.
   ([experimental features](https://nuxt.com/docs/4.x/guide/going-further/experimental-features)).
   The stricter-settings PR turned `typedPages` on. A test on the pinned
   versions showed that it checks route names but accepts any string as a
-  path, and the Nuxt page
-  links by path, so it does not change m45 there: vue-router prints a
-  warning in the browser when the link is clicked.
+  path, and the Nuxt page links by path, so it does not change m45 there:
+  vue-router prints a warning in the browser when the link is clicked.
 
 ### Django 6.1 and Jinja 3.1
 
@@ -568,9 +570,9 @@ benchmark's stage: editor, check, build, or runtime.
   the stricter-settings PR turned it on in the Jinja app.
 - **Not in the default setup.** The stricter-settings PR considered each
   of these for the Django, Rusty and django-components apps and added
-  none: none is part of
-  a Django project's usual setup, and none would report a mistake the
-  cases make (the Django framework notes give the details):
+  none: none is part of a Django project's usual setup, and none would
+  report a mistake the cases make (the Django framework notes give the
+  details):
   - the [Django Language Server](https://djls.joshthomas.dev/en/latest/template-validation/)
     (djls), which reports unknown tags and filters and filter argument counts
     in the editor;
@@ -1070,14 +1072,14 @@ per page addition: Django Rusty Templates (PR 9) and django-components
 (PR 6) came before both, and ReactPy (PR 8) and django-unicorn (PR 10)
 before PR 5.
 
-**Stricter settings for the frameworks measured before PR 6 (done).** The
+**Stricter settings for every framework (done).** The
 decision on stricter settings applies to every framework. django-components
 (PR 6), ReactPy (PR 8) and django-unicorn (PR 10) were set up under it when
 they were added: django-components turns on Pydantic models, ReactPy its
 debug mode, and django-unicorn has no stricter setting to turn on. The
 stricter-settings PR applied it to the others: Jinja turns on
 `StrictUndefined`, Nuxt `strictTemplates` and `typedPages`, Next.js
-`typedRoutes` and two of the TypeScript options Nuxt's generated tsconfig
+`typedRoutes` and the three TypeScript options Nuxt's generated tsconfig
 adds, and django-components adds `extra='forbid'` to its Pydantic models.
 Citry, Django, Django Rusty Templates and FastHTML have no such setting.
 Each framework's notes name the settings changed and the ones left off,
@@ -1167,8 +1169,7 @@ count, unless Reflex needs a `max_jobs` limit.
   other frameworks here have the same kind of check, the benchmark turns
   it on in that framework's normal setup, so the frameworks are compared
   like for like. The framework notes record each setting changed from the
-  default. This applies to the next published run, so the published
-  results change too. (Every framework is now set up under it; see
+  default. It applies from the 2026-10-21 run on. (Every framework is now set up under it; see
   section 8.)
 - **Conversions (question 3):** a framework that turns `"1"` into `1`
   for you counts as "prevented". Judge it case by case, with "prevented"

@@ -18,7 +18,7 @@ export default defineNuxtConfig({
   // Both settings are off by default. The benchmark turns them on
   // because other frameworks here run the same kind of check: vue-tsc
   // reports unknown components, elements, attributes, directives and
-  // events, and checks links that name a route.
+  // component events, and checks links that name a route.
   typescript: {
     tsConfig: {
       vueCompilerOptions: { strictTemplates: true },

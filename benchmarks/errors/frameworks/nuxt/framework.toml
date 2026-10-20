@@ -27,24 +27,25 @@ editor stage. The starter installs neither. Nuxt does not type-check during `nux
 `nuxt build` unless `typescript.typeCheck` is turned on, and it defaults to false.
 
 The editor stage stands in for the Vue - Official extension, which Nuxt's installation guide
-recommends. It first runs `nuxi prepare`, as the starter's postinstall script does, to write the
-`.nuxt` tsconfigs the editor reads. A failing prepare is ignored, because the editor keeps the
-`.nuxt` folder an earlier install wrote. It then runs `vue-tsc -b --noEmit`, the command
+recommends. It first runs `nuxi prepare`, as the starter's postinstall script does, to write
+the `.nuxt` tsconfigs the editor reads. A failing prepare is ignored, because the editor keeps
+the `.nuxt` folder an earlier install wrote. It then runs `vue-tsc -b --noEmit`, the command
 `nuxt typecheck` runs when tsconfig.json lists project references, as the starter's does.
-vue-tsc checks every file, while the editor shows diagnostics only for open files. A type error is reported where the wrong value is used: in m17 the server route returns a
-string, and vue-tsc reports TS2322 at the `:count` binding in `app/pages/index.vue`. The case's
-`indirect` note records why that finding still counts. A developer editing the route sees no
-error there; the editor shows it only with `app/pages/index.vue` open.
+vue-tsc checks every file, while the editor shows diagnostics only for open files. A type error
+is reported where the wrong value is used: in m17 the server route returns a string, and
+vue-tsc reports TS2322 at the `:count` binding in `app/pages/index.vue`. The case's `indirect`
+note records why that finding still counts. A developer editing the route sees no error there;
+the editor shows it only with `app/pages/index.vue` open.
 
 vue-tsc reports only TypeScript's diagnostics. The extension also shows the Vue compiler's own
 errors for a single-file component (SFC), such as "Element is missing end tag", through the
 `vue-sfc` and `vue-compiler-dom-errors` plugins of @vue/language-service 3.3.13, the version
-the Vue - Official extension ships. The second editor command, `vue-template-diagnostics.cjs` next to this file, calls the @vue/language-core
-3.3.13 parse and compile functions with the default options to report those errors. It skips
-two adjustments language-core makes while a developer types: it adds a closing `>` when the
-template ends inside an unfinished opening tag, and it reuses the previous result while an edit
-stays inside one expression. No case hits either, and the script was not compared against a
-running editor.
+the Vue - Official extension ships. The second editor command, `vue-template-diagnostics.cjs`
+next to this file, calls the @vue/language-core 3.3.13 parse and compile functions with the
+default options to report those errors. It skips two adjustments language-core makes while a
+developer types: it adds a closing `>` when the template ends inside an unfinished opening tag,
+and it reuses the previous result while an edit stays inside one expression. No case hits
+either, and the script was not compared against a running editor.
 
 check: ESLint through Nuxt's official `@nuxt/eslint` module 1.17.0 (ESLint 10.13.0), added with
 `nuxi module add eslint` as Nuxt's docs describe; the starter itself installs no linter. It
@@ -73,7 +74,8 @@ other frameworks here have the same kind of check, so nuxt.config.ts sets two:
   `.nuxt/tsconfig.app.json` that vue-tsc reads. In vue-tsc 3.3.13 it turns on
   `checkUnknownProps`, `checkUnknownEvents`, `checkUnknownComponents`, `checkUnknownDirectives`
   and `strictVModel`, so vue-tsc reports an unknown component, element, attribute, directive or
-  component event, the same kinds of names Citry and Next.js's tsc check. It moves m01, m10,
+  component event, the same kinds of names Next.js's tsc checks (Citry checks component names
+  before the app runs). It moves m01, m10,
   m11, m21 and m29 to the editor. A misspelled event on a plain element (m31) is still not
   reported, because vue-tsc lets a plain element take any listener name, and Vue's slot types
   accept any slot name, so m05 and m35 are not reported either.

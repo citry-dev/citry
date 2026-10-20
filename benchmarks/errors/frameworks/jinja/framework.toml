@@ -52,12 +52,12 @@ does not know, and Django Rusty Templates raises on a misspelled
 attribute. Jinja's default prints an undefined name as empty text and
 raises only when the template reads an attribute of it; with
 StrictUndefined, printing an undefined name, using it in `{% if %}` or
-looping over it raises too. Starlette 1.6.0 takes the setting through its `env=`
-argument, the way its docs pass a custom environment. The clean app
-needs no change: every template reads only names its route gives it.
-This moves m04 (a macro called without its required `title`), m08
-(`owner.nmae`) and m36 (a misspelled slot-data name) from missed to an
-error when the page renders.
+looping over it raises too. Starlette 1.6.0 takes the setting through
+its `env=` argument, the way its docs pass a custom environment. The
+clean app needs no change: every template reads only names its route
+gives it. This moves m04 (a macro called without its required `title`),
+m08 (`owner.nmae`) and m36 (a misspelled slot-data name) from missed to
+an error when the page renders.
 """
 
 [setup]
