@@ -1,5 +1,11 @@
 key = "nuxt"
 name = "Nuxt (TypeScript)"
+# One case at a time: every `nuxt dev` picks a second port for its server-side
+# hot reload from the same 21 ports (24678-24698) by checking which one is
+# free, so two servers starting together can pick the same port, and the one
+# that loses may stop or log an error, which would be scored as the case's
+# runtime error.
+max_jobs = 1
 notes = """
 The baseline is the `npm create nuxt@latest` minimal starter (create-nuxt 4.0.1, template
 `minimal`, no modules selected), pinned to nuxt 4.5.2, vue 3.5.42 and vue-router 5.3.1. On top

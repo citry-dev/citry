@@ -103,6 +103,9 @@ class Framework:
     runtime: Runtime | None
     notes: str
     root: Path
+    # How many of this framework's cases may run at once, when fewer than the
+    # run's worker count; None means no limit of its own.
+    max_jobs: int | None = None
 
     @property
     def baseline(self) -> Path:
@@ -226,8 +229,12 @@ def load_framework(root: Path) -> Framework:
         tomllib.loads(path.read_text(encoding="utf-8")),
         str(path),
         {"key", "name", "setup", "stages"},
-        {"runtime", "notes"},
+        {"runtime", "notes", "max_jobs"},
     )
+    max_jobs = data.get("max_jobs")
+    # Python treats `true` as the int 1, so a bool is rejected explicitly.
+    if max_jobs is not None and (not isinstance(max_jobs, int) or isinstance(max_jobs, bool) or max_jobs < 1):
+        raise ConfigError(f"{path} max_jobs must be a whole number of cases, 1 or more")
     if data["key"] != root.name:
         raise ConfigError(f"{path} key {data['key']!r} must match its folder name {root.name!r}")
     setup = _table(data["setup"], f"{path} [setup]", {"manifests", "command"})
@@ -274,6 +281,7 @@ def load_framework(root: Path) -> Framework:
         runtime=runtime,
         notes=data.get("notes", ""),
         root=root,
+        max_jobs=max_jobs,
     )
 
 

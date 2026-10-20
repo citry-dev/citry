@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import signal
 import socket
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
@@ -21,6 +24,7 @@ from .score import RuntimeResult
 from .work import command_env, placeholder
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
     from playwright.sync_api import Browser, Page
@@ -75,6 +79,21 @@ _ID, _ARIA = 8, 9
 _GENERATED = re.compile(r"[0-9a-fA-F]{16,}")
 # How long one step waits for its element before the journey counts as failed.
 _STEP_TIMEOUT_MS = 5_000
+# Dev servers listen on ports from this range. It sits below the range the
+# operating system takes the local ends of outgoing connections from (49152
+# and up on macOS, 32768 and up on Linux), so the browser's or another
+# server's connections cannot take a port between its reservation here and
+# the server's start.
+_PORTS = range(20_000, 32_000)
+# Ports handed to a server that is still running in this process. Several
+# workers start servers at once, and checking that a port is free does not
+# keep it free, so a second worker must not be given the same port.
+_reserved_ports: set[int] = set()
+_ports_lock = threading.Lock()
+# How many times a server that could not listen on its port is started again
+# on another one, for a port another program took after it was checked.
+_PORT_ATTEMPTS = 3
+_PORT_IN_USE = re.compile(r"address already in use|EADDRINUSE", re.IGNORECASE)
 
 
 @dataclass
@@ -109,10 +128,37 @@ class Observation:
         return json.dumps(asdict(self), indent=2, sort_keys=True)
 
 
-def _free_port() -> int:
+def _port_is_free(port: int) -> bool:
+    """Tell whether nothing on this machine listens on, or holds, the port right now."""
     with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
+@contextmanager
+def reserve_port() -> Iterator[int]:
+    """
+    Give a free port that no other server of this run gets until the block ends.
+
+    The port is checked and recorded under one lock, so two workers asking
+    at the same moment get different ports.
+    """
+    with _ports_lock:
+        # A random order keeps two runs on one machine, each with its own
+        # reservations, from trying the same ports in the same order.
+        candidates = random.sample(_PORTS, k=len(_PORTS))
+        port = next((port for port in candidates if port not in _reserved_ports and _port_is_free(port)), None)
+        if port is None:
+            raise RuntimeError(f"no free port between {_PORTS.start} and {_PORTS.stop - 1}")
+        _reserved_ports.add(port)
+    try:
+        yield port
+    finally:
+        with _ports_lock:
+            _reserved_ports.discard(port)
 
 
 def _wait_ready(url: str, process: subprocess.Popen, timeout: int) -> bool:
@@ -256,10 +302,29 @@ def _journey(
 
 
 def observe(framework: Framework, env: Path, work: Path, log_path: Path) -> Observation:
+    """
+    Start the app's development server on a free port, drive its page, and stop the server.
+
+    A server that could not listen because another program took its port
+    is started again on a new port, so the clash is not recorded as the
+    case's server failing to start.
+    """
     runtime = framework.runtime
     if runtime is None:
         raise ConfigError(f"{framework.key} has no [runtime] section")
-    port = _free_port()
+    for _attempt in range(_PORT_ATTEMPTS):
+        with reserve_port() as port:
+            observation = _observe_on(framework, runtime, env, work, log_path, port)
+        # The log is read from the file: a server that never answered keeps an
+        # empty `server_log` in its observation, as the comparison expects.
+        if observation.started or not _PORT_IN_USE.search(log_path.read_text(errors="replace")):
+            break
+    return observation
+
+
+def _observe_on(
+    framework: Framework, runtime: Runtime, env: Path, work: Path, log_path: Path, port: int
+) -> Observation:
     argv = [placeholder(part, framework, env, work, port) for part in runtime.argv]
     url = f"http://127.0.0.1:{port}{runtime.page_path}"
     observation = Observation()
@@ -278,6 +343,9 @@ def observe(framework: Framework, env: Path, work: Path, log_path: Path) -> Obse
                 observation.started = False
                 observation.failure = "the development server did not answer"
                 return observation
+            # Each call starts its own Playwright and browser: Playwright's
+            # synchronous API must not be shared between threads, and a
+            # browser that crashes then takes down only this case.
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
                 _default_journey(browser, url, runtime, observation)
