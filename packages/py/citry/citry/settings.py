@@ -181,8 +181,8 @@ class LintSettings:
             in another language fails. The default is ``"warning"``.
         rule_misspelled_directive: Severity for a ``c-*`` attribute on an
             HTML element or custom element that looks like a misspelled
-            Citry directive, such as ``c-iff`` for ``c-if``, or ``c-show``
-            for Vue's ``v-show``. Citry renders it as an ordinary attribute,
+            Citry directive, such as ``c-iff`` for ``c-if``, or ``c-show``,
+            which Citry writes as ``c-if``. Citry renders it as an ordinary attribute,
             so the directive never runs; with ``c-iff`` the element always
             shows up. An attribute of the element, such as ``c-id``, is not
             reported. The default is ``"error"``.

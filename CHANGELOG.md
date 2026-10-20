@@ -7,6 +7,10 @@
 - `citry check` now fails on a misspelled directive such as
   `<div c-iff="show">`, which Citry would render as an `iff` attribute; set
   `rule_misspelled_directive` to change the severity.
+- `citry check --static` now uses the severity a component's own `Lint`
+  class sets as a plain string, such as `rule_alpine_attribute = "ignore"`.
+  Editor tools can read the same values from
+  `PythonTemplateRegion.owner_lint`, a tuple of `ComponentSourceLint`.
 
 ### Changed
 

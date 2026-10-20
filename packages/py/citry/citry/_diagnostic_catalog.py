@@ -867,7 +867,9 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                     'custom elements, elements inside <svg> or <math>, and attributes '
                                                     'that take a list of words, such as rel, are not checked. citry '
                                                     'check --static and an editor that has not loaded your application '
-                                                    'report it as a warning, because they cannot read your settings.'},
+                                                    "report it as a warning unless the component's own Lint class sets "
+                                                    'the rule as a plain string, because they cannot read your '
+                                                    'LintSettings.'},
  'citry.template.marker-name-invalid': {'code': 'citry.template.marker-name-invalid',
                                         'constant': 'TEMPLATE_MARKER_NAME_INVALID',
                                         'defaultSeverity': 'error',
@@ -900,7 +902,7 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                        'source': '<input c-model="query">',
                                                        'title': 'A directive name from Vue'}],
                                          'fix': 'Use the directive the message names. If the attribute really is meant '
-                                                'for the browser, pass it through c-bind, such as c-bind="{\'kind\': '
+                                                'for the browser, pass it through c-bind, such as c-bind="{\'show\': '
                                                 'value}", or set rule_misspelled_directive to "ignore" for that '
                                                 'component.',
                                          'messages': {'default': "'{name}' is not a Citry directive, so it renders an "
@@ -919,16 +921,21 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                          'surfaces': ['check', 'lsp'],
                                          'title': 'Misspelled Citry directive',
                                          'when': 'The part after c- is not an HTML attribute that the element accepts, '
-                                                 'and it looks like a directive: one typing mistake away from if, '
-                                                 'elif, else, for, empty, or bind; one of those in other letter case, '
-                                                 'such as c-If; a spelled-out c-elif, such as c-else-if; c-show for '
-                                                 'c-if or c-model for v-model; or c-key or c-ignore without the #. On '
-                                                 'a custom element, which can define its own attributes, a replaced '
-                                                 'letter and the c-show, c-model, c-key, and c-ignore names are not '
+                                                 'and it looks like a directive: if, elif, else, for, empty, or bind '
+                                                 'with two neighboring letters swapped, one letter typed twice, or one '
+                                                 'letter left out, such as c-fro, c-iff, or c-ele; one of those in '
+                                                 'other letter case, such as c-If; a spelled-out c-elif, such as '
+                                                 'c-else-if; c-show for c-if or c-model for v-model; or c-key or '
+                                                 'c-ignore without the #. A different letter, or an extra letter that '
+                                                 'is not a double, is not a typo, because it usually makes an ordinary '
+                                                 'word such as c-kind or c-form; neither are c-or, c-bid, c-bin, or a '
+                                                 'one-letter name. On a custom element, which can define its own '
+                                                 'attributes, the c-show, c-model, c-key, and c-ignore names are not '
                                                  'reported. Only HTML elements, custom elements, and <c-element> are '
                                                  'checked, not component tags or elements inside <svg> or <math>. '
                                                  'citry check --static and an editor that has not loaded your '
-                                                 'application report it too.'},
+                                                 "application report it too, with the severity the component's own "
+                                                 'Lint class sets as a plain string.'},
  'citry.template.unknown-component': {'code': 'citry.template.unknown-component',
                                       'constant': 'TEMPLATE_UNKNOWN_COMPONENT',
                                       'defaultSeverity': 'error',

@@ -622,8 +622,9 @@ def template_lint_diagnostics(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> tuple[types.Diagnostic, ...]:
     """Apply portable root linting only where current component ownership is proven."""
-    # The Alpine and attribute-value rules need no component namespace, so
-    # they run even before the project analysis is available.
+    # The Alpine, attribute-value, and misspelled-directive rules need no
+    # component namespace, so they run even before the project analysis is
+    # available.
     diagnostics = list(_html_attribute_lint_diagnostics(document, project, open_documents))
     if project.catalog is None or project.analysis is None:
         return tuple(diagnostics)
@@ -714,6 +715,13 @@ def _html_attribute_lint_diagnostics(
                 )
                 value_consumers.append(AttributeValueLintConsumer(analysis.lint.rule_invalid_attribute_value))
                 directive_consumers.append(MisspelledDirectiveLintConsumer(analysis.lint.rule_misspelled_directive))
+        else:
+            # Before the application loads, the owners' own Lint classes,
+            # read from the current text, are all that is known. With no
+            # owner the lint functions use their no-application severities.
+            consumers.extend(lint.alpine_consumer() for lint in region.owner_lint)
+            value_consumers.extend(lint.attribute_value_consumer() for lint in region.owner_lint)
+            directive_consumers.extend(lint.directive_consumer() for lint in region.owner_lint)
         findings: list[AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding] = [
             *lint_alpine_attributes(parsed.template, consumers, parse_nested=parser),
             *lint_attribute_values(parsed.template, value_consumers, parse_nested=parser),

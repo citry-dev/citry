@@ -10,6 +10,7 @@ import pytest
 from citry import (
     Citry,
     Component,
+    ComponentSourceLint,
     LintSettings,
     LspPosition,
     LspRange,
@@ -467,6 +468,171 @@ class TestDiscoverPythonTemplates:
         recovered = discover_python_templates(source, recover_incomplete=True)
         assert recovered.valid_python is False
         assert recovered.regions[0].source_map.template_source == "<c-panel />"
+        # Recovered text has no class to read, so no owner's Lint is known.
+        assert recovered.regions[0].owner_lint == ()
+
+
+def _owner_lint(source: str) -> dict[str, list[ComponentSourceLint]]:
+    """Return each discovered template's owner Lint records, keyed by the declaring class."""
+    return {
+        region.component_name: list(region.owner_lint)
+        for region in discover_python_templates("from citry import Component\n" + source).regions
+    }
+
+
+_TEMPLATE = "    template = '<p></p>'\n"
+
+
+class TestTemplateOwnerLint:
+    def test_reads_string_literals_from_the_component_lint_class(self):
+        source = (
+            "class Card(Component):\n" + _TEMPLATE + "    class Lint:\n"
+            "        rule_misspelled_directive = 'ignore'\n"
+            "        rule_invalid_attribute_value: str = 'error'\n"
+            "        rule_alpine_attribute = 'warning'\n"
+            "        rule_alpine_cloak = 'ignore'\n"
+            "        rule_unknown_template_variable = 'ignore'\n"
+        )
+        assert _owner_lint(source) == {
+            "Card": [ComponentSourceLint("warning", "ignore", "error", "ignore")],
+        }
+
+    def test_leaves_unreadable_and_unknown_values_unset(self):
+        # A name, a call, an unknown severity, and a value bound inside an
+        # `if` cannot be read from the source; the last value of a rule wins.
+        source = (
+            "from x import SEVERITY\n"
+            "class Card(Component):\n" + _TEMPLATE + "    class Lint:\n"
+            "        rule_misspelled_directive = SEVERITY\n"
+            "        rule_invalid_attribute_value = str('ignore')\n"
+            "        rule_alpine_cloak = 'off'\n"
+            "        if SEVERITY:\n"
+            "            rule_alpine_attribute = 'ignore'\n"
+            "class Other(Component):\n" + _TEMPLATE + "    class Lint:\n"
+            "        rule_misspelled_directive = 'ignore'\n"
+            "        rule_misspelled_directive = SEVERITY\n"
+        )
+        assert _owner_lint(source) == {"Card": [ComponentSourceLint()], "Other": [ComponentSourceLint()]}
+
+    def test_combines_lint_from_same_module_bases_nearest_first(self):
+        source = (
+            "class Base(Component):\n"
+            "    class Lint:\n"
+            "        rule_misspelled_directive = 'ignore'\n"
+            "        rule_alpine_cloak = 'warning'\n"
+            "class Card(Base):\n" + _TEMPLATE + "    class Lint:\n"
+            "        rule_misspelled_directive = 'warning'\n"
+        )
+        assert _owner_lint(source) == {
+            "Card": [ComponentSourceLint(rule_alpine_cloak="warning", rule_misspelled_directive="warning")],
+        }
+
+    def test_lint_none_drops_inherited_settings(self):
+        source = (
+            "class Base(Component):\n"
+            "    class Lint:\n"
+            "        rule_misspelled_directive = 'ignore'\n"
+            "class Card(Base):\n" + _TEMPLATE + "    Lint = None\n"
+        )
+        assert _owner_lint(source) == {"Card": [ComponentSourceLint()]}
+
+    def test_a_base_the_source_does_not_show_hides_inherited_settings(self):
+        # A Lint class with its own base, a Lint bound to a name or inside an
+        # `if`, and a decorated Lint may each bring rules from elsewhere; only
+        # what the body itself shows is read.
+        base = "class Base(Component):\n    class Lint:\n        rule_misspelled_directive = 'ignore'\n"
+        cases = {
+            "class Card(Base):\n" + _TEMPLATE + "    class Lint(Shared):\n        rule_alpine_cloak = 'ignore'\n": [
+                ComponentSourceLint(rule_alpine_cloak="ignore"),
+            ],
+            "class Card(Base):\n" + _TEMPLATE + "    Lint = Shared\n": [ComponentSourceLint()],
+            "class Card(Base):\n" + _TEMPLATE + "    if FLAG:\n        Lint = None\n": [ComponentSourceLint()],
+            "class Card(Base):\n" + _TEMPLATE + "    @wrap\n    class Lint:\n        pass\n": [
+                ComponentSourceLint(),
+            ],
+        }
+        for card, expected in cases.items():
+            assert _owner_lint(base + card) == {"Card": expected}, card
+        # With a mixin next to the component base, the template language is
+        # not proven either, so the template is not checked at all.
+        assert _owner_lint(base + "class Card(Mixin, Base):\n" + _TEMPLATE) == {}
+
+    def test_subclasses_that_keep_the_template_are_owners_too(self):
+        # Shop, Plain, and Native render Card's template; Fancy chooses its
+        # own, Markdown renders another language, and Mixed may get a
+        # template from its mixin.
+        source = (
+            "class Card(Component):\n" + _TEMPLATE + "    class Lint:\n"
+            "        rule_misspelled_directive = 'ignore'\n"
+            "class Shop(Card):\n"
+            "    class Lint:\n"
+            "        rule_misspelled_directive = 'warning'\n"
+            "class Plain(Shop):\n"
+            "    Lint = None\n"
+            "class Fancy(Card):\n"
+            "    template_file = 'fancy.html'\n"
+            "class Native(Card):\n"
+            "    template_lang = None\n"
+            "    class Lint:\n"
+            "        rule_alpine_cloak = 'warning'\n"
+            "class Markdown(Card):\n"
+            "    template_lang = 'markdown'\n"
+            "class Mixed(Mixin, Card):\n"
+            "    pass\n"
+        )
+        assert _owner_lint(source) == {
+            "Card": [
+                ComponentSourceLint(rule_misspelled_directive="ignore"),
+                ComponentSourceLint(rule_misspelled_directive="warning"),
+                ComponentSourceLint(),
+                ComponentSourceLint(rule_alpine_cloak="warning", rule_misspelled_directive="ignore"),
+            ],
+        }
+
+    def test_follows_the_name_a_base_is_bound_to_when_the_subclass_is_defined(self):
+        # Re-importing Component under Base's name makes Card's base Citry's
+        # own, so Base's Lint does not apply to it.
+        source = (
+            "class Base(Component):\n"
+            "    class Lint:\n"
+            "        rule_misspelled_directive = 'ignore'\n"
+            "from citry import Component as Base\n"
+            "class Card(Base):\n" + _TEMPLATE
+        )
+        assert _owner_lint(source) == {"Card": [ComponentSourceLint()]}
+
+    def test_the_last_lint_binding_in_a_class_wins(self):
+        base = "class Base(Component):\n    class Lint:\n        rule_misspelled_directive = 'ignore'\n"
+        lint = "    class Lint:\n        rule_alpine_cloak = 'ignore'\n"
+        reset = "    Lint: ClassVar[type | None] = None\n"
+        assert _owner_lint(base + "class Card(Base):\n" + _TEMPLATE + lint + reset) == {
+            "Card": [ComponentSourceLint()]
+        }
+        assert _owner_lint(base + "class Card(Base):\n" + _TEMPLATE + reset + lint) == {
+            "Card": [ComponentSourceLint(rule_alpine_cloak="ignore", rule_misspelled_directive="ignore")],
+        }
+
+    def test_reads_lint_on_library_components(self):
+        source = (
+            "from citry import LibraryComponent\n"
+            "class Card(LibraryComponent):\n" + _TEMPLATE + "    class Lint:\n"
+            "        rule_misspelled_directive = 'warning'\n"
+        )
+        assert _owner_lint(source) == {"Card": [ComponentSourceLint(rule_misspelled_directive="warning")]}
+
+    def test_builds_consumers_with_no_application_severities_for_unset_rules(self):
+        unset = ComponentSourceLint()
+        assert unset.alpine_consumer().rule_alpine_attribute == "warning"
+        assert unset.alpine_consumer().rule_alpine_cloak == "error"
+        assert unset.attribute_value_consumer().rule_invalid_attribute_value == "warning"
+        assert unset.directive_consumer().rule_misspelled_directive == "error"
+        chosen = ComponentSourceLint("ignore", "warning", "error", "ignore")
+        assert chosen.alpine_consumer().rule_alpine_attribute == "ignore"
+        assert chosen.alpine_consumer().rule_alpine_cloak == "warning"
+        assert chosen.attribute_value_consumer().rule_invalid_attribute_value == "error"
+        assert chosen.directive_consumer().rule_misspelled_directive == "ignore"
+        with pytest.raises(ValueError, match="rule_misspelled_directive"):
+            ComponentSourceLint(rule_misspelled_directive="fatal")  # type: ignore[arg-type]
 
 
 def test_source_map_long_unicode_lines_keep_utf16_columns():

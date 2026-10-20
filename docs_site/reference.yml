@@ -161,6 +161,7 @@ categories:
     title: Template analysis
     intro: Discovery, analysis, source mapping, and formatting for Python-embedded templates.
     symbols:
+      - citry.ComponentSourceLint
       - citry.LspPosition
       - citry.LspRange
       - citry.PythonComponentAssetDiscovery

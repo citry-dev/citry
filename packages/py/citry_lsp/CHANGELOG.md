@@ -8,6 +8,9 @@ All notable changes to `citry-lsp` are documented here.
 
 - The editor reports a misspelled directive, such as `c-iff` for `c-if`,
   with the severity your application's `rule_misspelled_directive` sets.
+- Before your application loads, the editor uses the severity a
+  component's own `Lint` class sets as a plain string, such as
+  `rule_misspelled_directive = "ignore"`.
 
 ### Changed
 

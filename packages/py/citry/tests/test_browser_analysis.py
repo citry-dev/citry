@@ -1356,6 +1356,11 @@ def _directives(
         '<div C-iff="1" c-bind="{\'iff\': 1}"></div>',
         # The directives themselves.
         '<div c-if="a"></div><div c-elif="b"></div><div c-else></div>',
+        # Ordinary words near a directive, on an element that has no such
+        # attribute.
+        '<div c-kind="1" c-elsa="2" c-find="3" c-of="4" c-form="5" c-fork="6" c-four="7" c-blind="8"></div>',
+        # Words and single letters one letter short of a directive.
+        '<div c-or="1" c-bid="2" c-bin="3" c-f="4" c-i="5"></div>',
     ],
 )
 def test_misspelled_directive_lint_accepts_real_attributes_and_directives(source):
@@ -1365,8 +1370,8 @@ def test_misspelled_directive_lint_accepts_real_attributes_and_directives(source
 def test_misspelled_directive_lint_reports_near_misses_of_each_directive():
     source = (
         '<div c-iff="a" c-fi="b" c-If="c" c-elfi="d" c-ele="e" c-fro="f" c-emty="g" c-bnid="h"></div>'
-        '<div c-else-if="i" c-elseif="j" c-form="k" c-kind="l"></div>'
-        '<my-el c-iff="m"></my-el><c-element c-is="\'p\'" c-iff="n"></c-element>'
+        '<div c-else-if="i" c-elseif="j" c-bidn="k" c-forr="l" c-IFF="m" c-fr="n" c-elf="o"></div>'
+        '<my-el c-iff="p"></my-el><c-element c-is="\'p\'" c-iff="q"></c-element>'
     )
     assert _directives(source) == [
         ("c-iff", "c-if", "error"),
@@ -1379,9 +1384,11 @@ def test_misspelled_directive_lint_reports_near_misses_of_each_directive():
         ("c-bnid", "c-bind", "error"),
         ("c-else-if", "c-elif", "error"),
         ("c-elseif", "c-elif", "error"),
-        # `form` and `kind` are attributes of other elements, not of <div>.
-        ("c-form", "c-for", "error"),
-        ("c-kind", "c-bind", "error"),
+        ("c-bidn", "c-bind", "error"),
+        ("c-forr", "c-for", "error"),
+        ("c-IFF", "c-if", "error"),
+        ("c-fr", "c-for", "error"),
+        ("c-elf", "c-elif", "error"),
         ("c-iff", "c-if", "error"),
         ("c-iff", "c-if", "error"),
     ]
@@ -1410,11 +1417,10 @@ def test_misspelled_directive_lint_names_vue_and_hash_spellings():
     assert model[0].code == "citry.template.misspelled-directive"
 
 
-def test_misspelled_directive_lint_reports_only_clear_typos_on_custom_elements():
-    # A custom element may define `kind` or `show` itself, so a replaced
-    # letter or a name from another framework passes there; an added,
-    # dropped, or swapped letter, other letter case, and a spelled-out
-    # `c-elif` are still reported.
+def test_misspelled_directive_lint_reports_only_typos_on_custom_elements():
+    # A custom element may define `show` or `model` itself, so a name from
+    # another framework passes there; a doubled, dropped, or swapped letter,
+    # other letter case, and a spelled-out `c-elif` are still reported.
     accepted = '<cds-button c-kind="k" c-show="s" c-model="m" c-key="y" c-of="o"></cds-button>'
     assert _directives(accepted) == []
     reported = '<my-el c-iff="a" c-fi="b" c-If="c" c-fro="d" c-else-if="e"></my-el>'

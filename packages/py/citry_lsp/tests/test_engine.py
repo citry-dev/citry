@@ -3004,6 +3004,36 @@ def test_template_lint_diagnostics_report_misspelled_directives_without_a_projec
     ]
 
 
+def test_template_lint_diagnostics_read_the_component_lint_class_without_a_project():
+    # Before the application loads, the component's own Lint class, read
+    # from the current text, sets each rule's severity.
+    source = (
+        "from citry import Component\n"
+        "class Card(Component):\n"
+        '    template = \'<p c-iff="x" dir="sideways">a</p>\'\n'
+        "    class Lint:\n"
+        "        rule_misspelled_directive = 'ignore'\n"
+        "        rule_invalid_attribute_value = 'error'\n"
+    )
+    project = _syntax_state()
+    document = _document(source, project, language_id="python")
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    assert [(item.code, item.severity) for item in diagnostics] == [
+        ("citry.template.invalid-attribute-value", types.DiagnosticSeverity.Error),
+    ]
+
+    # Removing the Lint class brings back the no-application severities.
+    plain = source.split("    class Lint:")[0]
+    document.update(plain, 2, project)
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+    assert sorted((item.code, item.severity) for item in diagnostics) == [
+        ("citry.template.invalid-attribute-value", types.DiagnosticSeverity.Warning),
+        ("citry.template.misspelled-directive", types.DiagnosticSeverity.Error),
+    ]
+
+
 def test_template_lint_diagnostics_report_alpine_attributes_without_a_project():
     # The Alpine rules need no component data, so the defaults apply here.
     source = "<p x-show='open' x-cloak></p>"

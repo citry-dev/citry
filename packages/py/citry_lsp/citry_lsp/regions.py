@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from citry import (
+    ComponentSourceLint,
     LspPosition,
     LspRange,
     PythonComponentAssetKind,
@@ -32,12 +33,20 @@ class TemplateSourceMap(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class TemplateRegion:
-    """One definite authored template region in a host document."""
+    """
+    One definite authored template region in a host document.
+
+    ``owner_lint`` holds the ``Lint`` severities read from the source of each
+    class in the same Python file that renders the region. It is empty for a
+    standalone template file, whose owners the source does not name, and for
+    a template in Python that does not parse yet.
+    """
 
     key: str
     component_name: str | None
     source_map: TemplateSourceMap
     ast_proven: bool = True
+    owner_lint: tuple[ComponentSourceLint, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +142,7 @@ def discover_python_regions(source: str) -> RegionDiscovery:
                 region.component_name,
                 region.source_map,
                 ast_proven=discovery.valid_python,
+                owner_lint=region.owner_lint,
             )
             for region in discovery.regions
         ),

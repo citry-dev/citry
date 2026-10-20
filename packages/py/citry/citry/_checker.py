@@ -536,6 +536,8 @@ def _check_static(cwd: Path) -> list[CheckFinding]:
             _static_notice_finding(path, notice.component_name, notice.message) for notice in discovery.notices
         )
         for region in discovery.regions:
+            # Without the application only the owners' own Lint classes are
+            # known; each unset rule keeps its no-application severity.
             findings.extend(
                 _check_template(
                     _TemplateSource(
@@ -543,6 +545,11 @@ def _check_static(cwd: Path) -> list[CheckFinding]:
                         content=region.source_map.template_source,
                         consumers=[],
                     ),
+                    alpine_lint_consumers=tuple(lint.alpine_consumer() for lint in region.owner_lint),
+                    attribute_value_lint_consumers=tuple(
+                        lint.attribute_value_consumer() for lint in region.owner_lint
+                    ),
+                    directive_lint_consumers=tuple(lint.directive_consumer() for lint in region.owner_lint),
                 ),
             )
     return findings
@@ -649,13 +656,11 @@ def _check_template(
             )
             for finding in lint_unknown_template_variables(template, lint_consumers)
         )
-    # Static mode has no consumers here, and the Alpine rules then use their
-    # built-in severities because they need no component namespace.
-    # The attribute-value rule likewise needs no namespace, so static mode
-    # checks enumerated HTML attribute values too, as warnings, because no
-    # component's Lint override can reach them here.
-    # The misspelled-directive rule needs no namespace either; static mode
-    # reports it with its default severity.
+    # The Alpine, attribute-value, and misspelled-directive rules need no
+    # component namespace, so static mode runs them too, with the
+    # severities each owner's Lint class sets in its source. A rule no owner
+    # sets uses its default, except that an invalid attribute value is then
+    # a warning (see lint_attribute_values).
     attribute_findings: list[AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding] = [
         *lint_alpine_attributes(template, alpine_lint_consumers, parse_nested=nested_parser),
         *lint_attribute_values(template, attribute_value_lint_consumers, parse_nested=nested_parser),

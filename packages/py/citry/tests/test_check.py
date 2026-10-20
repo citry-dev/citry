@@ -2156,8 +2156,8 @@ def test_static_check_reports_invalid_attribute_values_as_warnings(tmp_path):
 
     report = check_project(CheckAppSelection(), tmp_path)
 
-    # Static mode knows no component, so a Lint "ignore" could not reach the
-    # finding; it stays a warning and the check still exits 0.
+    # Static mode cannot read LintSettings, which might turn the rule off, so
+    # with no Lint class the finding stays a warning and the check exits 0.
     assert [(item.code, item.severity) for item in report.findings] == [
         ("citry.template.invalid-attribute-value", "warning"),
     ]
@@ -2211,6 +2211,68 @@ def test_static_check_reports_misspelled_directives_as_errors(tmp_path):
     assert [(item.code, item.severity) for item in report.findings] == [
         ("citry.template.misspelled-directive", "error"),
     ]
+
+
+def _static_lint_findings(tmp_path, source: str) -> list[tuple[str, str]]:
+    """Run static mode over one component module and return (code, severity) per finding."""
+    (tmp_path / "card.py").write_text("from citry import Component\n" + source, encoding="utf-8")
+    report = check_project(CheckAppSelection(), tmp_path)
+    return [(item.code, item.severity) for item in report.findings]
+
+
+_STATIC_LINT_TEMPLATE = '    template = \'<p c-iff="x" dir="sideways" x-cloak>a</p>\'\n'
+
+
+def test_static_check_applies_the_component_lint_class(tmp_path):
+    findings = _static_lint_findings(
+        tmp_path,
+        "class Card(Component):\n" + _STATIC_LINT_TEMPLATE + "    class Lint:\n"
+        "        rule_misspelled_directive = 'ignore'\n"
+        "        rule_invalid_attribute_value = 'error'\n"
+        "        rule_alpine_cloak = 'warning'\n",
+    )
+
+    # Each rule takes the component's own literal value.
+    assert sorted(findings) == [
+        ("citry.template.alpine-cloak", "warning"),
+        ("citry.template.invalid-attribute-value", "error"),
+    ]
+
+
+def test_static_check_uses_no_application_severities_for_unreadable_lint(tmp_path):
+    findings = _static_lint_findings(
+        tmp_path,
+        "from myapp.lint import IGNORE\n"
+        "class Card(Component):\n" + _STATIC_LINT_TEMPLATE + "    class Lint:\n"
+        "        rule_misspelled_directive = IGNORE\n",
+    )
+
+    # The imported name cannot be read without running the code, so each
+    # rule keeps the severity it has without an application.
+    assert sorted(findings) == [
+        ("citry.template.alpine-cloak", "error"),
+        ("citry.template.invalid-attribute-value", "warning"),
+        ("citry.template.misspelled-directive", "error"),
+    ]
+
+
+def test_static_check_reads_inherited_lint_and_reports_the_strictest_owner(tmp_path):
+    base = (
+        "class Base(Component):\n"
+        "    class Lint:\n"
+        "        rule_misspelled_directive = 'ignore'\n"
+        "class Card(Base):\n"
+        "    template = '<p c-iff=\"x\">a</p>'\n"
+    )
+
+    # Card inherits Base's "ignore".
+    assert _static_lint_findings(tmp_path, base) == []
+    # Shop renders Card's template and sets "warning", the stricter choice.
+    shop = "class Shop(Card):\n    class Lint:\n        rule_misspelled_directive = 'warning'\n"
+    assert _static_lint_findings(tmp_path, base + shop) == [("citry.template.misspelled-directive", "warning")]
+    # Plain drops the inherited Lint, so its default error applies.
+    plain = "class Plain(Card):\n    Lint = None\n"
+    assert _static_lint_findings(tmp_path, base + plain) == [("citry.template.misspelled-directive", "error")]
 
 
 def test_registry_check_reports_undeclared_emits_and_child_listeners(tmp_path):

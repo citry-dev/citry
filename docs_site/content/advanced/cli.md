@@ -124,7 +124,10 @@ citry check --static
 This mode reads the Python files in the current directory without running
 them. It finds only undecorated classes that subclass `Component` or
 `LibraryComponent` imported at the top of the module, and checks only a
-`template` written on the class as a plain string. It skips file
+`template` written on the class as a plain string. It applies each
+component's own `Lint` settings written as plain strings, but not your
+`LintSettings`; see
+[Without a loaded app](/ide/template-linting/#without-a-loaded-app). It skips file
 templates, inherited and computed templates, and cannot report an unknown
 component, because it never sees the full list of registered components.
 An error's origin is the file's full path followed by the attribute, such

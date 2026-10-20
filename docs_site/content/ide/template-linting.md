@@ -354,32 +354,39 @@ Citry reports a `c-` name as a `citry.template.misspelled-directive` error
 when the part after `c-` is not an attribute of that element and it looks
 like a directive:
 
-- one typing mistake away from `if`, `elif`, `else`, `for`, `empty`, or
-  `bind`, such as `c-iff`, `c-fro`, or `c-ele`;
+- `if`, `elif`, `else`, `for`, `empty`, or `bind` with two neighboring
+  letters swapped, one letter typed twice, or one letter left out, such
+  as `c-fro`, `c-iff`, or `c-ele`;
 - a directive in other letter case, such as `c-If`;
 - a spelled-out `c-elif`, such as `c-else-if` or `c-elseif`;
 - `c-show`, which you write as `c-if`, or a Vue directive written with
   `c-`, such as `c-model`, which you write as `v-model`;
 - `c-key` or `c-ignore`, which you write as `#c-key` or `#c-ignore`.
 
+A different letter, or an extra letter that is not a double, does not
+count as a typo, because it usually makes an ordinary word: `c-kind` is
+not read as `c-bind`, and `c-form` or `c-fork` not as `c-for`. A name one
+letter short of a directive is not reported when it is itself a word or a
+single letter, such as `c-or`, `c-bid`, `c-bin`, or `c-f`.
+
 An attribute the element really has is never reported, in any letter case:
-`c-id`, `c-ID`, `c-form` on `<input>`, `c-kind` on `<track>`, and every
-`c-data-*` and `c-aria-*` name pass. `<c-element>` accepts the attributes
-of every element. A custom element such as `<my-button>` can define its own
-attributes, so there only a clear typo is reported, such as `c-iff` or
-`c-If`, not `c-kind` or `c-show`. Component tags and elements inside
-`<svg>` or `<math>` are skipped; on a component tag, a `c-` name is a
-Python keyword argument.
+`c-id`, `c-ID`, `c-form` on `<input>`, and every `c-data-*` and `c-aria-*`
+name pass. `<c-element>` accepts the attributes of every element. A custom
+element such as `<my-button>` can define its own attributes, so there
+`c-show`, `c-model`, `c-key`, and `c-ignore` pass; typos such as `c-iff`
+or `c-If` are still reported. Component tags and elements inside `<svg>`
+or `<math>` are skipped; on a component tag, a `c-` name is a Python
+keyword argument.
 
 An attribute named like a directive, such as `for` on `<label>`, cannot
 take `c-`, because `c-for` is always the loop. Pass it through `c-bind`.
 
-When the attribute really is meant for the browser, such as a `kind`
-attribute that a page script reads (`c-kind` on a `<div>` looks like
-`c-bind`), pass it through `c-bind`, which this rule does not read:
+When the attribute really is meant for the browser, such as a `show`
+attribute that a page script reads (`c-show` on a `<div>` is reported, with
+`c-if` as the suggestion), pass it through `c-bind`, which this rule does not read:
 
 ```citry-html
-<div c-bind="{'kind': variant}">...</div>
+<div c-bind="{'show': expanded}">...</div>
 ```
 
 ## Check rules in CI
@@ -400,18 +407,37 @@ the command. Any error exits with status 1. See
 ### Without a loaded app
 
 `citry check --static`, and an editor that has not loaded your application,
-cannot tell which component owns a template. They skip the unknown-name
+do not know every component's template data. They skip the unknown-name
 rules.
 
 They still run the Alpine, attribute-value, and misspelled-directive rules,
-which need no component data. They cannot read your settings, so they use
-the default severities, with one exception: an invalid attribute value is a
-warning there, so a value that a page script reads cannot fail the check.
-A leftover `x-cloak` and a misspelled directive stay errors even if your
-settings ignore them. To keep a name that is really meant for the browser
-out of the check, pass it through `c-bind`. These tools also cannot tell
-which values an extension's template syntax produces, so they may report a
-value that `citry --app ... check` does not.
+which need no component data. They cannot read your `LintSettings`, but
+they do read the `Lint` class of the component that declares an inline
+`template`, without running your code:
+
+- A rule set to a plain string, such as
+  `rule_misspelled_directive = "ignore"`, applies as written.
+- A `Lint` inherited from a component class in the same file applies too,
+  and `Lint = None` drops it, as with a loaded application.
+- A subclass in the same file whose only base is that component, and that
+  sets neither `template` nor `template_file`, renders the same template.
+  The strictest severity among those components applies, as in
+  [shared templates](#shared-templates).
+
+A rule keeps its default severity when neither the component nor a
+component class it inherits from in the same file sets it, or when the
+value cannot be read from the source: a name imported from
+another module, a value computed at run time, a `Lint` class with its own
+base class, or a `Lint` assigned inside an `if`. In the editor, a
+template file, and a template whose closing quotes are not typed yet, use
+the defaults too, because no `Lint` class can be read for them. The one exception to the defaults: an invalid
+attribute value is a warning there, so a value that a page script reads
+cannot fail the check when only `LintSettings` turns the rule off.
+
+To keep a name that is really meant for the browser out of the check, pass
+it through `c-bind`. These tools also cannot tell which values an
+extension's template syntax produces, so they may report a value that
+`citry --app ... check` does not.
 
 ### Shared templates
 
