@@ -1,0 +1,9 @@
+# The pinned parser has no {% translate %} tag, so the page view translates
+# the heading with gettext, using the English text as the message id.
+status = "ported"
+mistake = { file = "board/views.py", contains = "gettext('Projcts')" }
+
+[[edits]]
+file = "board/views.py"
+old = "'heading': gettext('Projects'),"
+new = "'heading': gettext('Projcts'),"

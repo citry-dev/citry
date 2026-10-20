@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/static/board/board.js", contains = 'open: false' }
+
+[[edits]]
+file = "board/static/board/board.js"
+old = "open: false,"
+new = "open: false"

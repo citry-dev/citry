@@ -1,0 +1,11 @@
+# m01 already misspells the card's path in the page's {% include %}, and
+# the pinned parser has no {% extends %} (the Django case misspells that
+# path), so this case misspells the next template path the app names: the
+# page template in the page view.
+status = "ported"
+mistake = { file = "board/views.py", contains = "'board/pgae.html'" }
+
+[[edits]]
+file = "board/views.py"
+old = "return render(request, 'board/page.html', {"
+new = "return render(request, 'board/pgae.html', {"

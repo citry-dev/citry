@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/templates/board/page.html", contains = '@clik="toggle"' }
+
+[[edits]]
+file = "board/templates/board/page.html"
+old = '<button type="button" @click="toggle">Details</button>'
+new = '<button type="button" @clik="toggle">Details</button>'

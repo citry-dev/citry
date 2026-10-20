@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads. An included template cannot take markup from the page that includes it, so the card writes its own footer link and the page has no footer to fill under any name."

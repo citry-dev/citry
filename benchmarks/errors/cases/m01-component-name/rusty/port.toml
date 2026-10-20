@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/templates/board/page.html", contains = 'board/crad.html' }
+
+[[edits]]
+file = "board/templates/board/page.html"
+old = '{% include "board/card.html" with title=card.title count=card.count %}'
+new = '{% include "board/crad.html" with title=card.title count=card.count %}'

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/templates/board/page.html", contains = "url 'sav'" }
+
+[[edits]]
+file = "board/templates/board/page.html"
+old = '''hx-post="{% url 'save' %}"'''
+new = '''hx-post="{% url 'sav' %}"'''

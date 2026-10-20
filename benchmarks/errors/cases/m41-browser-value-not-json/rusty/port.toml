@@ -1,0 +1,9 @@
+# settings.py already imports Path for BASE_DIR, so the setting is written
+# as a Path; the page view hands it to json_script unchanged.
+status = "ported"
+mistake = { file = "mysite/settings.py", contains = "API_BASE = Path('/api')" }
+
+[[edits]]
+file = "mysite/settings.py"
+old = "API_BASE = '/api'"
+new = "API_BASE = Path('/api')"
