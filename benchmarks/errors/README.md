@@ -286,8 +286,40 @@ its inputs once, when the server renders it, and `open` changes in the
 browser, so the Status component's markup is still the Django app's
 nested Alpine component.
 
-Tetra, django-unicorn, Reflex and ReactPy are not
-measured yet.
+ReactPy has a case for every mistake
+([`frameworks/reactpy/`](frameworks/reactpy/) holds its app and notes), but
+its cells are not in the published run above yet; the next published run
+adds them. In ReactPy the server runs every component in Python and sends
+the browser the elements to show over a WebSocket, and a click runs a
+Python handler on the server. Its cells differ from the other Python
+frameworks' in these places:
+
+- **m02, m04, m05, m25, m26, m29 and m35:** ReactPy's `@component`
+  decorator is typed so that pyright accepts any arguments in a call to a
+  component. A misspelled or missing input, footer or callback raises a
+  `TypeError` only when the component renders, which shows as a server
+  error with an empty component. FastHTML's components are plain typed
+  functions, so pyright reports the same mistakes in the editor.
+- **m17, m27 and m49:** nothing checks an argument's type or allowed
+  choice, before or while the app runs. A count passed as text prints the
+  same text, so m17 is "never"; the status line given text and the
+  misspelled `tone` change the page without an error.
+- **m18, m32 and m33:** the Add button's handler runs on the server and
+  calls `save(amount=1)`. The amount is a Python argument, not a field
+  in a request, so pyright reports a misspelled, wrong-typed or missing
+  amount in the editor.
+- **m14 and m34:** n/a. ReactPy 1.1.0 renders nothing on the server, so
+  there is no server HTML for the browser to disagree with, and no browser
+  code reads a reply to the click.
+- **m19 and m20:** the conditional that shows the details text and the
+  toggle are Python, so their syntax errors are Python syntax errors,
+  which pyright and ruff report.
+- **m12, m40 and m42:** the API line is a ReactPy JavaScript component
+  that reads the API base from its props. Reading a prop the server did
+  not pass shows `API: undefined` with no error, and a second prop that
+  carries the secret reaches the browser without any tool noticing.
+
+Tetra, django-unicorn and Reflex are not measured yet.
 
 ## The reference page
 
@@ -332,8 +364,9 @@ two records means the mistake changed the page.
 that order. The page is recorded three times around it: right after it
 loads, after the clicks, and after a reload. The reload shows whether the
 saved count survives a new page load. Citry keeps it in browser-held state,
-so its clean page shows `Saved: 0` again after the reload, while the other
-frameworks keep it on the server and show `Saved: 1`.
+and ReactPy in component state that the server keeps only while that page
+is open, so their clean pages show `Saved: 0` again after the reload, while
+the other frameworks keep it on the server and show `Saved: 1`.
 
 **Every other journey** starts from a fresh load of the page in a new
 browser context, with no cookies or storage left from an earlier journey,
@@ -478,10 +511,13 @@ When a framework has a setting that turns on a stricter check, and other
 frameworks here have the same kind of check, the benchmark turns it on in
 that framework's app, so the frameworks are compared like for like, and the
 framework's notes name each setting changed from the default. The
-django-components app is the first one set up this way: it checks the
+django-components app was the first one set up this way: it checks the
 types of component inputs when a component renders, as Citry does, using
-Pydantic models. The other apps are set up under the same rule in a later change;
-until then they keep every setting at its default, such as Jinja's
+Pydantic models. The ReactPy app turns on ReactPy's debug mode, which adds
+development checks such as a warning for a list item without a key, as
+React and Vue do in development. The apps measured before
+django-components are set up under the same rule in a later change; until
+then they keep every setting at its default, such as Jinja's
 `StrictUndefined`.
 
 | Stage | What it measures |

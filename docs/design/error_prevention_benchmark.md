@@ -97,7 +97,11 @@ Templates, an experimental Rust version of Django's template engine, is
 measured as the Django app with its template backend switched
 (`frameworks/rusty`). django-components, the project Citry grew out of, is
 measured as the Django app with the page's parts turned into components
-(`frameworks/django-components`). The others are not measured yet.
+(`frameworks/django-components`). ReactPy, whose components are Python
+functions that the server runs while the browser shows what they return, is
+measured with its Starlette backend served by uvicorn, as in the
+performance benchmark (`frameworks/reactpy`). Tetra, django-unicorn and
+Reflex are not measured yet.
 
 ### Fairness rules
 
@@ -124,8 +128,9 @@ measured as the Django app with the page's parts turned into components
   frameworks here have the same kind of check, its app turns the setting on,
   so the frameworks are compared like for like (decided on 2026-10-20; see
   the plan's decisions). The framework's notes name every setting changed
-  from the default. The django-components app is the first one set up this
-  way; the other apps are set up under the rule in a later change.
+  from the default. The django-components and ReactPy apps are set up this
+  way; the apps measured before them are set up under the rule in a later
+  change.
 - Each case is written the way a developer of that framework would naturally
   make the mistake. A case is not changed after its result is seen, except to
   fix a case that did not express its mistake.
