@@ -343,7 +343,55 @@ ReactPy 1.1.0 renders nothing on the server, and no browser code reads a
 reply to the click. m46 is n/a as in FastHTML, because ReactPy has no
 translations.
 
-Tetra, django-unicorn and Reflex are not measured yet.
+django-unicorn has an app and cases
+([`frameworks/unicorn/`](frameworks/unicorn/) holds the app and its
+notes), but it is not in the run above; it joins the next published run.
+Its app is the Django app with the cards, the counter and the details
+turned into [django-unicorn](https://www.django-unicorn.com/) components.
+Each click sends the component's state to the server, which runs a Python
+method and sends back the component's new HTML, so the page loads neither
+HTMX nor Alpine. The saved count lives in the page, not in the session, so
+after a reload the page shows `Saved: 0`, as Citry's does. In a run of its
+own, its cells differ from Django's in these places:
+
+- **m06:** django-unicorn ignores a click whose action names a method
+  the component does not have, and prints nothing, so a misspelled `save`
+  leaves the count at 0, where the Django app's `{% url %}` fails.
+- **m21:** the details text is shown with Django's `{% if %}` tag, so the
+  misspelled tag leaves its `{% endif %}` without a match, which djLint
+  reports. The Django app's case misspells Alpine's `x-show`, which
+  nothing checks.
+- **m24, m29 and m30:** pyright reports all three. The card asks the card
+  list to hide it from Python, through `self.parent` as django-unicorn's
+  docs show, after checking that the parent is the card list. So pyright
+  sees the call, its method name and its argument. The Django app sends an
+  Alpine event that nothing checks, and its event carries no value, so its
+  m30 is n/a. Written with django-unicorn's `$parent.hide(...)` in the
+  markup instead, the three cases would be missed. pyright reports m29 at
+  the call in the card, so its cell is marked `°`.
+- **m39:** the saved total is a typed field of the counter component, so
+  pyright reports text stored in it. The Django app keeps the total in
+  the session, which nothing checks.
+- **m25 to m28:** the status line is a django-unicorn component that
+  receives `open` from the details each time the server renders them
+  again, so all four mistakes can be written, where the Django app's
+  Alpine version has no inputs (m26, m27) or shares its parent's state
+  (m28). django-unicorn checks neither the names nor the types of a
+  component's inputs, so all four are missed. The Django app's m25 is a
+  browser error instead, because its Alpine markup reads the undefined
+  name `opne`; here the value is stored under the misspelled name, which
+  nothing reads.
+- **m05, m20 and m35:** n/a. django-unicorn has no slots, so the card
+  writes its own footer link and the page fills nothing in it. No
+  JavaScript defines the toggle: the Details button uses django-unicorn's
+  built-in `$toggle('open')` action.
+
+m42 is missed as everywhere, but in django-unicorn's own form: the counter
+keeps the token as an ordinary class attribute, and django-unicorn writes
+every public attribute of a component into the page for its browser
+script.
+
+Tetra and Reflex are not measured yet.
 
 ## The reference page
 
@@ -387,9 +435,9 @@ two records means the mistake changed the page.
 **The default journey** clicks `Add`, `Details`, and the first `Hide`, in
 that order. The page is recorded three times around it: right after it
 loads, after the clicks, and after a reload. The reload shows whether the
-saved count survives a new page load. Citry keeps the count in
-browser-held state. ReactPy keeps it in component state on the server,
-which lasts only while that page is open. So both clean pages show
+saved count survives a new page load. Citry and django-unicorn keep the
+count in the page, and ReactPy keeps it in component state on the server,
+which lasts only while that page is open. So their clean pages show
 `Saved: 0` again after the reload, while the other frameworks keep the
 count on the server and show `Saved: 1`.
 
@@ -405,7 +453,9 @@ the page any journey reaches. Every framework lists three more journeys:
 `search` types `alpha` into the search field and presses Enter, and
 `about` and `project` click the `About` and `Project 1` links. Every
 framework except FastHTML, which has no status line, also lists a `status`
-journey, which clicks `Details`, `Close`, and `Details` again.
+journey, which clicks `Details`, `Close`, and `Details` again. In
+django-unicorn each of those clicks sends a request to the server, so its
+`status` journey waits half a second between clicks for the reply.
 
 A framework lists its journeys in `framework.toml`, by name, because the
 selectors differ between frameworks. This shortened example lists the
@@ -522,13 +572,13 @@ linters and type checker most of its projects add. Earlier is better, so a
 mistake these tools report counts as caught before running, however the
 framework itself would have reported it. For every Python stack that means
 pyright in standard mode (Pylance with type checking turned on) and ruff
-with its default rules; for Django, Rusty, django-components and Jinja
-templates, djLint; for Nuxt, the official `@nuxt/eslint` module; for
-Next.js, the ESLint its starter installs. Each tool keeps its default
-rules, with three exceptions that the clean app needs and that such
-projects commonly make: FastHTML's main.py turns off ruff's star-import
-rules (F403, F405), Nuxt's ESLint config turns off
-`vue/multi-word-component-names`, and the django-components app silences
+with its default rules; for Django, Rusty, django-components,
+django-unicorn and Jinja templates, djLint; for Nuxt, the official
+`@nuxt/eslint` module; for Next.js, the ESLint its starter installs.
+Each tool keeps its default rules, with three exceptions that the clean
+app needs and that such projects commonly make: FastHTML's main.py
+turns off ruff's star-import rules (F403, F405), Nuxt's ESLint config
+turns off `vue/multi-word-component-names`, and the django-components app silences
 one pyright check on the two lines where a component declares its `View`
 class the way the django-components docs write it.
 
@@ -540,8 +590,10 @@ django-components app was the first one set up this way: it checks the
 types of component inputs when a component renders, as Citry does, using
 Pydantic models. The ReactPy app turns on ReactPy's debug mode, which adds
 development checks such as a warning for a list item without a key, as
-React does in development; it changes none of ReactPy's cells. The apps
-measured before django-components are set up under the same rule in a
+React does in development; it changes none of ReactPy's cells. The
+django-unicorn app was added under the same rule, but django-unicorn has
+no setting that turns on a stricter check, so it keeps its defaults. The
+apps measured before django-components are set up under the same rule in a
 later change; until then they keep every setting at its default, such as
 Jinja's `StrictUndefined`.
 
