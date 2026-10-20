@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/templates/board/page.html", contains = 'avtar.svg' }
+
+[[edits]]
+file = "board/templates/board/page.html"
+old = "{% static 'board/avatar.svg' %}"
+new = "{% static 'board/avtar.svg' %}"

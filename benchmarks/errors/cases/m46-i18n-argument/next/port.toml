@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """create-next-app installs no translation library and the App Router has no built-in translation API, as for m15. The subtitle is plain JSX with the owner's name inserted directly, so there is no message argument to misname."""

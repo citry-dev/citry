@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/search.tsx", contains = 'name="qeury"' }
+
+[[edits]]
+file = "app/search.tsx"
+old = '<input type="search" name="q"'
+new = '<input type="search" name="qeury"'

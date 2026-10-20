@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/board_page.py", contains = 'var(--acent)' }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = 'color: var(--accent);'
+new = 'color: var(--acent);'

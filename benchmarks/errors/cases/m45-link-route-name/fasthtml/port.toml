@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'href="/abuot"' }
+
+[[edits]]
+file = "main.py"
+old = 'A("About", href="/about")'
+new = 'A("About", href="/abuot")'

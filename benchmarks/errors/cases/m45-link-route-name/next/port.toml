@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/page.tsx", contains = 'href="/abuot"' }
+
+[[edits]]
+file = "app/page.tsx"
+old = '<Link href="/about">'
+new = '<Link href="/abuot">'

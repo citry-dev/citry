@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/board_page.py", contains = 'nmae=owner.name' }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = 'tr("board-subtitle", name=owner.name)'
+new = 'tr("board-subtitle", nmae=owner.name)'
