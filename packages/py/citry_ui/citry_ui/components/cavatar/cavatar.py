@@ -168,6 +168,10 @@ class CAvatar(LibraryComponent):
     class Slots:
         default: SlotInput[CAvatarDefaultSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def _normalized(self, kwargs: Kwargs) -> dict[str, object]:
         return {
             "src": _plain_string("src", kwargs.src, optional=True, empty=False),

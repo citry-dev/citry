@@ -362,7 +362,9 @@ def _is_data_annotation(annotation: Any) -> bool:
         return bool(members) and all(_is_data_annotation(member) for member in members)
     if origin in (dict, Mapping) or annotation is dict or annotation is Mapping:
         return True
-    if not isinstance(annotation, type) or issubclass(annotation, Enum):
+    # On Python 3.10 a parameterized generic such as ``list[int]`` also counts
+    # as a type, and issubclass() rejects it, so it is told apart by its origin.
+    if not isinstance(annotation, type) or origin is not None or issubclass(annotation, Enum):
         return False
     return _is_pydantic_model(annotation) or _is_schema_class(annotation)
 

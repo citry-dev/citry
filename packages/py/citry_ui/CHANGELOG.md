@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Citry UI components work with Citry's new check that raises
+  `TypeError` for an input of the wrong type, and accept the same values
+  as before, such as `heading_level="2"`. Earlier Citry UI releases
+  reject some valid inputs under that check, so upgrade Citry UI and
+  Citry together.
+
 ## [0.3.0] - 2026-10-19
 
 ### Changed

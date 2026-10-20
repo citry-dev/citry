@@ -1390,8 +1390,10 @@ class Button(Component):
         href: str | None = None
         link: bool | None = None
         disabled: bool | None = False
-        variant: ThemeVariant | Literal["plain"] = "primary"
-        color: ThemeColor | str = "default"
+        # None picks the default styling, as get_styling_css() does; Dialog
+        # and Form pass None when the caller did not choose a color.
+        variant: ThemeVariant | Literal["plain"] | None = "primary"
+        color: ThemeColor | str | None = "default"
         type: str | None = "button"
         attrs: dict | None = None
 
@@ -1852,7 +1854,7 @@ class ExpansionPanel(Component):
 
     class Kwargs:
         open: bool | None = False
-        panel_id: str | None = None
+        panel_id: int | str | None = None
         attrs: dict | None = None
         header_attrs: dict | None = None
         content_attrs: dict | None = None
@@ -2276,7 +2278,7 @@ class Bookmarks(Component):
                     <c-Bookmark #c-key="bookmark.edit_url" c-bookmark="bookmark" c-js="bookmark_js" @menu-toggle="onContextMenuToggle" />
                 </c-for>
                 <li>
-                    <c-Icon name="plus" variant="outline" size="18" c-href="create_bookmark_url" c-color="theme.sidebar_link"
+                    <c-Icon name="plus" variant="outline" c-size="18" c-href="create_bookmark_url" c-color="theme.sidebar_link"
                         c-text_attrs="plus_icon_text_attrs" c-svg_attrs="plus_icon_svg_attrs">Add New Bookmark</c-Icon>
                 </li>
                 <div class="border-b border-gray-200 my-2 pt-2 text-sm font-bold">Attachments:</div>
@@ -3098,7 +3100,7 @@ class ProjectOutputDependency(Component):
                     <c-Button variant="plain" c-href="phase_url" c-attrs="phase_btn_attrs">{{ phase_type_title }}</c-Button>
                 </span>
             </div>
-            <c-ProjectOutputAttachments c-editable="False" c-has_attachments="attachments" c-attachments="attachments" :attachments="attachments"
+            <c-ProjectOutputAttachments c-editable="False" c-has_attachments="attachments != []" c-attachments="attachments" :attachments="attachments"
                 c-js_props="{'attachments': 'attachments'}" />
         </div>
     """
@@ -3174,7 +3176,7 @@ class ProjectOutputForm(Component):
                         <c-Button c-attrs="save_btn_attrs" @click="onOutputSubmit({ reload: true })">Save</c-Button>
                     </div>
                 </div>
-                <c-ProjectOutputAttachments c-has_attachments="attachments" c-attachments="attachments" c-editable="editable" c-js_props="attach_js_props" :attachments="attachments" />
+                <c-ProjectOutputAttachments c-has_attachments="attachments != []" c-attachments="attachments" c-editable="editable" c-js_props="attach_js_props" :attachments="attachments" />
             </c-Form>
         </div>
     """
