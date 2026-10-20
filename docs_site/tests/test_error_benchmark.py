@@ -119,44 +119,52 @@ def test_extract_rejects_records_the_page_cannot_draw(change: Any, message: str)
 def test_chart_view_stacks_buckets_in_order_then_extra_parts() -> None:
     view = chart_view(extract(_report(), allow_partial=True))
 
-    # Every bucket keeps its place even at zero; extra parts follow, and
-    # "Does not apply" is always last.
+    # Every bucket keeps its place even at zero, and extra parts follow. A
+    # mistake that does not apply is not drawn, so it has no legend entry.
     assert [item["label"] for item in view["legend"]] == [
         *(bucket["label"] for bucket in BUCKETS),
         "Not scored",
-        "Does not apply",
     ]
     alpha, beta = view["rows"]
     assert alpha["is_reference"] is True
     assert beta["is_reference"] is False
     # The total is the count of "Error before running".
     assert (alpha["total"], beta["total"]) == ("2", "0")
-    # Each part's width is its share of the four mistakes, so every bar has
-    # the same length.
+    # Each part's width is its share of the most mistakes that apply to any
+    # framework: three here, for both.
     assert [segment["title"] for segment in alpha["segments"]] == [
         "Error before running: 2",
         "Missed, page wrong: 1",
-        "Does not apply: 1",
     ]
-    assert alpha["segments"][0]["style"].startswith("width: 50.000%; background: #2f855a")
+    assert alpha["segments"][0]["style"].startswith("width: 66.667%; background: #2f855a")
     assert [segment["title"] for segment in beta["segments"]] == [
         "Error at runtime: 1",
         "Missed, no visible change: 1",
         "Not scored: 1",
-        "Does not apply: 1",
     ]
     assert view["table"][1] == {"name": "Beta", "cells": ["0", "0", "1", "0", "0", "1", "1", "1"]}
     for row in view["rows"]:
         widths = [float(segment["style"].split("%")[0].removeprefix("width: ")) for segment in row["segments"]]
         assert sum(widths) == pytest.approx(100, abs=0.01)
 
+    # With one more mistake that does not apply, Beta's bar is shorter than
+    # Alpha's, which still spans the full width.
+    report = _report()
+    report["results"][7].update(status="not-applicable", bucket=None, cell="n/a")
+    alpha, beta = chart_view(extract(report, allow_partial=True))["rows"]
+    lengths = [
+        sum(float(segment["style"].split("%")[0].removeprefix("width: ")) for segment in row["segments"])
+        for row in (alpha, beta)
+    ]
+    assert lengths == [pytest.approx(100, abs=0.01), pytest.approx(66.667, abs=0.01)]
+
 
 def test_chart_view_draws_a_record_without_a_case_as_its_own_part() -> None:
     report = _report()
     report["results"][6].update(status="missing", cell="-")
     view = chart_view(extract(report, allow_partial=True))
-    assert [item["label"] for item in view["legend"]][-2:] == ["No case written", "Does not apply"]
-    assert view["rows"][1]["segments"][-2]["title"] == "No case written: 1"
+    assert [item["label"] for item in view["legend"]][-1] == "No case written"
+    assert view["rows"][1]["segments"][-1]["title"] == "No case written: 1"
 
 
 def test_chart_view_leaves_out_extra_parts_nobody_has() -> None:

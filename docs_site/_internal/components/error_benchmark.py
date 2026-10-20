@@ -145,6 +145,15 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
         if any(count[key] for count in counts.values())
     ]
     first = buckets[0]
+    # A mistake that does not apply takes no room, so a bar is as long as the
+    # mistakes that apply to its framework, and only the longest bar spans the
+    # full width. The table below still counts the ones that do not apply.
+    drawn = [part for part in parts if part[0] != DOES_NOT_APPLY]
+    applicable = {
+        key: sum(count for part, count in framework_counts.items() if part != DOES_NOT_APPLY)
+        for key, framework_counts in counts.items()
+    }
+    axis = max(applicable.values())
 
     rows = [
         {
@@ -153,10 +162,10 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
             "is_reference": index == 0,
             "segments": [
                 {
-                    "style": f"width: {_percent(counts[framework['key']][key], total)}; background: {color}",
+                    "style": f"width: {_percent(counts[framework['key']][key], axis)}; background: {color}",
                     "title": f"{label}: {counts[framework['key']][key]}",
                 }
-                for key, label, color in parts
+                for key, label, color in drawn
                 if counts[framework["key"]][key]
             ],
         }
@@ -166,7 +175,7 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
         f"{framework['name']} {counts[framework['key']][first['id']]}" for framework in data["frameworks"]
     )
     return {
-        "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in parts],
+        "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in drawn],
         "rows": rows,
         "summary": f"Stacked bar chart. {first['label']}, out of {total}: {totals}.",
         "columns": [label for _, label, _ in parts],

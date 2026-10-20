@@ -19,8 +19,10 @@ The earlier a mistake is reported, the less time it costs you.
 
 ## What the chart shows
 
-- Each bar is one framework. Its full length stands for all 24
-  mistakes, and each colored part shows how many ended one way.
+- Each bar is one framework. Its length is the number of mistakes that
+  apply to that framework, so a framework where some mistakes cannot be
+  made has a shorter bar. Each colored part shows how many ended one
+  way.
 - Dark green, "Error before running": the editor, a command-line check,
   or the production build reported an error before the app ran. This
   is the best outcome.
@@ -36,9 +38,6 @@ The earlier a mistake is reported, the less time it costs you.
 - Dark gray, "Missed, no visible change": nothing reported the mistake,
   and the page looks the same, so the mistake stays hidden until the
   case it affects comes up.
-- Light gray, "Does not apply": the mistake cannot be made in this
-  framework, either because it has no equivalent or because the
-  framework's design prevents it.
 - The number at the end of each bar counts the mistakes reported as an
   error before running.
 

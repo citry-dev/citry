@@ -383,7 +383,10 @@ def test_the_html_report_draws_every_framework_and_escapes_tool_output() -> None
     assert page.startswith("<!doctype html>")
     assert "&lt;c-Crad&gt;" in page
     assert "<c-Crad>" not in page
-    assert "Does not apply or prevented by design" in page
+    # A mistake that does not apply takes no room: the bar is as long as what applies.
+    assert "1 mistakes apply" in page
+    assert page.count('<rect x="180.00" y="') == 1
+    assert 'download="error-outcomes.svg"' in page
     assert "<script" not in page
 
 

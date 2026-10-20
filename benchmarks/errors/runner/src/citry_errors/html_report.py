@@ -1,14 +1,20 @@
 """Write the run's report as one self-contained HTML file that opens from disk.
 
-The page draws the same data as results.json: a stacked bar per framework
-with the six outcomes, then every mistake grouped by category. It has no
-scripts and loads nothing, so it reads the same in any browser, offline.
+The page follows the framework interaction benchmark's report: white cards on
+a light page, each chart an SVG with its legend on top, framework groups with
+bold headings, light grid lines with an axis, and the totals to the right of
+each bar. It draws the same data as results.json: a stacked bar per
+framework with the six outcomes, then every mistake grouped by category. It
+has no scripts and loads nothing, so it reads the same in any browser,
+offline.
 """
 
 from __future__ import annotations
 
+import math
 from html import escape
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -26,169 +32,229 @@ BUCKET_COLORS = {
     "never": "#4a5568",
 }
 
-# Records outside the six buckets still take their share of the bar, so
-# every bar is as long as the number of mistakes.
-EXTRA = {
-    "not-scored": ("Not scored (runtime check skipped)", "#e2e8f0"),
-    "no-case": ("No case written", "#a0aec0"),
-    "does-not-apply": ("Does not apply or prevented by design", "#cbd5e0"),
-}
+# A case the runtime check skipped still takes its share of the bar, drawn
+# apart, so a partial run cannot pass for a finished one.
+NOT_SCORED = ("Not scored (runtime check skipped)", "#cbd5e0")
+
+# The interaction benchmark's report groups frameworks the same way, so a
+# reader of both finds each framework in the same place.
+GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (
+    (None, ("citry",)),
+    ("Django libraries", ("django", "jinja")),
+    ("Other Python libraries", ("fasthtml",)),
+    ("JavaScript SSR", ("next", "nuxt")),
+)
+
+# Segment colors on which dark text reads better than white; on the orange,
+# white text at this size would fall short of the WCAG AA contrast ratio.
+_DARK_TEXT = {"#9ae6b4", "#f6c177", "#cbd5e0", "#dd6b20"}
+
+# Chart geometry in SVG units, matching the interaction report's charts.
+_WIDTH = 700
+_LABEL_RIGHT = 168
+_BAR_LEFT = 180
+_BAR_WIDTH = 380
+_VALUE_LEFT = _BAR_LEFT + _BAR_WIDTH + 18
+_ROW = 56
+_HEADING_ROW = 28
+_BAR_HEIGHT = 20
 
 _CSS = """
-:root {
-  --bg: #ffffff; --fg: #1a202c; --muted: #4a5568; --line: #e2e8f0; --head: #f7fafc;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #171923; --fg: #e2e8f0; --muted: #a0aec0; --line: #2d3748; --head: #1f2533; }
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-main { max-width: 1100px; margin: 0 auto; }
-h1 { font-size: 1.6rem; margin: 0 0 4px; }
-h2 { font-size: 1.2rem; margin: 32px 0 8px; }
-.meta { color: var(--muted); margin: 0 0 20px; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 0; margin: 0 0 12px; list-style: none; }
-.legend li { display: flex; align-items: center; gap: 6px; }
-.swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
-.row { display: grid; grid-template-columns: 190px 1fr 36px; gap: 10px; align-items: center; margin: 6px 0; }
-.row .name { text-align: right; }
-.row.reference .name { font-weight: 700; }
-.bar { display: flex; height: 26px; border-radius: 4px; overflow: hidden; background: var(--line); }
-.part { display: flex; align-items: center; justify-content: center; font-size: 12px; color: #fff; }
-.part.light { color: #1a202c; }
-.total { font-weight: 700; }
-table { border-collapse: collapse; width: 100%; font-size: 14px; }
-th, td { border: 1px solid var(--line); padding: 4px 8px; text-align: center; }
-th:first-child, td:first-child { text-align: left; }
-thead th { background: var(--head); }
-tr.group th { background: var(--head); text-align: left; font-weight: 700; }
-td.cell { white-space: nowrap; }
-.wrap { overflow-x: auto; }
-dl.codes { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 12px; }
-dl.codes dt { font-weight: 700; font-family: ui-monospace, monospace; }
-dl.codes dd { margin: 0; }
-@media (max-width: 640px) {
-  .row { grid-template-columns: 1fr 36px; }
-  .row .name { grid-column: 1 / -1; text-align: left; }
-}
+:root{color-scheme:light;font:14px system-ui;color:#172638;background:#f3f6fa}
+body{max-width:1500px;margin:0 auto;padding:28px}h1{font-size:24px;margin-bottom:6px}
+p{line-height:1.5;max-width:1000px}.muted{color:#526275}
+.group-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,580px),1fr));gap:18px;margin-top:10px}
+article.chart{max-width:780px;background:white;border:1px solid #dbe3ed;border-radius:12px;padding:18px;min-width:0}
+h2{font-size:19px;margin:0;display:inline}h3{font-size:16px;margin:0;display:inline}
+.description{font-size:13px;color:#526275;margin:6px 0 10px}
+details>summary{cursor:pointer;list-style:none}details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:'\\25B8';display:inline-block;width:1.1em;color:#526275}
+details[open]>summary::before{content:'\\25BE'}
+section.group{margin-top:24px}
+.chart.wide{max-width:none;grid-column:1/-1}
+svg{width:100%;height:auto;display:block}svg text{font-family:system-ui;font-size:11px;fill:#26394c}
+.download{display:inline-block;font-size:12px;margin-top:8px;color:#2455a0}
+.notice{padding:10px 14px;background:#fff2d6;border-radius:8px;max-width:1000px;font-size:13px}
+.table-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border-bottom:1px solid #e0e7ef;padding:4px 8px;text-align:center}
+th:first-child,td:first-child{text-align:left}
+thead th{color:#526275;font-weight:600;border-bottom:1px solid #dbe3ed}
+tr.category th{padding-top:12px;font-weight:700;border-bottom:1px solid #dbe3ed}
+tbody th[scope=row]{font-weight:400}
+td.cell{white-space:nowrap;font-variant-numeric:tabular-nums}
+dl.codes{display:grid;grid-template-columns:max-content 1fr;gap:2px 10px;font-size:12px;margin:14px 0 0}
+dl.codes dt{font-weight:700;font-family:ui-monospace,monospace}dl.codes dd{margin:0;color:#526275}
+footer{font-size:12px;color:#526275;margin-top:20px}
+@media(max-width:600px){body{padding:14px}article.chart{padding:10px}}
 """
 
-# Shades on which dark text reads better than white; on the orange, white
-# text at this size would fall short of the WCAG AA contrast ratio.
-_LIGHT = {"#9ae6b4", "#f6c177", "#cbd5e0", "#e2e8f0", "#a0aec0", "#dd6b20"}
 
-
-def _part(record: dict[str, Any]) -> str:
-    """Return the bar part one record counts towards."""
-    if record["status"] in {"not-applicable", "prevented"}:
-        return "does-not-apply"
-    if record["status"] == "missing":
-        return "no-case"
+def _part(record: dict[str, Any]) -> str | None:
+    """Return the bar part a record counts towards, or None when the mistake does not apply."""
+    if record["status"] != "ported":
+        return None
     return record["bucket"] or "not-scored"
 
 
+def _ticks(maximum: int) -> list[int]:
+    """Grid lines from 0 to exactly `maximum`, at most five intervals.
+
+    The axis ends at the largest bar, so that bar spans the full width; a
+    round step that divides it is preferred, and otherwise the last line
+    marks the end on its own.
+    """
+    steps = (1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 50)
+    step = next((step for step in steps if maximum % step == 0 and maximum / step <= 5), None)
+    if step is None:
+        step = next(step for step in steps if step * 5 >= maximum)
+    ticks = list(range(0, maximum + 1, step))
+    return ticks if ticks[-1] == maximum else [*ticks, maximum]
+
+
+def chart_svg(summary: dict[str, Any]) -> str:
+    """Draw the stacked outcome bars as a standalone SVG document."""
+    labels = {row["id"]: row["label"] for row in summary["buckets"]}
+    parts = {key: (labels[key], color) for key, color in BUCKET_COLORS.items()} | {"not-scored": NOT_SCORED}
+    names = {row["key"]: row["name"] for row in summary["frameworks"]}
+    counts = {
+        key: {
+            part: sum(1 for row in summary["results"] if row["framework"] == key and _part(row) == part)
+            for part in parts
+        }
+        for key in names
+    }
+    shown = [part for part in parts if part in BUCKET_COLORS or any(counts[key][part] for key in names)]
+    # The axis ends at the framework with the most applicable mistakes, so
+    # its bar spans the full width and a shorter bar shows fewer that apply.
+    totals = {key: sum(counts[key].values()) for key in names}
+    ticks = _ticks(max(totals.values()))
+    scale = _BAR_WIDTH / ticks[-1]
+
+    title = "How each mistake ended, per framework"
+    legend: list[str] = []
+    # Legend: three columns, as in the interaction report.
+    for index, part in enumerate(shown):
+        x, y = 12 + (index % 3) * 229, 12 + (index // 3) * 20
+        label, color = parts[part]
+        legend.append(f'<rect x="{x}" y="{y}" width="11" height="11" fill="{color}"/>')
+        legend.append(f'<text x="{x + 16}" y="{y + 10}">{escape(label)}</text>')
+    top = 12 + math.ceil(len(shown) / 3) * 20 + 22
+
+    rows: list[str] = []
+    y = top
+    known = {key for _, keys in GROUPS for key in keys}
+    groups = [*GROUPS, ("Other frameworks", tuple(key for key in names if key not in known))]
+    for heading, group_keys in groups:
+        keys = tuple(key for key in group_keys if key in names)
+        if not keys:
+            continue
+        if heading:
+            y += 8
+            rows.append(
+                f'<text x="{_LABEL_RIGHT}" y="{y + 12}" font-weight="700" text-anchor="end">{escape(heading)}</text>'
+            )
+            y += _HEADING_ROW
+        for key in keys:
+            row = counts[key]
+            rows.append(f'<text x="{_LABEL_RIGHT}" y="{y + 14}" text-anchor="end">{escape(names[key])}</text>')
+            x = float(_BAR_LEFT)
+            for part in shown:
+                count = row[part]
+                if not count:
+                    continue
+                label, color = parts[part]
+                width = count * scale
+                tip = f"{names[key]}, {label}: {count}"
+                rows.append(
+                    f'<rect x="{x:.2f}" y="{y}" width="{width:.2f}" height="{_BAR_HEIGHT}" fill="{color}"'
+                    f' tabindex="0" aria-label="{escape(tip)}"><title>{escape(tip)}</title></rect>'
+                )
+                if width >= 14:
+                    fill = "#172638" if color in _DARK_TEXT else "#ffffff"
+                    rows.append(
+                        f'<text x="{x + width / 2:.2f}" y="{y + 14}" text-anchor="middle"'
+                        f' style="fill:{fill}">{count}</text>'
+                    )
+                x += width
+            before = row["static-error"] + row["static-warning"]
+            rows.append(f'<text x="{_VALUE_LEFT}" y="{y + 14}" font-weight="700">{before} before running</text>')
+            detail = f"{row['static-error']} errors · {row['static-warning']} warnings"
+            rows.append(f'<text x="{_VALUE_LEFT}" y="{y + 31}" style="fill:#526275">{detail}</text>')
+            rows.append(f'<text x="{_BAR_LEFT}" y="{y + 37}" style="fill:#526275">{totals[key]} mistakes apply</text>')
+            y += _ROW
+    bottom = y
+    grid = []
+    for tick in ticks:
+        gx = _BAR_LEFT + tick * scale
+        grid.append(f'<line x1="{gx:.2f}" x2="{gx:.2f}" y1="{top - 5}" y2="{bottom}" stroke="#e0e7ef"/>')
+        grid.append(f'<text x="{gx:.2f}" y="{bottom + 22}" text-anchor="middle">{tick}</text>')
+    height = bottom + 36
+    body = "".join(legend + grid + rows)
+    return (
+        f'<svg viewBox="0 0 {_WIDTH} {height}" role="img" aria-label="{escape(title)}"'
+        ' xmlns="http://www.w3.org/2000/svg"><style>text{font:11px system-ui;fill:#26394c}'
+        'text[font-weight="700"]{font-weight:700}</style>'
+        f"<title>{escape(title)}</title>{body}</svg>"
+    )
+
+
 def _tint(color: str) -> str:
-    # A light mix of the bucket color keeps the cell's code readable in both themes.
-    return f"background: color-mix(in srgb, {color} 35%, var(--bg))"
+    # A light mix of the bucket color keeps the cell's code readable.
+    return f"background: color-mix(in srgb, {color} 30%, white)"
 
 
 def render(summary: dict[str, Any]) -> str:
     frameworks = summary["frameworks"]
-    labels = {row["id"]: row["label"] for row in summary["buckets"]}
-    parts = {key: (labels[key], color) for key, color in BUCKET_COLORS.items()} | EXTRA
     by = {(row["framework"], row["mistake"]): row for row in summary["results"]}
     total = len(summary["mistakes"])
-
-    counts = {
-        framework["key"]: {
-            key: sum(1 for row in summary["results"] if row["framework"] == framework["key"] and _part(row) == key)
-            for key in parts
-        }
-        for framework in frameworks
-    }
-    # A part that no framework has stays out of the legend; the six outcomes always show.
-    shown = [key for key in parts if key in BUCKET_COLORS or any(counts[f["key"]][key] for f in frameworks)]
+    svg = chart_svg(summary)
 
     out = [
         "<!doctype html>",
         '<html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        "<title>Error-prevention results</title>",
-        f"<style>{_CSS}</style></head><body><main>",
-        "<h1>Error-prevention results</h1>",
+        "<title>Error-prevention benchmark</title>",
+        f"<style>{_CSS}</style></head><body>",
+        "<h1>Error-prevention benchmark</h1>",
+        f'<p class="muted">The same {total} developer mistakes, written in each framework where they apply. '
+        "Each one is counted where it was first reported: an error or a warning before the app runs "
+        "(editor, check or build), an error or a warning at runtime, or not at all. Earlier is better. "
+        "Hover or focus a bar part, or a table cell, for its details.</p>",
     ]
     source = summary.get("source") or {}
-    meta = f"Run {escape(summary['run'])}"
+    notice = f"Run {escape(summary['run'])}"
     if source:
-        meta += f", cases and tools from commit <code>{escape(source['commit'][:12])}</code>"
-        meta += " with uncommitted benchmark changes" if source.get("benchmark_files_changed") else ""
+        notice += f": cases and tools from commit {escape(source['commit'][:12])}"
+        notice += ", with uncommitted benchmark changes" if source.get("benchmark_files_changed") else ""
+    out.append(f'<p class="notice">{notice}.</p>')
+
+    out.append('<section class="group"><details open><summary><h2>Outcomes</h2></summary><div class="group-body">')
+    out.append('<article class="chart"><details open><summary><h3>How each mistake ended</h3></summary>')
     out.append(
-        f'<p class="meta">{meta}. The same {total} mistakes, written in each framework where they apply;'
-        " earlier is better.</p>"
+        '<p class="description">One bar per framework, as long as the number of mistakes that apply to it. '
+        "Greens were reported before the app ran, oranges only at runtime; red and gray were never reported. "
+        "The lighter shade of each pair is a warning.</p>"
     )
+    out.append(svg)
+    href = "data:image/svg+xml;charset=utf-8," + quote(svg)
+    out.append(f'<a class="download" download="error-outcomes.svg" href="{href}">Download SVG</a>')
+    out.append("</details></article></div></details></section>")
 
-    out.append("<h2>How each mistake ended</h2>")
-    out.append('<ul class="legend">')
-    for key in shown:
-        label, color = parts[key]
-        out.append(f'<li><span class="swatch" style="background:{color}"></span>{escape(label)}</li>')
-    out.append("</ul>")
-    out.append('<div role="img" aria-label="Stacked bars of how each mistake ended, per framework">')
-    for index, framework in enumerate(frameworks):
-        row_counts = counts[framework["key"]]
-        reference = " reference" if index == 0 else ""
-        out.append(
-            f'<div class="row{reference}"><span class="name">{escape(framework["name"])}</span><span class="bar">'
-        )
-        for key in shown:
-            count = row_counts[key]
-            if not count:
-                continue
-            label, color = parts[key]
-            light = " light" if color in _LIGHT else ""
-            out.append(
-                f'<span class="part{light}" style="width:{count / total * 100:.3f}%;background:{color}"'
-                f' title="{escape(label)}: {count}">{count}</span>'
-            )
-        out.append(
-            '</span><span class="total" title="Error before running" aria-label="Errors before running">'
-            f"{row_counts['static-error']}</span></div>"
-        )
-    out.append("</div>")
-
-    # The same counts as numbers, for exact values and for screen readers.
-    out.append('<div class="wrap"><table><thead><tr><th>Outcome</th>')
-    out += [f"<th>{escape(framework['name'])}</th>" for framework in frameworks]
-    out.append("</tr></thead><tbody>")
-    for key in shown:
-        out.append(f"<tr><td>{escape(parts[key][0])}</td>")
-        out += [f"<td>{counts[framework['key']][key]}</td>" for framework in frameworks]
-        out.append("</tr>")
-    out.append("</tbody></table></div>")
-
-    out.append("<h2>Every mistake</h2>")
-    out.append('<dl class="codes">')
-    for row in summary["codes"]:
-        out.append(f"<dt>{escape(row['code'])}</dt><dd>{escape(row['meaning'])}</dd>")
-    out.append("</dl>")
     out.append(
-        '<p class="meta">On a computer, hover over a cell to see what the tools printed,'
-        " or why the mistake does not apply.</p>"
+        '<section class="group"><details open><summary><h2>Every mistake</h2></summary><div class="group-body">'
     )
-    out.append('<div class="wrap"><table><thead><tr><th>Mistake</th>')
-    out += [f"<th>{escape(framework['name'])}</th>" for framework in frameworks]
+    out.append('<article class="chart wide"><div class="table-wrap"><table><thead><tr><th>Mistake</th>')
+    out += [f'<th scope="col">{escape(framework["name"])}</th>' for framework in frameworks]
     out.append("</tr></thead><tbody>")
     for category in summary["categories"]:
         group = [mistake for mistake in summary["mistakes"] if mistake["category"] == category["id"]]
         if not group:
             continue
-        out.append(f'<tr class="group"><th colspan="{len(frameworks) + 1}" scope="rowgroup">')
+        out.append(f'<tr class="category"><th colspan="{len(frameworks) + 1}" scope="rowgroup">')
         out.append(f"{escape(category['heading'])}</th></tr>")
         for mistake in group:
-            out.append(f'<tr><th scope="row" style="font-weight:400">{escape(mistake["title"])}</th>')
+            out.append(f'<tr><th scope="row">{escape(mistake["title"])}</th>')
             for framework in frameworks:
                 record = by.get((framework["key"], mistake["id"]))
                 if record is None:
@@ -196,12 +262,21 @@ def render(summary: dict[str, Any]) -> str:
                     continue
                 color = BUCKET_COLORS.get(record.get("bucket") or "")
                 style = f' style="{_tint(color)}"' if color else ""
-                hover = "\n".join(record.get("evidence") or []) or record.get("reason") or ""
-                title = f' title="{escape(hover.strip())}"' if hover.strip() else ""
+                hover = ("\n".join(record.get("evidence") or []) or record.get("reason") or "").strip()
+                title = f' title="{escape(hover)}"' if hover else ""
                 out.append(f'<td class="cell"{style}{title}>{escape(record["cell"])}</td>')
             out.append("</tr>")
     out.append("</tbody></table></div>")
-    out.append("</main></body></html>")
+    # The codes explain the table, so they follow it rather than push it down the page.
+    out.append('<dl class="codes">')
+    for row in summary["codes"]:
+        out.append(f"<dt>{escape(row['code'])}</dt><dd>{escape(row['meaning'])}</dd>")
+    out.append("</dl></article></div></details></section>")
+    out.append(
+        "<footer>Written by the error-prevention runner in benchmarks/errors. "
+        "results.json beside this file has the same data.</footer>"
+    )
+    out.append("</body></html>")
     return "\n".join(out) + "\n"
 
 
