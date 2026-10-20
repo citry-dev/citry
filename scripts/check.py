@@ -23,6 +23,7 @@ Usage:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -305,6 +306,23 @@ def _run_phase(name: str, cmd: list[str], *, agent: bool) -> dict[str, object]:
     return result
 
 
+def _annotate_failures(results: list[dict[str, object]]) -> None:
+    """Report each failed phase as a GitHub Actions error annotation."""
+    # GitHub turns these lines into annotations on the run's summary and the
+    # pull request's checks page, so a reader sees which phase failed
+    # without scrolling to the end of a log thousands of lines long.
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    for result in results:
+        if result["status"] != "FAILED":
+            continue
+        message = f"{result['name']} failed with exit code {result['exitCode']} after {result['durationSeconds']}s"
+        # A workflow command ends at the first line break, and GitHub reads
+        # these three characters as escapes in the message.
+        message = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::error title=check.py::{message}", flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the repository check suite (lint, types, tests, validators).")
     parser.add_argument(
@@ -342,6 +360,9 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     elif failed:
+        # The agent reporter keeps stdout for its JSON, so only the streaming
+        # reporter, which CI uses, writes annotations.
+        _annotate_failures(results)
         print(
             f"\n{len(failed)} of {len(results)} checks failed in {total_duration:.2f}s: {', '.join(failed)}",
             file=sys.stderr,

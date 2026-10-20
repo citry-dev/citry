@@ -153,3 +153,35 @@ def test_agent_report_keeps_progress_on_stderr_and_json_on_stdout(
     # The directory is removed with the run, so no later gate reads its pages.
     assert len(corpora) == 1
     assert not corpora[0].exists()
+
+
+def test_streaming_report_annotates_each_failed_phase_on_github_actions(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        check_script,
+        "_phases",
+        lambda profile, parity_corpus: [("ruff format", ["a"]), ("mypy", ["b"]), ("pytest", ["c"])],  # noqa: ARG005
+    )
+    exit_codes = {"ruff format": 1, "mypy": 0, "pytest": 2}
+    monkeypatch.setattr(check_script, "_run", lambda command, *, capture, phase_name: (exit_codes[phase_name], ""))  # noqa: ARG005
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+
+    assert check_script.main(["--profile", "fast"]) == 1
+    annotations = [line for line in capsys.readouterr().out.splitlines() if line.startswith("::error")]
+    # One annotation per failed phase, in phase order; the passing phase gets none.
+    assert [line.split("::")[2].split(" failed with")[0] for line in annotations] == ["ruff format", "pytest"]
+    assert annotations[0].startswith("::error title=check.py::ruff format failed with exit code 1 after ")
+
+
+def test_streaming_report_writes_no_annotations_outside_github_actions(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(check_script, "_phases", lambda profile, parity_corpus: [("mypy", ["a"])])  # noqa: ARG005
+    monkeypatch.setattr(check_script, "_run", lambda command, *, capture, phase_name: (1, ""))  # noqa: ARG005
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+
+    assert check_script.main(["--profile", "fast"]) == 1
+    assert "::error" not in capsys.readouterr().out
