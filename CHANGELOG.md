@@ -240,8 +240,8 @@
 
 ### Performance
 
-- Interactive pages that repeat a component many times render up to about
-  9% faster on the server.
+- Pages that repeat a component many times render up to about 9% faster
+  on the server.
 
 ## v0.6.0
 
