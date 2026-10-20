@@ -11,9 +11,10 @@ version of Django's template engine). PR 6 has added django-components,
 with PR 3's reference-page parts and a case for each of the 44 mistakes in
 the catalogue after PR 3. PRs 9 and 6 landed before PR 4, so PR 4 added its
 page changes and cases to both apps, and PR 5 will too. PR 8 has added
-ReactPy with a case for each of those 44 mistakes, and then PR 4's page
-changes and cases. The other PRs in section 8 are planned. The published results include 1b, PR 2, PR 3, PR 9,
-PR 6 and PR 4. The benchmark itself is described in
+ReactPy, with a case for each of those 44 mistakes, and then PR 4's page
+changes and cases. The other PRs in section 8 are planned. The published
+results include 1b, PR 2, PR 3, PR 9, PR 6, PR 4 and PR 8. The benchmark
+itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
 
@@ -853,11 +854,14 @@ Recommended order:
    reach the server log.
    Done in PR 8. The page is built from ReactPy components, with one
    JavaScript component for the API line, and served by uvicorn as in the
-   performance benchmark in `benchmarks/web`. Of the 44 cases, 18 end as
-   editor errors, 1 as a check error, 9 as runtime errors, 10 are missed
-   and 6 do not apply. The runtime errors are mostly misspelled or missing
-   component arguments, which pyright cannot see through `@component`. The
-   44 cases ran on their own in about a minute with `--jobs 5`.
+   performance benchmark in `benchmarks/web`. PR 4's search field, links,
+   avatar, heading color and subtitle were added after PR 4 landed; the
+   extra pages use ReactPy-Router, the ReactPy project's router. Of the 49
+   cases, 18 end as editor errors, 1 as a check error, 10 as runtime
+   errors, 13 are missed and 7 do not apply. The runtime errors are mostly
+   misspelled or missing component arguments, which pyright cannot see
+   through `@component`. The 49 cases ran on their own in about 2 minutes
+   with `--jobs 5`.
 4. **Django Rusty Templates.** Cheap, because it copies the Django baseline
    and changes the backend. The difference from Django is small: m08 moves to
    a runtime error, and m05 and m15 do not apply. The pinned parser has no
@@ -1018,10 +1022,10 @@ change per baseline, plus re-checking the clean page.
 | 2. Hand-offs on the current page (done) | m29-m35, m38-m42, m47 (13 mistakes; part 2 mistakes that need no page change) | 78 (13 x 6), minus the cells that do not apply | ~12 min | ~34 min |
 | 3. Browser components and slot data (done; the run changed one existing cell, Citry m14, from runtime error to missed, because the details panel now passes `open` to `Status`) | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
 | 4. Forms, links, assets, CSS variables, i18n arguments (done, after PRs 9 and 6, so it covers eight frameworks; the run changed no existing cell) | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 40 written + 8 baseline changes | ~10 min measured: the three new journeys add page loads to every case | ~20 min for eight frameworks, measured |
-| 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 104 + 8 baseline changes, now that there are eight frameworks | ~12 min, estimated for six frameworks before the journeys PR 4 added | ~58 min, estimated before PR 4; PR 4 measured ~20 min for eight frameworks |
+| 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 117 + 9 baseline changes, now that there are nine frameworks | ~12 min, estimated for six frameworks before the journeys PR 4 added | ~58 min, estimated before PR 4; PR 8 measured ~22 min for nine frameworks |
 | 6. django-components (done, after PR 9 and before PRs 4 and 5) | framework, baseline, one case per mistake. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); they ran on their own in about 95 seconds with `--jobs 5` | 44 written (estimate ~62) | ~1.5 min measured (estimate ~8 min) | ~10 min for eight frameworks, measured |
 | 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first | ~62 | unknown: 30-95 min if every case builds the frontend | see open question 4 |
-| 8. ReactPy (done, after PR 6 and before PRs 4 and 5) | framework, baseline, one case per mistake. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); they ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~6 min) | not yet run with the other frameworks |
+| 8. ReactPy (done, after PR 4 and before PR 5; the run changed no existing cell) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 2 minutes with `--jobs 5` | 49 written (estimate ~62) | ~2 min measured (estimate ~6 min) | ~22 min for nine frameworks, measured |
 | 9. Django Rusty Templates (done, after PR 3 and before PRs 4 and 5) | starts from the Django baseline. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); its first 37 cases ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~7 min) | ~8.5 min for seven frameworks, measured |
 | 10. django-unicorn | | ~62 | ~7 min | |
 | 11. Tetra | | ~62 | ~10 min | |
@@ -1030,9 +1034,9 @@ change per baseline, plus re-checking the clean page.
 The "Full run after" times assume one case at a time; the measured
 eight-framework run after PR 6, with `--jobs 5`, took about 10 minutes.
 The case counts for PRs 4 and 5 assume six frameworks. Each framework
-added before them, such as Django Rusty Templates in PR 9,
-django-components in PR 6 and ReactPy in PR 8, adds one case per mistake
-and one baseline change per page addition.
+added before one of them adds one case per mistake and one baseline change
+per page addition: Django Rusty Templates (PR 9) and django-components
+(PR 6) came before both, and ReactPy (PR 8) before PR 5.
 
 **Stricter settings for the frameworks measured before PR 6.** The decision
 on stricter settings applies to every framework, but only django-components

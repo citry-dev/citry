@@ -124,12 +124,14 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 Rerunning them with nothing changed took 8 seconds: it repeated only the
 browser checks of the 4 cases whose journey stops on an error page, which
 are never stored. Every framework repeats such cases on each run. A full run
-of the eight frameworks' 392 cases with nothing stored (`--no-cache`) took
-about 20 minutes on the same machine; most of it is the Nuxt cases, which
-run one at a time, and the Next.js builds. Each journey loads the page
-again in every browser check, and the `search`, `about` and `project`
-journeys bring each framework to five (FastHTML to four). It is not part of routine CI. Run
-it at each Citry release, and when a framework's pinned versions change.
+of the nine frameworks' 441 cases with nothing stored (`--no-cache`) took
+about 22 minutes on the same machine; most of it is the Nuxt cases, which
+run one at a time, and the Next.js builds. ReactPy's 49 cases, run on
+their own, took about 2 minutes. Each journey loads the page again in
+every browser check, and the `search`, `about` and `project` journeys
+bring each framework to five (FastHTML to four). It is not part of
+routine CI. Run it at each Citry release, and when a framework's pinned
+versions change.
 
 ## Latest result
 
@@ -145,7 +147,10 @@ an experimental Rust version of Django's template engine.
 "django-components + HTMX + Alpine" is the Django app with the card, the
 counter, the status line and the page rewritten as components of
 [django-components](https://github.com/django-components/django-components),
-the Django library Citry grew out of.
+the Django library Citry grew out of. "ReactPy" is
+[ReactPy](https://github.com/reactive-python/reactpy), a Python library
+for React-style components: the server runs them in Python and sends the
+browser the page to show over a WebSocket.
 
 Some differences between cells come from how each framework naturally
 writes a part of the page, not from its tools:
@@ -215,7 +220,8 @@ writes a part of the page, not from its tools:
 - **m45:** Django, Rusty, Jinja and django-components build the link from
   the route's name, so the page fails to render. Citry, FastHTML and
   Next.js link by path and get a 404 when the link is clicked; Nuxt's
-  router prints only a warning. Next.js's `typedRoutes` and Nuxt's
+  router prints only a warning, and ReactPy's router shows its
+  `Page not found` route with no message at all. Next.js's `typedRoutes` and Nuxt's
   `typedPages`, which would check links before the app runs, are off,
   as they are by default.
 - **m46:** Citry checks a message's arguments in the editor. Django's and
@@ -286,13 +292,11 @@ its inputs once, when the server renders it, and `open` changes in the
 browser, so the Status component's markup is still the Django app's
 nested Alpine component.
 
-ReactPy has a case for every mistake
-([`frameworks/reactpy/`](frameworks/reactpy/) holds its app and notes), but
-its cells are not in the published run above yet; the next published run
-adds them. In ReactPy the server runs every component in Python and sends
-the browser the elements to show over a WebSocket, and a click runs a
-Python handler on the server. The main differences from FastHTML's cells,
-the other framework here that writes its page as Python functions:
+In ReactPy ([`frameworks/reactpy/`](frameworks/reactpy/) holds its app
+and notes) the server runs every component in Python and sends the
+browser the elements to show over a WebSocket, and a click runs a Python
+handler on the server. The main differences from FastHTML's cells, the
+other framework here that writes its page as Python functions:
 
 - **m02, m04, m05, m25, m26, m29 and m35:** ReactPy's `@component`
   decorator is typed so that pyright accepts any arguments in a call to a
@@ -324,6 +328,9 @@ the other framework here that writes its page as Python functions:
 - **m19 and m20:** the conditional that shows the details text and the
   toggle's click handler are Python code, so their syntax errors are
   Python syntax errors, which pyright and ruff report.
+- **m45:** the About link goes through ReactPy-Router, which changes the
+  page in the browser. A misspelled route shows the router's
+  `Page not found` route with no error, where FastHTML's link gets a 404.
 - **m12 and m40:** the API line is a ReactPy JavaScript component that
   reads the API base from its props. Reading a prop the server did not
   pass shows `API: undefined` with no error. (A second prop that carries
@@ -331,7 +338,8 @@ the other framework here that writes its page as Python functions:
 
 m14 and m34 are n/a, as in FastHTML and the Django and Jinja apps:
 ReactPy 1.1.0 renders nothing on the server, and no browser code reads a
-reply to the click.
+reply to the click. m46 is n/a as in FastHTML, because ReactPy has no
+translations.
 
 Tetra, django-unicorn and Reflex are not measured yet.
 
