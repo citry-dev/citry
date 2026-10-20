@@ -57,6 +57,8 @@ markup reads the board's `open` through the scope Alpine shares with it. Its \
 Close button dispatches a `close` event, and a listener on the board sets \
 `open` to false.
 
+The heading's color, the search form, the avatar, and the About and project pages with their `{% url %}` links are written as in the Django app, apart from two workarounds. The avatar's URL is built from `{{ STATIC_URL }}`, like the other static files. The parser has no `{% blocktranslate %}`, so the page view translates the subtitle with `gettext('Owned by %(name)s')` and fills in the owner's name with `%`, the way Django's docs pass gettext a named argument.
+
 Where the two engines differ on a mistake: a misspelled attribute of an \
 existing object, such as `{{ owner.nmae }}`, raises VariableDoesNotExist at \
 render, where Django prints an empty string. An undefined variable (`{{ \
@@ -151,4 +153,17 @@ status = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "click", selector = "button:has-text('Close')" },
   { action = "click", selector = "button:has-text('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:has-text('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:has-text('Project 1')" },
 ]

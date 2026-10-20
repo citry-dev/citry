@@ -26,17 +26,32 @@ PROJECTS = [('Alpha', 3, True), ('Beta', 5, False), ('Gamma', 8, False)]
 
 def page(request):
     cards = [Project(title=title, count=count, featured=featured) for title, count, featured in PROJECTS]
+    owner = Owner(name='Ada')
     return render(request, 'board/page.html', {
-        'owner': Owner(name='Ada'),
+        'owner': owner,
         'cards': cards,
         # The pinned Rusty parser has no {% translate %} tag, so the heading
         # is translated here, with the English text as the message id.
         'heading': gettext('Projects'),
+        # Nor {% blocktranslate %}, so the subtitle's message gets the
+        # owner's name here, as a named placeholder the way gettext takes one.
+        'subtitle': gettext('Owned by %(name)s') % {'name': owner.name},
+        'accent': settings.ACCENT,
         # It has no json_script filter either, so the view calls the function
         # behind that filter, and the page writes the tag that board.js reads.
         'api_base_script': json_script(settings.API_BASE, 'api-base'),
         'count': request.session.get('count', 0),
+        # The search form submits back to this page with its text in `q`.
+        'searched': request.GET.get('q', ''),
     })
+
+
+def about(request):
+    return render(request, 'board/about.html')
+
+
+def project(request, project_id):
+    return render(request, 'board/project.html', {'project_id': project_id})
 
 
 @require_POST
