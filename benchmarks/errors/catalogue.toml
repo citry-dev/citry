@@ -3,15 +3,16 @@
 # Each entry describes the mistake in framework-neutral words. A framework's
 # version of it lives in cases/<id>/<framework>/port.toml. `origin` records
 # where the mistake came from, so a reader can check that the set is not
-# chosen to suit Citry. "neutral" entries come from one of three sources:
-# issue #158; the maintainer's list of hand-offs, the places where a web app
-# passes data from one part to another (server data into a template or into
-# browser code, a browser request to a server handler, a slot fill, saved
-# state), each checked for a misspelled name, a missing value and a wrong
-# type (section 2 of docs/design/error_prevention_benchmark_plan.md); and a
-# survey of what other frameworks' tools check. "citry-inventory" entries
-# come from the list of mistakes Citry itself checks or misses. At least half
-# must be "neutral".
+# chosen to suit Citry. "neutral" entries come from three sources: issue
+# #158, a survey of what other frameworks' tools check, and the
+# maintainer's list of hand-offs. A hand-off is a place where a web app
+# passes data from one part to another, such as server data into a template
+# or browser code, a browser request to a server handler, a slot fill, or
+# saved state. The list asks at each one whether a misspelled name, a
+# missing value, a wrong type and similar faults are reported (section 2 of
+# docs/design/error_prevention_benchmark_plan.md). "citry-inventory" entries
+# come from the list of mistakes Citry itself checks or misses. At least
+# half must be "neutral".
 #
 # Freeze this file before a published run. Changing a mistake after seeing which
 # framework catches it would bias the result.

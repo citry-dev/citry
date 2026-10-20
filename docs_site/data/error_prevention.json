@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261020T094732Z",
+  "run": "20261020T175743Z",
   "frameworks": [
     {
       "key": "citry",
@@ -195,6 +195,71 @@
       "id": "m24-undeclared-event",
       "title": "Child emits an event the parent does not listen for",
       "category": "events"
+    },
+    {
+      "id": "m29-listener-name",
+      "title": "Parent listens for a misspelled event",
+      "category": "events"
+    },
+    {
+      "id": "m30-event-payload-type",
+      "title": "Event sent with a payload of the wrong type",
+      "category": "events"
+    },
+    {
+      "id": "m31-dom-event-name",
+      "title": "Misspelled browser event name on an element",
+      "category": "events"
+    },
+    {
+      "id": "m32-payload-type",
+      "title": "Request payload field of the wrong type",
+      "category": "events"
+    },
+    {
+      "id": "m33-payload-missing-field",
+      "title": "Request payload leaves out a required field",
+      "category": "events"
+    },
+    {
+      "id": "m34-reply-field",
+      "title": "Browser reads a misspelled field of the server's reply",
+      "category": "events"
+    },
+    {
+      "id": "m35-required-slot-missing",
+      "title": "Required slot left unfilled",
+      "category": "naming"
+    },
+    {
+      "id": "m38-state-read-typo",
+      "title": "Template reads a misspelled state field",
+      "category": "naming"
+    },
+    {
+      "id": "m39-state-type",
+      "title": "State field given a value of the wrong type",
+      "category": "types"
+    },
+    {
+      "id": "m40-browser-value-name",
+      "title": "Browser code reads a misspelled server value",
+      "category": "naming"
+    },
+    {
+      "id": "m41-browser-value-not-json",
+      "title": "Server passes browser code a value the browser cannot receive",
+      "category": "server-browser"
+    },
+    {
+      "id": "m42-secret-sent-to-browser",
+      "title": "Server sends a secret to the browser",
+      "category": "server-browser"
+    },
+    {
+      "id": "m47-template-path",
+      "title": "Misspelled path to a template or component file",
+      "category": "templates"
     }
   ],
   "codes": [
@@ -583,6 +648,144 @@
       ]
     },
     {
+      "framework": "citry",
+      "mistake": "m29-listener-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m30-event-payload-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m31-dom-event-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m32-payload-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m33-payload-missing-field",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m34-reply-field",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The counter shows the saved total from `$state.count`, which Citry updates in the browser from the handler's state. The Add handler returns nothing, so no browser code reads a field of the server's reply. Misspelling the state field the counter reads is m38.",
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m35-required-slot-missing",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           />\u240a\n   |           ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided.",
+        "citry check: citry.parse.syntax Parse error:   --> 16:11\n   |\n16 |           <c-Card\n   | ...\n22 |           />\u240a\n   |           ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided.",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m38-state-read-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.typescript.ts2551 Property 'cuont' does not exist on type 'CitryEventsState'. Did you mean 'count'?"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m39-state-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot assign to attribute \"count\" for class \"State\"\n\u00a0\u00a0\"str\" is not assignable to \"int\""
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m40-browser-value-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.vue.unknown-variable Vue variable 'apiBsae' is not available in this component.",
+        "citry check: citry.vue.unknown-variable Vue variable 'apiBsae' is not available in this component."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m41-browser-value-not-json",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: ERROR:    Exception in ASGI application",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m42-secret-sent-to-browser",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m47-template-path",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The page and the card keep their templates and browser code inside their Python classes, as Citry's starter writes them, and the page uses the card by its tag name, `<c-Card>`, which Citry finds without a path. The page names no template or script file, so there is no path to misspell; misspelling the tag name is m01.",
+      "evidence": []
+    },
+    {
       "framework": "django",
       "mistake": "m01-component-name",
       "status": "ported",
@@ -837,6 +1040,147 @@
       "cell": "M",
       "reason": null,
       "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m29-listener-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m30-event-payload-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The card dispatches `hide` with no value (`$dispatch('hide')`). Each card sits in its own Alpine wrapper, and that wrapper's listener hides itself, so the page already knows which card the event came from and the event carries no payload whose type could be wrong.",
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m31-dom-event-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m32-payload-type",
+      "status": "prevented",
+      "bucket": null,
+      "cell": "P",
+      "reason": "The mistake cannot be written: HTMX sends `hx-vals` as ordinary form fields, and a form field is always text, so `hx-vals='{\"amount\": \"1\"}'` sends exactly the same request as `{\"amount\": 1}`. The view turns the field into a whole number with `int(request.POST['amount'])`, as it must for any form field, so the counter works.",
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m33-payload-missing-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Response Status Error Code 500 from /save/, [object HTMLSpanElement]",
+        "error: 500 http://127.0.0.1:<port>/save/",
+        "error: Internal Server Error: /save/",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m34-reply-field",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The save view replies with the HTML of the `saved` partial, which HTMX swaps in for `#saved`. No browser code reads a field of the reply.",
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m35-required-slot-missing",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m38-state-read-typo",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m39-state-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m40-browser-value-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: Cannot read properties of null (reading 'textContent')",
+        "error: pageerror: Illegal invocation",
+        "error: pageerror: api is not defined",
+        "error: pageerror: toggle is not defined",
+        "error: pageerror: Cannot read properties of null (reading 'textContent')"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m41-browser-value-not-json",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: Internal Server Error: /",
+        "error: Traceback (most recent call last):"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m42-secret-sent-to-browser",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m47-template-path",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: Internal Server Error: /",
+        "error: Traceback (most recent call last):"
+      ]
     },
     {
       "framework": "jinja",
@@ -1115,6 +1459,158 @@
       "evidence": []
     },
     {
+      "framework": "jinja",
+      "mistake": "m29-listener-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m30-event-payload-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The card dispatches `hide` with no value (`$dispatch('hide')`). Each card sits in its own Alpine wrapper, and that wrapper's listener hides itself, so the page already knows which card the event came from and the event carries no payload whose type could be wrong.",
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m31-dom-event-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m32-payload-type",
+      "status": "prevented",
+      "bucket": null,
+      "cell": "P",
+      "reason": "The mistake cannot be written: HTMX sends `hx-vals` as ordinary form fields, and a form field is always text, so `hx-vals='{\"amount\": \"1\"}'` sends exactly the same request as `{\"amount\": 1}`. The save route turns the field into a whole number with `int(str(form[\"amount\"]))`, as it must for any form field, so the counter works.",
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m33-payload-missing-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: Response Status Error Code 500 from /save, [object HTMLDivElement]",
+        "error: 500 http://127.0.0.1:<port>/save",
+        "error: INFO:     127.0.0.1:<port> - \"POST /save HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m34-reply-field",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The save route replies with the HTML of counter.html, which HTMX swaps in for the old counter. No browser code reads a field of the reply.",
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m35-required-slot-missing",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m38-state-read-typo",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m39-state-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m40-browser-value-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: pageerror: aip is not defined",
+        "error: pageerror: aip is not defined",
+        "warning: Alpine Expression Error: aip is not defined\n\nExpression: \"aip\"\n\n JSHandle@node",
+        "warning: Alpine Expression Error: aip is not defined\n\nExpression: \"aip\"\n\n JSHandle@node"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m41-browser-value-not-json",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m42-secret-sent-to-browser",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m47-template-path",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
       "framework": "fasthtml",
       "mistake": "m01-component-name",
       "status": "ported",
@@ -1391,6 +1887,7 @@
       "evidence": [
         "Pylance, type checking on (pyright 1.1.414, standard): pyright \"(\" was not closed",
         "Pylance, type checking on (pyright 1.1.414, standard): pyright Statements must be separated by newlines or semicolons",
+        "ruff 0.15.5 (default rules): invalid-syntax Expected `)`, found newline",
         "interaction: the development server did not answer",
         "the development server did not answer"
       ]
@@ -1418,6 +1915,149 @@
       "bucket": "missed",
       "cell": "M",
       "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m29-listener-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m30-event-payload-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The card's Hide button dispatches a `hide` event with no value. The page's listener finds the card from the element that sent the event (`event.target.closest('.card')`), so the event carries no payload whose type could be wrong.",
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m31-dom-event-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m32-payload-type",
+      "status": "prevented",
+      "bucket": null,
+      "cell": "P",
+      "reason": "HTMX sends `hx_vals` as ordinary form fields, and a form field is always text, so `json.dumps({\"amount\": \"1\"})` sends exactly the same request as `{\"amount\": 1}`. FastHTML turns the field into a whole number from the route's `amount: int` annotation, so the counter works.",
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m33-payload-missing-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 400 (Bad Request)",
+        "error: Response Status Error Code 400 from /save",
+        "error: 400 http://127.0.0.1:<port>/save"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m34-reply-field",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The save route replies with plain text such as `Saved: 1`, which HTMX swaps into `#saved`. No browser code reads a field of the reply.",
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m35-required-slot-missing",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"footer\"",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m38-state-read-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"cuont\" is not defined",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m39-state-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportOperatorIssue Operator \"+\" not supported for types \"int | str\" and \"int\"\n\u00a0\u00a0Operator \"+\" not supported for types \"str\" and \"int\" when expected type is \"object\""
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m40-browser-value-name",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The page writes the setting's value straight into the script's text with an f-string (`{json.dumps(API_BASE)}`), so the browser code never reads it by a name. Misspelling `API_BASE` in that f-string would be a misspelled name in the server's Python code, as in m07.",
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m41-browser-value-not-json",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: INFO:     127.0.0.1:<port> - \"GET / HTTP/1.1\" 500 Internal Server Error",
+        "error: ERROR:    Exception in ASGI application"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m42-secret-sent-to-browser",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m47-template-path",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "FastHTML builds the page from Python functions in main.py, as its docs do. The page has no template files, and the card is a function in the same file, so the page names no template or component file to misspell. Misspelling the card function's name is m01.",
       "evidence": []
     },
     {
@@ -1659,6 +2299,7 @@
       "reason": null,
       "evidence": [
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-parsing-error Parsing error: Unexpected end of expression.",
+        "nuxt build: exit-1 \u2502  SyntaxError: Error parsing JavaScript expression: Unexpected token (1:8)\n\u2502      at createCompilerError (.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:1374:17)\n\u2502      at emitError (.benchmarks/errors/envs/nuxt/nod...",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
         "error: 500 http://127.0.0.1:<port>/",
@@ -1676,6 +2317,7 @@
       "evidence": [
         "vue-tsc (Vue - Official): TS1005 ';' expected.",
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): eslint Parsing error: ';' expected.",
+        "nuxt build: exit-1 \u2502  24 |  \n\u2502      at constructor (.benchmarks/errors/envs/nuxt/node_modules/@babel/parser/lib/index.js:369:19)\n\u2502      at TypeScriptParserMixin.raise (.benchmarks/errors/envs/nuxt/node_modules/@babel/parser/lib/index.js:6622:19)\n\u2502      at TypeScriptParserMixin.semicolon (.benchma...",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
         "error: 500 http://127.0.0.1:<port>/",
@@ -1708,6 +2350,7 @@
       "evidence": [
         "Vue compiler diagnostics (Vue - Official): vue-compiler-dom-errors/24 Element is missing end tag.",
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/html-end-tags '<footer>' should have end tag.",
+        "nuxt build: exit-1 \u2502  SyntaxError: Element is missing end tag.\n\u2502      at createCompilerError (.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:1374:17)\n\u2502      at emitError (.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules/@vue/...",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Failed to load resource: the server responded with a status of 500 (Vite Error)",
         "error: 500 http://127.0.0.1:<port>/",
@@ -1737,6 +2380,137 @@
         "warning: [Vue warn]: Component emitted event \"hdie\" but it is neither declared in the emits option nor as an \"onHdie\" prop.",
         "warning:  WARN  [console.warn] [Vue warn]: Component emitted event \"hdie\" but it is neither declared in the emits option nor as an \"onHdie\" prop."
       ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m29-listener-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m30-event-payload-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Card declares its `hide` event with no value (`hide: []`) and emits it that way. The page's listener sits inside the loop and already knows the card (`@hide=\"hide(card.title)\"`), so the event carries no payload whose type could be wrong.",
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m31-dom-event-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m32-payload-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m33-payload-missing-field",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 500 (Server Error)",
+        "error: pageerror: [POST] \"/api/save\": 500 Server Error",
+        "error: 500 http://127.0.0.1:<port>/api/save",
+        "error: ERROR  [request error] [unhandled] [POST] http://127.0.0.1:<port>/api/save",
+        "error: \u001b[31m\u2139 Error: Cannot destructure property 'amount' of '(intermediate value)' as it is undefined.\u001b[39m"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m34-reply-field",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m35-required-slot-missing",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m38-state-read-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?",
+        "vue-tsc (Vue - Official): TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m39-state-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2322 Type 'string' is not assignable to type 'number'.",
+        "vue-tsc (Vue - Official): TS2322 Type 'string' is not assignable to type 'number'."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m40-browser-value-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m41-browser-value-not-json",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The public setting lives in `runtimeConfig` in nuxt.config.ts, where the API base `/api` is a plain string. JavaScript has no path type, and its URL class needs a full address or a base address to resolve against, which a relative setting like `/api` does not have, so a developer would not wrap it in one. A set or a date is not a natural type for an API base, and the page reads the same string the config holds.",
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m42-secret-sent-to-browser",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m47-template-path",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Nuxt imports the components in app/components/ by their file name, so the page uses `<Card>` without naming a file, and the starter has no layout file. There is no path to misspell; misspelling the component name is m01.",
+      "evidence": []
     },
     {
       "framework": "next",
@@ -2054,6 +2828,167 @@
         "error: pageerror: onHdie is not defined",
         "error: 500 http://127.0.0.1:<port>/",
         "error: \u2a2f ReferenceError: onHdie is not defined"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m29-listener-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ key: string; title: string; count: number; footer: Element; onHdie: () => void; }' is not assignable to type 'IntrinsicAttributes & CardProps'.",
+        "next build: TS2322 Type '{ key: string; title: string; count: number; footer: Element; onHdie: () => void; }' is not assignable to type 'IntrinsicAttributes & CardProps'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m30-event-payload-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The card calls `onHide()` with no value. The page passes each card its own callback, which already knows the card's project (`() => setHidden([...hidden, project.title])`), so the call carries no payload whose type could be wrong.",
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m31-dom-event-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ children: string; type: \"button\"; onClik: () => void; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.",
+        "next build: TS2322 Type '{ children: string; type: \"button\"; onClik: () => void; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.",
+        "error: Unknown event handler property `%s`. It will be ignored. onClik",
+        "error: Unknown event handler property `%s`. It will be ignored. onClik"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m32-payload-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type 'string' is not assignable to type 'number'.",
+        "next build: TS2322 Type 'string' is not assignable to type 'number'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m33-payload-missing-field",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2554 Expected 1 arguments, but got 0.",
+        "next build: TS2554 Expected 1 arguments, but got 0.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: Cannot read properties of undefined (reading 'amount')",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: \u2a2f TypeError: Cannot read properties of undefined (reading 'amount')",
+        "error:  POST / 500 in 176ms (next.js: 1.7ms, application-code: 174ms)"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m34-reply-field",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The server action replies with the new total as a bare number, which the page stores as it is (`setSaved(await save(...))`). The reply has no field to misspell.",
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m35-required-slot-missing",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2741 Property 'footer' is missing in type '{ key: string; title: string; count: number; onHide: () => void; }' but required in type 'CardProps'.",
+        "next build: TS2741 Property 'footer' is missing in type '{ key: string; title: string; count: number; onHide: () => void; }' but required in type 'CardProps'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m38-state-read-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?",
+        "next build: TS2551 Property 'cuont' does not exist on type '{ count: number; }'. Did you mean 'count'?"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m39-state-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type 'string' is not assignable to type 'number'.",
+        "next build: TS2322 Type 'string' is not assignable to type 'number'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m40-browser-value-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name 'apiBsae'. Did you mean 'apiBase'?",
+        "next build: TS2552 Cannot find name 'apiBsae'. Did you mean 'apiBase'?",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: apiBsae is not defined",
+        "error: 500 http://127.0.0.1:<port>/",
+        "error: \u2a2f ReferenceError: apiBsae is not defined"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m41-browser-value-not-json",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "In JavaScript the API base `/api` is a plain string: the language has no path type, and its URL class needs a full address or a base address to resolve against, which a relative setting like `/api` does not have, so a developer would not wrap it in one. A set or a date is not a natural type for an API base. The server component hands the client component the same string value the browser code renders.",
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m42-secret-sent-to-browser",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m47-template-path",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2307 Cannot find module './crad' or its corresponding type declarations.",
+        "next build: build Error: Module not found: Can't resolve './crad'",
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "error: pageerror: ./work/m47-template-path/app/board.tsx:5:1\nError: Module not found: Can't resolve './crad'\n  3 | import { useState } from \"react\";\n  4 | import { save } from \"./actions\";\n> 5 | import Card from \"./crad\";\n    | ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  6 | import type { Project } from \"./data...",
+        "error: ./work/m47-template-path/app/board.tsx:5:1\nError: Module not found: Can't resolve './crad'\n  3 | import { useState } from \"react\";\n  4 | import { save } from \"./actions\";\n> 5 | import Card from \"./crad\";\n    | ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  6 | import type { Project } from \"./data\";\n  7 |\n  ...",
+        "error: ./work/m47-template-path/app/board.tsx:5:1\nError: Module not found: Can't resolve './crad'\n  3 | import { useState } from \"react\";\n  4 | import { save } from \"./actions\";\n> 5 | import Card from \"./crad\";\n    | ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  6 | import type { Project } from \"./data\";\n  7 |\n  ..."
       ]
     }
   ]

@@ -58,8 +58,9 @@ in the browser; a misspelled server-side `c-if` would be silent, but the
 reference page has no server conditional. m12 reads `SECRET_TOKEN` in Vue
 code, which the unknown variable rule checks; returning it from
 `js_data()`, which sends it to the browser, reports nothing, which m42
-measures. The Next.js and Nuxt ports of m12 are that second form: the
-secret reaches the page.
+measures. In the Next.js and Nuxt ports of m12, reading the secret in
+browser code also sends it: the server renders it into the page before the
+browser reports a hydration error.
 
 The browser always runs Vue's production build, so Vue's development
 warnings never appear, and no Citry case can end as a runtime warning

@@ -101,9 +101,26 @@ how each framework naturally writes a part of the page, not from its tools:
 - **m17:** where the wrong type is computed differs (a Python data class,
   a server route, a page component), and so does where the type checker
   reports it.
+- **m30 and m34:** most pages need no value in the hide event, and most
+  never read the server's reply as data, so each applies to one framework
+  only: Citry's card sends its title with the hide event (m30), and Nuxt's
+  page reads `count` from the reply (m34). The other cells are n/a.
+- **m32:** Django, Jinja and FastHTML are "prevented": HTMX sends form
+  fields, which are always text, so `"1"` and `1` send the same request.
+- **m35:** Citry, FastHTML and Next.js declare the card's footer as
+  required, so leaving it out is reported. A Django block is always
+  optional, and so is a Nuxt slot whose type does not mark it required, so
+  the cards silently lose their footer links; Jinja's macro fails when it
+  calls the missing fill.
+- **m38:** Django reads the session with a default value, so a misspelled
+  field quietly shows 0, while the Jinja app reads its state without a
+  default, so the misspelled field raises an error.
+- **m42:** no framework's tools report a secret sent to the browser, and
+  the page looks the same, so every cell is missed.
 
-The gaps this run found in Citry are tracked in
-[#207](https://github.com/citry-dev/citry/issues/207).
+The gaps the earlier 24-mistake run found in Citry are tracked in
+[#207](https://github.com/citry-dev/citry/issues/207); the gaps the
+hand-off mistakes (m29 to m47) found are not in it yet.
 
 Django Rusty Templates, django-components, Tetra, django-unicorn, Reflex and
 ReactPy are not measured yet.

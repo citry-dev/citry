@@ -96,7 +96,9 @@ was seen.
   browser code or a browser request to a server handler, and asks at each
   one whether a misspelled name, a missing value or a wrong type is
   reported. It was written from how web apps move data, not from Citry's
-  rules, and is kept as the hand-off matrix in section 2 of
+  rules; entries from it that came from Citry's own rules or notes (m41,
+  m42) are still marked `citry-inventory`. The list is kept as the
+  hand-off matrix in section 2 of
   [error_prevention_benchmark_plan.md](error_prevention_benchmark_plan.md).
   `citry-errors validate` enforces the half.
 - Each framework's tools are its official starter's tools plus the linters
