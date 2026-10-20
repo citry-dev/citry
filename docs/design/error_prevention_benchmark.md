@@ -89,9 +89,18 @@ was seen.
 
 ### Fairness rules
 
-- At least half of the mistakes come from outside Citry's own rule list: from
-  #158 and from what other frameworks' tools check. `citry-errors validate`
-  enforces this.
+- At least half of the mistakes come from outside Citry's own rule list:
+  from #158, from what other frameworks' tools check, and from the
+  maintainer's list of hand-offs. That list names the places where a web
+  app passes data from one part to another, such as server data into
+  browser code or a browser request to a server handler, and asks at each
+  one whether a misspelled name, a missing value or a wrong type is
+  reported. It was written from how web apps move data, not from Citry's
+  rules; entries from it that came from Citry's own rules or notes (m41,
+  m42) are still marked `citry-inventory`. The list is kept as the
+  hand-off matrix in section 2 of
+  [error_prevention_benchmark_plan.md](error_prevention_benchmark_plan.md).
+  `citry-errors validate` enforces the half.
 - Each framework's tools are its official starter's tools plus the linters
   and type checker most of its projects add: pyright in standard mode and
   ruff for every Python stack, djLint for Django and Jinja templates, and

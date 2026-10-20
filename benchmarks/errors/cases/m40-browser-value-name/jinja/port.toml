@@ -1,0 +1,9 @@
+# The template hands the setting to Alpine as `api`; the browser code that
+# shows it reads that name.
+status = "ported"
+mistake = { file = "templates/index.html", contains = 'x-text="aip"' }
+
+[[edits]]
+file = "templates/index.html"
+old = '<span x-text="api">'
+new = '<span x-text="aip">'

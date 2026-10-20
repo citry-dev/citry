@@ -1,0 +1,13 @@
+# Single quotes, because the expression sits inside a double-quoted
+# attribute. Citry checks a JSON payload strictly, so "1" is not turned
+# into 1 for the handler.
+# Citry rejects the call with a 422 invalid_args error inside a 200 batch
+# response and hands it to $error('save'). The reference page has no error
+# display, so nothing appears on screen.
+status = "ported"
+mistake = { file = "app/components/counter.py", contains = "save({amount: '1'})" }
+
+[[edits]]
+file = "app/components/counter.py"
+old = "save({amount: 1})"
+new = "save({amount: '1'})"

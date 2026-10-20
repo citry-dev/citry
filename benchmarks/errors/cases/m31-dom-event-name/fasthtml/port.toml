@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = 'onclik="toggleDetails()"' }
+
+[[edits]]
+file = "main.py"
+old = 'Button("Details", onclick="toggleDetails()")'
+new = 'Button("Details", onclik="toggleDetails()")'

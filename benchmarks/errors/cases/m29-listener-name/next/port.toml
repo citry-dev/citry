@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/board.tsx", contains = "onHdie=" }
+
+[[edits]]
+file = "app/board.tsx"
+old = "onHide={() => setHidden([...hidden, project.title])}"
+new = "onHdie={() => setHidden([...hidden, project.title])}"

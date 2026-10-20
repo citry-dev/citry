@@ -1,0 +1,2 @@
+status = "prevented"
+reason = """HTMX sends `hx_vals` as ordinary form fields, and a form field is always text, so `json.dumps({"amount": "1"})` sends exactly the same request as `{"amount": 1}`. FastHTML turns the field into a whole number from the route's `amount: int` annotation, so the counter works."""

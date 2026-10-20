@@ -1,0 +1,13 @@
+status = "ported"
+mistake = { file = "app/board.tsx", contains = "<Card" }
+
+[[edits]]
+file = "app/board.tsx"
+old = '''
+            footer={
+              <a href={`#${project.title.toLowerCase()}`}>
+                Open {project.title}
+              </a>
+            }
+'''
+new = ""

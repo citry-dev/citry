@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/actions.ts", contains = "String(state.count + payload.amount)" }
+
+[[edits]]
+file = "app/actions.ts"
+old = "state.count += payload.amount;"
+new = "state.count = String(state.count + payload.amount);"

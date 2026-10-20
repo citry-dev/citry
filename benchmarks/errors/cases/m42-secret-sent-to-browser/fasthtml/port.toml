@@ -1,0 +1,10 @@
+# The page hands a server value to browser code the same way it hands over
+# the API base: written into a script with an f-string.
+status = "ported"
+mistake = { file = "main.py", contains = "json.dumps(SECRET_TOKEN)" }
+
+[[edits]]
+file = "main.py"
+old = '''Script(f"document.getElementById('api').textContent = 'API: ' + {json.dumps(API_BASE)};"),'''
+new = '''Script(f"document.getElementById('api').textContent = 'API: ' + {json.dumps(API_BASE)};"),
+        Script(f"const secretToken = {json.dumps(SECRET_TOKEN)};"),'''

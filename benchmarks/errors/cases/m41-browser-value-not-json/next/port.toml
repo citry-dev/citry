@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "In JavaScript the API base `/api` is a plain string: the language has no path type, and its URL class needs a full address or a base address to resolve against, which a relative setting like `/api` does not have, so a developer would not wrap it in one. A set or a date is not a natural type for an API base. The server component hands the client component the same string value the browser code renders."

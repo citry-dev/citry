@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The card calls `onHide()` with no value. The page passes each card its own callback, which already knows the card's project (`() => setHidden([...hidden, project.title])`), so the call carries no payload whose type could be wrong."

@@ -1,0 +1,17 @@
+# Without a fill the card tag has no content, so it is written as a
+# self-closing tag, as a developer who never wrote the fill would write it.
+status = "ported"
+mistake = { file = "app/app.vue", contains = "<Card" }
+
+[[edits]]
+file = "app/app.vue"
+old = '''
+      >
+        <template #footer>
+          <a :href="`#${card.title.toLowerCase()}`">Open {{ card.title }}</a>
+        </template>
+      </Card>
+'''
+new = '''
+      />
+'''

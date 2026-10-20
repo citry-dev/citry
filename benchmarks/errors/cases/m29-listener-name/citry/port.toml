@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/board_page.py", contains = '@hdie="hideCard"' }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = '@hide="hideCard"'
+new = '@hdie="hideCard"'

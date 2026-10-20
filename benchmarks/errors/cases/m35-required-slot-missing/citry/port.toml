@@ -1,0 +1,17 @@
+# Without a fill the card tag has no content, so it is written as a
+# self-closing tag, as a developer who never wrote the fill would write it.
+status = "ported"
+mistake = { file = "app/components/board_page.py", contains = "<c-Card" }
+
+[[edits]]
+file = "app/components/board_page.py"
+old = '''
+                >
+                  <c-fill name="footer">
+                    <a c-href="'#' + project.slug">Open {{ project.title }}</a>
+                  </c-fill>
+                </c-Card>
+'''
+new = '''
+                />
+'''

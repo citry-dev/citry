@@ -1,0 +1,14 @@
+# The setting is written as a path object in data.py; js_data() passes it
+# to the browser unchanged, as in the clean app.
+status = "ported"
+mistake = { file = "app/data.py", contains = 'API_BASE = PurePosixPath("/api")' }
+
+[[edits]]
+file = "app/data.py"
+old = "from dataclasses import dataclass\n"
+new = "from dataclasses import dataclass\nfrom pathlib import PurePosixPath\n"
+
+[[edits]]
+file = "app/data.py"
+old = 'API_BASE = "/api"'
+new = 'API_BASE = PurePosixPath("/api")'

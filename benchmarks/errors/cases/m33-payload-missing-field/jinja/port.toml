@@ -1,0 +1,9 @@
+status = "ported"
+mistake = { file = "templates/counter.html", contains = 'hx-post="/save"' }
+
+[[edits]]
+file = "templates/counter.html"
+old = '''
+    hx-vals='{"amount": 1}'
+'''
+new = ""

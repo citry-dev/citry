@@ -1,0 +1,2 @@
+status = "prevented"
+reason = """The mistake cannot be written: HTMX sends `hx-vals` as ordinary form fields, and a form field is always text, so `hx-vals='{"amount": "1"}'` sends exactly the same request as `{"amount": 1}`. The save route turns the field into a whole number with `int(str(form["amount"]))`, as it must for any form field, so the counter works."""

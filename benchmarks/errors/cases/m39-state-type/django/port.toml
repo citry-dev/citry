@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/views.py", contains = "str(count)" }
+
+[[edits]]
+file = "board/views.py"
+old = "request.session['count'] = count"
+new = "request.session['count'] = str(count)"

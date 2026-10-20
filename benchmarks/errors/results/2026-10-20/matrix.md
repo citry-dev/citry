@@ -1,17 +1,17 @@
-# Error-prevention results, run 20261020T094732Z
+# Error-prevention results, run 20261020T175743Z
 
-Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
+Cases and tools from commit `60e9fc263512744a094532ba2e3d65958ed569db`.
 
 ## How each mistake ended
 
 | Outcome | Citry | Django + HTMX + Alpine | Jinja + HTMX + Alpine | FastHTML | Nuxt (TypeScript) | Next.js (TypeScript) |
 | --- | --- | --- | --- | --- | --- | --- |
-| Static/IDE error | 16 | 3 | 2 | 11 | 13 | 18 |
+| Static/IDE error | 20 | 3 | 2 | 14 | 16 | 27 |
 | Static/IDE warning | 1 | 0 | 0 | 0 | 0 | 0 |
-| Runtime error | 3 | 5 | 10 | 5 | 5 | 2 |
+| Runtime error | 4 | 9 | 16 | 7 | 6 | 2 |
 | Runtime warning | 0 | 0 | 0 | 0 | 0 | 0 |
-| N/A or prevented | 0 | 1 | 3 | 3 | 1 | 2 |
-| Missed | 4 | 15 | 9 | 5 | 5 | 2 |
+| N/A or prevented | 2 | 4 | 6 | 8 | 4 | 5 |
+| Missed | 10 | 21 | 13 | 8 | 11 | 3 |
 
 ## Every mistake
 
@@ -33,8 +33,8 @@ Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
 
 | Mistake | Citry | Django + HTMX + Alpine | Jinja + HTMX + Alpine | FastHTML | Nuxt (TypeScript) | Next.js (TypeScript) |
 | --- | --- | --- | --- | --- | --- | --- |
-| (caught/total) | (20/24) | (8/23) | (12/21) | (16/21) | (18/23) | (20/22) |
-| **Names: components, inputs, slots, variables** | (8/8) | (1/8) | (3/6) | (6/7) | (6/7) | (6/6) |
+| (caught/total) | (25/35) | (12/33) | (18/31) | (21/29) | (22/33) | (29/32) |
+| **Names: components, inputs, slots, variables** | (11/11) | (2/11) | (6/9) | (8/9) | (7/10) | (9/9) |
 | Misspelled component name | E | R | R | E | R | E |
 | Misspelled input name | E | M | R | E | E | E |
 | Missing required input | E | M | M | E | E | E |
@@ -43,24 +43,37 @@ Cases and tools from commit `b0ef345dcc7a71e5ba7d68d0bbf7677f8a7348be`.
 | Misspelled attribute on a template object | E | M | M | E | E | E |
 | Unknown translation message key | E | M | n/a | n/a | n/a | n/a |
 | Misspelled template directive | R | M | M | M | R | n/a |
-| **Types** | (3/3) | (1/3) | (2/3) | (2/2) | (2/3) | (2/3) |
+| Required slot left unfilled | E | M | R | E | M | E |
+| Template reads a misspelled state field | E | M | R | E | E | E |
+| Browser code reads a misspelled server value | E | R | R | n/a | M | E |
+| **Types** | (4/4) | (1/4) | (2/4) | (3/3) | (3/4) | (3/4) |
 | Wrong-typed input written in markup | E | M | M | n/a | E | E |
 | Wrong-typed input computed in code | E | E | E | E | E° | E |
 | Wrong-typed operation in a template expression | E | M | R | E | M | M |
-| **Template and script syntax** | (3/3) | (3/3) | (3/3) | (3/3) | (3/3) | (3/3) |
+| State field given a value of the wrong type | E | M | M | E | E | E |
+| **Template and script syntax** | (3/3) | (4/4) | (4/4) | (3/3) | (3/3) | (4/4) |
 | Syntax error in a browser expression | R | R | R | R | C | E |
 | Syntax error in component JavaScript | E | E | R | R | E | E |
 | Unclosed element in a template | E | C | C | E | E | E° |
+| Misspelled path to a template or component file | n/a | R | R | n/a | n/a | E |
 | **HTML and CSS** | (1/4) | (0/4) | (0/4) | (1/4) | (2/4) | (3/4) |
 | Invalid HTML attribute value | Ew | M | M | M | E | E |
 | Misspelled HTML attribute name | M | M | M | M | M | E |
 | Misspelled HTML element | M | M | M | E | R | E |
 | Misspelled CSS class | M | M | M | M | M | M |
-| **Events and server requests** | (3/4) | (2/4) | (3/4) | (3/4) | (3/4) | (4/4) |
+| **Events and server requests** | (3/9) | (3/7) | (4/7) | (4/7) | (5/9) | (8/8) |
 | Misspelled server handler name | E | R | R | R | E° | E |
 | State field typo in an update handler | E | M | R | E | E | E |
 | Misspelled field in a request payload | M | R | R | R | M | E |
 | Child emits an event the parent does not listen for | E | M | M | M | E | E |
-| **Server and browser** | (2/2) | (1/1) | (1/1) | (1/1) | (2/2) | (2/2) |
+| Parent listens for a misspelled event | M | M | M | M | M | E |
+| Event sent with a payload of the wrong type | M | n/a | n/a | n/a | n/a | n/a |
+| Misspelled browser event name on an element | M | M | M | M | M | E |
+| Request payload field of the wrong type | M | P | P | P | M | E |
+| Request payload leaves out a required field | M | R | R | R | R | E |
+| Browser reads a misspelled field of the server's reply | n/a | n/a | n/a | n/a | E | n/a |
+| **Server and browser** | (3/4) | (2/3) | (2/3) | (2/3) | (2/3) | (2/3) |
 | Server-only value read in browser code | E | R | R | R | R | R |
 | Server and browser render different content | R | n/a | n/a | n/a | R | R |
+| Server passes browser code a value the browser cannot receive | R | R | R | R | n/a | n/a |
+| Server sends a secret to the browser | M | M | M | M | M | M |

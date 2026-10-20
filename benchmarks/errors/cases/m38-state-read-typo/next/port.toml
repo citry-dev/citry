@@ -1,0 +1,11 @@
+# The page reads the saved total from server state for the count the
+# counter shows when the page loads; the server action still reads and
+# writes `count` correctly. A misspelled name in the markup itself would
+# be m07.
+status = "ported"
+mistake = { file = "app/page.tsx", contains = "state.cuont" }
+
+[[edits]]
+file = "app/page.tsx"
+old = "initialSaved={state.count}"
+new = "initialSaved={state.cuont}"

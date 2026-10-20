@@ -1,0 +1,12 @@
+# The page's fill is the footer block in project_card.html; the case leaves
+# it out, so the template only extends the card.
+status = "ported"
+mistake = { file = "board/templates/board/project_card.html", contains = '{% extends "board/card.html" %}' }
+
+[[edits]]
+file = "board/templates/board/project_card.html"
+old = '''
+
+
+{% block footer %}<a href="#{{ title|lower }}">Open {{ title }}</a>{% endblock %}'''
+new = ""

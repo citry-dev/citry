@@ -1,0 +1,16 @@
+# The card sends its count instead of its title. The count has to be in the
+# card's browser data for the Vue code to read it; without that, the Vue
+# code would read a value that exists only on the server, which is the
+# mistake m12 covers.
+status = "ported"
+mistake = { file = "app/components/card.py", contains = "$emit('hide', count)" }
+
+[[edits]]
+file = "app/components/card.py"
+old = 'return {"title": kwargs.title}'
+new = 'return {"title": kwargs.title, "count": kwargs.count}'
+
+[[edits]]
+file = "app/components/card.py"
+old = "$emit('hide', title)"
+new = "$emit('hide', count)"

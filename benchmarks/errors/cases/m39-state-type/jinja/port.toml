@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app.py", contains = "str(request.app.state.count +" }
+
+[[edits]]
+file = "app.py"
+old = 'request.app.state.count += int(str(form["amount"]))'
+new = 'request.app.state.count = str(request.app.state.count + int(str(form["amount"])))'

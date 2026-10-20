@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and five others report the same 24 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and five others report the same 37 developer mistakes.
 ---
 
 # Benchmarks
@@ -8,7 +8,7 @@ description: How fast Citry and eleven other frameworks make a 1,400-entry page 
 - [Performance](#performance): how long a page with 1,400 entries
   takes to become usable.
 - [Catching errors](#catching-errors): how early each framework
-  reports the same 24 developer mistakes.
+  reports the same 37 developer mistakes.
 
 ## Performance
 
@@ -73,12 +73,12 @@ noise.
 The earlier a mistake is reported, the less time it costs you.
 
 We wrote the same small app in Citry and five other frameworks, made
-the same 24 mistakes in each (a misspelled component name, a
+the same 37 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**.
 
 <c-error-benchmark-chart
-  title="How the 24 mistakes ended in each framework"
+  title="How the 37 mistakes ended in each framework"
 />
 
 ### Read the error chart { #errors-what-the-chart-shows }
@@ -98,20 +98,36 @@ each mistake was first reported**.
 
 ### Where Citry stands { #errors-where-citry-stands }
 
-- **Before the app runs: 17 of 24** (16 errors, 1 warning). Next.js
-  18, Nuxt 13, FastHTML 11, Django + HTMX + Alpine 3, Jinja + HTMX +
-  Alpine 2.
-- **Missed: 4**, the page is wrong with no message:
-    - a misspelled HTML element, HTML attribute name, or CSS class
-    - a misspelled field in the data a button sends to the server
+- **Before the app runs: 21 of 35** (20 errors, 1 warning). Two of
+  the 37 mistakes don't apply to Citry. Next.js 27 of 32, Nuxt 16 of
+  33, FastHTML 14 of 29, Django + HTMX + Alpine 3 of 33, Jinja + HTMX
+  + Alpine 2 of 31.
+- **Missed: 10**, nothing tells you:
+    - a misspelled HTML element, HTML attribute name, or CSS class: the
+      page looks wrong
+    - the data a button sends to the server has a misspelled field, a
+      field of the wrong type, or a missing field: the server rejects
+      it, but the page shows no error
+    - the parent listens for a misspelled event, or the child's event
+      sends a number where the parent expects text: clicking the
+      child's button changes nothing
+    - a misspelled browser event such as `@clik`: the button does
+      nothing
+    - a secret sent to the browser through `js_data()`: the page looks
+      right, but the secret is in what the browser receives. No
+      framework here reports this one, and in Next.js and Nuxt even
+      reading a server-only value in browser code puts it in the page
+      before an error appears.
 - **Warning only: 1**, an invalid attribute value such as
   `type="sumbit"`.
-- **Only at runtime: 3**:
+- **Only at runtime: 4**:
     - a misspelled template directive: fails in the browser
     - the server and browser render different content: fails in the
       browser
     - a syntax error in a browser expression: the server fails to render
       the page
+    - browser code is passed a value it can't receive, such as a path
+      object: the server fails to render the page
 - **Needs `template_data()`**: 3 of these reports (a wrong-typed
   input in markup, a misspelled attribute on a template object, a
   wrong-typed operation in a template expression) appear only when the
@@ -119,17 +135,13 @@ each mistake was first reported**.
   bug ([#202](https://github.com/citry-dev/citry/issues/202)). The
   starter's components define it; components written from
   [Getting Started](/getting-started/installation/) often don't.
-- **Similar mistakes can go unreported.** Three cases are written
-  where a Citry check exists; a similar mistake isn't checked:
-    - a misspelled event name in the parent's listener (the child's
-      misspelled emit is caught)
-    - a misspelled server-side `c-if` (the case misspells a Vue
-      directive)
-    - a server-only value sent to the browser through `js_data()`
-      (reading it in browser code is caught). In the Next.js and Nuxt
-      versions of this case, the server-only value does reach the page.
+- **A similar mistake can go unreported.** The misspelled template
+  directive above is a Vue one, `v-iff`, which fails in the browser. A
+  misspelled server-side `c-if` isn't reported at all.
 - **Why Next.js leads**: TypeScript checks its HTML elements, attribute
-  names and values, and its server actions take typed arguments.
+  names and values, and event names. Its server actions take typed
+  arguments, so a wrong or missing field in the data a button sends is
+  caught too.
 
 ### How we measured { #errors-how-we-measured }
 

@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The page writes the setting's value straight into the script's text with an f-string (`{json.dumps(API_BASE)}`), so the browser code never reads it by a name. Misspelling `API_BASE` in that f-string would be a misspelled name in the server's Python code, as in m07."

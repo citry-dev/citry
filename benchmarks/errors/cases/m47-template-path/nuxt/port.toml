@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "Nuxt imports the components in app/components/ by their file name, so the page uses `<Card>` without naming a file, and the starter has no layout file. There is no path to misspell; misspelling the component name is m01."

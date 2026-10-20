@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "server/api/save.post.ts", contains = "String(state.count + amount)" }
+
+[[edits]]
+file = "server/api/save.post.ts"
+old = "state.count += amount"
+new = "state.count = String(state.count + amount)"

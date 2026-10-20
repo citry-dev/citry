@@ -1,0 +1,20 @@
+# The server component passes the secret to the client component as a
+# prop, which the client component declares but does not use. Next.js sends
+# a client component's props to the browser.
+status = "ported"
+mistake = { file = "app/page.tsx", contains = "secretToken={secretToken}" }
+
+[[edits]]
+file = "app/page.tsx"
+old = 'import { owner, projects, state } from "./data";'
+new = 'import { owner, projects, secretToken, state } from "./data";'
+
+[[edits]]
+file = "app/page.tsx"
+old = "<Board apiBase={API_BASE} projects={projects} initialSaved={state.count} />"
+new = "<Board apiBase={API_BASE} projects={projects} initialSaved={state.count} secretToken={secretToken} />"
+
+[[edits]]
+file = "app/board.tsx"
+old = "  initialSaved: number;\n"
+new = "  initialSaved: number;\n  secretToken?: string;\n"

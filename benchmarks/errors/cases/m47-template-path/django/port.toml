@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/templates/board/project_card.html", contains = 'board/crad.html' }
+
+[[edits]]
+file = "board/templates/board/project_card.html"
+old = '{% extends "board/card.html" %}'
+new = '{% extends "board/crad.html" %}'

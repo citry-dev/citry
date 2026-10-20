@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "main.py", contains = "addEventListener('hdie'" }
+
+[[edits]]
+file = "main.py"
+old = "document.addEventListener('hide', (event) => {"
+new = "document.addEventListener('hdie', (event) => {"

@@ -1,0 +1,11 @@
+# The board route reads the saved total from server state for the count
+# the counter shows when the page loads; the save route still reads and
+# writes `count` correctly. A misspelled name in the template itself would
+# be m07.
+status = "ported"
+mistake = { file = "server/api/board.get.ts", contains = "state.cuont" }
+
+[[edits]]
+file = "server/api/board.get.ts"
+old = "count: state.count,"
+new = "count: state.cuont,"
