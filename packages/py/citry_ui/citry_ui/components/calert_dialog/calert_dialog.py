@@ -130,6 +130,10 @@ class CAlertDialog(LibraryComponent):
         activator: SlotInput[CAlertDialogActivatorSlotData] | None = None
         default: SlotInput[CAlertDialogDefaultSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         validate_html_id("CAlertDialog", kwargs.id)
         if kwargs.id is not None and "\x00" in kwargs.id:

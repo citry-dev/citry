@@ -15,6 +15,8 @@ up in its own index. The ``djc-*`` class names match the vendored
 
 from __future__ import annotations
 
+# Imported at runtime so Citry can check the quick_links input against it.
+from collections.abc import Sequence  # noqa: TC003
 from typing import Any
 
 from citry import Component
@@ -26,9 +28,10 @@ class SearchModal(Component):
     transparent = True
 
     class Kwargs:
-        # None falls back to DEFAULT_QUICK_LINKS (a mutable list cannot be a
-        # dataclass default, which the Kwargs class becomes).
-        quick_links: list | None = None
+        # None shows no quick links (a mutable list cannot be a dataclass
+        # default, which the Kwargs class becomes). The page passes either
+        # its own list or the settings' tuple, so accept any sequence.
+        quick_links: Sequence[Any] | None = None
         pagefind_path: str = "/pagefind/pagefind.js"
         site_target: str = ""
 

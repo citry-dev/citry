@@ -394,6 +394,10 @@ class CTagsInput(LibraryComponent):
     class Slots:
         pass
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def _localized_messages(self, value: CTagsInputMessages | None) -> tuple[CTagsInputMessages, dict[str, bool]]:
         if value is not None and not isinstance(value, CTagsInputMessages):
             raise TypeError(f"CTagsInput messages must be CTagsInputMessages or None, got {value!r}.")

@@ -325,6 +325,7 @@ here.
 | <span id="djc-050">DJC-050</span> | `on_render_before`, `on_render`, `on_render_after` | Merge them into one `on_render(self)`, written as a generator when it runs before and after the template. Details below. | 🔴 |
 | <span id="djc-071">DJC-071</span> | Inner `Defaults` class; `Default(...)`; `get_component_defaults()` | Make defaults annotated fields on `Kwargs`: `size: int = 10`. Delete `Defaults`, which Citry silently ignores. Details below. | 🔴 |
 | <span id="djc-072">DJC-072</span> | Passing `None` gets the declared default | `None` is a value; the default applies only when the input is left out. Details below. | 🟡 |
+| <span id="djc-096">DJC-096</span> | `Kwargs` annotations are not checked when the component renders | Citry checks the outer type of each input against its annotation and raises `TypeError` for a wrong one. Details below. | 🟡 |
 | <span id="djc-073">DJC-073</span> | `self.raw_kwargs` includes defaults | `self.raw_kwargs` holds only what the caller passed, so an omitted input raises `KeyError`. Read defaults from the typed kwargs: `kwargs.size`. | 🟡 |
 | <span id="djc-068">DJC-068</span> | A bare inner `Kwargs`, `Slots`, or `TemplateData` class becomes a NamedTuple | It becomes a dataclass. Use attribute access instead of tuple access. Details below. | 🟡 |
 | <span id="djc-069">DJC-069</span> | `Kwargs = Empty` | There is no `Empty`; the import fails. Write `class Kwargs: pass`, and delete `Args = Empty`. Details below. | 🟡 |
@@ -373,11 +374,22 @@ Details:
       handle `dataclasses.MISSING` while reading each field's `default` or
       `default_factory`. For resolved values, read the typed kwargs while
       rendering, or write a helper that calls the factories.
-- **DJC-072:** A template that showed the default now shows `None`, with
-  no error. Leave the input out where you meant "use the default". If a
-  caller may really hold `None`, resolve it in `template_data`:
+- **DJC-072:** Passing `None` to `title: str = "Hi"` raises `TypeError`
+  when the component renders (`expects str, got None`), because the
+  annotation does not allow `None`. Leave the input out where you meant
+  "use the default". If a caller may really hold `None`, annotate the
+  field `title: str | None = "Hi"` and resolve it in `template_data`:
   `value if value is not None else fallback`. Audit call sites that pass
   `None` on purpose.
+- **DJC-096:** An annotation that does not match the values callers pass
+  now fails, for example `count: int` receiving `"3"` from a plain
+  template attribute. Write `c-count="3"` to pass the number, or widen the
+  annotation, such as `panel_id: int | str`. `title: str = None` keeps
+  working, because a field's own default always passes. To port first
+  and fix types later, set `check_input_types = False` in the
+  component's nested `class Lint:`;
+  [Inputs and validation](/concepts/inputs-and-validation/#typed-kwargs-checks)
+  lists what each annotation accepts.
 - **DJC-068:** Indexing, unpacking, `_asdict()`, and `_replace()` raise,
   and so does setting an attribute the class does not declare. Use
   attribute access, or `self.raw_kwargs` for a plain dict. A class with an
