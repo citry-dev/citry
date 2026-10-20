@@ -51,6 +51,18 @@ HTML, which HTMX swaps in. As in the Django app, the reply shows the total \
 it computed, so a typo in the stored field name shows only after the reload \
 the runner does after its clicks.
 
+The page parts that are plain template markup are written as in the Django \
+app: the subtitle's `{% blocktranslate %}`, the avatar's `{% static %}`, the \
+search form, which submits back to the page with GET, and the `{% url %}` \
+links. Three parts use django-components' own forms. BoardPage's \
+`get_css_data()` returns the heading's color, which django-components turns \
+into the CSS variable `--accent` that board_page.css reads. The page's View \
+passes the searched text to BoardPage as its input `searched`. And the About \
+and project pages are components whose Views are routed with `as_view()`; \
+their templates load the components' CSS and JavaScript with \
+`{% component_css_dependencies %}` and `{% component_js_dependencies %}`, as \
+the docs' page templates do.
+
 A component's View gets a URL in one of two ways the docs show: \
 `get_component_url()`, which makes one up from the class, or \
 `Component.as_view()` in the URL configuration, which the docs' HTML \
@@ -61,7 +73,7 @@ in Python instead, and a misspelled class name there (m06) would be an \
 editor error rather than the runtime error `{% url %}` gives.
 
 Value types: by default django-components turns a component's `Kwargs`, \
-`Slots`, `TemplateData` and `JsData` classes into named tuples, which check \
+`Slots`, `TemplateData`, `JsData` and `CssData` classes into named tuples, which check \
 only that each name is known and each required name is given. Its docs say \
 that to check types as well, a project writes these classes as Pydantic \
 models and installs the djc-ext-pydantic extension, which the \
@@ -69,7 +81,7 @@ django-components project publishes. The benchmark turns on a framework's \
 stricter check when other frameworks here have the same kind of check, and \
 Citry checks input types when a component renders, so this app turns it on: \
 djc-ext-pydantic 1.1.0 (with Pydantic 2.14.1) is listed in \
-`COMPONENTS["extensions"]`, and those four classes are Pydantic \
+`COMPONENTS["extensions"]`, and those classes are Pydantic \
 `BaseModel`s. This is the one change from django-components' defaults. \
 Pydantic's default mode converts text such as "3" to a number, and ignores \
 names a model does not declare: a misspelled input or slot name is reported \
@@ -186,4 +198,17 @@ status = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "click", selector = "button:has-text('Close')" },
   { action = "click", selector = "button:has-text('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:has-text('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:has-text('Project 1')" },
 ]
