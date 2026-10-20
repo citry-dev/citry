@@ -46,7 +46,7 @@ NO_CASE = ("No case written", "#a0aec0")
 # reader of both finds each framework in the same place.
 GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (
     (None, ("citry",)),
-    ("Django libraries", ("django", "rusty", "jinja", "unicorn", "django-components")),
+    ("Django libraries", ("django", "rusty", "jinja", "tetra", "unicorn", "django-components")),
     ("Other Python libraries", ("fasthtml", "reactpy")),
     ("JavaScript SSR", ("next", "nuxt")),
 )

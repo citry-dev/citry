@@ -1,0 +1,9 @@
+# The card's Hide button dispatches the browser event `hide`, which the
+# card list subscribes its `hide` method to with `@public.listen`.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = "$dispatch('hdie', title)" }
+
+[[edits]]
+file = 'board/components/default.py'
+old = "$dispatch('hide', title)"
+new = "$dispatch('hdie', title)"

@@ -1,0 +1,15 @@
+# Tetra registers each component class as a template tag named after it,
+# so the card list uses the card as {% Card %}...{% /Card %}, and the case
+# misspells both tags.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = '{% Crad title=' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '{% Card title=card.title'
+new = '{% Crad title=card.title'
+
+[[edits]]
+file = 'board/components/default.py'
+old = '{% /Card %}'
+new = '{% /Crad %}'

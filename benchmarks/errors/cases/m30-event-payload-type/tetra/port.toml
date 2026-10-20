@@ -1,0 +1,10 @@
+# The card's count is not one of its public attributes, so the browser
+# code cannot read it by name; the template writes it into the Alpine
+# expression.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = "$dispatch('hide', {{ count }})" }
+
+[[edits]]
+file = 'board/components/default.py'
+old = "$dispatch('hide', title)"
+new = "$dispatch('hide', {{ count }})"

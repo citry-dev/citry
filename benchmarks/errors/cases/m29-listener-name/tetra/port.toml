@@ -1,0 +1,9 @@
+# The card list's listener for the card's `hide` event is its `hide`
+# method, which `@public.listen` subscribes to the event by name.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = "@public.listen('hdie')" }
+
+[[edits]]
+file = 'board/components/default.py'
+old = "@public.listen('hide')"
+new = "@public.listen('hdie')"

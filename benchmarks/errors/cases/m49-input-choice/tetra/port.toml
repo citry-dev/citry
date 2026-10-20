@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'yesno:"acent,plain"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = 'yesno:"accent,plain"'
+new = 'yesno:"acent,plain"'

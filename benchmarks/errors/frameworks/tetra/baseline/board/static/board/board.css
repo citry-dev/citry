@@ -1,0 +1,7 @@
+h1 {
+  color: var(--accent);
+}
+
+.board {
+  color: rgb(0, 128, 0);
+}

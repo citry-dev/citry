@@ -1,0 +1,9 @@
+# Tetra's components write their templates inline, so no component names
+# a template file; the page's view does.
+status = "ported"
+mistake = { file = 'board/views.py', contains = 'board/pgae.html' }
+
+[[edits]]
+file = 'board/views.py'
+old = "'board/page.html'"
+new = "'board/pgae.html'"

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'x-show="open &&"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '<p x-show="open">Details are visible</p>'
+new = '<p x-show="open &&">Details are visible</p>'

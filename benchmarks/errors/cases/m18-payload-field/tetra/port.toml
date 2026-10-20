@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """The Add button calls the counter's public method as `save(1)`. Tetra sends a call's arguments to the server as a list and passes them to the Python method by position, so the request carries no field names, and there is no field the button could misspell. Leaving the amount out is m33."""

@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """The counter's `save` returns nothing. Tetra renders the counter again after the call and morphs the new HTML into the page, so no code of the app reads a field of the reply."""

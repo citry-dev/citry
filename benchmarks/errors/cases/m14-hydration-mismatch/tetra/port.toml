@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """Tetra renders its components only on the server and sends finished HTML. In the browser, Alpine starts each component on that HTML and sets x-text and x-show without comparing them to what the server wrote, and after a public method call Tetra morphs in HTML the server rendered again. No code renders a component in the browser, so there is no server render and first browser render that could disagree."""

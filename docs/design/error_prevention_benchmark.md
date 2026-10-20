@@ -104,7 +104,11 @@ uvicorn, as in the performance benchmark in `benchmarks/web`.
 django-unicorn, whose components the server renders again after every
 click, is measured as the Django app with the cards, the counter, the
 details and the search form turned into its components
-(`frameworks/unicorn`). Tetra and Reflex are not measured yet.
+(`frameworks/unicorn`). Tetra, whose components the server renders and
+whose Alpine code in the browser calls their Python methods on the
+server, is measured as the Django app with the interactive parts turned
+into its components (`frameworks/tetra`); it has an app and cases but is
+not in a published run yet. Reflex is not measured yet.
 
 ### Fairness rules
 
@@ -123,7 +127,8 @@ details and the search form turned into its components
 - Each framework's tools are its official starter's tools plus the linters
   and type checker most of its projects add: pyright in standard mode and
   ruff for every Python stack, djLint for the Django, Django Rusty
-  Templates, django-components, django-unicorn and Jinja templates, and
+  Templates, django-components, django-unicorn, Tetra and Jinja
+  templates, and
   ESLint for Nuxt and Next.js. A framework that relies on the language's
   own checks, such as FastHTML's typed Python functions, gets credit for
   what those checks catch. Each tool keeps its default rules, apart from

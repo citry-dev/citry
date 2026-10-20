@@ -1,0 +1,15 @@
+# The developer makes the token a public attribute of the API line, the
+# way the component hands the API base to the browser, although no browser
+# code reads it. Tetra writes every public attribute into the page.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'secret_token: str = public(settings.SECRET_TOKEN)' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '''
+    api_base: str = public('')  # pyright: ignore[reportAssignmentType]
+'''
+new = '''
+    api_base: str = public('')  # pyright: ignore[reportAssignmentType]
+    secret_token: str = public(settings.SECRET_TOKEN)  # pyright: ignore[reportAssignmentType]
+'''

@@ -1,0 +1,9 @@
+# A slot's content renders with the card's own variables, Tetra's way for
+# the card to hand its title and count to the fill.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'Open {{ titel }}' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = 'Open {{ title }} ({{ count }})'
+new = 'Open {{ titel }} ({{ count }})'

@@ -1,0 +1,8 @@
+{
+  "name": "tetra-error-benchmark",
+  "private": true,
+  "description": "The esbuild that Tetra builds the components' JavaScript and CSS with, at the version Tetra 0.8.5 would download itself.",
+  "devDependencies": {
+    "esbuild": "0.27.2"
+  }
+}

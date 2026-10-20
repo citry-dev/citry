@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = '@click="save()"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '@click="save(1)"'
+new = '@click="save()"'

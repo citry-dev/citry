@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'Saved: {{ cuont }}' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = 'Saved: {{ count }}'
+new = 'Saved: {{ cuont }}'

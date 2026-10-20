@@ -493,7 +493,56 @@ keeps the token as an ordinary class attribute, and django-unicorn writes
 every public attribute of a component into the page for its browser
 script.
 
-Tetra and Reflex are not measured yet.
+Tetra has an app and cases ([`frameworks/tetra/`](frameworks/tetra/)
+holds the app and its notes), but it is not in the run above; it joins
+the next published run. Its app is the Django app with the API line, the
+card list, the cards, the counter, the details with their status line and
+the search form turned into [Tetra](https://www.tetraframework.com/)
+components. Each component is a Python class whose template and script
+are strings in the class. The server renders it, and in the browser it
+becomes an Alpine component whose Alpine code can call the class's
+public methods on the server. The saved count lives in the page, as in
+django-unicorn, so after a reload the page shows `Saved: 0`. In a run of
+its own, its cells differ from Django's in these places:
+
+- **m01:** the card list uses the card as a template tag, `{% Card %}`,
+  and Tetra compiles every component's template when Django starts, so
+  the misspelled tag fails `manage.py check`. The Django app's misspelled
+  `{% include %}` fails only when the page renders.
+- **m02 and m04:** the card's values arrive as the arguments of its
+  `load()` method, so a misspelled or missing `title` raises a
+  `TypeError` when the page renders, where the Django app's page shows no
+  title and no error.
+- **m20 and m22:** the details' script and the card's template are
+  strings in the component's Python class, as Tetra's tutorial writes
+  them, so neither VS Code's JavaScript check nor djLint reads them. The
+  script's syntax error makes `manage.py tetrabuild` print esbuild's error,
+  but the command still succeeds, so the build stage does not count it;
+  the page then fails to render (m20). The unclosed element is missed
+  (m22). The Django app's script and template are files, which those tools
+  check.
+- **m39:** the saved total is a typed public attribute of the counter, so
+  pyright reports text stored in it. The Django app keeps the total in
+  the session, which nothing checks.
+- **m30 and m32:** the card sends its title with the `hide` event, so
+  m30 applies, and the card list stores a number where its `hidden`
+  attribute is declared as a list of strings. Tetra checks public
+  attributes against their types when it saves a component's state, so
+  the call fails with a server error. The Add button calls `save('1')`,
+  and Tetra passes the text on unchanged, so adding it to the total fails
+  with a server error (m32), where HTMX's form fields make the Django
+  app's m32 prevented. m30 and m41 are runtime errors only because the
+  app annotates the public attributes' types, following the rule on
+  stricter settings below; without the annotations, a trial run gave a
+  silently wrong m30 and a never-reported m41.
+- **m36 and m37:** Tetra renders a slot's content with the card's own
+  variables, so the fill reads the card's `title` and `count`, and both
+  mistakes apply. Nothing checks what a fill reads, so both are missed.
+  A Django block takes no arguments, so the Django app's cells are n/a.
+- **m18:** n/a. Tetra sends a public method's arguments in order, with
+  no names, so the request has no field to misspell.
+
+Reflex is not measured yet.
 
 ## The reference page
 
@@ -538,8 +587,8 @@ two records means the mistake changed the page.
 **The default journey** clicks `Add`, `Details`, and the first `Hide`, in
 that order. The page is recorded three times around it: right after it
 loads, after the clicks, and after a reload. The reload shows whether the
-saved count survives a new page load. Citry and django-unicorn keep the
-count in the page, and ReactPy keeps it in component state on the server,
+saved count survives a new page load. Citry, django-unicorn and Tetra
+keep the count in the page, and ReactPy keeps it in component state on the server,
 which lasts only while that page is open. So their clean pages show
 `Saved: 0` again after the reload, while the other frameworks keep the
 count on the server and show `Saved: 1`.
@@ -676,7 +725,7 @@ mistake these tools report counts as caught before running, however the
 framework itself would have reported it. For every Python stack that means
 pyright in standard mode (Pylance with type checking turned on) and ruff
 with its default rules; for Django, Rusty, django-components,
-django-unicorn and Jinja templates, djLint; for Nuxt, the official
+django-unicorn, Tetra and Jinja templates, djLint; for Nuxt, the official
 `@nuxt/eslint` module; for Next.js, the ESLint its starter installs.
 Each tool keeps its default rules (for a linter, the rules its framework's
 preset turns on), except for the stricter settings below

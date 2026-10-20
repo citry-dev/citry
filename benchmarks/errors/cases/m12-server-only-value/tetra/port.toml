@@ -1,0 +1,11 @@
+# The API line's Alpine code reads what the component hands the browser,
+# its public attributes. The secret token is not one of them, so reading
+# it here reads a name the browser never received. Making it public would
+# be m42, which sends it to the browser.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'x-text="secret_token"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = 'x-text="api_base"'
+new = 'x-text="secret_token"'

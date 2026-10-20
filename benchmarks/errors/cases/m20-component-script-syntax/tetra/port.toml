@@ -1,0 +1,15 @@
+# The details' script loses the comma after its `toggle()` method, so
+# the object it exports is no longer valid JavaScript.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'toggle() {' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '''
+        this.open = !this.open;
+      },
+'''
+new = '''
+        this.open = !this.open;
+      }
+'''

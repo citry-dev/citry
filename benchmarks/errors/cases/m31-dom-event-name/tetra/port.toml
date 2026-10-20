@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = '@clik="toggle()"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '@click="toggle()"'
+new = '@clik="toggle()"'
