@@ -216,7 +216,29 @@ Two cases are written differently but end as Django's do. With no
 `{% extends %}`, the m47 case misspells the page template's path in the
 view, which fails at runtime.
 
-django-components, Tetra, django-unicorn, Reflex and ReactPy are not
+django-components has an app and cases
+([`frameworks/django-components/`](frameworks/django-components/) holds the
+app and its notes), but it is not in the run above; it joins the next
+published run. Its app is the
+Django app with the card, the counter and the page turned into components.
+Where its cells differ from Django's, the reason is:
+
+- **m02, m04, m05 and m35:** django-components checks each component's
+  inputs and slots when it renders, so a misspelled or missing input or
+  slot gives a server error on the first page load, where the Django app
+  shows a different page with no error. Nothing reports these before the
+  app runs.
+- **m03:** the wrong-type input gives a server error on the first page
+  load, but only because the app turns on django-components' documented
+  type checking (Pydantic models with the djc-ext-pydantic extension),
+  following the rule on stricter settings below. Without it,
+  `count="card.count"` would print the text.
+- **m12:** the page's script reads values only from the data
+  `get_js_data()` sends it, so reading a `secret_token` that was never sent
+  leaves the API line blank, with no error. The Django app's script looks
+  the value up by element id and fails when the element is missing.
+
+Tetra, django-unicorn, Reflex and ReactPy are not
 measured yet.
 
 ## The reference page
@@ -389,14 +411,25 @@ linters and type checker most of its projects add. Earlier is better, so a
 mistake these tools report counts as caught before running, however the
 framework itself would have reported it. For every Python stack that means
 pyright in standard mode (Pylance with type checking turned on) and ruff
-with its default rules; for Django, Rusty and Jinja templates, djLint;
-for Nuxt, the official `@nuxt/eslint` module; for Next.js, the ESLint its
-starter installs. Each tool keeps its default rules, with two exceptions that the
-clean app needs and that such projects commonly make: FastHTML's main.py
-turns off ruff's star-import rules (F403, F405), and Nuxt's ESLint config
-turns off `vue/multi-word-component-names`. An app setting that is off by
-default, such as Jinja's `StrictUndefined`, stays off in the published
-results.
+with its default rules; for Django, Rusty, django-components and Jinja
+templates, djLint; for Nuxt, the official `@nuxt/eslint` module; for
+Next.js, the ESLint its starter installs. Each tool keeps its default
+rules, with three exceptions that the clean app needs and that such
+projects commonly make: FastHTML's main.py turns off ruff's star-import
+rules (F403, F405), Nuxt's ESLint config turns off
+`vue/multi-word-component-names`, and the django-components app silences
+one pyright check on the two lines where a component declares its `View`
+class the way the django-components docs write it.
+
+When a framework has a setting that turns on a stricter check, and other
+frameworks here have the same kind of check, the benchmark turns it on in
+that framework's app, so the frameworks are compared like for like, and the
+framework's notes name each setting changed from the default. The
+django-components app is the first one set up this way: it checks
+component value types with Pydantic, as Citry does when a component
+renders. The other apps are set up under the same rule in a later change;
+until then they keep every setting at its default, such as Jinja's
+`StrictUndefined`.
 
 | Stage | What it measures |
 | --- | --- |

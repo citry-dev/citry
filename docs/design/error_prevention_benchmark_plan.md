@@ -8,8 +8,10 @@ hand-off mistakes on the current page), PR 3 (browser components and slot
 data) and PR 9 (Django Rusty Templates, the Django app on an experimental
 Rust version of Django's template engine). PR 9 landed before PRs 4 and 5,
 so each of those PRs also adds its page changes and cases to the Rusty
-app. The other PRs in section 8 are planned. The published results include
-1b, PR 2, PR 3 and PR 9. The benchmark itself is described in
+app. PR 6 has added django-components, with PR 3's reference-page parts
+and a case for each of the 44 mistakes in the catalogue after PR 3; PRs 4
+and 5 cover it too. The other PRs in section 8 are planned. The published
+results include 1b, PR 2, PR 3, PR 9 and PR 6. The benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
 
@@ -457,9 +459,9 @@ benchmark's stage: editor, check, build, or runtime.
   The benchmark does not run the plugin (see `frameworks/next/framework.toml`).
   Most of these rules have no Citry equivalent, because Citry does not split
   server and client components.
-- **Typed links (`typedRoutes`, editor and build).** Off by default, so
-  under the benchmark's "default rules" policy a misspelled link (m45) is
-  missed. Source: [Next.js TypeScript docs](https://nextjs.org/docs/app/api-reference/config/typescript).
+- **Typed links (`typedRoutes`, editor and build).** Off by default.
+  Whether the decision on stricter settings turns it on is settled when m45
+  is added (PR 4); left off, a misspelled link (m45) is missed. Source: [Next.js TypeScript docs](https://nextjs.org/docs/app/api-reference/config/typescript).
 - **eslint-config-next (check).** Its rules come from
   [packages/eslint-config-next](https://github.com/vercel/next.js/blob/canary/packages/eslint-config-next/src/index.ts):
   - errors: `react/jsx-key` and `jsx-no-duplicate-props`, and
@@ -521,7 +523,8 @@ benchmark's stage: editor, check, build, or runtime.
 - **Nuxt options that are off by default.** `experimental.typedPages` (typed
   `<NuxtLink>`) and the typed message options of @nuxtjs/i18n
   ([experimental features](https://nuxt.com/docs/4.x/guide/going-further/experimental-features)).
-  Under the default-rules policy, m45 is missed in Nuxt too.
+  As with `typedRoutes`, whether the decision on stricter settings turns
+  `typedPages` on is settled with m45; left off, m45 is missed in Nuxt too.
 
 ### Django 6.1 and Jinja 3.1
 
@@ -551,8 +554,10 @@ benchmark's stage: editor, check, build, or runtime.
   loads, but stays silent inside an `{% if %}` that never runs. Macros reject
   an unknown keyword argument with a `TypeError`. `StrictUndefined` is off by
   default ([API docs](https://jinja.palletsprojects.com/en/stable/api/#jinja2.StrictUndefined)).
-- **Not in the default setup.** These are candidates for a separately
-  labeled "stricter setup" run, not the published defaults:
+- **Not in the default setup.** Under the decision on stricter settings,
+  each of these is turned on in the Django app when other frameworks here
+  have the same kind of check; that has not been decided for any of them
+  yet:
   - the [Django Language Server](https://djls.joshthomas.dev/en/latest/template-validation/)
     (djls), which reports unknown tags and filters and filter argument counts
     in the editor;
@@ -576,10 +581,12 @@ benchmark's stage: editor, check, build, or runtime.
   - **At render:** it builds `Kwargs` and `Slots` as NamedTuples, so an
     unknown input, a missing input or an unknown slot raises a `TypeError`.
     A required slot left empty raises with a "did you mean" hint.
-  - **Never at runtime:** value types, because NamedTuples do not check
-    them.
-  - **No static template checks:** it adds no system checks or editor
-    support.
+  - **Not at runtime by default:** value types, because NamedTuples do
+    not check them. Its docs say that to check types, a project writes
+    these classes as Pydantic models and installs the djc-ext-pydantic
+    extension; PR 6 turns that on, under the decision on stricter settings.
+  - **No static template checks:** its one system check looks only at the
+    folders its settings name, and it ships no editor support.
 
   This was read from the installed source.
 - **Tetra 0.8.5**: an unknown public method gives a 404 on the server, or a
@@ -806,6 +813,10 @@ Recommended order:
    direct test of Citry's main claim. Cost is medium. The baseline is the
    Django one with the card turned into a component, and the tools are the
    same as Django's. Nothing extra needs installing.
+   Done in PR 6: the page, the card and the counter are components. One
+   package was installed after all: djc-ext-pydantic, for the type checks
+   the decision on stricter settings turns on. The 37 cases ran in about 76
+   seconds with 5 cases at a time.
 2. **Reflex.** It is the Python framework with the strongest checks before
    running: its compile step checks value types, handler arguments and prop
    values. Part 3 cares most about this, because it catches things Citry
@@ -843,10 +854,10 @@ Each new framework gets `framework.toml`, a baseline, and one case for each
 mistake in the catalogue at that point. So adding frameworks after the
 catalogue grows makes each framework PR larger, but keeps each
 catalogue PR to the frameworks measured at that point. Django Rusty
-Templates (PR 9) came after
-PR 3 and adds PR 3's page changes and cases itself; PRs 4 and 5 cover it
-too. The total work is the same either way; the split in section 8 keeps
-every PR to one dimension.
+Templates (PR 9) and django-components (PR 6) came after PR 3 and add PR
+3's page changes and cases themselves; PRs 4 and 5 cover them too. The
+total work is the same either way; the split in section 8 keeps every PR
+to one dimension.
 
 ---
 
@@ -982,7 +993,7 @@ change per baseline, plus re-checking the clean page.
 | 3. Browser components and slot data (done; the run changed one existing cell, Citry m14, from runtime error to missed, because the details panel now passes `open` to `Status`) | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
 | 4. Forms, links, assets, CSS variables, i18n arguments | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 30 + 24 baseline changes | ~5 min | ~46 min |
 | 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 78 + 6 baseline changes | ~12 min | ~58 min |
-| 6. django-components | framework, baseline, one case per mistake | ~62 | ~8 min | ~66 min |
+| 6. django-components (app and the 37 cases of the current catalogue done; the cases of PRs 3 to 5 come with those PRs) | framework, baseline, one case per mistake | ~62 | ~8 min | ~66 min |
 | 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first | ~62 | unknown: 30-95 min if every case builds the frontend | see open question 4 |
 | 8. ReactPy | | ~62 | ~6 min | |
 | 9. Django Rusty Templates (done, after PR 3 and before PRs 4 and 5) | starts from the Django baseline. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); its first 37 cases ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~7 min) | ~8.5 min for seven frameworks, measured |
@@ -995,6 +1006,13 @@ seven-framework run after PR 9, with `--jobs 5`, took about 8.5 minutes.
 The case counts for PRs 4 and 5 assume six frameworks. Each framework
 added before them, such as Django Rusty Templates in PR 9, adds one case
 per mistake and one baseline change per page addition.
+
+**Stricter settings for the frameworks measured before PR 6.** The decision
+on stricter settings applies to every framework, but only django-components
+(PR 6) was set up under it when it was added; the others get their own PR.
+Until then the published cells compare django-components with its type
+checks on against the other frameworks at their defaults. The
+django-components notes name the cells this changes (m03 and m49).
 
 Each of PRs 2 to 5 should also publish a new `results/<date>/` run and update
 the README's reference-page table and its notes on single cells.

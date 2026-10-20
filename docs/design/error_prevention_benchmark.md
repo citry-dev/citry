@@ -95,7 +95,9 @@ Six more were chosen before any result was seen: Django Rusty Templates,
 django-components, Tetra, django-unicorn, Reflex and ReactPy. Django Rusty
 Templates, an experimental Rust version of Django's template engine, is
 measured as the Django app with its template backend switched
-(`frameworks/rusty`). The others are not measured yet.
+(`frameworks/rusty`). django-components, the project Citry grew out of, is
+measured as the Django app with the page's parts turned into components
+(`frameworks/django-components`). The others are not measured yet.
 
 ### Fairness rules
 
@@ -113,12 +115,17 @@ measured as the Django app with its template backend switched
   `citry-errors validate` enforces the half.
 - Each framework's tools are its official starter's tools plus the linters
   and type checker most of its projects add: pyright in standard mode and
-  ruff for every Python stack, djLint for Django, Django Rusty Templates
-  and Jinja templates, and ESLint for Nuxt and Next.js. A framework that
-  relies on the language's own checks, such as FastHTML's typed Python
-  functions, gets credit for what those checks catch. Each tool keeps its
-  default rules. A stricter setting is not in the published results; it
-  can be added later as a separately labeled run.
+  ruff for every Python stack, djLint for the Django, Django Rusty
+  Templates, django-components and Jinja templates, and ESLint for Nuxt and
+  Next.js. A framework that relies on the language's own checks, such as
+  FastHTML's typed Python functions, gets credit for what those checks
+  catch. Each tool keeps its default rules.
+- When a framework has a setting that turns on a stricter check, and other
+  frameworks here have the same kind of check, its app turns the setting on,
+  so the frameworks are compared like for like (decided on 2026-10-20; see
+  the plan's decisions). The framework's notes name every setting changed
+  from the default. The django-components app is the first one set up this
+  way; the other apps are set up under the rule in a later change.
 - Each case is written the way a developer of that framework would naturally
   make the mistake. A case is not changed after its result is seen, except to
   fix a case that did not express its mistake.
