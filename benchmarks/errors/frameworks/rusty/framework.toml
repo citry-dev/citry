@@ -36,14 +36,26 @@ it;
 template prints the `<script>` tag it returns;
 - no `{% partialdef %}`: the counter's text is its own template, \
 board/saved.html, which the page includes and the save view renders;
-- no `{% extends %}` or `{% block %}`: an included template cannot take \
-markup from the page that includes it, so the card writes its own footer \
-link. A card written as a Django `simple_block_tag`, the other way to take \
+- no `{% extends %}` or `{% block %}`: the card writes its own footer link. \
+A card written as a Django `simple_block_tag`, the usual other way to take \
 markup, fails when the template loads at this commit with Django 6.1.1 \
 (TemplateSyntaxError: 'card' must have a first argument of 'content'). The \
-page has no footer to fill, so the slot mistakes (m05, m35) do not apply.
+page could still hand the card a template name for `{% include %}` to render \
+as its footer, but that needs a separate template file for each fill, so \
+the app keeps the footer in the card. The four slot mistakes do not apply: the page has no \
+footer to fill (m05, m35), and the card hands no slot data to a fill (m36, \
+m37).
 Apart from whitespace, the page the browser gets is the same as the Django \
 app's.
+
+The card's `tone` and the status line inside Details are written as in the \
+Django app: the page picks each card's `tone` with \
+`card.featured|yesno:"accent,plain"`, and the status line is an Alpine \
+component (`Alpine.data('status')` in board.js) nested inside the board's. \
+Alpine has no required or typed component inputs; the status line's \
+markup reads the board's `open` through the scope Alpine shares with it. Its \
+Close button dispatches a `close` event, and a listener on the board sets \
+`open` to false.
 
 Where the two engines differ on a mistake: a misspelled attribute of an \
 existing object, such as `{{ owner.nmae }}`, raises VariableDoesNotExist at \
@@ -133,4 +145,10 @@ default = [
   { action = "click", selector = "button:has-text('Details')" },
   { action = "wait", ms = 300 },
   { action = "click", selector = "button:has-text('Hide')" },
+]
+# Opens the details, closes them from the status line, and opens them again.
+status = [
+  { action = "click", selector = "button:has-text('Details')" },
+  { action = "click", selector = "button:has-text('Close')" },
+  { action = "click", selector = "button:has-text('Details')" },
 ]

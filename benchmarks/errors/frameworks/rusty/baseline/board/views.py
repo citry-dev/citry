@@ -17,13 +17,15 @@ class Owner:
 class Project:
     title: str
     count: int
+    # The page draws a featured project's card with the accent border.
+    featured: bool
 
 
-PROJECTS = [('Alpha', 3), ('Beta', 5), ('Gamma', 8)]
+PROJECTS = [('Alpha', 3, True), ('Beta', 5, False), ('Gamma', 8, False)]
 
 
 def page(request):
-    cards = [Project(title=title, count=count) for title, count in PROJECTS]
+    cards = [Project(title=title, count=count, featured=featured) for title, count, featured in PROJECTS]
     return render(request, 'board/page.html', {
         'owner': Owner(name='Ada'),
         'cards': cards,

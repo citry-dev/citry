@@ -10,14 +10,14 @@
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   {{ api_base_script }}
-  <div class="board" title="Board" x-data="board">
+  <div class="board" title="Board" x-data="board" @close="open = false">
     <h1>{{ heading }}</h1>
     <p>Owner: {{ owner.name }}</p>
     <p>API: <span x-text="api"></span></p>
 
     {% for card in cards %}
       <div x-data="{ shown: true }" x-show="shown" @hide="shown = false">
-        {% include "board/card.html" with title=card.title count=card.count %}
+        {% include "board/card.html" with title=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}
       </div>
     {% endfor %}
 
@@ -34,8 +34,12 @@
       </button>
     </p>
 
-    <button type="button" @click="toggle">Details</button>
+    <button type="button" :aria-expanded="open" @click="toggle">Details</button>
     <p x-show="open">Details are visible</p>
+    <p x-data="status">
+      <span x-text="open ? 'Status: open' : 'Status: closed'"></span>
+      <button type="button" @click="close">Close</button>
+    </p>
 
     <form role="search">
       <button type="submit">Search</button>

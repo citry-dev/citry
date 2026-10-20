@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """The pinned Django Rusty Templates commit has no `{% extends %}` or `{% block %}` tag; both raise NotImplementedError when the template loads, and a `simple_block_tag` card also fails there with Django 6.1.1. So the card writes its own footer link. Even a footer the page handed over as a template name to `{% include %}` would read the card's own context, as a Django block does, so the card hands a fill no slot data of its own and there is no slot-data name to misspell. A misspelled variable in the card's link is m07."""
