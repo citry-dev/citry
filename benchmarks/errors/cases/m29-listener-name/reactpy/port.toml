@@ -3,5 +3,5 @@ mistake = { file = "main.py", contains = 'on_hdie=' }
 
 [[edits]]
 file = "main.py"
-old = 'on_hide=lambda title:'
-new = 'on_hdie=lambda title:'
+old = 'on_hide=make_hide('
+new = 'on_hdie=make_hide('

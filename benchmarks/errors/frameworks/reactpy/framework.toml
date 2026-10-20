@@ -6,14 +6,15 @@ The app follows ReactPy's docs: components are Python functions marked \
 `html.button`) and a dict of attributes, state is kept with \
 `hooks.use_state`, and event handlers are Python functions given as \
 `on_click`. main.py builds a Starlette app and lets \
-`reactpy.backend.starlette.configure` add ReactPy's routes, and uvicorn \
-serves it, the way ReactPy's guide to running an app shows and the way the \
+`reactpy.backend.starlette.configure` add ReactPy's routes; uvicorn serves \
+it. This is how ReactPy's guide to running an app does it, and how the \
 ReactPy app in benchmarks/web runs. ReactPy 1.1.0, Starlette 0.52.1, uvicorn \
-0.52.4 and websockets 17.1 are the web app's versions, and its other \
-resolved versions are held to the web app's too; they are locked in \
-baseline/uv.lock for Python 3.12. Starlette stays on 0.x because ReactPy's \
-Starlette backend calls a method Starlette 1.x does not have. ReactPy has \
-no project generator.
+0.52.4 and websockets 17.1 match the ReactPy app in benchmarks/web, and so \
+do the other resolved versions; all are locked in baseline/uv.lock for \
+Python 3.12. Starlette stays on 0.x because ReactPy's Starlette backend \
+calls `add_websocket_route`, which Starlette 1.x does not have. ReactPy has \
+no project generator and installs no type checker or linter, so the static \
+stages are the tools most Python projects add.
 
 How the page runs: the server sends the browser an HTML page with an empty \
 body. ReactPy's browser code then opens a WebSocket, the server runs the \
@@ -29,22 +30,25 @@ does.
 The parts of the page:
 - Page (main.py) holds the hidden cards' titles and renders the heading, the \
 board and the other parts. The cards sit in a wrapper of their own, because \
-ReactPy matches children without a key by position: with the cards loose in \
-the board, hiding one moved the counter and the details panel up one \
-place, and ReactPy then started them again with fresh state.
+ReactPy matches children without a key by position: if the cards sat \
+directly in the board, hiding one would move the counter and the details \
+panel up one place, and ReactPy would start them again with fresh state.
 - Card (card.py) takes `title: str`, `count: int`, \
 `tone: Literal["plain", "accent"]`, a `footer` function and an `on_hide` \
 function. It hands its title and count back to the page by calling \
 `footer(title, count)`, and the page passes a lambda that builds the link, \
-as the FastHTML app does. Hide calls `on_hide(title)`, so the page's one \
-handler knows which card to hide; a lambda per card that closed over the \
-loop's project would see only the last project, because a Python closure \
-reads a loop variable when it runs.
+as the FastHTML app does. Hide calls `on_hide()` with no value. The page \
+builds each card's handler with `make_hide(project.title)`, a function \
+that returns a handler for one title, the way ReactPy's docs build one \
+handler per list item. (A lambda written in the loop would see only the \
+last project, because a Python closure reads a loop variable when it runs.)
 - Counter (main.py) keeps `count` with `use_state`. Add calls \
 `save(amount=1)`, a plain Python function in the component. The browser \
 sends only the click; the amount is a Python argument that never crosses \
-the network, so the request-payload mistakes (m18, m32, m33) are mistakes \
-in a Python call, which pyright checks.
+the network. The reference page names a `save` handler that receives an \
+amount, so the request-payload mistakes (m18, m32, m33) are written in that \
+call. They score as editor errors because pyright checks that call, \
+although no data crosses the network.
 - Details (main.py) keeps `open` with `use_state` and passes it to the \
 status line. Status (status.py) takes `open: bool` and an `on_close` \
 function, which its Close button calls.
@@ -53,7 +57,10 @@ JavaScript component in api_line.js, loaded with `web.module_from_file` \
 and given the API base as a prop. JavaScript components are how ReactPy's \
 docs add browser code to a page. ReactPy turns a prop's snake_case name \
 into camelCase on the way, so Python passes `api_base` and the script \
-reads `props.apiBase`. A ReactPy developer who only needs to show the value \
+reads `props.apiBase`. The script follows ReactPy's `bind`, `create` and \
+`render` interface directly, as the web app's disclosure.js does, where \
+ReactPy's docs example loads Preact from a CDN; that keeps every run \
+offline. A ReactPy developer who only needs to show the value \
 would write `html.p(f"API: {API_BASE}")`, with no browser code at all; the \
 reference page asks for browser code here because m12 and m40 to m42 test \
 what passes between the server and browser code.
@@ -65,12 +72,14 @@ What pyright sees: ReactPy types `@component` as returning \
 component. A misspelled, missing or wrong-typed input (m02, m04, m05, m17, \
 m25 to m27, m29, m35, m49) is not reported before the app runs. Inside a \
 component, pyright checks the code against the parameters' types, so a \
-wrong operation on `title` (m23), a misspelled callback (m24) and a \
-callback given the wrong type (m30) are editor errors. The page's footer \
-lambda gets no parameter types from that call either, so treating `count` \
-as text (m37) shows only when the card renders. A call with an unknown or \
-missing argument raises a TypeError when ReactPy renders the component; \
-ReactPy logs it with a traceback and draws the component empty. Nothing \
+wrong operation on `title` (m23) and a misspelled callback (m24) are editor \
+errors. Because pyright \
+does not check the call to `Card`, the page's footer lambda gets no \
+parameter types either, so treating `count` as text (m37) fails only when \
+the card renders. A call with an unknown or missing argument raises a \
+`TypeError` when ReactPy renders the component; ReactPy logs it with a \
+traceback and draws the component empty, or, in debug mode as here, shows \
+the error text in its place. Nothing \
 checks argument types at runtime. ReactPy has no setting or typed \
 alternative that lets pyright check component arguments.
 
@@ -87,19 +96,26 @@ check: ruff with its default rules. A ruff finding fails the command, so it \
 counts as an error. ReactPy has no check command. Its hooks docs recommend \
 a flake8 plugin, flake8-reactpy-hooks, that checks where hooks are called; \
 no package of that name is on PyPI. The plugin the ReactPy project does \
-publish, reactpy-flake8 0.7.0 (2023), fails to load in a fresh environment \
-with flake8 7.4.1, because it imports `pkg_resources`, which only an \
-installed setuptools provides. No mistake in the catalogue breaks a rule of \
-hooks, so it would report nothing here either. There is no build stage.
+publish, reactpy-flake8 0.7.0 (2023), fails to load with flake8 7.4.1, \
+because it imports `pkg_resources`, which neither a fresh environment nor \
+setuptools 84.2.1, the current release, provides. No mistake in the \
+catalogue calls a hook in the wrong place, so it would report nothing here \
+either. There is no build stage.
 
-runtime: `uvicorn main:app`. The one setting changed from ReactPy's \
+runtime: `uvicorn main:app`. ReactPy's guide also shows `reactpy.run()`, \
+which it calls a development server: it builds the same Starlette app with \
+Starlette's `debug` flag on and serves it with uvicorn. That flag changes \
+only the HTTP error pages, which no case reaches (every error here happens \
+while ReactPy renders over the WebSocket), so the app keeps the guide's \
+`configure` form, which also lets the runner pick the port. The one setting changed from ReactPy's \
 defaults is debug mode, turned on with `REACTPY_DEBUG_MODE=1` (its default \
-is off). In debug mode ReactPy checks that each element it sends follows its \
-format and that every attribute can be sent as JSON, warns about a list \
-child without a key, logs more, and shows a component's render error in the \
-page in place of the component. The benchmark runs each framework's \
-development mode, and React and Vue give the same kind of development \
-warnings, so the rule on stricter settings turns it on. It changes no cell \
+is off). In debug mode ReactPy checks each element it sends against its \
+element format, checks that every attribute can be sent as JSON, warns \
+about a list child without a key, checks that each JavaScript component a \
+page asks for is exported by its file, logs more, and shows a component's \
+render error in the page in place of the component. The benchmark runs each framework's \
+development mode, and React gives the same kind of development warnings, \
+so the rule on stricter settings turns it on. It changes no cell \
 in this run: each error it shows in the page is also logged without it, and \
 m41 fails either way (in debug mode when the element is built, otherwise \
 when the update is sent, which leaves the page blank while the browser \

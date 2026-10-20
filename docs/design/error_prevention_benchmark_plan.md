@@ -627,7 +627,8 @@ benchmark's stage: editor, check, build, or runtime.
   baseline must use that style.
 - **ReactPy 1.1.0**: `@component` hides the function's parameters from
   pyright, so wrong or missing arguments show up only when the component
-  renders, as a logged `TypeError`. The component then renders empty.
+  renders, as a logged `TypeError`. The component then renders empty (in
+  debug mode, it shows the error text).
   Attributes are an untyped dict. The list-key warning and other checks run
   only with `REACTPY_DEBUG_MODE`. The hooks linter its docs name is not on
   PyPI ([hooks docs](https://reactpy.dev/docs/reference/hooks-api.html)).
@@ -637,9 +638,9 @@ benchmark's stage: editor, check, build, or runtime.
     logs it with a traceback, so the runner sees a server error, and
     draws the component empty, or shows the error text in its place in
     debug mode. A wrong argument type is never reported.
-  - **The hooks linter:** the ReactPy project publishes it as
-    `reactpy-flake8` 0.7.0, which fails to load in a fresh environment
-    because it imports `pkg_resources`. It checks only where hooks are
+  - **The hooks linter:** the package the ReactPy project does publish,
+    `reactpy-flake8` 0.7.0, fails to load in a fresh environment because
+    it imports `pkg_resources`. It checks only where hooks are
     called, which no mistake in the catalogue tests, so it is not a stage.
   - **Debug mode:** PR 8 turns it on under the decision on stricter
     settings. It changes no cell, because each error it shows in the page
@@ -850,10 +851,10 @@ Recommended order:
    pyright and ruff as the tools. It mostly shows what a Python framework
    with weak typing catches, and many cells will be runtime errors that only
    reach the server log.
-   Done in PR 8. The page is ReactPy components served by uvicorn, as in
-   the performance benchmark, with one JavaScript component for the API
-   line. Of the 44 cases, 19 end as editor errors, 9 as runtime errors,
-   11 are missed and 5 do not apply. The runtime errors are mostly
+   Done in PR 8. The page is built from ReactPy components and served by
+   uvicorn, as in the performance benchmark in `benchmarks/web`, with one JavaScript component for the API
+   line. Of the 44 cases, 18 end as editor errors, 1 as a check error, 9
+   as runtime errors, 10 are missed and 6 do not apply. The runtime errors are mostly
    misspelled or missing component arguments, which pyright cannot see
    through `@component`. The 44 cases ran on their own in about a minute
    with `--jobs 5`.
@@ -1036,11 +1037,10 @@ and one baseline change per page addition.
 **Stricter settings for the frameworks measured before PR 6.** The decision
 on stricter settings applies to every framework, but only django-components
 (PR 6) and ReactPy (PR 8) were set up under it when they were added; the
-others get their own PR. ReactPy's one changed setting, debug mode, changes
-no cell.
-Until then the published cells compare django-components with its type
-checks on against the other frameworks at their defaults. The
-django-components notes name the cells this changes (m03 and m49).
+others get their own PR. Until then the published cells compare
+django-components with its type checks on against the other frameworks at
+their defaults. The django-components notes name the cells this changes
+(m03 and m49). ReactPy's one changed setting, debug mode, changes no cell.
 
 Each of PRs 2 to 5 should also publish a new `results/<date>/` run and update
 the README's reference-page table and its notes on single cells.

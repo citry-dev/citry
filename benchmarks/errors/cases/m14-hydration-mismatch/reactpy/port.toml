@@ -1,4 +1,4 @@
 status = "not-applicable"
 reason = """
-ReactPy 1.1.0 renders nothing on the server. The page's HTML is an empty shell, and the browser builds every element from the layout the server sends over a WebSocket, so there is no server-rendered HTML for a first browser render to disagree with. The components themselves, the details panel included, run only on the server, so none can branch on whether it runs in the browser.
+ReactPy 1.1.0 renders nothing on the server. The page's HTML is an empty shell, and the browser builds the page from the elements the server sends as JSON over a WebSocket, so there is no server-rendered HTML for a first browser render to disagree with. The components themselves, the details panel included, run only on the server, so none can branch on whether it runs in the browser.
 """

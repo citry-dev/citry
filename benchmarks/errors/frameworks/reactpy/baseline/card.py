@@ -12,14 +12,12 @@ def Card(
     tone: Literal["plain", "accent"],
     # The card hands its title and count to `footer`, which builds the footer link.
     footer: Callable[[str, int], VdomDict],
-    # The card tells the page which card to hide by its title.
-    on_hide: Callable[[str], None],
+    on_hide: Callable[[], None],
 ) -> VdomDict:
     return html.article(
         {"class_name": f"card card--{tone}"},
         html.p(f"{title}: {count} tasks"),
         html.footer(footer(title, count)),
         # The card only announces the click; the page decides what hiding means.
-        html.button({"type": "button", "on_click": lambda event: on_hide(title)}, "Hide"),
+        html.button({"type": "button", "on_click": lambda event: on_hide()}, "Hide"),
     )
-

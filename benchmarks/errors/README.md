@@ -291,33 +291,41 @@ ReactPy has a case for every mistake
 its cells are not in the published run above yet; the next published run
 adds them. In ReactPy the server runs every component in Python and sends
 the browser the elements to show over a WebSocket, and a click runs a
-Python handler on the server. Its cells differ from the other Python
-frameworks' in these places:
+Python handler on the server. Its cells differ from FastHTML's, the other
+framework here that writes its page as Python functions, in these places:
 
 - **m02, m04, m05, m25, m26, m29 and m35:** ReactPy's `@component`
   decorator is typed so that pyright accepts any arguments in a call to a
   component. A misspelled or missing input, footer or callback raises a
   `TypeError` only when the component renders, which shows as a server
-  error with an empty component. FastHTML's components are plain typed
-  functions, so pyright reports the same mistakes in the editor.
+  error, with the error text in place of the component (debug mode is on;
+  without it the component is empty). FastHTML's components are plain
+  typed functions, so pyright reports m02, m04, m05 and m35 in the editor;
+  FastHTML has no status line (m25, m26) and misses m29.
+- **m37:** for the same reason the page's footer lambda gets no parameter
+  types, so treating `count` as text fails only when the card renders.
 - **m17, m27 and m49:** nothing checks an argument's type or allowed
   choice, before or while the app runs. A count passed as text prints the
-  same text, so m17 is "never"; the status line given text and the
-  misspelled `tone` change the page without an error.
+  same text, so m17 is "never"; a status line given text in place of a
+  boolean (m27) and the misspelled `tone` (m49) change the page without an
+  error.
+- **m28:** the status line's click handler assigns `False` to `open`,
+  which in Python makes a new local name, and ruff reports that the name
+  is never used. FastHTML has no status line.
 - **m18, m32 and m33:** the Add button's handler runs on the server and
   calls `save(amount=1)`. The amount is a Python argument, not a field
   in a request, so pyright reports a misspelled, wrong-typed or missing
   amount in the editor.
-- **m14 and m34:** n/a. ReactPy 1.1.0 renders nothing on the server, so
-  there is no server HTML for the browser to disagree with, and no browser
-  code reads a reply to the click.
 - **m19 and m20:** the conditional that shows the details text and the
-  toggle are Python, so their syntax errors are Python syntax errors,
-  which pyright and ruff report.
-- **m12, m40 and m42:** the API line is a ReactPy JavaScript component
-  that reads the API base from its props. Reading a prop the server did
-  not pass shows `API: undefined` with no error, and a second prop that
-  carries the secret reaches the browser without any tool noticing.
+  toggle's click handler are Python code, so their syntax errors are
+  Python syntax errors, which pyright and ruff report.
+- **m12 and m40:** the API line is a ReactPy JavaScript component that
+  reads the API base from its props. Reading a prop the server did not
+  pass shows `API: undefined` with no error. (A second prop that carries
+  the secret, m42, reaches the browser unnoticed, as in every framework.)
+
+m14 and m34 are n/a, as in the other Python apps: ReactPy 1.1.0 renders
+nothing on the server, and no browser code reads a reply to the click.
 
 Tetra, django-unicorn and Reflex are not measured yet.
 
@@ -363,10 +371,11 @@ two records means the mistake changed the page.
 **The default journey** clicks `Add`, `Details`, and the first `Hide`, in
 that order. The page is recorded three times around it: right after it
 loads, after the clicks, and after a reload. The reload shows whether the
-saved count survives a new page load. Citry keeps it in browser-held state,
-and ReactPy in component state that the server keeps only while that page
-is open, so their clean pages show `Saved: 0` again after the reload, while
-the other frameworks keep it on the server and show `Saved: 1`.
+saved count survives a new page load. Citry keeps the count in
+browser-held state. ReactPy keeps it in component state on the server,
+which lasts only while that page is open. So both clean pages show
+`Saved: 0` again after the reload, while the other frameworks keep the
+count on the server and show `Saved: 1`.
 
 **Every other journey** starts from a fresh load of the page in a new
 browser context, with no cookies or storage left from an earlier journey,
@@ -515,7 +524,8 @@ django-components app was the first one set up this way: it checks the
 types of component inputs when a component renders, as Citry does, using
 Pydantic models. The ReactPy app turns on ReactPy's debug mode, which adds
 development checks such as a warning for a list item without a key, as
-React and Vue do in development. The apps measured before
+React does in development; it changes no cell in this run. The apps
+measured before
 django-components are set up under the same rule in a later change; until
 then they keep every setting at its default, such as Jinja's
 `StrictUndefined`.

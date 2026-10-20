@@ -1,6 +1,8 @@
-# The status line's own click handler assigns `False` to its `open` input.
-# `nonlocal` is what Python needs for that assignment to change the input
-# rather than a new local name.
+# The status line's own click handler assigns `False` to its `open` input, as
+# a React developer would. In Python the assignment makes `open` a new local
+# name in `close`, so nothing changes in the page. Adding `nonlocal open`
+# would rebind the input itself, which changes nothing in the page either and
+# which no tool reports.
 status = "ported"
 mistake = { file = "status.py", contains = 'open = False' }
 
@@ -11,7 +13,6 @@ old = '''
 '''
 new = '''
     def close(event):
-        nonlocal open
         open = False
 
     return html.p(

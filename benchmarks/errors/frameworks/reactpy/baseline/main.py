@@ -1,5 +1,6 @@
 """The error benchmark's reference page, written the way the ReactPy docs write an app."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -74,6 +75,15 @@ def Page() -> VdomDict:
     # Cards are hidden in this page's state only; the project list stays the same.
     hidden, set_hidden = hooks.use_state([])
 
+    # Each card gets a hide handler of its own, built by a function the way
+    # ReactPy's docs build one handler per list item, so the handler knows
+    # its card's title without the card passing it back.
+    def make_hide(title: str) -> Callable[[], None]:
+        def hide() -> None:
+            set_hidden([*hidden, title])
+
+        return hide
+
     return html.div(
         html.h1("Projects"),
         html.div(
@@ -91,7 +101,8 @@ def Page() -> VdomDict:
                         count=project.count,
                         tone="accent" if project.featured else "plain",
                         footer=lambda title, count: html.a({"href": f"#{title.lower()}"}, f"Open {title} ({count})"),
-                        on_hide=lambda title: set_hidden([*hidden, title]),
+                        on_hide=make_hide(project.title),
+                        # A key keeps each card matched to its project when an earlier one is hidden.
                         key=project.title,
                     )
                     for project in projects

@@ -1,7 +1,4 @@
-status = "ported"
-mistake = { file = "card.py", contains = 'on_hide(count)' }
-
-[[edits]]
-file = "card.py"
-old = 'lambda event: on_hide(title)'
-new = 'lambda event: on_hide(count)'
+status = "not-applicable"
+reason = """
+The card calls `on_hide()` with no value. The page gives each card a hide handler of its own, built by `make_hide(project.title)`, which already knows the card's project, so the call carries no payload whose type could be wrong.
+"""
