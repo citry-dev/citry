@@ -162,7 +162,10 @@ class VueVariableInfo:
         )
 
 
-# TemplateLintInfo fields that a record from an older citry may leave out.
+# TemplateLintInfo fields that a record may leave out. They were added after
+# the record's first release, and the app worker can import a different
+# citry than the language server, for example when the project's environment
+# file puts another copy on PYTHONPATH.
 _OPTIONAL_LINT_INFO_FIELDS = frozenset({"rule_misspelled_directive"})
 
 
@@ -292,9 +295,9 @@ class TemplateLintInfo:
     @classmethod
     def from_dict(cls, value: object) -> TemplateLintInfo:
         """Validate and restore one detached lint record."""
-        # A rule added after the first release may be missing from a record
-        # that an older citry app worker sent, so it gets its default; every
-        # other field must be present, and no unknown field is accepted.
+        # A record from an older citry has no field added later, so that
+        # field gets its default; every other field must be present, and no
+        # unknown field is accepted.
         if type(value) is not dict or set(value) - _OPTIONAL_LINT_INFO_FIELDS != {
             "rule_unknown_template_variable",
             "template_variables",

@@ -9,12 +9,18 @@ All notable changes to `citry-lsp` are documented here.
 - The editor reports a misspelled directive, such as `c-iff` for `c-if`,
   with the severity your application's `rule_misspelled_directive` sets.
 
+### Changed
+
+- `citry check --types` no longer checks components installed in a `.venv`
+  or `site-packages` folder inside your project; their authors check them.
+
 ### Fixed
 
 - `citry check --types` and the editor now report type errors in a
   component that has no `template_data()` of its own, or whose
   `template_data()` or `js_data()` comes from a class in an installed
-  package, an editable install, or a `.venv` inside the project.
+  package, an editable install, or a `.venv` inside the project. An inline
+  template is checked when its class subclasses `Component` directly.
 
 ## [0.2.0] - 2026-10-19
 

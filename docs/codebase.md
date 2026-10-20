@@ -250,7 +250,8 @@ The `citry.template.invalid-attribute-value` rule checks static attribute
 values against
 [`citry/_html_attribute_values.py`](../packages/py/citry/citry/_html_attribute_values.py),
 and the `citry.template.misspelled-directive` rule reads the HTML attribute
-names in the same module, so that `c-id` or `c-form` is never reported.
+names in the same module, so that an attribute of the element, such as
+`c-id`, or `c-form` on `<input>`, is not reported.
 That module is generated from the HTML Standard's attribute index, and its
 docstring records the standard's update date. To pick up keywords and
 attribute names the standard has added or removed, run:
@@ -262,10 +263,11 @@ python scripts/generate_html_attribute_values.py
 The script downloads https://html.spec.whatwg.org/multipage/indices.html; pass
 `--source FILE` to read a saved copy instead. It keeps only rows whose values
 are a closed list of keywords, and adds a few closed sets that the index
-describes in words, such as `<input type>`. Review the diff before committing:
-a new keyword or attribute name becomes valid, and a removed one starts being
-reported. No CI
-job refreshes the table, because that would need network access.
+describes in words, such as `<input type>`, plus a few values browsers accept
+outside the standard, such as `wrap="off"`. Review the diff before
+committing: a new keyword or attribute name becomes valid, and a removed one
+starts being reported. No CI job refreshes the table, because that would
+need network access.
 
 ### Running tests
 

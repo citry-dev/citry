@@ -355,11 +355,10 @@ class AlpineAttributeFinding:
     end_index: int
 
 
-# Severity of an invalid attribute value when no component is known. A
-# component's Lint "ignore" cannot reach this case, so a warning keeps a
-# script-owned attribute value from failing `citry check --static` with no
-# way to turn the finding off.
-_UNOWNED_ATTRIBUTE_VALUE_SEVERITY: Literal["warning"] = "warning"
+# Severity of an invalid attribute value when the caller has no settings to
+# pass, as in `citry check --static`. No `Lint` setting can reach that case,
+# so a warning keeps a value that a page script reads from failing the check.
+_NO_SETTINGS_ATTRIBUTE_VALUE_SEVERITY: Literal["warning"] = "warning"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1081,7 +1080,7 @@ def lint_attribute_values(
         Findings in source order.
 
     """
-    effective = tuple(consumers) or (AttributeValueLintConsumer(_UNOWNED_ATTRIBUTE_VALUE_SEVERITY),)
+    effective = tuple(consumers) or (AttributeValueLintConsumer(_NO_SETTINGS_ATTRIBUTE_VALUE_SEVERITY),)
     active = [consumer.rule_invalid_attribute_value for consumer in effective]
     active = [severity for severity in active if severity != "ignore"]
     if not active:
@@ -1326,24 +1325,25 @@ def lint_misspelled_directives(
       ``if``, ``elif``, ``else``, ``for``, ``empty``, or ``bind``;
     - is one of those names in other letter case, such as ``c-If``;
     - is a spelled-out ``elif``, such as ``c-else-if``; or
-    - names a directive of Vue, such as ``c-show`` or ``c-model``, or one of
-      the ``#c-key`` and ``#c-ignore`` attributes without their ``#``.
+    - is ``show`` or ``model``, directive names from Vue, or ``key`` or
+      ``ignore``, which Citry spells ``#c-key`` and ``#c-ignore``.
 
-    HTML attribute names compare without letter case, so ``c-id``,
-    ``c-ID``, ``c-form`` on ``<input>``, and ``c-data-*`` or ``c-aria-*``
-    names are never reported. A custom element accepts the
-    global attributes and those of a form-associated custom element, and
-    ``<c-element>``, whose tag is chosen at render time, accepts the
-    attributes of every element. Component tags, the other ``c-*`` tags,
-    PascalCase Vue components, and elements inside ``<svg>`` or ``<math>``
-    are skipped.
+    An attribute of the element is not reported, in any letter case, so
+    ``c-id``, ``c-ID``, ``c-form`` on ``<input>``, and ``c-data-*`` or
+    ``c-aria-*`` names pass. ``<c-element>``, whose tag is chosen at render
+    time, accepts the attributes of every element. A custom element accepts
+    the global attributes and those of a form-associated custom element, and
+    because it may define its own, such as ``kind``, a name with one
+    replaced letter and a name from the last bullet are not reported there.
+    Component tags, the other ``c-*`` tags, PascalCase Vue components, and
+    elements inside ``<svg>`` or ``<math>`` are skipped.
 
     A finding is reported unless every consumer ignores the rule, and it is an
     error when any reporting consumer says ``"error"``. The check needs no
-    component namespace, so an empty ``consumers``, as ``citry check
-    --static`` and an editor without project analysis pass, uses the default
-    ``"error"``. An attribute that is really meant for the browser can go
-    through ``c-bind``, which this rule does not read.
+    component namespace. With an empty ``consumers``, which ``citry check
+    --static`` and an editor without project analysis pass, findings use the
+    default ``"error"``. An attribute that is really meant for the browser
+    can go through ``c-bind``, which this rule does not read.
 
     Args:
         template: Parsed Citry template AST.
@@ -1372,12 +1372,11 @@ _ELEMENT_DIRECTIVES = ("if", "elif", "else", "for", "empty", "bind")
 # Spellings an author brings from other languages for `c-elif`.
 _SPELLED_OUT_ELIF = frozenset({"else-if", "elseif", "elsif", "else_if"})
 # Names that are a directive elsewhere but not in Citry, with what to write
-# instead. The `vue` entries are Vue directives that work in a Citry template
-# with their `v-` prefix.
+# instead. `c-show` keeps its Python condition with `c-if`; `v-model` has no
+# Python form, so the message names Vue's directive.
 _FOREIGN_DIRECTIVES: dict[str, tuple[str, Literal["default", "vue"]]] = {
-    "show": ("v-show", "vue"),
+    "show": ("c-if", "default"),
     "model": ("v-model", "vue"),
-    "html": ("v-html", "vue"),
     "key": ("#c-key", "default"),
     "ignore": ("#c-ignore", "default"),
 }
@@ -1402,9 +1401,18 @@ def _collect_misspelled_directives(
         if _ascii_lower(tag) in {"svg", "math"}:
             continue
         accepted = _accepted_attribute_names(tag)
+        # A custom element defines its own attributes, such as `kind` on a
+        # design-system button, so only the clearest typos are reported there.
+        custom_element = tag not in _HTML_ELEMENTS and tag != "c-element"
         for attr in node.start_tag.attrs:
             if accepted is not None:
-                finding = _misspelled_directive_finding(attr, accepted, severity, base_index)
+                finding = _misspelled_directive_finding(
+                    attr,
+                    accepted,
+                    severity,
+                    base_index,
+                    custom_element=custom_element,
+                )
                 if finding is not None:
                     found.append(finding)
             # A template-valued attribute holds more HTML, whose offsets are
@@ -1455,6 +1463,8 @@ def _misspelled_directive_finding(
     accepted: tuple[Collection[str], ...],
     severity: Literal["warning", "error"],
     base_index: int,
+    *,
+    custom_element: bool,
 ) -> MisspelledDirectiveFinding | None:
     """Return a finding for one ``c-*`` attribute that looks like a directive but renders as an attribute."""
     name = attr.key.content
@@ -1469,7 +1479,7 @@ def _misspelled_directive_finding(
     # HTML attribute names ignore letter case, so `c-ID` still sets `id`.
     if any(lowered in names for names in accepted) or lowered.startswith(("data-", "aria-")):
         return None
-    suggestion = _directive_suggestion(lowered)
+    suggestion = _directive_suggestion(lowered, custom_element=custom_element)
     if suggestion is None:
         return None
     target, variant = suggestion
@@ -1490,22 +1500,32 @@ def _misspelled_directive_finding(
     )
 
 
-def _directive_suggestion(lowered: str) -> tuple[str, Literal["default", "vue"]] | None:
-    """Return the directive a lowercased ``c-*`` suffix most likely meant, with its message variant."""
+def _directive_suggestion(
+    lowered: str,
+    *,
+    custom_element: bool,
+) -> tuple[str, Literal["default", "vue"]] | None:
+    """
+    Return the directive a lowercased ``c-*`` suffix most likely meant, with its message variant.
+
+    On a custom element, a name from another framework and a name with one
+    replaced letter, such as ``kind`` for ``bind``, may be the element's own
+    attribute, so only the other mistakes are reported there.
+    """
     if lowered in _SPELLED_OUT_ELIF:
         return "c-elif", "default"
     if lowered in _FOREIGN_DIRECTIVES:
-        return _FOREIGN_DIRECTIVES[lowered]
+        return None if custom_element else _FOREIGN_DIRECTIVES[lowered]
     # A name in other letter case, such as `If`, has distance zero here, so
     # it is found by the same loop. The first directive in the list wins a
     # tie, which keeps the suggestion stable.
     for directive in _ELEMENT_DIRECTIVES:
-        if _within_one_edit(lowered, directive):
+        if _within_one_edit(lowered, directive, allow_replacement=not custom_element):
             return f"c-{directive}", "default"
     return None
 
 
-def _within_one_edit(written: str, expected: str) -> bool:
+def _within_one_edit(written: str, expected: str, *, allow_replacement: bool = True) -> bool:
     """Return whether one inserted, deleted, replaced, or swapped letter turns ``written`` into ``expected``."""
     if written == expected:
         return True
@@ -1516,7 +1536,7 @@ def _within_one_edit(written: str, expected: str) -> bool:
             index for index, (left, right) in enumerate(zip(written, expected, strict=True)) if left != right
         ]
         if len(differences) == 1:
-            return True
+            return allow_replacement
         # Two neighbouring letters typed in the wrong order, as in `fi`.
         return (
             len(differences) == 2

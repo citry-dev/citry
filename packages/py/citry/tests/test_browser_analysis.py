@@ -1163,6 +1163,8 @@ def _attribute_values(
         '<img loading="lazy" decoding="async" fetchpriority="high" crossorigin referrerpolicy="no-referrer">',
         '<video preload crossorigin="use-credentials"></video><track kind="captions">',
         '<textarea wrap="hard"></textarea><table><tr><th scope="colgroup"></th></tr></table>',
+        # Browsers support `wrap="off"` though the standard does not list it.
+        '<textarea wrap="off"></textarea>',
         '<ol type="I"><li type="DISC">x</li></ol><ul type="Square"></ul><bdo dir="rtl">x</bdo>',
         # The browser decodes character references before it reads the keyword.
         '<div draggable="&#116;rue" dir="&#x61;uto"></div>',
@@ -1386,25 +1388,43 @@ def test_misspelled_directive_lint_reports_near_misses_of_each_directive():
 
 
 def test_misspelled_directive_lint_names_vue_and_hash_spellings():
+    # `c-show` keeps its Python condition as `c-if`; `c-html` is left alone,
+    # because no spelling inserts a Python value as HTML safely.
     source = '<div c-show="a" c-model="b" c-html="c" c-key="d" c-ignore="e"></div>'
     assert [suggestion for _name, suggestion, _severity in _directives(source)] == [
-        "v-show",
+        "c-if",
         "v-model",
-        "v-html",
         "#c-key",
         "#c-ignore",
     ]
-    show, key = (
-        lint_misspelled_directives(parse_template(text), ()) for text in ('<p c-show="a"></p>', '<p c-key="d"></p>')
+    model, key = (
+        lint_misspelled_directives(parse_template(text), ()) for text in ('<p c-model="a"></p>', '<p c-key="d"></p>')
     )
-    assert show[0].message == (
-        "'c-show' is not a Citry directive, so it renders an HTML attribute named 'show'. "
-        "For Vue's directive, write 'v-show'."
+    assert model[0].message == (
+        "'c-model' is not a Citry directive, so it renders an HTML attribute named 'model'. "
+        "For Vue's directive, write 'v-model'."
     )
     assert key[0].message == (
         "'c-key' is not a Citry directive, so it renders an HTML attribute named 'key'. Did you mean '#c-key'?"
     )
-    assert show[0].code == "citry.template.misspelled-directive"
+    assert model[0].code == "citry.template.misspelled-directive"
+
+
+def test_misspelled_directive_lint_reports_only_clear_typos_on_custom_elements():
+    # A custom element may define `kind` or `show` itself, so a replaced
+    # letter or a name from another framework passes there; an added,
+    # dropped, or swapped letter, other letter case, and a spelled-out
+    # `c-elif` are still reported.
+    accepted = '<cds-button c-kind="k" c-show="s" c-model="m" c-key="y" c-of="o"></cds-button>'
+    assert _directives(accepted) == []
+    reported = '<my-el c-iff="a" c-fi="b" c-If="c" c-fro="d" c-else-if="e"></my-el>'
+    assert [suggestion for _name, suggestion, _severity in _directives(reported)] == [
+        "c-if",
+        "c-if",
+        "c-if",
+        "c-for",
+        "c-elif",
+    ]
 
 
 def test_misspelled_directive_lint_maps_nested_template_offsets_into_the_outer_source():

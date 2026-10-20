@@ -152,7 +152,7 @@ ENUMERATED_VALUES: Final[dict[str, dict[str, tuple[str, ...]]]] = {'accept-chars
           'li': ('1', 'a', 'A', 'i', 'I', 'none', 'disc', 'circle', 'square'),
           'ol': ('1', 'a', 'A', 'i', 'I'),
           'ul': ('none', 'disc', 'circle', 'square')},
- 'wrap': {'textarea': ('soft', 'hard')},
+ 'wrap': {'textarea': ('soft', 'hard', 'off')},
  'writingsuggestions': {'*': ('true', 'false', '')}}
 
 # (element, attribute) -> the keywords that compare with letter case.

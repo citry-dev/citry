@@ -8,8 +8,9 @@ from the WHATWG HTML Standard's attribute index, where the "Value" column lists
 the allowed keywords of an enumerated attribute, such as ``"true"; "false"``.
 
 The rule ``citry.template.misspelled-directive`` reads the attribute names from
-the same index, plus its event handler attributes, so a ``c-*`` name that is a
-real HTML attribute, such as ``c-id`` or ``c-form``, is never reported.
+the same index, plus its event handler attributes, so a ``c-*`` name that is an
+attribute of its element, such as ``c-id``, or ``c-form`` on ``<input>``, is not
+reported.
 
 Only rows whose value cell is a closed list of keywords are kept. A row that
 also allows open text, such as ``"any"`` or a number for ``step``, a custom
@@ -78,6 +79,9 @@ SUPPLEMENTS: dict[str, dict[str, tuple[str, ...]]] = {
         "li": ("1", "a", "A", "i", "I", "none", "disc", "circle", "square"),
         "ul": ("none", "disc", "circle", "square"),
     },
+    # `wrap="off"` is not in the standard, but every major browser supports
+    # it to turn off soft wrapping, and no standard keyword does that.
+    "wrap": {"textarea": ("soft", "hard", "off")},
     # "Referrer policy": the referrer policy keywords of the Referrer Policy
     # standard, which `referrerpolicy` attributes accept, including the empty string.
     "referrerpolicy": {

@@ -113,7 +113,9 @@ finding has an `origin`, `code`, `severity`, `message`, and `range`.
 ### `check --static` syntax
 
 When you cannot import the project, for example in a CI job without its
-dependencies, check template syntax only:
+dependencies, check template syntax and the lint rules that need no
+component data, such as
+[misspelled directives](/ide/template-linting/#find-misspelled-directives):
 
 ```bash
 citry check --static

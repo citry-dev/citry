@@ -8,7 +8,8 @@ description: Find names that come from nowhere, Python variables read by Vue, le
 Some template mistakes show up only when the page renders, and some never
 raise an error at all. A misspelled variable fails only when the page
 renders. A Vue binding can read a Python loop variable the browser never
-sees. The browser silently ignores an attribute value it does not accept.
+sees. The browser silently ignores an attribute value it does not accept,
+and a misspelled `c-if` renders the element anyway.
 Citry's lint rules find these mistakes in the editor and in `citry check`,
 before anyone opens the page.
 
@@ -336,11 +337,13 @@ class LegacyWidget(Component):
 ## Misspelled directives { #find-misspelled-directives }
 
 Citry reads only its own directive names, such as `c-if` and `c-for`. Any
-other `c-` name binds an ordinary attribute, so a typo does not fail. The
-element below always shows up, and gets an `iff` attribute:
+other `c-` name on an HTML element sets an ordinary attribute from the
+Python value, so a typo does not fail. The element below always shows up,
+whatever `show` is:
 
 ```citry-html
-{# Error: 'c-iff' is not a Citry directive; did you mean 'c-if'? #}
+{# Error: 'c-iff' is not a Citry directive, so it renders an
+   HTML attribute named 'iff'. Did you mean 'c-if'? #}
 <div c-iff="show">Details</div>
 
 {# Right: the element renders only when show is true #}
@@ -355,18 +358,25 @@ like a directive:
   `bind`, such as `c-iff`, `c-fro`, or `c-ele`;
 - a directive in other letter case, such as `c-If`;
 - a spelled-out `c-elif`, such as `c-else-if` or `c-elseif`;
-- a Vue directive with the wrong prefix, such as `c-show` or `c-model`,
-  which you write as `v-show` or `v-model`, or `c-key` and `c-ignore`,
-  which you write as `#c-key` and `#c-ignore`.
+- `c-show`, which you write as `c-if`, or a Vue directive written with
+  `c-`, such as `c-model`, which you write as `v-model`;
+- `c-key` or `c-ignore`, which you write as `#c-key` or `#c-ignore`.
 
-Real attribute names never count, so `c-id`, `c-form` on `<input>`,
-`c-kind` on `<track>`, and every `c-data-*` and `c-aria-*` name pass. On a
-custom element such as `<my-input>`, the attributes every element takes
-and those of form controls pass. Component tags are skipped, because there
-a `c-` name is a Python keyword argument.
+An attribute the element really has is never reported, in any letter case:
+`c-id`, `c-ID`, `c-form` on `<input>`, `c-kind` on `<track>`, and every
+`c-data-*` and `c-aria-*` name pass. `<c-element>` accepts the attributes
+of every element. A custom element such as `<my-button>` can define its own
+attributes, so there only a clear typo is reported, such as `c-iff` or
+`c-If`, not `c-kind` or `c-show`. Component tags and elements inside
+`<svg>` or `<math>` are skipped; on a component tag, a `c-` name is a
+Python keyword argument.
 
-When the attribute really is meant for the browser, pass it through
-`c-bind`, which this rule does not read:
+An attribute named like a directive, such as `for` on `<label>`, cannot
+take `c-`, because `c-for` is always the loop. Pass it through `c-bind`.
+
+When the attribute really is meant for the browser, such as a `kind`
+attribute that a page script reads (`c-kind` on a `<div>` looks like
+`c-bind`), pass it through `c-bind`, which this rule does not read:
 
 ```citry-html
 <div c-bind="{'kind': variant}">...</div>
@@ -394,12 +404,14 @@ cannot tell which component owns a template. They skip the unknown-name
 rules.
 
 They still run the Alpine, attribute-value, and misspelled-directive rules,
-which need no component data, but they cannot read your settings, so they
-use the default severities. A leftover `x-cloak` is then an error even if your settings
-ignore it. An invalid attribute value is a warning there, not an error,
-because a component's `"ignore"` setting cannot reach it. They also cannot
-tell which values an extension's template syntax produces, so they may
-report a value that `citry --app ... check` does not.
+which need no component data. They cannot read your settings, so they use
+the default severities, with one exception: an invalid attribute value is a
+warning there, so a value that a page script reads cannot fail the check.
+A leftover `x-cloak` and a misspelled directive stay errors even if your
+settings ignore them. To keep a name that is really meant for the browser
+out of the check, pass it through `c-bind`. These tools also cannot tell
+which values an extension's template syntax produces, so they may report a
+value that `citry --app ... check` does not.
 
 ### Shared templates
 

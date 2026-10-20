@@ -4671,8 +4671,10 @@ def _expression_shadow_consumers(
     for owner, context in zip(owners, contexts, strict=True):
         # ty checks only files in its project, and the copied module may be a
         # base class outside it, so the copy is placed next to the
-        # component's own file. A file template is the fallback, because the
-        # user's checked files hold it too.
+        # component's own file. A component with no known Python file falls
+        # back to its template file, which ty also checks. Without either,
+        # no consumer of this template is checked, because every query must
+        # hold for all of them.
         anchor_file = owner.python_file or owner.template_file
         if (
             context is None
@@ -8509,10 +8511,12 @@ def js_data_inference_requests(
         # ty answers only for a copy placed next to the user's own file, so
         # an installed component, whose authors check it, is skipped.
         anchor_file = component.python_file
+        # The duplicate check comes first, because the project-file check
+        # looks at the folders on disk.
         if (
-            anchor_file is None
+            (source_file, owner.qualname) in requests
+            or anchor_file is None
             or not is_project_source_file(anchor_file, workspace)
-            or (source_file, owner.qualname) in requests
         ):
             continue
         found, source = (

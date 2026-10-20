@@ -624,8 +624,8 @@ def virtual_document_uri(source_file: Path, identity: str, *, anchor_file: Path)
     Return a deterministic unsaved URI for a generated copy of `source_file`, placed next to `anchor_file`.
 
     ty reports findings only for its own project files: files inside its
-    workspace that it does not exclude, such as anything under a `.venv` or
-    outside the workspace. `source_file` may be an inherited base class in an
+    workspace that it does not exclude. A file under a `.venv`, or outside
+    the workspace, gets no findings. `source_file` may be an inherited base class in an
     installed package, so the copy goes next to `anchor_file`, the component
     being checked, which is a file the user has ty check. The copy's relative
     imports are already absolute, so its directory does not change what they

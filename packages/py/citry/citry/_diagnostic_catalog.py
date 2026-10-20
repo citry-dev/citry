@@ -867,8 +867,7 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                     'custom elements, elements inside <svg> or <math>, and attributes '
                                                     'that take a list of words, such as rel, are not checked. citry '
                                                     'check --static and an editor that has not loaded your application '
-                                                    "report it as a warning, because a component's "
-                                                    'rule_invalid_attribute_value setting cannot reach them.'},
+                                                    'report it as a warning, because they cannot read your settings.'},
  'citry.template.marker-name-invalid': {'code': 'citry.template.marker-name-invalid',
                                         'constant': 'TEMPLATE_MARKER_NAME_INVALID',
                                         'defaultSeverity': 'error',
@@ -898,12 +897,12 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                        'source': '<div c-iff="show">Details</div>',
                                                        'title': 'A typo in c-if'},
                                                       {'language': 'citry-html',
-                                                       'source': '<div c-show="open">Menu</div>',
+                                                       'source': '<input c-model="query">',
                                                        'title': 'A directive name from Vue'}],
                                          'fix': 'Use the directive the message names. If the attribute really is meant '
-                                                'for the browser, set rule_misspelled_directive to "ignore" for that '
-                                                'component, or pass it through c-bind, such as c-bind="{\'iff\': '
-                                                'value}".',
+                                                'for the browser, pass it through c-bind, such as c-bind="{\'kind\': '
+                                                'value}", or set rule_misspelled_directive to "ignore" for that '
+                                                'component.',
                                          'messages': {'default': "'{name}' is not a Citry directive, so it renders an "
                                                                  "HTML attribute named '{attribute}'. Did you mean "
                                                                  "'{suggestion}'?",
@@ -916,16 +915,18 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                         'suggestion': 'The directive the author probably meant.'},
                                          'summary': 'A c-* attribute on an HTML element looks like a Citry directive, '
                                                     'such as c-iff for c-if, but is not one. Citry renders it as an '
-                                                    'ordinary attribute, so the element shows up whatever the '
-                                                    'condition says.',
+                                                    'ordinary attribute, and the directive never runs.',
                                          'surfaces': ['check', 'lsp'],
                                          'title': 'Misspelled Citry directive',
                                          'when': 'The part after c- is not an HTML attribute that the element accepts, '
-                                                 'and it is one typing mistake away from if, elif, else, for, empty, '
-                                                 'or bind, the same name in other letter case, such as c-If, a '
-                                                 'spelled-out form such as c-else-if, or a directive name from Vue, '
-                                                 'such as c-show. Only HTML elements, custom elements, and <c-element> '
-                                                 'are checked, not component tags or elements inside <svg> or <math>. '
+                                                 'and it looks like a directive: one typing mistake away from if, '
+                                                 'elif, else, for, empty, or bind; one of those in other letter case, '
+                                                 'such as c-If; a spelled-out c-elif, such as c-else-if; c-show for '
+                                                 'c-if or c-model for v-model; or c-key or c-ignore without the #. On '
+                                                 'a custom element, which can define its own attributes, a replaced '
+                                                 'letter and the c-show, c-model, c-key, and c-ignore names are not '
+                                                 'reported. Only HTML elements, custom elements, and <c-element> are '
+                                                 'checked, not component tags or elements inside <svg> or <math>. '
                                                  'citry check --static and an editor that has not loaded your '
                                                  'application report it too.'},
  'citry.template.unknown-component': {'code': 'citry.template.unknown-component',

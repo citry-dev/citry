@@ -44,10 +44,14 @@ Write the expression without `{{ }}`: `c-title="user.name"`, not
 `c-title=""` are errors. Only the `c-else` and `c-empty` markers from
 [Conditions and loops](/syntax/control-flow/) take no value.
 
-Any `c-` name that is not a directive becomes an attribute, typos included:
-`<div c-iff="show">` renders `<div iff>` and shows the element whatever
-`show` is. `citry check` and the editor report such a name as an error; see
+On an HTML element, any `c-` name that is not a directive becomes an
+attribute, typos included: `<div c-iff="show">` always shows the element,
+whatever `show` is. `citry check` and the editor report a name that looks
+like a misspelled directive as an error; see
 [Misspelled directives](/ide/template-linting/#find-misspelled-directives).
+An attribute named like a directive, such as `for` on `<label>`, cannot take
+`c-`, because `c-for` is always the loop; write
+`c-bind="{'for': field_id}"`.
 
 Citry HTML-escapes attribute names and values, including a
 [`Markup`][citry.Markup] value, so a `"` in a value cannot end the

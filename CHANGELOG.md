@@ -4,19 +4,16 @@
 
 ### Added
 
-- `citry check` and the editor report a misspelled directive, such as
-  `<div c-iff="show">`, which Citry renders as an `iff` attribute, as the
-  `citry.template.misspelled-directive` error; real attribute names such as
-  `c-id` are never reported, and `rule_misspelled_directive` changes the
-  severity.
+- `citry check` now fails on a misspelled directive such as
+  `<div c-iff="show">`, which Citry would render as an `iff` attribute; set
+  `rule_misspelled_directive` to change the severity.
 
 ### Changed
 
 - `citry check` now fails, and the editor shows an error, on an HTML
   attribute value the browser does not accept, such as
-  `<button type="sumbit">`, because `rule_invalid_attribute_value` defaults
-  to `"error"`; set it to `"warning"` in `LintSettings` to keep the previous
-  behavior.
+  `<button type="sumbit">`. Set `rule_invalid_attribute_value="warning"` in
+  `LintSettings` to keep the previous behavior.
 
 ## v0.6.0
 
