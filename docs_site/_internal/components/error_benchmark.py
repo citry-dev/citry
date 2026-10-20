@@ -5,7 +5,10 @@ each framework, and how early each framework reported them.
 
 The chart gives each framework one bar, split by how the mistakes ended, from
 "static error" (best) to "missed" (worst); the
-benchmark calls these five outcomes buckets. The table shows every mistake in
+benchmark calls these five outcomes buckets. The number beside each bar and
+the dashed line count the mistakes reported before the app ran (static
+errors plus static warnings): the number for that framework, the line for
+the first framework (Citry). The table shows every mistake in
 every framework as the short code the benchmark report uses.
 
 The results come from ``docs_site/data/error_prevention.json``, which
@@ -148,10 +151,15 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
     not_applicable = [part for part in extras if part[0] == DOES_NOT_APPLY]
     parts = parts[:-1] + not_applicable + parts[-1:] + [part for part in extras if part[0] != DOES_NOT_APPLY]
 
+    # The number beside a bar counts what a tool reported before the app ran,
+    # as an error or a warning: the outcome the page argues matters most.
+    static = {key: count["static-error"] + count["static-warning"] for key, count in counts.items()}
+    reference = data["frameworks"][0]
     rows = [
         {
             "name": framework["name"],
             "is_reference": index == 0,
+            "total": str(static[framework["key"]]),
             "segments": [
                 {
                     "style": f"width: {_percent(counts[framework['key']][key], total)}; background: {color}",
@@ -175,6 +183,12 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in parts],
         "rows": rows,
+        # The dashed line at the first framework's static count shows which
+        # frameworks report more mistakes before running and which fewer.
+        "reference": {
+            "label": f"{reference['name']} static/IDE: {static[reference['key']]}",
+            "style": f"left: {_percent(static[reference['key']], total)}",
+        },
         "summary": f"Stacked bar chart of {total} mistakes. {totals}.",
     }
 
@@ -301,6 +315,14 @@ class ErrorBenchmarkChartMarkup(Component):
           role="img"
           c-aria-label="title + '. ' + summary"
         >
+          <div class="bench-chart__guides" aria-hidden="true">
+            <span
+              class="bench-chart__reference"
+              c-style="reference['style']"
+            >
+              <span class="bench-chart__reference-label">{{ reference['label'] }}</span>
+            </span>
+          </div>
           <div
             c-for="row in rows"
             class="bench-chart__row"
@@ -316,6 +338,7 @@ class ErrorBenchmarkChartMarkup(Component):
                 c-title="segment['title']"
               ></span>
             </span>
+            <span class="bench-chart__total">{{ row['total'] }}</span>
           </div>
         </div>
       </figure>

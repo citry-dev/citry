@@ -81,11 +81,11 @@ when a framework's pinned versions change.
 
 ## Latest result
 
-[`results/2026-10-20/`](results/2026-10-20/) is the run published on the docs
-site's Error prevention page. Open `report.html` there in a browser for the
-chart and the full table; `results.json` has the first few findings behind
-each cell, and the findings that pointed away from the change without an
-`indirect` note. Some differences between cells come from
+[`results/2026-10-20/`](results/2026-10-20/) is the run published in the
+"Catching errors" section of the docs site's Benchmarks page. Open
+`report.html` there in a browser for the chart and the full table;
+`results.json` has the first few findings behind each cell, and the
+findings that pointed away from the change without an `indirect` note. Some differences between cells come from
 how each framework naturally writes a part of the page, not from its tools:
 
 - **m20:** Django's toggle script is a `.js` file, which VS Code's

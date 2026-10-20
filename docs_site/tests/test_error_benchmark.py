@@ -146,6 +146,10 @@ def test_chart_view_stacks_buckets_in_order_then_extra_parts() -> None:
     for row in view["rows"]:
         widths = [float(segment["style"].split("%")[0].removeprefix("width: ")) for segment in row["segments"]]
         assert sum(widths) == pytest.approx(100, abs=0.01)
+    # The number beside each bar counts static errors plus warnings, and the
+    # dashed line sits at the first framework's count.
+    assert [row["total"] for row in view["rows"]] == ["2", "0"]
+    assert view["reference"] == {"label": "Alpha static/IDE: 2", "style": "left: 50.000%"}
 
 
 def test_chart_view_draws_a_record_without_a_case_as_its_own_part() -> None:
@@ -212,9 +216,11 @@ def test_rendered_chart_draws_rows_and_table() -> None:
 
     rows = figure.xpath(".//*[contains(concat(' ', @class, ' '), ' bench-chart__row ')]")
     assert [row.xpath("string(.//*[@class='bench-chart__name'])") for row in rows] == ["Alpha", "Beta"]
-    # The chart has no number column or table: the counts are in the bar
-    # parts' titles, and the label screen readers hear lists every count.
-    assert not figure.xpath(".//*[@class='bench-chart__total'] | .//table")
+    # Each row ends with its static count; the chart has no table, since the
+    # label screen readers hear lists every count.
+    assert [row.xpath("string(.//*[@class='bench-chart__total'])") for row in rows] == ["2", "0"]
+    assert not figure.xpath(".//table")
+    assert figure.xpath("string(.//*[@class='bench-chart__reference-label'])") == "Alpha static/IDE: 2"
     label = figure.xpath(".//*[@role='img']")[0].attrib["aria-label"]
     assert label.startswith("Mistakes. Stacked bar chart of 4 mistakes. Alpha: Static error 2, ")
     assert "Beta: Runtime error 1, " in label

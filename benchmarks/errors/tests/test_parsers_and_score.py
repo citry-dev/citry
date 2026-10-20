@@ -392,6 +392,10 @@ def test_the_html_report_draws_every_framework_and_escapes_tool_output() -> None
     assert "<td>(0/0)</td>" in page
     # Both bars start at the axis, and each covers every mistake.
     assert page.count('<rect x="180.00" y="') == 2
+    # The dashed line sits at Citry's one static report, at the end of the
+    # axis, and names its count.
+    assert "Citry static/IDE: 1</text>" in page
+    assert 'stroke-dasharray="5 4"' in page
     assert 'download="error-outcomes.svg"' in page
     assert "<script" not in page
 

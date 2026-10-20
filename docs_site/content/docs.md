@@ -136,9 +136,8 @@ editor you use.
   operating systems, and more.
 - [Security](/security/): template expressions, State, browser data,
   and what you must secure when you deploy.
-- [Benchmarks](/about/benchmarks/): how fast Citry renders.
-- [Error prevention](/about/error-prevention/): how early Citry reports
-  common mistakes.
+- [Benchmarks](/about/benchmarks/): how fast Citry renders, and how
+  early it reports common mistakes.
 
 Ready to build something? [Install Citry](/getting-started/installation/) and
 render your first component.

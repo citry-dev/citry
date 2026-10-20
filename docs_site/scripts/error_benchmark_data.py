@@ -1,6 +1,6 @@
 # ruff: noqa: T201 - a maintenance script that prints the file it wrote
 """
-Refresh the results behind the Error prevention page
+Refresh the results behind the "Catching errors" section of the Benchmarks page
 (``docs_site/data/error_prevention.json``).
 
 The error-prevention benchmark (``benchmarks/errors``) writes the same

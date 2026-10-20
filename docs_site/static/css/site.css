@@ -2581,8 +2581,10 @@ body.djc-drawer-open .djc-drawer-overlay {
   background: color-mix(in oklab, var(--c-fg) 14%, transparent);
 }
 
-/* The dashed line at the first row's total lets a reader see which bars end
-   before it (faster) and which end after it (slower). */
+/* The dashed line marks a reference value on the bar track: the first
+   row's total in the speed chart, so a reader sees which bars end before
+   it (faster) and after it (slower), and the first framework's static
+   count in the error chart. */
 .bench-chart__reference {
   position: absolute;
   /* Starts just under its label, which sits in the plot's top padding. */
@@ -2718,12 +2720,12 @@ body.djc-drawer-open .djc-drawer-overlay {
 /* Error benchmark (<c-error-benchmark-chart />, <c-error-benchmark-table />) */
 /* ------------------------------------------------------------------ */
 /* The error chart reuses the bench-chart rules above. Its bars are short
-   counts, so it needs no axis, reference line or total column. These rules
-   come after the phone rules above so they win at every width. */
+   counts, so it needs no axis; the total column holds a two-digit count.
+   These rules come after the phone rules above so they win at every
+   width. */
 .bench-chart--counts {
-  --bench-top: 0.25rem;
   --bench-axis: 0.25rem;
-  --bench-total: 0rem;
+  --bench-total: 1.5rem;
 }
 
 /* The code meanings are sentences, which read better one per line than

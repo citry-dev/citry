@@ -63,6 +63,7 @@ _BAR_WIDTH = 490
 _ROW = 36
 _HEADING_ROW = 28
 _BAR_HEIGHT = 20
+_REFERENCE_COLOR = "#2455a0"
 
 _CSS = """
 :root{color-scheme:light;font:14px system-ui;color:#172638;background:#f3f6fa}
@@ -148,7 +149,8 @@ def chart_svg(summary: dict[str, Any]) -> str:
         label, color = parts[part]
         legend.append(f'<rect x="{x}" y="{y}" width="11" height="11" fill="{color}"/>')
         legend.append(f'<text x="{x + 16}" y="{y + 10}">{escape(label)}</text>')
-    top = 12 + math.ceil(len(shown) / 3) * 20 + 22
+    # The extra room above the bars holds the dashed line's label.
+    top = 12 + math.ceil(len(shown) / 3) * 20 + 34
 
     rows: list[str] = []
     y = top
@@ -193,8 +195,21 @@ def chart_svg(summary: dict[str, Any]) -> str:
         gx = _BAR_LEFT + tick * scale
         grid.append(f'<line x1="{gx:.2f}" x2="{gx:.2f}" y1="{top - 5}" y2="{bottom}" stroke="#e0e7ef"/>')
         grid.append(f'<text x="{gx:.2f}" y="{bottom + 22}" text-anchor="middle">{tick}</text>')
+    # The dashed line marks where Citry's count of mistakes reported before
+    # the app runs (errors plus warnings) ends, so a reader sees which frameworks report more or fewer
+    # mistakes before the app runs. It is drawn over the bars.
+    reference = []
+    if "citry" in names:
+        static = counts["citry"]["static-error"] + counts["citry"]["static-warning"]
+        rx = _BAR_LEFT + static * scale
+        reference = [
+            f'<line x1="{rx:.2f}" x2="{rx:.2f}" y1="{top - 5}" y2="{bottom}" stroke="{_REFERENCE_COLOR}"'
+            ' stroke-width="2" stroke-dasharray="5 4"/>',
+            f'<text x="{rx:.2f}" y="{top - 9}" text-anchor="middle" font-weight="700"'
+            f' style="fill:{_REFERENCE_COLOR}">{escape(names["citry"])} static/IDE: {static}</text>',
+        ]
     height = bottom + 36
-    body = "".join(legend + grid + rows)
+    body = "".join(legend + grid + rows + reference)
     return (
         f'<svg viewBox="0 0 {_WIDTH} {height}" role="img" aria-label="{escape(title)}"'
         ' xmlns="http://www.w3.org/2000/svg"><style>text{font:11px system-ui;fill:#26394c}'
