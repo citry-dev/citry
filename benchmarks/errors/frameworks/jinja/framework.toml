@@ -59,7 +59,8 @@ timeout = 300
 argv = ["{venv}/bin/uvicorn", "app:app", "--host", "127.0.0.1", "--port", "{port}"]
 page_path = "/"
 ready_timeout = 90
-steps = [
+[runtime.journeys]
+default = [
   { action = "click", selector = "button:text-is('Add')" },
   { action = "wait", ms = 500 },
   { action = "click", selector = "button:text-is('Details')" },

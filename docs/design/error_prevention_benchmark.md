@@ -134,6 +134,51 @@ Every `old` text is looked up in the clean file, never in the result of
 another edit. So the order of a case's edits does not matter, and one edit
 cannot create or hide the text another one needs.
 
+### How the browser check drives the page
+
+The browser check takes named journeys through the page: sequences of
+clicks, typing, key presses and waits. The runner records the page, meaning
+its visible text and a few properties of each element, three times around
+the default journey: after the load, after its clicks and after a reload.
+Every other journey loads the page fresh, runs its steps and records the
+page once. A form submit or a link click replaces
+the page, so it gets a journey of its own instead of joining the default
+one, where it would change the page that every existing case is compared on.
+
+- **Journeys live in `framework.toml`, not in the catalogue or a case.**
+  Selectors differ by framework (some match a button with `has-text`,
+  others with `text-is`, and each framework writes its buttons
+  differently), as do the waits a framework needs, so the
+  framework owns them. A case cannot choose its journeys: every case runs
+  every journey of its framework, so a case cannot skip the journey where
+  its mistake shows, and a journey added later covers every existing case
+  without editing it. Each journey adds one page load and its
+  steps to every case of that framework.
+- **Each journey starts in a new browser context**, with no cookies or
+  storage from an earlier journey. The server is not restarted, so
+  journeys run in a fixed order, the default one first, and the clean app
+  and every case start each journey from the same server state, apart from
+  what the case's mistake itself saved.
+- **What a record holds.** For each element: tag, `title`, the button type
+  the browser settled on, computed text color, border color, display and
+  visibility, `alt`, `id`, every `aria-*` attribute, and the disabled state.
+  The disabled state is what the browser applies, so `disabled="false"`
+  counts as disabled, as it does for the user. A border color that neither
+  the page nor the browser's defaults set follows the text color, so it
+  adds a difference only where one of them sets it. It is read with the
+  hover and focus the last click left behind: in FastHTML, Pico gives the
+  button under the pointer another border color but the same text color.
+  Two runs of the same page leave the pointer on the same element, so this
+  adds a difference only when the case moves what sits under the pointer.
+  Any sequence of 16 or
+  more hex digits in an `id` or `aria-*` value is blanked before the
+  comparison: Citry mounts each interactive page into an element whose
+  `citry-vue-` id ends in 32 random hex digits, new on every render, so
+  without the blanking no two Citry records would match. A mistake that
+  changes only `alt`, `id`, an `aria-*` attribute, the disabled state or a
+  border color reads as "silently wrong". Like "never", that counts as
+  missed.
+
 ## How it behaves when something goes wrong
 
 | Problem | What happens |
@@ -146,6 +191,14 @@ cannot create or hide the text another one needs.
 | A baseline path passes those checks but resolves outside the baseline through a symbolic link, or lies in a folder the working copy leaves out, such as `node_modules` | `validate` names the case's folder and the path, and `run` stops before running anything. Without the first check the case's edits would be applied to a file read through the link; without the second the run would fail partway through |
 | The baseline changes in a file that a case replaces with a full copy | Nothing reports it: the copy keeps the old version of the whole file, so the case tests a page that differs from the clean app in more than its mistake. Cases therefore use edits unless they rewrite most of a file |
 | A `framework.toml` or `port.toml` has an unknown or missing key | Loading fails with the file and key named. A typo cannot silently change what is measured |
+| A framework's journeys are not a table, have no `default` journey, or include an empty journey or one whose name does not start with a lowercase letter followed by lowercase letters, digits and `-` | Loading fails with the file and, where there is one, the journey named, so `validate` and `run` stop before any server starts |
+| A step is not a table, has an unknown action, a missing key, a key its action does not use (such as `ms` on a click), an empty or non-text selector or key, text that is not a string, or an `ms` that is not a whole number above 0 | Loading fails as above, with the file, the journey and the step named. A key another action uses would otherwise be ignored without a word |
+| In a case, a journey step cannot find or use its element within five seconds, or the page does not load within 60 seconds or go quiet within 15 seconds after the last step | The journey stops, the page is recorded where it stopped, and the case counts as "silently wrong" unless something reported it. The evidence holds the error, plus the journey's name for a journey other than the default. When the default journey stops, the reload record is skipped as well |
+| A journey step fails in the clean app | Every cell of that framework is marked `!`, as for any other clean-app problem, because the case's journey could not be compared with a working one |
+| A step leaves the page mid-navigation, so it cannot be recorded | The journey counts as failed, as above, with the reason in the record |
+| A developer-written `id` or `aria-*` value contains 16 or more hex digits in a row, such as a content hash or a long number | That part is blanked like a generated id, so a mistake that changes only it reads as "never" |
+| A `press` step with no selector runs when nothing has focus | The key goes to the page and may do nothing, in the clean app and the case alike, so nothing reports that the journey did less than intended |
+| A framework makes up an `id` or `aria-*` value on every render in a form other than 16 or more hex digits in a row | Nothing blanks it, so the clean app and every case differ and every case of that framework that nothing reported reads as "silently wrong". It shows as that framework's "never" cells all moving to "silently wrong" in one run; the fix is to extend the blanking in `runtime.py` |
 | A mistake has no port in some framework | `validate` lists it. In a run the cell shows `-`, so a gap is visible rather than counted |
 | The clean app produces an error in some stage, or its page fails | The run continues, but every cell for that framework is marked `!`, because a case's finding could not be told apart from what was already there |
 | A tool times out | The stage counts as neither a catch nor a miss. When it comes before the stage the cell shows, so that it could have reported the mistake earlier, the cell is marked `~` |
@@ -167,9 +220,11 @@ cannot create or hide the text another one needs.
   corrections from each framework's users are invited
   ([#151](https://github.com/citry-dev/citry/issues/151)).
 - **The page comparison sees text, element types, button types, tooltips,
-  colors, display and visibility, after the load, after the clicks and after
-  a reload.** A mistake whose only effect is outside these, such as
-  a broken keyboard shortcut, would read as "never".
+  text and border colors, display, visibility, `alt`, `id`, `aria-*` and
+  the disabled state, at the points the journeys record.** A mistake whose
+  only effect is outside these, or in a part of the page no journey
+  reaches, such as a keyboard shortcut no journey presses, reads as
+  "never".
 
 ## Cost
 

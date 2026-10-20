@@ -86,7 +86,8 @@ env = { PORT = "{port}" }
 page_path = "/"
 ready_timeout = 180
 settle_ms = 800
-steps = [
+[runtime.journeys]
+default = [
   { action = "click", selector = "button:text-is('Add')" },
   { action = "wait", ms = 500 },
   { action = "click", selector = "button:text-is('Details')" },

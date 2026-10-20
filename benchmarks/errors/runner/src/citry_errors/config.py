@@ -7,7 +7,10 @@ import tomllib
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Set as AbstractSet
 
 BENCH_ROOT = Path(__file__).resolve().parents[3]
 REPO_ROOT = BENCH_ROOT.parents[1]
@@ -21,7 +24,23 @@ STATIC_STAGES = ("editor", "check", "build")
 OUTCOMES = ("editor", "check", "build", "runtime-error", "runtime-warning", "silent", "never")
 PARSERS = ("citry-json", "pyright-json", "tsc", "eslint-json", "ruff-json", "djlint", "exit")
 PORT_STATUSES = ("ported", "not-applicable", "prevented")
-STEP_ACTIONS = ("click", "wait")
+# Each browser step's own keys: the ones it needs, then the ones it may take.
+# A key outside these is rejected, so a typo such as `ms` on a click cannot
+# silently do nothing. `press` without a selector presses the key on whatever
+# has focus, which is how a keyboard flow moves on from the previous step.
+STEP_KEYS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
+    "click": (frozenset({"selector"}), frozenset()),
+    "fill": (frozenset({"selector", "text"}), frozenset()),
+    "press": (frozenset({"key"}), frozenset({"selector"})),
+    "wait": (frozenset({"ms"}), frozenset()),
+}
+# A journey is a named list of browser steps in `framework.toml`. This one is
+# the journey the page is recorded around: after the load, after its steps,
+# and after a reload. Every framework with a browser check has it.
+DEFAULT_JOURNEY = "default"
+# A journey name becomes a key in the recorded observation and in messages,
+# so it stays lowercase letters, digits and `-`, starting with a letter.
+_JOURNEY_NAME = re.compile(r"[a-z][a-z0-9-]*")
 
 
 class ConfigError(ValueError):
@@ -50,9 +69,15 @@ class Stage:
 
 @dataclass(frozen=True)
 class Step:
+    """One thing the browser check does on the page: click, fill a field, press a key, or wait."""
+
     action: str
     selector: str = ""
     ms: int = 0
+    # The text `fill` types into the field, replacing what was there.
+    text: str = ""
+    # The key `press` presses, in Playwright's names such as `Enter` or `Tab`.
+    key: str = ""
 
 
 @dataclass(frozen=True)
@@ -60,7 +85,10 @@ class Runtime:
     argv: tuple[str, ...]
     page_path: str
     ready_timeout: int
-    steps: tuple[Step, ...]
+    # Journey name -> its steps, in the order the file lists them. The
+    # default journey is always present; every other one starts from a
+    # fresh load of the page and records the page once at its end.
+    journeys: dict[str, tuple[Step, ...]]
     env: dict[str, str] = field(default_factory=dict)
     settle_ms: int = 800
 
@@ -113,7 +141,9 @@ class Port:
     root: Path
 
 
-def _table(data: Any, where: str, required: set[str], optional: set[str] = frozenset()) -> dict[str, Any]:
+def _table(
+    data: Any, where: str, required: AbstractSet[str], optional: AbstractSet[str] = frozenset()
+) -> dict[str, Any]:
     """Reject a missing or unknown key, so a typo in a definition cannot silently change a result."""
     if not isinstance(data, dict):
         raise ConfigError(f"{where} must be a table")
@@ -224,20 +254,14 @@ def load_framework(root: Path) -> Framework:
         raw = _table(
             data["runtime"],
             f"{path} [runtime]",
-            {"argv", "page_path", "steps"},
+            {"argv", "page_path", "journeys"},
             {"ready_timeout", "env", "settle_ms"},
         )
-        steps = []
-        for index, step in enumerate(raw["steps"]):
-            row = _table(step, f"{path} runtime step {index}", {"action"}, {"selector", "ms"})
-            if row["action"] not in STEP_ACTIONS:
-                raise ConfigError(f"{path} runtime step {index} has unknown action {row['action']!r}")
-            steps.append(Step(action=row["action"], selector=row.get("selector", ""), ms=int(row.get("ms", 0))))
         runtime = Runtime(
             argv=tuple(raw["argv"]),
             page_path=raw["page_path"],
             ready_timeout=int(raw.get("ready_timeout", 90)),
-            steps=tuple(steps),
+            journeys=load_journeys(raw["journeys"], f"{path} [runtime.journeys]"),
             env=dict(raw.get("env", {})),
             settle_ms=int(raw.get("settle_ms", 800)),
         )
@@ -250,6 +274,64 @@ def load_framework(root: Path) -> Framework:
         runtime=runtime,
         notes=data.get("notes", ""),
         root=root,
+    )
+
+
+def load_journeys(data: Any, where: str) -> dict[str, tuple[Step, ...]]:
+    """
+    Read the named journeys of a framework's browser check.
+
+    Every problem is reported here, when the file loads, so a bad journey
+    stops `validate` and `run` before any server starts rather than failing
+    each case's browser check in the middle of a run.
+    """
+    if not isinstance(data, dict):
+        raise ConfigError(f"{where} must be a table of journey names to lists of steps")
+    if DEFAULT_JOURNEY not in data:
+        # The three page records every case is compared on are taken around
+        # this journey, so without it the browser check would compare nothing.
+        raise ConfigError(f"{where} needs a {DEFAULT_JOURNEY!r} journey")
+    journeys = {}
+    for name, steps in data.items():
+        if not _JOURNEY_NAME.fullmatch(name):
+            raise ConfigError(f"{where} journey name {name!r} must be lowercase letters, digits and '-'")
+        if not isinstance(steps, list) or not steps:
+            # A journey with no steps would only record the loaded page again.
+            raise ConfigError(f"{where} journey {name!r} must be a non-empty list of steps")
+        journeys[name] = tuple(
+            _step(step, f"{where} journey {name!r} step {index}") for index, step in enumerate(steps)
+        )
+    return journeys
+
+
+def _step(data: Any, where: str) -> Step:
+    """Read one step, accepting only the keys its action uses, each with a value of the right kind."""
+    if not isinstance(data, dict) or "action" not in data:
+        raise ConfigError(f"{where} must be a table with an action")
+    action = data["action"]
+    # A list or table here is not hashable, so the kind is checked before the lookup.
+    if not isinstance(action, str) or action not in STEP_KEYS:
+        raise ConfigError(f"{where} has unknown action {action!r}; expected one of {sorted(STEP_KEYS)}")
+    required, optional = STEP_KEYS[action]
+    row = _table(data, where, {"action"} | required, optional)
+    # An empty selector or key would fail only when the browser reaches the
+    # step, in the clean app as well, so every cell of that framework would
+    # be marked `!` partway through the run.
+    for key in ("selector", "key"):
+        if key in row and (not isinstance(row[key], str) or not row[key]):
+            raise ConfigError(f"{where} {key} must be non-empty text")
+    # Filling in empty text is a real action (it clears the field), so only the kind is checked.
+    if "text" in row and not isinstance(row["text"], str):
+        raise ConfigError(f"{where} text must be text")
+    # Python treats `true` as the int 1, so a bool is rejected explicitly.
+    if "ms" in row and (not isinstance(row["ms"], int) or isinstance(row["ms"], bool) or row["ms"] <= 0):
+        raise ConfigError(f"{where} ms must be a whole number of milliseconds above 0")
+    return Step(
+        action=action,
+        selector=row.get("selector", ""),
+        ms=row.get("ms", 0),
+        text=row.get("text", ""),
+        key=row.get("key", ""),
     )
 
 

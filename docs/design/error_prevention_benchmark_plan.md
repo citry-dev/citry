@@ -2,8 +2,10 @@
 
 Status: approved by the maintainer on 2026-10-20, with the decisions listed
 at the end. Written against the benchmark as added in PR #205 (commit
-`9346c7131`; the published 2026-10-20 run used `b0ef345dc`). PR 1a (case
-edits, section 7) is done; the other PRs in section 8 are planned. The
+`9346c7131`; the published 2026-10-20 run used `b0ef345dc`). PRs 1a (case
+edits) and 1b (runner journeys and page comparison) are done, as described
+in section 7; the other PRs in section 8 are planned. The published results
+do not include 1b yet; they will after the next full run. The
 benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
@@ -880,8 +882,8 @@ style, and must not change the visible page outside its own part.
 
 Each addition needs a matching change in two places:
 
-- **The runner's browser check: separate journeys.** Today one list of
-  steps per framework (`framework.toml`, read in `runtime.py:166-170`) runs
+- **The runner's browser check: separate journeys (done in PR 1b).**
+  Before PR 1b, one list of steps per framework (`framework.toml`) ran
   before the after-click snapshot and the reload snapshot. Adding a search
   submit or a link click to that list would replace the board in both
   snapshots, so every existing case would be compared on a different page.
@@ -889,14 +891,42 @@ Each addition needs a matching change in two places:
   its own steps, and records its own snapshot, and the three existing
   snapshots stay as they are. The planned journeys are: Details, Close,
   Details (A); type `alpha` and submit (D); click About (E); click the
-  project link (E). The runner supports only `click` and `wait` today, so
-  journeys also need `fill` and `press` steps.
-- **The page comparison.** It reads text, element type, button type,
-  tooltip, color, display and visibility (`runtime.py:28-40`). Add border
-  color (B), and `alt`, `id`, `aria-*` and `disabled` (m53-m57, m62).
-  Without them, those cases can be caught only by tools, and no run can show
-  that they express their mistake. Image load failures (F) already reach the
-  browser log as errors.
+  project link (E). The runner supported only `click` and `wait`, so
+  journeys also needed `fill` and `press` steps, which PR 1b added.
+
+  Journeys are declared in `framework.toml` under
+  `[runtime.journeys]`, because their selectors differ by framework; the
+  old list of steps is the `default` journey, with its three snapshots at
+  the same points. Every case runs every journey of its framework, so a
+  case cannot choose to skip the journey where its mistake shows. PRs 3
+  and 4 add the planned journeys to each framework's `framework.toml`
+  together with the page part they drive, and update the README's
+  sentence that every framework lists only the default journey. The
+  README's "The browser check" section describes the format, and the
+  design doc's error table lists its error modes.
+- **The page comparison (done in PR 1b).** It read text, element type,
+  button type, tooltip, color, display and visibility. PR 1b added border
+  color (B), and `alt`, `id`, `aria-*` and the disabled state (m53-m57,
+  m62). Without them, those cases could be caught only by tools, and no run
+  could show that they express their mistake. Image load failures (F)
+  already reach the browser log as errors.
+
+  Which existing cells this can change: only a mistake that is "never"
+  today can move, to "silently wrong", and both count as missed. In the
+  2026-10-20 run only m09 (`type="sumbit"`) is "never": in Django, Jinja
+  and FastHTML, and in Citry's result when warnings are not counted (the
+  published cell is `Ew`, because the editor's warning still counts there). Its edit changes only the `type`
+  text, which the browser already reads as `submit`, and none of the newly
+  compared values, so the next full run should show no changed cell. Citry
+  mounts an interactive page into an element whose id has 32 random hex
+  digits, new on every render, so the comparison blanks any 16 or more
+  hex digits in a row in an `id` or `aria-*` value. A
+  change in m09 would mean a newly compared value still differs between
+  two loads of the same page, and needs a look before the run is
+  published. Next.js and Nuxt have no "never" cell, so this run cannot show
+  whether a newly compared value changes between two loads of their clean
+  pages; the first "never" case there, or a one-off run that observes each
+  clean app twice, would show it.
 
 Where a framework cannot write an addition naturally (Django and Jinja have
 no browser-side components for A), the mistakes that need it are
@@ -929,7 +959,7 @@ change per baseline, plus re-checking the clean page.
 | PR | Contents | Cases to write | Added run time | Full run after |
 | --- | --- | --- | --- | --- |
 | 1a. Case edits | `edits` form for `port.toml` and a script that converts the 134 ported cases. Proof in seconds: apply each converted case to its baseline and compare the result byte for byte with the old copy. No benchmark run needed | 0 new (134 converted by script) | 0 | ~22 min |
-| 1b. Runner journeys and page comparison | Named journeys with `fill`/`press` steps, and border color, `alt`, `id`, `aria-*`, `disabled` in the page comparison. One full run; any cell that changes is listed in the PR, since a wider comparison can turn a "never" into "silently wrong" (both score as missed) | 0 | 0 | ~22 min |
+| 1b. Runner journeys and page comparison (code done, full run pending) | Named journeys with `fill`/`press` steps, and border color, `alt`, `id`, `aria-*`, `disabled` in the page comparison. One full run; any cell that changes is listed with the run, since a wider comparison can turn a "never" into "silently wrong" (both score as missed). No cell is expected to change (section 7); the published results change only after that run | 0 | 0 | ~22 min |
 | 2. Hand-offs on the current page | m29-m35, m38-m42, m47 (13 mistakes; part 2 mistakes that need no page change) | 78 (13 x 6), minus the cells that do not apply | ~12 min | ~34 min |
 | 3. Browser components and slot data | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
 | 4. Forms, links, assets, CSS variables, i18n arguments | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 30 + 24 baseline changes | ~5 min | ~46 min |

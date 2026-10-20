@@ -35,9 +35,11 @@ framework, the earliest stage that reported it.
    the report marks that cell `°`. Every finding elsewhere that no note
    confirms is listed in `results.json`, so a reader can check what was left
    out.
-4. The runner then starts the app's development server, clicks through the
-   page in Chromium, and compares the result with the clean app's. This
-   decides the outcome when no tool reported the mistake:
+4. The runner then starts the app's development server, drives the page in
+   Chromium through the framework's journeys (see
+   [The browser check](#the-browser-check)), and compares what it records
+   with the clean app's. This decides the outcome when no tool reported the
+   mistake:
    - a server error, an error response or a browser error is a runtime error;
    - a browser or server warning is a runtime warning;
    - a different page with no message is "silently wrong";
@@ -110,7 +112,8 @@ ReactPy are not measured yet.
 
 Every baseline app serves this page at `/`, using its framework's normal way
 of writing each part. The visible text must match exactly, because the
-runner's browser check clicks the same buttons in every framework.
+runner's [browser check](#the-browser-check) clicks the same buttons in
+every framework.
 
 | Part | What the page does | Used by |
 | --- | --- | --- |
@@ -125,18 +128,88 @@ runner's browser check clicks the same buttons in every framework.
 | Details | A `Details` button toggles browser-side state named `open`. While open, the text `Details are visible` shows | m14, m19, m20, m21 |
 | Search form | `<form role="search"><button type="submit">Search</button></form>` | m09 |
 
-The runner's browser check records the page right after it loads, clicks
-`Add`, `Details`, and the first `Hide` in that order, records the page again,
-then reloads it and records it a third time. The reload shows whether the
-saved count survives a new page load. Citry keeps it in browser-held state,
-so its clean page shows `Saved: 0` again after the reload, while the other
-frameworks keep it on the server and show `Saved: 1`. Each card's footer
-link names its own project.
+Each card's footer link names its own project.
 
 A part the framework cannot express naturally may be left out, and every case
 that needs it is then recorded as `not-applicable` with the reason. For
 example, a server-template stack with no browser-side component model has no
 hydration, so m14 does not apply to it.
+
+## The browser check
+
+The browser check opens the page in Chromium, takes a few named sequences of
+steps through it, called journeys, and records what the page shows. It does
+the same for the clean app and for the case, and a difference between the
+two records means the mistake changed the page.
+
+**The default journey** clicks `Add`, `Details`, and the first `Hide`, in
+that order. The page is recorded three times around it: right after it
+loads, after the clicks, and after a reload. The reload shows whether the
+saved count survives a new page load. Citry keeps it in browser-held state,
+so its clean page shows `Saved: 0` again after the reload, while the other
+frameworks keep it on the server and show `Saved: 1`.
+
+**Every other journey** starts from a fresh load of the page in a new
+browser context, with no cookies or storage left from an earlier journey,
+runs its own steps, and records the page once at its end. The server is not
+restarted between journeys, so it keeps what earlier journeys saved, such as
+the count. Journeys run in the order `framework.toml` lists them, after the
+default one, so the clean app and the case start each journey from the same
+server state, apart from what the mistake itself changed. Every case runs
+every journey of its framework, so a mistake is compared on every part of
+the page any journey reaches. Every framework in this benchmark currently
+lists only the default journey.
+
+A framework lists its journeys in `framework.toml`, by name, because the
+selectors differ between frameworks. In this example, which is not taken
+from any framework here, `search` is a second journey that types into a
+search field and submits it (the real default journeys also click `Details`
+and `Hide`):
+
+```toml
+[runtime.journeys]
+default = [
+  { action = "click", selector = "button:text-is('Add')" },
+  { action = "wait", ms = 500 },
+]
+search = [
+  { action = "fill", selector = "input[name=q]", text = "alpha" },
+  { action = "press", selector = "input[name=q]", key = "Enter" },
+]
+```
+
+| Step | Keys | What it does |
+| --- | --- | --- |
+| `click` | `selector` | Clicks the first element the Playwright selector matches |
+| `fill` | `selector`, `text` | Replaces the first matching field's value with `text`; empty text clears it |
+| `press` | `key`, optional `selector` | Presses a key named the way Playwright names it, such as `Enter` or `Tab`, on the first matching element, or on whatever has focus when there is no selector; when nothing has focus, the key goes to the page and may do nothing |
+| `wait` | `ms` | Waits that many milliseconds, for a change the page makes without a request |
+
+A misspelled action, a missing or extra key, or a missing `default` journey
+stops `validate` and `run` before any server starts, naming the file and,
+where there is one, the journey and the step.
+
+After the last step the runner waits until the page has no requests in
+flight, and then `settle_ms` more milliseconds (a `[runtime]` key in
+`framework.toml`, 800 by default), before it records the page. A step whose
+element cannot be found or used within five seconds stops its journey, as
+does a page that does not load within 60 seconds or does not go quiet within
+15 seconds after the last step. In a case's run that counts as a different
+page, so the case is "silently wrong" unless something reported it; in the
+clean app's run it marks every cell of that framework `!`.
+
+Each record keeps the page's visible text and, for every element, its tag,
+`title`, the button type the browser settled on, its computed text color,
+border color, display and visibility, its `alt` and `id`, every `aria-*`
+attribute, and whether it is disabled. Before the two records are compared,
+any sequence of 16 or more hex digits in an `id` or `aria-*` value is
+blanked, because a framework makes such an id up on every render: Citry
+mounts each interactive page into an element with a random `citry-vue-...`
+id. The border color is read where the journey leaves the mouse and the
+focus, so a button under the pointer after the last click shows its hover
+color, the same in both runs when the page is the same. A mistake whose only
+effect is outside these, such as a value typed into a field that no text on
+the page repeats, reads as "never".
 
 ## Writing a case
 
