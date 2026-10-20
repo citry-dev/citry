@@ -2753,6 +2753,28 @@ body.djc-drawer-open .djc-drawer-overlay {
   text-align: center;
 }
 
+/* The mistake names stay in place while the framework columns scroll
+   sideways, so a reader on a narrow screen always sees which row a cell
+   belongs to. A sticky cell needs a solid background to hide the cells
+   sliding under it, and the inset shadow redraws its right border, which
+   the collapsed table border would otherwise leave behind. */
+.prose .error-bench-table tr > :first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--c-surface-2);
+  box-shadow: inset -1px 0 0 var(--c-border);
+}
+
+/* On a phone the names wrap in a narrower column, so part of the
+   framework columns stays in view beside them. */
+@media (max-width: 640px) {
+  .prose .error-bench-table tr > :first-child {
+    min-width: 8rem;
+    max-width: 10rem;
+  }
+}
+
 /* Each cell is tinted with its outcome's chart colour, mixed with the
    page background so the text stays readable in both themes. A cell
    without an outcome colour mixes with nothing and stays plain. */
