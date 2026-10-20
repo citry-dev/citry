@@ -232,7 +232,7 @@ class CContextMenu(LibraryComponent):
         target: SlotInput[CContextMenuTargetSlotData]
         menu: SlotInput[CContextMenuMenuSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

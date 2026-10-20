@@ -491,7 +491,7 @@ class CAccordion(LibraryComponent):
     class Slots:
         default: SlotInput[CAccordionDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1284,7 +1284,7 @@ class CAccordionItem(LibraryComponent):
         default: SlotInput[CAccordionItemDefaultSlotData]
         actions: SlotInput[CAccordionItemActionsSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1554,7 +1554,7 @@ class CInternalAccordionItems(LibraryComponent):
     class Slots:
         default: SlotInput[CAccordionDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1584,7 +1584,7 @@ class CInternalAccordionPanelContent(LibraryComponent):
     class Slots:
         default: SlotInput[CAccordionItemDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

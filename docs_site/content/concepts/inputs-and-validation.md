@@ -151,16 +151,21 @@ from citry import Component
 
 
 class LegacyCard(Component):
+    class Kwargs:
+        title: str
+
     class Lint:
         check_input_types = False
 
     template = """
-      <div class="legacy-card"></div>
+      <div class="legacy-card">{{ title }}</div>
     """
 ```
 
-To turn it off for a whole application, pass it in
-[`LintSettings`][citry.LintSettings]:
+To turn it off for a whole application, pass `check_input_types=False`
+to [`LintSettings`][citry.LintSettings]. The setting sits with the lint
+settings, but it acts when a component renders; `citry check` ignores
+it:
 
 ```python
 from citry import Citry, LintSettings

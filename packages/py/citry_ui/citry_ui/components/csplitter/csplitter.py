@@ -225,7 +225,7 @@ class CSplitter(LibraryComponent):
     class Slots:
         default: SlotInput[CSplitterDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -600,7 +600,7 @@ class CSplitterPanel(LibraryComponent):
     class Slots:
         default: SlotInput[CSplitterPanelDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -642,7 +642,7 @@ class CInternalSplitterDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CSplitterDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -677,7 +677,7 @@ class CInternalSplitter(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -775,7 +775,7 @@ class CInternalSplitterPanel(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -834,7 +834,7 @@ class CInternalSplitterHandle(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

@@ -171,7 +171,7 @@ class CToggleGroup(LibraryComponent):
     class Slots:
         default: SlotInput[CToggleGroupDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -385,7 +385,7 @@ class CToggle(LibraryComponent):
     class Slots:
         default: SlotInput[CToggleDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

@@ -255,7 +255,7 @@ class CTour(LibraryComponent):
         activator: SlotInput[CTourActivatorSlotData] | None = None
         close: SlotInput[CTourCloseSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -416,7 +416,7 @@ class CTourStep(LibraryComponent):
         default: SlotInput[CTourStepDefaultSlotData]
         media: SlotInput[CTourStepMediaSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -462,7 +462,7 @@ class CInternalTourDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTourDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -501,7 +501,7 @@ class CInternalTour(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -637,7 +637,7 @@ class CInternalTourStep(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

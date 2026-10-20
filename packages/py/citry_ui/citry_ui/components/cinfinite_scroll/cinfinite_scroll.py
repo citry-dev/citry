@@ -123,7 +123,7 @@ class CInfiniteScroll(LibraryComponent):
         # Keep this camelCase spelling in sync with the JavaScript data key.
         serverDefaults: dict[str, object]  # noqa: N815
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

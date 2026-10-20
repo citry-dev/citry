@@ -244,7 +244,7 @@ class CNavigationMenu(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -790,7 +790,7 @@ class CNavigationMenuLink(LibraryComponent):
     class Slots:
         default: SlotInput[CNavigationMenuLinkDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -845,7 +845,7 @@ class CNavigationMenuItem(LibraryComponent):
         label: SlotInput[CNavigationMenuItemLabelSlotData]
         default: SlotInput[CNavigationMenuItemDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

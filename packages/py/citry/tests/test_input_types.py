@@ -756,8 +756,133 @@ class TestSwitches:
 
         assert _renders(Card, value="1")
 
+    def test_lint_class_off_skips_template_data_and_state(self):
+        app = Citry(secret=SIGNING_KEY)
+        app.set_mounted_prefix("/citry")
+
+        class Card(Component):
+            citry = app
+
+            class TemplateData:
+                count: int
+
+            class Lint:
+                check_input_types = False
+
+            def template_data(self, kwargs: Any, slots: Any) -> dict[str, object]:
+                return {"count": "1"}
+
+            template = """
+              <span>{{ count }}</span>
+            """
+
+        class Counter(Component):
+            citry = app
+
+            class State:
+                count: int = 0
+
+            class Events:
+                def increment(self, state: object) -> None:
+                    pass
+
+            class Lint:
+                check_input_types = False
+
+            def state_data(self, kwargs: object, slots: object) -> dict[str, object]:
+                return {"count": "1"}
+
+            template = """
+              <button @c-click="increment"></button>
+            """
+
+        assert _renders(Card)
+        assert _renders(Counter)
+
+    def test_nearest_base_in_method_order_wins(self):
+        app = Citry()
+
+        class Loose(Component):
+            citry = app
+
+            class Lint:
+                check_input_types = False
+
+        class Strict(Component):
+            citry = app
+
+            class Lint:
+                check_input_types = True
+
+        class LooseFirst(Loose, Strict):
+            class Kwargs:
+                value: int
+
+            template = """
+              <span>{{ value }}</span>
+            """
+
+        class StrictFirst(Strict, Loose):
+            class Kwargs:
+                value: int
+
+            template = """
+              <span>{{ value }}</span>
+            """
+
+        assert _renders(LooseFirst, value="1")
+        assert not _renders(StrictFirst, value="1")
+
+    def test_library_without_lint_follows_each_installing_app(self):
+        class Badge(LibraryComponent):
+            class Kwargs:
+                count: int
+
+            template = """
+              <span>{{ count }}</span>
+            """
+
+        library = ComponentLibrary(name="badges", components=(Badge,))
+        checking_app = Citry()
+        checking_app.register_library(library)
+        relaxed_app = Citry(lint=LintSettings(check_input_types=False))
+        relaxed_app.register_library(library)
+
+        assert not _renders(checking_app.get("Badge"), count="1")
+        assert _renders(relaxed_app.get("Badge"), count="1")
+
+    @pytest.mark.parametrize("mode", [True, "vue"], ids=["simple", "simple-vue"])
+    def test_simple_component_lint_class_turns_the_check_off(self, mode: object):
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            simple = mode  # type: ignore[assignment]
+
+            class Kwargs:
+                count: int
+
+            class Lint:
+                check_input_types = False
+
+            template = """
+              <span>{{ count }}</span>
+            """
+
+        class Parent(Component):
+            citry = app
+
+            class Kwargs:
+                count: object
+
+            template = """
+              <div><c-Child c-count="count" /></div>
+            """
+
+        assert _renders(Parent, count="1")
+
     def test_engine_setting_must_be_a_bool(self):
-        with pytest.raises(TypeError, match=r"LintSettings\.check_input_types must be a bool, got str"):
+        with pytest.raises(TypeError, match=r"LintSettings\.check_input_types must be True or False, got 'false'"):
             LintSettings(check_input_types="false")  # type: ignore[arg-type]
 
     def test_lint_class_setting_must_be_a_bool(self):

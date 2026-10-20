@@ -219,7 +219,7 @@ class CTagGroup(LibraryComponent):
         label: SlotInput[CTagGroupLabelSlotData] | None = None
         description: SlotInput[CTagGroupDescriptionSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -783,7 +783,7 @@ class CTag(LibraryComponent):
         default: SlotInput[CTagDefaultSlotData]
         start: SlotInput[CTagStartSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

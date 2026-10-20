@@ -273,7 +273,7 @@ class CTreeGrid(LibraryComponent):
         header: SlotInput[CTreeGridHeaderSlotData] | None = None
         cell: SlotInput[CTreeGridCellSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

@@ -250,7 +250,7 @@ class CCascader(LibraryComponent):
     class Slots:
         default: SlotInput[CCascaderDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -359,7 +359,7 @@ class CCascaderOption(LibraryComponent):
     class Slots:
         default: SlotInput[CCascaderOptionDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -407,7 +407,7 @@ class CInternalCascaderDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CCascaderDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -434,7 +434,7 @@ class CInternalCascader(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -520,7 +520,7 @@ class CInternalCascaderOption(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -576,7 +576,7 @@ class CInternalCascaderGroup(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

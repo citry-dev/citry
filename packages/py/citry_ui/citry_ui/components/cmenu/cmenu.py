@@ -834,7 +834,7 @@ class CMenu(LibraryComponent):
         activator: SlotInput[CMenuActivatorSlotData]
         default: SlotInput[CMenuDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -3956,7 +3956,7 @@ class CMenuItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -4058,7 +4058,7 @@ class CMenuCheckboxItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -4178,7 +4178,7 @@ class CMenuRadioItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -4277,7 +4277,7 @@ class CMenuGroup(LibraryComponent):
         label: SlotInput[CMenuGroupLabelSlotData]
         default: SlotInput[CMenuGroupDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -4402,7 +4402,7 @@ class CMenuRadioGroup(LibraryComponent):
         default: SlotInput[CMenuRadioGroupDefaultSlotData]
         label: SlotInput[CMenuRadioGroupLabelSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -4729,7 +4729,7 @@ class CMenuSeparator(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -4813,7 +4813,7 @@ class CMenuSubmenu(LibraryComponent):
         description: SlotInput[CMenuSubmenuDescriptionSlotData] | None = None
         end: SlotInput[CMenuSubmenuEndSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -5438,7 +5438,7 @@ class CInternalMenuSurface(LibraryComponent):
     class Slots:
         default: SlotInput[object]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -5484,7 +5484,7 @@ class CInternalMenuCollection(LibraryComponent):
     class Slots:
         default: SlotInput[object]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -5514,7 +5514,7 @@ class CInternalMenuContent(LibraryComponent):
     class Slots:
         default: SlotInput[object]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

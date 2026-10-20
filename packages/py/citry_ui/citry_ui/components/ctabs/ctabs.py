@@ -156,7 +156,7 @@ class CTabs(LibraryComponent):
     class Slots:
         default: SlotInput[CTabsDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -759,7 +759,7 @@ class CTab(LibraryComponent):
     class Slots:
         default: SlotInput[CTabDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -830,7 +830,7 @@ class CTabPanel(LibraryComponent):
     class Slots:
         default: SlotInput[CTabPanelDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -887,7 +887,7 @@ class CInternalTab(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -957,7 +957,7 @@ class CInternalTabPanel(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1018,7 +1018,7 @@ class CInternalTabsDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTabsDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1056,7 +1056,7 @@ class CInternalTabs(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

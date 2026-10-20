@@ -195,7 +195,7 @@ class CFormCollection(LibraryComponent):
         # Keep this camelCase spelling in sync with the JavaScript data key.
         serverDefaults: dict[str, bool]  # noqa: N815
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -309,7 +309,7 @@ class CFormCollectionItem(LibraryComponent):
     class Slots:
         default: SlotInput[CFormCollectionItemSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -360,7 +360,7 @@ class CInternalFormCollectionDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CFormCollectionDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -403,7 +403,7 @@ class CInternalFormCollection(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -524,7 +524,7 @@ class CInternalFormCollectionItem(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

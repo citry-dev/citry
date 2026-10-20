@@ -171,7 +171,7 @@ class CVirtualList(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -254,7 +254,7 @@ class CVirtualListItem(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListItemDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -287,7 +287,7 @@ class CInternalVirtualListDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -325,7 +325,7 @@ class CInternalVirtualList(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -405,7 +405,7 @@ class CInternalVirtualListStatic(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -448,7 +448,7 @@ class CInternalVirtualListWindow(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -511,7 +511,7 @@ class CVirtualWindow(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -617,7 +617,7 @@ class CInternalVirtualListItem(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

@@ -884,8 +884,9 @@ class Component(metaclass=ComponentMeta):
     [`LintSettings`][citry.LintSettings] accepts. Nested declarations
     compose in the same order Python uses to resolve methods across base
     classes. Assign ``None`` to return to the Citry instance's application
-    lint policy. When the class is defined, an unknown setting raises
-    ``ValueError`` and a ``check_input_types`` that is not a ``bool``
+    lint settings, including its ``check_input_types``. When the class is
+    defined, an unknown setting or an invalid severity raises
+    ``ValueError``, and a ``check_input_types`` that is not a ``bool``
     raises ``TypeError``.
 
     ``check_input_types = False`` skips the render-time check of each
@@ -894,7 +895,10 @@ class Component(metaclass=ComponentMeta):
     errors, or that accepts values its annotations do not name.
     ``check_input_types = True`` checks this component even when the app
     turns the check off. To accept more values for one field, widen its
-    annotation instead, for example ``title: str | int``.
+    annotation instead, for example ``title: str | int``. Citry reads
+    ``check_input_types`` once, when the class is defined (for a library
+    component, when its library is registered), so changing the ``Lint``
+    class's attribute afterwards has no effect.
 
     Example:
         ```python

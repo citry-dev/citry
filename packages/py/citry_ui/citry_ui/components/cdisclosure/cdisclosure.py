@@ -510,7 +510,7 @@ class CDisclosure(LibraryComponent):
         default: SlotInput[CDisclosureDefaultSlotData]
         actions: SlotInput[CDisclosureActionsSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1524,7 +1524,7 @@ class CInternalDisclosureTitleContent(LibraryComponent):
     class Slots:
         default: SlotInput[CDisclosureTitleSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1552,7 +1552,7 @@ class CInternalDisclosureActionsContent(LibraryComponent):
     class Slots:
         default: SlotInput[CDisclosureActionsSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1580,7 +1580,7 @@ class CInternalDisclosurePanelContent(LibraryComponent):
     class Slots:
         default: SlotInput[CDisclosureDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

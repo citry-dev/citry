@@ -195,7 +195,7 @@ class CContainer(LibraryComponent):
     class Slots:
         default: SlotInput[CContainerDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -258,7 +258,7 @@ class CGrid(LibraryComponent):
     class Slots:
         default: SlotInput[CGridDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -337,7 +337,7 @@ class CGridItem(LibraryComponent):
     class Slots:
         default: SlotInput[CGridItemDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

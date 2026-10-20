@@ -195,7 +195,7 @@ class CStepper(LibraryComponent):
     class Slots:
         default: SlotInput[CStepperDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -466,7 +466,7 @@ class CStep(LibraryComponent):
         description: SlotInput[CStepDescriptionSlotData] | None = None
         indicator: SlotInput[CStepIndicatorSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -505,7 +505,7 @@ class CInternalStepperDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CStepperDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -541,7 +541,7 @@ class CInternalStepper(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -615,7 +615,7 @@ class CInternalStep(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

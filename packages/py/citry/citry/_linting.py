@@ -635,7 +635,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             if type(candidate_check) is not bool:
                 msg = (
                     f"Component {component_class.__name__}.Lint.check_input_types "
-                    f"must be True or False, got {candidate_check!r}"
+                    f"must be True or False, got {candidate_check!r}."
                 )
                 raise TypeError(msg)
             check_input_types = candidate_check

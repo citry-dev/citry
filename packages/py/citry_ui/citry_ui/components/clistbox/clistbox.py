@@ -369,7 +369,7 @@ class CListbox(LibraryComponent):
     class Slots:
         default: SlotInput[CListboxDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1006,7 +1006,7 @@ class CListboxOption(LibraryComponent):
         description: SlotInput[CListboxOptionDescriptionSlotData] | None = None
         end: SlotInput[CListboxOptionStateSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -1204,7 +1204,7 @@ class CListboxGroup(LibraryComponent):
     class Slots:
         default: SlotInput[CListboxGroupDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

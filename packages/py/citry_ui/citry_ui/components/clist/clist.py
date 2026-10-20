@@ -152,7 +152,7 @@ class CList(LibraryComponent):
     class Slots:
         default: SlotInput[CListDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -245,7 +245,7 @@ class CListItem(LibraryComponent):
         description: SlotInput[CListItemDescriptionSlotData] | None = None
         end: SlotInput[CListItemEndSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

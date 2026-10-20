@@ -199,7 +199,7 @@ class CSortable(LibraryComponent):
     class Slots:
         default: SlotInput[CSortableDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -330,7 +330,7 @@ class CSortableItem(LibraryComponent):
         default: SlotInput[CSortableItemSlotData] | None = None
         handle: SlotInput[CSortableItemSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -368,7 +368,7 @@ class CInternalSortableDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CSortableDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -405,7 +405,7 @@ class CInternalSortable(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -511,7 +511,7 @@ class CInternalSortableItem(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

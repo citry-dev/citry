@@ -228,7 +228,7 @@ class CTransferList(LibraryComponent):
     class Slots:
         default: SlotInput[CTransferListDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -431,7 +431,7 @@ class CTransferListItem(LibraryComponent):
     class Slots:
         default: SlotInput[CTransferListItemDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -468,7 +468,7 @@ class CInternalTransferListDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTransferListDefaultSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -510,7 +510,7 @@ class CInternalTransferList(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -772,7 +772,7 @@ class CInternalTransferListItem(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

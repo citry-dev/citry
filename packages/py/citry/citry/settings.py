@@ -122,7 +122,7 @@ def _is_vue_variable_name(name: object) -> bool:
 @dataclass(frozen=True, slots=True)
 class LintSettings:
     """
-    Configure Citry's template and browser lint rules and analysis-only variables.
+    Configure Citry's template and browser lint rules, analysis-only variables, and the render-time input type check.
 
     Attributes:
         rule_unknown_template_variable: Severity for a free template root that
@@ -344,7 +344,7 @@ class LintSettings:
         # Every render reads this flag, so a truthy string such as "false"
         # must fail here rather than silently keep the check on.
         if type(self.check_input_types) is not bool:
-            msg = f"LintSettings.check_input_types must be a bool, got {type(self.check_input_types).__name__}."
+            msg = f"LintSettings.check_input_types must be True or False, got {self.check_input_types!r}."
             raise TypeError(msg)
 
 
@@ -409,9 +409,9 @@ class CitrySettings:
             which is how you add or change a global after the instance exists
             (including the default instance, created at import before your code
             runs).
-        lint: Template lint severities and analysis-only variables. Runtime
-            globals are discovered from ``Citry.template_globals`` and do not
-            need to be repeated here.
+        lint: Template lint severities, analysis-only variables, and the
+            render-time input type check. Runtime globals are discovered from
+            ``Citry.template_globals`` and do not need to be repeated here.
         security_csp: Content Security Policy check for rendered output.
             Citry scans the final HTML for raw ``<script>`` and ``<style>``
             elements, inline ``on*`` attributes, and ``javascript:`` URLs.

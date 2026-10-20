@@ -189,7 +189,7 @@ class CTimeline(LibraryComponent):
     class Slots:
         default: SlotInput[CTimelineDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -245,7 +245,7 @@ class CTimelineItem(LibraryComponent):
         opposite: SlotInput[CTimelineItemOppositeSlotData] | None = None
         indicator: SlotInput[CTimelineItemIndicatorSlotData] | None = None
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -281,7 +281,7 @@ class CInternalTimelineDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTimelineDefaultSlotData]
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -314,7 +314,7 @@ class CInternalTimeline(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
@@ -386,7 +386,7 @@ class CInternalTimelineItem(LibraryComponent):
     class Slots:
         pass
 
-    # This component checks its own inputs with errors that list the accepted values.
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
     class Lint:
         check_input_types = False
 
