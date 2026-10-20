@@ -1,0 +1,11 @@
+# The board's browser code receives the API base from get_js_data() in its
+# $onComponent callback and names the field when it unpacks it. The typo is
+# made once, where the field is unpacked, so the code that uses the value
+# still names `api_base`, which is then not defined.
+status = "ported"
+mistake = { file = "components/board_page/board_page.js", contains = 'api_bsae' }
+
+[[edits]]
+file = "components/board_page/board_page.js"
+old = '$onComponent(({ api_base }) => {'
+new = '$onComponent(({ api_bsae }) => {'

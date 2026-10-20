@@ -1,0 +1,16 @@
+# The board's browser code takes the secret token from the data
+# django-components hands it, as it takes the API base, but get_js_data()
+# sends only the API base. Adding the secret to get_js_data() would be
+# m42, which sends it to the browser.
+status = "ported"
+mistake = { file = "components/board_page/board_page.js", contains = 'api: secret_token,' }
+
+[[edits]]
+file = "components/board_page/board_page.js"
+old = '$onComponent(({ api_base }) => {'
+new = '$onComponent(({ secret_token }) => {'
+
+[[edits]]
+file = "components/board_page/board_page.js"
+old = 'api: api_base,'
+new = 'api: secret_token,'

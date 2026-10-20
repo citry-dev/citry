@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = 'count="card.count"' }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = '{% component "card" title=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}'
+new = '{% component "card" title=card.title count="card.count" tone=card.featured|yesno:"accent,plain" %}'

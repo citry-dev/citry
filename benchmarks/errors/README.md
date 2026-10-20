@@ -124,8 +124,8 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 Rerunning them with nothing changed took 8 seconds: it repeated only the
 browser checks of the 4 cases whose journey stops on an error page, which
 are never stored. Every framework repeats such cases on each run. A full run
-of the seven frameworks' 308 cases with nothing stored (`--no-cache`) took
-about 8.5 minutes on the same machine; most of it is the Nuxt cases, which
+of the eight frameworks' 352 cases with nothing stored (`--no-cache`) took
+about 10 minutes on the same machine; most of it is the Nuxt cases, which
 run one at a time, and the Next.js builds. It is not part of routine CI. Run
 it at each Citry release, and when a framework's pinned versions change.
 
@@ -140,13 +140,18 @@ findings that pointed away from the change without an `indirect` note.
 "Rusty + HTMX + Alpine" is the Django app with its templates rendered by
 [Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
 an experimental Rust version of Django's template engine.
+"django-components + HTMX + Alpine" is the Django app with the card, the
+counter, the status line and the page rewritten as components of
+[django-components](https://github.com/django-components/django-components),
+the Django library Citry grew out of.
 
 Some differences between cells come from how each framework naturally
 writes a part of the page, not from its tools:
 
-- **m20:** the Django and Rusty apps' toggle script is a `.js` file,
-  which VS Code's JavaScript check reads; Jinja's is written inline in an
-  Alpine attribute, which nothing checks before the browser.
+- **m20:** the Django, Rusty and django-components apps' toggle script
+  is a `.js` file, which VS Code's JavaScript check reads; Jinja's is
+  written inline in an Alpine attribute, which nothing checks before the
+  browser.
 - **m13:** some apps read the state field before writing it, so a
   misspelled field fails at runtime; others only write it, so the page is
   silently wrong.
@@ -173,11 +178,13 @@ writes a part of the page, not from its tools:
   never read the server's reply as data, so each applies to one framework
   only: Citry's card sends its title with the hide event (m30), and Nuxt's
   page reads `count` from the reply (m34). The other cells are n/a.
-- **m32:** Django, Rusty, Jinja and FastHTML are "prevented": HTMX sends
-  form fields, which are always text, so `"1"` and `1` send the same
-  request.
+- **m32:** Django, Rusty, Jinja, django-components and FastHTML are
+  "prevented": HTMX sends form fields, which are always text, so `"1"`
+  and `1` send the same request.
 - **m35:** Citry, FastHTML and Next.js declare the card's footer as
-  required, so leaving it out is reported. A Django block is always
+  required, so leaving it out is reported before the app runs;
+  django-components declares it required too, and reports it when the
+  page renders. A Django block is always
   optional, and so is a Nuxt slot whose type does not mark it required, so
   the cards silently lose their footer links; Jinja's macro fails when it
   calls the missing fill.
@@ -188,15 +195,16 @@ writes a part of the page, not from its tools:
   the data (`data="{ title, count }"`), and does not check the type in
   either form, so both mistakes show only when the page renders. Jinja
   prints a misspelled name as empty text, so its m36 is missed.
-- **m38:** Django and Rusty read the session with a default value, so a
-  misspelled field quietly shows 0, while the Jinja app reads its state
-  without a default, so the misspelled field raises an error.
+- **m38:** Django, Rusty and django-components read the session with a
+  default value, so a misspelled field quietly shows 0, while the Jinja
+  app reads its state without a default, so the misspelled field raises
+  an error.
 - **m42:** no framework's tools report a secret sent to the browser, and
   the page looks the same, so every cell is missed.
 
 The gaps the earlier 24-mistake run found in Citry are tracked in
-[#207](https://github.com/citry-dev/citry/issues/207); the gaps the
-mistakes measured since (m25 to m42, m47 and m49) found are not in it yet.
+[#207](https://github.com/citry-dev/citry/issues/207); the gaps found by
+the mistakes added since (m25 to m42, m47 and m49) are not in it yet.
 
 Rusty's cells match Django's except three:
 
@@ -216,7 +224,39 @@ Two cases are written differently but end as Django's do. With no
 `{% extends %}`, the m47 case misspells the page template's path in the
 view, which fails at runtime.
 
-django-components, Tetra, django-unicorn, Reflex and ReactPy are not
+django-components' cells differ from Django's in these places
+([`frameworks/django-components/`](frameworks/django-components/) holds
+its app and notes):
+
+- **m02, m04, m05 and m35:** django-components checks each component's
+  inputs and slots when it renders, so a misspelled or missing input or
+  slot gives a server error on the first page load, where the Django app
+  shows a different page with no error. Nothing reports these before the
+  app runs.
+- **m03 and m49:** the wrong-typed input and the misspelled `tone` choice
+  give a server error on the first page load, but only because the app
+  turns on django-components' documented type checking (Pydantic models
+  with the djc-ext-pydantic extension), following the rule on stricter
+  settings below. Without it, the card would show the text `card.count`
+  in place of the number, and the first card would silently lose its
+  border.
+- **m12:** the page's script reads values only from the data
+  `get_js_data()` sends it, so reading a `secret_token` that was never sent
+  leaves the API line blank, with no error. The Django app's script looks
+  the value up by element id and fails when the element is missing.
+- **m36 and m37:** unlike a Django block, a django-components slot hands
+  data to its fill (`{% slot "footer" title=title count=count %}`), which
+  the fill reads through `data="footer"`, so both mistakes apply. Nothing
+  checks what a template fill reads from that data, so a misspelled field
+  prints as empty text and a count joined with text through `add` prints
+  an empty value in place of the count; both are missed.
+
+m25 to m28 end as in the Django app. django-components hands a component
+its inputs once, when the server renders it, and `open` changes in the
+browser, so the Status component's markup is still the Django app's
+nested Alpine component.
+
+Tetra, django-unicorn, Reflex and ReactPy are not
 measured yet.
 
 ## The reference page
@@ -389,14 +429,25 @@ linters and type checker most of its projects add. Earlier is better, so a
 mistake these tools report counts as caught before running, however the
 framework itself would have reported it. For every Python stack that means
 pyright in standard mode (Pylance with type checking turned on) and ruff
-with its default rules; for Django, Rusty and Jinja templates, djLint;
-for Nuxt, the official `@nuxt/eslint` module; for Next.js, the ESLint its
-starter installs. Each tool keeps its default rules, with two exceptions that the
-clean app needs and that such projects commonly make: FastHTML's main.py
-turns off ruff's star-import rules (F403, F405), and Nuxt's ESLint config
-turns off `vue/multi-word-component-names`. An app setting that is off by
-default, such as Jinja's `StrictUndefined`, stays off in the published
-results.
+with its default rules; for Django, Rusty, django-components and Jinja
+templates, djLint; for Nuxt, the official `@nuxt/eslint` module; for
+Next.js, the ESLint its starter installs. Each tool keeps its default
+rules, with three exceptions that the clean app needs and that such
+projects commonly make: FastHTML's main.py turns off ruff's star-import
+rules (F403, F405), Nuxt's ESLint config turns off
+`vue/multi-word-component-names`, and the django-components app silences
+one pyright check on the two lines where a component declares its `View`
+class the way the django-components docs write it.
+
+When a framework has a setting that turns on a stricter check, and other
+frameworks here have the same kind of check, the benchmark turns it on in
+that framework's app, so the frameworks are compared like for like, and the
+framework's notes name each setting changed from the default. The
+django-components app is the first one set up this way: it checks the
+types of component inputs when a component renders, as Citry does, using
+Pydantic models. The other apps are set up under the same rule in a later change;
+until then they keep every setting at its default, such as Jinja's
+`StrictUndefined`.
 
 | Stage | What it measures |
 | --- | --- |

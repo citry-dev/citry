@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = '@clik="toggle"' }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = '<button type="button" :aria-expanded="open" @click="toggle">Details</button>'
+new = '<button type="button" :aria-expanded="open" @clik="toggle">Details</button>'

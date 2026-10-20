@@ -52,7 +52,7 @@ _EVIDENCE_CHARS = 300
 
 # Citry comes first, so every other column reads as a comparison with it; then
 # the Python server stacks, then the TypeScript frameworks.
-ORDER = ("citry", "django", "rusty", "jinja", "fasthtml", "nuxt", "next")
+ORDER = ("citry", "django", "rusty", "jinja", "django-components", "fasthtml", "nuxt", "next")
 
 CATEGORIES = {
     "naming": "Names: components, inputs, slots, variables",

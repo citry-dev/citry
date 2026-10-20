@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/card/card.py", contains = '''template_file = 'crad.html'''' }
+
+[[edits]]
+file = "components/card/card.py"
+old = '''template_file = 'card.html''''
+new = '''template_file = 'crad.html''''

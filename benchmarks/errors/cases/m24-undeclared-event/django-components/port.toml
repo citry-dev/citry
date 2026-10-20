@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/card/card.html", contains = '''$dispatch('hdie')''' }
+
+[[edits]]
+file = "components/card/card.html"
+old = '''<button type="button" @click="$dispatch('hide')">Hide</button>'''
+new = '''<button type="button" @click="$dispatch('hdie')">Hide</button>'''

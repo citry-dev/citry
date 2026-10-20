@@ -1,0 +1,28 @@
+[project]
+name = "django-components-error-benchmark"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django==6.1.1",
+    "django-components==0.152.0",
+    # django-components' documented way to check component value types.
+    "djc-ext-pydantic==1.1.0",
+]
+
+[dependency-groups]
+# The tools most Django projects add, which Django's own starter does
+# not install: pyright stands in for Pylance in the editor, ruff lints the
+# Python files and djLint the templates.
+dev = [
+    "djlint==1.46.6",
+    "pyright==1.1.414",
+    "ruff==0.15.5",
+]
+
+[tool.uv]
+package = false
+
+# Type checking on, as in most typed Python projects: Pylance's "standard"
+# mode, which is also the pyright command line's default.
+[tool.pyright]
+typeCheckingMode = "standard"

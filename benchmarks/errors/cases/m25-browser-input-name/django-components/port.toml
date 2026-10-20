@@ -1,0 +1,13 @@
+# The status line is an Alpine component nested inside the one that owns
+# `open`, and its markup reads `open` through the scope Alpine shares with
+# it, as in the Django app. django-components renders the status line's
+# markup on the server and cannot pass that component `open`, which changes
+# in the browser. The name the markup reads stands in for the input's name,
+# so the case misspells the name the markup reads.
+status = "ported"
+mistake = { file = "components/status/status.html", contains = "opne ?" }
+
+[[edits]]
+file = "components/status/status.html"
+old = '''x-text="open ? 'Status: open' :'''
+new = '''x-text="opne ? 'Status: open' :'''

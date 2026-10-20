@@ -1,0 +1,21 @@
+# The developer also declares the field in JsData, as the app declares
+# every value it sends. The secret reaches the browser either way, because
+# django-components only checks the dict against the model and sends the
+# dict.
+status = "ported"
+mistake = { file = "components/board_page/board_page.py", contains = ''''secret_token': settings.SECRET_TOKEN''' }
+
+[[edits]]
+file = "components/board_page/board_page.py"
+old = '''        return {'api_base': settings.API_BASE}'''
+new = '''        return {'api_base': settings.API_BASE, 'secret_token': settings.SECRET_TOKEN}'''
+
+[[edits]]
+file = "components/board_page/board_page.py"
+old = '''
+        api_base: str
+'''
+new = '''
+        api_base: str
+        secret_token: str
+'''

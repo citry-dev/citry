@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "components/counter/counter.html", contains = '"amont"' }
+
+[[edits]]
+file = "components/counter/counter.html"
+old = '''hx-vals='{"amount": 1}''''
+new = '''hx-vals='{"amont": 1}''''

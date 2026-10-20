@@ -1,0 +1,10 @@
+# The card passes its title and count to the footer slot as slot data, and
+# the page's fill names that data `footer` with the `data` keyword
+# django-components' slot docs show.
+status = "ported"
+mistake = { file = "components/board_page/board_page.html", contains = "footer.titel" }
+
+[[edits]]
+file = "components/board_page/board_page.html"
+old = "Open {{ footer.title }} ({{ footer.count }})"
+new = "Open {{ footer.titel }} ({{ footer.count }})"
