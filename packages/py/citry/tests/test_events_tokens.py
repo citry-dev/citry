@@ -755,6 +755,18 @@ class TestApplyUpdates:
         assert "Expected int" in exc_info.value.fields["count"]
         assert state.count == 0
 
+    def test_parameterized_container_fields_accept_json_lists(self):
+        # JSON has no tuple or set, and on Python 3.10 a parameterized generic
+        # such as ``tuple[str, ...]`` counts as a type that isinstance() rejects.
+        @dataclass
+        class TagState:
+            tags: tuple[str, ...] = ()
+            labels: set[str] = frozenset()
+
+        state = TagState()
+        applied = apply_state_updates(state, {"tags": ["a"], "labels": ["b"]}, model_fields=("tags", "labels"))
+        assert applied == ("labels", "tags")
+
     def test_bool_not_accepted_for_int_field(self):
         state = WidgetState()
         with pytest.raises(StateUpdateError):

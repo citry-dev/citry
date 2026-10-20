@@ -510,6 +510,10 @@ class CDisclosure(LibraryComponent):
         default: SlotInput[CDisclosureDefaultSlotData]
         actions: SlotInput[CDisclosureActionsSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_disclosure_snapshot", None)
         if cached is not None:
@@ -1520,6 +1524,10 @@ class CInternalDisclosureTitleContent(LibraryComponent):
     class Slots:
         default: SlotInput[CDisclosureTitleSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -1544,6 +1552,10 @@ class CInternalDisclosureActionsContent(LibraryComponent):
     class Slots:
         default: SlotInput[CDisclosureActionsSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -1567,6 +1579,10 @@ class CInternalDisclosurePanelContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CDisclosureDefaultSlotData]
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(
         self,

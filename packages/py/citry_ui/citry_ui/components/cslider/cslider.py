@@ -1182,6 +1182,10 @@ class CSlider(LibraryComponent):
     class Slots:
         pass
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _snapshot(self, kwargs, is_range=False)
 
@@ -1236,6 +1240,10 @@ class CRangeSlider(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _snapshot(self, kwargs, is_range=True)

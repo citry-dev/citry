@@ -195,6 +195,10 @@ class CStepper(LibraryComponent):
     class Slots:
         default: SlotInput[CStepperDefaultSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_STEPPER_CONTEXT, None) is not None:
             raise ValueError(
@@ -462,6 +466,10 @@ class CStep(LibraryComponent):
         description: SlotInput[CStepDescriptionSlotData] | None = None
         indicator: SlotInput[CStepIndicatorSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         for name in ("disabled", "optional", "error"):
             validate_boolean("CStep", name, getattr(kwargs, name))
@@ -497,6 +505,10 @@ class CInternalStepperDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CStepperDefaultSlotData]
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -528,6 +540,10 @@ class CInternalStepper(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if len(kwargs.registry.steps) < 2:
@@ -598,6 +614,10 @@ class CInternalStep(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declaration = kwargs.declaration
