@@ -219,9 +219,10 @@ writes a part of the page, not from its tools:
   error stays in `$error('search')`, which the page does not show.
 - **m45:** Django, Rusty, Jinja and django-components build the link from
   the route's name, so the page fails to render. Citry, FastHTML and
-  Next.js link by path and get a 404 when the link is clicked; Nuxt's
-  router prints only a warning, and ReactPy's router shows its
-  `Page not found` route with no message at all. Next.js's `typedRoutes` and Nuxt's
+  Next.js link by path and get a 404 when the link is clicked. Nuxt's
+  router prints only a warning. ReactPy's router changes the page in the
+  browser, so the link shows the app's catch-all `Page not found` route,
+  and nothing reports an error. Next.js's `typedRoutes` and Nuxt's
   `typedPages`, which would check links before the app runs, are off,
   as they are by default.
 - **m46:** Citry checks a message's arguments in the editor. Django's and
@@ -310,7 +311,7 @@ other framework here that writes its page as Python functions:
   types, so treating `count` as text fails only when the card renders.
 - **m17, m27 and m49:** nothing checks an argument's type or allowed
   choice, before or while the app runs. A count passed as text prints the
-  same text, so m17 is "never"; a status line given text in place of a
+  same text, so m17 is missed; a status line given text in place of a
   boolean (m27) and the misspelled `tone` (m49) change the page without an
   error.
 - **m28:** the status line's click handler assigns `False` to `open`,
@@ -329,8 +330,9 @@ other framework here that writes its page as Python functions:
   toggle's click handler are Python code, so their syntax errors are
   Python syntax errors, which pyright and ruff report.
 - **m45:** the About link goes through ReactPy-Router, which changes the
-  page in the browser. A misspelled route shows the router's
-  `Page not found` route with no error, where FastHTML's link gets a 404.
+  page in the browser. A link to a misspelled path shows the app's
+  catch-all `Page not found` route, and nothing reports an error, where
+  FastHTML's link gets a 404 from the server.
 - **m12 and m40:** the API line is a ReactPy JavaScript component that
   reads the API base from its props. Reading a prop the server did not
   pass shows `API: undefined` with no error. (A second prop that carries

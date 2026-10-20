@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and seven others report the same 49 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and eight others report the same 49 developer mistakes.
 ---
 
 # Benchmarks
@@ -83,7 +83,7 @@ django-components is the Django app with its page, cards, counter and
 status line rewritten as components of
 [django-components](https://github.com/django-components/django-components),
 the Django library Citry grew out of.
-[ReactPy](https://github.com/reactive-python/reactpy) writes
+[ReactPy](https://github.com/reactive-python/reactpy) lets you write
 React-style components in Python: the server runs them and sends the
 browser the page to show.
 
@@ -200,8 +200,8 @@ browser the page to show.
 - **ReactPy**: the app turns on ReactPy's debug mode, which is off by
   default. It adds development checks, such as a warning for a list
   item without a key, like the ones React gives in development. With it
-  off, every ReactPy result here stays the same. The other frameworks
-  keep their default settings for now.
+  off, every ReactPy result here stays the same.
+- **Other frameworks**: default settings.
 - **Setup**: the project layout from each framework's docs or starter,
   with default settings unless the
   [benchmark notes](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)

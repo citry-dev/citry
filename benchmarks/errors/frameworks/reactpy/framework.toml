@@ -69,7 +69,10 @@ what passes between the server and browser code.
 submits it the ordinary way, back to `/` with the text as `q` in the URL. \
 Page reads it with ReactPy-Router's `use_search_params()`. The field is \
 controlled by `use_state`, so the `Searching for:` line repeats what is \
-typed.
+typed. A ReactPy developer could instead handle `on_submit` and keep the \
+text in state, so no field name would be read and m44 would not apply; \
+the page submits the form because the reference page has the server read \
+the field `q`.
 - The About and project pages come from ReactPy-Router 2.0.0, the router \
 the ReactPy project publishes for ReactPy 1.1: App lists the routes with \
 `browser_router` and `route`, the project page reads its `{id:int}` part \
@@ -135,8 +138,8 @@ page asks for is exported by its file, logs more, and shows a component's \
 render error in the page in place of the component. The benchmark runs \
 each framework's development mode, and Next.js, through React, gives the \
 same kind of development warnings, so the rule on stricter settings turns \
-it on. It changes no cell: a run with `REACTPY_DEBUG_MODE=0` gave the same \
-44 cells. Each error it shows in the page is also logged without it, and \
+it on. It changes no cell: runs with `REACTPY_DEBUG_MODE=0` gave the same \
+49 cells. Each error it shows in the page is also logged without it, and \
 m41 fails either way (in debug mode when the element is built, otherwise \
 when the update is sent, which leaves the page blank while the browser \
 keeps reconnecting).

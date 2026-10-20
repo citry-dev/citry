@@ -2,7 +2,8 @@
 name = "reactpy-error-benchmark"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-# The same direct dependencies as the ReactPy app in benchmarks/web. Starlette
+# The ReactPy app in benchmarks/web's direct dependencies, plus ReactPy-Router
+# for the About and project pages. Starlette
 # stays on 0.x, because ReactPy 1.1.0's Starlette backend calls
 # `add_websocket_route`, which Starlette 1.x does not have.
 dependencies = [

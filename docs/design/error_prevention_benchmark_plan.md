@@ -644,7 +644,7 @@ benchmark's stage: editor, check, build, or runtime.
     it imports `pkg_resources`. It checks only where hooks are
     called, which no mistake in the catalogue tests, so it is not a stage.
   - **Debug mode:** PR 8 turns it on under the decision on stricter
-    settings. It changes no cell; a run with it off gave the same 44
+    settings. It changes no cell; runs with it off gave the same 49
     cells.
 
 ### What this says about Citry's blind spots
@@ -1031,9 +1031,10 @@ change per baseline, plus re-checking the clean page.
 | 11. Tetra | | ~62 | ~10 min | |
 | (later) Ref G and m50 | provide/inject in every baseline | 1 case + 1 baseline change per framework | | |
 
-The "Full run after" times assume one case at a time; the measured
-eight-framework run after PR 6, with `--jobs 5`, took about 10 minutes.
-The case counts for PRs 4 and 5 assume six frameworks. Each framework
+The estimated "Full run after" times assume one case at a time; the
+measured ones use `--jobs 5`, such as the eight-framework run after PR 6,
+which took about 10 minutes. Row 4 counts the eight frameworks measured
+when PR 4 ran, and row 5 the nine measured now. Each framework
 added before one of them adds one case per mistake and one baseline change
 per page addition: Django Rusty Templates (PR 9) and django-components
 (PR 6) came before both, and ReactPy (PR 8) before PR 5.

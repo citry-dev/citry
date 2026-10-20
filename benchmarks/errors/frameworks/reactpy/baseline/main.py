@@ -161,8 +161,8 @@ def ProjectPage() -> VdomDict:
 
 @component
 def App() -> ComponentType:
-    # ReactPy-Router, from the ReactPy project, picks the page for the URL in
-    # the browser; the last route catches every other URL.
+    # ReactPy-Router, from the ReactPy project, picks the page that matches the
+    # browser's URL; the last route catches every other URL.
     return browser_router(
         route("/", Page()),
         route("/about", html.h1("About this board")),
