@@ -5,14 +5,14 @@ at the end. Written against the benchmark as added in PR #205 (commit
 `9346c7131`). PRs 1a (case edits) and 1b (runner journeys and page
 comparison) are done, as described in section 7, and so are PR 2 (the
 hand-off mistakes on the current page), PR 3 (browser components and slot
-data), PR 4 (forms, links, assets, CSS variables and i18n arguments) and PR 9 (Django Rusty Templates, the Django app on an experimental
-Rust version of Django's template engine). PR 9 landed before PRs 4 and 5,
-so each of those PRs also adds its page changes and cases to the Rusty
-app. PR 6 has added django-components, with PR 3's reference-page parts
-and a case for each of the 44 mistakes in the catalogue after PR 3; PRs 4
-and 5 cover it too. The other PRs in section 8 are planned. The published
-results include 1b, PR 2, PR 3, PR 9, PR 6 and PR 4. The benchmark itself is
-described in
+data), PR 4 (forms, links, assets, CSS variables and i18n arguments) and
+PR 9 (Django Rusty Templates, the Django app on an experimental Rust
+version of Django's template engine). PR 6 has added django-components,
+with PR 3's reference-page parts and a case for each of the 44 mistakes in
+the catalogue after PR 3. PRs 9 and 6 landed before PR 4, so PR 4 added its
+page changes and cases to both apps, and PR 5 will too. The other PRs in
+section 8 are planned. The published results include 1b, PR 2, PR 3, PR 9,
+PR 6 and PR 4. The benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
 
@@ -432,8 +432,8 @@ Notes on single entries:
   so m42 adds a new case mainly for Citry and the server-template stacks.
   It is kept because the benchmark should show a shared blind spot, not only
   Citry's wins.
-- **m46** applies only where translations are built in (Citry, Django and,
-  if added, django-components and Tetra), like m15.
+- **m46** applies only where translations are built in (Citry, Django,
+  Rusty, django-components and, if added, Tetra), like m15.
 
 ---
 
@@ -461,8 +461,10 @@ benchmark's stage: editor, check, build, or runtime.
   Most of these rules have no Citry equivalent, because Citry does not split
   server and client components.
 - **Typed links (`typedRoutes`, editor and build).** Off by default.
-  Whether the decision on stricter settings turns it on is settled when m45
-  is added (PR 4); left off, a misspelled link (m45) is missed. Source: [Next.js TypeScript docs](https://nextjs.org/docs/app/api-reference/config/typescript).
+  PR 4 left it off, because every app except django-components keeps its
+  defaults until the later change that applies the decision on stricter
+  settings. With it off, a misspelled link (m45) is a 404 when the link is
+  clicked. Source: [Next.js TypeScript docs](https://nextjs.org/docs/app/api-reference/config/typescript).
 - **eslint-config-next (check).** Its rules come from
   [packages/eslint-config-next](https://github.com/vercel/next.js/blob/canary/packages/eslint-config-next/src/index.ts):
   - errors: `react/jsx-key` and `jsx-no-duplicate-props`, and
@@ -524,8 +526,9 @@ benchmark's stage: editor, check, build, or runtime.
 - **Nuxt options that are off by default.** `experimental.typedPages` (typed
   `<NuxtLink>`) and the typed message options of @nuxtjs/i18n
   ([experimental features](https://nuxt.com/docs/4.x/guide/going-further/experimental-features)).
-  As with `typedRoutes`, whether the decision on stricter settings turns
-  `typedPages` on is settled with m45; left off, m45 is missed in Nuxt too.
+  PR 4 left `typedPages` off too. It checks route names, and the Nuxt page
+  links by path, so it would not change m45 there: vue-router prints a
+  warning in the browser when the link is clicked.
 
 ### Django 6.1 and Jinja 3.1
 
@@ -993,7 +996,7 @@ change per baseline, plus re-checking the clean page.
 | 2. Hand-offs on the current page (done) | m29-m35, m38-m42, m47 (13 mistakes; part 2 mistakes that need no page change) | 78 (13 x 6), minus the cells that do not apply | ~12 min | ~34 min |
 | 3. Browser components and slot data (done; the run changed one existing cell, Citry m14, from runtime error to missed, because the details panel now passes `open` to `Status`) | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
 | 4. Forms, links, assets, CSS variables, i18n arguments (done, after PRs 9 and 6, so it covers eight frameworks; the run changed no existing cell) | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 40 written + 8 baseline changes | ~10 min measured: the three new journeys add page loads to every case | ~20 min for eight frameworks, measured |
-| 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 78 + 6 baseline changes | ~12 min | ~58 min |
+| 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 104 + 8 baseline changes, now that there are eight frameworks | ~12 min, estimated for six frameworks before the journeys PR 4 added | ~58 min, estimated before PR 4; PR 4 measured ~20 min for eight frameworks |
 | 6. django-components (done, after PR 9 and before PRs 4 and 5) | framework, baseline, one case per mistake. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); they ran on their own in about 95 seconds with `--jobs 5` | 44 written (estimate ~62) | ~1.5 min measured (estimate ~8 min) | ~10 min for eight frameworks, measured |
 | 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first | ~62 | unknown: 30-95 min if every case builds the frontend | see open question 4 |
 | 8. ReactPy | | ~62 | ~6 min | |

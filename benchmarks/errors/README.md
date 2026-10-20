@@ -126,9 +126,9 @@ browser checks of the 4 cases whose journey stops on an error page, which
 are never stored. Every framework repeats such cases on each run. A full run
 of the eight frameworks' 392 cases with nothing stored (`--no-cache`) took
 about 20 minutes on the same machine; most of it is the Nuxt cases, which
-run one at a time, and the Next.js builds. Each journey adds a page load to
-every browser check, and the search, About and project journeys made it
-six journeys per framework. It is not part of routine CI. Run
+run one at a time, and the Next.js builds. Each journey loads the page
+again in every browser check, and the `search`, `about` and `project`
+journeys bring each framework to five (FastHTML to four). It is not part of routine CI. Run
 it at each Citry release, and when a framework's pinned versions change.
 
 ## Latest result
@@ -203,11 +203,11 @@ writes a part of the page, not from its tools:
   an error.
 - **m42:** no framework's tools report a secret sent to the browser, and
   the page looks the same, so every cell is missed.
-- **m43:** no tool here checks a CSS variable's name against the value
-  the server sets, so the heading silently changes color. Nuxt is the
-  exception because its page reads the server's value with Vue's
-  `v-bind()` in the stylesheet, which makes the misspelled name a
-  property of the board data that vue-tsc reports.
+- **m43:** only Nuxt reports a CSS variable whose name differs from the
+  one the server sets. Its page reads the server's value with Vue's
+  `v-bind('board?.accent')`, so the misspelled name reads a property the
+  board data does not have, which vue-tsc reports. Elsewhere the heading
+  silently changes color.
 - **m44:** nothing compares a form field's name with the name the server
   reads, so the search shows no `Searched:` line. Citry's form calls a
   server event, which rejects the call because `q` is missing, but the
@@ -219,9 +219,10 @@ writes a part of the page, not from its tools:
   `typedPages`, which would check links before the app runs, are off,
   as they are by default.
 - **m46:** Citry checks a message's arguments in the editor. Django's and
-  django-components' `{% blocktranslate %}` prints the misnamed argument
-  as empty text, while Rusty's view fills the gettext placeholder from a
-  dictionary and raises a `KeyError`. The other frameworks have no
+  django-components' `{% blocktranslate %}` leaves the owner's name out,
+  so the subtitle reads `Owned by ` with no error, while Rusty's view
+  fills the gettext placeholder from a dictionary and raises a
+  `KeyError`. The other frameworks have no
   translations built in, as for m15.
 - **m48:** the misspelled image is a 404 when the page loads, except in
   Nuxt, whose build turns an image path in a template into an import and
@@ -231,12 +232,16 @@ The gaps the earlier 24-mistake run found in Citry are tracked in
 [#207](https://github.com/citry-dev/citry/issues/207); the gaps found by
 the mistakes added since (m25 to m49) are not in it yet.
 
-Rusty's cells match Django's except three:
+Rusty's cells match Django's except four:
 
 - **m08:** Django Rusty Templates raises an error when the page reads a
   misspelled attribute of an existing object (`owner.nmae`), where Django
   prints an empty string. This is the only mistake the two template
   engines handle differently.
+- **m46:** with no `{% blocktranslate %}`, Rusty's view fills the
+  subtitle's gettext placeholder from a dictionary, so the misnamed
+  argument raises a `KeyError`; Django's tag prints the name as empty
+  text.
 - **m05 and m35:** n/a. The version this benchmark pins has no
   `{% extends %}` or `{% block %}`, so the card writes its own footer
   link, and the page has no footer to misspell or leave out. For the
@@ -293,7 +298,7 @@ every framework.
 
 | Part | What the page does | Used by |
 | --- | --- | --- |
-| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title`. The server sets its color, blue, as the CSS variable `--accent`, which the stylesheet reads (Nuxt's stylesheet reads the server's value with Vue's `v-bind()` instead) | m15, m43 |
+| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title`. The server sets its color, blue, as the CSS variable `--accent`, which the stylesheet reads (Nuxt's stylesheet reads the server's value with Vue's `v-bind()` instead). This is unrelated to the card's `accent` tone | m15, m43 |
 | Subtitle | `Owned by Ada` under the heading. Where translations are built in, it comes from a message that takes the owner's name as an argument | m46 |
 | Board wrapper | A `<div class="board" title="Board">` around everything below. The stylesheet makes `.board` text `rgb(0, 128, 0)` | m10, m11, m16 |
 | Avatar | An `<img>` of the owner from the app's static files, `avatar.svg`, with the alt text `Ada` | m48 |
@@ -345,9 +350,10 @@ framework except FastHTML, which has no status line, also lists a `status`
 journey, which clicks `Details`, `Close`, and `Details` again.
 
 A framework lists its journeys in `framework.toml`, by name, because the
-selectors differ between frameworks. In this shortened example, `search`
-is a second journey that types into the search field and submits it (the
-real default journeys also click `Details` and `Hide`):
+selectors differ between frameworks. This shortened example lists the
+default journey and the search journey, which types into the search field
+and submits it (the real default journeys also click `Details` and
+`Hide`):
 
 ```toml
 [runtime.journeys]

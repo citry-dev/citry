@@ -55,23 +55,24 @@ child's emit, which Citry's `undeclared-emit` rule (an event the component
 does not declare) checks; misspelling it in the parent's `@hdie` listener
 reports nothing, which m29 measures. m21 misspells `v-if`, which Vue rejects
 in the browser; a misspelled server-side `c-if`, such as the one that
-shows the search form's `Searched:` line, would be silent. m12 reads `SECRET_TOKEN` in Vue
-code, which the unknown variable rule checks; returning it from
+shows the search form's `Searched:` line, would be silent, and no case
+measures it. m12 reads `SECRET_TOKEN` in Vue code, which the unknown
+variable rule checks; returning it from
 `js_data()`, which sends it to the browser, reports nothing, which m42
 measures. In the Next.js and Nuxt ports of m12, reading the secret in
 browser code also sends it: the server renders it into the page before the
 browser reports a hydration error.
 
 The search form is its own `Search` component. `@c-submit.prevent` sends
-the form's named controls to the component's `search` server event, as
-Citry's forms guide shows, and the event renders the component again with
-what was searched. The text typed so far is ordinary Vue state bound with
+the form's fields to the component's `search` server event, as Citry's
+forms guide shows, and the event renders the component again with what
+was searched. The text typed so far is ordinary Vue state bound with
 `v-model`. The heading's color comes from `css_data()`, which Citry turns
-into the CSS variable `--accent` on the component's top-level elements,
-the heading among them. The bare ASGI
-starter has a single page route and serves no static files, so app/main.py
-adds the About and project pages as plain path checks and serves
-app/static/, where the owner's avatar lives.
+into the CSS variable `--accent` on the board page's own elements, the
+heading among them. The bare ASGI starter has a single page route and
+serves no static files, so app/main.py adds the About and project pages
+as plain path checks and serves app/static/, where the owner's avatar
+lives.
 
 The browser always runs Vue's production build, so Vue's development
 warnings never appear, and no Citry case can end as a runtime warning

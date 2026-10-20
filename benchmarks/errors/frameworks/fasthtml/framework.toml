@@ -37,9 +37,9 @@ The board sets the heading's color as the CSS variable `--accent` in its \
 `style`, and app.css reads it. The About and project pages are routes \
 written as `@rt("/about")` on functions named after them, since a second \
 function named `get` would redefine the first, which ruff reports. The page \
-links to them with path strings, as it names its other routes. Passing \
-the route function itself (`href=about`) would make a misspelled link \
-(m45) an undefined name, as for m06.
+links to them with path strings, as the Add button names `/save`. Passing \
+the route function itself (`href=about`) would make pyright report a \
+misspelled link (m45) as an undefined name, as in m06.
 
 editor: FastHTML's docs name no editor. VS Code with Pylance is used as the \
 most common Python setup, with type checking turned on. It is measured with \

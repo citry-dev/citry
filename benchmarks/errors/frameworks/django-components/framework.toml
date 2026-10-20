@@ -9,8 +9,8 @@ django-components installs djc-core 1.3.1, its compiled helper package. \
 Django, HTMX, Alpine, the settings and the tools are otherwise the same as in \
 the Django app.
 
-The page is built from four components in the project's `components/` \
-folder, the folder django-components looks in by default. Each component is a \
+The board page is built from four components in the project's \
+`components/` folder, the folder django-components looks in by default. Each component is a \
 Python class in its own folder with its template in a separate .html file, as \
 the getting-started tutorial writes them, and is registered with `@register`:
 - BoardPage is the whole page. Its `View.get` answers `/`, and \
@@ -54,14 +54,17 @@ the runner does after its clicks.
 The page parts that are plain template markup are written as in the Django \
 app: the subtitle's `{% blocktranslate %}`, the avatar's `{% static %}`, the \
 search form, which submits back to the page with GET, and the `{% url %}` \
-links. Three parts use django-components' own forms. BoardPage's \
+links. Three parts use django-components' own features. BoardPage's \
 `get_css_data()` returns the heading's color, which django-components turns \
 into the CSS variable `--accent` that board_page.css reads. The page's View \
 passes the searched text to BoardPage as its input `searched`. And the About \
-and project pages are components whose Views are routed with `as_view()`; \
-their templates load the components' CSS and JavaScript with \
-`{% component_css_dependencies %}` and `{% component_js_dependencies %}`, as \
-the docs' page templates do.
+and project pages are two more components, whose Views are routed with \
+`as_view()`. Their templates name where the components' CSS and JavaScript \
+go with `{% component_css_dependencies %}` and \
+`{% component_js_dependencies %}`, the tags the docs' page templates use; \
+BoardPage leaves that to django-components, which inserts them by default. \
+A template tag in the head also keeps djLint's rule that asks for a meta \
+description (H030) quiet, as BoardPage's `{% static %}` tags do.
 
 A component's View gets a URL in one of two ways the docs show: \
 `get_component_url()`, which makes one up from the class, or \
@@ -73,8 +76,8 @@ in Python instead, and a misspelled class name there (m06) would be an \
 editor error rather than the runtime error `{% url %}` gives.
 
 Value types: by default django-components turns a component's `Kwargs`, \
-`Slots`, `TemplateData`, `JsData` and `CssData` classes into named tuples, which check \
-only that each name is known and each required name is given. Its docs say \
+`Slots`, `TemplateData`, `JsData` and `CssData` classes into named tuples, \
+which check only that each name is known and each required name is given. Its docs say \
 that to check types as well, a project writes these classes as Pydantic \
 models and installs the djc-ext-pydantic extension, which the \
 django-components project publishes. The benchmark turns on a framework's \

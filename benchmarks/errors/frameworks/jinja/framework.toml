@@ -24,13 +24,14 @@ Python files; Pylance does not check Jinja templates or the HTMX and Alpine
 attributes in them. VS Code's built-in HTML support checks only <script>
 and <style> blocks inside a page. The page's one <style> block, which sets
 `--accent`, gives no finding in VS Code's CSS check (tried with
-vscode-css-languageservice 6.3.2), so the editor stage leaves it out. Pylance's default diagnosticMode "openFilesOnly" reports
+vscode-css-languageservice 6.3.2), so the editor stage does not run that
+check. Pylance's default diagnosticMode "openFilesOnly" reports
 only on open files, while the command line checks every file, which can only
 add findings.
 
-The page writes the heading's color into a `<style>` block in its head as
-the CSS variable `--accent`, which styles.css reads, because djLint flags
-an inline style (H021), as in the Django app. The search form submits back
+As in the Django app, the page writes the heading's color into a `<style>`
+block in its head, because djLint flags an inline style (H021); styles.css
+reads it as the CSS variable `--accent`. The search form submits back
 to the page with GET, and the route reads `q` from the query string. The
 About and project pages are named Starlette routes, which the page links to
 with `url_for`; the project route takes the number as `{project_id:int}`.

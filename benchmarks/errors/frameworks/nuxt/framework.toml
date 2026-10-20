@@ -62,7 +62,7 @@ the opening and the closing tag; renaming only the opening tag is a template com
 the editor reports.
 
 Three results depend on how the page is written. The heading's color is read with `v-bind()`,
-so m43's misspelled name is a TypeScript property of the board data, which vue-tsc reports; a
+so m43's misspelled name reads a property the board data does not have, which vue-tsc reports; a
 `style` binding that sets `--accent` for a `var(--accent)` in main.css would report nothing. The
 avatar is a path into public/, and Vite turns an absolute path in a template into an import, so
 m48's misspelled file fails `nuxt build`. And `experimental.typedPages` is off, as it is by

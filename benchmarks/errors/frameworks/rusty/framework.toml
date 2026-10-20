@@ -45,8 +45,8 @@ as its footer, but that needs a separate template file for each fill, so \
 the app keeps the footer in the card. The four slot mistakes do not apply: the page has no \
 footer to fill (m05, m35), and the card hands no slot data to a fill (m36, \
 m37).
-Apart from whitespace, the page the browser gets is the same as the Django \
-app's.
+Apart from whitespace and the order of the tags in its head, the page the \
+browser gets is the same as the Django app's.
 
 The card's `tone` and the status line inside Details are written as in the \
 Django app: the page picks each card's `tone` with \

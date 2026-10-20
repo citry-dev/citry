@@ -113,9 +113,9 @@ the Django library Citry grew out of.
 - **Missed: 15**, nothing tells you:
     - a misspelled HTML element, HTML attribute name, CSS class, or CSS
       variable the server sets: the page looks wrong
-    - a form field named differently from what the server reads: the
-      search shows nothing. The server rejects the call, but the page
-      shows no error
+    - a form field named differently from what the server reads:
+      submitting the search shows no result. The server rejects the
+      call, but the page shows no error
     - the data a button sends to the server has a misspelled field, a
       field of the wrong type, or a missing field: the server rejects
       it, but the page shows no error
