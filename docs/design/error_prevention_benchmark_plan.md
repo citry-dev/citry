@@ -890,12 +890,14 @@ Recommended order:
    because it has no slots and no child-to-parent events. Its unknown-method
    behavior (silently ignored) is a useful data point.
    Done in PR 10 (`frameworks/unicorn`): the card list, the cards, the
-   counter, the details and the status line are components. Seven cases
-   do not apply (m05, m14, m20 and m34 to m37) and one is prevented (m32).
-   m24 applies after all: the card calls the card list's `hide` method
-   through `self.parent`. django-unicorn has no stricter setting to
-   turn on. Its 44 cases ran on their own in about 100 seconds with
-   `--jobs 5`.
+   counter, the details, the status line and the search form are
+   components. Seven cases do not apply (m05, m14, m20 and m34 to m37)
+   and one is prevented (m32). m24 applies after all: the card calls the
+   card list's `hide` method through `self.parent`. django-unicorn has no
+   stricter setting to turn on. PR 10 was written after PR 4, so it also
+   adds PR 4's page parts and cases. Its 49 cases ran on their own in
+   about 3 minutes with `--jobs 5`; its 44 cases took about 100 seconds
+   before PR 4 added five cases and three journeys.
 6. **Tetra.** Highest setup cost after Reflex: encrypted state, sessions and
    an esbuild step. The web benchmark app already solves these, so the
    baseline can start from it.
@@ -1047,7 +1049,7 @@ change per baseline, plus re-checking the clean page.
 | 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first | ~62 | unknown: 30-95 min if every case builds the frontend | see open question 4 |
 | 8. ReactPy (done, after PR 4 and before PR 5; the run changed no existing cell) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 2 minutes with `--jobs 5` | 49 written (estimate ~62) | ~2 min measured (estimate ~6 min) | ~22 min for nine frameworks, measured |
 | 9. Django Rusty Templates (done, after PR 3 and before PRs 4 and 5) | starts from the Django baseline. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); its first 37 cases ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~7 min) | ~8.5 min for seven frameworks, measured |
-| 10. django-unicorn (done, after PR 6 and before PRs 4 and 5) | framework, baseline, one case per mistake. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); they ran on their own in about 100 seconds with `--jobs 5`. Not in a published run yet | 44 written (estimate ~62) | ~1.7 min measured (estimate ~7 min) | |
+| 10. django-unicorn (done, after PRs 6 and 4 and before PR 5) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 3 minutes with `--jobs 5`. Not in a published run yet | 49 written (estimate ~62) | ~3 min measured (estimate ~7 min) | |
 | 11. Tetra | | ~62 | ~10 min | |
 | (later) Ref G and m50 | provide/inject in every baseline | 1 case + 1 baseline change per framework | | |
 

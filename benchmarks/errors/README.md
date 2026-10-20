@@ -346,8 +346,9 @@ translations.
 django-unicorn has an app and cases
 ([`frameworks/unicorn/`](frameworks/unicorn/) holds the app and its
 notes), but it is not in the run above; it joins the next published run.
-Its app is the Django app with the cards, the counter and the details
-turned into [django-unicorn](https://www.django-unicorn.com/) components.
+Its app is the Django app with the cards, the counter, the details with
+their status line, and the search form turned into
+[django-unicorn](https://www.django-unicorn.com/) components.
 Each click sends the component's state to the server, which runs a Python
 method and sends back the component's new HTML, so the page loads neither
 HTMX nor Alpine. The saved count lives in the page, not in the session, so
