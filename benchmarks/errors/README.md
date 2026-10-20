@@ -500,47 +500,59 @@ card list, the cards, the counter, the details with their status line and
 the search form turned into [Tetra](https://www.tetraframework.com/)
 components. Each component is a Python class whose template and script
 are strings in the class. The server renders it, and in the browser it
-becomes an Alpine component whose Alpine code can call the class's
-public methods on the server. The saved count lives in the page, as in
-django-unicorn, so after a reload the page shows `Saved: 0`. In a run of
-its own, its cells differ from Django's in these places:
+becomes an Alpine component. The attributes it declares with
+`public(...)`, its public attributes, are Alpine data in the browser and
+travel back to the server with each call, and its Alpine code can call
+the class's public methods on the server. A page passes a component its
+values in the component's tag, such as `{% Card title=... %}`, and Tetra
+hands them to the component's `load()` method when it renders it. The
+saved count lives in the page, as in django-unicorn, so after a reload the
+page shows `Saved: 0`. In a run of its own, its cells differ from
+Django's in these places:
 
 - **m01:** the card list uses the card as a template tag, `{% Card %}`,
   and Tetra compiles every component's template when Django starts, so
   the misspelled tag fails `manage.py check`. The Django app's misspelled
   `{% include %}` fails only when the page renders.
-- **m02 and m04:** the card's values arrive as the arguments of its
-  `load()` method, so a misspelled or missing `title` raises a
+- **m02 and m04:** a misspelled or missing `title` in the card's tag
+  leaves `load()` without its `title` argument, so it raises a
   `TypeError` when the page renders, where the Django app's page shows no
   title and no error.
+- **m18:** n/a. Tetra sends a public method's arguments in order, with
+  no names, so the request has no field to misspell.
 - **m20 and m22:** the details' script and the card's template are
   strings in the component's Python class, as Tetra's tutorial writes
-  them, so neither VS Code's JavaScript check nor djLint reads them. The
-  script's syntax error makes `manage.py tetrabuild` print esbuild's error,
-  but the command still succeeds, so the build stage does not count it;
-  the page then fails to render (m20). The unclosed element is missed
-  (m22). The Django app's script and template are files, which those tools
-  check.
+  them, so neither VS Code's JavaScript check nor djLint reads them. Tetra
+  builds the scripts with esbuild, a JavaScript bundler, when its build
+  command, `manage.py tetrabuild`, runs. The script's syntax error makes
+  the command print esbuild's error, but the command still exits
+  successfully, so the build stage counts it as a warning (m20). The
+  error points at a copy of the script Tetra makes for esbuild, so the
+  cell is marked `°`. The unclosed element is missed (m22). The Django
+  app's script and template are files, which those tools check.
+- **m30 and m32:** the card sends its title with the `hide` event, so
+  m30 applies. The case sends the card's count instead, and the card
+  list stores that number in `hidden`, which is declared as a list of
+  strings. Tetra checks public attributes against their declared types
+  when it writes a component's state into the page, so the call fails
+  with a server error. In the m32 case the Add button calls `save('1')`,
+  and Tetra passes the text on unchanged, so adding it to the total fails
+  with a server error. In the Django app, HTMX sends the amount as form
+  text and the view converts it with `int()`, so its m32 is prevented.
+- **m36 and m37:** Tetra renders a slot's content with the card's own
+  variables, so the fill reads the card's `title` and `count`, and both
+  mistakes apply. Tetra's docs do not describe this; passing the list's
+  `card` to the fill instead, which they do describe, would make both
+  n/a, as in the Django app. Nothing checks what a fill reads, so both
+  are missed.
 - **m39:** the saved total is a typed public attribute of the counter, so
   pyright reports text stored in it. The Django app keeps the total in
   the session, which nothing checks.
-- **m30 and m32:** the card sends its title with the `hide` event, so
-  m30 applies, and the card list stores a number where its `hidden`
-  attribute is declared as a list of strings. Tetra checks public
-  attributes against their types when it saves a component's state, so
-  the call fails with a server error. The Add button calls `save('1')`,
-  and Tetra passes the text on unchanged, so adding it to the total fails
-  with a server error (m32), where HTMX's form fields make the Django
-  app's m32 prevented. m30 and m41 are runtime errors only because the
-  app annotates the public attributes' types, following the rule on
-  stricter settings below; without the annotations, a trial run gave a
-  silently wrong m30 and a never-reported m41.
-- **m36 and m37:** Tetra renders a slot's content with the card's own
-  variables, so the fill reads the card's `title` and `count`, and both
-  mistakes apply. Nothing checks what a fill reads, so both are missed.
-  A Django block takes no arguments, so the Django app's cells are n/a.
-- **m18:** n/a. Tetra sends a public method's arguments in order, with
-  no names, so the request has no field to misspell.
+
+m30 and, as in the Django app, m41 are runtime errors, but in Tetra only
+because the app gives its public attributes types, following the rule on
+stricter settings below. In a trial run without the types, both were
+missed.
 
 Reflex is not measured yet.
 
@@ -724,8 +736,9 @@ linters and type checker most of its projects add. Earlier is better, so a
 mistake these tools report counts as caught before running, however the
 framework itself would have reported it. For every Python stack that means
 pyright in standard mode (Pylance with type checking turned on) and ruff
-with its default rules; for Django, Rusty, django-components,
-django-unicorn, Tetra and Jinja templates, djLint; for Nuxt, the official
+with its default rules; for the templates of Django, Rusty,
+django-components, django-unicorn and Jinja, and Tetra's page templates,
+djLint; for Nuxt, the official
 `@nuxt/eslint` module; for Next.js, the ESLint its starter installs.
 Each tool keeps its default rules (for a linter, the rules its framework's
 preset turns on), except for the stricter settings below

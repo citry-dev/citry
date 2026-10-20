@@ -249,6 +249,41 @@ def djlint(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding
     return findings
 
 
+# esbuild prints `✘ [ERROR] message`, then the place as `    path:line:col:`.
+_ESBUILD_ERROR = re.compile(r"^\s*(?:✘\s*)?\[ERROR\]\s+(?P<msg>.*)$")
+_ESBUILD_LOCATION = re.compile(r"^\s+(?P<file>[^\s:][^:]*):(?P<line>\d+):\d+:\s*$")
+
+
+def esbuild(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding]:
+    """Read the esbuild errors a build command prints, such as Tetra's `manage.py tetrabuild`.
+
+    A command can print esbuild's error and still succeed, as tetrabuild does.
+    The developer sees the error, but a CI build passes, so the error counts as
+    a warning then, and as an error only when the command fails.
+    """
+    severity = "error" if exit_code != 0 else "warning"
+    findings = []
+    pending: str | None = None
+    for line in _strip_ansi(stdout + "\n" + stderr).splitlines():
+        match = _ESBUILD_ERROR.match(line)
+        if match:
+            # An error with no place before the next one is kept unlocated.
+            if pending is not None:
+                findings.append(Finding(None, None, severity, "esbuild", pending))
+            pending = match["msg"].strip()
+            continue
+        match = _ESBUILD_LOCATION.match(line)
+        if pending is not None and match:
+            findings.append(Finding(relative(match["file"], work), int(match["line"]), severity, "esbuild", pending))
+            pending = None
+    if pending is not None:
+        findings.append(Finding(None, None, severity, "esbuild", pending))
+    # The command can also fail before esbuild runs, such as on a Python import error.
+    if exit_code != 0 and not findings:
+        findings.extend(exit_status(stdout, stderr, exit_code, work))
+    return findings
+
+
 def exit_status(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding]:
     """Treat a failing command as one unlocated error, quoting the end of its output."""
     if exit_code == 0:
@@ -280,5 +315,6 @@ PARSE = {
     "eslint-json": eslint_json,
     "ruff-json": ruff_json,
     "djlint": djlint,
+    "esbuild": esbuild,
     "exit": exit_status,
 }

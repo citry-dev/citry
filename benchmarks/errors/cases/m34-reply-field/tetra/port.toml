@@ -1,2 +1,2 @@
 status = "not-applicable"
-reason = """The counter's `save` returns nothing. Tetra renders the counter again after the call and morphs the new HTML into the page, so no code of the app reads a field of the reply."""
+reason = """The counter's `save` returns nothing. A public method's return value would reach the Alpine code that called it, but the counter relies on Tetra's default instead: Tetra renders the counter again after the call and puts the new HTML in place of the old, so no code of the app reads a field of the reply."""

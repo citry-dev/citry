@@ -34,7 +34,7 @@ ALLOWED_HOSTS = []
 INSTALLED_APPS = [
     # Tetra's install guide puts it before django.contrib.staticfiles, so its
     # runserver command, which builds the components' JavaScript and CSS
-    # first, takes precedence.
+    # first, takes precedence over the one staticfiles adds.
     'tetra',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -128,13 +128,16 @@ STATIC_URL = 'static/'
 
 
 # Tetra
-# Tetra builds each component library's JavaScript and CSS with esbuild.
-# Tetra 0.8.5 ships no esbuild binary and would download one on first use, so
-# this app installs the version Tetra downloads (0.27.2) from npm, as Tetra's
-# install guide allows, and names it here. npm puts it in node_modules/.bin,
-# which `npm exec` and the benchmark's runner put on PATH.
+# Tetra builds each component library's JavaScript and CSS with esbuild, a
+# JavaScript bundler. Tetra 0.8.5 ships no esbuild binary and would download
+# one on first use, so this app installs the version Tetra downloads (0.27.2)
+# from npm, as Tetra's install guide allows, and names it here. npm puts it
+# in node_modules/.bin next to package.json. The benchmark's runner keeps
+# node_modules elsewhere and puts its .bin folder on PATH, so the app looks
+# there second.
 
-TETRA_ESBUILD_PATH = shutil.which('esbuild') or str(BASE_DIR / 'node_modules' / '.bin' / 'esbuild')
+ESBUILD = BASE_DIR / 'node_modules' / '.bin' / 'esbuild'
+TETRA_ESBUILD_PATH = str(ESBUILD) if ESBUILD.exists() else shutil.which('esbuild') or str(ESBUILD)
 
 
 # Email

@@ -6,8 +6,10 @@ from sourcetypes import css, django_html
 from tetra import Component, public
 
 # Tetra finds this module because it is board/components/default.py: every
-# component class here belongs to the app's `default` library, and templates
-# use each one as a tag named after its class, such as {% Card %}.
+# component class here belongs to the app's `default` library, the group of
+# components whose scripts and styles Tetra builds into one JavaScript file
+# and one CSS file. Templates use each one as a tag named after its class,
+# such as {% Card %}.
 #
 # A public attribute is part of the component's Alpine data in the browser.
 # Its type annotation lets Tetra check the value whenever it saves the
@@ -18,8 +20,7 @@ from tetra import Component, public
 # Tetra's docs mark each inline template, stylesheet and script with a type
 # from sourcetypes, which tells VS Code's Python Inline Source extension how
 # to highlight it. `script` goes without one: Component declares it as
-# `str | None`, so pyright rejects `script: javascript`, and no comment can
-# silence that on a line that opens a string.
+# `str | None`, so pyright rejects `script: javascript`, a form the docs use.
 
 
 # The page's cards, typed so a type checker sees their fields.
@@ -49,18 +50,21 @@ class ApiLine(Component):
 class Card(Component):
     # Public, so the Hide button can send the title with its event.
     title: str = public('')  # pyright: ignore[reportAssignmentType]
+    # No browser code reads these, so they stay on the server.
     count: int = 0
     tone: Literal['plain', 'accent'] = 'plain'
 
-    # The {% Card %} tag's arguments arrive here, and Tetra keeps them to call
-    # load() again whenever the card is resumed from its saved state.
+    # The {% Card %} tag's arguments arrive here. Tetra keeps them and calls
+    # load() again whenever a public method call rebuilds the card from the
+    # state saved in the page.
     def load(self, title: str, count: int, tone: Literal['plain', 'accent'], *args, **kwargs) -> None:
         self.title = title
         self.count = count
         self.tone = tone
 
-    # The footer slot is filled by the card list. A slot's content renders
-    # with the card's own variables, so the fill reads `title` and `count`.
+    # The footer slot is filled by the card list. Tetra renders a slot's
+    # content with the card's own variables, so the fill reads `title` and
+    # `count` from the card.
     template: django_html = """
     <div class="card card--{{ tone }}">
       <h2>{{ title }}: {{ count }} tasks</h2>

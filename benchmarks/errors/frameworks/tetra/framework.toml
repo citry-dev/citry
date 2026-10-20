@@ -3,21 +3,22 @@ name = "Tetra"
 notes = """
 The app is the Django app (frameworks/django) with Tetra 0.8.5 added the \
 way its install guide says: `tetra` first in INSTALLED_APPS, before \
-`django.contrib.staticfiles`, so Tetra's runserver command, which builds the \
-components' JavaScript and CSS before it starts the server, takes \
-precedence; `tetra.middleware.TetraMiddleware` last in MIDDLEWARE; \
-`tetra.urls` under `__tetra__/` in the URL configuration; and `{% \
-tetra_styles %}` and `{% tetra_scripts include_alpine=True %}` in the page's \
-head. The version is the one the performance benchmark's Tetra app pins \
-(benchmarks/web/apps/tetra), whose README explains why it is not the latest \
-release. As there, channels 4.3.2 is pinned because Tetra 0.8.5 imports it \
-when Django starts; the app uses no reactive component and no channel layer. \
-Tetra 0.8.5's wheel ships no esbuild binary and downloads one into its own \
-package folder on the first build, so the app installs esbuild 0.27.2, the \
-version Tetra would download, with npm (package.json), and names it in \
-TETRA_ESBUILD_PATH, as the install guide allows. Tetra brings its own Alpine, \
-so the page loads neither HTMX nor a separate Alpine. Django, the settings \
-and the tools are otherwise the same as in the Django app.
+`django.contrib.staticfiles`, so that Tetra's runserver command takes \
+precedence over the one staticfiles adds; `tetra.middleware.TetraMiddleware` \
+last in MIDDLEWARE; `tetra.urls` under `__tetra__/` in the URL \
+configuration; and `{% tetra_styles %}` and `{% tetra_scripts \
+include_alpine=True %}` in the page's head. The version is the one the \
+performance benchmark's Tetra app pins (benchmarks/web/apps/tetra), whose \
+README explains why it is not the latest release. As there, channels 4.3.2 \
+is pinned because Tetra 0.8.5 imports it when Django starts; the app uses no \
+WebSockets. Tetra builds its components' JavaScript and CSS with esbuild, a \
+JavaScript bundler. Tetra 0.8.5's wheel ships no esbuild binary and \
+downloads one into its own package folder on the first build, so the app \
+installs esbuild 0.27.2, the version Tetra would download, with npm \
+(package.json), and names it in TETRA_ESBUILD_PATH, as the install guide \
+allows. Tetra brings its own Alpine, so the page loads neither HTMX nor a \
+separate Alpine. Django, the settings and the tools are otherwise the same \
+as in the Django app.
 
 The page is a plain Django view and template (board/views.py, \
 board/templates/board/page.html) with the heading, the subtitle, the avatar, \
@@ -26,15 +27,18 @@ color is set in a `<style>` block as the CSS variable `--accent` that \
 board.css reads, the subtitle uses `{% blocktranslate with name=owner.name \
 %}`, the avatar `{% static %}`, and the links `{% url %}`. The interactive \
 parts are Tetra components in board/components/default.py, the module \
-Tetra's tutorial uses: every class in it belongs to the app's `default` \
-library, and a template uses each one as a tag named after its class, such \
-as `{% Card ... %}...{% /Card %}`. Each component writes its template, and \
-where it has them its script and its stylesheet, as Python strings in the \
-class, as the tutorial and the components docs do:
+Tetra's tutorial uses. Every class in it belongs to the app's `default` \
+library, the group of components whose scripts and styles Tetra builds into \
+one JavaScript file and one CSS file, and a template uses each one as a tag \
+named after its class, such as `{% Card ... %}...{% /Card %}`. Each \
+component writes its template, and where it has them its script and its \
+stylesheet, as Python strings in the class, as the tutorial and the \
+components docs do. A component's public attributes, declared with \
+`public(...)`, are part of its Alpine data in the browser; its other \
+attributes stay on the server. Its load() method is the one Tetra calls \
+with the component tag's values when it renders the component:
 - ApiLine has the public attribute `api_base`, which load() sets from the \
-settings, and shows it with Alpine's `x-text`. A public attribute is part \
-of the component's Alpine data in the browser; every other attribute stays \
-on the server.
+settings, and shows it with Alpine's `x-text`.
 - ProjectList builds the cards in load() and keeps the titles of the hidden \
 cards in the public attribute `hidden`. Its `hide(title)` method is \
 subscribed with `@public.listen('hide')` to the browser event `hide`, the \
@@ -42,26 +46,24 @@ shortcut the components docs give for an event that bubbles up from a \
 child: Tetra calls the method on the server with the event's value, then \
 renders the list again without the hidden card.
 - Card takes `title`, `count` and `tone` as the arguments of its load() \
-method, which is how the component tag passes values to a component. \
-load() also takes `*args, **kwargs`, as every load() in Tetra's docs does, \
-so an argument it does not name is dropped. `title` is public, so the Hide \
-button can send it with `$dispatch('hide', title)`; `count` and `tone` are \
-ordinary attributes, because no browser code reads them. The card's \
-template has a `{% slot footer %}`, which the card list fills inside the \
-card's tag. Tetra renders a slot's content with the card's own variables, \
-not the list's (a template passes its own variables to a component only \
-through the tag's `context:` section or the component's `_extra_context`), \
-so the fill reads `title` and \
-`count` from the card: this is how the card hands its data to the fill. \
-Tetra has no required slots. The accent border is in the card's `style`, \
-which Tetra bundles with the library's CSS.
+method. load() also takes `*args, **kwargs`, as most load() methods in \
+Tetra's docs do, so an argument it does not name is dropped. `title` is \
+public, so the Hide button can send it with `$dispatch('hide', title)`; \
+`count` and `tone` are ordinary attributes, because no browser code reads \
+them. The card's template has a `{% slot footer %}`, which the card list \
+fills inside the card's tag. The accent border is in the card's `style`, \
+which Tetra builds into the library's CSS.
 - Counter keeps the saved total in the public attribute `count`. Add runs \
 `save(1)`: Tetra calls the public method on the server with the arguments \
 in order, then renders the counter again.
 - Details keeps the public attribute `open`, which its script's `toggle()` \
-changes in the browser, with no server request, the way Tetra's docs toggle \
-a password field. `aria-expanded` and the details text follow `open` \
-through Alpine.
+changes in the browser, with no server request. Tetra's tutorial puts a \
+component's browser behavior in such script methods, and the Django and \
+django-components apps toggle the details with a script function too. The \
+docs' password field toggles inline instead (`@click="visible = \
+!visible"`); written that way, no script would define the toggle, and m20 \
+would be n/a, as for django-unicorn. `aria-expanded` and the details text \
+follow `open` through Alpine.
 - Status is the status line inside Details. Tetra gives a component its \
 inputs only when the server renders it, and `open` changes in the browser, \
 so, as in the Django and django-components apps, the status line is an \
@@ -73,54 +75,92 @@ field with `x-model`, in the browser only. The form submits to the page with \
 GET, so the field's `name` decides what the view reads, as in the Django \
 app.
 
+The footer slot and what the card hands it: Tetra renders a slot's content \
+with the card's own variables, not the card list's (the list's variables \
+reach the card only through the tag's `context:` section or the card's \
+`_extra_context`). So the fill reads `title` and `count` from the card, \
+which is how the card hands its data to the fill here. This is how Tetra \
+0.8.5's code works (a fill is a Django block, rendered in the component's \
+context), but its docs do not describe it: they say only that passing \
+context suits content passed down from an outer template. A developer \
+whose first try, `{{ card.title }}`, prints nothing would either find this \
+or pass the list's `card` with `context: card`. Written the second way, the \
+card would hand the fill no data, and m36 and m37 would be n/a, as in the \
+Django app. Tetra has no required slots.
+
 State lives in the page. Tetra writes each component's public attributes \
-into its root element as Alpine data, together with the component's whole \
-state, pickled and encrypted with a key made from SECRET_KEY and the \
-session, and the browser sends both back with each public method call. So \
-the saved total is kept in the page, and a reload starts again from \
-`Saved: 0`, as in the Citry and django-unicorn apps; the Django app keeps \
-the total in the session and shows `Saved: 1` after a reload.
+into its root element as Alpine data, together with the component's state: \
+the component pickled, without the attributes load() sets, and encrypted \
+with a key made from SECRET_KEY and the session. The browser sends both \
+back with each public method call. So the saved total is kept in the page, \
+and a reload starts again from `Saved: 0`, as in the Citry and \
+django-unicorn apps; the Django app keeps the total in the session and \
+shows `Saved: 1` after a reload.
 
 Inline components, or directory-style ones: Tetra's library docs also \
 describe directory-style components, whose template, script and stylesheet \
-are files next to the component's Python module. Written that way, djLint \
-and VS Code's JavaScript check could read them, so m20 and m22 would likely \
-end as in the Django app, as an editor error and a check error. This is \
-reasoned from the Django app's cells, not measured. The inline form is the \
-one the tutorial teaches.
+are files next to the component's Python module, and call the inline form \
+"another (shortcut) way of creating components, especially for simple \
+building bricks (like BasicComponents without Js, CSS, and with small HTML \
+templates)". The app still writes Details' script and Card's stylesheet \
+inline, because the tutorial writes its TodoItem, which has both, that way, \
+and so do the components docs' examples. Written as files, the card's \
+template would be read by djLint, which reports the unclosed element of m22 \
+there (H025, checked on such a file), and the details' script by the \
+JavaScript syntax check the Django app has, which reports the syntax error \
+of m20 in the Django and django-components apps. So m20 and m22 would \
+likely end as in the Django app; m22 was checked with djLint, m20 is \
+reasoned from those apps' cells. Tetra 0.8.5 reads a directory-style \
+component's script from `<component name>.js`, not the `script.js` its \
+library docs show.
 
-The one stricter setting: type annotations on public attributes. Tetra \
-builds a Pydantic model from each component's public attributes and their \
-annotations, and checks the values against it whenever it saves the \
-component's state, that is whenever the component renders. The docs write \
-public attributes both with an annotation (`visible: bool = \
-public(False)`) and without (`title = public("")`); without one, the model \
-accepts any value. Citry, and django-components with its type-checking \
-extension, check component values' types too, so this app annotates every \
-public attribute. Two cells depend on it, measured in a trial run without \
-the annotations: m30 and m41 end as runtime errors with them, and without \
-them m30 is silently wrong (the list stores the number and no title \
-matches it) and m41 is never reported (Tetra's JSON encoder writes the \
-Path as its text). Pydantic's default mode turns text such as "3" into a \
-number. Were the card's `count` and `tone` public, Tetra would check them \
-too, and m03 and m49 would likely end as runtime errors (reasoned from the \
-source, not measured); they are not public because no browser code reads \
-them. pyright sees `public(...)` itself as a `Public` object, not as the \
-annotated type, so each annotated line carries a `# pyright: ignore` comment \
-for that one check (reportAssignmentType); no case edits those lines except \
-m42, which adds one. The docs also annotate each inline template, script \
-and stylesheet with a type from the sourcetypes package (an alias of str \
-that VS Code's Python Inline Source extension reads to highlight the \
-string). The scripts go without it: Component declares `script` as `str | \
-None`, so pyright rejects `script: javascript`, and no comment can silence \
-that on a line that opens a string.
+The one stricter check: type annotations on public attributes. Tetra has \
+no setting for this; it checks a value only when its attribute has a type \
+annotation, so annotating every public attribute is how this app turns the \
+check on. Tetra builds a Pydantic model from each component's public \
+attributes and their annotations, and checks the values against it each \
+time it writes the component's state into the page. The docs write public \
+attributes both with an annotation (`visible: bool = public(False)`) and \
+without (`title = public("")`); without one, the model accepts any value. \
+Citry, and django-components with its type-checking extension, check \
+component values' types too, so this app annotates every public attribute. \
+Two cells depend on it, measured in a trial run without the annotations: \
+m30 and m41 end as runtime errors with them, and were missed without them \
+(m30's list stored the number and no title matched it; m41 showed the same \
+page, because Tetra's JSON encoder writes the Path as its text). The trial \
+left out only the annotations of `api_base` and `hidden`, and pyright \
+reported an error in its clean app, where the card list unpacks the \
+unannotated `hidden`; the browser check, which decides both cells, is not \
+affected by that. Without the annotation on `count`, pyright also rejects \
+the counter's addition, so a developer using pyright is pushed to write \
+the annotations anyway. Pydantic's default mode accepts \
+numeric text such as "3" for a number, and Tetra keeps the text, but it \
+rejects text such as "card.count". Were the card's `count` and `tone` \
+public, Tetra would check them too, and m03 and m49 would likely end as \
+runtime errors (reasoned from the source, not measured); they are not \
+public because no browser code reads them. pyright sees `public(...)` as a \
+`Public` object, not as a value of the annotated type, so each annotated \
+line carries a `# pyright: ignore` comment for that one check \
+(reportAssignmentType); no case edits those lines except m42, which adds \
+one. The docs also annotate each inline template, script and stylesheet \
+with a type from the sourcetypes package (an alias of str that VS Code's \
+Python Inline Source extension reads to highlight the string). The scripts \
+go without it: Component declares `script` as `str | None`, so pyright \
+rejects `script: javascript`. `script: javascript | None` passes, but the \
+docs never write it, and whether the extension still highlights it was not \
+checked.
 
 What Tetra itself checks, read from the installed source and seen in the \
 cases:
 - Tetra compiles every component's template when Django starts, so an \
 unknown tag, such as a misspelled component tag (m01), fails `manage.py \
-check` and the build. It also rejects a template without exactly one \
-top-level tag.
+check` and the build. This is not a system check, and it is partly an \
+accident: in DEBUG, Tetra catches the template's syntax error, logs it and \
+puts off compiling until the first render, but its own check that the \
+template has exactly one top-level tag then reads the template's source, \
+which compiles it at once and raises the error. A later version could keep \
+the error until the page renders. The same misspelled tag in page.html, \
+which is not a component template, fails only when the page renders.
 - The component tag's values are Python arguments of load(), so a missing \
 argument raises a TypeError when the page renders. No type or allowed \
 value is checked.
@@ -130,12 +170,15 @@ Tetra logs the error and answers 500, and its browser script throws. A \
 public method name the component does not have is a ReferenceError in \
 Alpine, in the browser; the server never hears of it.
 - The build: `manage.py tetrabuild`, and runserver before it starts, build \
-each library's JavaScript and CSS with esbuild. A syntax error in a script \
-makes esbuild print the error, with the line in the component's Python \
-file, and Tetra print `ERROR BUILDING JS`, but tetrabuild still exits with \
-status 0, so the build stage, which counts a failing build, does not count \
-it (m20). runserver goes on, and every page that uses a component of that \
-library then fails, because the library's build output is missing.
+each library's JavaScript and CSS with esbuild. Tetra copies each inline \
+script into a file under the app's `__tetracache__` folder, padded with \
+spaces so that its lines match the component's Python file, and esbuild \
+reports a syntax error at that copy's line. Tetra then prints `ERROR \
+BUILDING JS`, but tetrabuild still exits with status 0. The build stage \
+reads esbuild's error from the output and counts it as a warning, because \
+the developer sees it but a CI build passes (m20). runserver goes on, and \
+every page that uses a component of that library then fails, because the \
+library's JavaScript file is missing.
 
 editor: as in the Django app. Tetra ships no editor extension or language \
 server; its docs point to VS Code's Python Inline Source extension, which \
@@ -151,29 +194,41 @@ JavaScript support does not read JavaScript written in a Python string.
 check: `python manage.py check`, plus ruff with its default rules for the \
 Python files and djLint with its Django profile for the page templates. A \
 linter finding fails its command, so it counts as an error. Tetra's own \
-system checks concern only reactive components and WebSockets. djLint does \
-not read the component templates, which are Python strings.
+system checks concern only components that use WebSockets; m01 fails \
+`manage.py check` because Tetra compiles the templates when Django starts. \
+djLint does not read the component templates, which are Python strings.
 
 build: `python manage.py tetrabuild`, the build command Tetra's install \
-guide names. It counts only when it fails.
+guide names, read with the esbuild parser: esbuild's printed errors count \
+as warnings when the command exits with status 0, and a failing command \
+counts as an error.
 
 runtime: as in the Django app, `manage.py migrate` (sessions are stored in \
-the database, and Tetra creates one to encrypt each component's state), \
-then `manage.py runserver --noreload`, which is Tetra's runserver: it builds \
-the components' JavaScript and CSS, then starts Django's. The first run \
-builds Tetra's own component library into Tetra's package folder in the \
-shared environment; the clean app runs alone first, so the cases find it \
-built and leave it alone.
+the database, and Tetra creates a session for each visitor and uses it in \
+the key that encrypts each component's state), then `manage.py runserver \
+--noreload`, which is Tetra's runserver: it builds the components' \
+JavaScript and CSS, then starts Django's. Tetra also builds its own \
+component library, into its package folder in the environment every case \
+shares. Setup builds it once, with `manage.py tetrabuild tetra` from the \
+clean app's folder, so cases running side by side find it built and never \
+write it at the same time.
 
 The default journey's Add and Hide clicks each call a public method on the \
-server; the journey waits after Add for the reply, and the runner waits for \
-the last request after Hide. Details and Close change the page in the \
-browser only, so the status journey needs no waits.
+server; the journey waits 500 ms after Add, and 300 ms after Details as the \
+other Django apps' journeys do, and the runner waits for the last request \
+after Hide. Details and Close change the page in the browser only, so the \
+status journey needs no waits.
 """
 
 [setup]
 manifests = [".python-version", "pyproject.toml", "uv.lock", "package.json", "package-lock.json"]
-command = ["sh", "-c", "uv sync --frozen && npm ci --no-audit --no-fund"]
+# Tetra writes its own component library's build into its package folder in
+# the shared environment. Building it here, once, keeps cases that run side
+# by side from building it at the same time.
+command = [
+  "sh", "-c",
+  "uv sync --frozen && npm ci --no-audit --no-fund && cd {framework}/baseline && {venv}/bin/python manage.py tetrabuild tetra",
+]
 
 [[stages]]
 stage = "editor"
@@ -210,7 +265,9 @@ timeout = 300
 stage = "build"
 label = "manage.py tetrabuild (esbuild 0.27.2)"
 argv = ["{venv}/bin/python", "manage.py", "tetrabuild"]
-parser = "exit"
+# tetrabuild exits with status 0 when esbuild fails, so its printed errors
+# are read too.
+parser = "esbuild"
 timeout = 300
 
 [runtime]

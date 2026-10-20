@@ -613,22 +613,23 @@ benchmark's stage: editor, check, build, or runtime.
 
   Measuring it in PR 11 confirmed the browser error (m06 is a runtime
   error; the server's 404 is never reached, because Alpine fails before it
-  sends a request) and corrected the build claim. `manage.py tetrabuild`
-  prints esbuild's error for a script syntax error but exits with status 0,
-  so the build stage does not count it; the page then fails to render,
-  because the library's build output is missing (m20 is a runtime error).
-  It added three findings:
+  sends a request). It also confirmed that a script syntax error shows up
+  at build, with one difference: `manage.py tetrabuild` prints esbuild's
+  error but exits with status 0, so a CI build passes. The benchmark reads
+  the printed error and counts it as a build warning (m20). The page then
+  fails to render, because the JavaScript file Tetra builds for the
+  components is missing. It added three findings:
   - **Templates:** Tetra compiles every component's template when Django
     starts, so an unknown tag, such as a misspelled component tag (m01),
     fails `manage.py check`.
-  - **Inputs:** the component tag's values are the arguments of the
-    component's `load()` method, so a misspelled or missing input raises a
-    `TypeError` when the page renders (m02, m04). Nothing checks their
-    types.
-  - **State:** Tetra checks a public attribute's value against its type
-    annotation when it saves a component's state, so a wrong-typed value
-    is a server error (m30, m41), but only where the attribute is
-    annotated.
+  - **Inputs:** the component tag passes its values as arguments to the
+    component's `load()` method, which Tetra calls when it renders the
+    component, so a misspelled or missing input raises a `TypeError` when
+    the page renders (m02, m04). Nothing checks their types.
+  - **State:** Tetra checks the value of a public attribute (one it sends
+    to the browser) against its type annotation each time it writes the
+    component's state into the page, so a wrong-typed value is a server
+    error (m30, m41), but only where the attribute is annotated.
 - **django-unicorn 0.67.0**:
   - **Unknown method:** `unicorn:click="sav"` is silently ignored.
   - **Unknown field:** `unicorn:model="cuont"` raises `UnicornViewError` and
@@ -953,12 +954,15 @@ Recommended order:
    form are Tetra components. The setup cost was lower than expected:
    Tetra's encrypted state and sessions need only Django's default session
    middleware and `manage.py migrate`, and esbuild comes from npm at the
-   version Tetra would download itself. From the web app it took the
-   pinned versions, including channels, which Tetra imports when Django
-   starts. Five cases do not apply (m14, m18, m26, m27, m34) and one is
-   prevented (m28). Its one stricter setting is a type on every public
-   attribute, which makes Tetra check the attribute's value and changes
-   m30 and m41. PR 11 was written after PR 4, so it covers PR 4's page
+   version Tetra would download itself. The app takes its pinned
+   versions from the performance benchmark's Tetra app, including
+   channels, which Tetra imports when Django starts. Five cases do not
+   apply (m14, m18, m26, m27, m34) and one is prevented (m28). Tetra has
+   no setting for a stricter check, but it checks a public attribute's
+   value only when the attribute declares a type, so the app declares one
+   on each; that changes m30 and m41. The build prints a script's syntax
+   error without failing, so the runner gained an esbuild parser that
+   counts such an error as a build warning. PR 11 was written after PR 4, so it covers PR 4's page
    parts and cases. Its 49 cases ran on their own in about 3.5 minutes
    with `--jobs 5`.
 
@@ -1110,13 +1114,13 @@ change per baseline, plus re-checking the clean page.
 | 8. ReactPy (done, after PR 4 and before PR 5; the run changed no existing cell) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 2 minutes with `--jobs 5` | 49 written (estimate ~62) | ~2 min measured (estimate ~6 min) | ~22 min for nine frameworks, measured |
 | 9. Django Rusty Templates (done, after PR 3 and before PRs 4 and 5) | starts from the Django baseline. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); its first 37 cases ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~7 min) | ~8.5 min for seven frameworks, measured |
 | 10. django-unicorn (done, after PRs 6 and 4 and before PR 5) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 3 minutes with `--jobs 5` | 49 written (estimate ~62) | ~3 min measured (estimate ~7 min) | ~25 min for ten frameworks, measured; the run changed no existing cell |
-| 11. Tetra (done, after PRs 6, 4 and 10 and before PR 5; not in a published run yet) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 3.5 minutes with `--jobs 5` | 49 written (estimate ~62) | ~3.5 min measured (estimate ~10 min) | |
+| 11. Tetra (done, after PRs 6, 4 and 10 and before PR 5; not in a published run yet) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 3.5 minutes with `--jobs 5` | 49 written (estimate ~62) | ~3.5 min measured (estimate ~10 min) | not measured; Tetra is not in a published run yet |
 | (later) Ref G and m50 | provide/inject in every baseline | 1 case + 1 baseline change per framework | | |
 
 The estimated "Full run after" times assume one case at a time; the
 measured ones use `--jobs 5`, such as the eight-framework run after PR 6,
 which took about 10 minutes. Row 4 counts the eight frameworks measured
-when PR 4 ran, and row 5 the eleven measured now. Each framework
+when PR 4 ran, and row 5 the eleven frameworks there are now. Each framework
 added before one of them adds one case per mistake and one baseline change
 per page addition: Django Rusty Templates (PR 9) and django-components
 (PR 6) came before both, and ReactPy (PR 8), django-unicorn (PR 10) and

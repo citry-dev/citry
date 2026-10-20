@@ -3,6 +3,10 @@
 status = "ported"
 mistake = { file = 'board/components/default.py', contains = 'toggle() {' }
 
+[indirect]
+reason = "Tetra copies each inline script into a file under board/__tetracache__/, padded with spaces so that its lines match the component's Python file, and hands that copy to esbuild. esbuild reports the syntax error in the copy, at the line where the missing comma makes the next method unexpected."
+codes = ["esbuild"]
+
 [[edits]]
 file = 'board/components/default.py'
 old = '''

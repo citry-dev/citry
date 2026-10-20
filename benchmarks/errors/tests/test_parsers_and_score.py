@@ -14,6 +14,7 @@ from citry_errors.parsers import (
     ToolUnavailable,
     citry_json,
     djlint,
+    esbuild,
     eslint_json,
     exit_status,
     pyright_json,
@@ -369,6 +370,28 @@ def test_djlint_findings_take_the_file_printed_above_them() -> None:
         Finding("board/templates/board/card.html", 1, "error", "H025", 'Tag seems to be an orphan. <div class="card">')
     ]
     assert djlint("Linted 3 files, found 0 errors.\n", "", 0, WORK) == []
+
+
+def test_esbuild_errors_are_warnings_when_the_build_command_still_succeeds() -> None:
+    # Tetra's tetrabuild prints esbuild's error and exits with status 0.
+    err = (
+        '\u2718 [ERROR] Expected "}" but found "close"\n\n'
+        "    board/__tetracache__/default/default.py__details.tmp.js:149:6:\n"
+        "      149 \u2502       close() {\n\n1 error\n"
+    )
+    found = Finding(
+        "board/__tetracache__/default/default.py__details.tmp.js",
+        149,
+        "warning",
+        "esbuild",
+        'Expected "}" but found "close"',
+    )
+    assert esbuild("ERROR BUILDING JS: board.default\n", err, 0, WORK) == [found]
+    # The same output from a failing command is an error.
+    assert [f.severity for f in esbuild("", err, 1, WORK)] == ["error"]
+    # A failure before esbuild runs, such as a Python import error, is one unlocated error.
+    assert esbuild("", "ImportError: boom", 1, WORK) == [Finding(None, None, "error", "exit-1", "ImportError: boom")]
+    assert esbuild("Tetra: Building Javascript and CSS\n", "", 0, WORK) == []
 
 
 def test_the_html_report_draws_every_framework_and_escapes_tool_output() -> None:
