@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and seven others report the same 44 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and seven others report the same 49 developer mistakes.
 ---
 
 # Benchmarks
@@ -8,7 +8,7 @@ description: How fast Citry and eleven other frameworks make a 1,400-entry page 
 - [Performance](#performance): how long a page with 1,400 entries
   takes to become usable.
 - [Catching errors](#catching-errors): how early each framework
-  reports the same 44 developer mistakes.
+  reports the same 49 developer mistakes.
 
 ## Performance
 
@@ -73,7 +73,7 @@ noise.
 The earlier a mistake is reported, the less time it costs you.
 
 We wrote the same small app in Citry and seven other frameworks, made
-the same 44 mistakes in each (a misspelled component name, a
+the same 49 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**. Rusty is the Django app with its
 templates rendered by
@@ -85,7 +85,7 @@ status line rewritten as components of
 the Django library Citry grew out of.
 
 <c-error-benchmark-chart
-  title="How the 44 mistakes ended in each framework"
+  title="How the 49 mistakes ended in each framework"
 />
 
 ### Read the error chart { #errors-what-the-chart-shows }
@@ -105,14 +105,17 @@ the Django library Citry grew out of.
 
 ### Where Citry stands { #errors-where-citry-stands }
 
-- **Before the app runs: 24 of 42** (23 errors, 1 warning). Two of
-  the 44 mistakes don't apply to Citry. Next.js 34 of 39, Nuxt 23 of
-  40, FastHTML 17 of 32, Django + HTMX + Alpine 3 of 35,
-  Rusty + HTMX + Alpine 3 of 33, django-components + HTMX + Alpine 3
-  of 37, Jinja + HTMX + Alpine 2 of 35.
-- **Missed: 13**, nothing tells you:
-    - a misspelled HTML element, HTML attribute name, or CSS class: the
-      page looks wrong
+- **Before the app runs: 25 of 47** (24 errors, 1 warning). Two of
+  the 49 mistakes don't apply to Citry. Next.js 34 of 43, Nuxt 25 of
+  44, FastHTML 17 of 36, Django + HTMX + Alpine 3 of 40,
+  Rusty + HTMX + Alpine 3 of 38, django-components + HTMX + Alpine 3
+  of 42, Jinja + HTMX + Alpine 2 of 39.
+- **Missed: 15**, nothing tells you:
+    - a misspelled HTML element, HTML attribute name, CSS class, or CSS
+      variable the server sets: the page looks wrong
+    - a form field named differently from what the server reads: the
+      search shows nothing. The server rejects the call, but the page
+      shows no error
     - the data a button sends to the server has a misspelled field, a
       field of the wrong type, or a missing field: the server rejects
       it, but the page shows no error
@@ -135,8 +138,10 @@ the Django library Citry grew out of.
       before an error appears.
 - **Warning only: 1**, an invalid attribute value such as
   `type="sumbit"`.
-- **Only at runtime: 5**:
+- **Only at runtime: 7**:
     - a misspelled template directive: fails in the browser
+    - a link to a route that doesn't exist, or an image with a
+      misspelled path: the browser gets a 404
     - a syntax error in a browser expression: the server fails to render
       the page
     - browser code is passed a value it can't receive, such as a path
