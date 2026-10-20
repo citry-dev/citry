@@ -102,9 +102,10 @@ def make_error_fallback_component(citry_instance: Citry) -> type[Component]:
             if fallback_text is None:
                 return ""
             # on_render escapes a returned plain str, so the attribute text
-            # shows as written; a Markup value stays trusted HTML. Kwargs
-            # types are not enforced at runtime, so a number or other value
-            # becomes its text here rather than failing inside the boundary.
+            # shows as written; a Markup value stays trusted HTML. When the
+            # app turns the input type check off, a number or other value can
+            # still arrive, and it becomes its text here rather than failing
+            # inside the boundary.
             if isinstance(fallback_text, str) or hasattr(fallback_text, "__html__"):
                 return fallback_text
             return str(fallback_text)

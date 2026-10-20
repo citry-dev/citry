@@ -785,6 +785,34 @@ def test_data_method_signatures_use_component_specific_input_types():
         assert signature.parameters["slots"].default is inspect.Parameter.empty
 
 
+def test_installed_components_skip_the_general_input_type_check():
+    # Citry UI checks its public inputs itself with errors that list the
+    # accepted values, and accepts values its annotations do not name, so
+    # every installed class must have Citry's general check off.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    checked = [
+        definition.__name__
+        for definition in installation.definitions
+        if installation[definition]._citry_input_types is not False
+    ]
+    assert checked == []
+
+    class Page(Component):
+        citry = app
+        # A plain attribute passes text, which the heading_level annotation
+        # (an int Literal) does not name.
+        template = """
+          <c-CDisclosure heading_level="2">
+            <c-fill name="title">Title</c-fill>
+            <c-fill name="default">Body</c-fill>
+          </c-CDisclosure>
+        """
+
+    html = Page().render().serialize(deps_strategy="ignore")
+    assert '<h2 class="cui-disclosure__heading"' in html
+
+
 def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():
     requirements = importlib.metadata.requires("citry-ui")
     resources = importlib.resources.files("citry_ui")

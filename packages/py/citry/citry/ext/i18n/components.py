@@ -150,6 +150,12 @@ $component({});
         class Slots:
             default: SlotInput | None = None
 
+        # template_data checks every attribute with an error that names the
+        # <c-i18n> tag, so the general type check would only replace those
+        # messages with one that names this internal class.
+        class Lint:
+            check_input_types = False
+
         def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:  # noqa: ARG002
             client = const_value(kwargs.client)
             if type(client) is not bool:

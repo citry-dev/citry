@@ -50,13 +50,12 @@ def test_card_accepts_one_typed_input_and_one_default_slot() -> None:
     assert len(set(marker.findall(page_html))) == 2
 
 
-def test_plain_schema_annotation_does_not_validate_the_value_type() -> None:
+def test_plain_schema_annotation_rejects_a_wrong_value_type() -> None:
     get_example_registry()
     card = citry.get("card")
 
-    html = str(card(accent=123, slots={"default": "Annotations guide type checkers."}))
-
-    assert "--accent: 123" in html
+    with pytest.raises(TypeError, match=r"Card\.Kwargs\.accent expects str, got int \(123\)"):
+        str(card(accent=123, slots={"default": "Annotations guide type checkers."}))
 
 
 def test_card_requires_its_accent_and_content() -> None:

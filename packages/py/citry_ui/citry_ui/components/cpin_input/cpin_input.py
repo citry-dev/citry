@@ -217,6 +217,10 @@ class CPinInput(LibraryComponent):
     class Slots:
         separator: SlotInput[CPinInputSeparatorSlotData] | None = None
 
+    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    class Lint:
+        check_input_types = False
+
     def _snapshot(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         cached = getattr(self, "_cui_pin_input_snapshot", None)
         if cached is not None:
