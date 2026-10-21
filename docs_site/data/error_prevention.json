@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261021T153733Z",
+  "run": "20261021T155859Z",
   "frameworks": [
     {
       "key": "citry",
@@ -1000,7 +1000,7 @@
       "cell": "R",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
@@ -5138,7 +5138,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):",
-        "error: [21/Oct/2026 15:47:50] \"GET / HTTP/1.1\" 500 320907"
+        "error: [21/Oct/2026 16:09:04] \"GET / HTTP/1.1\" 500 320907"
       ]
     },
     {
@@ -6555,11 +6555,11 @@
       "cell": "Rw",
       "reason": null,
       "evidence": [
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b9434d0, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x10b8e7ec0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b943530, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10ba78040>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b943590, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10ba78180>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10ba7c8f0, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10ba7a160>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10ba7c890, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10ba7a5c0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c34d0, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x107667f60>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c3530, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x1077f40e0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c3590, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x1077f4220>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1077f88f0, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x1077f5da0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1077f8650, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x1077f62a0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
       ]
     },
     {
@@ -6999,7 +6999,7 @@
       "reason": null,
       "evidence": [
         "ruff 0.15.5 (default rules): F841 Local variable `open` is assigned to but never used",
-        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x1079ce020> -> None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ..."
+        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x109db6020> -> None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ..."
       ]
     },
     {
@@ -7926,10 +7926,10 @@
       "cell": "Rw",
       "reason": null,
       "evidence": [
-        "warning: %cssr:warn%c [Vue warn]: injection \"bordName\" not found. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <Index>\nat <RouteProvider>\nat <RouterView>\nat <NuxtPage>\nat <App>\nat <NuxtRoot>",
         "warning: [Vue warn]: injection \"bordName\" not found. \n  at <Card key=\"Alpha\" title=\"Alpha\" count=3  ... > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< undefined > > \n  at <RouteProvider key=\"/\" vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route...",
         "warning: [Vue warn]: injection \"bordName\" not found. \n  at <Card key=\"Beta\" title=\"Beta\" count=5  ... > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< undefined > > \n  at <RouteProvider key=\"/\" vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route= ...",
         "warning: [Vue warn]: injection \"bordName\" not found. \n  at <Card key=\"Gamma\" title=\"Gamma\" count=8  ... > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< undefined > > \n  at <RouteProvider key=\"/\" vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route...",
+        "warning: %cssr:warn%c [Vue warn]: injection \"bordName\" not found. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <Index>\nat <RouteProvider>\nat <RouterView>\nat <NuxtPage>\nat <App>\nat <NuxtRoot>",
         "warning: %cssr:warn%c [Vue warn]: injection \"bordName\" not found. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <Index>\nat <RouteProvider>\nat <RouterView>\nat <NuxtPage>\nat <App>\nat <NuxtRoot>"
       ]
     },

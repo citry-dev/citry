@@ -277,11 +277,11 @@ writes a part of the page, not from its tools:
   the browser is the first to report them.
   [PR #233](https://github.com/citry-dev/citry/pull/233) adds a
   `citry check` rule that asks the FastAPI app which pages and files it
-  serves, but no release has it yet. m45 and m48 are expected to become
-  warnings once a release with it is measured and both `citry` stages
-  pass `--app app.main:citry_app`, the module that calls `mount()`. m61
-  is expected to stay a runtime error, because the rule does not check a
-  parameter type that only the route function declares.
+  serves, but no release has it yet. Both `citry` stages already load the
+  app from `app.main`, the module that calls `mount()`, so m45 and m48
+  are expected to become warnings once a release with the rule is
+  measured. m61 is expected to stay a runtime error, because the rule
+  does not check a parameter type that only the route function declares.
 - **m45:** Django, Rusty, Jinja, Tetra, django-unicorn and
   django-components build the link from the route's name, so the page fails to render.
   Next.js's `typedRoutes` checks a link's path against the app's routes,
