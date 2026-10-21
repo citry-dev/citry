@@ -99,7 +99,9 @@ class Toy:
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def run(self, **options: object) -> Path:
-        args = argparse.Namespace(framework=None, mistake=None, skip_runtime=False, jobs=4, no_cache=False)
+        args = argparse.Namespace(
+            framework=None, mistake=None, skip_runtime=False, jobs=4, static_jobs=2, no_cache=False
+        )
         for name, value in options.items():
             setattr(args, name, value)
         return cli.run(args)

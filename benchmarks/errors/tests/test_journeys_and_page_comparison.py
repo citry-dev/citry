@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -114,6 +115,29 @@ def test_a_runtime_section_without_journeys_is_rejected_when_the_framework_loads
     )
     with pytest.raises(ConfigError, match=r"missing \['journeys'\]"):
         load_framework(root)
+
+
+@pytest.mark.parametrize(("value", "expected"), [(None, True), ("true", True), ("false", False), ('"false"', None)])
+def test_journeys_at_once_is_on_by_default_and_must_be_a_boolean(
+    tmp_path: Path, value: str | None, expected: bool | None
+) -> None:
+    root = tmp_path / "reactpy"
+    root.mkdir()
+    (root / "framework.toml").write_text(
+        'key = "reactpy"\nname = "ReactPy"\nstages = []\n'
+        "[setup]\nmanifests = []\ncommand = []\n"
+        '[runtime]\nargv = ["uvicorn"]\npage_path = "/"\n'
+        + (f"journeys_at_once = {value}\n" if value is not None else "")
+        + '[[runtime.journeys.default]]\naction = "wait"\nms = 1\n'
+    )
+    if expected is None:
+        # A quoted "false" is text, and would read as true if it were let through.
+        with pytest.raises(ConfigError, match="journeys_at_once must be true or false"):
+            load_framework(root)
+    else:
+        runtime_settings = load_framework(root).runtime
+        assert runtime_settings is not None
+        assert runtime_settings.journeys_at_once is expected
 
 
 def test_every_framework_in_the_benchmark_has_a_default_journey() -> None:
@@ -276,40 +300,55 @@ class _FakePage:
     def _log(self, call: str) -> None:
         self.calls.append(f"{self.name}: {call}")
 
+    async def _log_and_yield(self, call: str) -> None:
+        self._log(call)
+        # Hands control to the other journeys, as a real wait on the browser does,
+        # so journeys meant to run at the same time interleave their calls.
+        await asyncio.sleep(0)
+
     def on(self, event: str, _handler: object) -> None:
         self._log(f"on {event}")
 
-    def goto(self, _url: str, **_options: object) -> None:
-        self._log("goto")
+    async def goto(self, _url: str, **_options: object) -> None:
+        await self._log_and_yield("goto")
 
-    def reload(self, **_options: object) -> None:
-        self._log("reload")
+    async def reload(self, **_options: object) -> None:
+        await self._log_and_yield("reload")
 
-    def wait_for_timeout(self, ms: int) -> None:
-        self._log(f"wait {ms}")
+    async def wait_for_timeout(self, ms: int) -> None:
+        await self._log_and_yield(f"wait {ms}")
 
-    def wait_for_load_state(self, state: str, **_options: object) -> None:
-        self._log(state)
+    async def wait_for_load_state(self, state: str, **_options: object) -> None:
+        await self._log_and_yield(state)
 
-    def evaluate(self, _script: str, _argument: object = None) -> dict:
-        self._log("record")
-        return {"text": str(len(self.calls)), "elements": []}
+    async def evaluate(self, _script: str, _argument: object = None) -> dict:
+        await self._log_and_yield("record")
+        return {"text": self.name, "elements": []}
 
     def locator(self, selector: str) -> _FakePage:
         self._log(f"locator {selector}")
         return self
 
-    def click(self, **_options: object) -> None:
-        self._log("click")
+    async def click(self, **_options: object) -> None:
+        await self._log_and_yield("click")
 
-    def fill(self, text: str, **_options: object) -> None:
-        self._log(f"fill {text}")
+    async def fill(self, text: str, **_options: object) -> None:
+        await self._log_and_yield(f"fill {text}")
 
-    def press(self, key: str, **_options: object) -> None:
-        self._log(f"press {key}")
+    async def press(self, key: str, **_options: object) -> None:
+        await self._log_and_yield(f"press {key}")
 
-    def close(self) -> None:
-        self._log("close")
+    async def close(self) -> None:
+        await self._log_and_yield("close")
+
+
+class _FakeContext:
+    def __init__(self, browser: _FakeBrowser) -> None:
+        self.browser = browser
+
+    async def new_page(self) -> _FakePage:
+        self.browser.pages += 1
+        return _FakePage(self.browser.calls, f"page {self.browser.pages}")
 
 
 class _FakeBrowser:
@@ -317,12 +356,11 @@ class _FakeBrowser:
         self.calls: list[str] = []
         self.pages = 0
 
-    def new_context(self) -> _FakeBrowser:
-        return self
+    async def new_context(self) -> _FakeContext:
+        return _FakeContext(self)
 
-    def new_page(self) -> _FakePage:
-        self.pages += 1
-        return _FakePage(self.calls, f"page {self.pages}")
+
+_LISTEN = ("on console", "on pageerror", "on response")
 
 
 def test_the_default_journey_records_the_page_at_the_same_points_and_other_journeys_start_fresh() -> None:
@@ -333,13 +371,11 @@ def test_the_default_journey_records_the_page_at_the_same_points_and_other_journ
     settings = Runtime(argv=(), page_path="/", ready_timeout=1, journeys=steps, settle_ms=800)
     browser = _FakeBrowser()
     observation = Observation()
-    runtime._default_journey(browser, "http://x/", settings, observation)  # type: ignore[arg-type]
-    observation.journeys["search"] = runtime._journey(browser, "http://x/", steps["search"], 800, observation)  # type: ignore[arg-type]
-    listen = ["on console", "on pageerror", "on response"]
+    asyncio.run(runtime._run_journeys(browser, "http://x/", settings, observation))  # type: ignore[arg-type]
     # The default journey records the page after the load, after the steps
     # and after a reload, each time after the settle wait.
     assert browser.calls == [
-        *(f"page 1: {call}" for call in listen),
+        *(f"page 1: {call}" for call in _LISTEN),
         "page 1: goto",
         "page 1: wait 800",
         "page 1: record",
@@ -353,7 +389,7 @@ def test_the_default_journey_records_the_page_at_the_same_points_and_other_journ
         "page 1: wait 800",
         "page 1: record",
         "page 1: close",
-        *(f"page 2: {call}" for call in listen),
+        *(f"page 2: {call}" for call in _LISTEN),
         "page 2: goto",
         "page 2: wait 800",
         "page 2: locator input",
@@ -366,6 +402,45 @@ def test_the_default_journey_records_the_page_at_the_same_points_and_other_journ
     ]
     assert not observation.failure
     assert observation.journeys["search"].snapshot is not None
+
+
+def test_the_other_journeys_run_at_once_but_only_after_the_default_journey_has_closed() -> None:
+    """The default journey saves to the server, so each other journey must load the page after it ends."""
+    click = (Step("click", selector="button"),)
+    # Listed out of alphabetical order, so the records' order shows it follows the file.
+    steps = {DEFAULT_JOURNEY: click, "status": click, "about": click, "search": click}
+    settings = Runtime(argv=(), page_path="/", ready_timeout=1, journeys=steps, settle_ms=800)
+    browser = _FakeBrowser()
+    observation = Observation()
+    asyncio.run(runtime._run_journeys(browser, "http://x/", settings, observation))  # type: ignore[arg-type]
+    calls = browser.calls
+    default_closed = calls.index("page 1: close")
+    others = ("page 2", "page 3", "page 4")
+    # Nothing of another journey happens until the default journey's page is closed.
+    assert all(not call.startswith(others) for call in calls[:default_closed])
+    # Every other journey has loaded its page before any of them records it,
+    # so they ran at the same time rather than one after another.
+    last_goto = max(calls.index(f"{page}: goto") for page in others)
+    first_record = min(calls.index(f"{page}: record") for page in others)
+    assert last_goto < first_record
+    # Each journey keeps its own page's record, under its own name, in the order the file lists them.
+    assert list(observation.journeys) == ["status", "about", "search"]
+    assert [record.snapshot["text"] for record in observation.journeys.values()] == list(others)  # type: ignore[index]
+
+
+def test_a_framework_can_run_its_other_journeys_one_after_another() -> None:
+    """With `journeys_at_once = false`, each journey's page is closed before the next journey opens one."""
+    click = (Step("click", selector="button"),)
+    steps = {DEFAULT_JOURNEY: click, "status": click, "about": click}
+    settings = Runtime(argv=(), page_path="/", ready_timeout=1, journeys=steps, settle_ms=800, journeys_at_once=False)
+    browser = _FakeBrowser()
+    observation = Observation()
+    asyncio.run(runtime._run_journeys(browser, "http://x/", settings, observation))  # type: ignore[arg-type]
+    pages = [call.split(":")[0] for call in browser.calls]
+    # Each page's calls form one unbroken run, in the order the file lists the journeys.
+    assert pages == sorted(pages)
+    assert browser.calls.index("page 2: close") < browser.calls.index("page 3: on console")
+    assert list(observation.journeys) == ["status", "about"]
 
 
 def test_the_page_record_holds_the_columns_the_comparison_reads() -> None:

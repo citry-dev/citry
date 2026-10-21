@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import pytest
-from citry_errors import parallel, report, runtime
+from citry_errors import cli, parallel, report, runtime
 from citry_errors.config import ConfigError, Framework, Runtime, Step, load_framework
 from conftest import MISTAKES
 
@@ -29,35 +29,8 @@ def test_results_come_back_in_task_order_whatever_order_the_tasks_finish_in() ->
         time.sleep(0.02 * (5 - number))
         return number * 10
 
-    results = parallel.run_all(range(5), work, jobs=5, group=lambda _: "all", limits={}, stop=threading.Event())
+    results = parallel.run_all(range(5), work, jobs=5, stop=threading.Event())
     assert results == [0, 10, 20, 30, 40]
-
-
-def test_a_framework_limit_caps_its_cases_and_lets_other_frameworks_go_first() -> None:
-    running: Counter[str] = Counter()
-    highest: Counter[str] = Counter()
-    lock = threading.Lock()
-    started: list[str] = []
-
-    def work(task: str) -> str:
-        with lock:
-            running[task[0]] += 1
-            highest[task[0]] = max(highest[task[0]], running[task[0]])
-            started.append(task)
-        time.sleep(0.03)
-        with lock:
-            running[task[0]] -= 1
-        return task
-
-    tasks = ["n1", "n2", "n3", "j1", "j2", "j3"]
-    results = parallel.run_all(
-        tasks, work, jobs=4, group=lambda task: task[0], limits={"n": 1}, stop=threading.Event()
-    )
-    assert results == tasks
-    assert highest["n"] == 1
-    # While n2 and n3 wait for n1, the j tasks behind them start.
-    assert started.index("j1") < started.index("n2")
-    assert highest["j"] > 1
 
 
 def test_a_failing_task_stops_new_tasks_and_is_raised_after_the_running_ones_finish() -> None:
@@ -75,7 +48,7 @@ def test_a_failing_task_stops_new_tasks_and_is_raised_after_the_running_ones_fin
         return number
 
     with pytest.raises(ValueError, match="case 0 broke"):
-        parallel.run_all(range(20), work, jobs=2, group=lambda _: "all", limits={}, stop=threading.Event())
+        parallel.run_all(range(20), work, jobs=2, stop=threading.Event())
     # The task that was running beside the failing one finished; the rest never started.
     assert finished == [1]
 
@@ -103,29 +76,16 @@ def test_ctrl_c_stops_new_tasks_sets_stop_and_waits_for_running_ones() -> None:
         return number
 
     with pytest.raises(KeyboardInterrupt):
-        parallel.run_all(range(10), work, jobs=2, group=lambda _: "all", limits={}, stop=stop)
+        parallel.run_all(range(10), work, jobs=2, stop=stop)
     assert stop.is_set()
     assert sorted(started) == [0, 1]
     # Both workers had given up their case before run_all returned, so it waited for them.
     assert sorted(gave_up) == [0, 1]
 
 
-def test_a_task_whose_group_cannot_be_worked_out_fails_the_run() -> None:
-    def group(number: int) -> str:
-        if number == 2:
-            raise KeyError(number)
-        return "all"
-
-    with pytest.raises(KeyError):
-        parallel.run_all(range(5), lambda number: number, jobs=2, group=group, limits={}, stop=threading.Event())
-
-
-@pytest.mark.parametrize(("jobs", "limits"), [(0, {}), (2, {"all": 0})])
-def test_a_limit_of_zero_is_rejected_rather_than_waiting_forever(jobs: int, limits: dict[str, int]) -> None:
+def test_zero_jobs_is_rejected_rather_than_running_nothing() -> None:
     with pytest.raises(ValueError, match="must be 1 or more"):
-        parallel.run_all(
-            range(3), lambda n: n, jobs=jobs, group=lambda _: "all", limits=limits, stop=threading.Event()
-        )
+        parallel.run_all(range(3), lambda n: n, jobs=0, stop=threading.Event())
 
 
 def test_concurrent_workers_never_share_a_port_and_a_finished_one_frees_it() -> None:
@@ -231,17 +191,104 @@ def test_a_server_that_fails_for_another_reason_is_not_started_again(
 
 
 @pytest.mark.parametrize(("value", "accepted"), [("2", True), ("0", False), ("true", False), ('"2"', False)])
-def test_max_jobs_must_be_a_whole_number_of_cases(tmp_path: Path, value: str, accepted: bool) -> None:
+def test_max_servers_must_be_a_whole_number_of_servers(tmp_path: Path, value: str, accepted: bool) -> None:
     root = tmp_path / "toy"
     root.mkdir()
     (root / "framework.toml").write_text(
-        f'key = "toy"\nname = "Toy"\nstages = []\nmax_jobs = {value}\n[setup]\nmanifests = []\ncommand = ["true"]\n'
+        f'key = "toy"\nname = "Toy"\nstages = []\nmax_servers = {value}\n[setup]\nmanifests = []\ncommand = ["true"]\n'
     )
     if accepted:
-        assert load_framework(root).max_jobs == int(value)
+        assert load_framework(root).max_servers == int(value)
     else:
-        with pytest.raises(ConfigError, match="max_jobs"):
+        with pytest.raises(ConfigError, match="max_servers"):
             load_framework(root)
+
+
+def _count_at_once(monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
+    """Wrap the tools and the browser check so the returned counter holds the most of each that ran together."""
+    lock = threading.Lock()
+    running = Counter[str]()
+    most = Counter[str]()
+
+    # Wraps either of two functions with different signatures.
+    def counting(kind: str, real):
+        def wrapped(*args: object) -> object:
+            with lock:
+                running[kind] += 1
+                most[kind] = max(most[kind], running[kind])
+            try:
+                # Long enough that, without a limit, several workers would be here together.
+                time.sleep(0.05)
+                return real(*args)
+            finally:
+                with lock:
+                    running[kind] -= 1
+
+        return wrapped
+
+    monkeypatch.setattr(cli, "run_stages", counting("tools", cli.run_stages))
+    monkeypatch.setattr(cli, "observe", counting("browser", cli.observe))
+    return most
+
+
+@pytest.mark.parametrize(
+    ("jobs", "static_jobs", "max_servers", "browser", "tools"),
+    [
+        # `--static-jobs` limits the tools. Cases then reach their browser
+        # checks one by one, so whether two of those overlap is down to timing
+        # and is not checked.
+        (4, 1, None, None, 1),
+        # `--jobs` limits the browser checks, and the tools still run side by side.
+        (1, 4, None, 1, "several"),
+        # A framework's `max_servers` limits its browser checks below `--jobs`, not its tools.
+        (4, 4, 1, 1, "several"),
+    ],
+)
+def test_each_limit_caps_only_its_own_part_of_a_case(
+    toy: Toy,
+    monkeypatch: pytest.MonkeyPatch,
+    jobs: int,
+    static_jobs: int,
+    max_servers: int | None,
+    browser: int | str | None,
+    tools: int | str,
+) -> None:
+    if max_servers is not None:
+        definition = toy.root / "frameworks" / "toy" / "framework.toml"
+        definition.write_text(
+            definition.read_text().replace('name = "Toy"\n', f'name = "Toy"\nmax_servers = {max_servers}\n')
+        )
+    most = _count_at_once(monkeypatch)
+    run_dir = toy.run(jobs=jobs, static_jobs=static_jobs, no_cache=True)
+    if browser is not None:
+        assert most["browser"] > 1 if browser == "several" else most["browser"] == browser
+    assert most["tools"] > 1 if tools == "several" else most["tools"] == tools
+    # The run records both limits, so a reader knows how it was run.
+    run_info = json.loads((run_dir / "run.json").read_text())
+    assert (run_info["jobs"], run_info["static_jobs"]) == (jobs, static_jobs)
+
+
+def test_a_case_gives_up_before_starting_its_server_when_ctrl_c_came_while_it_waited_for_a_slot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: list[Path] = []
+    monkeypatch.setattr(cli, "observe", lambda *args: started.append(args[2]))
+    stop = threading.Event()
+    stop.set()
+    context = cli.Context(
+        tmp_path,
+        observe_runtime=True,
+        reuse=False,
+        environment="env",
+        framework_digests={},
+        stop=stop,
+        tool_slots=threading.Semaphore(1),
+        browser_slots=threading.Semaphore(1),
+    )
+    framework = Framework("toy", "Toy", (), (), (), None, "", tmp_path)
+    with pytest.raises(parallel.Stopped):
+        cli._observe(context, framework, None, tmp_path, tmp_path)
+    assert started == []
 
 
 def test_a_run_on_several_workers_writes_the_same_records_as_one_worker(toy: Toy) -> None:
@@ -263,7 +310,13 @@ def test_a_run_on_several_workers_writes_the_same_records_as_one_worker(toy: Toy
 
 
 def test_observe_runs_on_several_threads_at_once_with_a_real_browser(tmp_path: Path) -> None:
-    """Each worker starts its own Playwright, so browser checks on several threads must not disturb each other."""
+    """
+    Each worker starts its own Playwright, so browser checks on several threads must not disturb each other.
+
+    Each check also runs two more journeys at once in their own browser
+    contexts, and their console messages must still reach the record in
+    the order the journeys are listed.
+    """
     playwright_api = pytest.importorskip("playwright.sync_api")
     with playwright_api.sync_playwright() as playwright:
         try:
@@ -275,14 +328,24 @@ def test_observe_runs_on_several_threads_at_once_with_a_real_browser(tmp_path: P
         site = tmp_path / f"site{number}"
         site.mkdir()
         (site / "index.html").write_text(
-            f"<p>Site {number}</p><button onclick=\"this.textContent='done'\">go</button>"
+            f"<p>Site {number}</p>"
+            f"<button id=d onclick=\"this.textContent='done'; console.error('d {number}')\">go</button>"
+            + "".join(
+                f"<button id={name} onclick=\"console.error('{name} {number}')\">{name}</button>" for name in "ab"
+            )
         )
         sites.append(site)
     settings = Runtime(
         argv=(sys.executable, "-m", "http.server", "{port}", "--bind", "127.0.0.1"),
         page_path="/",
         ready_timeout=30,
-        journeys={"default": (Step("click", selector="button"),)},
+        journeys={
+            "default": (Step("click", selector="#d"),),
+            # Clicks after `second` has, so its message comes last unless each
+            # journey's messages are kept apart until the journeys end.
+            "first": (Step("wait", ms=300), Step("click", selector="#b")),
+            "second": (Step("click", selector="#a"),),
+        },
         settle_ms=50,
     )
     framework = Framework("toy", "Toy", (), (), (), settings, "", tmp_path)
@@ -297,6 +360,8 @@ def test_observe_runs_on_several_threads_at_once_with_a_real_browser(tmp_path: P
         page = json.dumps(observation.snapshot)
         assert f"Site {number}" in page
         assert "done" in page
+        assert all(f"Site {number}" in json.dumps(record.snapshot) for record in observation.journeys.values())
+        assert observation.console_errors == [f"d {number}", f"b {number}", f"a {number}"]
 
 
 def test_what_a_server_prints_after_it_is_stopped_is_left_out_of_the_record(tmp_path: Path) -> None:

@@ -10,7 +10,8 @@ import shutil
 import subprocess
 import sys
 import threading
-from dataclasses import asdict, dataclass
+from contextlib import nullcontext
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -182,6 +183,16 @@ class Context:
     # Set on Ctrl-C. The child processes of running cases may have been
     # killed by the same signal, so nothing finished after it is stored.
     stop: threading.Event
+    # Held while a case runs its static stages (`--static-jobs` of them).
+    # The tools keep several cores busy, while a browser check mostly waits
+    # for its page, so fewer cases run their tools at once than run a
+    # browser check.
+    tool_slots: threading.Semaphore
+    # Held while a case runs its browser check (`--jobs` of them).
+    browser_slots: threading.Semaphore
+    # One per framework with `max_servers`, held while one of its
+    # development servers runs, so only that many of them run at once.
+    server_slots: dict[str, threading.Semaphore] = field(default_factory=dict)
 
 
 def _entry_folder(framework: Framework, name: str) -> Path:
@@ -195,17 +206,30 @@ def _stages_for(
     key = cache.case_key(context.environment, context.framework_digests[framework.key], port, work)
     folder = _entry_folder(framework, "baseline" if port is None else port.mistake)
     entry = cache.load(folder, key) if context.reuse else None
-    return key, entry, entry.stages if entry else run_stages(framework, work, context.stop)
+    if entry:
+        return key, entry, entry.stages
+    with context.tool_slots:
+        return key, None, run_stages(framework, work, context.stop)
 
 
-def _observe(framework: Framework, entry: cache.Entry | None, work: Path, out: Path) -> tuple[Observation, bool]:
+def _observe(
+    context: Context, framework: Framework, entry: cache.Entry | None, work: Path, out: Path
+) -> tuple[Observation, bool]:
     """Give the browser check for a working copy, reusing a stored one, and say whether it was reused."""
     log = out / "server.log"
     if entry is not None and entry.observation is not None and entry.server_log is not None:
         shutil.copyfile(entry.server_log, log)
         observation, reused = entry.observation, True
     else:
-        observation, reused = observe(framework, env_dir(framework), work, log), False
+        # Waits here, after the case's tools have run, so a framework limited
+        # to one server at a time still runs several of its cases' static
+        # stages side by side. The framework's own slot comes first, so a case
+        # waiting for it does not hold one of the run's browser slots meanwhile.
+        with context.server_slots.get(framework.key) or nullcontext(), context.browser_slots:
+            # Ctrl-C may have come while the case waited for a slot.
+            if context.stop.is_set():
+                raise parallel.Stopped
+            observation, reused = observe(framework, env_dir(framework), work, log), False
     (out / "runtime.json").write_text(observation.to_json())
     return observation, reused
 
@@ -240,7 +264,7 @@ def _run_baseline(context: Context, framework: Framework) -> tuple[Baseline, boo
     if framework.runtime and context.observe_runtime:
         # A fresh copy, as for every case's browser check.
         base = materialize(framework, None)
-        runtime, runtime_reused = _observe(framework, entry, base.path, base_out)
+        runtime, runtime_reused = _observe(context, framework, entry, base.path, base_out)
         reused = reused and runtime_reused
     # The clean app must pass every stage, or a case's finding could not be
     # told apart from noise that was already there.
@@ -306,7 +330,7 @@ def _run_case(context: Context, framework: Framework, port: Port, baseline: Base
         # (such as a production build), so the browser check sees the same
         # files whether the tools ran in this run or an earlier one.
         copy = materialize(framework, port)
-        observation, runtime_reused = _observe(framework, entry, copy.path, out)
+        observation, runtime_reused = _observe(context, framework, entry, copy.path, out)
         runtime_result = compare(baseline.runtime, observation)
         reused = reused and runtime_reused
     # A case compared with a clean app that had problems is not stored: the
@@ -376,7 +400,17 @@ def _static_catch(stages: list[StageResult]) -> str:
 
 
 def default_jobs() -> int:
-    """Use half the CPUs, at most 8: each case runs tools and a browser that use several cores at once."""
+    """
+    Run one browser check per CPU, at most 10: on a machine with cores to spare, a check mostly waits for its page.
+
+    10 is the most that was measured, on a 10-core machine with 24 GB of
+    memory, and each browser check holds up to four pages open at once.
+    """
+    return max(1, min(10, os.cpu_count() or 2))
+
+
+def default_static_jobs() -> int:
+    """Run the static stages of up to half as many cases as there are CPUs, at most 8: each tool uses several cores."""
     return max(1, min(8, (os.cpu_count() or 2) // 2))
 
 
@@ -416,7 +450,7 @@ def _run_locked(
     args: argparse.Namespace, selected: list[Framework], ports: dict[tuple[str, str], Port], mistakes: list[Mistake]
 ) -> Path:
     run_dir = _new_run_dir(datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"))
-    source = _source() | {"jobs": args.jobs}
+    source = _source() | {"jobs": args.jobs, "static_jobs": args.static_jobs}
     (run_dir / "run.json").write_text(json.dumps(source, indent=2) + "\n")
     for framework in selected:
         prepare(framework)
@@ -429,6 +463,13 @@ def _run_locked(
             framework.key: cache.framework_digest(framework, env_dir(framework)) for framework in selected
         },
         stop=threading.Event(),
+        tool_slots=threading.Semaphore(args.static_jobs),
+        browser_slots=threading.Semaphore(args.jobs),
+        server_slots={
+            framework.key: threading.Semaphore(framework.max_servers)
+            for framework in selected
+            if framework.max_servers
+        },
     )
     reused_baselines: list[str] = []
     # Each clean app runs alone, before any case: every case of its framework
@@ -452,9 +493,9 @@ def _run_locked(
     scored = parallel.run_all(
         tasks,
         lambda task: _run_case(context, task[0], task[1], baselines[task[0].key]),
-        jobs=args.jobs,
-        group=lambda task: task[0].key,
-        limits={framework.key: framework.max_jobs for framework in selected if framework.max_jobs},
+        # Enough workers for every slot of both kinds to be busy at once. A
+        # slot can still sit empty while every worker waits for the other kind.
+        jobs=args.jobs + args.static_jobs,
         stop=context.stop,
     )
     by_case = {(framework.key, port.mistake): result for (framework, port), result in zip(tasks, scored, strict=True)}
@@ -505,7 +546,14 @@ def main(argv: list[str] | None = None) -> int:
         "--jobs",
         type=_positive,
         default=default_jobs(),
-        help=f"how many cases run at once (default: {default_jobs()}, half the CPUs, at most 8)",
+        help=f"how many browser checks run at once (default: {default_jobs()}, one per CPU, at most 10)",
+    )
+    run_cmd.add_argument(
+        "--static-jobs",
+        type=_positive,
+        default=default_static_jobs(),
+        help=f"how many cases run their static stages at once (default: {default_static_jobs()}, "
+        "half the CPUs, at most 8)",
     )
     rep = commands.add_parser("report", help="write the matrix for one run")
     rep.add_argument("run_dir", type=Path)
