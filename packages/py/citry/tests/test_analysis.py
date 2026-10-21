@@ -17,7 +17,9 @@ from citry import (
     PythonTemplateSourceMap,
     TemplateAnalysis,
     TemplateLintConsumer,
+    discover_python_component_assets,
     discover_python_templates,
+    format_python_templates,
     lint_unknown_template_variables,
 )
 from citry._linting import TemplateLintInfo
@@ -722,3 +724,79 @@ def test_untraced_component_templates_follow_project_imports_only(tmp_path):
         ("Card", "BaseCard", 8, 6),
         ("Mixed", "Mixin", 10, 6),
     ]
+
+
+def test_app_components_read_a_decorated_component_the_app_lists():
+    source = (
+        "from citry import Component\n"
+        "from app.registry import register\n"
+        "@register\n"
+        "class Listed(Component):\n"
+        "    template = '<p>listed</p>'\n"
+        "@register\n"
+        "class Unlisted(Component):\n"
+        "    template = '<p>unlisted</p>'\n"
+    )
+
+    # Reading the file alone, a decorator may replace the class, so neither
+    # template is read; the app's record proves the listed one.
+    assert discover_python_templates(source).regions == ()
+    assert [
+        region.component_name for region in discover_python_templates(source, app_components={"Listed": True}).regions
+    ] == ["Listed"]
+
+
+def test_app_components_find_templates_whose_base_comes_from_another_module():
+    source = (
+        "from app.base import AppBase, JinjaBase, register\n"
+        "class Card(AppBase):\n"
+        "    template = '<article>{{ title }}</article>'\n"
+        "    js = 'console.log(1)'\n"
+        "    css = 'article { color: red }'\n"
+        "class Wide(Card):\n"
+        "    template = '<section></section>'\n"
+        "class Legacy(JinjaBase):\n"
+        "    template = '<p>{% if x %}{% endif %}</p>'\n"
+        "    css = 'p { margin: 0 }'\n"
+        "@register\n"
+        "class Decorated(AppBase):\n"
+        "    template = '<p></p>'\n"
+        "class Added(AppBase):\n"
+        "    template = '<p>  </p>'\n"
+    )
+    # What a loaded app reports: Legacy's base sets another template_lang.
+    # Added is not listed, as for a class written after the app loaded.
+    app_components = {"Card": True, "Legacy": False, "Decorated": True}
+
+    templates = discover_python_templates(source, app_components=app_components)
+    assets = discover_python_component_assets(source, app_components=app_components)
+    untraced = discover_untraced_component_templates(
+        source,
+        is_project_module=lambda module, _level: module == "app.base",
+        app_components=app_components,
+    )
+
+    # A listed class is a component, and a same-file subclass traces
+    # through it. A template the app does not call Citry's own is skipped,
+    # though its CSS is still found. The app's record names the class that
+    # declares the template, so a decorated one is read too.
+    assert [(region.component_name, region.source_map.template_source) for region in templates.regions] == [
+        ("Card", "<article>{{ title }}</article>"),
+        ("Wide", "<section></section>"),
+        ("Decorated", "<p></p>"),
+    ]
+    assert [(region.component_name, region.kind.value) for region in assets.regions] == [
+        ("Card", "template"),
+        ("Card", "js"),
+        ("Card", "css"),
+        ("Wide", "template"),
+        ("Legacy", "css"),
+        ("Decorated", "template"),
+    ]
+    # Only the classes still skipped keep their notice.
+    assert [(item.component_name, item.base) for item in untraced] == [("Added", "AppBase")]
+    # Without the app, and for the formatter, which never loads it, reading
+    # the file alone finds none of them.
+    assert discover_python_templates(source).regions == ()
+    assert discover_python_component_assets(source).regions == ()
+    assert format_python_templates(source).changed_component_names == ()

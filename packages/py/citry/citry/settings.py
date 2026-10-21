@@ -138,6 +138,8 @@ _TEMPLATE_RULE_FIELDS = (
     "rule_unknown_server_event_field",
     "rule_missing_server_event_field",
     "rule_incompatible_server_event_field",
+    "rule_unknown_form_field",
+    "rule_missing_form_field",
     "rule_misspelled_css_variable",
 )
 
@@ -263,17 +265,32 @@ class LintSettings:
         rule_unknown_server_event_field: Severity for an ``@c-*`` binding
             that sends a key the handler's data class does not declare, such
             as ``save({amont: 1})``. The server rejects the call. ``citry
-            check`` reports it only with your application loaded. The
-            default is ``"error"``.
+            check`` and the editor report it only with your application
+            loaded. The default is ``"error"``.
         rule_missing_server_event_field: Severity for an ``@c-*`` binding
             that leaves out a field the handler's data class requires. The
-            server rejects the call. ``citry check`` reports it only with
-            your application loaded. The default is ``"error"``.
+            server rejects the call. ``citry check`` and the editor report
+            it only with your application loaded. The default is
+            ``"error"``.
         rule_incompatible_server_event_field: Severity for an ``@c-*``
             binding that sends a literal value the handler's data class does
             not accept, such as ``save({amount: '1'})`` for an ``int``
-            field. The server rejects the call. ``citry check`` reports it
-            only with your application loaded. The default is ``"error"``.
+            field. The server rejects the call. ``citry check`` and the
+            editor report it only with your application loaded. The default
+            is ``"error"``.
+        rule_unknown_form_field: Severity for a control in a form whose
+            ``@c-submit`` sends the form's fields to a server event, when
+            the handler's data class does not declare the control's
+            ``name``, such as ``<input name="qeury">`` for a field ``q``.
+            The server rejects each submit that sends the control. ``citry
+            check`` and the editor report it only with your application
+            loaded. The default is ``"error"``.
+        rule_missing_form_field: Severity for a form whose ``@c-submit``
+            sends its fields to a server event, when no control in it is
+            named after a field the handler's data class requires.
+            It is reported only when the template shows every control the
+            form can send. ``citry check`` and the editor report it only
+            with your application loaded. The default is ``"error"``.
         rule_misspelled_css_variable: Severity for a ``var(--name)`` in a
             component's CSS that is one typing slip from a key its
             ``css_data()`` returns, such as ``var(--acent)`` for
@@ -336,6 +353,8 @@ class LintSettings:
     rule_unknown_server_event_field: LintSeverity = "error"
     rule_missing_server_event_field: LintSeverity = "error"
     rule_incompatible_server_event_field: LintSeverity = "error"
+    rule_unknown_form_field: LintSeverity = "error"
+    rule_missing_form_field: LintSeverity = "error"
     rule_misspelled_css_variable: LintSeverity = "warning"
     check_input_types: bool = True
 

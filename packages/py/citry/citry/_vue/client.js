@@ -3661,11 +3661,13 @@
       return bridge;
     };
     if (hasEvents) ensureEventsBridge();
-    async function sendDeclarativeEvent(record, binding, source, args) {
+    // `argsSource` is "form" when the args were read from a form, so the
+    // server binds their text like a form posted without JavaScript.
+    async function sendDeclarativeEvent(record, binding, source, args, argsSource) {
       const eventsBridge = ensureEventsBridge();
       let result;
       try {
-        result = await eventsBridge.send({source, handler: binding.handler, args});
+        result = await eventsBridge.send({source, handler: binding.handler, args, argsSource});
       } catch (error) {
         if (!ownedApp.terminal && eventsBridge.isDeclarativeFailureHandled(error)) return undefined;
         throw error;
@@ -3683,19 +3685,27 @@
       if (!source) throw new Error("Citry Events binding has no mounted Vue owner");
       return {binding, source};
     };
+    // A binding written without arguments sends the fields of the form that
+    // fired the event, as text. The result says so, because the server then
+    // converts that text like a form posted without JavaScript; arguments
+    // the template wrote are JSON values and carry no mark.
     const declarativeEventArgs = (value, authoredArgs) => {
       let args = authoredArgs;
+      let argsSource;
       if (args === undefined) {
         const isEvent = typeof global.Event === "function" && value instanceof global.Event;
         const form = isEvent && value.target instanceof HTMLFormElement
           ? value.target
           : isEvent && value.currentTarget instanceof HTMLFormElement ? value.currentTarget : null;
-        args = form
-          ? global.CitryVueEvents.collectFormArgs(form, new Set())
-          : {};
+        if (form) {
+          // `submitter` is the button that submitted the form, which a post
+          // without JavaScript sends too.
+          args = global.CitryVueEvents.collectFormArgs(form, new Set(), value.submitter);
+          argsSource = "form";
+        } else args = {};
       }
       plain(args, "Citry Events arguments");
-      return args;
+      return {args, argsSource};
     };
     // Vue already checks a `@c-*` binding's `.enter` or `.escape` on its
     // keyboard event, before `.prevent`, `.stop`, and `.self`. The key is
@@ -3716,9 +3726,9 @@
       const {binding, source} = resolveDeclarativeEvent(record, bindingId);
       if (binding.event !== event.type) throw new Error("Citry Events binding is missing or stale");
       if (!keyedEventPasses(binding, event)) return undefined;
-      const args = declarativeEventArgs(event, authoredArgs);
+      const {args, argsSource} = declarativeEventArgs(event, authoredArgs);
       if (binding.debounce === null && binding.throttle === null)
-        return sendDeclarativeEvent(record, binding, source, args);
+        return sendDeclarativeEvent(record, binding, source, args, argsSource);
       const element = event.currentTarget;
       if (!(element instanceof Element)) throw new Error(TIMED_COMPONENT_BINDING_ERROR);
       if (!timingDirectiveOwns(element, record, bindingId, binding))
@@ -3748,7 +3758,7 @@
             if (remainingThrottle > 0)
               scheduleDelay(lifetime, remainingThrottle, () => releaseEventTiming(lifetime));
             else releaseEventTiming(lifetime);
-            void sendDeclarativeEvent(record, currentBinding, source, capturedArgs).then(resolve, reject);
+            void sendDeclarativeEvent(record, currentBinding, source, capturedArgs, argsSource).then(resolve, reject);
           });
         });
       }
@@ -3761,15 +3771,15 @@
         lifetime.timer = 0;
       }
       scheduleDelay(lifetime, binding.throttle, () => releaseEventTiming(lifetime));
-      return sendDeclarativeEvent(record, binding, source, capturedArgs);
+      return sendDeclarativeEvent(record, binding, source, capturedArgs, argsSource);
     };
     definitionRegistry(appId).eventDispatchComponent = async (record, bindingId, emittedValue, authoredArgs) => {
       const {binding, source} = resolveDeclarativeEvent(record, bindingId);
       if (!keyedEventPasses(binding, emittedValue)) return undefined;
-      const args = declarativeEventArgs(emittedValue, authoredArgs);
+      const {args, argsSource} = declarativeEventArgs(emittedValue, authoredArgs);
       if (binding.debounce !== null || binding.throttle !== null)
         throw new Error(TIMED_COMPONENT_BINDING_ERROR);
-      return sendDeclarativeEvent(record, binding, source, args);
+      return sendDeclarativeEvent(record, binding, source, args, argsSource);
     };
     definitionRegistry(appId).eventPoll = async (record, bindingId, args) => {
       if (record.app !== definitionRegistry(appId) || record.app.mounted.get(record.occurrenceId)?.record !== record)

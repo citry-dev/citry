@@ -41,6 +41,10 @@
     `save({amount: '1'})` for an `int` field
     (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
     `rule_incompatible_server_event_field`);
+  - a control in a form whose `@c-submit` sends the form's fields, when
+    the handler's data class does not declare its `name`, such as
+    `<input name="qeury">`, or no control is named after a required field
+    (`rule_unknown_form_field`, `rule_missing_form_field`);
   - a `var(--name)` that misspells a `css_data()` key, such as
     `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
 
@@ -49,9 +53,17 @@
 - With your application loaded, `citry check` now warns when `js_data()`
   sends a module constant that JSON cannot carry, such as a
   `PurePosixPath`.
+- `Citry.inspect_components()` now says, for each Events handler, whether
+  an argument key the data class does not declare fails the call
+  (`extra_fields`) and whether Citry or Pydantic checks the values
+  (`validated_by`).
 - `citry check --static` now lists, as a note, each template it skips
   because the component's base class comes from another module of your
   project.
+- `discover_python_templates()` and `discover_python_component_assets()`
+  accept `app_components`, the classes a loaded application registers in
+  the file, so a tool can find the templates of components whose base
+  class comes from another module.
 
 ### Changed
 
@@ -99,9 +111,21 @@
 - The render error for a component that `<c-for>` repeats without
   `#c-key`, or with a duplicate one, now names the tag, its template, and
   the line.
+- A form submitted through `@c-submit` now gives the handler the same
+  values as the same form posted without JavaScript: text such as `"3"`
+  fills an `int` or `float` field, a checked checkbox fills a `bool`
+  field, and the submit button that sent the form adds its `name`. Number
+  and range inputs now send their text, so a handler that reads
+  `event.args` directly, or a Pydantic model in strict mode, gets `"3"`
+  instead of `3`, as it already did without JavaScript.
 
 ### Fixes
 
+- A form that calls a server event can now keep Django's hidden
+  `csrfmiddlewaretoken` input inside it. The server removes that field
+  before it checks the event's data class, with or without JavaScript,
+  instead of rejecting the call for an unknown field. Name other token
+  fields in `extensions_defaults={"events": {"_csrf_field_names": [...]}}`.
 - An Events data class field annotated as `Literal[...]` now accepts the
   values it lists. Every call used to fail with "Unsupported annotation".
 - An Events `State` field annotated as a tuple is a tuple again in event

@@ -1081,7 +1081,10 @@ query strings carry only strings, so for those codecs (6.2) the binding
 is source-aware, and strings additionally bind to declared `int` /
 `float` / `bool` fields (`"5"` binds to `int`; boolean spellings accept
 the HTML form vocabulary: `"true"` / `"false"` / `"1"` / `"0"` / `"on"`;
-anything else is the per-field 422). File fields are declared
+anything else is the per-field 422). A form the runtime submits gets the
+same rule: the browser sends the form's text in a JSON call marked
+`argsSource: "form"` (4.2, 5.1), and the dispatcher binds it like a
+no-JS form post. File fields are declared
 as `UploadedFile` (or `list[UploadedFile]`) on the schema and arrive via
 the multipart codec (6.2).
 
@@ -1303,7 +1306,7 @@ The component-level config surface, exhaustively:
 
 | Attribute | Type / signature | Default | What it does |
 |---|---|---|---|
-| `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any `callable(events)`; both bind identically. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the raw unvalidated payload is `self.event.args`). Raise `EventError` (e.g. `status=403`) to deny, return to allow. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. Resolution is most-specific-wins: `@event(guard=...)` beats `_guard` beats the engine default (7.4). |
+| `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any `callable(events)`; both bind identically. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the unvalidated payload is `self.event.args`, with the host CSRF field names of 3.5 removed). Raise `EventError` (e.g. `status=403`) to deny, return to allow. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. Resolution is most-specific-wins: `@event(guard=...)` beats `_guard` beats the engine default (7.4). |
 | `_context` | `def _context(self) -> Any`; receives the Events instance (request populated, guards not yet run) | engine default from `extensions_defaults["events"]`, else none | Builds the per-call `context` injectable (3.6). Usually configured once, engine-wide. |
 | `_csrf` | `"auto"` \| `False` \| `callable(request) -> None` (raise to reject) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only citry's own token layer (the baseline never turns off, and a host framework's token check, like Django's `CsrfViewMiddleware`, is governed by the host and stays on, 7.4); a callable replaces citry's token check and runs on top of the baseline and any host check. |
 | `_methods` | tuple of HTTP method names | `("POST",)` | The allowed methods for handlers that do not set `@event(methods=...)`. GET opts a handler into read-only, cacheable-in-principle (served `no-store` until GET caching lands, section 16), pasteable-URL calls (7.4). |
@@ -1352,7 +1355,14 @@ for configuring extensions without touching them. The envelope size cap
 is engine-wide only, with no per-component override: it guards the
 transport before any component resolves, and one batch envelope spans
 components, so declaring it on a component's `Events` class fails at
-class definition. Engine-wide registries
+class definition. The host's CSRF field names (`_csrf_field_names`,
+default `("csrfmiddlewaretoken",)`) are engine-wide in the same way: the
+dispatcher removes those keys from a call's args before it validates them
+against the handler's data class, unless the class declares the name, so a
+form may keep the host's hidden token input
+([`security_csrf.md`](security_csrf.md) section 4.4). A single string, an
+empty name, or a value that is not a list, tuple, or set fails at engine
+construction; an empty sequence turns the removal off. Engine-wide registries
 and secrets are `CitrySettings` fields: `secret` (7.1),
 `event_result_resolvers` (result resolvers, 6.2), and
 `event_payload_codecs` (payload codecs, 6.2).
@@ -1604,6 +1614,14 @@ is opaque, minted and verified by the same binding.
   no-JS HTTP path is the one exception: a targetless render becomes the
   whole HTML response body, so it needs no client-side target.
 - `args`: a required JSON object, named keys only. Validated server-side.
+- `argsSource`: present, with the only value `"form"`, when the runtime
+  read `args` from a form's named controls (5.1). The values are then the
+  form's text, and the server binds them by the source-aware rule of
+  3.3, exactly as for a no-JS form post, so a form gives the handler the
+  same values with or without JavaScript. Absent means the args are JSON
+  values checked strictly; this is what `$sendEvent`, API clients, and
+  arguments written in a binding send. Any other value or type rejects
+  the call as `protocol_mismatch`.
 - `stateToken`: the opaque state token, echoed verbatim. Absent for stateless
   handlers.
 - `stateUpdates`: two-way binding updates (`_model` State fields, 7.2)
@@ -2368,14 +2386,20 @@ handler, as `@c-submit.prevent="submit"` and `submit()` do, and the event
 comes from a `<form>`, the runtime sends the form's named controls as the
 wire args payload. Arguments written in the binding replace the form's
 fields instead of joining them: `@c-submit.prevent="submit({draft: true})"`
-sends only `{draft: true}`. The browser sends each control's value as a
-string, except that a `number` or `range` input holding a number sends
-that number, and a name with several values, such as several checked
-checkboxes, sends a list of strings. An unchecked checkbox sends nothing,
-and file inputs are left out. The payload is JSON, so it
-is checked strictly; only the urlencoded no-JS codec (6.2) binds strings
-to `int`, `float`, and `bool` fields, so the two paths can deliver
-different values for the same form. Control `name` attributes map to
+sends only `{draft: true}`. The browser sends each control's value as the
+text the form holds, `number` and `range` inputs included, and a name with
+several values, such as several checked checkboxes, sends a list of
+strings. An unchecked checkbox sends nothing, and file inputs are left
+out. Because the browser read the args from a form, it marks the call with
+`argsSource: "form"` (4.2), and the server binds the text by the same
+source-aware rule (3.3) as the urlencoded no-JS codec (6.2): `"3"` fills an
+`int` field and a checked checkbox's `"on"` fills a `bool` field. The
+browser also adds the name and value of the submit button that sent the
+form, as a no-JS post does. The JS path and the no-JS path therefore
+deliver the same values for the same form, except for a file input, whose
+file name a no-JS post sends as text. Arguments written in the binding
+are JSON values, so they carry no mark and are checked strictly. Control
+`name` attributes map to
 schema fields, schema validation produces the 422 `fieldErrors` map for
 the error display, and a failed submit re-renders nothing, so the DOM
 keeps the user's input:
@@ -2383,7 +2407,7 @@ keeps the user's input:
 ```html
 <form @c-submit.prevent="submit">
   <input name="email">
-  <input name="quantity" type="number">
+  <input name="quantity" type="number" value="1" required>
   <button type="submit">Order</button>
 </form>
 ```
@@ -3948,8 +3972,9 @@ it.
 **The envelope** is the one JSON object a transport hands the dispatcher
 per request: the call envelope of 4.2 (`protocol`, `requestId`, optional
 `capabilities`, and `calls`, where each call carries `componentClassId`,
-`handlerName`, optional `callerRenderId`, `args`, optional `stateToken`,
-optional `stateUpdates`, and optional `sendSequence`). The
+`handlerName`, optional `callerRenderId`, `args`, optional `argsSource`,
+optional `stateToken`, optional `stateUpdates`, and optional
+`sendSequence`). The
 dispatcher returns the matching result envelope of 4.3 (`results[i]`
 answers `calls[i]`). Transports never look inside either; they carry
 bytes.
@@ -4643,6 +4668,8 @@ shape:
           }
         ]
       },
+      "extra_fields": "reject",
+      "validated_by": "citry",
       "return_type_display": "dict[str, int]",
       "return_type_fidelity": "normalized",
       "description": "Save one item.",
@@ -4673,6 +4700,16 @@ Every handler object always contains exactly these keys:
   display text is present and `"unavailable"` when it is not. Request field
   defaults and default factories are never included, even when the caller
   requests component default values.
+- `extra_fields` says what the server does with an argument key the data
+  class does not declare. It is `"reject"` when the call then fails with
+  `invalid_args`: for a handler with no `data` parameter, a plain annotated
+  class, a dataclass, and a Pydantic model whose config sets
+  `extra="forbid"`. It is `"ignore"` for any other Pydantic model, because
+  Pydantic drops or keeps such a key without failing the call.
+- `validated_by` says whose rules check the argument values: `"citry"` for
+  Citry's own strict rules (section 3.3), or `"pydantic"` when the data class
+  is a Pydantic model, which converts values by its own rules, such as `"1"`
+  to `1`, and may read a field under an alias.
 - `return_type_display` and `return_type_fidelity` follow the same normalized
   or unavailable pair. The inspector reads the stored return annotation
   without resolving it: string annotations are copied, and unsupported values
@@ -4683,6 +4720,14 @@ Every handler object always contains exactly these keys:
 - `debounce` and `throttle` are the resolved client timing values in
   milliseconds or `null`. A value must be a non-negative JavaScript-safe
   integer, at most `2**53 - 1`; larger values are invalid at declaration time.
+
+The editor reads `extra_fields` and `validated_by` to report `@c-*`
+arguments the server rejects before the page runs. While `validated_by` is
+`"citry"`, `extra_fields` is always `"reject"`; the two keys are separate
+because a Pydantic model can reject undeclared keys and still convert
+values. A consumer that receives a handler without them, from an older
+Citry, or with a value it does not know, must not assume either answer;
+citry-lsp then skips its argument checks for that handler.
 
 The `handlers` array is sorted lexically by public wire `name`, independent of
 Python method declaration order. This makes the versioned JSON stable while

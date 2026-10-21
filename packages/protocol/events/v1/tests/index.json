@@ -29,6 +29,13 @@
     ]
   },
   {
+    "call": "form_args.call.json",
+    "result": "form_args.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId"
+    ]
+  },
+  {
     "call": "history.call.json",
     "result": "history.result.json",
     "dynamic_fields": [

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import typing
+from collections.abc import Mapping
 from dataclasses import MISSING, Field, is_dataclass
 from dataclasses import fields as dataclass_fields
 from typing import TYPE_CHECKING, Literal, cast, get_origin
@@ -11,6 +12,7 @@ from typing import TYPE_CHECKING, Literal, cast, get_origin
 from citry._class_introspection import _safe_class_import_path, _static_class_dict, _static_class_mro
 from citry._schema_introspection import _format_annotation, _inspect_schema_class
 from citry.ext.events.handlers import _get_annotations_as_text
+from citry.ext.events.schemas import _is_pydantic_model
 from citry.introspection import FieldInfo, _is_utf8_string
 
 if TYPE_CHECKING:
@@ -61,12 +63,43 @@ def _inspect_handler(handler: EventHandler) -> dict[str, object]:
         "name": handler.name,
         "methods": list(handler.methods),
         "request_schema": _inspect_request_schema(handler.data_schema),
+        "extra_fields": _extra_fields(handler.data_schema),
+        "validated_by": "pydantic" if _is_pydantic_schema(handler.data_schema) else "citry",
         "return_type_display": handler.return_type_display,
         "return_type_fidelity": handler.return_type_fidelity,
         "description": handler.description,
         "debounce": handler.debounce,
         "throttle": handler.throttle,
     }
+
+
+def _is_pydantic_schema(schema_class: type | None) -> bool:
+    """Whether Pydantic, rather than Citry's own rules, checks this handler's arguments."""
+    return schema_class is not None and _is_pydantic_model(schema_class)
+
+
+def _extra_fields(schema_class: type | None) -> Literal["reject", "ignore"]:
+    """
+    Say what the server does with an argument key the data class does not declare.
+
+    Citry rejects such a key for a plain class, a dataclass, and a handler
+    that takes no data. Pydantic ignores it unless the model's config sets
+    ``extra="forbid"``; ``extra="allow"`` keeps it, which still does not
+    reject the call, so it reads as ``"ignore"`` too.
+    """
+    if not _is_pydantic_schema(schema_class):
+        return "reject"
+    # Pydantic v2 keeps the effective config, inherited values included, as
+    # a mapping on the class; v1 exposes it as the ``__config__`` class.
+    config = getattr(schema_class, "model_config", None)
+    extra = (
+        config.get("extra")
+        if isinstance(config, Mapping)
+        else getattr(getattr(schema_class, "__config__", None), "extra", None)
+    )
+    # v1 spells the value as an enum member whose value is the string.
+    value = extra if type(extra) is str else getattr(extra, "value", None)
+    return "reject" if value == "forbid" else "ignore"
 
 
 def _inspect_request_schema(schema_class: type | None) -> dict[str, object] | None:

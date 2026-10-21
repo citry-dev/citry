@@ -49,6 +49,8 @@ them. There is no separate editor setting.
 | [`citry.browser.unknown-server-event-field`](/ide/diagnostics/#citry.browser.unknown-server-event-field) | A key in `@c-*` arguments that the handler does not accept | error |
 | [`citry.browser.missing-server-event-field`](/ide/diagnostics/#citry.browser.missing-server-event-field) | `@c-*` arguments without a field the handler requires | error |
 | [`citry.browser.incompatible-server-event-field`](/ide/diagnostics/#citry.browser.incompatible-server-event-field) | A literal in `@c-*` arguments of a type the handler rejects | error |
+| [`citry.browser.unknown-form-field`](/ide/diagnostics/#citry.browser.unknown-form-field) | A control in a submitted form whose `name` the handler does not accept | error |
+| [`citry.browser.missing-form-field`](/ide/diagnostics/#citry.browser.missing-form-field) | A submitted form without a control for a field the handler requires | error |
 | [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A `var(--name)` that misspells a `css_data()` key | warning |
 
 ## Fix unknown names
@@ -900,13 +902,86 @@ Citry checks what it can read from the template:
 A call with no arguments is reported only on an element that cannot
 contain a form, such as `<button>`. On a `<form>`, on an element that may
 hold one, or for the `submit` event, the browser may send the form's
-fields instead. A Pydantic `data` class is not checked, because Pydantic
-ignores extra keys and converts values.
+fields instead. When that binding is an `@c-submit` on the `<form>`
+itself, [the form field rules](#check-form-fields) check the fields. A
+Pydantic `data` class is not checked, because Pydantic converts values
+and may read a field under another name.
 
 Each mistake has its own setting: `rule_unknown_server_event_field`,
 `rule_missing_server_event_field`, and
 `rule_incompatible_server_event_field`. These rules need your
-application, so only `citry --app ... check` reports them.
+application: `citry --app ... check` reports them, and so does the editor
+once it has loaded your application. While a handler or its `data` class
+has unsaved changes, the editor stops checking calls to that handler
+until you save the file.
+
+### Form fields { #check-form-fields }
+
+A form whose `@c-submit` names only the handler, as in `search` or
+`search()`, sends its named controls as the handler's arguments, with or
+without JavaScript. Citry compares each control's `name` with the
+handler's `data` class:
+
+```citry
+class SearchIn:
+    q: str
+
+
+class Search(Component):
+    class Events:
+        def search(self, data: SearchIn):
+            ...
+
+    template = """
+      {# Error: Server event 'search' requires field
+         'q', but no control in this form has that
+         name. #}
+      <form @c-submit.prevent="search">
+        {# Error: The form sends field 'qeury', which
+           server event 'search' does not declare. #}
+        <input name="qeury" />
+      </form>
+
+      {# Right #}
+      <form @c-submit.prevent="search">
+        <input name="q" />
+      </form>
+    """
+```
+
+Citry checks each `<input>`, `<select>`, `<textarea>`, and submit
+`<button>` with a `name` written in the template. A submit button sends
+its name only when it submits the form, and a checkbox only when it is
+checked, so such a mistake fails only those submits.
+
+Citry leaves out a control that the browser may not send with this form,
+or may send under another name:
+
+- a disabled control, including one inside a disabled `<fieldset>` or
+  with a bound `:disabled`;
+- a control tied to another form by its `form` attribute;
+- a file input, a button that cannot submit, and a button whose click
+  is prevented, as in `@click.prevent`;
+- a control whose `type` or `name` is written as an expression, or that
+  has an attribute spread such as `v-bind="attrs"`.
+
+It also leaves out the host's CSRF field, such as Django's
+`csrfmiddlewaretoken`, because the server removes it before it checks the
+`data` class ([CSRF in forms](/security/#csrf-tokens-in-forms)). An image
+button, `<input type="image">`, sends where it was clicked as `x` and
+`y`, or `go.x` and `go.y` for `name="go"`, so Citry checks those names
+instead.
+
+A required field without a control is reported only when the template
+shows every control the form can send. The check is off for a form that
+holds a component, custom element, slot, `<template>`, loop, `v-html`,
+`#c-ignore` content, attribute spread, or a `name` written as an
+expression. It is also off when the form has an `id`, because a control
+elsewhere could join the form with its `form` attribute.
+
+Each mistake has its own setting: `rule_unknown_form_field` and
+`rule_missing_form_field`. Like the argument rules, they need your
+application.
 
 ## Misspelled CSS variables { #find-misspelled-css-variables }
 
@@ -1004,10 +1079,8 @@ extension's template syntax produces, so they may report a value that
 
 ### Imported base classes { #templates-the-check-cannot-find }
 
-`citry check --static` and the editor read one file at a time. When a
-component extends a class from another module of your project, they
-cannot tell from the file that the class is a component, so they skip its
-template:
+When a component extends a class from another module of your project,
+the file alone does not show that the class is a component:
 
 ```citry
 from app.base import BaseCard
@@ -1019,11 +1092,22 @@ class Card(BaseCard):
     """
 ```
 
+`citry --app ... check`, with or without `--types`, and an editor that has
+loaded your application find `Card` among your registered components and
+check its template.
+
+Without your application, Citry skips the template.
 `citry check --static` lists each skipped template as a note, and the
 editor marks the class name with an information message
 ([`citry.check.template-not-checked`](/ide/diagnostics/#citry.check.template-not-checked)).
-Nothing is wrong with the code. `citry --app ... check` loads your
-application and checks the template.
+Nothing is wrong with the code. To have the editor check the template, give
+it your application, for example with the `citry.app` setting in
+[VS Code](/ide/vscode/).
+
+The editor finds these classes by the names they had when it loaded your
+application. A class you add or rename keeps the message until the editor
+loads your application again, which VS Code does when you save a Python
+file.
 
 ### Shared templates
 

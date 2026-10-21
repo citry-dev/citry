@@ -17,6 +17,7 @@ import pytest
 from citry import Citry, Component, LintSettings
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
+from citry._registry_lint import annotation_from_type_display, server_event_payload_from_description
 from citry.ext.events import event
 
 try:
@@ -546,6 +547,329 @@ def test_each_payload_rule_has_its_own_setting(tmp_path):
 
 
 ################################################
+# THE EDITOR'S COPY OF WHAT A HANDLER ACCEPTS
+################################################
+
+
+def _description(**overrides: object) -> dict[str, object]:
+    description: dict[str, object] = {
+        "name": "save",
+        "methods": ["POST"],
+        "request_schema": {
+            "kind": "fields",
+            "import_path": "app.SaveIn",
+            "fields": [
+                {"name": "amount", "required": True, "type_display": "int", "type_fidelity": "normalized"},
+                {"name": "when", "required": False, "type_display": "datetime.date", "type_fidelity": "normalized"},
+            ],
+        },
+        "extra_fields": "reject",
+        "validated_by": "citry",
+    }
+    description.update(overrides)
+    return description
+
+
+def test_a_handler_description_gives_the_same_payload_rules_as_the_data_class():
+    payload = server_event_payload_from_description(_description())
+
+    assert payload is not None
+    assert payload.takes_data
+    assert payload.rejects_unknown
+    assert not payload.query_string
+    assert {name: field.required for name, field in (payload.fields or {}).items()} == {"amount": True, "when": False}
+    # Only a type the text proves is checked; a class name is left alone.
+    assert (payload.fields or {})["amount"].annotation is int
+    assert (payload.fields or {})["when"].annotation is None
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # An older Citry sends neither key, so nothing proves Citry checks the values.
+        {"extra_fields": None, "validated_by": None},
+        {"validated_by": "pydantic"},
+        {"validated_by": "something-new"},
+        {"extra_fields": "something-new"},
+        {"request_schema": {"kind": "fields", "import_path": None, "fields": [{"name": 1, "required": True}]}},
+    ],
+)
+def test_a_handler_description_that_proves_nothing_turns_the_rules_off(overrides):
+    description = {key: value for key, value in _description(**overrides).items() if value is not None}
+
+    assert server_event_payload_from_description(description) is None
+
+
+def test_a_handler_description_reads_the_editor_copy_and_other_shapes():
+    # The editor's frozen copy holds tuples where the JSON had lists.
+    frozen = _description(methods=("GET", "POST"))
+    frozen["request_schema"] = {**frozen["request_schema"], "fields": tuple(frozen["request_schema"]["fields"])}
+    payload = server_event_payload_from_description(frozen)
+    assert payload is not None
+    assert payload.query_string
+    assert set(payload.fields or {}) == {"amount", "when"}
+
+    no_data = server_event_payload_from_description(_description(request_schema=None))
+    assert no_data is not None
+    assert not no_data.takes_data
+
+    # An opaque schema names no fields, so only a handler-level fact is known.
+    opaque = server_event_payload_from_description(
+        _description(request_schema={"kind": "opaque", "import_path": None, "fields": []})
+    )
+    assert opaque is not None
+    assert opaque.fields is None
+
+
+@pytest.mark.parametrize(
+    ("text", "annotation"),
+    [
+        ("int", int),
+        ("str | None", str | None),
+        ('Literal["asc", "desc"]', Literal["asc", "desc"]),
+        ("Literal[1, -2]", Literal[1, -2]),
+        ("list[int]", list[int]),
+        ("tuple[int, ...]", tuple[int, ...]),
+        ("dict[str, float]", dict[str, float]),
+        ("Optional[bool]", bool | None),
+        ("datetime.date", None),
+        ("list[app.Item]", None),
+        ("Literal[Color.RED]", None),
+        ("not a type (", None),
+    ],
+)
+def test_type_display_text_becomes_an_annotation_only_when_the_text_proves_it(text, annotation):
+    assert annotation_from_type_display(text) == annotation
+
+
+################################################
+# FORM FIELDS SENT TO A SERVER EVENT
+################################################
+
+_UNKNOWN_FORM = "citry.browser.unknown-form-field"
+_MISSING_FORM = "citry.browser.missing-form-field"
+_FORM = (_UNKNOWN_FORM, _MISSING_FORM)
+
+
+class QueryIn:
+    q: str
+
+
+def test_the_benchmark_form_field_mistake_is_reported(tmp_path):
+    # The search form of case m44-form-field-name, with the control's name
+    # misspelled.
+    form = """
+        <form role="search" @c-submit.prevent="save">
+          <input
+            type="search"
+            name="qeury"
+            v-model="query"
+          />
+          <button type="submit">Search</button>
+        </form>
+    """
+    findings = _findings(_counter_engine(form, data_class=QueryIn), tmp_path, *_FORM)
+
+    assert findings == [
+        (
+            _MISSING_FORM,
+            "error",
+            "Server event 'save' requires field 'q', but no control in this form has that name, so the server"
+            " rejects every submit.",
+        ),
+        (
+            _UNKNOWN_FORM,
+            "error",
+            "The form sends field 'qeury', which server event 'save' does not declare, so the server rejects the"
+            " submit.",
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("form", "data_class", "expected"),
+    [
+        # A name one slip from a declared field gets a suggestion.
+        (
+            '<form @c-submit.prevent="save"><input name="query"><input name="paeg"></form>',
+            SearchIn,
+            [
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'paeg', which server event 'save' does not declare, so the server rejects"
+                    " the submit. Did you mean 'page'?",
+                )
+            ],
+        ),
+        # A handler without data rejects every field.
+        (
+            '<form @c-submit.prevent="save()"><input name="q"></form>',
+            None,
+            [
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'q', but server event 'save' takes no data, so the server rejects the"
+                    " submit.",
+                )
+            ],
+        ),
+        # A <textarea> and a <select> send their names too.
+        (
+            '<form @c-submit.prevent="save"><select name="q"><option>a</option></select>'
+            '<textarea name="nots"></textarea></form>',
+            QueryIn,
+            [
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'nots', which server event 'save' does not declare, so the server rejects"
+                    " the submit.",
+                )
+            ],
+        ),
+        # The button that submits the form sends its name too.
+        (
+            '<form @c-submit.prevent="save"><input name="q"><button name="action" value="go">Go</button></form>',
+            QueryIn,
+            [
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'action', which server event 'save' does not declare, so the server"
+                    " rejects the submit.",
+                )
+            ],
+        ),
+        # An image button sends where it was clicked, never its bare name.
+        (
+            '<form @c-submit.prevent="save"><input name="q"><input type="image" name="go" src="go.svg" alt="Go">'
+            "</form>",
+            QueryIn,
+            [
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'go.x', which server event 'save' does not declare, so the server"
+                    " rejects the submit.",
+                ),
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'go.y', which server event 'save' does not declare, so the server"
+                    " rejects the submit.",
+                ),
+            ],
+        ),
+        # A form that shows every control it sends, without the required one.
+        (
+            '<form @c-submit.prevent="save"><button>Go</button></form>',
+            QueryIn,
+            [
+                (
+                    _MISSING_FORM,
+                    "Server event 'save' requires field 'q', but no control in this form has that name, so the"
+                    " server rejects every submit.",
+                )
+            ],
+        ),
+    ],
+)
+def test_form_fields_the_server_rejects_are_reported(tmp_path, form, data_class, expected):
+    findings = _findings(_counter_engine(form, data_class=data_class), tmp_path, *_FORM)
+
+    assert [(code, message) for code, _severity, message in findings] == expected
+
+
+@pytest.mark.parametrize(
+    "form",
+    [
+        '<form @c-submit.prevent="save"><input name="q"></form>',
+        # The server removes Django's CSRF field before it checks the class.
+        '<form @c-submit.prevent="save"><input name="q"><input type="hidden" name="csrfmiddlewaretoken"></form>',
+        # Controls the browser does not send with this form.
+        '<form @c-submit.prevent="save"><input name="q"><input name="extra" disabled></form>',
+        '<form @c-submit.prevent="save"><input name="q"><input name="extra" :disabled="busy"></form>',
+        '<form @c-submit.prevent="save"><input name="q"><input name="other" form="elsewhere"></form>',
+        '<form @c-submit.prevent="save"><input name="q"><input type="file" name="upload"></form>',
+        '<form @c-submit.prevent="save"><input name="q"><button type="button" name="go">Go</button></form>',
+        # A button whose click is prevented never submits.
+        '<form @c-submit.prevent="save"><input name="q"><button name="add" @click.prevent="addRow">+</button></form>',
+        # Vue's `^name` and `.name` shorthands bind the name as an expression.
+        '<form @c-submit.prevent="save"><input ^name="field"></form>',
+        '<form @c-submit.prevent="save"><input name="q"><button ^type="kind" name="go">Go</button></form>',
+        '<form @c-submit.prevent="save"><fieldset disabled><input name="x"></fieldset><input name="q"></form>',
+        '<form @c-submit.prevent="save"><input name="x" v-bind="attrs"><input name="q"></form>',
+        # A required field may come from a control the template cannot see.
+        '<form id="search" @c-submit.prevent="save"><button>Go</button></form>',
+        '<form @c-submit.prevent="save"><c-SearchField /></form>',
+        '<form @c-submit.prevent="save"><input :name="field"></form>',
+        '<form @c-submit.prevent="save"><input :name.prop="field"></form>',
+        # A library may add controls inside content Citry leaves alone.
+        '<form @c-submit.prevent="save"><div #c-ignore></div><button>Go</button></form>',
+        '<form @c-submit.prevent="save"><search-box></search-box></form>',
+        '<form @c-submit.prevent="save"><input v-for="name in names" :name="name"></form>',
+        '<form @c-submit.prevent="save"><slot></slot></form>',
+        # A required field inside a condition still has its control.
+        '<form @c-submit.prevent="save"><c-if cond="ready"><input name="q"></c-if></form>',
+        # Arguments written in the binding replace the form's fields.
+        '<form @c-submit.prevent="save({q: \'x\'})"><input name="zzz"></form>',
+        # A submit from inside another element is not read as this form's.
+        '<div @c-submit="save"><form><input name="zzz"></form></div>',
+    ],
+)
+def test_form_fields_the_server_accepts_or_cannot_be_read_are_not_reported(tmp_path, form):
+    assert _findings(_counter_engine(form, data_class=QueryIn), tmp_path, *_FORM) == []
+
+
+def test_the_csrf_field_names_setting_is_followed(tmp_path):
+    form = '<form @c-submit.prevent="save"><input name="q"><input type="hidden" name="authenticity_token"></form>'
+    engine = Citry(autodiscover=False, extensions_defaults={"events": {"_csrf_field_names": ["authenticity_token"]}})
+
+    def save(self, data: QueryIn):
+        return None
+
+    type(
+        "Search",
+        (Component,),
+        {"citry": engine, "Events": type("Events", (), {"save": save}), "template": form, "__module__": __name__},
+    )
+
+    assert _findings(engine, tmp_path, *_FORM) == []
+    # Without the setting, the same field is unknown to the data class.
+    assert [
+        code for code, _severity, _message in _findings(_counter_engine(form, data_class=QueryIn), tmp_path, *_FORM)
+    ] == [_UNKNOWN_FORM]
+
+
+@pytest.mark.skipif(pydantic is None, reason="pydantic is not installed")
+def test_a_form_for_a_pydantic_data_class_is_not_checked(tmp_path):
+    model = type("QueryModel", (pydantic.BaseModel,), {"__annotations__": {"q": str}, "__module__": __name__})
+
+    engine = _counter_engine('<form @c-submit.prevent="save"><input name="qeury"></form>', data_class=model)
+
+    assert _findings(engine, tmp_path, *_FORM) == []
+
+
+def test_each_form_rule_has_its_own_setting(tmp_path):
+    lint = LintSettings(rule_unknown_form_field="warning", rule_missing_form_field="ignore")
+    engine = Citry(autodiscover=False, lint=lint)
+
+    def save(self, data: QueryIn):
+        return None
+
+    type(
+        "Search",
+        (Component,),
+        {
+            "citry": engine,
+            "Events": type("Events", (), {"save": save}),
+            "template": '<form @c-submit.prevent="save"><input name="qeury"></form>',
+            "__module__": __name__,
+        },
+    )
+
+    assert [(code, severity) for code, severity, _message in _findings(engine, tmp_path, *_FORM)] == [
+        (_UNKNOWN_FORM, "warning"),
+    ]
+
+
+################################################
 # A MISSPELLED css_data() VARIABLE
 ################################################
 
@@ -698,7 +1022,7 @@ def test_static_check_notes_a_template_whose_base_comes_from_the_project(tmp_pat
     assert report.findings == ()
     assert report.notes == (
         f"{package / 'card.py'}:5: Citry cannot tell from this file that Card is a component, because it extends"
-        " BaseCard, which comes from another module, so this template is checked only by citry check with your"
-        " application loaded. [citry.check.template-not-checked]",
+        " BaseCard, which comes from another module, so this template is checked only when Citry loads your"
+        " application and finds Card there. [citry.check.template-not-checked]",
     )
     assert report.exit_code == 0

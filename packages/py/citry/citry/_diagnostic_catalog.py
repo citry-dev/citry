@@ -46,6 +46,8 @@ BROWSER_INCOMPATIBLE_COMPONENT_PROP = 'citry.browser.incompatible-component-prop
 BROWSER_MISSING_COMPONENT_KEY = 'citry.browser.missing-component-key'
 BROWSER_PROP_ASSIGNMENT = 'citry.browser.prop-assignment'
 BROWSER_UNKNOWN_SERVER_EVENT_FIELD = 'citry.browser.unknown-server-event-field'
+BROWSER_UNKNOWN_FORM_FIELD = 'citry.browser.unknown-form-field'
+BROWSER_MISSING_FORM_FIELD = 'citry.browser.missing-form-field'
 BROWSER_MISSING_SERVER_EVENT_FIELD = 'citry.browser.missing-server-event-field'
 BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD = 'citry.browser.incompatible-server-event-field'
 CHECK_TEMPLATE_DECLARATION = 'citry.check.template-declaration'
@@ -125,7 +127,7 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                               "handler's data class does not accept for that field. "
                                                               'The server rejects the call, and the handler does not '
                                                               'run.',
-                                                   'surfaces': ['check'],
+                                                   'surfaces': ['check', 'lsp'],
                                                    'title': 'Wrong type for a server event field',
                                                    'when': 'A key in the object literal of an @c-* binding has a '
                                                            "literal value, such as '1', true, 2.5, or null, or a "
@@ -140,7 +142,8 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                            'checked, because Pydantic converts values. When several '
                                                            'components share the template, it is checked only when '
                                                            'they use the same data class for the handler. citry check '
-                                                           'needs your application for this rule.'},
+                                                           'needs your application for this rule, and the editor '
+                                                           'reports it once it has loaded your application.'},
  'citry.browser.invalid-model-target': {'code': 'citry.browser.invalid-model-target',
                                         'configurableSeverity': True,
                                         'constant': 'BROWSER_INVALID_MODEL_TARGET',
@@ -240,6 +243,42 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                           'when': 'A registered <c-*> tag has no Vue binding for a prop the child '
                                                   'declares with required: true, and no spread binding could supply '
                                                   'it.'},
+ 'citry.browser.missing-form-field': {'code': 'citry.browser.missing-form-field',
+                                      'configurableSeverity': True,
+                                      'constant': 'BROWSER_MISSING_FORM_FIELD',
+                                      'defaultSeverity': 'error',
+                                      'documentationPath': '/ide/diagnostics/#citry.browser.missing-form-field',
+                                      'examples': [{'language': 'citry-html',
+                                                    'source': '<form @c-submit.prevent="search">\n'
+                                                              '  <button>Search</button>\n'
+                                                              '</form>',
+                                                    'title': 'A form without the required control'}],
+                                      'fix': 'Add a control with that name, or give the field a default in the '
+                                             "handler's data class.",
+                                      'messages': {'default': "Server event '{event}' requires field '{name}', but no "
+                                                              'control in this form has that name, so the server '
+                                                              'rejects every submit.'},
+                                      'parameters': {'event': "The server event's name.",
+                                                     'name': "The required field's name."},
+                                      'summary': 'A form sends its fields to a server event, but none of its controls '
+                                                 "is named after a field that the handler's data class requires. The "
+                                                 'server rejects every submit, and the handler does not run.',
+                                      'surfaces': ['check', 'lsp'],
+                                      'title': 'Missing form field',
+                                      'when': 'A <form> has an @c-submit binding that writes no arguments, such as '
+                                              '@c-submit.prevent="search" or search(), so the browser sends the '
+                                              "form's named controls, as a post without JavaScript does. No <input>, "
+                                              '<select>, <textarea>, or <button> in the form has the name of a field '
+                                              'without a default. The rule runs only when the template shows every '
+                                              'name the form can send: the form has no id, which a control elsewhere '
+                                              'could name in its form attribute, and it holds no component, custom '
+                                              'element, slot, <template>, loop, v-html, #c-ignore content, attribute '
+                                              'spread, or name written as an expression. A Pydantic data class is not '
+                                              'checked, because Pydantic converts values and may read a field under '
+                                              'another name. When several components share the template, it is checked '
+                                              'only when they use the same data class for the handler. citry check '
+                                              'needs your application for this rule, and the editor reports it once it '
+                                              'has loaded your application.'},
  'citry.browser.missing-server-event-field': {'code': 'citry.browser.missing-server-event-field',
                                               'configurableSeverity': True,
                                               'constant': 'BROWSER_MISSING_SERVER_EVENT_FIELD',
@@ -258,18 +297,20 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'summary': 'An @c-* binding calls a server event without a field that '
                                                          "the handler's data class requires. The server rejects the "
                                                          'call, and the handler does not run.',
-                                              'surfaces': ['check'],
+                                              'surfaces': ['check', 'lsp'],
                                               'title': 'Missing server event field',
                                               'when': 'The arguments of an @c-* binding are an object literal with no '
                                                       '... spread and no computed key, and they leave out a field that '
                                                       'has no default; or the binding sends no arguments, as in save '
                                                       'or save(), from an element that cannot contain a form, such as '
                                                       'a button. A binding with no arguments on a <form>, or for the '
-                                                      'submit event, is not reported, because the browser then sends '
-                                                      "the form's fields. A Pydantic data class is not checked. When "
+                                                      'submit event, is not reported here, because the browser then '
+                                                      "sends the form's fields; citry.browser.missing-form-field "
+                                                      'checks those. A Pydantic data class is not checked. When '
                                                       'several components share the template, it is checked only when '
                                                       'they use the same data class for the handler. citry check needs '
-                                                      'your application for this rule.'},
+                                                      'your application for this rule, and the editor reports it once '
+                                                      'it has loaded your application.'},
  'citry.browser.prop-assignment': {'code': 'citry.browser.prop-assignment',
                                    'configurableSeverity': True,
                                    'constant': 'BROWSER_PROP_ASSIGNMENT',
@@ -368,6 +409,58 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                            'name that emits does not list and no on<Event> prop declares. Citry checks '
                                            'only when emits is an array of strings or an object with plain keys. A '
                                            'component without emits may emit any name, as in Vue.'},
+ 'citry.browser.unknown-form-field': {'code': 'citry.browser.unknown-form-field',
+                                      'configurableSeverity': True,
+                                      'constant': 'BROWSER_UNKNOWN_FORM_FIELD',
+                                      'defaultSeverity': 'error',
+                                      'documentationPath': '/ide/diagnostics/#citry.browser.unknown-form-field',
+                                      'examples': [{'language': 'citry-html',
+                                                    'source': '<form @c-submit.prevent="search">\n'
+                                                              '  <input name="qeury" />\n'
+                                                              '</form>',
+                                                    'title': "A typo in a control's name"}],
+                                      'fix': "Correct the control's name, or add the field to the handler's data "
+                                             'class.',
+                                      'messages': {'default': "The form sends field '{name}', which server event "
+                                                              "'{event}' does not declare, so the server rejects the "
+                                                              'submit.',
+                                                   'no-data': "The form sends field '{name}', but server event "
+                                                              "'{event}' takes no data, so the server rejects the "
+                                                              'submit.',
+                                                   'suggestion': "The form sends field '{name}', which server event "
+                                                                 "'{event}' does not declare, so the server rejects "
+                                                                 "the submit. Did you mean '{suggestion}'?"},
+                                      'parameters': {'event': "The server event's name.",
+                                                     'name': "The control's name as written.",
+                                                     'suggestion': 'The declared field one typing slip from the name.'},
+                                      'summary': 'A form sends its fields to a server event, and one of its controls '
+                                                 "has a name that the handler's data class does not declare. The "
+                                                 'server rejects each submit that sends that control, and the handler '
+                                                 'does not run.',
+                                      'surfaces': ['check', 'lsp'],
+                                      'title': 'Unknown form field',
+                                      'when': 'A <form> has an @c-submit binding that writes no arguments, such as '
+                                              '@c-submit.prevent="search" or search(), so the browser sends the '
+                                              "form's named controls, as a post without JavaScript does. An <input>, "
+                                              '<select>, <textarea>, or submit <button> in the form has a static name '
+                                              "the handler's data class does not declare, or the handler takes no data "
+                                              'parameter. A submit button sends its name only when it is the one that '
+                                              'submits the form, and a checkbox only when it is checked. A control is '
+                                              'not checked when the browser may not send it with this form or may send '
+                                              'it under another name: it is disabled, by its own disabled attribute, a '
+                                              'bound :disabled, or a disabled <fieldset>; it is tied to another form '
+                                              'by its form attribute; it is a file input, a button that cannot submit, '
+                                              'or a button whose click is prevented, as in @click.prevent; its type or '
+                                              'name is written as an expression; or it has an attribute spread such as '
+                                              'v-bind="attrs". An image input sends where it was clicked, as x and y, '
+                                              'or name.x and name.y, so those names are checked instead of its name. '
+                                              "Neither are the host's CSRF field names that the server removes before "
+                                              'it checks the data class, by default csrfmiddlewaretoken. A Pydantic '
+                                              'data class is not checked, because Pydantic converts values and may '
+                                              'read a field under another name. When several components share the '
+                                              'template, it is checked only when they use the same data class for the '
+                                              'handler. citry check needs your application for this rule, and the '
+                                              'editor reports it once it has loaded your application.'},
  'citry.browser.unknown-server-event': {'code': 'citry.browser.unknown-server-event',
                                         'constant': 'BROWSER_UNKNOWN_SERVER_EVENT',
                                         'defaultSeverity': 'error',
@@ -418,16 +511,18 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'summary': 'An @c-* binding sends an object with a key that the '
                                                          "handler's data class does not declare. The server rejects "
                                                          'the call, and the handler does not run.',
-                                              'surfaces': ['check'],
+                                              'surfaces': ['check', 'lsp'],
                                               'title': 'Unknown server event field',
                                               'when': 'The arguments of an @c-* binding, such as '
                                                       '@c-click="save({amont: 1})", are an object literal with a key '
                                                       "the handler's data class does not declare, or the handler takes "
                                                       'no data parameter. A key written next to a ... spread is still '
                                                       'checked. A Pydantic data class is not checked, because Pydantic '
-                                                      'ignores extra keys. When several components share the template, '
-                                                      'it is checked only when they use the same data class for the '
-                                                      'handler. citry check needs your application for this rule.'},
+                                                      'may ignore extra keys or read a field under another name. When '
+                                                      'several components share the template, it is checked only when '
+                                                      'they use the same data class for the handler. citry check needs '
+                                                      'your application for this rule, and the editor reports it once '
+                                                      'it has loaded your application.'},
  'citry.browser.unknown-state-field': {'code': 'citry.browser.unknown-state-field',
                                        'constant': 'BROWSER_UNKNOWN_STATE_FIELD',
                                        'defaultSeverity': 'error',
@@ -555,17 +650,23 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                               '      <article>{{ title }}</article>\n'
                                                               '    """',
                                                     'title': 'A base class from another module'}],
-                                      'fix': 'Nothing is wrong with the code. Run citry check with your application '
-                                             'loaded, as in citry --app module:engine check, to check the template.',
+                                      'fix': 'Nothing is wrong with the code. To check the template, load your '
+                                             'application: run citry check with it, as in citry --app module:engine '
+                                             'check, and give the editor the same module:engine path, in the citry.app '
+                                             'setting in VS Code. For a class you added or renamed, the message stays '
+                                             'until the editor loads the application again, which VS Code does when '
+                                             'you save a Python file.',
                                       'messages': {'default': 'Citry cannot tell from this file that {component} is a '
                                                               'component, because it extends {base}, which comes from '
-                                                              'another module, so this template is checked only by '
-                                                              'citry check with your application loaded.'},
+                                                              'another module, so this template is checked only when '
+                                                              'Citry loads your application and finds {component} '
+                                                              'there.'},
                                       'parameters': {'base': 'The imported class it extends, as written.',
                                                      'component': 'The class name.'},
                                       'summary': 'A class sets a template, but it extends a class from another module '
-                                                 'of your project, so the editor and citry check --static cannot tell '
-                                                 'that it is a component and do not check its template.',
+                                                 'of your project, so Citry cannot tell from the file alone that it is '
+                                                 'a component. Its template is checked only when Citry loads your '
+                                                 'application and finds the class there.',
                                       'surfaces': ['check', 'lsp'],
                                       'title': 'Template checked only with the application',
                                       'when': 'A class in a Python file sets template to a string literal that '
@@ -573,9 +674,12 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'component, and it extends a class imported from a module of your '
                                               'project, directly or through a class defined in the same file. A class '
                                               'from an installed package does not count. citry check --static lists it '
-                                              'as a note, and the editor shows it as information on the class name. '
-                                              'citry check with your application loaded reads the component registry '
-                                              'and checks the template, so it does not report this.'},
+                                              'as a note. The editor shows it as information on the class name while '
+                                              'it has not loaded your application, and for a class added or renamed '
+                                              'since it loaded the application. citry check with your application '
+                                              'loaded, citry check --types, and an editor that has loaded the '
+                                              'application find the class in the component registry and check its '
+                                              'template, so they do not report it.'},
  'citry.check.template-value-invalid': {'code': 'citry.check.template-value-invalid',
                                         'constant': 'CHECK_TEMPLATE_VALUE_INVALID',
                                         'defaultSeverity': 'error',

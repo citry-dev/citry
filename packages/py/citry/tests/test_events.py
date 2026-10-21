@@ -928,7 +928,8 @@ class TestHandlerEnumeration:
             "Component Comp: invalid config field on its nested 'Events' class (the"
             " 'events' extension). '_guardd' is not a recognized Events config attribute;"
             " the recognized names are:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes."
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _csrf_field_names."
             " Did you mean '_guard'?" in str(err.value)
         )
 
@@ -1684,7 +1685,8 @@ class TestConfigFieldValidation:
             "Extension 'events': invalid config field in the 'extensions_defaults'"
             " setting. '_guardd' is not a recognized Events config attribute; the"
             " recognized names are:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes."
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _csrf_field_names."
             " Did you mean '_guard'?" in str(err.value)
         )
 
@@ -1699,7 +1701,8 @@ class TestConfigFieldValidation:
             " setting. 'refresh' cannot be a global default: unprefixed names on Events"
             " are event handlers, and event handlers are defined on each component's"
             " nested Events class. Only the underscore config can be defaulted globally:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes." in str(err.value)
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _csrf_field_names." in str(err.value)
         )
 
     def test_defaults_config_name_without_underscore_gets_hint(self):
@@ -1729,7 +1732,8 @@ class TestConfigFieldValidation:
             " 'events' extension). 'greeting' must be an event handler (unprefixed names"
             " on Events are handlers, and a handler is a plain method defined with"
             " 'def'); got 'hi'. Configuration uses the underscore names:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes." in str(err.value)
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _csrf_field_names." in str(err.value)
         )
 
     def test_property_handler_rejected(self):
@@ -1773,7 +1777,8 @@ class TestConfigFieldValidation:
             " on Events are handlers, and a handler is a plain method defined with"
             " 'def'); got functools.partial(<built-in function print>, 'hi')."
             " Configuration uses the underscore names:"
-            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes." in str(err.value)
+            " _guard, _context, _csrf, _methods, _debounce, _throttle, _topics, _max_envelope_bytes,"
+            " _csrf_field_names." in str(err.value)
         )
 
     def test_valid_two_tier_config_passes(self):
@@ -1893,6 +1898,8 @@ class TestEventsIntrospection:
                         "name": "alpha",
                         "methods": ["POST"],
                         "request_schema": None,
+                        "extra_fields": "reject",
+                        "validated_by": "citry",
                         "return_type_display": None,
                         "return_type_fidelity": "unavailable",
                         "description": None,
@@ -1907,6 +1914,8 @@ class TestEventsIntrospection:
                             "import_path": f"{__name__}.IntrospectionEmptyIn",
                             "fields": [],
                         },
+                        "extra_fields": "reject",
+                        "validated_by": "citry",
                         "return_type_display": None,
                         "return_type_fidelity": "unavailable",
                         "description": None,
@@ -1921,6 +1930,8 @@ class TestEventsIntrospection:
                             "import_path": f"{__name__}.IntrospectionOpaqueIn",
                             "fields": [],
                         },
+                        "extra_fields": "reject",
+                        "validated_by": "citry",
                         "return_type_display": None,
                         "return_type_fidelity": "unavailable",
                         "description": None,
@@ -1952,6 +1963,8 @@ class TestEventsIntrospection:
                                 },
                             ],
                         },
+                        "extra_fields": "reject",
+                        "validated_by": "citry",
                         "return_type_display": "dict[str, int]",
                         "return_type_fidelity": "normalized",
                         "description": "Save one card.\n\nKeeps the public description clean.",
@@ -2198,6 +2211,53 @@ class TestEventsIntrospection:
         assert handler["return_type_display"] == "explode_annotation()"
         assert handler["return_type_fidelity"] == "normalized"
 
+    def test_extra_fields_and_validated_by_follow_the_data_class(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        class LooseIn(pydantic.BaseModel):
+            q: str
+
+        class ClosedIn(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(extra="forbid")
+            q: str
+
+        class OpenIn(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(extra="allow")
+            q: str
+
+        app = _Citry(autodiscover=False)
+
+        class Card(Component):
+            citry = app
+
+            class Events:
+                def loose(self, data: LooseIn):
+                    return None
+
+                def closed(self, data: ClosedIn):
+                    return None
+
+                def open(self, data: OpenIn):
+                    return None
+
+                def plain(self, data: IntrospectionEventIn):
+                    return None
+
+                def bare(self):
+                    return None
+
+        _catalog, components = _events_introspection_catalog(app)
+        handlers = components["card"]["extensions"]["events"]["data"]["handlers"]
+        # Citry rejects an undeclared key itself; Pydantic rejects it only
+        # with extra="forbid", and checks values by its own rules.
+        assert {handler["name"]: (handler["extra_fields"], handler["validated_by"]) for handler in handlers} == {
+            "bare": ("reject", "citry"),
+            "closed": ("reject", "pydantic"),
+            "loose": ("ignore", "pydantic"),
+            "open": ("ignore", "pydantic"),
+            "plain": ("reject", "citry"),
+        }
+
     def test_publication_excludes_private_events_state_and_queue_configuration(self):
         private_value = "PRIVATE_STATE_VALUE_MUST_NOT_BE_PUBLISHED"
         private_topic = "private-topic:{token}"
@@ -2238,6 +2298,8 @@ class TestEventsIntrospection:
             "name",
             "methods",
             "request_schema",
+            "extra_fields",
+            "validated_by",
             "return_type_display",
             "return_type_fidelity",
             "description",
@@ -2353,6 +2415,8 @@ class TestEventsIntrospection:
                     "name": "ping",
                     "methods": ["POST"],
                     "request_schema": None,
+                    "extra_fields": "reject",
+                    "validated_by": "citry",
                     "return_type_display": None,
                     "return_type_fidelity": "unavailable",
                     "description": None,

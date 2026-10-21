@@ -9,9 +9,11 @@ handler validates its arguments with.
 
 from __future__ import annotations
 
+import ast
 import math
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Literal, Union
 
 from citry._browser_expressions import (
     _ascii_lower,
@@ -23,7 +25,9 @@ from citry._browser_expressions import (
 )
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
+    BROWSER_MISSING_FORM_FIELD,
     BROWSER_MISSING_SERVER_EVENT_FIELD,
+    BROWSER_UNKNOWN_FORM_FIELD,
     BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
 )
 from citry._diagnostics import render_diagnostic
@@ -32,7 +36,7 @@ from citry.ext.events.schemas import json_value_error, payload_fields
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable
 
     from citry_core.template_parser import Template
 
@@ -288,6 +292,222 @@ _ELEMENTS_WITHOUT_FORMS = frozenset(
 
 
 @dataclass(frozen=True, slots=True)
+class ServerEventField:
+    """
+    One field a handler's data class takes from the browser.
+
+    Attributes:
+        name: The key the browser sends.
+        required: Whether the server rejects a call that leaves it out.
+        annotation: The field's type, which the server checks each value
+            against, or None when it is not known, so its values are not
+            checked.
+
+    """
+
+    name: str
+    required: bool
+    annotation: Any
+
+
+@dataclass(frozen=True, slots=True)
+class ServerEventPayload:
+    """
+    What the server accepts as one handler's arguments, as far as the template rules can tell.
+
+    ``citry check`` builds it from the handler's data class with
+    ``server_event_payload``, and the editor from the handler description
+    the app worker sends with ``server_event_payload_from_description``, so
+    both run the same rules.
+
+    Attributes:
+        takes_data: Whether the handler has a ``data`` parameter. A handler
+            without one rejects every key.
+        fields: The data class's fields by name, or None when they are not
+            known, which turns off the checks that need them.
+        rejects_unknown: Whether the server rejects a key the data class
+            does not declare.
+        query_string: Whether the browser may send the arguments as a GET
+            query string, which the server reads as text, so ``'2'`` fits
+            an ``int`` field.
+
+    """
+
+    takes_data: bool
+    fields: Mapping[str, ServerEventField] | None
+    rejects_unknown: bool
+    query_string: bool = False
+
+
+def server_event_payload(data_class: type | None, *, query_string: bool = False) -> ServerEventPayload | None:
+    """
+    Describe what the server accepts from a handler's data class, or None when the rules must skip it.
+
+    A Pydantic model is skipped: Pydantic converts values by its own rules
+    and may read a field under an alias. So is a class whose annotations
+    cannot be resolved, which fails when the handler first runs.
+    """
+    if data_class is None:
+        return ServerEventPayload(takes_data=False, fields={}, rejects_unknown=True, query_string=query_string)
+    specs = payload_fields(data_class)
+    if specs is None:
+        return None
+    return ServerEventPayload(
+        takes_data=True,
+        fields={spec.name: ServerEventField(spec.name, spec.required, spec.annotation) for spec in specs},
+        rejects_unknown=True,
+        query_string=query_string,
+    )
+
+
+def server_event_payload_from_description(handler: Mapping[str, object]) -> ServerEventPayload | None:
+    """
+    Describe what the server accepts from one handler of the Events introspection entry.
+
+    The editor cannot import the application, so it reads the handler
+    description the app worker copies out of it (``docs/design/events.md``
+    section 9.1). Returns None, so the rules skip the handler, when the
+    description does not prove that Citry's own rules check the arguments:
+    a Pydantic model, a description from an older Citry without
+    ``extra_fields`` and ``validated_by``, a value this version does not
+    know, or a malformed entry. A field whose type text is not one of the
+    plain JSON types, a ``Literal``, a union, or a container of those has its
+    values left unchecked.
+    """
+    if handler.get("validated_by") != "citry":
+        return None
+    extra_fields = handler.get("extra_fields")
+    if extra_fields not in {"reject", "ignore"}:
+        return None
+    methods = handler.get("methods")
+    # The editor's copy of the description holds tuples where the JSON had lists.
+    query_string = isinstance(methods, (list, tuple)) and "GET" in methods
+    schema = handler.get("request_schema")
+    if schema is None:
+        return ServerEventPayload(takes_data=False, fields={}, rejects_unknown=True, query_string=query_string)
+    if not isinstance(schema, Mapping):
+        return None
+    raw_fields = schema.get("fields")
+    # An opaque schema lists no fields, which says nothing about the class.
+    if schema.get("kind") != "fields" or not isinstance(raw_fields, (list, tuple)):
+        return ServerEventPayload(
+            takes_data=True, fields=None, rejects_unknown=extra_fields == "reject", query_string=query_string
+        )
+    fields: dict[str, ServerEventField] = {}
+    for raw in raw_fields:
+        if not isinstance(raw, Mapping):
+            return None
+        name, required, display = raw.get("name"), raw.get("required"), raw.get("type_display")
+        if not isinstance(name, str) or not isinstance(required, bool):
+            return None
+        annotation = annotation_from_type_display(display) if isinstance(display, str) else None
+        fields[name] = ServerEventField(name, required, annotation)
+    return ServerEventPayload(
+        takes_data=True, fields=fields, rejects_unknown=extra_fields == "reject", query_string=query_string
+    )
+
+
+# The names a description's type text may use, with the annotation each
+# means. A class name, such as `datetime` or a nested data class, is not
+# here, because the text alone does not say which class it is.
+_DISPLAY_NAMES: dict[str, Any] = {
+    "int": int,
+    "float": float,
+    "str": str,
+    "bool": bool,
+    "None": type(None),
+    "NoneType": type(None),
+    "Any": Any,
+    "object": object,
+    "list": list,
+    "dict": dict,
+}
+_DISPLAY_GENERICS: dict[str, Any] = {
+    "list": list,
+    "List": list,
+    "tuple": tuple,
+    "Tuple": tuple,
+    "set": set,
+    "Set": set,
+    "frozenset": frozenset,
+    "dict": dict,
+    "Dict": dict,
+}
+
+
+def annotation_from_type_display(text: str) -> Any:
+    """
+    Rebuild the annotation that a handler description's ``type_display`` text names, or None.
+
+    Only names whose meaning the text alone proves are read: the plain JSON
+    types, ``None``, ``Any``, ``Literal`` with constant values, unions
+    written with ``|``, ``Optional``, or ``Union``, and ``list``, ``tuple``,
+    ``set``, and ``dict`` of those. Anything else returns None, so the
+    caller does not check values of that field.
+    """
+    try:
+        node = ast.parse(text, mode="eval").body
+    except (SyntaxError, ValueError):
+        return None
+    return _display_annotation(node)
+
+
+def _display_annotation(node: ast.expr) -> Any:
+    if isinstance(node, ast.Constant) and node.value is None:
+        return type(None)
+    if isinstance(node, ast.Name):
+        return _DISPLAY_NAMES.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        left, right = _display_annotation(node.left), _display_annotation(node.right)
+        return None if left is None or right is None else Union[left, right]  # noqa: UP007 - built from parts
+    if not isinstance(node, ast.Subscript) or not isinstance(node.value, ast.Name):
+        return None
+    name = node.value.id
+    items = list(node.slice.elts) if isinstance(node.slice, ast.Tuple) else [node.slice]
+    if name == "Literal":
+        values = [_literal_constant(item) for item in items]
+        if any(value is _NOT_A_LITERAL for value in values):
+            return None
+        return Literal[tuple(values)]
+    # `tuple[int, ...]` is the one form whose second item is not a type.
+    if (
+        name in {"Tuple", "tuple"}
+        and len(items) == 2
+        and isinstance(items[1], ast.Constant)
+        and items[1].value is Ellipsis
+    ):
+        inner = _display_annotation(items[0])
+        return None if inner is None else tuple.__class_getitem__((inner, ...))
+    parts = [_display_annotation(item) for item in items]
+    if any(part is None for part in parts):
+        return None
+    if name == "Optional" and len(parts) == 1:
+        return Union[parts[0], None]  # noqa: UP007 - built from parts
+    if name == "Union":
+        return Union[tuple(parts)]  # noqa: UP007 - built from parts
+    origin = _DISPLAY_GENERICS.get(name)
+    if origin is None:
+        return None
+    return origin[tuple(parts)] if len(parts) > 1 else origin[parts[0]]
+
+
+def _literal_constant(node: ast.expr) -> object:
+    """Return the value a ``Literal`` item's text spells, or ``_NOT_A_LITERAL``."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float, bool)):
+        return node.value
+    # A negative number is written as a minus sign before the constant.
+    if (
+        isinstance(node, ast.UnaryOp)
+        and isinstance(node.op, ast.USub)
+        and isinstance(node.operand, ast.Constant)
+        and isinstance(node.operand.value, (int, float))
+        and not isinstance(node.operand.value, bool)
+    ):
+        return -node.operand.value
+    return _NOT_A_LITERAL
+
+
+@dataclass(frozen=True, slots=True)
 class ServerEventPayloadFinding:
     """One mistake in the arguments an ``@c-*`` binding sends to a server event."""
 
@@ -299,12 +519,10 @@ class ServerEventPayloadFinding:
 
 def server_event_payload_findings(
     call: ServerEventCall,
-    data_class: type | None,
-    *,
-    query_string: bool = False,
+    payload: ServerEventPayload,
 ) -> tuple[ServerEventPayloadFinding, ...]:
     """
-    Compare the arguments one ``@c-*`` binding writes with its handler's data class.
+    Compare the arguments one ``@c-*`` binding writes with what its handler accepts.
 
     The server checks the arguments against the data class before the
     handler runs and rejects the call on any mistake, so each finding here
@@ -314,34 +532,25 @@ def server_event_payload_findings(
       any key when the handler takes no ``data``;
     - a required field that an object literal with no ``...`` spread or
       computed key leaves out, or that a call without arguments leaves out,
-      unless the browser may send a form's fields instead;
+      unless the browser may send a form's fields instead, which
+      ``server_event_form_findings`` checks;
     - a literal value, or a condition whose two results are literals, that
       the server's own check for that field rejects.
 
-    A Pydantic data class is skipped: Pydantic ignores extra keys and
-    converts values by its own rules.
-
     Args:
         call: One binding, from ``server_event_calls``.
-        data_class: The handler's ``data`` annotation, or None when the
-            handler takes no ``data``.
-        query_string: Whether the browser may send the arguments as a GET
-            query string, which the server reads as text, so `'2'` fits an
-            `int` field. A value is then reported only when both ways of
-            sending it fail.
+        payload: What the handler accepts, from ``server_event_payload`` or
+            ``server_event_payload_from_description``.
 
     Returns:
         Findings in source order.
 
     """
-    fields = None if data_class is None else payload_fields(data_class)
-    if data_class is not None and fields is None:
-        return ()
-    accepted = {} if fields is None else {field.name: field for field in fields}
+    accepted = payload.fields
     if call.arguments is None:
         # The browser sends a form's fields when the event comes from a
         # `<form>`, which any other element but these may contain.
-        if call.event == "submit" or _ascii_lower(call.element) not in _ELEMENTS_WITHOUT_FORMS:
+        if accepted is None or call.event == "submit" or _ascii_lower(call.element) not in _ELEMENTS_WITHOUT_FORMS:
             return ()
         return tuple(_missing_field(call, name) for name, field in accepted.items() if field.required)
     parsed = _browser_object_literal(call.arguments.strip(), base_index=0)
@@ -355,13 +564,21 @@ def server_event_payload_findings(
     # JavaScript keeps the last of two equal keys, so only its value is sent.
     sent = {item.name: item for item in properties}
     for item in properties:
-        field = accepted.get(item.name)
+        field = None if accepted is None else accepted.get(item.name)
         if field is None:
-            findings.append(_unknown_field(call, item.name, data_class, accepted, base, item))
+            if _rejects_key(payload, item.name):
+                findings.append(
+                    ServerEventPayloadFinding(
+                        BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
+                        _unknown_field_message(BROWSER_UNKNOWN_SERVER_EVENT_FIELD, item.name, call.handler, payload),
+                        base + item.start_index,
+                        base + item.end_index,
+                    )
+                )
             continue
-        if sent[item.name] is not item:
+        if sent[item.name] is not item or field.annotation is None:
             continue
-        detail = _rejected_literal(field.annotation, item.value_source, query_string=query_string)
+        detail = _rejected_literal(field.annotation, item.value_source, query_string=payload.query_string)
         if detail is not None:
             findings.append(
                 ServerEventPayloadFinding(
@@ -376,44 +593,27 @@ def server_event_payload_findings(
                     base + item.value_end_index,
                 )
             )
-    if not dynamic:
+    if not dynamic and accepted is not None:
         findings.extend(
             _missing_field(call, name) for name, field in accepted.items() if field.required and name not in written
         )
     return tuple(sorted(findings, key=lambda item: (item.start_index, item.end_index)))
 
 
-def _unknown_field(
-    call: ServerEventCall,
-    name: str,
-    data_class: type | None,
-    accepted: Mapping[str, Any],
-    base: int,
-    item: Any,
-) -> ServerEventPayloadFinding:
-    if data_class is None:
-        message = render_diagnostic(
-            BROWSER_UNKNOWN_SERVER_EVENT_FIELD, variant="no-data", name=name, event=call.handler
-        )
-    else:
-        suggestion = next((field for field in accepted if one_slip_from(name, field)), None)
-        message = (
-            render_diagnostic(BROWSER_UNKNOWN_SERVER_EVENT_FIELD, name=name, event=call.handler)
-            if suggestion is None
-            else render_diagnostic(
-                BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
-                variant="suggestion",
-                name=name,
-                event=call.handler,
-                suggestion=suggestion,
-            )
-        )
-    return ServerEventPayloadFinding(
-        BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
-        message,
-        base + item.start_index,
-        base + item.end_index,
-    )
+def _rejects_key(payload: ServerEventPayload, name: str) -> bool:
+    """Return whether the server rejects a call that sends this key."""
+    if not payload.takes_data:
+        return True
+    return payload.rejects_unknown and payload.fields is not None and name not in payload.fields
+
+
+def _unknown_field_message(code: str, name: str, event: str, payload: ServerEventPayload) -> str:
+    if not payload.takes_data:
+        return render_diagnostic(code, variant="no-data", name=name, event=event)
+    suggestion = next((field for field in payload.fields or () if one_slip_from(name, field)), None)
+    if suggestion is None:
+        return render_diagnostic(code, name=name, event=event)
+    return render_diagnostic(code, variant="suggestion", name=name, event=event, suggestion=suggestion)
 
 
 def _missing_field(call: ServerEventCall, name: str) -> ServerEventPayloadFinding:
@@ -423,6 +623,310 @@ def _missing_field(call: ServerEventCall, name: str) -> ServerEventPayloadFindin
         call.start_index,
         call.end_index,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class FormControlName:
+    """One control of a form whose static ``name`` the browser sends with the form's fields."""
+
+    name: str
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class ServerEventForm:
+    """
+    One ``<form>`` whose ``@c-submit`` binding sends the form's fields to a server event.
+
+    Attributes:
+        call: The ``@c-submit`` binding on the form, which writes no
+            arguments, so the browser collects the form's named controls.
+        sent: The controls a submit includes under their written name when
+            they hold a value: an ``<input>``, ``<select>``, ``<textarea>``,
+            or submit ``<button>`` with a static ``name`` that is not
+            disabled, does not belong to another form, has no attribute
+            spread, and is not a file or image input.
+        names: Every static control name in the form, including controls
+            that are sent only sometimes, such as a disabled one.
+        complete: Whether ``names`` lists every name the form can send:
+            the form has no ``id`` that a control outside it could name,
+            and it holds no component, custom element, slot, ``<template>``,
+            loop, ``v-html``, ``#c-ignore`` content, spread, or name written
+            as an expression.
+
+    """
+
+    call: ServerEventCall
+    sent: tuple[FormControlName, ...]
+    names: frozenset[str]
+    complete: bool
+
+
+def server_event_forms(
+    template: Template,
+    handler_names: frozenset[str],
+    *,
+    parse_nested: Callable[[str], Template],
+) -> tuple[ServerEventForm, ...]:
+    """Return each ``<form>`` whose argument-free ``@c-submit`` binding calls one of ``handler_names``."""
+    found: list[ServerEventForm] = []
+    _collect_server_event_forms(template, found, handler_names, parse_nested=parse_nested, base_index=0)
+    return tuple(found)
+
+
+def _collect_server_event_forms(
+    template: Template,
+    found: list[ServerEventForm],
+    handler_names: frozenset[str],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        attrs = node.start_tag.attrs
+        for attr in attrs:
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_server_event_forms(
+                        parsed,
+                        found,
+                        handler_names,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+        body = getattr(node, "body", None)
+        call = (
+            _form_submit_call(node, handler_names, base_index)
+            if _ascii_lower(node.start_tag.name.content) == "form"
+            else None
+        )
+        if call is not None:
+            form = _FormControls(complete=not any(_set_attribute(attr) == "id" for attr in attrs))
+            if body is not None:
+                form.walk(body, base_index=base_index, disabled=False)
+            found.append(ServerEventForm(call, tuple(form.sent), frozenset(form.names), form.complete))
+        # A form inside a form is invalid HTML, which the browser drops, so
+        # the walk goes on into any element's content either way.
+        if body is not None:
+            _collect_server_event_forms(body, found, handler_names, parse_nested=parse_nested, base_index=base_index)
+
+
+def _form_submit_call(node: Any, handler_names: frozenset[str], base_index: int) -> ServerEventCall | None:
+    """Return the form's ``@c-submit`` binding when it calls a known handler and writes no arguments."""
+    for attr in node.start_tag.attrs:
+        key = attr.key.content
+        inner = attr.inner_value
+        if inner is None or not key.startswith("@c-") or key[len("@c-") :].split(".", 1)[0] != "submit":
+            continue
+        parsed = _server_event_call(inner.content, handler_names)
+        if parsed is None or parsed[2] is not None:
+            continue
+        handler, handler_start, _arguments, arguments_offset = parsed
+        start = base_index + inner.start_index
+        return ServerEventCall(
+            handler=handler,
+            event="submit",
+            element=node.start_tag.name.content,
+            arguments=None,
+            arguments_start=start + len(inner.content[:arguments_offset].encode("utf-8")),
+            start_index=start + len(inner.content[:handler_start].encode("utf-8")),
+            end_index=start + len(inner.content[: handler_start + len(handler)].encode("utf-8")),
+        )
+    return None
+
+
+# The controls a submit sends. A submit button sends its name only when it
+# is the one that submitted the form, which both Citry's browser runtime and
+# a post without JavaScript include.
+_FORM_CONTROLS = frozenset({"input", "select", "textarea", "button"})
+# Input types a submit never sends as text: buttons that cannot submit, an
+# image button, which sends `name.x` and `name.y` instead, and a file, which
+# the browser runtime leaves out.
+_UNSENT_INPUT_TYPES = frozenset({"image", "reset", "button", "file"})
+# Button types that never submit the form.
+_UNSENT_BUTTON_TYPES = frozenset({"reset", "button"})
+# Citry tags that render their content in place, at most once.
+_IN_PLACE_CONDITIONS = frozenset({"c-if", "c-elif", "c-else"})
+
+
+def _set_attribute(attr: Any) -> str | None:
+    """Return the attribute an attribute key sets, lowercased, whether written plainly or bound."""
+    key = _ascii_lower(attr.key.content)
+    # `.name` and `^name` are Vue's shorthands for `:name.prop` and
+    # `:name.attr`.
+    for prefix in (":", "v-bind:", "c-", ".", "^"):
+        if key.startswith(prefix):
+            # A modifier such as `.prop` still sets the same name.
+            return key[len(prefix) :].split(".", 1)[0]
+    return key
+
+
+@dataclass(slots=True)
+class _FormControls:
+    """Collect the control names inside one form, and whether they are all the form can send."""
+
+    complete: bool
+    sent: list[FormControlName] = field(default_factory=list)
+    names: set[str] = field(default_factory=set)
+
+    def walk(self, template: Template, *, base_index: int, disabled: bool) -> None:
+        for element in template.elements:
+            if not isinstance(element, TemplateElement.Node):
+                continue
+            node = element._0
+            tag = node.start_tag.name.content
+            lower = _ascii_lower(tag)
+            attrs = node.start_tag.attrs
+            keys = {_ascii_lower(attr.key.content) for attr in attrs}
+            # A component, custom element, slot, or `<template>` can render
+            # controls the template does not show, and a loop or spread can
+            # repeat a control or give it another name.
+            if (
+                (lower.startswith("c-") and lower not in _IN_PLACE_CONDITIONS)
+                or tag != lower
+                or "-" in lower
+                or lower in {"slot", "template", "component"}
+                # A library may add controls inside `#c-ignore` content.
+                or keys & {"v-for", "c-for", "v-bind", "c-bind", "v-html", "v-slot", "#c-ignore"}
+                or any(key.startswith("v-slot:") for key in keys)
+                # Markup written inside an attribute renders elsewhere.
+                or any(attr.kind == HtmlAttrKind.Template for attr in attrs)
+            ):
+                self.complete = False
+            # A disabled fieldset disables every control inside it.
+            inside_disabled = disabled or (
+                lower == "fieldset" and any(_set_attribute(attr) == "disabled" for attr in attrs)
+            )
+            if lower in _FORM_CONTROLS:
+                self._control(lower, attrs, base_index, disabled=inside_disabled)
+            body = getattr(node, "body", None)
+            if body is not None:
+                self.walk(body, base_index=base_index, disabled=inside_disabled)
+
+    def _control(self, lower: str, attrs: Any, base_index: int, *, disabled: bool) -> None:
+        name_attr = None
+        image_type = None
+        # Whether the browser may leave the control out of this form's submit.
+        sometimes = disabled
+        # Whether its type means it never sends its name as text.
+        unsent_type = False
+        for attr in attrs:
+            key = _ascii_lower(attr.key.content)
+            sets = _set_attribute(attr)
+            if key == "name":
+                name_attr = attr
+            elif lower == "button" and _prevents_click(key):
+                # A button whose click is prevented never submits the form.
+                sometimes = True
+            elif sets == "name":
+                # A name written as an expression may be anything.
+                self.complete = False
+                return
+            elif sets in {"disabled", "form"} or key in {"v-bind", "c-bind"}:
+                # A disabled control is not sent, one tied to another form by
+                # `form` is sent with that form, and a spread may set
+                # another name.
+                sometimes = True
+            elif sets == "type" and lower in {"input", "button"}:
+                inner = attr.inner_value
+                written_type = None if key != "type" or inner is None else _ascii_lower(inner.content.strip())
+                if written_type is None:
+                    # A type written as an expression may be any of them.
+                    sometimes = True
+                elif written_type in (_UNSENT_INPUT_TYPES if lower == "input" else _UNSENT_BUTTON_TYPES):
+                    unsent_type = True
+                    if written_type == "image" and lower == "input":
+                        image_type = inner
+        inner = None if name_attr is None else name_attr.inner_value
+        if image_type is not None:
+            # An image button that submits the form sends where it was
+            # clicked, as `x` and `y`, or `name.x` and `name.y`, and never
+            # its bare name, so the bare name is not one the form sends.
+            if not sometimes:
+                prefix = f"{inner.content}." if inner is not None and inner.content else ""
+                for axis in ("x", "y"):
+                    self.sent.append(
+                        FormControlName(
+                            prefix + axis,
+                            base_index + image_type.start_index,
+                            base_index + image_type.end_index,
+                        )
+                    )
+            return
+        if inner is None or not inner.content:
+            return
+        self.names.add(inner.content)
+        if not sometimes and not unsent_type:
+            self.sent.append(
+                FormControlName(inner.content, base_index + inner.start_index, base_index + inner.end_index)
+            )
+
+
+def _prevents_click(key: str) -> bool:
+    """Return whether an attribute is a click listener with the ``.prevent`` modifier."""
+    for prefix in ("@click", "v-on:click", "@c-click"):
+        if key.startswith(prefix) and ".prevent" in key[len(prefix) :]:
+            return True
+    return False
+
+
+def server_event_form_findings(
+    form: ServerEventForm,
+    payload: ServerEventPayload,
+    *,
+    dropped_names: frozenset[str] = frozenset(),
+) -> tuple[ServerEventPayloadFinding, ...]:
+    """
+    Compare the control names a form sends with what its ``@c-submit`` handler accepts.
+
+    The browser sends the form's named controls, and so does a post without
+    JavaScript, so a name the data class does not declare fails each submit
+    that sends that control. A required field is reported missing only when
+    the form proves it lists every name it can send.
+
+    Args:
+        form: One form, from ``server_event_forms``.
+        payload: What the handler accepts.
+        dropped_names: The host CSRF field names the server removes before
+            it checks the data class, such as ``csrfmiddlewaretoken``.
+
+    Returns:
+        Findings in source order.
+
+    """
+    findings: list[ServerEventPayloadFinding] = []
+    accepted = payload.fields
+    for control in form.sent:
+        declared = accepted is not None and control.name in accepted
+        if declared or (control.name in dropped_names) or not _rejects_key(payload, control.name):
+            continue
+        findings.append(
+            ServerEventPayloadFinding(
+                BROWSER_UNKNOWN_FORM_FIELD,
+                _unknown_field_message(BROWSER_UNKNOWN_FORM_FIELD, control.name, form.call.handler, payload),
+                control.start_index,
+                control.end_index,
+            )
+        )
+    if form.complete and payload.takes_data and accepted is not None:
+        findings.extend(
+            ServerEventPayloadFinding(
+                BROWSER_MISSING_FORM_FIELD,
+                render_diagnostic(BROWSER_MISSING_FORM_FIELD, name=name, event=form.call.handler),
+                form.call.start_index,
+                form.call.end_index,
+            )
+            for name, item in accepted.items()
+            if item.required and name not in form.names
+        )
+    return tuple(sorted(findings, key=lambda item: (item.start_index, item.end_index)))
 
 
 # What a missing value is, so a literal that names nothing is told apart.
@@ -484,11 +988,20 @@ def _json_literal_value(source: str) -> object:
 
 
 __all__ = [
+    "FormControlName",
     "RepeatedComponentCall",
     "ServerEventCall",
+    "ServerEventField",
+    "ServerEventForm",
+    "ServerEventPayload",
     "ServerEventPayloadFinding",
+    "annotation_from_type_display",
     "server_event_calls",
+    "server_event_form_findings",
+    "server_event_forms",
+    "server_event_payload",
     "server_event_payload_findings",
+    "server_event_payload_from_description",
     "template_has_vue_attributes",
     "unkeyed_repeated_component_calls",
 ]

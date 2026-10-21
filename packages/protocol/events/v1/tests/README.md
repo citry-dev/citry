@@ -80,6 +80,7 @@ and self-addressed `render:` targets derived from a live render ID.
 | `happy_render` | A stateful call returns a `morph` render when advertised and echoes `sendSequence`. |
 | `baseline_swap` | Omitting capabilities uses the v1 baseline, so `morph` becomes `replace`. |
 | `data_only` | A stateless call can omit caller State metadata and return one data value. |
+| `form_args` | A call marked `argsSource: "form"` binds the text `"7"` to an `int` field, as a form posted without JavaScript would. |
 | `history` | `push` and `replace` history actions retain their authored order and timing. |
 | `rename_coerce` | A State mutation returns the State refresh first, with the token and public State values, then an event and data value. |
 | `batch_two` | `results[i]` answers `calls[i]`, including mixed stateful and stateless calls. |

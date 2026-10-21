@@ -1738,7 +1738,9 @@ class TestFormAndQueryTypedFields:
     declared ``int`` / ``float`` / ``bool`` fields. A JSON payload stays
     strict (a string where the schema declares ``int`` is a 422 there): JSON
     expresses those types natively, so a mistyped field is a client bug
-    worth surfacing. The full binding matrix lives in
+    worth surfacing. A JSON call the browser collected from a form carries
+    ``argsSource: "form"`` and binds like a form post. The full binding
+    matrix lives in
     test_events_schemas.py; these tests prove the rule end to end over
     the HTTP routes.
     """
@@ -1798,6 +1800,76 @@ class TestFormAndQueryTypedFields:
         error = response.json()["results"][0]["error"]
         assert error["code"] == "invalid_args"
         assert error["fieldErrors"] == {"count": "Expected int, got str."}
+
+    def _signup(self, c):
+        class SignupIn:
+            count: int
+            notify: bool
+
+        class Signup(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class Events:
+                def join(self, data: SignupIn):
+                    return {"total": data.count + 1, "notify": data.notify}
+
+        return Signup
+
+    def test_a_browser_form_call_binds_text_like_a_no_js_post(self):
+        c = _citry()
+        signup = self._signup(c)
+        client = _mounted(c)
+        fields = {"count": "3", "notify": "on"}
+
+        # The browser sends a form's text with the form mark, and the server
+        # binds "3" to int and a checked checkbox's "on" to bool.
+        response = _post_call(client, signup, "join", {"args": fields, "argsSource": "form"})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"total": 4, "notify": True}}]
+
+        # The same fields posted without JavaScript bind to the same values.
+        response = client.post(_event_url(signup, "join"), data=fields)
+        assert response.status_code == 200
+        assert response.json() == {"total": 4, "notify": True}
+
+        # Text the field cannot read is still that field's 422.
+        response = _post_call(client, signup, "join", {"args": {"count": "x", "notify": "on"}, "argsSource": "form"})
+        assert response.status_code == 422
+        assert response.json()["results"][0]["error"]["fieldErrors"] == {"count": "Not a valid int: 'x'."}
+
+    def test_a_call_without_the_form_mark_stays_strict(self):
+        c = _citry()
+        signup = self._signup(c)
+        client = _mounted(c)
+        response = _post_call(client, signup, "join", {"args": {"count": "3", "notify": "on"}})
+        assert response.status_code == 422
+        error = response.json()["results"][0]["error"]
+        assert error["code"] == "invalid_args"
+        assert error["fieldErrors"] == {"count": "Expected int, got str.", "notify": "Expected bool, got str."}
+
+    @pytest.mark.parametrize("value", ["json", True])
+    def test_an_unknown_args_source_is_a_protocol_mismatch(self, value):
+        c = _citry()
+        signup = self._signup(c)
+        client = _mounted(c)
+        response = _post_call(client, signup, "join", {"args": {"count": "3", "notify": "on"}, "argsSource": value})
+        assert response.status_code == 400
+        error = response.json()["results"][0]["error"]
+        assert error == {
+            "status": 400,
+            "code": "protocol_mismatch",
+            "message": "The call's 'argsSource' must be 'form' or omitted.",
+        }
+
+    def test_the_form_mark_survives_the_csrf_field_drop(self):
+        c = _citry()
+        signup = self._signup(c)
+        client = _mounted(c)
+        args = {"count": "3", "notify": "on", "csrfmiddlewaretoken": "t0k"}
+        response = _post_call(client, signup, "join", {"args": args, "argsSource": "form"})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"total": 4, "notify": True}}]
 
     def test_pasted_get_url_binds_an_int_field(self):
         c = _citry()
@@ -1875,3 +1947,176 @@ class TestEnvelopeCapConfig:
         with pytest.raises(ValueError, match="_max_envelope_bytes") as err:
             _citry(extensions_defaults={"events": {"_max_envelope_bytes": "big"}})
         assert "'_max_envelope_bytes' must be a positive int (a byte count); got 'big'." in str(err.value)
+
+
+################################################
+# HOST CSRF FIELDS IN A FORM'S ARGUMENTS
+################################################
+
+
+class TestCsrfFieldNames:
+    """
+    A form that calls a server event may hold the host's CSRF hidden input,
+    such as Django's ``csrfmiddlewaretoken``. Both the browser and a no-JS
+    form post send it as one more field, so the dispatcher drops the names in
+    ``extensions_defaults["events"]["_csrf_field_names"]`` before it checks
+    the data class (design 3.3).
+    """
+
+    def _search(self, c):
+        class SearchIn:
+            q: str
+
+        class TokenIn:
+            csrfmiddlewaretoken: str
+
+        class Search(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class Events:
+                def search(self, data: SearchIn):
+                    return {"q": data.q}
+
+                def ping(self, event):
+                    return {"args": dict(event.args)}
+
+                def token(self, data: TokenIn):
+                    return {"token": data.csrfmiddlewaretoken}
+
+        return Search
+
+    def test_a_no_js_form_post_drops_the_default_django_field(self):
+        c = _citry()
+        search = self._search(c)
+        client = _mounted(c)
+        response = client.post(_event_url(search, "search"), data={"q": "alpha", "csrfmiddlewaretoken": "t0k"})
+        assert response.status_code == 200
+        assert response.json() == {"q": "alpha"}
+
+    def test_a_json_call_drops_the_field_and_a_handler_without_data_still_runs(self):
+        c = _citry()
+        search = self._search(c)
+        client = _mounted(c)
+        response = _post_call(client, search, "search", {"args": {"q": "alpha", "csrfmiddlewaretoken": "t0k"}})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"q": "alpha"}}]
+
+        # A handler that takes no data also accepts the field, and its
+        # event.args no longer carries the token.
+        response = _post_call(client, search, "ping", {"args": {"csrfmiddlewaretoken": "t0k"}})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"args": {}}}]
+
+    def test_a_get_query_and_a_batch_call_drop_the_field_too(self):
+        c = _citry()
+
+        class PeekIn:
+            q: str
+
+        class Peeker(Component):
+            citry = c
+            template = "<div>p</div>"
+
+            class Events:
+                @event(methods=("GET",))
+                def peek(self, data: PeekIn):
+                    return {"q": data.q}
+
+        search = self._search(c)
+        client = _mounted(c)
+        response = client.get(_event_url(Peeker, "peek"), params={"q": "a", "csrfmiddlewaretoken": "t0k"})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"q": "a"}}]
+
+        envelope = {
+            "protocol": "citry-events/1",
+            "requestId": "r1",
+            "calls": [
+                {
+                    "componentClassId": search.class_id,
+                    "handlerName": "search",
+                    "args": {"q": "b", "csrfmiddlewaretoken": "t0k"},
+                }
+            ],
+        }
+        response = _post_envelope(client, "/citry/ext/events/call", envelope)
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"q": "b"}}]
+
+    def test_a_data_class_that_declares_the_field_still_receives_it(self):
+        c = _citry()
+        search = self._search(c)
+        client = _mounted(c)
+        response = client.post(_event_url(search, "token"), data={"csrfmiddlewaretoken": "t0k"})
+        assert response.status_code == 200
+        assert response.json() == {"token": "t0k"}
+
+    def test_the_setting_replaces_the_default_names(self):
+        c = _citry(extensions_defaults={"events": {"_csrf_field_names": ["authenticity_token"]}})
+        search = self._search(c)
+        client = _mounted(c)
+        response = client.post(_event_url(search, "search"), data={"q": "a", "authenticity_token": "t0k"})
+        assert response.status_code == 200
+
+        # The default name is no longer dropped, so it is an unknown field.
+        response = client.post(_event_url(search, "search"), data={"q": "a", "csrfmiddlewaretoken": "t0k"})
+        assert response.status_code == 422
+        assert "csrfmiddlewaretoken: Unexpected field" in response.text
+
+    def test_an_empty_setting_turns_dropping_off(self):
+        c = _citry(extensions_defaults={"events": {"_csrf_field_names": ()}})
+        search = self._search(c)
+        client = _mounted(c)
+        response = client.post(_event_url(search, "search"), data={"q": "a", "csrfmiddlewaretoken": "t0k"})
+        assert response.status_code == 422
+
+    def test_a_form_post_keeps_converting_text_after_the_drop(self):
+        c = _citry()
+
+        class CountIn:
+            count: int
+
+        class Tally(Component):
+            citry = c
+            template = "<div>t</div>"
+
+            class Events:
+                def add(self, data: CountIn):
+                    return {"total": data.count + 1}
+
+        client = _mounted(c)
+        response = client.post(_event_url(Tally, "add"), data={"count": "3", "csrfmiddlewaretoken": "t0k"})
+        assert response.status_code == 200
+        assert response.json() == {"total": 4}
+
+    @pytest.mark.parametrize(
+        ("value", "message"),
+        [
+            (
+                "csrfmiddlewaretoken",
+                "'_csrf_field_names' must be a list, tuple, or set of field names, such as"
+                " ['csrfmiddlewaretoken']; got 'csrfmiddlewaretoken'.",
+            ),
+            (["csrfmiddlewaretoken", ""], "'_csrf_field_names' must hold non-empty strings; got ''."),
+            ([1], "'_csrf_field_names' must hold non-empty strings; got 1."),
+        ],
+    )
+    def test_a_bad_value_fails_at_engine_construction(self, value, message):
+        with pytest.raises(ValueError, match="_csrf_field_names") as err:
+            _citry(extensions_defaults={"events": {"_csrf_field_names": value}})
+        assert message in str(err.value)
+
+    def test_a_component_level_declaration_fails_at_class_definition(self):
+        c = _citry()
+        with pytest.raises(ValueError, match="engine-wide"):
+
+            class Tokened(Component):
+                citry = c
+                template = "<div>c</div>"
+
+                class Events:
+                    _csrf_field_names = ("csrfmiddlewaretoken",)
+
+                    def go(self):
+                        return None

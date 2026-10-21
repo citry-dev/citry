@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from citry._input_types import _restore_json_tuples
 from citry._protocol.events import (
+    ARGS_SOURCE_FORM,
     CAPABILITIES_BASELINE_V1,
     PROTOCOL,
     RENDERERS,
@@ -64,7 +65,7 @@ from citry._protocol.events import (
 # the floor that raises it (csrf.py) and is shared here for the fallback path
 # of a broken user policy.
 from citry.ext.events.actions import Render, _download_content_disposition
-from citry.ext.events.csrf import _MSG_CSRF_FAILED
+from citry.ext.events.csrf import _MSG_CSRF_FAILED, csrf_field_names
 from citry.ext.events.errors import EventError, wire_error
 from citry.ext.events.handlers import event_options
 from citry.ext.events.results import (
@@ -77,7 +78,7 @@ from citry.ext.events.results import (
     track_constructed_actions,
     warn_unreturned_actions,
 )
-from citry.ext.events.schemas import validate_args
+from citry.ext.events.schemas import StringArgs, declared_field_names, validate_args
 from citry.ext.events.state import public_state_values
 from citry.ext.events.tokens import (
     InvalidStateError,
@@ -215,9 +216,11 @@ class CallEvent:
         instance_id: The calling instance's render id, or ``None`` for an
             instance-less call (an API client, a hand-written form).
         transport: The transport that carried the call (``"http"``, ...).
-        args: The raw, unvalidated wire args payload. Guards read this when
-            they need payload values, because one guard covers handlers with
-            different schemas.
+        args: The call's args before validation, with the host CSRF field
+            names removed (the ``_csrf_field_names`` key of
+            ``extensions_defaults["events"]``).
+            Guards read this when they need payload values, because one guard
+            covers handlers with different schemas.
 
     """
 
@@ -338,6 +341,25 @@ class _CallPlan:
     # The on_event hook's answer, when an extension answered the call in the
     # handler's place; _NOT_ANSWERED means the handler runs.
     answered: Any
+
+
+def _without_csrf_fields(args: dict[str, Any], data_schema: type | None, names: frozenset[str]) -> Any:
+    """
+    Return the call's args without the host CSRF fields that the data class does not declare.
+
+    The result keeps the args' own class, so a form post's
+    [`StringArgs`][citry.ext.events.schemas.StringArgs] still binds text to
+    numbers and booleans. A data class that declares one of these names
+    receives it like any other field.
+    """
+    present = names.intersection(args)
+    if not present:
+        return args
+    if data_schema is not None:
+        present -= declared_field_names(data_schema)
+        if not present:
+            return args
+    return type(args)({key: value for key, value in args.items() if key not in present})
 
 
 def _state_fingerprint(state: Any) -> str | None:
@@ -769,6 +791,16 @@ class EventsDispatcher:
 
         # Args validation against the handler's data schema (design 3.3, WP9).
         args = call.get("args") or {}
+        # The browser marks args it collected from a form: their values are
+        # the form's text, so they bind to numbers and booleans exactly as a
+        # no-JS form post does. Without the mark, JSON values stay strict.
+        if call.get("argsSource") == ARGS_SOURCE_FORM:
+            args = StringArgs(args)
+        # A form may hold the host's CSRF hidden field, which the browser and
+        # a no-JS post both send as one more field; drop it first so the call
+        # is not rejected for a field the data class never asked for. The
+        # drop keeps the args' class, so the form conversion above survives.
+        args = _without_csrf_fields(args, handler.data_schema, csrf_field_names(ctx.citry))
         data_value: Any = None
         if handler.data_schema is not None:
             validation = validate_args(handler.data_schema, args)
