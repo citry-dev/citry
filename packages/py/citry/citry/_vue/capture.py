@@ -467,6 +467,31 @@ def format_prepared_element_attrs(value: PreparedElementOpen) -> tuple[str, ...]
     return tuple(rendered)
 
 
+def element_key_conflict_message(value: PreparedElementOpen, authored_name: str | None) -> str:
+    """
+    Explain an element whose ``#c-key`` and another attribute both set its Vue key.
+
+    ``authored_name`` is the attribute the template writes beside ``#c-key``,
+    such as ``key``, or None when the other key is a Python value from
+    ``c-key`` or ``c-bind``. The parser already rejects ``:key`` this way;
+    this covers the forms only a render can see, in the same words.
+    """
+    # Spans are byte offsets into the authored template source.
+    prefix = value.source.encode("utf-8")[: value.span[0]].decode("utf-8", errors="ignore")
+    line = prefix.count("\n") + 1
+    column = len(prefix.rsplit("\n", 1)[-1]) + 1
+    where = f"the <{value.tag}> element that starts at line {line}, column {column} of its template"
+    if authored_name is None:
+        return (
+            f"{where[0].upper()}{where[1:]} has '#c-key' and also gets a 'key' attribute from Python, through"
+            " c-key or c-bind. Both set the element's key. Keep '#c-key' and remove the other."
+        )
+    return (
+        f"'{authored_name}' on {where} sets the same attribute as '#c-key'. "
+        f"Keep '#c-key' to key the element from Python, or remove it and keep '{authored_name}'."
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class PreparedElementClose:
     source: str

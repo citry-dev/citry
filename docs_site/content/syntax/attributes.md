@@ -484,7 +484,8 @@ match it instead:
 
 The value is a Python expression. Use something that identifies the record
 and does not change, such as a database id, and keep keys unique within
-the list.
+the list. When loops are nested, a component's key must be unique across
+every repetition, so combine the outer and inner values into one key.
 
 On a page that uses Vue, a component that `<c-for>` repeats must have a
 `#c-key`. A missing, `None`, or duplicate key makes the render fail. On an

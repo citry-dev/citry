@@ -90,6 +90,14 @@
   [props and events guide](https://citry.dev/vue/props-and-events/) shows
   how to type an event's values so both the child's `$emit` and the
   parent's method are checked.
+- When a page that uses Vue fails because a repeated component has no
+  `#c-key`, or two repetitions share one, the error now names the
+  component tag, its template and line, the repeated value, and the fix.
+  For nested loops it says to combine the loop values into one key.
+- When `v-model` sits on an element that holds no value, such as `<div>`
+  or `<form>`, the render error now names each such element with its
+  template and line, and lists the elements `v-model` works on, instead
+  of an internal Vue compiler message.
 
 ### Changed
 

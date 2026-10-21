@@ -12,16 +12,20 @@ from threading import Lock
 from typing import TYPE_CHECKING, TypedDict, cast
 from weakref import WeakKeyDictionary, ref
 
+from citry._markup_lint import find_invalid_model_targets
 from citry._vue.capture import render_prepared_direct, render_prepared_marker_replacement
-from citry._vue.compiler import HELPER_CONTRACT, CompiledRender, NativeCompiler
+from citry._vue.compiler import HELPER_CONTRACT, CompiledRender, NativeCompiler, VueCompilerDiagnosticsError
 from citry._vue.direct_capture import Assembly, assemble_typed_render
 from citry._vue.protocol import DefinitionAsset, prepared_manifest, revision_envelope
+from citry.assets import load_template
 from citry.cache import _forget_stored_key, _store_if_missing
 from citry.citry import Citry
 from citry.citry_element import CitryElement
 from citry.component import Component, ComponentMeta
+from citry.component_registry import NotRegistered
 from citry.ext.dependencies.scripts import uses_component
 from citry.ext.events.emission import EXTRA_KEY, EventInstanceEntry, build_events_manifest
+from citry_core.template_parser import ParseOptions, TemplateElement, parse_template
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -31,11 +35,13 @@ if TYPE_CHECKING:
     from citry._vue.prepared import PreparedViewMetadata
     from citry.browser_render import PreparedBrowserExtension
     from citry.citry_render import CitryRender
+    from citry.citry_template import CitryTemplate
     from citry.ext.dependencies.types import Dependency, DependencyRecord
     from citry.ext.events.extension import EventsExtension
     from citry.ext.events.renderers import _VueMarkerTarget
     from citry.ext.events.results import RenderEncodingContext
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
+    from citry_core.template_parser import Template
 
 
 # A page links compiled definitions and stylesheets by digest, and the browser
@@ -1084,25 +1090,177 @@ def native_compile_view(
 
     def compile_view(assembly: Assembly) -> dict[str, CompiledRender]:
         definitions = {item.id: item for item in assembly.view.definitions}
-        compiled = {
-            definition_id: compiler.compile(
-                value.template,
-                type_key=definitions[definition_id].type_key,
-                dynamic_elements=value.dynamic_elements,
-                template_context_names=value.template_context_names,
-                directive_signature=definitions[definition_id].directive_signature,
-                local_calls=value.local_calls,
-                element_bindings=value.element_bindings,
-                local_call_runs=value.local_call_runs,
-                opaque_html_sites=value.opaque_html_sites,
-                runtime_event_sites=value.runtime_event_sites,
-            )
-            for definition_id, value in assembly.compile_inputs.items()
-        }
+        compiled: dict[str, CompiledRender] = {}
+        for definition_id, value in assembly.compile_inputs.items():
+            try:
+                compiled[definition_id] = compiler.compile(
+                    value.template,
+                    type_key=definitions[definition_id].type_key,
+                    dynamic_elements=value.dynamic_elements,
+                    template_context_names=value.template_context_names,
+                    directive_signature=definitions[definition_id].directive_signature,
+                    local_calls=value.local_calls,
+                    element_bindings=value.element_bindings,
+                    local_call_runs=value.local_call_runs,
+                    opaque_html_sites=value.opaque_html_sites,
+                    runtime_event_sites=value.runtime_event_sites,
+                )
+            except VueCompilerDiagnosticsError as error:
+                # The compiler only sees the Vue template Citry generated, so
+                # name the authored template here, where the component is known.
+                if _MODEL_HELPER_MISMATCH in error.codes():
+                    raise ValueError(_model_target_message(assembly, definition_id, error)) from error
+                raise
         check_directive_roots(assembly, compiled)
         return compiled
 
     return compile_view
+
+
+# Citry's native compiler reports this, with no position, when a `v-model`
+# compiles to no value helper: on an element such as `<div>`, a custom
+# element, or a component tag Vue cannot resolve.
+_MODEL_HELPER_MISMATCH = "MODEL_HELPER_MISMATCH"
+
+
+def _model_target_message(assembly: Assembly, definition_id: str, error: VueCompilerDiagnosticsError) -> str:
+    """
+    Explain a ``MODEL_HELPER_MISMATCH`` by naming each ``v-model`` on an element that holds no value.
+
+    The compiler gives no position, so this searches the authored templates
+    the failing Vue template was written from: the component's own, each
+    transparent component copied into it, and each ``simple=True`` component
+    they call. It uses the rule ``citry check`` uses
+    (``rule_invalid_model_target``). The search reads whole templates, so it
+    also names a ``v-model`` in a branch this render skipped; each one it
+    names fails whenever it renders. When it finds nothing, the message names
+    the component and keeps the compiler's text.
+    """
+    definition = next((item for item in assembly.view.definitions if item.id == definition_id), None)
+    type_keys = assembly.definition_template_types.get(definition_id) or (
+        (definition.type_key,) if definition is not None else ()
+    )
+    classes: list[type[Component]] = []
+    for type_key in type_keys:
+        if assembly.component_for_type is None:
+            break
+        try:
+            classes.append(assembly.component_for_type(type_key))
+        except KeyError:
+            # A class unregistered since the render started cannot be searched.
+            continue
+    owner = classes[0] if classes else None
+    if owner is None:
+        owner_label = f"component {type_keys[0]}" if type_keys else "a component"
+    elif owner.citry._template_root_class is owner:
+        # Citry.render_template() renders through a private root class the
+        # author never wrote, so name what they called instead.
+        owner_label = "the template given to render_template()"
+    else:
+        owner_label = f"component {owner.__name__}"
+    locations: list[str] = []
+    owner_origin: str | None = None
+    for component_class in _with_simple_callees(classes):
+        template = load_template(component_class)
+        if template is None:
+            continue
+        if component_class is owner:
+            owner_origin = template.origin
+        for line, message in _invalid_model_targets(template):
+            # A copied component's template is not the owner's, so name the
+            # component that wrote it, unless its inline template's origin
+            # (`<file>::<ClassName>`) already does.
+            name = component_class.__name__
+            writer = (
+                "" if component_class is owner or template.origin.endswith(f"::{name}") else f" (component {name})"
+            )
+            locations.append(f"  in template {template.origin}{writer}, line {line}: {message}")
+    # Vue reports every problem in one compile, so pass the others on, or the
+    # author meets them one render at a time.
+    other_codes = sorted(error.codes() - {_MODEL_HELPER_MISMATCH})
+    if not locations:
+        where = f" (template {owner_origin})" if owner_origin else ""
+        return (
+            f"Vue could not compile {owner_label}{where}: a v-model in it is on an element or component that"
+            " Vue cannot bind. Put v-model on an <input>, <textarea>, or <select>, or on a Citry component"
+            f" tag (<c-...>). {error}"
+        )
+    message = f"Vue could not compile {owner_label}. Check each v-model below:\n" + "\n".join(locations)
+    if other_codes:
+        message += f"\nVue also reported {', '.join(other_codes)}: {error}"
+    return message
+
+
+def _with_simple_callees(classes: list[type[Component]]) -> list[type[Component]]:
+    """
+    Return ``classes`` followed by each ``simple=True`` component their templates call, at any depth.
+
+    A ``simple=True`` component writes its HTML into its caller's template,
+    so its ``v-model`` attributes reach the caller's Vue template.
+    """
+    found = list(classes)
+    index = 0
+    while index < len(found):
+        component_class = found[index]
+        index += 1
+        template = load_template(component_class)
+        parsed = _parse_for_search(template) if template is not None else None
+        if parsed is None:
+            continue
+        for tag in _component_tags(parsed):
+            try:
+                called = component_class.citry.get(tag[2:])
+            except NotRegistered:
+                continue
+            if called.simple is True and called not in found:
+                found.append(called)
+    return found
+
+
+def _component_tags(template: Template) -> list[str]:
+    """Return every ``<c-*>`` tag name in a parsed template, including inside element bodies."""
+    tags: list[str] = []
+    pending = [template]
+    while pending:
+        current = pending.pop()
+        for element in current.elements:
+            if not isinstance(element, TemplateElement.Node):
+                continue
+            node = element._0
+            tag = node.start_tag.name.content
+            if tag.lower().startswith("c-"):
+                tags.append(tag)
+            body = getattr(node, "body", None)
+            if body is not None:
+                pending.append(body)
+    return tags
+
+
+def _parse_for_search(template: CitryTemplate) -> Template | None:
+    """Parse a component template on its own, or return None when that is not possible."""
+    # A nested fragment's offsets count from another source, so they cannot
+    # be turned into a line of this template.
+    if template.root_source is not None or template.source_offset:
+        return None
+    options = ParseOptions(list(template.foreign_spans)) if template.foreign_spans else None
+    try:
+        return parse_template(template.source, options=options)
+    except (SyntaxError, ValueError):
+        # An unparsable template only means there is nothing to name.
+        return None
+
+
+def _invalid_model_targets(template: CitryTemplate) -> list[tuple[int, str]]:
+    """For each ``v-model`` on an element that holds no value, return its line in the template and the message."""
+    parsed = _parse_for_search(template)
+    if parsed is None:
+        return []
+    encoded = template.source.encode("utf-8")
+    # Finding offsets are bytes into the template source.
+    return [
+        (encoded[: finding.start_index].count(b"\n") + 1, finding.message)
+        for finding in find_invalid_model_targets(parsed)
+    ]
 
 
 _UNSHOWABLE_ROOTS = {
