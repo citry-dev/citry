@@ -65,6 +65,10 @@ project:
 }
 ```
 
+If FastAPI, Flask, or Django serves your app, set `app` to the module that
+mounts Citry, so the editor also reports links to pages your app does not
+serve. See [Links to missing pages](/ide/template-linting/#find-links-to-missing-pages).
+
 `app` can also name a [`ComponentLibrary`][citry.ComponentLibrary], to work on
 a component library without a host application.
 
@@ -110,6 +114,11 @@ command. This is also what you run in CI:
 ```console
 citry --app myproject.app:citry_app check
 ```
+
+If FastAPI, Flask, or Django serves your app, point `--app` at the module
+that mounts Citry, so the check also reports links to pages your app does
+not serve. See
+[Links to missing pages](/ide/template-linting/#find-links-to-missing-pages).
 
 Use `citry check --static` when the project cannot be imported. See
 [Command line](/advanced/cli/#check-component-templates).

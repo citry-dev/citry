@@ -10,7 +10,8 @@
 - Use public `citry` APIs and follow the existing component patterns.
   Keep explicit `Kwargs` and `Slots` schemas and typed component inputs.
 - Start with `app/__init__.py` for the app factory, `app/citry_app.py`
-  for Citry setup, `app/components/` for components, and `app/data.py` for data.
+  for Citry setup, `app/wsgi.py` for the app that `citry check` loads,
+  `app/components/` for components, and `app/data.py` for data.
 - Keep the shared Citry instance mounted under `/citry` and initialized
   before `create_app()` returns.
 - Follow the README to set `CITRY_SECRET` before starting the server.
@@ -18,7 +19,7 @@
 - Treat `State` as browser input. Keep secrets on the server and check
   authorization before returning private data or performing writes.
 - After changes, follow the README environment setup, run
-  `uv run citry --app app.citry_app:citry_app check`, then run `uv run pytest`.
+  `uv run citry --app app.wsgi:citry_app check`, then run `uv run pytest`.
   The local tests live in `tests/test_app.py`.
 - For template, CSS, Events, or host changes, run the README server command
   and check the page in a browser. Verify the help button, search results,

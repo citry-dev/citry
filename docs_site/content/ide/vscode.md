@@ -78,6 +78,10 @@ it, Citry can complete your components, check their inputs and slots, and
 take you to their definitions. Without it, Citry only checks template syntax
 and explains built-in tags such as `<c-if>`.
 
+If FastAPI, Flask, or Django serves your app, point `citry.app` at the
+module that mounts Citry, so the editor also reports links to pages your app does not serve.
+See [Links to missing pages](/ide/template-linting/#find-links-to-missing-pages).
+
 To work on a component library without a host application, point `citry.app`
 at the library's [`ComponentLibrary`][citry.ComponentLibrary] instead:
 

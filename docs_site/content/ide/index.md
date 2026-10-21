@@ -43,6 +43,11 @@ With the application loaded, Citry knows every component you registered, so it
 also reports unknown component tags, wrong inputs and slots, and template
 variables that come from nowhere.
 
+If FastAPI, Flask, or Django serves your app, point `--app` at the module
+that mounts Citry. The check then also reports links to pages your app does
+not serve. See
+[Links to missing pages](/ide/template-linting/#find-links-to-missing-pages).
+
 When the project cannot be imported, for example in a CI job without its
 dependencies, run the checks that do not need your components, such as
 template syntax:

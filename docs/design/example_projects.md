@@ -378,7 +378,7 @@ async handlers. Django and WSGI must not imply that they do.
 |---|---|
 | FastAPI | An `HTMLResponse` page route, root lifespan calling `initialize()` before `yield`, `citry.contrib.fastapi.mount`, and Uvicorn as the documented server. |
 | Django | A normal Django view returning `HttpResponse`, project URL patterns including `citry.contrib.django.urlpatterns`, `AppConfig.ready()` initialization, `citry.contrib.django.secret()`, CSRF middleware, and a page response that ensures the default CSRF cookie exists for Events. |
-| Flask | An application factory, normal Flask page route/response, `citry.contrib.flask.mount`, initialization after registrations and mounting but before returning the app, a real Flask test client, and Flask's development server command. |
+| Flask | An application factory, normal Flask page route/response, `citry.contrib.flask.mount`, initialization after registrations and mounting but before returning the app, an `app/wsgi.py` module that builds the app once for `citry check`, the editor, and a production server, a real Flask test client, and Flask's development server command. |
 | Bare ASGI | One small root ASGI application that owns lifespan and dispatches the page versus `/citry`, `citry.contrib.asgi.asgi_app`, explicit `set_mounted_prefix`, and Uvicorn. The mounted Citry subapplication is not relied on for root lifespan. |
 | Bare WSGI | One small root WSGI dispatcher for the page and `/citry`, `citry.contrib.wsgi.wsgi_app`, explicit `set_mounted_prefix`, initialization before the server starts threads, and Waitress or another explicitly declared WSGI server. |
 
@@ -733,13 +733,25 @@ runs pytest. The workflow supplies fixed test-only secrets where the app needs
 them; Django also receives `DJANGO_SETTINGS_MODULE=config.settings`. Project
 READMEs show the same local check command and any required environment setup.
 
+Each FastAPI, Django, and Flask project points its check command and the
+editor's `citry.app` setting at the module that mounts Citry: `app.main` for
+FastAPI, `config.urls` for Django, and `app.wsgi` for Flask, a small module
+that calls `create_app()`. Mounting lets the check ask the framework which
+pages and static files the app serves, so it reports a link to a missing one.
+The bare ASGI and WSGI starters route requests in their own code, which no
+integration can read, so they point at `app.citry_app` and their check prints
+a note that it did not check links. The standalone starter serves no pages,
+so it has no links to check.
+
 GitHub does not run these nested workflows inside the Citry monorepo. The
 shared qualifier runs each cataloged `check` command before its `test` command
 in the clean project copy. A failing check stops qualification before tests or
-browser startup. Django settings are scoped to that project's environment.
-Catalog loading rejects a missing or malformed `check` command, and clean-copy
-validation rejects a missing project workflow. Archive tests verify that the
-workflow travels with the copied project.
+browser startup, and so does a FastAPI, Django, or Flask check that prints a
+note saying it skipped links, because no integration was mounted or the
+framework raised an error. Django settings are scoped to that
+project's environment. Catalog loading rejects a missing or malformed `check`
+command, and clean-copy validation rejects a missing project workflow. Archive
+tests verify that the workflow travels with the copied project.
 
 
 Example qualification should have a dedicated Python workflow or dedicated

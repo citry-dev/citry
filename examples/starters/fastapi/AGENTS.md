@@ -18,7 +18,7 @@
 - Treat `State` as browser input. Keep secrets on the server and check
   authorization before returning private data or performing writes.
 - After changes, follow the README environment setup, run
-  `uv run citry --app app.citry_app:citry_app check`, then run `uv run pytest`.
+  `uv run citry --app app.main:citry_app check`, then run `uv run pytest`.
   The local tests live in `tests/test_app.py`.
 - For template, CSS, Events, or host changes, run the README server command
   and check the page in a browser. Verify the help button, search results,

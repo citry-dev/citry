@@ -67,9 +67,14 @@ Check component templates with the app registry, then run the tests:
 Use the environment setup from the run instructions above.
 
 ```console
-uv run citry --app app.citry_app:citry_app check
+uv run citry --app app.main:citry_app check
 uv run pytest
 ```
+
+The check imports `app/main.py`, which mounts Citry, so it can ask FastAPI
+which pages the app serves and report a link to a page that does not exist.
+If you move the `mount()` call to another module, point `--app` there too, or
+the check prints a note and skips links.
 
 [The included GitHub Actions workflow](.github/workflows/check.yml) runs
 these checks on pushes and pull requests when you copy this project, including

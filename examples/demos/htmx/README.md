@@ -45,9 +45,14 @@ Its lockfile pins the Citry version exercised by the tests.
 Check component templates with the app registry, then run the tests:
 
 ```console
-uv run citry --app app.citry_app:citry_app check
+uv run citry --app app.main:citry_app check
 uv run pytest
 ```
+
+The check imports `app/main.py`, which mounts Citry, so it can ask FastAPI
+which pages and static files the app serves and report a link to one that
+does not exist. If you move the `mount()` call to another module, point
+`--app` there too, or the check prints a note and skips links.
 
 [The included GitHub Actions workflow](.github/workflows/check.yml) runs
 these checks on pushes and pull requests when you copy this project, including

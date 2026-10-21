@@ -1124,11 +1124,16 @@ your Citry instance under the name you give. A Flask app built by a
 factory function mounts Citry only when the factory runs, so add a small
 module that calls it, such as `app/wsgi.py` holding
 `web_app = create_app()` and `from app.citry_app import citry_app`, and
-point `--app` at `app.wsgi:citry_app`. Give the editor the same path in its `citry.app` setting. If none of these
-functions ran, `citry check` prints one note and checks no links, and the
-editor checks no links either. Serving Citry with the plain ASGI or WSGI
-app from `citry.contrib.asgi` or `citry.contrib.wsgi` leaves links
-unchecked, because those apps do not know your routes.
+point `--app` at `app.wsgi:citry_app`. Give the editor the same path in
+its settings: `citry.app` in VS Code, `app` in PyCharm. The FastAPI,
+Django, and Flask
+[starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples/starters){: target="_blank" rel="noopener"}
+use these paths.
+
+If none of these functions ran, `citry check` prints one note and checks
+no links, and the editor checks no links either. Serving Citry with the
+plain ASGI or WSGI app from `citry.contrib.asgi` or `citry.contrib.wsgi`
+leaves links unchecked, because those apps do not know your routes.
 
 The rule checks a literal `href`, `src`, or `action` on an HTML element
 when the value starts with a single `/`. The query string and fragment

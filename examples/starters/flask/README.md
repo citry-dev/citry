@@ -70,9 +70,15 @@ Check component templates with the app registry, then run the tests:
 Use the environment setup from the run instructions above.
 
 ```console
-uv run citry --app app.citry_app:citry_app check
+uv run citry --app app.wsgi:citry_app check
 uv run pytest
 ```
+
+The check imports `app/wsgi.py`, which builds the app with `create_app()`.
+Building the app mounts Citry, so the check can ask Flask which pages and
+static files the app serves and report a link to one that does not exist.
+If you move the `mount()` call out of `create_app()`, make sure `app/wsgi.py`
+still runs it, or the check prints a note and skips links.
 
 [The included GitHub Actions workflow](.github/workflows/check.yml) runs
 these checks on pushes and pull requests when you copy this project, including
@@ -100,6 +106,7 @@ Remove-Item -Recurse -Force `
 |---|---|
 | `app/__init__.py` | Creates Flask, serves `/`, mounts `/citry`, and initializes Citry. |
 | `app/citry_app.py` | Creates the shared Citry instance and configures component autodiscovery. |
+| `app/wsgi.py` | Builds the app when imported, so `citry check`, the editor, and a production WSGI server can load it. |
 | `app/components/` | Keeps the page shell, card, explorer, and page in separate component modules. |
 | `app/data.py` | Defines the sample projects and filters them. |
 | `tests/test_app.py` | Checks the page, Citry runtime, and missing routes. |
@@ -136,7 +143,9 @@ Before adding private data or write operations:
   every record the handler loads;
 - add your host application's CSRF token to authenticated write operations;
 - use a shared Citry cache when several workers render component updates; and
-- serve Flask through a production WSGI server and your usual proxy setup.
+- serve `app.wsgi:web_app` through a production WSGI server you add, such as
+  `gunicorn app.wsgi:web_app` (or Waitress on Windows), behind your usual
+  proxy setup.
 
 Read the [Flask integration guide](https://citry.dev/advanced/web-frameworks/#flask),
 [Events guide](https://citry.dev/events/), and

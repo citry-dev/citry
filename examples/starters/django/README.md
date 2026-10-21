@@ -72,7 +72,7 @@ On macOS or Linux:
 
 ```console
 export DJANGO_SETTINGS_MODULE=config.settings
-uv run citry --app project_explorer.citry_app:citry_app check
+uv run citry --app config.urls:citry_app check
 uv run pytest
 ```
 
@@ -80,9 +80,14 @@ In PowerShell:
 
 ```powershell
 $env:DJANGO_SETTINGS_MODULE = "config.settings"
-uv run citry --app project_explorer.citry_app:citry_app check
+uv run citry --app config.urls:citry_app check
 uv run pytest
 ```
+
+The check imports `config/urls.py`, which mounts Citry, so it can ask Django
+which pages the project serves and report a link to a page that does not
+exist. If you move the `citry_urlpatterns(...)` call to another module, point
+`--app` there too, or the check prints a note and skips links.
 
 [The included GitHub Actions workflow](.github/workflows/check.yml) runs
 these checks on pushes and pull requests when you copy this project, including
