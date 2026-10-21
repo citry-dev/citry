@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/counter.html', contains = 'unicorn:click="save()"' }
+
+[[edits]]
+file = 'board/templates/unicorn/counter.html'
+old = 'save(amount=1)'
+new = 'save()'

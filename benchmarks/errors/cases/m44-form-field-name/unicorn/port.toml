@@ -1,0 +1,9 @@
+# The search component binds the field with unicorn:model, but the form
+# still submits it to the page by its `name`, which the view reads.
+status = "ported"
+mistake = { file = 'board/templates/unicorn/search.html', contains = 'name="qeury"' }
+
+[[edits]]
+file = 'board/templates/unicorn/search.html'
+old = '<input type="search" name="q"'
+new = '<input type="search" name="qeury"'

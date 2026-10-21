@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/project_list.py', contains = 'count=str(count)' }
+
+[[edits]]
+file = 'board/components/project_list.py'
+old = 'Project(title=title, count=count, featured=featured)'
+new = 'Project(title=title, count=str(count), featured=featured)'

@@ -1,0 +1,9 @@
+# django-unicorn's action syntax sets a property with `name=value`, so
+# the status line's Close button assigns its own `open` input.
+status = "ported"
+mistake = { file = 'board/templates/unicorn/status.html', contains = 'unicorn:click="open=False"' }
+
+[[edits]]
+file = 'board/templates/unicorn/status.html'
+old = 'unicorn:click="close"'
+new = 'unicorn:click="open=False"'

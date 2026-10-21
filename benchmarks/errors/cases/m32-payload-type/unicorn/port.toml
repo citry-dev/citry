@@ -1,0 +1,2 @@
+status = "prevented"
+reason = """django-unicorn turns each action argument into the type the method's annotation names before it calls the method. With `def save(self, amount: int)`, the button's `save(amount='1')` calls `save(amount=1)`, so the counter works. Checked on the pinned version: the page reads `Saved: 1` after Add, the same as the clean app."""

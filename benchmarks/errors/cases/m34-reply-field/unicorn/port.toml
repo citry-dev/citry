@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The counter's Add action replies with the component's new HTML and data, which django-unicorn's browser script puts in place of the old counter. No code of the app reads a field of the reply."

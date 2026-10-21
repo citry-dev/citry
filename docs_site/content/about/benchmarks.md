@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and eight others report the same 49 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and nine others report the same 49 developer mistakes.
 ---
 
 # Benchmarks
@@ -72,7 +72,7 @@ noise.
 
 The earlier a mistake is reported, the less time it costs you.
 
-We wrote the same small app in Citry and eight other frameworks, made
+We wrote the same small app in Citry and nine other frameworks, made
 the same 49 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**. Rusty is the Django app with its
@@ -86,6 +86,10 @@ the Django library Citry grew out of.
 [ReactPy](https://github.com/reactive-python/reactpy) lets you write
 React-style components in Python: the server runs them and sends the
 browser the page to show.
+django-unicorn is the Django app with its cards, counter, details and
+search form rewritten as components of
+[django-unicorn](https://www.django-unicorn.com/). Each click goes to
+the server, which sends back the component's new HTML.
 
 <c-error-benchmark-chart
   title="How the 49 mistakes ended in each framework"
@@ -110,9 +114,10 @@ browser the page to show.
 
 - **Before the app runs: 25 of 47** (24 errors, 1 warning). Two of
   the 49 mistakes don't apply to Citry. Next.js 34 of 43, Nuxt 25 of
-  44, ReactPy 19 of 42, FastHTML 17 of 36, Django + HTMX + Alpine 3 of 40,
-  Rusty + HTMX + Alpine 3 of 38, django-components + HTMX + Alpine 3
-  of 42, Jinja + HTMX + Alpine 2 of 39.
+  44, ReactPy 19 of 42, FastHTML 17 of 36, django-unicorn 7 of 41,
+  Django + HTMX + Alpine 3 of 40, Rusty + HTMX + Alpine 3 of 38,
+  django-components + HTMX + Alpine 3 of 42, Jinja + HTMX + Alpine 2
+  of 39.
 - **Missed: 15**, nothing tells you:
     - a misspelled HTML element, HTML attribute name, CSS class, or CSS
       variable the server sets: the page looks wrong
@@ -175,13 +180,13 @@ browser the page to show.
 - **Citry**: the editor extension's language server (measured with
   `citry check --types`) and `citry check`.
 - **Every Python stack** (Citry, Django, Rusty, Jinja,
-  django-components, FastHTML, ReactPy):
+  django-unicorn, django-components, FastHTML, ReactPy):
   Pylance with type checking on (measured with pyright in standard mode), and
   ruff with its default rules.
-- **Django, Rusty, Jinja and django-components**: djLint with the
-  Django or Jinja profile, `manage.py check` for Django, Rusty and
-  django-components, and VS Code's JavaScript syntax check for the
-  script files in the Django, Rusty and django-components apps.
+- **Django, Rusty, Jinja, django-unicorn and django-components**:
+  djLint with the Django or Jinja profile, `manage.py check` for every
+  app except Jinja's, and VS Code's JavaScript syntax check for the
+  script files in every app except Jinja's.
 - **Next.js and Nuxt**: the editor's TypeScript checks (tsc for
   Next.js; vue-tsc and the Vue compiler's errors for Nuxt), ESLint, and
   the production build.
@@ -201,6 +206,8 @@ browser the page to show.
   default. It adds development checks, such as a warning for a list
   item without a key, like the ones React gives in development. With it
   off, every ReactPy result here stays the same.
+- **django-unicorn**: default settings. None of its settings adds a
+  stricter check.
 - **Other frameworks**: default settings.
 - **Setup**: the project layout from each framework's docs or starter,
   with default settings unless the

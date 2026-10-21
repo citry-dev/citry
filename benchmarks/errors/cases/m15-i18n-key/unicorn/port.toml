@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/board/page.html', contains = 'translate "Projcts"' }
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = '<h1>{% translate "Projects" %}</h1>'
+new = '<h1>{% translate "Projcts" %}</h1>'

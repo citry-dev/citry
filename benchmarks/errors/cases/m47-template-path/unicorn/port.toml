@@ -1,0 +1,9 @@
+# django-unicorn finds each component's template from the component's
+# name, so no component names a template file; the page's view does.
+status = "ported"
+mistake = { file = 'board/views.py', contains = 'board/pgae.html' }
+
+[[edits]]
+file = 'board/views.py'
+old = "'board/page.html'"
+new = "'board/pgae.html'"

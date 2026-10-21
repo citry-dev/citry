@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/details.html', contains = 'unicorn:clik=' }
+
+[[edits]]
+file = 'board/templates/unicorn/details.html'
+old = "unicorn:click=\"$toggle('open')\""
+new = "unicorn:clik=\"$toggle('open')\""

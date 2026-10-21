@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = 'django-unicorn has no slots, so the card hands no slot data to a fill from the page. The card writes its own footer link from its own `title` and `count`; a misspelled name there is a misspelled template variable, which m07 covers.'

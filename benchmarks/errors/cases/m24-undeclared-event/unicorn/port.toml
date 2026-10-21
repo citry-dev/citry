@@ -1,0 +1,9 @@
+# The card asks the card list to hide it by calling the list's method
+# through self.parent, as django-unicorn's child-components docs do.
+status = "ported"
+mistake = { file = 'board/components/card.py', contains = 'self.parent.hdie(' }
+
+[[edits]]
+file = 'board/components/card.py'
+old = 'self.parent.hide(self.title)'
+new = 'self.parent.hdie(self.title)'

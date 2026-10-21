@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/counter.html', contains = '{{ cuont }}' }
+
+[[edits]]
+file = 'board/templates/unicorn/counter.html'
+old = 'Saved: {{ count }}'
+new = 'Saved: {{ cuont }}'

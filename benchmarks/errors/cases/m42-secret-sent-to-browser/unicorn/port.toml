@@ -1,0 +1,25 @@
+# The counter keeps the token for server-side use as an ordinary class
+# attribute. django-unicorn writes every public attribute of a component
+# into the page for its browser script, so the token reaches the browser.
+status = "ported"
+mistake = { file = 'board/components/counter.py', contains = 'secret_token = settings.SECRET_TOKEN' }
+
+[[edits]]
+file = 'board/components/counter.py'
+old = '''
+from django_unicorn.components import UnicornView
+'''
+new = '''
+from django.conf import settings
+from django_unicorn.components import UnicornView
+'''
+
+[[edits]]
+file = 'board/components/counter.py'
+old = '''
+    count: int = 0
+'''
+new = '''
+    count: int = 0
+    secret_token = settings.SECRET_TOKEN
+'''

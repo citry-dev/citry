@@ -1,0 +1,5 @@
+<div class="card card--{{ tone }}">
+  <h2>{{ title }}: {{ count }} tasks</h2>
+  <button type="button" unicorn:click="hide">Hide</button>
+  <div class="card-footer"><a href="#{{ title|lower }}">Open {{ title }} ({{ count }})</a></div>
+</div>

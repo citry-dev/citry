@@ -1,20 +1,22 @@
 # Error-prevention benchmark: plan for parts 2 and 3
 
-Status: approved by the maintainer on 2026-10-20, with the decisions listed
-at the end. Written against the benchmark as added in PR #205 (commit
-`9346c7131`). PRs 1a (case edits) and 1b (runner journeys and page
-comparison) are done, as described in section 7, and so are PR 2 (the
-hand-off mistakes on the current page), PR 3 (browser components and slot
-data), PR 4 (forms, links, assets, CSS variables and i18n arguments) and
-PR 9 (Django Rusty Templates, the Django app on an experimental Rust
-version of Django's template engine). PR 6 has added django-components,
-with PR 3's reference-page parts and a case for each of the 44 mistakes in
-the catalogue after PR 3. PRs 9 and 6 landed before PR 4, so PR 4 added its
-page changes and cases to both apps, and PR 5 will too. PR 8 has added
-ReactPy, with a case for each of those 44 mistakes, and then PR 4's page
-changes and cases. The other PRs in section 8 are planned. The published
-results include 1b, PR 2, PR 3, PR 9, PR 6, PR 4 and PR 8. The benchmark
-itself is described in
+Status: approved by the maintainer on 2026-10-20, with the decisions
+listed at the end. Written against the benchmark as added in PR #205
+(commit `9346c7131`). PRs 1a (case edits) and 1b (runner journeys and
+page comparison) are done, as described in section 7, and so are PR 2
+(the hand-off mistakes on the current page), PR 3 (browser components
+and slot data), PR 4 (forms, links, assets, CSS variables and i18n
+arguments) and PR 9 (Django Rusty Templates, the Django app on an
+experimental Rust version of Django's template engine). PR 6 has added
+django-components, with PR 3's reference-page parts and a case for each
+of the 44 mistakes in the catalogue after PR 3. PRs 9 and 6 landed
+before PR 4, so PR 4 added its page changes and cases to both apps, and
+PR 5 will too. PR 8 has added ReactPy, with a case for each of those 44
+mistakes, and then PR 4's page changes and cases. PR 10 has added
+django-unicorn the same way, with PR 4's page changes and a case for
+each of the 49 mistakes in the catalogue after PR 4. The other PRs in
+section 8 are planned. The published results include 1b, PR 2, PR 3,
+PR 9, PR 6, PR 4, PR 8 and PR 10. The benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
 
@@ -603,6 +605,17 @@ benchmark's stage: editor, check, build, or runtime.
   - **Unknown field:** `unicorn:model="cuont"` raises `UnicornViewError` and
     shows a browser error.
   - **No child-to-parent events and no slots:** m05 and m24 do not apply.
+
+  Measuring it in PR 10 confirmed the first point (m06 is missed),
+  corrected the third, left the second unmeasured, and added two
+  findings. A child component calls a method
+  of the component that renders it through `self.parent`, as the
+  child-components docs show, so m24 applies; with the parent's type
+  narrowed for pyright, pyright reports the misspelled call. The page uses
+  no `unicorn:model`, so the unknown-field error is not measured. The
+  tag's keyword arguments are set on the component with no check of their
+  names or types, and action arguments are converted to the types the
+  method's annotations name, so m32 is prevented.
 - **FastHTML** (already measured): this survey found two behaviors m32 and
   m33 will expose.
   - **Wrong-typed field:** a 404, not a 400.
@@ -876,6 +889,15 @@ Recommended order:
 5. **django-unicorn.** Low to medium cost. Several cases do not apply,
    because it has no slots and no child-to-parent events. Its unknown-method
    behavior (silently ignored) is a useful data point.
+   Done in PR 10 (`frameworks/unicorn`): the card list, the cards, the
+   counter, the details, the status line and the search form are
+   components. Seven cases do not apply (m05, m14, m20 and m34 to m37)
+   and one is prevented (m32). m24 applies after all: the card calls the
+   card list's `hide` method through `self.parent`. django-unicorn has no
+   stricter setting to turn on. PR 10 was written after PR 4, so it also
+   adds PR 4's page parts and cases. Its 49 cases ran on their own in
+   about 3 minutes with `--jobs 5`; its 44 cases took about 100 seconds
+   before PR 4 added five cases and three journeys.
 6. **Tetra.** Highest setup cost after Reflex: encrypted state, sessions and
    an esbuild step. The web benchmark app already solves these, so the
    baseline can start from it.
@@ -1022,26 +1044,28 @@ change per baseline, plus re-checking the clean page.
 | 2. Hand-offs on the current page (done) | m29-m35, m38-m42, m47 (13 mistakes; part 2 mistakes that need no page change) | 78 (13 x 6), minus the cells that do not apply | ~12 min | ~34 min |
 | 3. Browser components and slot data (done; the run changed one existing cell, Citry m14, from runtime error to missed, because the details panel now passes `open` to `Status`) | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
 | 4. Forms, links, assets, CSS variables, i18n arguments (done, after PRs 9 and 6, so it covers eight frameworks; the run changed no existing cell) | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 40 written + 8 baseline changes | ~10 min measured: the three new journeys add page loads to every case | ~20 min for eight frameworks, measured |
-| 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 117 + 9 baseline changes, now that there are nine frameworks | ~12 min, estimated for six frameworks before the journeys PR 4 added | ~58 min, estimated before PR 4; PR 8 measured ~22 min for nine frameworks |
+| 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 130 + 10 baseline changes, now that there are ten frameworks | ~12 min, estimated for six frameworks before the journeys PR 4 added | ~58 min, estimated before PR 4; PR 10 measured ~25 min for ten frameworks |
 | 6. django-components (done, after PR 9 and before PRs 4 and 5) | framework, baseline, one case per mistake. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); they ran on their own in about 95 seconds with `--jobs 5` | 44 written (estimate ~62) | ~1.5 min measured (estimate ~8 min) | ~10 min for eight frameworks, measured |
 | 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first | ~62 | unknown: 30-95 min if every case builds the frontend | see open question 4 |
 | 8. ReactPy (done, after PR 4 and before PR 5; the run changed no existing cell) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 2 minutes with `--jobs 5` | 49 written (estimate ~62) | ~2 min measured (estimate ~6 min) | ~22 min for nine frameworks, measured |
 | 9. Django Rusty Templates (done, after PR 3 and before PRs 4 and 5) | starts from the Django baseline. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); its first 37 cases ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~7 min) | ~8.5 min for seven frameworks, measured |
-| 10. django-unicorn | | ~62 | ~7 min | |
+| 10. django-unicorn (done, after PRs 6 and 4 and before PR 5) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 3 minutes with `--jobs 5` | 49 written (estimate ~62) | ~3 min measured (estimate ~7 min) | ~25 min for ten frameworks, measured; the run changed no existing cell |
 | 11. Tetra | | ~62 | ~10 min | |
 | (later) Ref G and m50 | provide/inject in every baseline | 1 case + 1 baseline change per framework | | |
 
 The estimated "Full run after" times assume one case at a time; the
 measured ones use `--jobs 5`, such as the eight-framework run after PR 6,
 which took about 10 minutes. Row 4 counts the eight frameworks measured
-when PR 4 ran, and row 5 the nine measured now. Each framework
+when PR 4 ran, and row 5 the ten measured now. Each framework
 added before one of them adds one case per mistake and one baseline change
 per page addition: Django Rusty Templates (PR 9) and django-components
-(PR 6) came before both, and ReactPy (PR 8) before PR 5.
+(PR 6) came before both, and ReactPy (PR 8) and django-unicorn (PR 10)
+before PR 5.
 
 **Stricter settings for the frameworks measured before PR 6.** The decision
 on stricter settings applies to every framework, but only django-components
-(PR 6) and ReactPy (PR 8) were set up under it when they were added; the
+(PR 6), ReactPy (PR 8) and django-unicorn (PR 10) were set up under it when
+they were added, and django-unicorn has no stricter setting to turn on; the
 others get their own PR. Until then the published cells compare
 django-components with its type checks on against the other frameworks at
 their defaults. The django-components notes name the cells this changes
@@ -1126,15 +1150,17 @@ count, unless Reflex needs a `max_jobs` limit.
 
 ### Decisions (2026-10-20)
 
-- **Stricter settings (question 2):** there is no separate "strict setup"
-  run. When a framework has a setting that turns on a stricter check, and
-  other frameworks here have the same kind of check, the benchmark turns
-  it on in that framework's normal setup, so the frameworks are compared
-  like for like. The framework notes record each setting changed from the
-  default. This applies to the next published run, so the published
-  results change too. (As of PR 8, django-components and ReactPy are set
-  up under it; the frameworks measured before django-components follow in
-  their own PR, see section 8.)
+- **Stricter settings (question 2):** there is no separate "strict
+  setup" run. When a framework has a setting that turns on a stricter
+  check, and other frameworks here have the same kind of check, the
+  benchmark turns it on in that framework's normal setup, so the
+  frameworks are compared like for like. The framework notes record each
+  setting changed from the default. This applies to the next published
+  run, so the published results change too. (As of PR 10,
+  django-components, ReactPy and django-unicorn are set up under it,
+  though django-unicorn has no setting to change; the frameworks
+  measured before django-components follow in their own PR, see
+  section 8.)
 - **Conversions (question 3):** a framework that turns `"1"` into `1`
   for you counts as "prevented". Judge it case by case, with "prevented"
   as the default.

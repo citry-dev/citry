@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = 'django-unicorn renders every component on the server and sends finished HTML. Its browser script never renders a component itself: after an action it puts the HTML the server sent in place of the old, so there is no server render and first browser render that could disagree.'

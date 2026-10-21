@@ -1,0 +1,10 @@
+{% load unicorn %}
+<div>
+  {% for card in cards %}
+    {% if card.title not in hidden %}
+      {% with tone=card.featured|yesno:"accent,plain" %}
+        {% unicorn "card" key=card.title title=card.title count=card.count tone=tone %}
+      {% endwith %}
+    {% endif %}
+  {% endfor %}
+</div>

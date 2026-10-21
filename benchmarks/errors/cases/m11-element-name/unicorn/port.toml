@@ -1,0 +1,18 @@
+status = "ported"
+mistake = { file = 'board/templates/board/page.html', contains = '<dvi class="board"' }
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = '<div class="board" title="Board">'
+new = '<dvi class="board" title="Board">'
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = '''
+    </nav>
+  </div>
+'''
+new = '''
+    </nav>
+  </dvi>
+'''

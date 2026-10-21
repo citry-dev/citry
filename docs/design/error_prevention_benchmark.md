@@ -100,8 +100,11 @@ measured as the Django app with the page's parts turned into components
 (`frameworks/django-components`). ReactPy (`frameworks/reactpy`), whose
 components are Python functions that the server runs while the browser
 shows what they return, is measured with its Starlette backend served by
-uvicorn, as in the performance benchmark in `benchmarks/web`. Tetra,
-django-unicorn and Reflex are not measured yet.
+uvicorn, as in the performance benchmark in `benchmarks/web`.
+django-unicorn, whose components the server renders again after every
+click, is measured as the Django app with the cards, the counter, the
+details and the search form turned into its components
+(`frameworks/unicorn`). Tetra and Reflex are not measured yet.
 
 ### Fairness rules
 
@@ -120,17 +123,18 @@ django-unicorn and Reflex are not measured yet.
 - Each framework's tools are its official starter's tools plus the linters
   and type checker most of its projects add: pyright in standard mode and
   ruff for every Python stack, djLint for the Django, Django Rusty
-  Templates, django-components and Jinja templates, and ESLint for Nuxt and
-  Next.js. A framework that relies on the language's own checks, such as
-  FastHTML's typed Python functions, gets credit for what those checks
-  catch. Each tool keeps its default rules.
+  Templates, django-components, django-unicorn and Jinja templates, and
+  ESLint for Nuxt and Next.js. A framework that relies on the language's
+  own checks, such as FastHTML's typed Python functions, gets credit for
+  what those checks catch. Each tool keeps its default rules.
 - When a framework has a setting that turns on a stricter check, and other
   frameworks here have the same kind of check, its app turns the setting on,
   so the frameworks are compared like for like (decided on 2026-10-20; see
   the plan's decisions). The framework's notes name every setting changed
   from the default. The django-components and ReactPy apps are set up this
-  way; the apps measured before them are set up under the rule in a later
-  change.
+  way. The django-unicorn app was added under the rule too, but
+  django-unicorn has no setting that turns on a stricter check. The apps
+  measured before them are set up under the rule in a later change.
 - Each case is written the way a developer of that framework would naturally
   make the mistake. A case is not changed after its result is seen, except to
   fix a case that did not express its mistake.
@@ -283,7 +287,7 @@ with `--jobs 5` on a 10-core machine. Running every browser check as well,
 one case at a time, took about 280 seconds. A rerun with nothing changed
 took 8 seconds, because the browser checks of the 4 cases whose journey
 stops on an error page are never stored and run again. A full run of the
-nine frameworks (441 cases) with nothing stored took about 22 minutes
+ten frameworks (490 cases) with nothing stored took about 25 minutes
 with the default `--jobs 5`, most of it the Nuxt cases, which run one at
 a time. It is not part of routine CI. Its result changes only when a
 case, a pinned version or Citry changes, so it is run at each Citry

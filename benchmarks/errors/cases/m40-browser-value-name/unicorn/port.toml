@@ -1,0 +1,9 @@
+# The page hands the setting to the browser in a json_script tag with the
+# id api-base; the browser code reads it by that id.
+status = "ported"
+mistake = { file = 'board/static/board/board.js', contains = 'api-bsae' }
+
+[[edits]]
+file = 'board/static/board/board.js'
+old = "getElementById('api-base')"
+new = "getElementById('api-bsae')"
