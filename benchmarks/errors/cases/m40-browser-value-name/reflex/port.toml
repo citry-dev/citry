@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'BoardState.api_bsae' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.text("API: ", BoardState.api_base),'
+new = 'rx.text("API: ", BoardState.api_bsae),'

@@ -1,0 +1,9 @@
+# The card's Hide button sends the event the card received under a misspelled
+# name.
+status = "ported"
+mistake = { file = 'board/card.py', contains = 'on_click=on_hdie' }
+
+[[edits]]
+file = 'board/card.py'
+old = 'on_click=on_hide)'
+new = 'on_click=on_hdie)'

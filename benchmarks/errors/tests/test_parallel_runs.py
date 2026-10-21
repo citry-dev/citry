@@ -207,6 +207,7 @@ def test_a_server_that_names_a_backend_port_gets_a_second_reserved_port(
         "OSError: [Errno 48] Address already in use",
         "Error: listen EADDRINUSE: address already in use 127.0.0.1:20001",
         "Error: That port is already in use.",
+        "Error: Frontend port: 20001 is already in use.",
     ],
 )
 def test_each_servers_port_clash_message_is_recognised(line: str) -> None:

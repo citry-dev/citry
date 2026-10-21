@@ -1,0 +1,8 @@
+# Reflex converts a var to text with `.to(str)`, its counterpart of `str(n)`.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'project.count.to(str)' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'count=project.count,'
+new = 'count=project.count.to(str),'

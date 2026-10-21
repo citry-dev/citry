@@ -62,6 +62,7 @@ ORDER = (
     "django-components",
     "fasthtml",
     "reactpy",
+    "reflex",
     "nuxt",
     "next",
 )

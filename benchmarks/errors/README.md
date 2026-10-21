@@ -26,9 +26,9 @@ framework, the earliest stage that reported it.
    A tool's finding counts if the clean app did not produce it and it
    points within `window` lines of the mistake line (three by default). A
    failing command with no location takes the first file and line its output names;
-   with none, it counts only when its message names the changed file. A
-   check that fails with a Python traceback, such as Reflex's compile
-   check, points at the traceback's last frame inside the app. A
+   with none, it counts only when its message names the changed file. When
+   a check fails with a Python traceback, such as `reflex compile`, its
+   finding points at the traceback's last frame inside the app. A
    finding elsewhere can still come from the change: a
    parser reports an unclosed tag at the outer element, and a type checker
    reports a wrong value where it is used. It can also be a side effect, such
@@ -134,8 +134,12 @@ run. A full run of the eleven frameworks' 682 cases with nothing stored
 the Nuxt cases, which run one at a time, and the Next.js builds.
 Before m51 to m63 were added, ReactPy's 49 cases, run on their own,
 took about 2 minutes, and django-unicorn's about 3. Tetra's 62 cases,
-run on their own after m51 to m63 were added, took about 4. Each journey
-loads the page again in every browser check, and the `search`, `about` and `project` journeys bring
+run on their own after m51 to m63 were added, took about 4. Reflex's 49
+cases, run on their own before m51 to m63 were added, took about 1.5
+minutes, because its tools reported 31 of its 40 ported mistakes and
+only the other 9 started its development server. Each journey loads the
+page again in every browser check, and the `search`, `about` and
+`project` journeys bring
 each framework to five (FastHTML to four). It is not part of routine CI.
 Run it at each Citry release, and when a framework's pinned versions
 change.
@@ -204,7 +208,8 @@ writes a part of the page, not from its tools:
   "prevented": HTMX sends form fields, which are always text, so `"1"`
   and `1` send the same request. django-unicorn is "prevented" too: it
   converts an action's argument to the type the method declares, so
-  `save(amount='1')` calls `save(amount=1)`. Tetra passes the text to the
+  `save(amount='1')` calls `save(amount=1)`, and so is Reflex, which
+  converts an event's argument the same way. Tetra passes the text to the
   method unchanged, so adding it to the total fails with a server error.
 - **m35:** Citry, FastHTML and Next.js declare the card's footer as
   required, so leaving it out is reported before the app runs;
@@ -235,7 +240,9 @@ writes a part of the page, not from its tools:
 - **m44:** nothing compares a form field's name with the name the server
   reads, so the search shows no `Searched:` line. Citry's form calls a
   server event, which rejects the call because `q` is missing, but the
-  error stays in `$error('search')`, which the page does not show.
+  error stays in `$error('search')`, which the page does not show. In
+  Reflex the search handler reads the field by name, so the misspelling
+  raises a `KeyError` on the server.
 - **m45:** Django, Rusty, Jinja, Tetra, django-unicorn and
   django-components build the link from the route's name, so the page fails to render.
   Next.js's `typedRoutes` checks a link's path against the app's routes,
@@ -253,7 +260,8 @@ writes a part of the page, not from its tools:
   translations built in, as for m15.
 - **m48:** the misspelled image is a 404 when the page loads, except in
   Nuxt, whose build turns an image path in a template into an import and
-  fails on the missing file.
+  fails on the missing file, and in Reflex, whose development server
+  answers with the app's page and status 200.
 - **m51:** a list key matters only where the browser updates the list in
   place. The Django, Rusty, django-components, Jinja and FastHTML pages
   render the cards on the server and only hide one in the browser, so
@@ -585,7 +593,55 @@ Tetra only because the app gives its public attributes types, following
 the rule on stricter settings below. In a trial run without the types on
 `api_base` and `hidden`, both were missed.
 
-Reflex is not measured yet.
+
+In Reflex ([`frameworks/reflex/`](frameworks/reflex/) holds its app and
+notes) the page is written as Python functions, as in ReactPy, but
+Reflex compiles them into a React app. Its development server serves that app with
+Vite, and the browser sends each click to a Python backend over a
+WebSocket. Its cases have been run, but its cells are not in the
+published results yet; they join the next published run.
+pyright, ruff and `reflex compile` report 31 of its 40 ported mistakes
+before the app runs, so only 9 cases needed the browser check. Where its
+cells, or the reason behind them, differ from ReactPy's:
+
+- **m02, m04, m05, m25, m26, m29 and m35:** the card and the status line
+  are plain typed Python functions, so pyright reports a misspelled or
+  missing input, footer or callback in the editor, where ReactPy's
+  `@component` hides them until the component renders.
+- **m17, m27 and m49:** pyright also checks the types of those inputs,
+  including the `Literal` choices of `tone`.
+- **m08 and m31:** only `reflex compile` reports them. pyright accepts any
+  attribute of a state field that holds an object, such as `owner.nmae`,
+  and any keyword on a component, such as `on_clik`; Reflex's compile step
+  checks both.
+- **m13:** pyright accepts an assignment to any attribute of a state in
+  an event handler, because Reflex's state class defines `__setattr__`,
+  so `self.cuont += amount` fails only when Add is clicked.
+- **m10:** Reflex passes a keyword it does not know, such as `titel`, on
+  as a CSS property, so the board silently loses its tooltip.
+- **m12:** the page reads the backend-only field that holds the secret,
+  and Reflex writes its value into the compiled page, so the API line
+  shows the secret with no error.
+- **m44:** the search handler reads `form_data["q"]`, so a misspelled
+  field name raises a `KeyError` on the server when the form is
+  submitted; ReactPy reads the URL and silently shows no `Searched:` line.
+- **m45:** Reflex's router shows its own `404: Page not found` page in the
+  browser, with no error.
+- **m48:** in development, React Router's handler in the Vite server
+  answers a misspelled file path with the app's page and status 200, so
+  the image shows broken but nothing reports an error; the page
+  comparison does not look at whether an image loaded, so the cell is
+  "never" rather than "silently wrong".
+- **m18, m32 and m41:** prevented. Reflex builds an event's payload from
+  the handler's own parameter names, so the page never writes the field
+  name `amount`; it converts the text `"1"` to the number the handler
+  declares, as django-unicorn does; and it sends a `pathlib.Path` to the
+  browser as its text.
+
+m03, m14, m15, m30, m34 and m46 are n/a, for the same reasons as in
+ReactPy: the inputs are Python arguments, nothing is rendered on the
+server, Reflex has no translations, the hide event already carries the
+card's title, and no browser code reads the reply to a click.
 
 ## The reference page
 
@@ -634,13 +690,17 @@ saved count survives a new page load. Citry, django-unicorn and Tetra
 keep the count in the page, and ReactPy keeps it in component state on the server,
 which lasts only while that page is open. So their clean pages show
 `Saved: 0` again after the reload, while the other frameworks keep the
-count on the server and show `Saved: 1`.
+count on the server and show `Saved: 1`. Reflex keeps it in state on the
+server for each browser tab, and a reload stays in the same tab, so it
+shows `Saved: 1` too.
 
 **Every other journey** starts from a fresh load of the page in a new
 browser context, with no cookies or storage left from an earlier journey,
 runs its own steps, and records the page once at its end. The server is not
 restarted between journeys, so it keeps what earlier journeys saved, such as
-the count. Journeys run in the order `framework.toml` lists them, after the
+the count. Reflex is the exception: it keeps state for each browser tab,
+and a new browser context is a new tab, so each of its journeys starts
+from `Saved: 0` and all three cards. Journeys run in the order `framework.toml` lists them, after the
 default one, so the clean app and the case start each journey from the same
 server state, apart from what the mistake itself changed. Every case runs
 every journey of its framework, so a mistake is compared on every part of
@@ -770,18 +830,23 @@ pyright in standard mode (Pylance with type checking turned on) and ruff
 with its default rules; for the templates of Django, Rusty,
 django-components, django-unicorn and Jinja, and Tetra's page templates,
 djLint; for Nuxt, the official
-`@nuxt/eslint` module; for Next.js, the ESLint its starter installs.
+`@nuxt/eslint` module; for Next.js, the ESLint its starter installs; for
+Reflex, `reflex compile --dry`, which builds every page without running
+the app.
 Each tool keeps its default rules (for a linter, the rules its framework's
 preset turns on), except for the stricter settings below
-and four changes that the clean app needs and that such projects
+and five changes that the clean app needs and that such projects
 commonly make: FastHTML's main.py turns off ruff's star-import rules
 (F403, F405), Nuxt's ESLint config turns off
 `vue/multi-word-component-names`, the django-components app silences
 one pyright check on the two lines where a component declares its `View`
-class the way the django-components docs write it, and the Tetra app
+class the way the django-components docs write it, the Tetra app
 silences one pyright check on each line that declares a typed public
 attribute, because pyright reads `public(...)` as returning a `Public`
-object rather than a value of the declared type.
+object rather than a value of the declared type, and the Reflex app
+silences one pyright check on the line that reads the project number
+from the page's URL as `rx.State.project_id`, as Reflex's docs write it,
+because pyright cannot see a var Reflex adds when it registers the page.
 
 When a framework has a setting that turns on a stricter check, and other
 frameworks here have the same kind of check, the benchmark turns it on in
@@ -800,8 +865,8 @@ settings considered and left off, with the reason. These are on:
 | Next.js | `noUncheckedIndexedAccess`, `noImplicitOverride` and `verbatimModuleSyntax` in tsconfig.json | tsc treats a value read by index as possibly missing, requires `override` on a method that replaces its parent's, and requires `import type` for an import used only as a type; the tsconfig Nuxt generates turns all three on |
 | ReactPy | `REACTPY_DEBUG_MODE=1` | ReactPy checks each element and attribute it sends and warns about a list item without a key, like React's development checks in Next.js |
 
-In Citry, Django, Django Rusty Templates, FastHTML and django-unicorn,
-none of the settings adds a kind of check the other frameworks make, so
+In Citry, Django, Django Rusty Templates, FastHTML, django-unicorn and
+Reflex, none of the settings adds a kind of check the other frameworks make, so
 they keep their defaults; their notes list the settings considered.
 
 Each linter keeps the rules its framework's preset turns on (or its own

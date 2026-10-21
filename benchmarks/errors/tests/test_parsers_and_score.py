@@ -518,6 +518,19 @@ def test_a_python_syntax_error_and_a_failure_outside_the_app_are_read_as_well() 
     assert python_traceback("compiled", "", 0, WORK) == []
 
 
+def test_a_python_traceback_takes_the_exception_from_the_unindented_line() -> None:
+    frame = f'  File "{WORK}/board/board.py", line 12, in page'
+    # A source line shaped like `Name: text` is indented under its frame, so it is not the exception.
+    bare = f'{frame}\n    note: "assert"\n    assert ready\nAssertionError'
+    [finding] = python_traceback(bare, "", 1, WORK)
+    assert (finding.line, finding.code, finding.message) == (12, "AssertionError", "AssertionError")
+    named = f"{frame}\njinja2.exceptions.TemplateNotFound: index.html"
+    assert python_traceback(named, "", 1, WORK)[0].code == "TemplateNotFound"
+    # A frame in a folder a tool generated, such as Reflex's `.web`, is not the app's code.
+    generated = f'{frame}\n  File "{WORK}/.web/backend/x.py", line 3, in f\nValueError: bad'
+    assert python_traceback(generated, "", 1, WORK)[0].line == 12
+
+
 def test_an_import_failure_counts_and_a_file_name_must_match_whole() -> None:
     crash = Finding(None, None, "error", "citry.app-failure", "NameError: name 'x' is not defined")
     assert score_stage("check", "citry check", [], [crash], "app/data.py", 3, 3).error

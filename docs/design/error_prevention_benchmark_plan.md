@@ -14,7 +14,9 @@ before PR 4, so PR 4 added its page changes and cases to both apps, and
 PR 5 did too. PR 8 has added ReactPy, with a case for each of those 44
 mistakes, and then PR 4's page changes and cases. PR 10 has added
 django-unicorn the same way, with PR 4's page changes and a case for
-each of the 49 mistakes in the catalogue after PR 4. A later PR (the
+each of the 49 mistakes in the catalogue after PR 4. PR 7 has added
+Reflex the same way, with a case for each of those 49 mistakes; its
+cells are not published yet. A later PR (the
 stricter-settings PR) applied the decision on stricter settings to the frameworks measured before PR 6
 (section 8). PR 5 then added part 3's 13 mistakes (m51 to m63) to all
 ten frameworks, with Ref H. PR 11 has added Tetra, with the
@@ -918,12 +920,29 @@ Recommended order:
    runtime stage needs no production build: `reflex run` serves the page
    with Vite's development server, which starts in about 5 seconds, and the
    whole browser check, five journeys included, takes about 20 seconds a
-   case. Five such checks at once took 24 seconds, eight took 28, with the
-   same page in each. A working copy whose browser check ran adds 5 to 14
+   case. Five such checks at once took 24 seconds, eight took 28, and each
+   recorded the same page. A working copy whose browser check ran adds 5 to 14
    MB to the disk's used space, because Bun copies the frontend's packages
-   from its store in the environment as copy-on-write clones. The runner's existing rule already skips the browser
-   check for a case a static stage reported, so the decision on open
-   question 4 needs no Reflex-specific code.
+   from its store in the environment as copy-on-write clones. The runner's
+   existing rule already skips the browser check for a case a static stage
+   reported, so the decision on open question 4 needs no Reflex-specific
+   code.
+
+   Done in PR 7, with a case for each of the 49 mistakes in the catalogue
+   after PR 4. Of the 49, 31 end as static errors (28 in the editor, 3 in
+   the check stage, where `reflex compile` reports m08 and m31 and ruff
+   reports m28), 2 as runtime errors (m13 and m44), 7 are missed, 6 do not
+   apply and 3 are prevented (m18, m32 and m41). So only 9 of the 40
+   ported cases needed the browser check, and the 49 cases ran on their
+   own in about 85 seconds with `--jobs 5`.
+   The survey in section 4 expected `reflex compile` to report a
+   misspelled event trigger and a prop of the wrong type, and the cases
+   confirm both: it reports m31, and it reports m09's `type="sumbit"` too,
+   though pyright reports m09 first, in the editor. The runner gained three things for it:
+   a second reserved port for Reflex's backend, a reader that points a
+   Python traceback at the app's own line, and it stops recording the
+   server's output when it sends the stop signal, because Reflex reports its
+   killed frontend process as an error at every stop.
 3. **ReactPy.** Cheap: pure Python and uvicorn, a few seconds per case, with
    pyright and ruff as the tools. It mostly shows what a Python framework
    with weak typing catches, and many cells will be runtime errors that only
@@ -1130,7 +1149,7 @@ change per baseline, plus re-checking the clean page.
 | 4. Forms, links, assets, CSS variables, i18n arguments (done, after PRs 9 and 6, so it covers eight frameworks; the run changed no existing cell) | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 40 written + 8 baseline changes | ~10 min measured: the three new journeys add page loads to every case | ~20 min for eight frameworks, measured |
 | 5. Other frameworks' checks (part 3) (done, after PR 10 and the stricter settings, so it covers ten frameworks) | Ref H and the board wrapper's id, then m51-m63 (13 mistakes); m53-m55, m61 and m63 use parts from PRs 3 and 4 | 130 written (9 of them n/a) + 10 baseline changes | ~6 min: the full run grew from about 25 to about 31 minutes (estimate ~12 min for six frameworks, before the journeys PR 4 added) | ~31 min for ten frameworks, measured; the run changed no existing cell |
 | 6. django-components (done, after PR 9 and before PRs 4 and 5) | framework, baseline, one case per mistake. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); they ran on their own in about 95 seconds with `--jobs 5` | 44 written (estimate ~62) | ~1.5 min measured (estimate ~8 min) | ~10 min for eight frameworks, measured |
-| 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first (measured: about 20 seconds per browser check, no frontend build per case; see section 6) | ~62 | ~2-5 min estimated with `--jobs 5` for 49 cases, from the measurement | see open question 4 |
+| 7. Reflex (done, after PRs 4, 8 and 10 and before PR 5; not published yet) | framework, baseline with PR 4's page parts, `reflex compile --dry` check stage, one case per mistake. 49 cases; 9 needed the browser check, about 20 seconds each, with no frontend build per case | 49 written (estimate ~62) | ~1.5 min measured with `--jobs 5` (estimate 30-95 min) | not in a full run yet; its cells join the next published run |
 | 8. ReactPy (done, after PR 4 and before PR 5; the run changed no existing cell) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 2 minutes with `--jobs 5` | 49 written (estimate ~62) | ~2 min measured (estimate ~6 min) | ~22 min for nine frameworks, measured |
 | 9. Django Rusty Templates (done, after PR 3 and before PRs 4 and 5) | starts from the Django baseline. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); its first 37 cases ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~7 min) | ~8.5 min for seven frameworks, measured |
 | 10. django-unicorn (done, after PRs 6 and 4 and before PR 5) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 3 minutes with `--jobs 5` | 49 written (estimate ~62) | ~3 min measured (estimate ~7 min) | ~25 min for ten frameworks, measured; the run changed no existing cell |
@@ -1205,9 +1224,9 @@ frameworks: skipping about 38% of the 1.6 hours leaves about 1 hour of work,
 and 5 workers make that about 12 minutes; Nuxt's 62 cases, run one at a
 time, and the clean apps, run alone, keep the total above that. This is an
 estimate from the 2026-10-20 per-case times and the Jinja and FastHTML
-measurement, to be replaced by the first full run's time. With Reflex, add
-its frontend builds for the cases no tool reported, divided by the worker
-count, unless Reflex needs a `max_jobs` limit.
+measurement, to be replaced by the first full run's time. Reflex adds
+little: PR 7 measured about 85 seconds for its 49 cases with `--jobs 5`,
+with no frontend build per case and no `max_jobs` limit.
 
 ---
 

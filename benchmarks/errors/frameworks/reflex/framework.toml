@@ -45,9 +45,11 @@ would not be server data passed to the browser, which several mistakes \
 The parts of the page:
 - BoardState holds the server data: `owner` and `projects` (dataclasses), \
 `api_base`, the heading's `accent` color, and the titles of the hidden \
-cards. `SECRET_TOKEN` is the backend-only var `_secret_token`: Reflex keeps \
-a field whose name starts with an underscore on the backend and leaves it \
-out of the state it sends to the browser. The \
+cards. `SECRET_TOKEN` is the backend-only var `_secret_token` (Reflex calls \
+a state field a var): Reflex keeps a field whose name starts with an \
+underscore on the backend and leaves it out of the state it sends to the \
+browser. A page that reads it anyway gets its value written into the \
+compiled page, so m12 shows the secret with no error. The \
 cards come from the computed var `visible_projects`, rendered with \
 `rx.foreach`; a computed var is a value Reflex works out again from \
 `projects` and `hidden` whenever they change.
@@ -106,10 +108,25 @@ on. It is measured with pyright 1.1.414, the engine Pylance runs, from the \
 command line with `typeCheckingMode = "standard"` set in pyproject.toml, \
 which Pylance reads too (Pylance's own default is "off"). The baseline adds \
 pyright as a dev dependency only to take this measurement. Reflex's types \
-let pyright check field names on a state class, the arguments of a call to \
-a component function, and the arguments of an event; the attributes of a \
-field that holds an object, such as `owner.name`, are not typed, so pyright \
-accepts any name there.
+let pyright check a field read from a state class in a page \
+(`CounterState.count`), the arguments of a call to a component function, \
+and the arguments of an event. pyright accepts any name in three places: \
+an attribute of a field that holds an object, such as `owner.name`; an \
+assignment to an attribute of `self` inside an event handler, such as \
+`self.count += amount`, because Reflex's state class defines \
+`__setattr__`; and an unknown keyword on a Reflex component. Reflex reports an unknown event \
+trigger such as `on_clik` when it compiles the page, and passes any other \
+unknown keyword, such as `titel`, on as a CSS property.
+
+What the page comparison cannot see: in development, React Router's \
+handler in the Vite server answers a file path that does not exist, such \
+as a misspelled image, with the app's page and status 200. The image \
+shows broken, but nothing reports an error, and the comparison does not \
+record whether an image loaded, so m48 reads as "never". The page names \
+the avatar by its URL, as Reflex's docs show for a file in assets/; \
+naming it with `rx.asset("avatar.svg")` instead would make `reflex \
+compile` report a misspelled file, because `rx.asset` checks that the \
+file exists.
 
 check: ruff with its default rules, and `reflex compile --dry`. A ruff \
 finding fails the command, so it counts as an error. `reflex compile` is \
@@ -120,7 +137,7 @@ other things, that a field read in a page exists on its object, that \
 `rx.foreach` gets a list, that a component's props have the types it \
 declares, that an event trigger such as `on_click` exists, and that a \
 handler's arguments fit the event. A failure is a Python traceback, which \
-the runner's `python-traceback` reader turns into a finding at the last \
+the runner's `python-traceback` parser turns into a finding at the last \
 frame inside the app, named after the exception. There is no build stage: \
 `reflex export`, the production build, runs the same compile step and then \
 Vite on the generated React code, and the page has no JavaScript of its own \

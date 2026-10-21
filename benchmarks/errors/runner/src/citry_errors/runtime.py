@@ -25,6 +25,7 @@ from .work import command_env, placeholder
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
+    from typing import IO
 
     from playwright.sync_api import Browser, Page
 
@@ -77,8 +78,14 @@ _ports_lock = threading.Lock()
 # How many ports a server gets in all: one, plus a new one each time it could
 # not listen because another program took its port after it was checked.
 _PORT_ATTEMPTS = 3
-# Python and Node print the first two; Django's runserver prints the third.
-_PORT_IN_USE = re.compile(r"address already in use|EADDRINUSE|port is already in use", re.IGNORECASE)
+# Python and Node print the first two; Django's runserver prints the third,
+# and Reflex the third with the port number in it (`Frontend port: 20001 is
+# already in use.`).
+_PORT_IN_USE = re.compile(r"address already in use|EADDRINUSE|port(?::? \d+)? is already in use", re.IGNORECASE)
+# How long the server's log must stay unchanged before the record of its
+# output ends, and the longest the runner waits for that.
+_LOG_QUIET_S = 0.3
+_LOG_QUIET_LIMIT_S = 5.0
 
 
 @dataclass
@@ -168,6 +175,19 @@ def _wait_ready(url: str, process: subprocess.Popen, timeout: int) -> bool:
         except OSError:
             time.sleep(0.5)
     return False
+
+
+def _quiet_size(log: IO[str]) -> int:
+    """Wait until the server's log stops growing, then give its size in bytes."""
+    deadline = time.monotonic() + _LOG_QUIET_LIMIT_S
+    size = os.fstat(log.fileno()).st_size
+    while time.monotonic() < deadline:
+        time.sleep(_LOG_QUIET_S)
+        grown = os.fstat(log.fileno()).st_size
+        if grown == size:
+            break
+        size = grown
+    return size
 
 
 def _stop(process: subprocess.Popen) -> None:
@@ -304,8 +324,8 @@ def observe(framework: Framework, env: Path, work: Path, log_path: Path) -> Obse
     runtime = framework.runtime
     if runtime is None:
         raise ConfigError(f"{framework.key} has no [runtime] section")
-    # A second port is reserved only for a server that names one, so the
-    # other frameworks keep the same reservations as before.
+    # A second port is reserved only for a server that names one, so a
+    # server that needs one port takes only one.
     needs_backend_port = any("{backend_port}" in part for part in (*runtime.argv, *runtime.env.values()))
     for _attempt in range(_PORT_ATTEMPTS):
         with reserve_port() as port, reserve_port() if needs_backend_port else nullcontext(0) as backend_port:
@@ -349,11 +369,14 @@ def _observe_on(
                         observation.journeys[name] = _journey(browser, url, steps, runtime.settle_ms, observation)
                 browser.close()
         finally:
-            # What the server prints once it is told to stop, such as Reflex
-            # reporting that its frontend process was killed, says nothing
-            # about the page, so the record ends where the browser check did.
-            # The log file keeps everything.
-            recorded = os.fstat(log.fileno()).st_size
+            # What the server prints once it is told to stop says nothing
+            # about the page, and some of it comes only in some runs, such as
+            # granian's `Unexpected exit from worker-1` under `reflex run`; it
+            # would make the clean app or a case report an error at random. So
+            # the record ends where the browser check did, once the server has
+            # finished printing what the last journey caused. The log file
+            # keeps everything.
+            recorded = _quiet_size(log)
             _stop(process)
     with log_path.open("rb") as file:
         observation.server_log = file.read(recorded).decode(errors="replace").splitlines()

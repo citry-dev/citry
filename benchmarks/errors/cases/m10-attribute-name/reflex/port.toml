@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'titel="Board"' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'title="Board",'
+new = 'titel="Board",'

@@ -100,6 +100,9 @@ def command_env(
     base["NEXT_TELEMETRY_DISABLED"] = "1"
     base["NUXT_TELEMETRY_DISABLED"] = "1"
     base["PYTHONDONTWRITEBYTECODE"] = "1"
+    # A Python server writes what it prints straight to its log, so it is
+    # there while the page is checked, not only when the server exits.
+    base["PYTHONUNBUFFERED"] = "1"
     for key, value in (extra or {}).items():
         base[key] = placeholder(value, framework, env, work, port, backend_port)
     return base
