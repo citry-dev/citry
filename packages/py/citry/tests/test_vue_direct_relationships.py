@@ -1087,7 +1087,7 @@ def test_component_run_does_not_hide_duplicate_render_object() -> None:
     rendered.parts.append(child)
     with pytest.raises(
         UnsupportedPreparedView,
-        match=r"duplicate explicit #c-key|render occurrence appears more than once",
+        match=r"has a duplicate #c-key|render occurrence appears more than once",
     ):
         _view(rendered)
 
@@ -3114,7 +3114,7 @@ def test_repeated_same_component_site_with_same_explicit_key_is_rejected() -> No
         def template_data(self, kwargs, slots):
             return {"values": (1, 2)}
 
-    with pytest.raises(Exception, match="duplicate explicit #c-key"):
+    with pytest.raises(Exception, match="has a duplicate #c-key"):
         _view(render_prepared_direct(Root()))
 
 

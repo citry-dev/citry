@@ -42,6 +42,9 @@ string parsing every payload gets (``str`` to ``UUID`` / ``datetime`` /
 additionally bind to declared ``int`` / ``float`` / ``bool`` fields. The
 JSON codecs build plain dicts instead, so JSON payloads keep the strict
 rules (a string where the schema declares ``int`` is a per-field error).
+The one exception is a call the browser runtime collected from a form: it
+carries ``argsSource: "form"``, and the dispatcher builds its args as
+``StringArgs`` too, so a form binds the same with or without JavaScript.
 """
 
 from __future__ import annotations

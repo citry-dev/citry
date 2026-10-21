@@ -18,7 +18,11 @@ The coercion table, exactly (anything else is a per-field error):
 - ``str`` to ``UUID`` / ``datetime`` / ``date`` / ``time`` / ``Decimal`` /
   ``Enum`` (ISO strings, by enum value),
 - ``list`` to ``tuple`` / ``set``,
-- nested annotated classes from objects.
+- nested annotated classes from objects,
+- a ``Literal[...]`` field accepts a value equal to one of its listed
+  values after that value's own rule above (an Enum member by its value),
+  so ``"2"`` from a form post binds to ``Literal[1, 2]`` and ``true`` never
+  matches ``1``.
 
 The binding is source-aware (design 3.3). A JSON payload stays strict for
 ``int`` / ``float`` / ``bool`` fields: JSON expresses those types natively,
@@ -27,7 +31,9 @@ strings cannot express them (every value arrives as a string), so for
 payloads from those codecs strings additionally bind to declared ``int`` /
 ``float`` / ``bool`` fields (``"5"`` binds to ``int``; ``bool`` accepts the
 HTML form vocabulary ``"true"`` / ``"false"`` / ``"1"`` / ``"0"`` / ``"on"``).
-The codecs mark such payloads by building them as
+A form submitted through the browser runtime gets the same rule: the browser
+sends the form's text and marks the call with ``argsSource: "form"``. The
+codecs and the dispatcher mark such payloads by building them as
 [`StringArgs`][citry.ext.events.schemas.StringArgs]; see ``validate_args``.
 
 Deliberately absent: ORM-model-by-primary-key coercion (an argument must
@@ -45,7 +51,7 @@ from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import UnionType
-from typing import Any, NamedTuple, Union, get_args, get_origin, get_type_hints
+from typing import Any, Literal, NamedTuple, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from citry.ext.events.files import UploadedFile
@@ -109,16 +115,18 @@ class ValidationResult:
 
 class StringArgs(dict[str, Any]):
     """
-    An args payload whose values arrived as strings (a form post or a GET
-    query string).
+    An args payload whose values arrived as strings (a form post, a GET
+    query string, or a form the browser runtime collected).
 
     The string transports cannot express numbers or booleans natively, so
     the form and query codecs (``codecs.py``) build the args they decode as
     this class, and [`validate_args`][citry.ext.events.schemas.validate_args]
     then additionally binds strings to declared ``int`` / ``float`` /
-    ``bool`` fields (the source-aware rule of design 3.3). A JSON payload is
-    decoded into plain dicts, so nothing on the wire can produce this class
-    and JSON validation stays strict.
+    ``bool`` fields (the source-aware rule of design 3.3). The dispatcher
+    also builds it for a JSON call marked ``argsSource: "form"``, which the
+    browser sends when it collected the args from a form, so both ways of
+    submitting a form bind the same. Any other JSON payload is decoded into
+    plain dicts, so its validation stays strict.
     """
 
 
@@ -178,7 +186,7 @@ def validate_args(
             design 3.3 (``"5"`` binds to ``int``; ``bool`` accepts exactly
             ``"true"`` / ``"false"`` / ``"1"`` / ``"0"`` / ``"on"``).
             ``None`` (the default) reads the answer off the payload itself:
-            ``True`` when a codec built it as
+            ``True`` when a codec or the dispatcher built it as
             [`StringArgs`][citry.ext.events.schemas.StringArgs], else the
             strict JSON behavior. A Pydantic-model schema is unaffected
             either way: Pydantic applies its own coercion rules.
@@ -260,6 +268,74 @@ def _schema_info(schema_cls: type) -> tuple[type, tuple[_FieldSpec, ...]]:
         if field.init
     )
     return converted, specs
+
+
+def payload_fields(schema_cls: type) -> tuple[_FieldSpec, ...] | None:
+    """
+    Return the fields a ``data`` class accepts from the wire, for ``citry check``.
+
+    Returns None for a Pydantic model, whose own rules decide what it
+    accepts, and for a class whose annotations cannot be resolved, which
+    fails at the first call anyway.
+    """
+    if _is_pydantic_model(schema_cls):
+        return None
+    try:
+        return _schema_info(schema_cls)[1]
+    except Exception:  # noqa: BLE001 - an unresolvable annotation is reported when the handler runs
+        return None
+
+
+def declared_field_names(schema_cls: type) -> frozenset[str]:
+    """
+    Return the field names a ``data`` class takes from the wire, without resolving its annotations.
+
+    The dispatcher reads this before it drops the host's CSRF fields from a
+    call, so a class that declares such a field still receives it. A
+    Pydantic model's field aliases count too, because Pydantic reads a
+    payload key by its alias.
+    """
+    if _is_pydantic_model(schema_cls):
+        # ``model_fields`` is Pydantic v2; ``__fields__`` the v1 spelling.
+        model_fields = getattr(schema_cls, "model_fields", None) or getattr(schema_cls, "__fields__", {})
+        names = set(model_fields)
+        for info in model_fields.values():
+            names.update(_pydantic_input_names(info))
+        return frozenset(names)
+    converted = convert_schema_class(schema_cls)
+    return frozenset(field.name for field in fields(converted) if field.init)
+
+
+def _pydantic_input_names(info: Any) -> set[str]:
+    """Return every top-level payload key a Pydantic field reads: its alias and its validation aliases."""
+    names: set[str] = set()
+    alias = getattr(info, "alias", None)
+    if isinstance(alias, str):
+        names.add(alias)
+    # Pydantic v2's `validation_alias` is a string, an `AliasChoices` of
+    # several, or an `AliasPath` whose first step is the top-level key.
+    validation_alias = getattr(info, "validation_alias", None)
+    choices = getattr(validation_alias, "choices", None)
+    for choice in choices if isinstance(choices, list) else [validation_alias]:
+        path = getattr(choice, "path", None)
+        first = path[0] if isinstance(path, list) and path else choice
+        if isinstance(first, str):
+            names.add(first)
+    return names
+
+
+def json_value_error(annotation: Any, value: Any, *, bind_strings: bool = False) -> str | None:
+    """
+    Return the message the server gives for ``value`` in a field annotated ``annotation``, or None when it fits.
+
+    By default ``value`` is checked as a JSON payload is, without the string
+    rules of a form post, because the browser sends ``@c-*`` arguments as
+    JSON. ``bind_strings`` applies those rules, as for a GET query string.
+    """
+    errors: dict[str, str] = {}
+    if _coerce(value, annotation, "", errors, bind_strings=bind_strings) is not _INVALID:
+        return None
+    return next(iter(errors.values()), None)
 
 
 def _validate_object(
@@ -347,6 +423,8 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
     origin = get_origin(annotation)
     if origin in (Union, UnionType):
         return _coerce_union(value, annotation, path, errors, bind_strings=bind_strings)
+    if origin is Literal:
+        return _coerce_literal(value, annotation, path, errors, bind_strings=bind_strings)
     if origin in (list, tuple, set):
         return _coerce_container(value, annotation, origin, path, errors, bind_strings=bind_strings)
     if origin is dict or origin is Mapping:
@@ -546,6 +624,37 @@ def _coerce_union(value: Any, annotation: Any, path: str, errors: dict[str, str]
             return coerced
     names = " or ".join(_type_name(member) for member in non_none)
     return _fail(errors, path, f"Expected {names}, got {_value_type_name(value)}.")
+
+
+def _coerce_literal(value: Any, annotation: Any, path: str, errors: dict[str, str], *, bind_strings: bool) -> Any:
+    """Coerce a ``Literal[...]`` value: it must equal one of the listed values, with that value's type."""
+    members = get_args(annotation)
+    for member in members:
+        # The wire carries an Enum member as its value, so the value is what
+        # the payload must match, read by the value's own type.
+        expected = member.value if isinstance(member, Enum) else member
+        # Each listed value is read by its own type's rule, so a form post's
+        # "2" still binds to `Literal[1, 2]`, as for a plain field of that type.
+        scratch: dict[str, str] = {}
+        coerced = _coerce(value, type(expected), path, scratch, bind_strings=bind_strings)
+        # Python counts True == 1, so the type is compared too: JSON keeps
+        # `true` and `1` apart, and so does the field.
+        if coerced is not _INVALID and type(coerced) is type(expected) and coerced == expected:
+            return member
+    # Values are shown as the browser writes them, an Enum member by its value.
+    listed = ", ".join(_literal_value_text(member.value if isinstance(member, Enum) else member) for member in members)
+    return _fail(errors, path, f"Expected one of {listed}, got {_literal_value_text(value)}.")
+
+
+def _literal_value_text(value: Any) -> str:
+    """Show a scalar itself, in JSON spelling, so a wrong choice reads as that choice; anything else by its type."""
+    if isinstance(value, str):
+        return _short_repr(value)
+    if isinstance(value, bool) or value is None:
+        return _value_type_name(value) if value is None else str(value).lower()
+    if isinstance(value, (int, float)):
+        return repr(value)
+    return _value_type_name(value)
 
 
 def _coerce_container(

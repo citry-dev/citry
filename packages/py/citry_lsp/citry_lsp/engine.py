@@ -8,6 +8,7 @@ import json
 import re
 import tokenize
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
@@ -19,10 +20,16 @@ from citry import LspPosition, LspRange
 from citry._browser_expressions import _normalized_dynamic_slot_source
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
+    BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
     BROWSER_INVALID_STATE_BINDING_TARGET,
     BROWSER_MISSING_COMPONENT_PROP,
+    BROWSER_MISSING_FORM_FIELD,
+    BROWSER_MISSING_SERVER_EVENT_FIELD,
+    BROWSER_UNKNOWN_FORM_FIELD,
     BROWSER_UNKNOWN_SERVER_EVENT,
+    BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
     BROWSER_UNKNOWN_STATE_FIELD,
+    CHECK_TEMPLATE_NOT_CHECKED,
     I18N_ARGUMENT_INVALID,
     I18N_CATALOG_INVALID,
     I18N_UNKNOWN_MESSAGE,
@@ -37,6 +44,15 @@ from citry._html_attribute_values import ENUMERATED_VALUES as ENUMERATED_ATTRIBU
 from citry._html_attribute_values import HTML_ELEMENTS as HTML_ELEMENT_NAMES
 from citry._i18n_directives import looks_like_i18n_binding
 from citry._i18n_guards import i18n_configured_guarded_calls
+from citry._markup_lint import MARKUP_LINT_RULES
+from citry._registry_lint import (
+    ServerEventPayload,
+    server_event_calls,
+    server_event_form_findings,
+    server_event_forms,
+    server_event_payload_findings,
+    server_event_payload_from_description,
+)
 from citry._source_lines import source_lines
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
@@ -53,6 +69,8 @@ from citry.analysis import (
     BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
+    MarkupLintConsumer,
+    MarkupLintFinding,
     MisspelledDirectiveFinding,
     MisspelledDirectiveLintConsumer,
     ShadowPythonDocument,
@@ -94,11 +112,16 @@ from citry.analysis import (
     css_data_completion_at,
     css_data_reference_at,
     css_data_references,
+    discover_untraced_component_templates,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_component_js_prop_assignments,
+    lint_invalid_vue_expressions,
+    lint_markup,
     lint_misspelled_directives,
+    lint_prop_assignments,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -109,6 +132,7 @@ from citry.analysis import (
     lint_vue_python_variables,
     mark_literal_findings,
     merge_json_wire_types,
+    project_module_exists,
     python_application_lint_variable_range,
     python_class_asset_resolution_signature,
     python_class_defines_direct_method,
@@ -158,10 +182,12 @@ from citry_lsp.type_analysis import is_project_source_file
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Sequence
 
-    from citry._linting import TemplateVariableInfo
+    from citry._linting import TemplateLintInfo, TemplateVariableInfo
     from citry._template_data_source import TemplateDataSourceShape
+    from citry.settings import LintSeverity
+    from citry_core.template_parser import Template
     from citry_lsp.catalog import CatalogIndex, ComponentRecord, FieldRecord, SchemaRecord
     from citry_lsp.project import (
         I18nOutputRecord,
@@ -558,19 +584,22 @@ class DocumentState:
         self._analysis_revision += 1
         self.source = source
         self.version = version
+        # The loaded app also names this file's components whose base class
+        # comes from another module, which reading the file alone misses.
+        app_components = _app_components(project, self.uri) if self.language_id == "python" else None
         discovery: tuple[TemplateRegion, ...]
         if self.language_id == "citry-html" or (
             self.language_id == "html" and project.catalog is not None and project.catalog.owns_template_uri(self.uri)
         ):
             discovery = (standalone_region(source),)
         elif self.language_id == "python":
-            discovery = discover_python_regions(source).regions
+            discovery = discover_python_regions(source, app_components=app_components).regions
         else:
             discovery = ()
         if self.language_id == "css" and project.catalog is not None and project.catalog.asset_owners(self.uri, "css"):
             self.css_regions = (standalone_css_region(source),)
         elif self.language_id == "python":
-            self.css_regions = discover_python_css_regions(source)
+            self.css_regions = discover_python_css_regions(source, app_components=app_components)
         else:
             self.css_regions = ()
         if (
@@ -580,7 +609,7 @@ class DocumentState:
         ):
             self.js_regions = (standalone_js_region(source),)
         elif self.language_id == "python":
-            self.js_regions = discover_python_js_regions(source)
+            self.js_regions = discover_python_js_regions(source, app_components=app_components)
         else:
             self.js_regions = ()
         self.messages_regions = discover_python_messages_regions(source) if self.language_id == "python" else ()
@@ -593,6 +622,8 @@ class DocumentState:
             if result is not None:
                 parsed[region.key] = result
                 self.last_good[region.key] = result
+        if self.language_id == "python":
+            diagnostics.extend(_untraced_template_diagnostics(self.uri, source, project, app_components))
         self.parsed = parsed
         self.diagnostics = tuple(diagnostics)
 
@@ -614,6 +645,93 @@ class DocumentState:
     def js_region_at(self, position: types.Position) -> JsRegion | None:
         """Return the current authored JavaScript region containing a position."""
         return js_region_at_position(self.js_regions, _citry_position(position))
+
+
+def _app_components(project: ProjectState, uri: str) -> dict[str, bool] | None:
+    """
+    Name the classes in one Python file that the loaded app registers as components.
+
+    Reading one file proves a class is a component only when its base is
+    Citry's own class or a component in the same file. The app records which
+    class body declares each inline template, JavaScript, and CSS, so a
+    component whose base class comes from another module is found through
+    those records. Each name maps to whether every component that renders
+    that class's template uses Citry's own template language, so a template
+    in another language is never parsed as Citry.
+
+    Returns ``None`` without a loaded app, so discovery reads the file alone.
+    """
+    catalog = project.catalog
+    if catalog is None:
+        return None
+    names: dict[str, None] = {}
+    native: dict[str, bool] = {}
+    for kind, qualname, component in catalog.inline_assets_in(uri):
+        # Discovery reads only module-level classes, so a nested class
+        # cannot be matched by name.
+        if "." in qualname:
+            continue
+        names[qualname] = None
+        if kind != "template":
+            continue
+        # A worker that cannot tell the template language gives no answer,
+        # which keeps the template unchecked rather than guessed.
+        answer = project.source_analysis.native_template(component) if project.source_analysis is not None else None
+        native[qualname] = native.get(qualname, True) and answer is True
+    # A class that the app shows only as the owner of JavaScript or CSS has no
+    # component that renders its template, so its template stays skipped.
+    return {name: native.get(name, False) for name in names}
+
+
+def _untraced_template_diagnostics(
+    uri: str,
+    source: str,
+    project: ProjectState,
+    app_components: Mapping[str, bool] | None = None,
+) -> list[types.Diagnostic]:
+    """
+    Point out each class whose template the editor does not check, because its base class comes from another module.
+
+    The editor finds templates by reading one file at a time, so it cannot
+    tell that such a class is a component. Once the app is loaded, the
+    classes in ``app_components`` are found and not reported; a class added
+    or renamed since the app loaded is still reported until the app reloads.
+    Nothing is wrong with the code, so this is information, not a warning.
+    """
+    path = file_uri_path(uri)
+    workspace = project.status.workspace
+    if path is None or not workspace:
+        return []
+    root = Path(workspace).resolve()
+    file = path.resolve()
+    if not file.is_relative_to(root):
+        return []
+    lines = source_lines(source)
+    diagnostics: list[types.Diagnostic] = []
+    for untraced in discover_untraced_component_templates(
+        source,
+        is_project_module=lambda module, level: project_module_exists(module, level, file=file, root=root),
+        app_components=app_components,
+    ):
+        line = lines[untraced.line - 1] if untraced.line <= len(lines) else ""
+        diagnostics.append(
+            types.Diagnostic(
+                range=types.Range(
+                    types.Position(untraced.line - 1, _utf16_units(line[: untraced.start_column])),
+                    types.Position(untraced.line - 1, _utf16_units(line[: untraced.end_column])),
+                ),
+                message=render_diagnostic(
+                    CHECK_TEMPLATE_NOT_CHECKED,
+                    component=untraced.component_name,
+                    base=untraced.base,
+                ),
+                severity=types.DiagnosticSeverity.Information,
+                code=CHECK_TEMPLATE_NOT_CHECKED,
+                code_description=types.CodeDescription(diagnostic_documentation_url(CHECK_TEMPLATE_NOT_CHECKED)),
+                source="citry",
+            )
+        )
+    return diagnostics
 
 
 def template_lint_diagnostics(
@@ -688,7 +806,7 @@ def _html_attribute_lint_diagnostics(
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> tuple[types.Diagnostic, ...]:
-    """Report Alpine leftovers, invalid enumerated values, and misspelled directives with each owner's severities."""
+    """Report the template rules that need no component data, with each owner's severities."""
     analysis = project.analysis
     parser = analysis.parse_template if analysis is not None else parse_template
     diagnostics: list[types.Diagnostic] = []
@@ -699,6 +817,7 @@ def _html_attribute_lint_diagnostics(
         consumers: list[AlpineAttributeLintConsumer] = []
         value_consumers: list[AttributeValueLintConsumer] = []
         directive_consumers: list[MisspelledDirectiveLintConsumer] = []
+        markup_consumers: list[MarkupLintConsumer] = []
         if analysis is not None:
             for owner in _template_consumers(document, region, project, open_documents):
                 # An owner missing from the analysis still belongs to this
@@ -707,6 +826,11 @@ def _html_attribute_lint_diagnostics(
                 consumers.append(AlpineAttributeLintConsumer(lint.rule_alpine_attribute, lint.rule_alpine_cloak))
                 value_consumers.append(AttributeValueLintConsumer(lint.rule_invalid_attribute_value))
                 directive_consumers.append(MisspelledDirectiveLintConsumer(lint.rule_misspelled_directive))
+                # Vue passes a parent's attributes to the root element only
+                # of a component with browser code.
+                markup_consumers.append(
+                    _markup_lint_consumer(lint, root_may_receive_attributes=_may_have_browser_code(owner, project))
+                )
             if not consumers:
                 # No proven owner: the application policy still applies,
                 # which is closer to the author's intent than the defaults.
@@ -715,6 +839,7 @@ def _html_attribute_lint_diagnostics(
                 )
                 value_consumers.append(AttributeValueLintConsumer(analysis.lint.rule_invalid_attribute_value))
                 directive_consumers.append(MisspelledDirectiveLintConsumer(analysis.lint.rule_misspelled_directive))
+                markup_consumers.append(_markup_lint_consumer(analysis.lint, root_may_receive_attributes=True))
         else:
             # Before the application loads, the owners' own Lint classes,
             # read from the current text, are all that is known. With no
@@ -722,10 +847,20 @@ def _html_attribute_lint_diagnostics(
             consumers.extend(lint.alpine_consumer() for lint in region.owner_lint)
             value_consumers.extend(lint.attribute_value_consumer() for lint in region.owner_lint)
             directive_consumers.extend(lint.directive_consumer() for lint in region.owner_lint)
-        findings: list[AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding] = [
+            markup_consumers.extend(lint.markup_consumer() for lint in region.owner_lint)
+        findings: list[
+            AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding | MarkupLintFinding
+        ] = [
             *lint_alpine_attributes(parsed.template, consumers, parse_nested=parser),
             *lint_attribute_values(parsed.template, value_consumers, parse_nested=parser),
             *lint_misspelled_directives(parsed.template, directive_consumers, parse_nested=parser),
+            *lint_markup(parsed.template, markup_consumers, parse_nested=parser),
+            *lint_invalid_vue_expressions(
+                parsed.template,
+                browser_expressions(parsed.template, parse_nested=parser),
+                markup_consumers,
+                parse_nested=parser,
+            ),
         ]
         for finding in findings:
             try:
@@ -749,6 +884,35 @@ def _html_attribute_lint_diagnostics(
                 )
             )
     return tuple(diagnostics)
+
+
+def _may_have_browser_code(owner: ComponentRecord, project: ProjectState) -> bool:
+    """Return whether Vue may render a component, so a parent's attributes may reach its single root element."""
+    if owner.assets.js.kind != "none" or owner.schemas.js_data.kind != "absent":
+        return True
+    # Browser data, State, or event handlers may make Vue render the
+    # component even without JavaScript of its own, as `citry check` also
+    # assumes. Anything the analysis does not show counts as browser code.
+    source = project.source_analysis
+    if source is None:
+        return True
+    js_data = source.js_data_chain(owner)
+    state = source.state_fields(owner)
+    handlers = source.event_handlers(owner)
+    if js_data is None or state is None or handlers is None:
+        return True
+    # The chain ends at the class that defines the `js_data()` that runs;
+    # only Component's own default sends nothing.
+    overrides_js_data = not js_data or (js_data[-1].module, js_data[-1].qualname) != ("citry.component", "Component")
+    return overrides_js_data or bool(state) or bool(handlers)
+
+
+def _markup_lint_consumer(lint: TemplateLintInfo, *, root_may_receive_attributes: bool) -> MarkupLintConsumer:
+    """Copy one component's severities for the HTML rules from its lint record."""
+    return MarkupLintConsumer(
+        **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
+        root_may_receive_attributes=root_may_receive_attributes,
+    )
 
 
 def i18n_diagnostics(
@@ -1341,7 +1505,14 @@ def browser_diagnostics(
                     expressions, _consumer_js_sources(consumers, project, document, open_documents)
                 ),
                 *lint_undeclared_component_listeners(
-                    expressions, lambda tag: _tag_js_source(tag, project, document, open_documents)
+                    expressions,
+                    lambda tag: _tag_js_source(tag, project, document, open_documents),
+                    severities=_owner_rule_severities(consumers, project, "rule_undeclared_component_event"),
+                ),
+                *lint_prop_assignments(
+                    expressions,
+                    _consumer_js_sources(consumers, project, document, open_documents),
+                    severities=_owner_rule_severities(consumers, project, "rule_prop_assignment"),
                 ),
             )
         )
@@ -1388,6 +1559,13 @@ def browser_diagnostics(
                         event.end_index,
                     )
                 )
+            # The handler names are current, so their arguments and the forms
+            # that submit to them can be checked against what each accepts.
+            diagnostics.extend(
+                _server_event_payload_diagnostics(
+                    region, parsed.template, consumers, document, project, open_documents, parse_nested=parser
+                )
+            )
     for js_region in document.js_regions:
         js_consumers = _js_consumers(document, js_region, project, open_documents)
         data_names = _closed_js_asset_data_names(document, js_region, project, open_documents)
@@ -1417,7 +1595,13 @@ def browser_diagnostics(
             )
         diagnostics.extend(
             _vue_finding_diagnostic(js_region, finding)
-            for finding in lint_undeclared_component_js_emits(js_region.source_map.template_source)
+            for finding in (
+                *lint_undeclared_component_js_emits(js_region.source_map.template_source),
+                *lint_component_js_prop_assignments(
+                    js_region.source_map.template_source,
+                    severities=_owner_rule_severities(js_consumers, project, "rule_prop_assignment"),
+                ),
+            )
         )
         js_lint_consumers = _component_js_lint_consumers(js_consumers, project)
         if js_lint_consumers is not None:
@@ -1510,6 +1694,18 @@ def _consumer_js_sources(
             return ()
         sources.append(resolved[0])
     return tuple(sources)
+
+
+def _owner_rule_severities(
+    consumers: Sequence[ComponentRecord],
+    project: ProjectState,
+    rule: str,
+) -> list[LintSeverity]:
+    """Return each owner's severity for one ``rule_*`` setting, the application's for an owner the analysis lacks."""
+    analysis = project.analysis
+    if analysis is None:
+        return []
+    return [getattr(analysis.component_lint.get(owner.definition_id, analysis.lint), rule) for owner in consumers]
 
 
 def _tag_js_source(
@@ -2589,8 +2785,13 @@ def _component_template_ast(
         if python_source is None:
             return None
         owner_name = asset.owner_qualname.rsplit(".", 1)[-1]
+        # Find the owner the way the open file finds it, including a class
+        # whose base class comes from another module.
+        app_components = _app_components(project, asset.owner_file.resolve().as_uri())
         matches = [
-            region for region in discover_python_regions(python_source).regions if region.component_name == owner_name
+            region
+            for region in discover_python_regions(python_source, app_components=app_components).regions
+            if region.component_name == owner_name
         ]
         if len(matches) != 1:
             return None
@@ -8211,7 +8412,14 @@ def _component_js_asset_source(
     if source is None:
         return None
     owner_name = asset.owner_qualname.rsplit(".", 1)[-1]
-    matches = [region for region in discover_python_js_regions(source) if region.component_name == owner_name]
+    # Find the owner the way the open file finds it, including a class whose
+    # base class comes from another module.
+    app_components = _app_components(project, asset.owner_file.resolve().as_uri())
+    matches = [
+        region
+        for region in discover_python_js_regions(source, app_components=app_components)
+        if region.component_name == owner_name
+    ]
     if len(matches) != 1:
         return None
     source_map = matches[0].source_map
@@ -10707,6 +10915,232 @@ def _event_handler_location(
     if source_range is None:
         return None
     return types.Location(handler.source_file.resolve().as_uri(), _range(source_range))
+
+
+# The setting that controls each server-event payload and form-field finding.
+_SERVER_EVENT_PAYLOAD_RULES = {
+    BROWSER_UNKNOWN_SERVER_EVENT_FIELD: "rule_unknown_server_event_field",
+    BROWSER_MISSING_SERVER_EVENT_FIELD: "rule_missing_server_event_field",
+    BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD: "rule_incompatible_server_event_field",
+    BROWSER_UNKNOWN_FORM_FIELD: "rule_unknown_form_field",
+    BROWSER_MISSING_FORM_FIELD: "rule_missing_form_field",
+}
+
+
+def _server_event_payload_diagnostics(
+    region: TemplateRegion,
+    template: Template,
+    consumers: tuple[ComponentRecord, ...],
+    document: DocumentState,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+    *,
+    parse_nested: Callable[[str], Template],
+) -> list[types.Diagnostic]:
+    """
+    Report `@c-*` arguments and form fields the server would reject, as `citry check` does.
+
+    The editor cannot import the app, so it reads what each handler accepts
+    from the handler descriptions the app worker copied, and only while the
+    handler and its data class are unchanged since the app loaded.
+    """
+    payloads = _shared_server_event_payloads(consumers, document, project, open_documents)
+    if not payloads:
+        return []
+    found = [
+        finding
+        for call in server_event_calls(template, frozenset(payloads), parse_nested=parse_nested)
+        for finding in server_event_payload_findings(call, payloads[call.handler])
+    ]
+    for form in server_event_forms(template, frozenset(payloads), parse_nested=parse_nested):
+        found.extend(
+            server_event_form_findings(form, payloads[form.call.handler], dropped_names=project.csrf_field_names)
+        )
+    diagnostics: list[types.Diagnostic] = []
+    for finding in found:
+        severities = _owner_rule_severities(consumers, project, _SERVER_EVENT_PAYLOAD_RULES[finding.code])
+        active = [severity for severity in severities if severity != "ignore"]
+        if not active:
+            continue
+        diagnostics.append(
+            types.Diagnostic(
+                range=_range(region.source_map.map_range(finding.start_index, finding.end_index)),
+                message=finding.message,
+                severity=types.DiagnosticSeverity.Error if "error" in active else types.DiagnosticSeverity.Warning,
+                code=finding.code,
+                code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
+                source="citry",
+            )
+        )
+    return diagnostics
+
+
+def _shared_server_event_payloads(
+    consumers: tuple[ComponentRecord, ...],
+    document: DocumentState,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> dict[str, ServerEventPayload]:
+    """
+    Return what each handler accepts, for the handlers every owner of the template shares.
+
+    A template shared by several components sends each binding to the one
+    that renders it, so a handler is kept only when every owner describes it
+    the same way. A handler whose method or data class was edited since the
+    app loaded is left out until the app reloads.
+    """
+    if not consumers or project.source_analysis is None:
+        return {}
+    shared: dict[str, tuple[Mapping[str, object], bool]] | None = None
+    for component in consumers:
+        records = project.source_analysis.event_handlers(component)
+        if records is None:
+            return {}
+        current: dict[str, tuple[Mapping[str, object], bool]] = {}
+        for description in _handler_descriptions(component):
+            name = description.get("name")
+            record = next((item for item in records if item.name == name), None)
+            if not isinstance(name, str) or record is None:
+                continue
+            if not _handler_description_is_current(record, description, document, open_documents):
+                continue
+            methods = description.get("methods")
+            current[name] = (description, isinstance(methods, tuple) and "GET" in methods)
+        if shared is None:
+            shared = current
+            continue
+        shared = {
+            name: (description, query_string or current[name][1])
+            for name, (description, query_string) in shared.items()
+            if name in current and _same_payload_description(description, current[name][0])
+        }
+    payloads: dict[str, ServerEventPayload] = {}
+    for name, (description, query_string) in (shared or {}).items():
+        payload = server_event_payload_from_description(description)
+        if payload is not None:
+            # A GET from any owner may send the arguments as a query string.
+            payloads[name] = replace(payload, query_string=payload.query_string or query_string)
+    return payloads
+
+
+def _handler_descriptions(component: ComponentRecord) -> tuple[Mapping[str, object], ...]:
+    """Return the handler descriptions in one component's Events introspection entry."""
+    publication = component.extensions.get("events")
+    data = publication.get("data") if isinstance(publication, Mapping) else None
+    handlers = data.get("handlers") if isinstance(data, Mapping) else None
+    if not isinstance(handlers, tuple):
+        return ()
+    return tuple(handler for handler in handlers if isinstance(handler, Mapping))
+
+
+def _same_payload_description(left: Mapping[str, object], right: Mapping[str, object]) -> bool:
+    """Return whether two handler descriptions accept the same arguments."""
+    return all(left.get(key) == right.get(key) for key in ("request_schema", "extra_fields", "validated_by"))
+
+
+def _handler_description_is_current(
+    record: SourceEventRecord,
+    description: Mapping[str, object],
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> bool:
+    """
+    Return whether the handler and its data class read the same now as when the app loaded.
+
+    The description describes the app as it was imported, from the files on
+    disk, so an unsaved edit to the handler's method or to its data class
+    makes it stale. The editor reloads the app when a Python file is saved.
+    """
+    if not _definition_unchanged(record.source_file, record.qualname, document, open_documents):
+        return False
+    if description.get("request_schema") is None:
+        return True
+    if record.data_file is not None and record.data_qualname is not None:
+        return _definition_unchanged(record.data_file, record.data_qualname, document, open_documents)
+    # The worker could not say where the class is defined, so any unsaved
+    # Python file may hold it.
+    return open_documents is None or not _any_unsaved_python(open_documents)
+
+
+def _definition_unchanged(
+    source_file: Path,
+    qualname: str,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> bool:
+    """Return whether a class or function reads the same in the editor as in the file on disk."""
+    documents = {document.uri: document, **(open_documents or {})}
+    found_open, current = _synchronized_document_source(source_file, documents)
+    # A file no editor buffer holds is the file on disk, which the app read.
+    if not found_open:
+        return True
+    saved = _saved_python_source(source_file)
+    if current is None or saved is None:
+        return False
+    if current == saved:
+        return True
+    found = _python_definition_source(current, qualname)
+    return found is not None and found == _python_definition_source(saved, qualname)
+
+
+def _saved_python_source(source_file: Path) -> str | None:
+    """Return a Python file's text on disk, or None when it cannot be read."""
+    try:
+        resolved = source_file.resolve()
+        stat = resolved.stat()
+    except (OSError, ValueError):
+        return None
+    return _saved_python_text(resolved, stat.st_mtime_ns, stat.st_size)
+
+
+# Every diagnostics pass compares the same few files with their saved text,
+# so each saved version is read once; a write changes the key.
+@lru_cache(maxsize=64)
+def _saved_python_text(resolved: Path, _mtime_ns: int, _size: int) -> str | None:
+    try:
+        raw = resolved.read_bytes()
+        encoding, _lines = tokenize.detect_encoding(io.BytesIO(raw).readline)
+        # Decode without newline translation: an editor buffer keeps the
+        # file's `\r\n` line endings, and the two texts must compare equal.
+        return raw.decode(encoding)
+    except (OSError, SyntaxError, UnicodeError):
+        return None
+
+
+# A file with many handlers asks for several definitions of the same text.
+@lru_cache(maxsize=256)
+def _python_definition_source(source: str, qualname: str) -> str | None:
+    """Return the text of the class or function at a dotted qualified name, or None when it is not there."""
+    try:
+        scope: list[ast.stmt] = ast.parse(source).body
+    except (SyntaxError, ValueError):
+        return None
+    node: ast.stmt | None = None
+    for part in qualname.split("."):
+        node = next(
+            (
+                statement
+                for statement in scope
+                if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+                and statement.name == part
+            ),
+            None,
+        )
+        if node is None:
+            return None
+        scope = node.body
+    return None if node is None else ast.get_source_segment(source, node)
+
+
+def _any_unsaved_python(open_documents: Mapping[str, DocumentState]) -> bool:
+    """Return whether any open Python document differs from its file on disk."""
+    for open_document in open_documents.values():
+        if open_document.language_id != "python":
+            continue
+        path = file_uri_path(open_document.uri)
+        if path is None or _saved_python_source(path) != open_document.source:
+            return True
+    return False
 
 
 def _js_data_type_diagnostics(

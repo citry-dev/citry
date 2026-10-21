@@ -26,8 +26,106 @@ attributes (`citry.template.alpine-attribute`,
 static HTML attribute value outside the keywords the HTML Standard allows
 (`citry.template.invalid-attribute-value`), and `rule_misspelled_directive`
 reports a `c-*` name that is not an HTML attribute of its element but looks
-like a misspelled directive, such as `c-iff`
-(`citry.template.misspelled-directive`). Steps below that describe Alpine attributes,
+like a misspelled directive, such as `c-iff`, or a `v-*` name one typing
+slip from a Vue directive, such as `v-iff`
+(`citry.template.misspelled-directive`).
+
+These rules read only the template's HTML, so they also run in
+`citry check --static` and in an editor that has not loaded the
+application:
+
+- `rule_misspelled_attribute` (`citry.template.misspelled-attribute`): a
+  misspelled attribute name.
+- `rule_misspelled_element` (`citry.template.misspelled-element`): a
+  misspelled tag.
+- `rule_unknown_aria_attribute` (`citry.template.unknown-aria-attribute`):
+  an `aria-*` name WAI-ARIA does not define.
+- `rule_invalid_nesting` (`citry.template.invalid-nesting`): a block
+  element inside `<p>`.
+- `rule_duplicate_id` (`citry.template.duplicate-id`): a literal `id` two
+  elements always render.
+- `rule_missing_image_alt` (`citry.template.missing-image-alt`): an
+  `<img>` without alt text.
+- `rule_invalid_model_target` (`citry.browser.invalid-model-target`):
+  `v-model` on an element that holds no value.
+- `rule_misspelled_event` (`citry.vue.misspelled-event`): a misspelled DOM
+  event in a listener.
+- `rule_invalid_vue_expression` (`citry.vue.invalid-expression`): a Vue
+  expression that is not valid JavaScript.
+
+`rule_undeclared_component_event` sets the severity of
+`citry.browser.undeclared-component-event`, which reads each child's
+`emits` and so needs the loaded application.
+
+These rules need facts that only the loaded application gives, so
+`citry check` runs them only with `--app`:
+
+- `rule_missing_component_key` (`citry.browser.missing-component-key`): a
+  component that `<c-for>` repeats without `#c-key`, when the template's
+  component or the repeated one makes the page use Vue.
+- `rule_prop_assignment` (`citry.browser.prop-assignment`): a component's
+  own template or JavaScript assigns to one of its props. The editor
+  reports it too once the application is loaded. A write in JavaScript is
+  at most a warning.
+- `rule_unknown_server_event_field`, `rule_missing_server_event_field`,
+  and `rule_incompatible_server_event_field`
+  (`citry.browser.*-server-event-field`): the literal arguments of an
+  `@c-*` call against the handler's `data` class, read as a GET query
+  string too for a handler that accepts GET.
+- `rule_unknown_form_field` and `rule_missing_form_field`
+  (`citry.browser.*-form-field`): the static control names of a `<form>`
+  whose `@c-submit` writes no arguments, against the same class. A missing
+  required field is reported only when the form shows every name it can
+  send. The host CSRF field names that the server removes
+  (`extensions_defaults["events"]["_csrf_field_names"]`) are skipped.
+
+- `rule_misspelled_css_variable` (`citry.css.misspelled-variable`): a
+  `var(--name)` one typing slip from a `css_data()` key.
+
+Each of these rules reports nothing when it cannot read its input:
+component JavaScript that does not parse, `css_data()` keys that are not
+all known, a Pydantic data class, or arguments that are not literals.
+
+The editor runs the five argument and form-field rules too, once the app
+worker has loaded the app. `citry check` builds what each handler accepts
+from the real data class. The editor builds the same record from the
+handler description in the Events introspection entry
+([`events.md`](events.md) section 9.1): `extra_fields` says whether an
+undeclared key fails the call, and `validated_by` says whether Citry's own
+rules check the values. The worker also copies the configured CSRF field
+names, so both tools skip the same controls.
+
+The editor skips a handler when the description cannot prove what the
+server accepts: a Pydantic model, a description without those keys from an
+older Citry, or a value the editor does not know. A field whose
+`type_display` names a class, rather than a plain JSON type, a `Literal`,
+a union, or a container of those, has its values left unchecked.
+
+The description reflects the files the app was imported from. The worker
+also sends where each handler's data class is defined, so the editor
+compares the handler's method and its data class in the open buffers with
+the files on disk, and skips the handler while either has unsaved changes.
+When the worker cannot place the data class, any unsaved Python buffer
+turns the rules off for that handler until the files are saved.
+
+Some classes set a literal template but extend a class imported from
+another module of the project, so reading one file cannot prove they are
+components. Once the app worker has loaded the app, the editor reads the
+component records' `owner_file` and `owner_qualname` for each inline
+template, JavaScript, and CSS, and passes the module-level class names in
+the open file to discovery as `app_components`. Discovery then accepts
+those classes even though the file does not show their base class, so their templates
+get the same checks as any other, and `citry check --types` gets them too
+through `project_check.py`. The worker also says, for each component,
+whether its effective `template_lang` is `None`; a template is read as
+Citry only when every component that renders it says so, because a base
+class in another module may set another template language. When the app
+fails to import, or a class was added or renamed after the app loaded,
+discovery does not accept it: `citry check --static` lists each such class
+as a note, and the editor marks it with an information diagnostic
+(`citry.check.template-not-checked`) until the app loads again.
+
+Steps below that describe Alpine attributes,
 magics, and scope record the earlier Alpine design; where they conflict with
 the Vue runtime, [`vue.md`](vue.md) and the code win.
 

@@ -430,7 +430,7 @@ class TestComponentKey:
             def template_data(self, kwargs, slots):
                 return {"items": kwargs["items"]}
 
-        with pytest.raises(UnsupportedPreparedView, match="duplicate explicit #c-key"):
+        with pytest.raises(UnsupportedPreparedView, match="has a duplicate #c-key"):
             _assemble(Parent(items=["same", "same"]))
 
     def test_component_key_is_kept_out_of_prepared_wire_and_compile_source(self):

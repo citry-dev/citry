@@ -158,6 +158,9 @@ class TestCitryInstance:
             rule_invalid_attribute_value="error",
             rule_misspelled_directive="warning",
             rule_i18n_cross_language_fallback="error",
+            rule_misspelled_attribute="warning",
+            rule_missing_image_alt="error",
+            rule_undeclared_component_event="error",
         )
         app = Citry(lint=lint)
         variables["later"] = str
@@ -184,6 +187,12 @@ class TestCitryInstance:
         assert LintSettings().rule_misspelled_directive == "error"
         assert lint.rule_i18n_cross_language_fallback == "error"
         assert LintSettings().rule_i18n_cross_language_fallback == "warning"
+        assert (lint.rule_misspelled_attribute, LintSettings().rule_misspelled_attribute) == ("warning", "error")
+        assert (lint.rule_missing_image_alt, LintSettings().rule_missing_image_alt) == ("error", "warning")
+        assert (lint.rule_undeclared_component_event, LintSettings().rule_undeclared_component_event) == (
+            "error",
+            "warning",
+        )
         assert lint.component_js_globals == {
             "analytics": Annotated[object, "Application analytics client."],
         }
@@ -212,6 +221,10 @@ class TestCitryInstance:
             LintSettings(rule_misspelled_directive=severity)
         with pytest.raises(ValueError, match="rule_i18n_cross_language_fallback"):
             LintSettings(rule_i18n_cross_language_fallback=severity)
+        with pytest.raises(ValueError, match="rule_invalid_vue_expression"):
+            LintSettings(rule_invalid_vue_expression=severity)
+        with pytest.raises(ValueError, match="rule_undeclared_component_event"):
+            LintSettings(rule_undeclared_component_event=severity)
 
     @pytest.mark.parametrize("name", ["", "two words", "class", "K"])  # noqa: RUF001
     def test_lint_settings_reject_names_without_exact_python_identity(self, name):

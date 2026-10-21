@@ -357,6 +357,10 @@ class SourceEventRecord:
     module: str
     qualname: str
     source_file: Path
+    # Where the handler's `data` class is defined, when the worker can tell,
+    # so the editor can see whether that class has unsaved edits.
+    data_file: Path | None = None
+    data_qualname: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,6 +387,7 @@ class SourceAnalysisIndex:
         "_js_data",
         "_js_schema",
         "_kwargs_classes",
+        "_native_template",
         "_state",
         "_state_resolution",
         "_template_asset",
@@ -410,6 +415,7 @@ class SourceAnalysisIndex:
         js_schema: dict[str, tuple[SourceClassRecord, ...] | None] = {}
         template_lint: dict[str, dict[str, SourceLintRecord]] = {}
         kwargs_classes: dict[str, KwargsWireClasses] = {}
+        native_template: dict[str, bool | None] = {}
         for raw_component in raw_components:
             (
                 definition_id,
@@ -440,6 +446,7 @@ class SourceAnalysisIndex:
             js_schema[definition_id] = js_schema_chain
             template_lint[definition_id] = lint_variables
             kwargs_classes[definition_id] = wire_classes
+            native_template[definition_id] = _source_native_template(raw_component, definition_id)
         expected = {component.definition_id for component in catalog.components}
         if set(template_data) != expected:
             raise ValueError("source analysis definition ids do not match the component catalog")
@@ -455,6 +462,7 @@ class SourceAnalysisIndex:
         self._js_schema = js_schema
         self._template_lint = template_lint
         self._kwargs_classes = kwargs_classes
+        self._native_template = native_template
 
     def template_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return copied provenance for one exact catalog component."""
@@ -504,6 +512,14 @@ class SourceAnalysisIndex:
         """Return a direct lint-variable mapping for one exact component."""
         return self._template_lint.get(component.definition_id, {}).get(name)
 
+    def native_template(self, component: ComponentRecord) -> bool | None:
+        """
+        Return whether the component renders its template as Citry's own template language.
+
+        ``None`` means the worker could not tell, or did not say.
+        """
+        return self._native_template.get(component.definition_id)
+
 
 def _source_component(
     value: object,
@@ -522,7 +538,7 @@ def _source_component(
     dict[str, SourceLintRecord],
     KwargsWireClasses,
 ]:
-    if type(value) is not dict or set(value) - {"js_schema", "kwargs_classes"} != {
+    if type(value) is not dict or set(value) - {"js_schema", "kwargs_classes", "native_template"} != {
         "definition_id",
         "css_data",
         "css_asset",
@@ -552,6 +568,40 @@ def _source_component(
     )
 
 
+def _events_csrf_field_names(value: object) -> frozenset[str]:
+    """Read the CSRF field names the worker copied from the app's Events settings."""
+    names = value.get("csrf_field_names") if type(value) is dict else None
+    if type(names) is not list or any(type(name) is not str for name in names):
+        raise ValueError("events analysis csrf_field_names must be a list of strings")
+    return frozenset(names)
+
+
+def _source_native_template(value: object, definition_id: str) -> bool | None:
+    """Read the worker's answer to whether a component's template is Citry's own template language."""
+    # A worker that does not send the key leaves the answer unknown, so the
+    # editor keeps skipping templates it cannot place.
+    native = value.get("native_template") if type(value) is dict else None
+    if native is not None and type(native) is not bool:
+        raise ValueError(f"source analysis native_template for {definition_id!r} must be a boolean or null")
+    return native
+
+
+def _source_data_class(value: object, definition_id: str) -> tuple[Path | None, str | None]:
+    """Read where a handler's data class is defined, or nothing when the worker could not tell."""
+    # A handler without data, or a class the worker cannot place, sends null.
+    if value is None:
+        return None, None
+    if type(value) is not dict or set(value) != {"file", "qualname"}:
+        raise ValueError(f"source analysis for {definition_id!r} has an invalid event data class")
+    source_file, qualname = value.get("file"), value.get("qualname")
+    if type(source_file) is not str or type(qualname) is not str or not qualname:
+        raise ValueError(f"source analysis for {definition_id!r} has an invalid event data class")
+    path = Path(source_file)
+    if not path.is_absolute():
+        raise ValueError(f"source analysis for {definition_id!r} has a relative event data class source")
+    return path.resolve(), qualname
+
+
 def _source_event_info(
     value: object,
     definition_id: str,
@@ -572,7 +622,7 @@ def _source_event_info(
     handlers: list[SourceEventRecord] = []
     names: set[str] = set()
     for raw_handler in raw_handlers or []:
-        if type(raw_handler) is not dict or set(raw_handler) != {
+        if type(raw_handler) is not dict or set(raw_handler) - {"data_class"} != {
             "name",
             "method_name",
             "module",
@@ -598,7 +648,10 @@ def _source_event_info(
         if not path.is_absolute():
             raise ValueError(f"source analysis for {definition_id!r} has a relative event source")
         names.add(name)
-        handlers.append(SourceEventRecord(name, method_name, module, qualname, path.resolve()))
+        data_file, data_qualname = _source_data_class(raw_handler.get("data_class"), definition_id)
+        handlers.append(
+            SourceEventRecord(name, method_name, module, qualname, path.resolve(), data_file, data_qualname)
+        )
     if raw_state is not None and type(raw_state) is not list:
         raise ValueError(f"source analysis for {definition_id!r} has invalid State fields")
     state_fields: list[SourceStateFieldRecord] = []
@@ -732,6 +785,9 @@ class ProjectState:
     catalog: CatalogIndex | None = None
     source_analysis: SourceAnalysisIndex | None = None
     i18n: I18nProjectIndex | None = None
+    # The host CSRF field names the app's server removes from an event call's
+    # arguments, so the form-field rule leaves those controls alone.
+    csrf_field_names: frozenset[str] = frozenset({"csrfmiddlewaretoken"})
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
     # ty's types for `js_data()` value parts, per file, source text, and class.
     _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
@@ -778,6 +834,14 @@ class ProjectState:
         parts unknown again until ty is asked about the new text.
         """
         return self._js_data_inferred.get((source_file.resolve(), source, qualname), {})
+
+    def js_data_files_with_non_json_answers(self) -> frozenset[Path]:
+        """Return the files where ty typed some `js_data()` value as a type JSON cannot carry."""
+        return frozenset(
+            source_file
+            for (source_file, _source, _qualname), answers in self._js_data_inferred.items()
+            if any(answer.unsupported for answer in answers.values())
+        )
 
     def has_js_data_inferred_types(self, source_file: Path, source: str, qualname: str) -> bool:
         """Return whether ty has answered for this exact source in this project generation."""
@@ -1027,9 +1091,10 @@ def _project_from_worker_output(
     try:
         source_analysis = SourceAnalysisIndex(payload.get("source_analysis"), catalog)
         raw_extensions = payload.get("extensions")
-        if type(raw_extensions) is not dict or set(raw_extensions) != {"i18n"}:
+        if type(raw_extensions) is not dict or set(raw_extensions) != {"i18n", "events"}:
             raise ValueError("extension analysis envelope is invalid")
         i18n = I18nProjectIndex(raw_extensions.get("i18n"))
+        csrf_field_names = _events_csrf_field_names(raw_extensions.get("events"))
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     project_output = payload.get("project_output")
@@ -1055,6 +1120,7 @@ def _project_from_worker_output(
         catalog=catalog,
         source_analysis=source_analysis,
         i18n=i18n,
+        csrf_field_names=csrf_field_names,
     )
 
 

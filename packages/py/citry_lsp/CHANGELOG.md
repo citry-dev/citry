@@ -11,6 +11,34 @@ All notable changes to `citry-lsp` are documented here.
 - Before your application loads, the editor uses the severity a
   component's own `Lint` class sets as a plain string, such as
   `rule_misspelled_directive = "ignore"`.
+- The editor reports a misspelled attribute, tag, `aria-*` name, or DOM
+  event (`titel`, `<dvi>`, `aria-expandd`, `@clik`), a `<div>` or other
+  block inside a `<p>`, a repeated `id`, an `<img>` without alt text, a
+  Vue expression that is not valid JavaScript, and `v-model` on an
+  element that holds no value. Each follows its `rule_*` setting, and
+  each works before your application loads.
+- The editor reports a typo in a Vue directive, such as `v-iff`, a
+  boolean attribute with a value such as `disabled="false"`, and, once
+  your application loads, a lowercase listener on a component for an
+  event the child does not declare, such as `@hdie`.
+- Once your application loads, the editor reports a component that
+  assigns to its own prop, such as `@click="open = false"`, at the
+  severity `rule_prop_assignment` sets.
+- Once your application loads, the editor reports `@c-*` arguments the
+  server would reject, such as `save({amont: 1})` or `save({amount: '1'})`
+  for an `int` field, and a control in a submitted form whose `name` the
+  handler does not accept, such as `<input name="qeury">`, as
+  `citry check` does. It skips a handler while the handler or its data
+  class has unsaved changes, and every handler of an application on an
+  older Citry, which does not say how the server checks the arguments.
+- The editor and `citry check --types` warn about a `js_data()` value that
+  ty types as a standard type JSON cannot carry, such as a
+  `PurePosixPath`, a `datetime`, or a set.
+- Once it has loaded your application, the editor checks the template,
+  JavaScript, and CSS of a component whose base class comes from another
+  module of your project, and `citry check --types` type-checks them.
+  Without the application, or for a class added or renamed since it
+  loaded, the editor marks the class with an information message.
 
 ### Changed
 

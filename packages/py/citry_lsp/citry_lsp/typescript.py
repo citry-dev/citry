@@ -31,6 +31,7 @@ from lsprotocol import types
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_MISSING_COMPONENT_PROP,
+    BROWSER_PROP_ASSIGNMENT,
     BROWSER_UNDECLARED_COMPONENT_EVENT,
     BROWSER_UNDECLARED_EMIT,
     BROWSER_UNKNOWN_SERVER_EVENT,
@@ -40,6 +41,7 @@ from citry._diagnostic_catalog import (
     I18N_ARGUMENT_INVALID,
     I18N_UNKNOWN_MESSAGE,
     TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+    VUE_INVALID_EXPRESSION,
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
 )
@@ -143,11 +145,15 @@ _CITRY_OWNED_CODES = frozenset(
         BROWSER_UNKNOWN_STATE_FIELD,
         BROWSER_MISSING_COMPONENT_PROP,
         BROWSER_INCOMPATIBLE_COMPONENT_PROP,
+        BROWSER_PROP_ASSIGNMENT,
         I18N_UNKNOWN_MESSAGE,
         I18N_ARGUMENT_INVALID,
         # A bound string such as `:dir="'rlt'"` is checked against the HTML
         # Standard's keywords, which also names the closest one.
         TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+        # A Vue expression with a syntax error is reported by Citry, so a
+        # TypeScript error on the same text, if any, is not shown twice.
+        VUE_INVALID_EXPRESSION,
     }
 )
 

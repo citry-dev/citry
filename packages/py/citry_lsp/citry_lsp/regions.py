@@ -6,7 +6,7 @@ import ast
 from array import array
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from citry import (
     ComponentSourceLint,
@@ -17,6 +17,9 @@ from citry import (
     discover_python_component_assets,
     discover_python_templates,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class TemplateSourceMap(Protocol):
@@ -132,9 +135,14 @@ def standalone_region(source: str) -> TemplateRegion:
     return TemplateRegion("standalone", None, StandaloneTemplateSourceMap(source))
 
 
-def discover_python_regions(source: str) -> RegionDiscovery:
-    """Adapt Citry's shared conservative discovery for interactive editing."""
-    discovery = discover_python_templates(source, recover_incomplete=True)
+def discover_python_regions(source: str, *, app_components: Mapping[str, bool] | None = None) -> RegionDiscovery:
+    """
+    Adapt Citry's shared conservative discovery for interactive editing.
+
+    ``app_components`` names the classes in this file that the loaded app
+    registers as components, as ``discover_python_templates`` takes it.
+    """
+    discovery = discover_python_templates(source, recover_incomplete=True, app_components=app_components)
     return RegionDiscovery(
         tuple(
             TemplateRegion(
@@ -150,10 +158,14 @@ def discover_python_regions(source: str) -> RegionDiscovery:
     )
 
 
-def discover_python_css_regions(source: str) -> tuple[CssRegion, ...]:
+def discover_python_css_regions(
+    source: str,
+    *,
+    app_components: Mapping[str, bool] | None = None,
+) -> tuple[CssRegion, ...]:
     """Return direct component ``css`` literals from valid Python source."""
     try:
-        discovery = discover_python_component_assets(source)
+        discovery = discover_python_component_assets(source, app_components=app_components)
     except (SyntaxError, TypeError, ValueError):
         return ()
     return tuple(
@@ -167,10 +179,14 @@ def discover_python_css_regions(source: str) -> tuple[CssRegion, ...]:
     )
 
 
-def discover_python_js_regions(source: str) -> tuple[JsRegion, ...]:
+def discover_python_js_regions(
+    source: str,
+    *,
+    app_components: Mapping[str, bool] | None = None,
+) -> tuple[JsRegion, ...]:
     """Return direct component ``js`` literals from valid Python source."""
     try:
-        discovery = discover_python_component_assets(source)
+        discovery = discover_python_component_assets(source, app_components=app_components)
     except (SyntaxError, TypeError, ValueError):
         return ()
     return tuple(

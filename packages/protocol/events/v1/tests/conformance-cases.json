@@ -38,6 +38,24 @@
       "implementations": ["python", "javascript"]
     },
     {
+      "id": "call-unknown-args-source",
+      "schema": "call.schema.json",
+      "constraint": "/$defs/call/properties/argsSource/const",
+      "seed": "form_args.call.json",
+      "operations": [{"op": "replace", "path": "/calls/0/argsSource", "value": "json"}],
+      "expected": {"path": "/calls/0/argsSource", "category": "enum"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "call-non-string-args-source",
+      "schema": "call.schema.json",
+      "constraint": "/$defs/call/properties/argsSource/type",
+      "seed": "form_args.call.json",
+      "operations": [{"op": "replace", "path": "/calls/0/argsSource", "value": true}],
+      "expected": {"path": "/calls/0/argsSource", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
       "id": "call-empty-batch",
       "schema": "call.schema.json",
       "constraint": "/properties/calls/minItems",

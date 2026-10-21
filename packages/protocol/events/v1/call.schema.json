@@ -90,6 +90,11 @@
           "type": "object",
           "description": "Open application data passed to the handler."
         },
+        "argsSource": {
+          "type": "string",
+          "const": "form",
+          "description": "Present when the browser collected args from a form's named controls, so their values are text. The server then binds that text to number and boolean fields by the same rules as a form posted without JavaScript. Omitted when args are JSON values checked strictly."
+        },
         "stateToken": {
           "type": "string",
           "minLength": 1,

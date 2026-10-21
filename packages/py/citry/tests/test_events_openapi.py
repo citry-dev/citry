@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 from uuid import UUID
 
 import pytest
@@ -461,6 +461,12 @@ class TestSchemaProjection:
             text_choice: TextChoice
             number_choice: NumberChoice
             mixed_choice: MixedChoice
+            level: Literal["low", "high"]
+            size: Literal[1, 2]
+            forced: Literal[True]
+            mixed_literal: Literal["text", 1]
+            choice_literal: Literal[TextChoice.FIRST]
+            number_choice_literal: Literal[NumberChoice.SECOND, b"raw"]
             nested: Nested
             optional_count: int | None
             label: str = ""
@@ -515,6 +521,13 @@ class TestSchemaProjection:
                 "text_choice": {"$ref": "#/components/schemas/TextChoice"},
                 "number_choice": {"$ref": "#/components/schemas/NumberChoice"},
                 "mixed_choice": {"$ref": "#/components/schemas/MixedChoice"},
+                "level": {"type": "string", "enum": ["low", "high"]},
+                "size": {"type": "integer", "enum": [1, 2]},
+                "forced": {"type": "boolean", "enum": [True]},
+                "mixed_literal": {"enum": ["text", 1]},
+                "choice_literal": {"type": "string", "enum": ["first"]},
+                # Bytes never arrive as JSON, so only the number is listed.
+                "number_choice_literal": {"type": "integer", "enum": [2]},
                 "nested": {"$ref": "#/components/schemas/Nested"},
                 "optional_count": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
                 "label": {"type": "string"},
@@ -546,6 +559,12 @@ class TestSchemaProjection:
                 "text_choice",
                 "number_choice",
                 "mixed_choice",
+                "level",
+                "size",
+                "forced",
+                "mixed_literal",
+                "choice_literal",
+                "number_choice_literal",
                 "nested",
                 "optional_count",
             ],

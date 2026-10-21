@@ -963,6 +963,93 @@ test("registered Vue Events transports receive the protocol envelope", async () 
   assert.equal(envelopes[0].calls[0].handlerName, "move");
 });
 
+test("a send from a form carries the form mark and a plain send leaves it out", async () => {
+  const calls = [];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host: basicHost(),
+    fetch: async (_url, init) => {
+      const envelope = JSON.parse(init.body);
+      calls.push(envelope.calls[0]);
+      return resultResponse(envelope);
+    },
+  });
+  const source = { stableId: "board", generation: 1 };
+  await bridge.send({ source, handler: "move", args: { count: "3" }, argsSource: "form" });
+  await bridge.send({ source, handler: "move", args: { count: 3 } });
+  assert.equal(calls[0].argsSource, "form");
+  assert.deepEqual(calls[0].args, { count: "3" });
+  // Without the mark the server keeps its strict JSON binding.
+  assert.equal(Object.hasOwn(calls[1], "argsSource"), false);
+});
+
+test("collectFormArgs sends every value as the form's text", () => {
+  const entries = [
+    ["count", "3"],
+    ["price", "2.5"],
+    ["notify", "on"],
+    ["tags", "a"],
+    ["tags", "b"],
+    ["avatar", { name: "photo.png" }],
+    ["reserved", "x"],
+  ];
+  const form = {};
+  const previous = globalThis.FormData;
+  // Node has no DOM form, so a stand-in FormData replays the entries a
+  // browser would read from a form with number, checkbox, repeated, and
+  // file controls.
+  globalThis.FormData = class {
+    constructor(given) {
+      assert.equal(given, form);
+    }
+    forEach(callback) {
+      for (const [name, value] of entries) callback(value, name);
+    }
+  };
+  try {
+    assert.deepEqual(bridgeModule.collectFormArgs(form, new Set(["reserved"])), {
+      count: "3",
+      price: "2.5",
+      notify: "on",
+      tags: ["a", "b"],
+    });
+  } finally {
+    globalThis.FormData = previous;
+  }
+});
+
+test("collectFormArgs sends the button that submitted the form, as a post without JavaScript does", () => {
+  const form = {};
+  const previous = { FormData: globalThis.FormData, HTMLButtonElement: globalThis.HTMLButtonElement };
+  globalThis.HTMLButtonElement = class {};
+  const button = new globalThis.HTMLButtonElement();
+  button.form = form;
+  const otherButton = new globalThis.HTMLButtonElement();
+  otherButton.form = {};
+  const given = [];
+  // The stand-in FormData adds the submitter's entry the way a browser does
+  // when it is passed one.
+  globalThis.FormData = class {
+    constructor(formGiven, submitter) {
+      given.push(submitter);
+      this.entries = [["q", "alpha"], ...(submitter ? [["action", "save"]] : [])];
+    }
+    forEach(callback) {
+      for (const [name, value] of this.entries) callback(value, name);
+    }
+  };
+  try {
+    assert.deepEqual(bridgeModule.collectFormArgs(form, new Set(), button), { q: "alpha", action: "save" });
+    // A button of another form, or no button, is not passed to FormData.
+    assert.deepEqual(bridgeModule.collectFormArgs(form, new Set(), otherButton), { q: "alpha" });
+    assert.deepEqual(bridgeModule.collectFormArgs(form, new Set()), { q: "alpha" });
+    assert.deepEqual(given, [button, undefined, undefined]);
+  } finally {
+    globalThis.FormData = previous.FormData;
+    globalThis.HTMLButtonElement = previous.HTMLButtonElement;
+  }
+});
+
 test("custom transports receive the request context the fetch transport sends", async () => {
   const sent = [];
   const fetched = [];

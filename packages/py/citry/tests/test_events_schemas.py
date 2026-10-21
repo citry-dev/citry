@@ -12,19 +12,26 @@ import sys
 import textwrap
 from collections.abc import Mapping
 from dataclasses import dataclass, is_dataclass
+from dataclasses import field as dataclass_field
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum, IntEnum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 from uuid import UUID
 
 import pytest
 
 from citry.ext.events import schemas as schemas_module
 from citry.ext.events.files import UploadedFile
-from citry.ext.events.schemas import StringArgs, ValidationResult, convert_schema_class, validate_args
+from citry.ext.events.schemas import (
+    StringArgs,
+    ValidationResult,
+    convert_schema_class,
+    declared_field_names,
+    validate_args,
+)
 
 try:
     import pydantic
@@ -209,6 +216,22 @@ class PagedIn:
 
 class NullOnly:
     value: None
+
+
+class Weight(Enum):
+    LIGHT = 1
+    HEAVY = 2
+
+
+class EnumLiteral:
+    weight: Literal[Weight.HEAVY]
+
+
+class LiteralChoices:
+    level: Literal["low", "high"]
+    size: Literal[1, 2] = 1
+    forced: Literal[True] | None = None
+    color: Literal[Color.RED] | None = None
 
 
 class UnsupportedContainer:
@@ -843,6 +866,60 @@ class TestUnionsAndOptional:
         assert result.fields == {"v": "Expected list[int] or int, got str."}
 
 
+class TestLiteralFields:
+    def test_a_listed_value_validates(self):
+        result = validate_args(LiteralChoices, {"level": "high", "size": 2, "forced": True, "color": "red"})
+        assert result.ok
+        assert (result.value.level, result.value.size, result.value.forced, result.value.color) == (
+            "high",
+            2,
+            True,
+            Color.RED,
+        )
+
+    def test_an_unlisted_value_names_the_choices(self):
+        result = validate_args(LiteralChoices, {"level": "mid"})
+        assert result.fields == {"level": "Expected one of 'low', 'high', got 'mid'."}
+
+    def test_a_value_of_another_type_is_rejected(self):
+        result = validate_args(LiteralChoices, {"level": 1})
+        assert result.fields == {"level": "Expected one of 'low', 'high', got 1."}
+
+    def test_true_and_one_stay_apart(self):
+        # Python counts True == 1, but JSON keeps them apart, and so does the field.
+        assert validate_args(LiteralChoices, {"level": "low", "size": True}).fields == {
+            "size": "Expected one of 1, 2, got true.",
+        }
+        assert validate_args(LiteralChoices, {"level": "low", "forced": 1}).fields == {
+            "forced": "Expected one of true, got 1.",
+        }
+
+    def test_a_whole_float_binds_to_an_int_choice(self):
+        # The int/float cross-coercion of a plain int field applies to each choice.
+        result = validate_args(LiteralChoices, {"level": "low", "size": 2.0})
+        assert result.ok
+        assert result.value.size == 2
+
+    def test_an_enum_choice_binds_from_its_value(self):
+        assert validate_args(LiteralChoices, {"level": "low", "color": "blue"}).fields == {
+            "color": "Expected one of 'red', got 'blue'.",
+        }
+
+    def test_an_enum_choice_with_a_number_value_matches_that_number(self):
+        # The wire carries an Enum member as its value, whatever its type.
+        assert validate_args(EnumLiteral, {"weight": 2}).value.weight is Weight.HEAVY
+        assert validate_args(EnumLiteral, {"weight": 1}).fields == {"weight": "Expected one of 2, got 1."}
+
+    def test_a_string_transport_binds_each_choice_by_its_type(self):
+        result = validate_args(LiteralChoices, StringArgs({"level": "low", "size": "2", "forced": "true"}))
+        assert result.ok
+        assert (result.value.size, result.value.forced) == (2, True)
+
+    def test_json_keeps_a_numeric_string_apart_from_an_int_choice(self):
+        result = validate_args(LiteralChoices, {"level": "low", "size": "2"})
+        assert result.fields == {"size": "Expected one of 1, 2, got '2'."}
+
+
 class TestUnsupportedAnnotations:
     def test_exact_none_accepts_null_and_rejects_other_values(self):
         result = validate_args(NullOnly, {"value": None})
@@ -1052,3 +1129,41 @@ class TestWithoutPydantic:
         )
         assert completed.returncode == 0, completed.stderr
         assert "OK-WITHOUT-PYDANTIC" in completed.stdout
+
+
+def test_declared_field_names_reads_init_fields_without_resolving_annotations():
+    @dataclass
+    class WithInitFalse:
+        q: str
+        computed: int = dataclass_field(default=0, init=False)
+
+    class Plain:
+        q: "NotDefinedAnywhere"  # noqa: F821 - never resolved
+        page: int = 1
+
+    assert declared_field_names(WithInitFalse) == frozenset({"q"})
+    assert declared_field_names(Plain) == frozenset({"q", "page"})
+
+
+@requires_pydantic
+def test_declared_field_names_counts_a_pydantic_alias():
+    class Model(pydantic.BaseModel):
+        token: str = pydantic.Field(alias="csrfmiddlewaretoken")
+
+    assert declared_field_names(Model) == frozenset({"token", "csrfmiddlewaretoken"})
+
+
+@requires_pydantic
+def test_declared_field_names_counts_pydantic_validation_aliases():
+    class Single(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias="csrfmiddlewaretoken")
+
+    class Choices(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias=pydantic.AliasChoices("csrfmiddlewaretoken", "tok"))
+
+    class Nested(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias=pydantic.AliasPath("csrf", 0))
+
+    assert "csrfmiddlewaretoken" in declared_field_names(Single)
+    assert {"csrfmiddlewaretoken", "tok"} <= declared_field_names(Choices)
+    assert "csrf" in declared_field_names(Nested)

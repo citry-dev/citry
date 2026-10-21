@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import tokenize
+from collections.abc import Mapping
 from functools import cache, lru_cache
 from pathlib import Path
 from types import FunctionType, ModuleType
@@ -127,7 +128,24 @@ def _extension_analysis(engine: Citry) -> dict[str, object]:
         inspector = getattr(extension, "_tooling_index", None)
         if callable(inspector):
             indexes[name] = inspector()
+    indexes["events"] = {"csrf_field_names": _csrf_field_names(engine)}
     return indexes
+
+
+def _csrf_field_names(engine: Citry) -> list[str]:
+    """
+    Copy the host CSRF field names the app's Events server removes from an event call's arguments.
+
+    The setting is read from the engine's settings rather than through
+    ``citry.ext.events.csrf``, so an app on an older Citry, which has neither
+    the setting nor the removal, still loads. The editor then stays silent
+    about a ``csrfmiddlewaretoken`` control there.
+    """
+    defaults = engine.settings.extensions_defaults.get("events", {})
+    value = defaults.get("_csrf_field_names") if isinstance(defaults, Mapping) else None
+    if isinstance(value, (list, tuple, set, frozenset)) and all(type(name) is str for name in value):
+        return sorted(value)
+    return ["csrfmiddlewaretoken"]
 
 
 def _source_analysis(
@@ -166,6 +184,7 @@ def _source_analysis(
                     else None
                 },
                 "template_asset": {"resolution_chain": template_asset_chain},
+                "native_template": _native_template(selected_class) if selected_class else None,
                 "css_asset": {"resolution_chain": css_asset_chain},
                 "js_asset": {"resolution_chain": js_asset_chain},
                 "events": (
@@ -190,6 +209,27 @@ def _source_analysis(
             }
         )
     return {"version": _SOURCE_ANALYSIS_VERSION, "components": components}
+
+
+def _native_template(component_class: type) -> bool | None:
+    """
+    Return whether the component renders its template as Citry's own template language.
+
+    The editor reads a template from source only when this is true, because
+    a base class in another module may set ``template_lang`` to another
+    template language, which Citry's parser would reject. The value is read
+    from the class namespaces along the MRO, so no project code runs.
+    ``None`` means the MRO cannot be read.
+    """
+    mro = _static_class_mro(component_class)
+    if not mro:
+        return None
+    for candidate in mro:
+        namespace = _static_class_dict(candidate)
+        if "template_lang" in namespace:
+            return namespace["template_lang"] is None
+    # Citry's own classes do not set it, so an unset value is Citry's language.
+    return True
 
 
 def _kwargs_classes(component_class: type | None, *, with_classes: bool) -> dict[str, object]:
@@ -257,12 +297,28 @@ def _schema_resolution_chain(
     return list(records.values()) or None
 
 
+def _class_source(cls: type | None) -> dict[str, str] | None:
+    """Return the file and qualified name that define a class, or None when they cannot be read."""
+    if cls is None:
+        return None
+    qualname = getattr(cls, "__qualname__", None)
+    try:
+        source_name = inspect.getsourcefile(cls)
+    except (TypeError, OSError):
+        return None
+    # A class defined inside a function cannot be found again by name.
+    if type(qualname) is not str or not qualname or "<locals>" in qualname or type(source_name) is not str:
+        return None
+    source_file = Path(source_name).resolve()
+    return {"file": source_file.as_posix(), "qualname": qualname} if source_file.is_file() else None
+
+
 def _event_sources(component_class: type) -> dict[str, object]:
     """Copy exact handler and public State origins without retaining project objects."""
     info = _component_events_info(component_class)
     if info is None:
         return {"handlers": [], "state": []}
-    handlers: list[dict[str, str]] = []
+    handlers: list[dict[str, object]] = []
     for wire_name, handler in info.handlers.items():
         func = handler.func
         module_name = getattr(func, "__module__", None)
@@ -286,6 +342,7 @@ def _event_sources(component_class: type) -> dict[str, object]:
                 "module": module_name,
                 "qualname": qualname,
                 "file": source_file.as_posix(),
+                "data_class": _class_source(handler.data_schema),
             }
         )
     if info.state_cls is None or info.state_meta is None:

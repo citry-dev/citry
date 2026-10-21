@@ -115,7 +115,9 @@ finding has an `origin`, `code`, `severity`, `message`, and `range`.
 When you cannot import the project, for example in a CI job without its
 dependencies, check template syntax and the lint rules that need no
 component data, such as
-[misspelled directives](/ide/template-linting/#find-misspelled-directives):
+[misspelled directives](/ide/template-linting/#find-misspelled-directives),
+[misspelled HTML names](/ide/template-linting/#find-misspelled-html-names),
+and [Vue compile errors](/ide/template-linting/#find-vue-compile-errors):
 
 ```bash
 citry check --static
@@ -130,6 +132,9 @@ component's own `Lint` settings written as plain strings, but not your
 [Without a loaded app](/ide/template-linting/#without-a-loaded-app). It skips file
 templates, inherited and computed templates, and cannot report an unknown
 component, because it never sees the full list of registered components.
+It also skips the template of a class whose base class comes from another
+module of your project, and lists it as a note; `--app` checks it (see
+[Imported base classes](/ide/template-linting/#templates-the-check-cannot-find)).
 An error's origin is the file's full path followed by the attribute, such
 as `/home/me/proj/myapp/card.py (Card.template)`.
 

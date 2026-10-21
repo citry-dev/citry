@@ -17,7 +17,9 @@ from citry import (
     PythonTemplateSourceMap,
     TemplateAnalysis,
     TemplateLintConsumer,
+    discover_python_component_assets,
     discover_python_templates,
+    format_python_templates,
     lint_unknown_template_variables,
 )
 from citry._linting import TemplateLintInfo
@@ -26,6 +28,8 @@ from citry.analysis import (
     css_data_completion_at,
     css_data_reference_at,
     css_data_references,
+    discover_untraced_component_templates,
+    project_module_exists,
     python_application_lint_variable_range,
     python_component_lint_variable_range,
     template_tag_uses,
@@ -200,9 +204,27 @@ class TestTemplateAnalysis:
 
         assert restored.rule_misspelled_directive == "error"
         assert restored.rule_unknown_template_variable == "warning"
-        # Only that one field may be missing, and no field may be unknown.
+        # Only the later fields may be missing, and no field may be unknown.
         with pytest.raises(ValueError, match="exact supported fields"):
             TemplateLintInfo.from_dict({**record, "rule_from_the_future": "error"})
+
+    def test_lint_record_carries_the_template_rules_and_fills_in_missing_ones(self):
+        record = TemplateLintInfo(
+            "warning",
+            (),
+            rule_missing_image_alt="error",
+            rule_undeclared_component_event="ignore",
+        ).to_dict()
+        restored = TemplateLintInfo.from_dict(record)
+        assert (restored.rule_missing_image_alt, restored.rule_undeclared_component_event) == ("error", "ignore")
+        # A record from an older citry has none of these rules.
+        for name in ("rule_missing_image_alt", "rule_undeclared_component_event", "rule_invalid_vue_expression"):
+            del record[name]
+        older = TemplateLintInfo.from_dict(record)
+        assert (older.rule_missing_image_alt, older.rule_undeclared_component_event) == ("warning", "warning")
+        assert older.rule_invalid_vue_expression == "error"
+        with pytest.raises(ValueError, match="rule_duplicate_id"):
+            TemplateLintInfo("warning", (), rule_duplicate_id="fatal")  # type: ignore[arg-type]
         del record["rule_alpine_cloak"]
         with pytest.raises(ValueError, match="exact supported fields"):
             TemplateLintInfo.from_dict(record)
@@ -634,6 +656,24 @@ class TestTemplateOwnerLint:
         with pytest.raises(ValueError, match="rule_misspelled_directive"):
             ComponentSourceLint(rule_misspelled_directive="fatal")  # type: ignore[arg-type]
 
+    def test_reads_the_html_rules_and_builds_their_consumer(self):
+        source = (
+            "class Card(Component):\n" + _TEMPLATE + "    class Lint:\n"
+            "        rule_missing_image_alt = 'error'\n"
+            "        rule_invalid_vue_expression = 'ignore'\n"
+        )
+        (lint,) = _owner_lint(source)["Card"]
+        assert lint == ComponentSourceLint(rule_missing_image_alt="error", rule_invalid_vue_expression="ignore")
+        consumer = lint.markup_consumer()
+        assert (consumer.rule_missing_image_alt, consumer.rule_invalid_vue_expression) == ("error", "ignore")
+        # Unset rules keep their defaults, and the source cannot show whether
+        # the component has browser code, so a root image may get its alt.
+        assert consumer.rule_duplicate_id == "error"
+        assert consumer.rule_misspelled_event == "warning"
+        assert consumer.root_may_receive_attributes is True
+        with pytest.raises(ValueError, match="rule_invalid_nesting"):
+            ComponentSourceLint(rule_invalid_nesting="fatal")  # type: ignore[arg-type]
+
 
 def test_source_map_long_unicode_lines_keep_utf16_columns():
     line = "aé😀" * 2000
@@ -642,3 +682,121 @@ def test_source_map_long_unicode_lines_keep_utf16_columns():
     line_bytes = len(line.encode("utf-8"))
     assert source_map.map_range(line_bytes - 4, line_bytes) == LspRange(LspPosition(0, 8009), LspPosition(0, 8011))
     assert source_map.map_range(line_bytes + 1, line_bytes + 2) == LspRange(LspPosition(1, 0), LspPosition(1, 1))
+
+
+def test_untraced_component_templates_follow_project_imports_only(tmp_path):
+    package = tmp_path / "app"
+    (package / "ui").mkdir(parents=True)
+    for path in (package / "__init__.py", package / "ui" / "__init__.py", package / "ui" / "base.py"):
+        path.write_text("", encoding="utf-8")
+    card = package / "ui" / "card.py"
+    source = (
+        "from citry import Component\n"
+        "from .base import BaseCard\n"
+        "from app.ui.base import Mixin\n"
+        "from installed import Widget\n"
+        "import app.ui.base as base\n"
+        "class Local(BaseCard):\n"
+        "    pass\n"
+        "class Card(Local):\n"
+        "    template = '<article></article>'\n"
+        "class Mixed(Mixin, Widget):\n"
+        "    template: str = '<p></p>'\n"
+        "class FromPackage(Widget):\n"
+        "    template = '<p></p>'\n"
+        "class Plain(BaseCard):\n"
+        "    template = 'card.html'\n"
+        "class Dotted(base.BaseCard):\n"
+        "    template = '<p></p>'\n"
+        "class Proven(Component):\n"
+        "    template = '<p></p>'\n"
+    )
+
+    found = discover_untraced_component_templates(
+        source,
+        is_project_module=lambda module, level: project_module_exists(module, level, file=card, root=tmp_path),
+    )
+
+    # A base defined in the file is followed to the class it imports; an installed
+    # package, a template that is a file name, a dotted base, and a proven
+    # component are not reported.
+    assert [(item.component_name, item.base, item.line, item.start_column) for item in found] == [
+        ("Card", "BaseCard", 8, 6),
+        ("Mixed", "Mixin", 10, 6),
+    ]
+
+
+def test_app_components_read_a_decorated_component_the_app_lists():
+    source = (
+        "from citry import Component\n"
+        "from app.registry import register\n"
+        "@register\n"
+        "class Listed(Component):\n"
+        "    template = '<p>listed</p>'\n"
+        "@register\n"
+        "class Unlisted(Component):\n"
+        "    template = '<p>unlisted</p>'\n"
+    )
+
+    # Reading the file alone, a decorator may replace the class, so neither
+    # template is read; the app's record proves the listed one.
+    assert discover_python_templates(source).regions == ()
+    assert [
+        region.component_name for region in discover_python_templates(source, app_components={"Listed": True}).regions
+    ] == ["Listed"]
+
+
+def test_app_components_find_templates_whose_base_comes_from_another_module():
+    source = (
+        "from app.base import AppBase, JinjaBase, register\n"
+        "class Card(AppBase):\n"
+        "    template = '<article>{{ title }}</article>'\n"
+        "    js = 'console.log(1)'\n"
+        "    css = 'article { color: red }'\n"
+        "class Wide(Card):\n"
+        "    template = '<section></section>'\n"
+        "class Legacy(JinjaBase):\n"
+        "    template = '<p>{% if x %}{% endif %}</p>'\n"
+        "    css = 'p { margin: 0 }'\n"
+        "@register\n"
+        "class Decorated(AppBase):\n"
+        "    template = '<p></p>'\n"
+        "class Added(AppBase):\n"
+        "    template = '<p>  </p>'\n"
+    )
+    # What a loaded app reports: Legacy's base sets another template_lang.
+    # Added is not listed, as for a class written after the app loaded.
+    app_components = {"Card": True, "Legacy": False, "Decorated": True}
+
+    templates = discover_python_templates(source, app_components=app_components)
+    assets = discover_python_component_assets(source, app_components=app_components)
+    untraced = discover_untraced_component_templates(
+        source,
+        is_project_module=lambda module, _level: module == "app.base",
+        app_components=app_components,
+    )
+
+    # A listed class is a component, and a same-file subclass traces
+    # through it. A template the app does not call Citry's own is skipped,
+    # though its CSS is still found. The app's record names the class that
+    # declares the template, so a decorated one is read too.
+    assert [(region.component_name, region.source_map.template_source) for region in templates.regions] == [
+        ("Card", "<article>{{ title }}</article>"),
+        ("Wide", "<section></section>"),
+        ("Decorated", "<p></p>"),
+    ]
+    assert [(region.component_name, region.kind.value) for region in assets.regions] == [
+        ("Card", "template"),
+        ("Card", "js"),
+        ("Card", "css"),
+        ("Wide", "template"),
+        ("Legacy", "css"),
+        ("Decorated", "template"),
+    ]
+    # Only the classes still skipped keep their notice.
+    assert [(item.component_name, item.base) for item in untraced] == [("Added", "AppBase")]
+    # Without the app, and for the formatter, which never loads it, reading
+    # the file alone finds none of them.
+    assert discover_python_templates(source).regions == ()
+    assert discover_python_component_assets(source).regions == ()
+    assert format_python_templates(source).changed_component_names == ()

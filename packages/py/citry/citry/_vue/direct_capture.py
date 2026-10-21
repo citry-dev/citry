@@ -1455,9 +1455,7 @@ def assemble_typed_render(
                             )
                             transparent_identity = (transparent_call_base, placement_route, explicit_key)
                             if transparent_identity in local_transparent_identity_keys:
-                                raise UnsupportedPreparedView(
-                                    "repeated component call has a duplicate explicit #c-key"
-                                )
+                                raise UnsupportedPreparedView(_duplicate_key_message(transparent_call))
                             local_transparent_identity_keys.add(transparent_identity)
                             wrapper_digest = _digest(
                                 transparent_call_base, placement_route, ("explicit", explicit_key)
@@ -1561,9 +1559,7 @@ def assemble_typed_render(
                                 raise UnsupportedPreparedView("prepared #c-key must evaluate to a string")
                             member_identity = (member_base, placement_route, member_key)
                             if member_identity in local_identity_keys:
-                                raise UnsupportedPreparedView(
-                                    "repeated component call has a duplicate explicit #c-key"
-                                )
+                                raise UnsupportedPreparedView(_duplicate_key_message(member_metadata))
                             local_identity_keys.add(member_identity)
                             member_placement_digest = _digest(member_base, placement_route, ("explicit", member_key))
                             member_placement_key = f"citryPlacement{member_placement_digest[:24]}"
@@ -1643,7 +1639,7 @@ def assemble_typed_render(
                     call_index = call_counts[call_site]
                     call_counts[call_site] += 1
                     if call_index and explicit_key is None:
-                        raise UnsupportedPreparedView("repeated component call requires an explicit #c-key")
+                        raise UnsupportedPreparedView(_missing_key_message(metadata))
                     if explicit_key is None:
                         local_id = f"citryCall{_digest(call_base, placement_route, 0)[:16]}"
                         identity_key = local_id
@@ -1652,7 +1648,7 @@ def assemble_typed_render(
                             raise UnsupportedPreparedView("prepared #c-key must evaluate to a string")
                         identity = (call_base, placement_route, explicit_key)
                         if identity in local_identity_keys:
-                            raise UnsupportedPreparedView("repeated component call has a duplicate explicit #c-key")
+                            raise UnsupportedPreparedView(_duplicate_key_message(metadata))
                         local_identity_keys.add(identity)
                         local_id = f"citryCall{_digest(call_base, placement_route, call_index)[:16]}"
                         identity_key = explicit_key
@@ -2761,6 +2757,33 @@ def _authored_call_tag(call: _PreparedCallMetadata | None, fallback: str) -> str
     head = call.source.encode()[start : start + 256].decode(errors="ignore")
     match = re.match(r"<([^\s/>]+)", head)
     return match.group(1) if match else fallback
+
+
+def _call_site(call: _PreparedCallMetadata | None) -> str:
+    """Describe where a component call sits, as `in <template>, line N`, for error messages."""
+    if call is None:
+        return "in a component rendered from Python"
+    # Call spans are byte offsets into the authored template source.
+    line = call.source.encode()[: call.source_span[0]].count(b"\n") + 1
+    return f"in {call.origin}, line {line}" if call.origin else f"on line {line} of its template"
+
+
+def _missing_key_message(call: _PreparedCallMetadata | None) -> str:
+    """Name the repeated call that has no `#c-key`, and what to add."""
+    tag = _authored_call_tag(call, "component")
+    return (
+        f"<{tag}> {_call_site(call)} repeats inside a loop but has no #c-key. On a page that uses Vue, each"
+        f' repeated component needs a #c-key unique to its item, such as #c-key="item.id".'
+    )
+
+
+def _duplicate_key_message(call: _PreparedCallMetadata | None) -> str:
+    """Name the repeated call whose `#c-key` value came up twice."""
+    tag = _authored_call_tag(call, "component")
+    return (
+        f"<{tag}> {_call_site(call)} has a duplicate #c-key: two items of the loop gave it the same value."
+        " Give each item a unique #c-key."
+    )
 
 
 def _digest(*values: object) -> str:

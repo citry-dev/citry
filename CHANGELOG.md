@@ -11,6 +11,59 @@
   class sets as a plain string, such as `rule_alpine_attribute = "ignore"`.
   Editor tools can read the same values from
   `PythonTemplateRegion.owner_lint`, a tuple of `ComponentSourceLint`.
+- `citry check` and the editor now report HTML mistakes that the browser
+  passes over without an error: a misspelled attribute, tag, or `aria-*`
+  name (`titel`, `<dvi>`, `aria-expandd`), a block such as `<div>` inside
+  a `<p>`, two elements with the same `id`, and an `<img>` without alt
+  text. The image check is a warning and the others are errors, so
+  `citry check` may now fail on an existing project; each rule has a
+  `rule_*` setting
+  ([details](https://citry.dev/ide/template-linting/)).
+- `citry check` and the editor now report Vue mistakes that would stop a
+  component from rendering: an expression that is not valid JavaScript,
+  such as `v-if="open &&"` (`rule_invalid_vue_expression`), and `v-model`
+  on an element that holds no value, such as `<form>`
+  (`rule_invalid_model_target`). A misspelled DOM event in a listener,
+  such as `@clik`, is a warning (`rule_misspelled_event`).
+- The misspelled-directive check now also reports a typo in a Vue
+  directive, such as `v-iff` or `v-elif`, which otherwise stops the page
+  with an error in the browser.
+- With your application loaded, `citry check` now reports more mistakes
+  that fail only when the page runs
+  ([details](https://citry.dev/ide/template-linting/)):
+  - a component that `<c-for>` repeats without `#c-key` on a page that uses
+    Vue (`rule_missing_component_key`);
+  - a component that assigns to its own prop, such as
+    `@click="open = false"` (`rule_prop_assignment`), which the editor
+    reports too;
+  - `@c-*` arguments the server would reject: an unknown key, a missing
+    required field, or a literal of the wrong type, such as
+    `save({amount: '1'})` for an `int` field
+    (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
+    `rule_incompatible_server_event_field`);
+  - a control in a form whose `@c-submit` sends the form's fields, when
+    the handler's data class does not declare its `name`, such as
+    `<input name="qeury">`, or no control is named after a required field
+    (`rule_unknown_form_field`, `rule_missing_form_field`);
+  - a `var(--name)` that misspells a `css_data()` key, such as
+    `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
+
+  These are errors by default except the CSS check, so `citry check` may
+  now fail on an existing project.
+- With your application loaded, `citry check` now warns when `js_data()`
+  sends a module constant that JSON cannot carry, such as a
+  `PurePosixPath`.
+- `Citry.inspect_components()` now says, for each Events handler, whether
+  an argument key the data class does not declare fails the call
+  (`extra_fields`) and whether Citry or Pydantic checks the values
+  (`validated_by`).
+- `citry check --static` now lists, as a note, each template it skips
+  because the component's base class comes from another module of your
+  project.
+- `discover_python_templates()` and `discover_python_component_assets()`
+  accept `app_components`, the classes a loaded application registers in
+  the file, so a tool can find the templates of components whose base
+  class comes from another module.
 
 ### Changed
 
@@ -42,9 +95,39 @@
   attribute value the browser does not accept, such as
   `<button type="sumbit">`. Set `rule_invalid_attribute_value="warning"` in
   `LintSettings` to keep the previous behavior.
+- `citry check` now fails on a boolean attribute with a value such as
+  `disabled="false"`, which still disables the element. Leave the
+  attribute out to turn it off, or let Vue set it from a JavaScript
+  boolean, as in `:disabled="saving"`.
+- A listener on a component tag with a lowercase name the child does not
+  declare, such as `@hdie`, is now reported too, with the declared event
+  it probably means (`hide`). DOM event names such as `@click` still
+  pass. Set `rule_undeclared_component_event` to change the severity,
+  which is a warning by default.
+- `citry check` and the editor now report a string for a Boolean Vue prop,
+  such as `:open="open ? 'open' : 'closed'"`, unless the string is empty
+  or the prop's own name. They also check both results of a condition
+  whose results are literals.
+- The render error for a component that `<c-for>` repeats without
+  `#c-key`, or with a duplicate one, now names the tag, its template, and
+  the line.
+- A form submitted through `@c-submit` now gives the handler the same
+  values as the same form posted without JavaScript: text such as `"3"`
+  fills an `int` or `float` field, a checked checkbox fills a `bool`
+  field, and the submit button that sent the form adds its `name`. Number
+  and range inputs now send their text, so a handler that reads
+  `event.args` directly, or a Pydantic model in strict mode, gets `"3"`
+  instead of `3`, as it already did without JavaScript.
 
 ### Fixes
 
+- A form that calls a server event can now keep Django's hidden
+  `csrfmiddlewaretoken` input inside it. The server removes that field
+  before it checks the event's data class, with or without JavaScript,
+  instead of rejecting the call for an unknown field. Name other token
+  fields in `extensions_defaults={"events": {"_csrf_field_names": [...]}}`.
+- An Events data class field annotated as `Literal[...]` now accepts the
+  values it lists. Every call used to fail with "Unsupported annotation".
 - An Events `State` field annotated as a tuple is a tuple again in event
   handlers, instead of the list that JSON turned it into.
 - On Python 3.10, a browser update to an Events `State` field annotated as

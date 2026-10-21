@@ -5,10 +5,10 @@ from __future__ import annotations
 import asyncio
 import io
 import tokenize
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from citry_lsp.engine import DocumentState
+from citry_lsp.engine import DocumentState, _js_data_type_diagnostics
 from citry_lsp.semantic import infer_js_data_value_types, semantic_diagnostics
 from citry_lsp.type_analysis import TyAnalyzer, TyUnavailableError, is_project_source_file
 from citry_lsp.uri import file_uri_path
@@ -85,6 +85,8 @@ def check_project_python_types(
     Each template expression is checked in the same generated Python file the
     editor gives ty, and the findings pass the same filter, so `citry check
     --types` reports a `citry.python.*` finding exactly when the editor would.
+    The result also holds the editor's `citry.js-data.unsupported-type`
+    warnings, which can depend on the types ty gives `js_data()` values.
 
     ty also types the `js_data()` values Citry's own rules leave unknown, and
     `project` keeps those types, so run this before the TypeScript check that
@@ -111,9 +113,13 @@ async def _check_project_python_types(
     analyzer = TyAnalyzer(workspace, request_timeout=_BATCH_REQUEST_TIMEOUT_SECONDS)
     results: list[ProjectTypeFinding] = []
     try:
+        # A copy of the project starts without ty's answers, so comparing
+        # the two shows which warnings need them.
+        untyped = replace(project)
         await infer_js_data_value_types(analyzer, project, documents)
         if analyzer.failure is not None:
             raise TyUnavailableError(analyzer.failure)
+        non_json_files = project.js_data_files_with_non_json_answers()
         for uri, document in sorted(documents.items()):
             findings = await semantic_diagnostics(analyzer, document, project, documents)
             # The editor shows nothing when ty fails, but a command must say so.
@@ -122,16 +128,43 @@ async def _check_project_python_types(
             path = file_uri_path(uri)
             if path is None:
                 continue
+            # The editor warns about a js_data() value that JSON cannot carry
+            # once ty has typed it, such as a module constant holding a path,
+            # so the command reports those warnings too. Warnings Citry's own
+            # rules give without ty are left to the registry check, which
+            # already reports them. Finding them reads every component, so
+            # only a file where ty found such a type is searched.
+            reported = list(findings)
+            if path.resolve() in non_json_files:
+                reported.extend(_ty_js_data_type_diagnostics(document, project, untyped, documents))
             results.extend(
                 ProjectTypeFinding(path, document.source, diagnostic)
                 for diagnostic in sorted(
-                    findings,
+                    reported,
                     key=lambda item: (item.range.start.line, item.range.start.character),
                 )
             )
     finally:
         await analyzer.close()
     return tuple(results)
+
+
+def _ty_js_data_type_diagnostics(
+    document: DocumentState,
+    project: ProjectState,
+    untyped: ProjectState,
+    documents: dict[str, DocumentState],
+) -> list[types.Diagnostic]:
+    """Return the editor's js-data warnings for one file that appear only once ty has typed the values."""
+    without_ty = {
+        (item.range.start.line, item.range.start.character, item.message)
+        for item in _js_data_type_diagnostics(document, untyped, documents)
+    }
+    return [
+        item
+        for item in _js_data_type_diagnostics(document, project, documents)
+        if (item.range.start.line, item.range.start.character, item.message) not in without_ty
+    ]
 
 
 __all__ = ["ProjectTypeFinding", "check_project_python_types", "project_documents"]

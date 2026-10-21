@@ -211,6 +211,43 @@ The host validates that request exactly as it validates any other native form.
 The same hidden input can serve both native forms and the token function in
 section 4.2.
 
+### 4.4 The hidden input inside a form that calls a server event
+
+The hidden input may also sit inside a form whose `@c-submit` calls a server
+event:
+
+```citry-html
+<form @c-submit.prevent="search">
+  <input
+    type="hidden"
+    name="csrfmiddlewaretoken"
+    c-value="csrf_token"
+  >
+  <input name="q">
+</form>
+```
+
+The browser collects every named control of that form, and a post without
+JavaScript sends them all too, so the token arrives as one more field next to
+`q`. Before the Events dispatcher checks the handler's data class, it removes
+the field names listed in `extensions_defaults["events"]["_csrf_field_names"]`
+(by default `("csrfmiddlewaretoken",)`). The call then reaches the handler
+with only `q`, on both paths. The token field is not a security check here:
+Django's middleware has already read it from the post or the header before the
+event runs.
+
+What happens in the edge cases:
+
+- A data class that declares a field with one of these names still receives
+  it, because the dispatcher drops only names the class does not declare.
+- An empty sequence turns the drop off, so such a field is rejected as an
+  unknown field again.
+- A value other than a list, tuple, or set of non-empty strings, including a
+  single string, fails when the `Citry(...)` engine is built. Setting
+  `_csrf_field_names` on a component's `Events` class fails when the class is
+  defined, because the name of the host's token field is one fact for the
+  whole site.
+
 A native form may instead target Citry's per-event form-compatibility route.
 It still cannot send the custom Events header, so the host token, Origin and
 Fetch Metadata checks, and the event route's form decoding remain the relevant
@@ -326,7 +363,7 @@ repeat token plumbing.
 | Cookies, SameSite, trusted origins, and proxy setup | Owns | Preserves browser behavior | Does not override locally |
 | Events custom header and Fetch credentials | Configures convention | Owns transport | Normally no work |
 | Non-GET cross-site request floor | May add stronger checks | Owns and keeps enabled | Cannot disable |
-| Native form hidden field | Supplies token | Renders explicit input | Declares the input and field |
+| Native form hidden field | Supplies token | Renders explicit input; drops the field from server event arguments | Declares the input and field |
 | Optional custom callable | Defines policy | Invokes after floor | Selects component or handler scope |
 | Authentication and authorization | Supplies identity and policy | Exposes request and guards | Checks every action and record |
 

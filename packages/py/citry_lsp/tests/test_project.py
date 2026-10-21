@@ -678,6 +678,16 @@ def test_private_source_analysis_requires_exact_catalog_coverage(tmp_path, monke
     with pytest.raises(ValueError, match="invalid js_schema resolution chain"):
         SourceAnalysisIndex(invalid_js_schema, catalog)
 
+    # Without the template-language answer the editor treats it as unknown,
+    # so it never reads such a template as Citry's own.
+    assert all(index.native_template(component) is None for component in catalog.components)
+    answered = json.loads(json.dumps(valid))
+    answered["components"][0]["native_template"] = False
+    assert SourceAnalysisIndex(answered, catalog).native_template(catalog.components[0]) is False
+    answered["components"][0]["native_template"] = "yes"
+    with pytest.raises(ValueError, match="native_template"):
+        SourceAnalysisIndex(answered, catalog)
+
     # Older private worker payloads remain readable, but cannot prove a closed
     # State namespace without the optional source snapshots.
     older_payload = json.loads(json.dumps(valid))

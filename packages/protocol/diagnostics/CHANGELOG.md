@@ -24,4 +24,46 @@
   warning where no setting chooses its severity, such as
   `citry check --static` for a component whose `Lint` class does not set it.
 - Added `citry.template.misspelled-directive`, the configurable error for a
-  `c-*` attribute that looks like a misspelled Citry directive.
+  `c-*` attribute that looks like a misspelled Citry directive, or a `v-*`
+  attribute that looks like a misspelled Vue directive (message variant
+  `vue-directive`).
+- Added configurable diagnostics for template HTML:
+  `citry.template.misspelled-attribute`,
+  `citry.template.misspelled-element`,
+  `citry.template.unknown-aria-attribute`,
+  `citry.template.invalid-nesting`, and `citry.template.duplicate-id`,
+  all errors by default, and `citry.template.missing-image-alt`, a warning
+  by default.
+- Added configurable diagnostics for Vue code: `citry.vue.invalid-expression`
+  and `citry.browser.invalid-model-target`, errors by default, and
+  `citry.vue.misspelled-event`, a warning by default.
+- `citry.template.invalid-attribute-value` also covers a boolean attribute
+  with a value other than empty or its own name, with the message variant
+  `boolean`.
+- `citry.browser.undeclared-component-event` is configurable
+  (`configurableSeverity: true`), also covers plain lowercase listener
+  names that are not DOM events, and has the message variant `suggestion`
+  that names a declared event one typing slip away.
+- Added configurable diagnostics that `citry check` reports with the
+  application loaded: `citry.browser.missing-component-key`,
+  `citry.browser.prop-assignment` (also reported by the language server,
+  with the message variant `v-model`),
+  `citry.browser.unknown-server-event-field` (variants `suggestion` and
+  `no-data`), `citry.browser.missing-server-event-field`, and
+  `citry.browser.incompatible-server-event-field`, all errors by default,
+  and `citry.css.misspelled-variable`, a warning by default. The language
+  server reports the three server-event field diagnostics too.
+- Added `citry.browser.unknown-form-field` (variants `suggestion` and
+  `no-data`) and `citry.browser.missing-form-field`, configurable errors
+  that `citry check` and the language server report with the application
+  loaded, for the control names of a form whose `@c-submit` sends its
+  fields to a server event.
+- Added `citry.check.template-not-checked`, an information diagnostic for a
+  class whose template `citry check --static` and the language server skip
+  because its base class comes from another module and Citry has not
+  loaded the application or does not find the class in it.
+- `citry.browser.incompatible-component-prop` also covers a string for a
+  Boolean prop and both results of a condition whose results are literals.
+- `citry.js-data.unsupported-type` also covers a module constant that
+  `js_data()` returns and a value that ty types as a standard type JSON
+  cannot carry.

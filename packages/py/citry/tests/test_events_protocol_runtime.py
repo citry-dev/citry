@@ -356,6 +356,17 @@ def test_builders_copy_open_application_json() -> None:
     assert call["args"] == {"items": [{"name": "before"}]}
 
 
+def test_build_call_carries_the_form_mark_only_when_given() -> None:
+    marked = events.build_call("Search_1", "search", {"page": "3"}, args_source=events.ARGS_SOURCE_FORM)
+    assert marked["argsSource"] == "form"
+    # Without the mark the key is absent, so the server keeps strict binding.
+    assert "argsSource" not in events.build_call("Search_1", "search", {"page": 3})
+    with pytest.raises(events.ProtocolValueError) as raised:
+        events.build_call("Search_1", "search", {}, args_source="json")
+    assert raised.value.issue.path == "/argsSource"
+    assert raised.value.issue.category == "enum"
+
+
 def test_validated_hook_mapping_may_preserve_an_explicit_zero_data_delay() -> None:
     action = {"action": "data", "value": {"saved": True}, "delay": 0}
     assert events.validate_action(action) is None

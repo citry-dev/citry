@@ -1849,7 +1849,7 @@ def test_registry_check_reports_native_vue_component_prop_presence_and_literal_t
     assert [finding.code for finding in incompatible] == ["citry.browser.incompatible-component-prop"] * 3
     assert [finding.message for finding in incompatible] == [
         "Vue prop 'required-title' expects string, but this binding is number.",
-        "Vue prop 'requiredCount' expects number, but this binding is string.",
+        "Vue prop 'requiredCount' expects number, but this binding is \"many\".",
         "Vue prop 'requiredRows' expects unknown[], but this binding is number.",
     ]
     expected_ranges = (
@@ -1860,6 +1860,40 @@ def test_registry_check_reports_native_vue_component_prop_presence_and_literal_t
     assert [(finding.start_index, finding.end_index) for finding in incompatible] == [
         (start, start + width) for start, width in expected_ranges
     ]
+
+
+def test_registry_check_reports_a_boolean_prop_given_a_string_other_than_its_own_name(tmp_path):
+    # Vue turns '' and the prop's own name, hyphenated, into true for a
+    # Boolean prop; any other string arrives as that string.
+    value = "open ? 'required-default' : 'closed'"
+    template = f'<c-card :requiredTitle="\'x\'" :requiredCount="1" :requiredRows="[]" :requiredDefault="{value}" />'
+    findings = _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, template))
+
+    # Only the result the prop rejects is named; the span covers the whole value.
+    assert [finding.message for finding in findings] == [
+        "Vue prop 'requiredDefault' expects boolean, but this binding is \"closed\".",
+    ]
+    assert (findings[0].start_index, findings[0].end_index) == (
+        template.index(value),
+        template.index(value) + len(value),
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "''",
+        "'required-default'",
+        "flag ? '' : false",
+        "flag ? true : 'required-default'",
+        # A string whose text Citry does not read may be one of the two.
+        "`${name}`",
+        "cond ? label : 'x'",
+    ],
+)
+def test_registry_check_accepts_the_strings_vue_turns_into_true_for_a_boolean_prop(tmp_path, value):
+    template = f'<c-card :requiredTitle="\'x\'" :requiredCount="1" :requiredRows="[]" :requiredDefault="{value}" />'
+    assert _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, template)) == []
 
 
 def test_registry_check_tracks_vue_component_prop_spread_order_and_dynamic_uncertainty(tmp_path):
@@ -2324,7 +2358,7 @@ def test_registry_check_reports_undeclared_emits_and_child_listeners(tmp_path):
         (
             "citry.browser.undeclared-component-event",
             "warning",
-            "Component 'c-lane' does not declare event 'drop-tsak' in its emits option.",
+            "Component 'c-lane' does not declare event 'drop-tsak' in its emits option. Did you mean 'drop-task'?",
         ),
         (
             "citry.browser.undeclared-emit",
@@ -2332,4 +2366,179 @@ def test_registry_check_reports_undeclared_emits_and_child_listeners(tmp_path):
             "Event 'drop-tsak' is not declared in this component's emits option.",
         ),
         ("citry.browser.undeclared-emit", "error", "Event 'moved' is not declared in this component's emits option."),
+    ]
+
+
+# The benchmark mistakes the template-only rules catch, one per line.
+_MARKUP_MISTAKES = """
+  <div class="board" id="board" titel="Board">
+    <dvi class="row"></dvi>
+    <h1 id="board">Board</h1>
+    <p>Owner: <div>Ann</div></p>
+    <img src="/static/avatar.svg" width="32">
+    <button :aria-expandd="open" @clik="toggle()" disabled="false">Menu</button>
+    <form v-model="query"><input name="q"></form>
+    <p v-iff="open">Details</p>
+    <p v-if="open &&">More</p>
+  </div>
+"""
+_MARKUP_FINDINGS = [
+    ("citry.template.misspelled-attribute", "error", 1),
+    ("citry.template.misspelled-element", "error", 2),
+    ("citry.template.duplicate-id", "error", 3),
+    ("citry.template.invalid-nesting", "error", 4),
+    ("citry.template.missing-image-alt", "warning", 5),
+    ("citry.template.invalid-attribute-value", "warning", 6),
+    ("citry.template.unknown-aria-attribute", "error", 6),
+    ("citry.vue.misspelled-event", "warning", 6),
+    ("citry.browser.invalid-model-target", "error", 7),
+    ("citry.template.misspelled-directive", "error", 8),
+    ("citry.vue.invalid-expression", "error", 9),
+]
+
+
+def _sorted_findings(report) -> list[tuple[str, str, int | None]]:
+    return sorted(
+        ((item.code, item.severity, item.line) for item in report.findings),
+        key=lambda item: (item[2] or 0, item[0]),
+    )
+
+
+def test_static_check_reports_the_template_only_rules_with_each_default_severity(tmp_path):
+    (tmp_path / "card.py").write_text(
+        f'from citry import Component\nclass Card(Component):\n    template = """{_MARKUP_MISTAKES}"""\n',
+        encoding="utf-8",
+    )
+
+    report = check_project(CheckAppSelection(), tmp_path)
+
+    # The finding lines count from the first line of the template string.
+    # Without the application an invalid attribute value is a warning.
+    assert _sorted_findings(report) == sorted(_MARKUP_FINDINGS, key=lambda item: (item[2], item[0]))
+
+
+def test_static_check_applies_the_component_lint_class_to_the_template_only_rules(tmp_path):
+    (tmp_path / "card.py").write_text(
+        "from citry import Component\n"
+        f'class Card(Component):\n    template = """{_MARKUP_MISTAKES}"""\n'
+        "    class Lint:\n"
+        "        rule_missing_image_alt = 'error'\n"
+        "        rule_duplicate_id = 'ignore'\n"
+        "        rule_invalid_vue_expression = 'warning'\n",
+        encoding="utf-8",
+    )
+
+    findings = {
+        (code, severity) for code, severity, _line in _sorted_findings(check_project(CheckAppSelection(), tmp_path))
+    }
+
+    assert ("citry.template.missing-image-alt", "error") in findings
+    assert ("citry.vue.invalid-expression", "warning") in findings
+    assert not any(code == "citry.template.duplicate-id" for code, _severity in findings)
+
+
+def test_registry_check_reports_the_template_only_rules_with_the_application_settings(tmp_path):
+    engine = Citry(
+        autodiscover=False,
+        lint=LintSettings(rule_misspelled_event="error", rule_invalid_nesting="ignore"),
+    )
+
+    class Card(Component):
+        citry = engine
+        template = _MARKUP_MISTAKES
+
+    class Quiet(Component):
+        citry = engine
+        template = '<p titel="x"></p>'
+
+        class Lint:
+            rule_misspelled_attribute = "ignore"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    # The component sends no browser data, so its Vue names are unknown too.
+    findings = [item for item in _sorted_findings(report) if item[0] != "citry.vue.unknown-variable"]
+
+    # With the application, an invalid attribute value is an error, and
+    # each setting applies; Quiet turns its rule off for itself.
+    expected = [
+        (
+            code,
+            "error" if code in {"citry.template.invalid-attribute-value", "citry.vue.misspelled-event"} else severity,
+            line,
+        )
+        for code, severity, line in _MARKUP_FINDINGS
+        if code != "citry.template.invalid-nesting"
+    ]
+    assert findings == sorted(expected, key=lambda item: (item[2], item[0]))
+
+
+def test_registry_check_reports_a_root_image_only_without_browser_code(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Avatar(Component):
+        citry = engine
+        template = '<img src="/static/avatar.svg">'
+
+    class BrowserAvatar(Component):
+        citry = engine
+        template = '<img :src="src">'
+        js = """
+          $component({ props: ['src'] });
+        """
+
+    class StateAvatar(Component):
+        citry = engine
+        template = '<img src="/static/avatar.svg">'
+
+        class State:
+            loaded: bool = False
+
+    class DataAvatar(Component):
+        citry = engine
+        template = '<img src="/static/avatar.svg">'
+
+        def js_data(self, kwargs, slots):
+            return {"src": "/static/avatar.svg"}
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # Vue passes the alt a parent writes on <c-BrowserAvatar> to its root
+    # <img>, and browser data or State may make Vue render a component
+    # too; a server-only component has no such path.
+    (finding,) = report.findings
+    assert finding.code == "citry.template.missing-image-alt"
+    assert "Avatar" in finding.origin
+    assert "BrowserAvatar" not in finding.origin
+
+
+def test_registry_check_reports_lowercase_child_listener_typos_with_the_configured_severity(tmp_path):
+    engine = Citry(autodiscover=False, lint=LintSettings(rule_undeclared_component_event="error"))
+
+    class Card(Component):
+        citry = engine
+        template = "<section></section>"
+        js = """
+          $component({ emits: ['hide'] });
+        """
+
+    class Board(Component):
+        citry = engine
+        template = '<c-Card @hdie="hideCard" @click="hideCard"></c-Card>'
+        js = """
+          $component({ methods: { hideCard() {} } });
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # `@click` is a DOM event the child's root may fire; `@hdie` is not.
+    assert [
+        (item.code, item.severity, item.message)
+        for item in report.findings
+        if item.code == "citry.browser.undeclared-component-event"
+    ] == [
+        (
+            "citry.browser.undeclared-component-event",
+            "error",
+            "Component 'c-card' does not declare event 'hdie' in its emits option. Did you mean 'hide'?",
+        ),
     ]

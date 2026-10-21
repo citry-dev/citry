@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
 # Lane is a child component with a typed `emits` object, rendered by Card.
 _APP = """from pathlib import Path
-from citry import Citry, Component
-engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+from citry import Citry, Component, LintSettings
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, lint=LintSettings({lint}))
 class Lane(Component):
     citry = engine
     template_file = 'lane.html'
@@ -45,10 +45,11 @@ def _project(
     javascript: str,
     *,
     extra: str = "",
+    lint: str = "",
     lane_template: str = "<section/>",
     lane_js: str = _LANE_JS,
 ):
-    (tmp_path / "app.py").write_text(_APP.format(extra=extra), encoding="utf-8")
+    (tmp_path / "app.py").write_text(_APP.format(extra=extra, lint=lint), encoding="utf-8")
     (tmp_path / "card.html").write_text(template, encoding="utf-8")
     (tmp_path / "card.js").write_text(javascript, encoding="utf-8")
     (tmp_path / "lane.html").write_text(lane_template, encoding="utf-8")
@@ -294,13 +295,35 @@ def test_child_listener_names_are_checked(tmp_path):
     # `@click` may be a native event, and `@dropTask` matches `drop-task`.
     assert [(item.message, item.severity) for item in found] == [
         (
-            "Component 'c-lane' does not declare event 'drop-tsak' in its emits option.",
+            "Component 'c-lane' does not declare event 'drop-tsak' in its emits option. Did you mean 'drop-task'?",
             types.DiagnosticSeverity.Warning,
         )
     ]
     assert found[0].range == types.Range(
         _position(_PARENT_TEMPLATE, "@drop-tsak"), _position(_PARENT_TEMPLATE, "@drop-tsak", len("@drop-tsak"))
     )
+
+
+def test_child_listener_lowercase_typos_follow_the_application_severity(tmp_path):
+    template = '<c-Lane @closd="move($event)" @emptied="move($event)" @input="move($event)"></c-Lane>'
+    project, _javascript, template_document, documents = _project(
+        tmp_path,
+        template,
+        _PARENT_JS,
+        lint="rule_undeclared_component_event='error'",
+    )
+    found = [
+        item
+        for item in browser_diagnostics(template_document, project, documents)
+        if item.code == "citry.browser.undeclared-component-event"
+    ]
+    # `@input` is a DOM event and `@emptied` is declared; `@closd` is a typo.
+    assert [(item.message, item.severity) for item in found] == [
+        (
+            "Component 'c-lane' does not declare event 'closd' in its emits option. Did you mean 'closed'?",
+            types.DiagnosticSeverity.Error,
+        )
+    ]
 
 
 @pytest.mark.parametrize(
@@ -339,3 +362,42 @@ def test_array_emits_type_declared_listeners_as_any_and_others_as_events(tmp_pat
             assert not [message for message in errors if "parameter of type 'null'" in message], errors
         else:
             assert _probe_message(expected) in errors, errors
+
+
+_PROP_JS = """$component({
+  props: { open: { type: Boolean, required: true } },
+  methods: { close() { this.open = false; } },
+});
+"""
+
+
+@pytest.mark.parametrize(
+    ("lint", "expected"),
+    [
+        (
+            "",
+            [
+                ("card.html", types.DiagnosticSeverity.Error),
+                # A write in the component's JavaScript is at most a warning.
+                ("card.js", types.DiagnosticSeverity.Warning),
+            ],
+        ),
+        ("rule_prop_assignment='ignore'", []),
+    ],
+)
+def test_assignments_to_an_own_prop_are_reported(tmp_path, lint, expected):
+    template = '<button @click="open = false">Close</button><p v-text="open ? 1 : 2"></p>'
+    project, javascript_document, template_document, documents = _project(tmp_path, template, _PROP_JS, lint=lint)
+
+    found = [
+        (name, item)
+        for name, document in (("card.html", template_document), ("card.js", javascript_document))
+        for item in browser_diagnostics(document, project, documents)
+        if item.code == "citry.browser.prop-assignment"
+    ]
+
+    assert [(name, item.severity) for name, item in found] == expected
+    for name, item in found:
+        source = template if name == "card.html" else _PROP_JS
+        assert item.range.start == _position(source, "open = false")
+        assert item.range.end == _position(source, "open = false", len("open"))
