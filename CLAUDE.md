@@ -288,8 +288,9 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 - **The PyO3 surface is registered in
   [`citry_core_py/src/lib.rs`](crates/citry_core_py/src/lib.rs).** Each Rust
   capability is added as a submodule of `_rust`: `template_parser`
-  (`parse_template`/`compile_template` plus the AST classes), `safe_eval`,
-  and `html_transform`. That list is exactly
+  (`parse_template`/`compile_template` plus the AST classes), `vue` (the Vue
+  compiler and server renderer), `html_transform`, `i18n`, `safe_eval`, and
+  `template_formatter`. That list is exactly
   what Python sees, so keep it in step with the
   [`_rust.pyi`](packages/py/citry_core/citry_core/_rust.pyi) stub.
 - **Python dependencies have one owner in the uv workspace.** A package's
