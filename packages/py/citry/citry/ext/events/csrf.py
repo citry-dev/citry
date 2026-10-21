@@ -145,8 +145,8 @@ def csrf_field_names(citry: Citry) -> frozenset[str]:
     """
     Return the host CSRF field names the server drops from an event call's arguments.
 
-    The value is the engine-wide
-    ``extensions_defaults["events"]["_csrf_field_names"]`` setting, which the
+    The value is the engine-wide ``_csrf_field_names`` key of
+    ``extensions_defaults["events"]``, which the
     extension validates when the engine is built, or Django's
     ``csrfmiddlewaretoken`` when it is not set.
     """

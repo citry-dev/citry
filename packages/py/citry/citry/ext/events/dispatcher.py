@@ -217,7 +217,8 @@ class CallEvent:
             instance-less call (an API client, a hand-written form).
         transport: The transport that carried the call (``"http"``, ...).
         args: The call's args before validation, with the host CSRF field
-            names removed (``extensions_defaults["events"]["_csrf_field_names"]``).
+            names removed (the ``_csrf_field_names`` key of
+            ``extensions_defaults["events"]``).
             Guards read this when they need payload values, because one guard
             covers handlers with different schemas.
 
