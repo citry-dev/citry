@@ -261,7 +261,11 @@ def test_findings_about_a_component_member_map_to_their_file_line(tmp_path: Path
         "class BoardPage:\n"
         "    def js_data(self, kwargs, slots):\n"
         '        return {"apiBase": API_BASE}\n\n'
-        '    template = """\n      <p>{{ ownr }}</p>\n    """\n'
+        '    template = """\n      <p>{{ ownr }}</p>\n    """\n\n'
+        "    class JsData:\n"
+        "        api_base: PurePosixPath\n\n"
+        "    def subtitle(self):\n"
+        '        return self.i18n.tr("board-subtitel")\n'
     )
     file = f"{work}/app/components/board_page.py"
     payload = {
@@ -283,12 +287,30 @@ def test_findings_about_a_component_member_map_to_their_file_line(tmp_path: Path
                 "message": "Template variable 'ownr' is not available in this template.",
                 "range": {"start": {"line": 2, "column": 10}},
             },
+            {
+                # A JsData field: the range counts lines of the file from 0.
+                "origin": "app.components.board_page.BoardPage.JsData.api_base",
+                "code": "citry.js-data.unsupported-type",
+                "severity": "warning",
+                "message": "JsData field 'api_base' is not a clean JSON value.",
+                "range": {"start": {"line": 9, "column": 8}},
+            },
+            {
+                # An i18n call in Python names the class alone, and counts lines of the file from 0.
+                "origin": f"{file} (app.components.board_page.BoardPage)",
+                "code": "citry.i18n.unknown-message",
+                "severity": "error",
+                "message": "Unknown i18n message ID 'board-subtitel'.",
+                "range": {"start": {"line": 12, "column": 15}},
+            },
         ]
     }
     findings = citry_json(json.dumps(payload), "", 1, work)
     assert [(finding.file, finding.line) for finding in findings] == [
         ("app/components/board_page.py", 3),
         ("app/components/board_page.py", 6),
+        ("app/components/board_page.py", 10),
+        ("app/components/board_page.py", 13),
     ]
 
 

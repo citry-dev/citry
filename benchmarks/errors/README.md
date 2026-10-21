@@ -89,6 +89,18 @@ no release on PyPI, so its app's lockfile pins it to a git
 commit, and `prepare` builds its Rust extension. That needs a Rust
 compiler (https://rustup.rs/) unless uv has already built it.
 
+The Citry app measures the Citry in this repository, not a release, so a
+Citry release ships with its results already measured. Its lockfile
+installs citry and citry-lsp from `packages/py/`, built as a release
+would be, and citry-core from PyPI at the version citry pins. A change
+to citry-core's Rust code is therefore measured only once a citry-core
+release has it. `prepare` installs the two packages again whenever a
+file in their folders changes, and first checks that the app's
+`uv.lock` still matches their sources; when it does not, it stops and
+asks you to run `uv lock` in `frameworks/citry/baseline/`. Each run's
+`run.json` lists these packages under `from_checkout`, and the report
+names them with the run's commit.
+
 `run` takes `--framework` and `--mistake`, each repeatable, to run part of
 the matrix, and `--skip-runtime` to run the static stages only. Installed
 environments, working copies and the raw output of every tool are kept under
@@ -121,7 +133,9 @@ finish in.
 output and browser check in `.benchmarks/errors/results/` (not to be
 confused with the committed `results/` report folder), and a later run runs
 only the cases whose inputs changed: the case itself, its framework's
-folder, what that framework's environment installed, the runner code that
+folder, what that framework's environment installed (for the Citry app,
+the files of citry and citry-lsp it built from this repository), the
+runner code that
 runs the tools and the browser, the installed Playwright, the Node and
 Python versions, the operating system version, a few environment variables
 the tools read, or the cache folder's location. Output that may say more
@@ -150,8 +164,9 @@ one after another and five cases ran at once, a browser check took about
 about 38 minutes, with the same cells. A rerun with nothing changed
 repeats only the browser checks whose journey stops on an error page,
 which are never stored: 4 cases in Jinja and FastHTML, and a few in every
-other framework. It is not part of routine CI. Run it at each Citry
-release, and when a framework's pinned versions change.
+other framework. It is not part of routine CI. Run it before each Citry
+release, so the release ships with its results, and when a framework's
+pinned versions change.
 
 ## Latest result
 
@@ -992,7 +1007,9 @@ django-components app.
 | `build` | The production build, when the framework has one |
 
 Each baseline pins exact versions in its own lockfile, and those versions are
-part of the result.
+part of the result. The Citry app is the exception: it installs citry and
+citry-lsp from this repository's sources, so a report names the commit it
+measured instead of a release.
 
 ## What the result does not show
 

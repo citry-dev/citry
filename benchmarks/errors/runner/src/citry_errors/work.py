@@ -6,6 +6,7 @@ import hashlib
 import itertools
 import json
 import os
+import re
 import shutil
 import subprocess
 import tomllib
@@ -76,8 +77,9 @@ def local_source_digest(framework: Framework) -> str:
     """
     Hash the files of every package the clean app installs from disk.
 
-    A change to them changes what the installed package does, so it must
-    install the package again and run the cases again.
+    A change to them can change what the installed package does, so the
+    runner installs the package again when this digest changes. It hashes
+    the package's tests and notes too, which costs only a rebuild.
     """
     digest = hashlib.sha256()
     for name, path in local_sources(framework).items():
@@ -92,6 +94,72 @@ def local_source_digest(framework: Framework) -> str:
             content = file.read_bytes() if file.is_file() else b"<deleted>"
             digest.update(relative.encode() + b"\0" + content + b"\0")
     return digest.hexdigest()
+
+
+def installed_local_digest(framework: Framework, env: Path) -> str:
+    """
+    Hash the files that the environment `env` installed for each package the clean app installs from disk.
+
+    Each installed package lists its files with their hashes in its
+    `*.dist-info/RECORD`. The stored results depend on those files, not on
+    the package's whole folder, so an edit to its tests or changelog keeps
+    them. The lines for the `.dist-info` folder itself are left out: its
+    metadata holds the package's README, and its `direct_url.json` names
+    the checkout the package was built from.
+    """
+    digest = hashlib.sha256()
+    for name in local_sources(framework):
+        # Installed folder names use underscores where the package name may
+        # use dashes or dots, such as citry_lsp for citry-lsp.
+        normalized = re.sub(r"[-_.]+", "_", name).lower()
+        records = sorted((env / ".venv" / "lib").glob(f"python*/site-packages/{normalized}-*.dist-info/RECORD"))
+        digest.update(f"{name}\0".encode())
+        for record in records:
+            for line in record.read_text(encoding="utf-8").splitlines():
+                if line and ".dist-info/" not in line.split(",", 1)[0]:
+                    digest.update(line.encode() + b"\0")
+        if not records:
+            digest.update(b"<not installed>\0")
+    return digest.hexdigest()
+
+
+def _check_lock(framework: Framework) -> None:
+    """
+    Stop when the clean app's uv.lock no longer matches the sources of a package it installs from disk.
+
+    `uv sync --frozen` installs whatever the lock says without comparing it
+    with those sources, so a dependency they add, or a new citry-core pin,
+    would be left out silently. uv runs in the clean app's folder, because
+    it resolves `${PROJECT_ROOT}` in the Citry app's overrides against the
+    folder it starts in.
+    """
+    if not local_sources(framework) or not (framework.baseline / "uv.lock").is_file():
+        return
+    result = subprocess.run(
+        ["uv", "lock", "--check", "--directory", str(framework.baseline)],
+        env={key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ConfigError(
+            f"{framework.baseline / 'uv.lock'} does not match the sources it installs from disk; "
+            f"run `uv lock` in that folder:\n{result.stderr[-2000:]}"
+        )
+
+
+def _remove_old_builds(framework: Framework) -> None:
+    """
+    Delete the build/ folder that setuptools leaves in each package folder the clean app installs from.
+
+    setuptools copies the sources into build/lib and builds the wheel from
+    there, keeping what an earlier build copied, so a module deleted or
+    renamed since would still be installed.
+    """
+    for path in local_sources(framework).values():
+        if path.is_dir():
+            shutil.rmtree(path / "build", ignore_errors=True)
 
 
 def _manifest_digest(framework: Framework) -> str:
@@ -117,8 +185,10 @@ def prepare(framework: Framework) -> Path:
     digest = _manifest_digest(framework)
     if marker.is_file() and json.loads(marker.read_text()).get("digest") == digest:
         return env
+    _check_lock(framework)
     env.mkdir(parents=True, exist_ok=True)
     marker.unlink(missing_ok=True)
+    _remove_old_builds(framework)
     for name in framework.setup_manifests:
         shutil.copy2(framework.baseline / name, env / name)
     result = subprocess.run(

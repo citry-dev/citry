@@ -76,8 +76,9 @@ def citry_json(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Fin
 
 
 _ORIGIN_WITH_LINE = re.compile(r"^(?P<file>.+?):(?P<line>\d+)(?::\d+)?$")
-# A finding about one member of a component class that Citry read from its
-# file, such as `/work/app/board_page.py (app.board_page.BoardPage.js_data)`.
+# A finding about a component class, or one of its members, that Citry
+# read from the class's file, such as
+# `/work/app/board_page.py (app.board_page.BoardPage.js_data)`.
 _ORIGIN_WITH_MEMBER = re.compile(r"^(?P<file>.+?) \((?P<member>[^()]+)\)$")
 
 
@@ -88,9 +89,13 @@ def _citry_location(origin: str, span: dict, work: Path) -> tuple[str | None, in
     finding in a template written inside a Python class names the attribute
     instead, `package.module.Class.template`, with lines counted inside the
     template, so the class is looked up to turn that into a file line. A
-    finding about a component member that Citry read from the file's source,
-    such as a value `js_data()` returns, names `path (package.module.Class.member)`
-    and counts its range in lines of that file, starting from 0.
+    field of a `JsData` class names `package.module.Class.JsData.field`, and
+    a value `js_data()` returns or an i18n call in Python names the file
+    with the class or member in brackets, `path (package.module.Class.js_data)`
+    or `path (package.module.Class)`; these count lines of the file from 0.
+    When the app could not be loaded, `citry check` reads a template from
+    the file alone and names it `path (Class.template)`, with lines counted
+    inside the template.
     """
     if not origin:
         return None, None
@@ -102,7 +107,6 @@ def _citry_location(origin: str, span: dict, work: Path) -> tuple[str | None, in
     if match:
         path = Path(match["file"])
         if match["member"].endswith(".template"):
-            # A template read without the app keeps counting inside the template.
             class_name = match["member"].split(".")[-2]
             return relative(str(path), work), _inline_template_line(path, class_name, "template", template_line)
         return relative(str(path), work), None if template_line is None else int(template_line) + 1
@@ -112,6 +116,9 @@ def _citry_location(origin: str, span: dict, work: Path) -> tuple[str | None, in
         if not path.is_file():
             continue
         class_name, attribute = parts[split], parts[split + 1] if split + 1 < len(parts) else ""
+        if attribute == "JsData":
+            # A JsData field's range already counts lines of the file, from 0.
+            return relative(str(path), work), None if template_line is None else int(template_line) + 1
         return relative(str(path), work), _inline_template_line(path, class_name, attribute, template_line)
     return origin, None
 

@@ -309,30 +309,67 @@ def _package_from_disk(toy: Toy, tmp_path: Path) -> tuple[Framework, Path]:
     (package.parent / ".gitignore").write_text("build/\n")
     subprocess.run(["git", "init", "-q", str(package.parent)], check=True)
     (toy.root / "frameworks" / "toy" / "baseline" / "pyproject.toml").write_text(
-        f'[tool.uv.sources]\npkg = {{ path = "{package.as_posix()}" }}\n'
+        '[project]\nname = "app"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = ["pkg"]\n\n'
+        f'[tool.uv]\npackage = false\n\n[tool.uv.sources]\npkg = {{ path = "{package.as_posix()}" }}\n'
     )
     return load_frameworks(toy.root / "frameworks")["toy"], package
 
 
-def test_a_change_to_a_package_installed_from_disk_installs_it_again_and_runs_every_case(
-    toy: Toy, tmp_path: Path
-) -> None:
+def test_a_change_to_a_package_installed_from_disk_installs_it_again(toy: Toy, tmp_path: Path) -> None:
     framework, package = _package_from_disk(toy, tmp_path)
-    env = toy.cache / "envs" / "toy"
-    install, results = work._manifest_digest(framework), cache.framework_digest(framework, env)
+    install = work._manifest_digest(framework)
     # Build output beside the sources is ignored by git, so it changes nothing.
     (package / "build").mkdir()
     (package / "build" / "module.py").write_text("VALUE = 1\n")
-    assert (work._manifest_digest(framework), cache.framework_digest(framework, env)) == (install, results)
+    assert work._manifest_digest(framework) == install
     # An edit that no lockfile and no file of the framework's folder records
-    # still installs the package again and runs the cases again.
+    # still installs the package again.
     (package / "module.py").write_text("VALUE = 2\n")
     assert work._manifest_digest(framework) != install
-    assert cache.framework_digest(framework, env) != results
     # A new file the sources gain counts too, before anyone commits it.
     (package / "module.py").write_text("VALUE = 1\n")
     (package / "helper.py").write_text("")
     assert work._manifest_digest(framework) != install
+
+
+def test_the_stored_results_follow_the_files_installed_from_disk(toy: Toy, tmp_path: Path) -> None:
+    framework, package = _package_from_disk(toy, tmp_path)
+    env = toy.cache / "envs" / "toy"
+    record = env / ".venv" / "lib" / "python3.12" / "site-packages" / "pkg-1.0.0.dist-info" / "RECORD"
+    record.parent.mkdir(parents=True)
+    installed = "pkg/module.py,sha256=one,10\npkg-1.0.0.dist-info/METADATA,sha256=readme,99\n"
+    record.write_text(installed)
+    before = cache.framework_digest(framework, env)
+    # An edit to the sources that changes nothing installed, such as a test,
+    # keeps the stored results.
+    (package / "test_module.py").write_text("def test(): pass\n")
+    assert cache.framework_digest(framework, env) == before
+    # So does a new README, which only reaches the package's metadata.
+    record.write_text(installed.replace("readme,99", "new-readme,98"))
+    assert cache.framework_digest(framework, env) == before
+    # A changed installed module runs every case again.
+    record.write_text(installed.replace("one,10", "two,10"))
+    assert cache.framework_digest(framework, env) != before
+
+
+def test_setup_stops_when_the_lock_no_longer_matches_a_package_installed_from_disk(
+    toy: Toy, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    framework, package = _package_from_disk(toy, tmp_path)
+    # The made-up packages need nothing from an index.
+    monkeypatch.setenv("UV_OFFLINE", "1")
+    subprocess.run(["uv", "lock", "-q", "--directory", str(framework.baseline)], check=True)
+    framework = Framework("toy", "Toy", ("pyproject.toml", "uv.lock"), ("true",), (), None, "", framework.root)
+    # An earlier build's copy of a module deleted since would be installed again.
+    (package / "build" / "lib").mkdir(parents=True)
+    (package / "build" / "lib" / "gone.py").write_text("")
+    work.prepare(framework)
+    assert not (package / "build").exists()
+    # A dependency the sources add is missing from the lock, so setup stops
+    # instead of installing without it.
+    (package / "pyproject.toml").write_text('[project]\nname = "pkg"\nversion = "1.0.0"\ndependencies = ["other"]\n')
+    with pytest.raises(ConfigError, match="run `uv lock`"):
+        work.prepare(framework)
 
 
 def test_a_run_and_its_report_name_the_packages_installed_from_this_repository(toy: Toy, tmp_path: Path) -> None:
@@ -343,7 +380,16 @@ def test_a_run_and_its_report_name_the_packages_installed_from_this_repository(t
     [package_record] = record["toy"]
     assert (package_record["name"], package_record["version"], package_record["path"]) == ("pkg", "1.0.0", "pkg")
     # Nothing is committed in the made-up checkout, so the sources count as changed.
-    assert package_record["changed"] is True
+    assert (package_record["changed"], package_record["tree"]) == (True, "")
+    git = ["git", "-C", str(package.parent), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run([*git, "add", "."], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "sources"], check=True)
+    [committed] = cli._from_checkout([framework], repo=package.parent)["toy"]
+    assert committed["changed"] is False
+    assert (
+        committed["tree"]
+        == subprocess.run([*git, "rev-parse", "HEAD:pkg"], capture_output=True, text=True, check=True).stdout.strip()
+    )
     # The run records the packages next to the commit, and the report names them.
     run_dir = toy.run()
     source = json.loads((run_dir / "run.json").read_text())
