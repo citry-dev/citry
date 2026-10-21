@@ -27,6 +27,9 @@ def page(request):
     return render(request, 'board/page.html', {
         'owner': Owner(name='Ada'),
         'cards': cards,
+        # Every template the page includes sees the page's context, so each
+        # card reads the board's name without taking it as an argument.
+        'board_name': 'Projects',
         # The template hands this to Alpine through the json_script filter.
         'api_base': settings.API_BASE,
         'accent': settings.ACCENT,

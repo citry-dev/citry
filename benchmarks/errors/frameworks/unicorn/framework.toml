@@ -38,7 +38,14 @@ Hide button runs the card's own `hide()`, which calls \
 django-unicorn's child-components docs reach a parent. django-unicorn has no \
 slots: a component renders only its own template, so the card writes its own \
 footer link from its title and count, as the Rusty app's card does, and m05, \
-m35, m36 and m37 do not apply.
+m35, m36 and m37 do not apply. \
+The card prints the board's name, `{{ board_name }}`, from a context \
+processor, board/context_processors.py, listed in the settings. \
+django-unicorn renders a component's template with the request, so \
+Django runs the context processors for it, including when the card list \
+renders the cards again after Hide. The page's own context reaches a \
+component only on its first render, so after Hide the cards would lose a \
+value the view put there.
 - counter keeps the saved total in a `count: int` field. Add runs \
 `save(amount=1)`, a keyword argument as the actions docs write them \
 (`is_user_via_kwarg(pk=2)`).

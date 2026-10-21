@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'BoardState.projects[0].count' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.foreach(BoardState.visible_projects, project_card)'
+new = 'rx.foreach(BoardState.projects[0].count, project_card)'

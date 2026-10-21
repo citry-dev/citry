@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+Reflex has no markup. A component's inputs are Python call arguments, so passing the count as a string is a value computed in code, which is mistake m17.
+"""

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'status(opne=' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'status(open=DetailsState.open,'
+new = 'status(opne=DetailsState.open,'

@@ -63,6 +63,10 @@ measures. In the Next.js and Nuxt ports of m12, reading the secret in
 browser code also sends it: the server renders it into the page before the
 browser reports a hydration error.
 
+The board page wraps the cards in `<c-provide key="board" name="Projects">`,
+and each card reads the board's name in `template_data()` with
+`self.inject("board")`, the first form Citry's provide-and-inject docs show.
+
 The search form is its own `Search` component. `@c-submit.prevent` sends
 the form's fields to the component's `search` server event, as Citry's
 forms guide shows, and the event renders the component again with what

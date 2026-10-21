@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+The card's Hide button sends the event the page gave it, `BoardState.hide(project.title)`, which already carries the card's title, so the card sends no value of its own whose type could be wrong.
+"""

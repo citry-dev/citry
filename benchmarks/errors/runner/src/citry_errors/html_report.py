@@ -47,7 +47,7 @@ NO_CASE = ("No case written", "#a0aec0")
 GROUPS: tuple[tuple[str | None, tuple[str, ...]], ...] = (
     (None, ("citry",)),
     ("Django libraries", ("django", "rusty", "jinja", "tetra", "unicorn", "django-components")),
-    ("Other Python libraries", ("fasthtml", "reactpy")),
+    ("Other Python libraries", ("fasthtml", "reactpy", "reflex")),
     ("JavaScript SSR", ("next", "nuxt")),
 )
 
@@ -256,7 +256,10 @@ def render(summary: dict[str, Any]) -> str:
     notice = f"Run {escape(summary['run'])}"
     if source:
         notice += f": cases and tools from commit {escape(source['commit'][:12])}"
-        notice += ", with uncommitted benchmark changes" if source.get("benchmark_files_changed") else ""
+        if source.get("inputs_tree"):
+            notice += f", benchmark inputs tree {escape(source['inputs_tree'][:12])}"
+        changed = source.get("inputs_changed", source.get("benchmark_files_changed"))
+        notice += ", with uncommitted benchmark changes" if changed else ""
     out.append(f'<p class="notice">{notice}.</p>')
 
     out.append('<section class="group"><details open><summary><h2>Outcomes</h2></summary><div class="group-body">')

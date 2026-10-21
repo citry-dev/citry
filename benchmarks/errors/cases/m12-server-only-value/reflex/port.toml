@@ -1,0 +1,10 @@
+# The page reads the backend-only var that holds the secret where it should
+# read the public api_base. Reflex writes the var's value into the compiled
+# page, so the API line shows the secret.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'BoardState._secret_token' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.text("API: ", BoardState.api_base),'
+new = 'rx.text("API: ", BoardState._secret_token),'

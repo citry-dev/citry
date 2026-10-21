@@ -1,0 +1,4 @@
+status = "prevented"
+reason = """
+A Reflex developer who keeps the API base as a path writes `pathlib.Path`, and Reflex converts a `Path` it sends to the browser into its text with its own serializer (`serialize_path` in reflex_base/utils/serializers.py), so the browser receives `/api` and the page is unchanged. Under the decision on conversions in the plan (docs/design/error_prevention_benchmark_plan.md, decisions on question 3), a framework that converts the value for the developer counts as prevented. Reflex has no serializer for every path class: a field typed `PurePosixPath` is rejected when the state class is defined.
+"""

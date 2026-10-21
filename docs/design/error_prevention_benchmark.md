@@ -110,7 +110,10 @@ details and the search form turned into its components
 (`frameworks/unicorn`). Tetra, whose components the server renders and
 whose Alpine code in the browser calls their Python methods on the
 server, is measured as the Django app with the interactive parts turned
-into its components (`frameworks/tetra`). Reflex is not measured yet.
+into its components (`frameworks/tetra`). Reflex (`frameworks/reflex`),
+whose Python components Reflex compiles into a React app, is measured
+with its development server, `reflex run`, and with `reflex compile --dry`
+as a check stage.
 
 ### Fairness rules
 
@@ -158,9 +161,15 @@ into its components (`frameworks/tetra`). Reflex is not measured yet.
   make the mistake. A case is not changed after its result is seen, except to
   fix a case that did not express its mistake.
 - The catalogue is frozen before a published run. Each run records the
-  commit it started from and whether the benchmark folder had uncommitted
-  changes, and the report prints both, so the cases it scored can be read
-  back from that commit.
+  commit it started from, whether the benchmark folder had uncommitted
+  changes, and the git tree id of the benchmark's inputs (`cases/`,
+  `catalogue.toml`, `frameworks/` and `runner/`, without the published
+  `results/`), and the report prints them, so the cases it scored can be
+  read back from that commit. The tree id is there because a rebase or a
+  squash merge, which GitHub can do when it merges a stack of pull
+  requests, gives the commit a new hash; any commit whose inputs give the same tree id has the same
+  cases and tools. The README shows the two git commands that work it
+  out.
 - A report that points away from the change counts only with an `indirect`
   note on the case. These notes are written after reading the tool output,
   so they are the one place where a result informs a case. To keep that in
@@ -215,8 +224,12 @@ one, where it would change the page that every existing case is compared on.
   what the case's mistake itself saved.
 - **What a record holds.** For each element: tag, `title`, the button type
   the browser settled on, computed text color, border color, display and
-  visibility, `alt`, `id`, every `aria-*` attribute, and the disabled state.
-  The disabled state is what the browser applies, so `disabled="false"`
+  visibility, `alt`, `id`, every `aria-*` attribute, the disabled state,
+  and, for an `<img>`, whether it loaded (`complete && naturalWidth > 0`).
+  An image the server answers with something other than an image, such as
+  a development server that sends the app's page for any unknown path,
+  breaks without an error status, so only this value shows it. The
+  disabled state is what the browser applies, so `disabled="false"`
   counts as disabled, as it does for the user. A border color that neither
   the page nor the browser's defaults set follows the text color, so it
   adds a difference only where one of them sets it. It is read with the
@@ -229,8 +242,8 @@ one, where it would change the page that every existing case is compared on.
   comparison: Citry mounts each interactive page into an element whose
   `citry-vue-` id ends in 32 random hex digits, new on every render, so
   without the blanking no two Citry records would match. A mistake that
-  changes only `alt`, `id`, an `aria-*` attribute, the disabled state or a
-  border color reads as "silently wrong". Like "never", that counts as
+  changes only `alt`, `id`, an `aria-*` attribute, the disabled state,
+  whether an image loaded or a border color reads as "silently wrong". Like "never", that counts as
   missed.
 
 ## How it behaves when something goes wrong
@@ -249,6 +262,8 @@ one, where it would change the page that every existing case is compared on.
 | A step is not a table, has an unknown action, a missing key, a key its action does not use (such as `ms` on a click), an empty or non-text selector or key, text that is not a string, or an `ms` that is not a whole number above 0 | Loading fails as above, with the file, the journey and the step named. A key another action uses would otherwise be ignored without a word |
 | In a case, a journey step cannot find or use its element within five seconds, or the page does not load within 60 seconds or go quiet within 15 seconds after the last step | The journey stops, the page is recorded where it stopped, and the case counts as "silently wrong" unless something reported it. The evidence holds the error, plus the journey's name for a journey other than the default. When the default journey stops, the reload record is skipped as well |
 | A journey step fails in the clean app | Every cell of that framework is marked `!`, as for any other clean-app problem, because the case's journey could not be compared with a working one |
+| An image is still loading when the page is recorded | The runner first waits until every image that has not finished loads or fails, for at most two seconds, then records whether each one loaded. An image that takes longer records as not loaded; if that happens in the clean app's run and not in a case's, or the other way round, the case reads as "silently wrong", the same risk as any page still changing under load |
+| A page has a lazy-loaded image the browser never requests, such as one far below the fold | It uses up the two-second wait at every record and records as not loaded in every run, so a misspelled path for that image reads as "never". The record is then taken up to two seconds after the page settled, so a navigation in that time fails the record, as for any step that leaves the page mid-navigation. No baseline has one: Next.js's `<Image>` is lazy by default, but its avatar sits in view near the top and loads |
 | A step leaves the page mid-navigation, so it cannot be recorded | The journey counts as failed, as above, with the reason in the record |
 | A developer-written `id` or `aria-*` value contains 16 or more hex digits in a row, such as a content hash or a long number | That part is blanked like a generated id, so a mistake that changes only it reads as "never" |
 | A `press` step with no selector runs when nothing has focus | The key goes to the page and may do nothing, in the clean app and the case alike, so nothing reports that the journey did less than intended |
@@ -258,9 +273,11 @@ one, where it would change the page that every existing case is compared on.
 | A tool times out | The stage counts as neither a catch nor a miss. When it comes before the stage the cell shows, so that it could have reported the mistake earlier, the cell is marked `~` |
 | The development server never answers | The case counts as a runtime error, because a developer starting the app would see the failure. A server that is only slower than the framework's `ready_timeout` is counted the same way, so the timeout is set well above the clean app's start time |
 | A tool reports the mistake more than `window` lines from the change, or in another file | It counts only when the case's `indirect` note says why it comes from the mistake and names its rule code, and the cell is marked `°`. Otherwise it is listed in `results.json` under `unconfirmed_indirect` and does not count, because a change can also cause side-effect findings, such as a variable it left unused |
-| A tool crashes on a case | The runner takes the first file and line under the working copy that the whole output names, and scores the failure like any located finding. A failure that names no such file counts only when the end of its output names the changed file; otherwise it is listed as unconfirmed, because it could be an unrelated failure such as a build that could not reach the network. A Citry app that fails to import always counts: the check imports it the same way every run and needs no network |
+| A tool crashes on a case | The runner takes the first file and line under the working copy that the whole output names, and scores the failure like any located finding. A failure that names no such file counts only when the end of its output names the changed file; otherwise it is listed as unconfirmed, because it could be an unrelated failure such as a build that could not reach the network. A Citry app that fails to import always counts: the check imports it the same way every run and needs no network. A Python command that fails with a traceback, such as Reflex's `reflex compile`, is read with the `python-traceback` parser instead: the finding points at the traceback's last frame inside the working copy, which is the app's own line the failure passed through, and is named after the exception |
 | A tool's output format changes | The parser finds nothing and the stage looks silent. The runner's tests cover each parser on small made-up outputs in the tools' formats, and a cell that suddenly changes after a version bump is checked against the raw output |
-| Two workers start development servers at the same moment | They get different ports. Ports come from 20000-24677: below the range the operating system gives to outgoing connections, and below 24678, where `nuxt dev` looks for a free hot-reload port (24678 to 24698). The runner keeps each port reserved until its server stops |
+| Two workers start development servers at the same moment | They get different ports. Ports come from 20000-24677: below the range the operating system gives to outgoing connections, and below 24678, where `nuxt dev` looks for a free hot-reload port (24678 to 24698). The runner keeps each port reserved until its server stops. A server that names `{backend_port}` in its command or its environment variables, such as `reflex run`, which runs its Python backend on a port of its own, gets a second reserved port the same way |
+| A development server prints errors while the runner stops it, such as `[ERROR] Unexpected exit from worker-1`, which granian prints under `reflex run` in some runs and not others | After the last journey the runner waits until the server's log has not grown for 0.3 seconds (at most 5 seconds), and the record of its output ends there, before the stop signal; the `server.log` file keeps the rest. Without this, such a line would mark the clean app's run as broken, or a case as a runtime error, at random. Every command runs with `PYTHONUNBUFFERED=1`, so a Python server's printed output reaches the log while the page is checked |
+| An error the server prints only while it stops, or holds back until a child process exits | It does not count. `reflex run` keeps the Vite server's output to itself and prints it only when that process exits, so no Vite error reaches a Reflex record; at Reflex's default log level the developer does not see that output while the app runs either |
 | Another program takes a server's port after the runner checked it was free | The server cannot listen. When its log says the address is in use, the runner starts it again on another port, trying up to three ports in all. After that the case counts as a runtime error, as for any server that never answers, and its browser check is not stored |
 | Two `nuxt dev` servers start together | Each picks a port for its server-side hot reload from the same 21 ports, so both can pick the same one. Nuxt's `max_jobs = 1` runs its cases, static stages included, one at a time; other frameworks' cases still run beside the Nuxt case |
 | Parallel cases slow each other down | The clean apps run alone, before any case, so the page every case is compared with is recorded on a quiet machine. A case's browser check waits a fixed `settle_ms` after the page goes quiet, so a page that is still changing after that under load can read as "silently wrong". The development server's `ready_timeout` and each tool's timeout are minutes, far above a case's normal time, but the browser's own limits are seconds (five per step, 15 for the page to go quiet), so heavy load could make a journey fail and read as "silently wrong". A run with `--jobs 1` and one with the default gave the same cells for Jinja and FastHTML; a cell that changes between the two would point at this |
@@ -289,8 +306,9 @@ one, where it would change the page that every existing case is compared on.
   corrections from each framework's users are invited
   ([#151](https://github.com/citry-dev/citry/issues/151)).
 - **The page comparison sees text, element types, button types, tooltips,
-  text and border colors, display, visibility, `alt`, `id`, `aria-*` and
-  the disabled state, at the points the journeys record.** A mistake whose
+  text and border colors, display, visibility, `alt`, `id`, `aria-*`, the
+  disabled state and whether each image loaded, at the points the journeys
+  record.** A mistake whose
   only effect is outside these, or in a part of the page no journey
   reaches, such as a keyboard shortcut no journey presses, reads as
   "never".
@@ -306,7 +324,7 @@ with `--jobs 5` on a 10-core machine. Running every browser check as well,
 one case at a time, took about 280 seconds. A rerun with nothing changed
 took 8 seconds, because the browser checks of the 4 cases whose journey
 stops on an error page are never stored and run again. A full run of the
-eleven frameworks (682 cases) with nothing stored took about 35 minutes
+twelve frameworks (756 cases) with nothing stored took about 38 minutes
 with the default `--jobs 5`, most of it the Nuxt cases, which run one at
 a time. It is not part of routine CI. Its result changes only when a
 case, a pinned version or Citry changes, so it is run at each Citry

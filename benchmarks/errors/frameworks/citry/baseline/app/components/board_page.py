@@ -50,22 +50,24 @@ class BoardPage(Component):
             <p>Owner: {{ owner.name }}</p>
             <p>Projects: {{ len(projects) }}</p>
             <p>API: <span v-text="apiBase"></span></p>
-            <div class="cards">
-              <c-for each="project in projects">
-                <c-Card
-                  #c-key="project.slug"
-                  c-title="project.title"
-                  c-count="project.count"
-                  c-tone="'accent' if project.featured else 'plain'"
-                  :hiddenTitles="hiddenTitles"
-                  @hide="hideCard"
-                >
-                  <c-fill name="footer" data="card">
-                    <a c-href="'#' + project.slug">Open {{ card.title }} ({{ card.count }})</a>
-                  </c-fill>
-                </c-Card>
-              </c-for>
-            </div>
+            <c-provide key="board" name="Projects">
+              <div class="cards">
+                <c-for each="project in projects">
+                  <c-Card
+                    #c-key="project.slug"
+                    c-title="project.title"
+                    c-count="project.count"
+                    c-tone="'accent' if project.featured else 'plain'"
+                    :hiddenTitles="hiddenTitles"
+                    @hide="hideCard"
+                  >
+                    <c-fill name="footer" data="card">
+                      <a c-href="'#' + project.slug">Open {{ card.title }} ({{ card.count }})</a>
+                    </c-fill>
+                  </c-Card>
+                </c-for>
+              </div>
+            </c-provide>
             <c-Counter />
             <c-Details />
             <c-Search />

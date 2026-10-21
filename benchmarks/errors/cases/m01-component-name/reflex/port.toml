@@ -1,0 +1,11 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'return crad(' }
+
+[[edits]]
+file = 'board/board.py'
+old = '''
+    return card(
+'''
+new = '''
+    return crad(
+'''

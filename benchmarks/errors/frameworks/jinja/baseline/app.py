@@ -59,6 +59,9 @@ async def homepage(request: Request):
             "api_base": API_BASE,
             "accent": ACCENT,
             "projects": projects,
+            # The card macro is imported with this context, so each card reads the
+            # board's name without taking it as an argument.
+            "board_name": "Projects",
             "count": request.app.state.count,
             # The search form submits back to this page with its text in `q`.
             "searched": request.query_params.get("q", ""),

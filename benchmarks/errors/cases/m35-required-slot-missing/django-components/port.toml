@@ -7,6 +7,6 @@ mistake = { file = "components/board_page/board_page.html", contains = '{% compo
 file = "components/board_page/board_page.html"
 old = '''
 {% component "card" title=card.title count=card.count tone=card.featured|yesno:"accent,plain" %}
-          {% fill "footer" data="footer" %}<a href="#{{ card.title|lower }}">Open {{ footer.title }} ({{ footer.count }})</a>{% endfill %}
-        {% endcomponent %}'''
+            {% fill "footer" data="footer" %}<a href="#{{ card.title|lower }}">Open {{ footer.title }} ({{ footer.count }})</a>{% endfill %}
+          {% endcomponent %}'''
 new = '{% component "card" title=card.title count=card.count tone=card.featured|yesno:"accent,plain" / %}'

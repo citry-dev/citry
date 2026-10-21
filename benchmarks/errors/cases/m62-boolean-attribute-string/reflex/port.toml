@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'disabled="false"' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.button("Search", type="submit")'
+new = 'rx.button("Search", type="submit", disabled="false")'

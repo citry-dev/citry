@@ -114,6 +114,10 @@ it has a `name`, so `<button name="action" value="save">` sends
 was clicked as `x` and `y` instead, which a data class does not declare,
 so use a `<button>` with an image inside it.
 
+The form's fields are sent only when the binding names the handler alone,
+as in `submit` or `submit()`. Arguments you write, as in
+`submit({draft: true})`, are sent instead of the fields.
+
 ## `EventError` field errors
 
 Raise [`EventError`][citry.ext.events.EventError] with a message and an error

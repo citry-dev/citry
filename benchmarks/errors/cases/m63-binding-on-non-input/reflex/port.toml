@@ -1,0 +1,24 @@
+# Reflex's two-way binding is a `value` read from the state and an `on_change`
+# that writes it back; both move from the field to the form that wraps it.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'on_change=SearchState.set_query,' }
+
+[indirect]
+reason = "Python points an error in a call that spans several lines at the call's first line, so `reflex compile`'s ValueError for the form's `on_change` names the line of `rx.form(`, a few lines above it."
+codes = ["ValueError"]
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.input(name="q", type="search", value=SearchState.query, on_change=SearchState.set_query),'
+new = 'rx.input(name="q", type="search"),'
+
+[[edits]]
+file = 'board/board.py'
+old = '''
+            role="search",
+'''
+new = '''
+            role="search",
+            value=SearchState.query,
+            on_change=SearchState.set_query,
+'''

@@ -30,6 +30,9 @@ def page(request):
     return render(request, 'board/page.html', {
         'owner': owner,
         'cards': cards,
+        # Every template the page includes sees the page's context, so each
+        # card reads the board's name without taking it as an argument.
+        'board_name': 'Projects',
         # The pinned Rusty parser has no {% translate %} tag, so the heading
         # is translated here, with the English text as the message id.
         'heading': gettext('Projects'),

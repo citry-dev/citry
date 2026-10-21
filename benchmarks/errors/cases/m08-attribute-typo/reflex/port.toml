@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/board.py", contains = 'owner.nmae' }
+
+[[edits]]
+file = "board/board.py"
+old = 'rx.text("Owner: ", BoardState.owner.name),'
+new = 'rx.text("Owner: ", BoardState.owner.nmae),'

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'rx.heading("Projects", as_="h1", id="board")' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.heading("Projects", as_="h1"),'
+new = 'rx.heading("Projects", as_="h1", id="board"),'

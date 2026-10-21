@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = """FastHTML's components are plain Python functions, which receive values only as arguments; FastHTML has no way for the page to provide a value to the functions it calls, and no shared state of its own. A module-level constant would be an ordinary Python name that the card reads for itself, not a value the page provides. So the page leaves the `Board:` line out, and there is no shared value to misspell."""

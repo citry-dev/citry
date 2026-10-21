@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+Reflex has no translations built in, and its docs set none up, as for m15. The subtitle joins the text and the owner's name directly, so there is no message argument to misname.
+"""

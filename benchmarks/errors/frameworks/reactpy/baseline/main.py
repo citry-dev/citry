@@ -13,7 +13,7 @@ from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.staticfiles import StaticFiles
 
-from card import Card
+from card import BoardContext, Card
 from status import Status
 
 HERE = Path(__file__).parent
@@ -124,24 +124,28 @@ def Page() -> VdomDict:
             html.p(f"Owner: {owner.name}"),
             html.p(f"Projects: {len(projects)}"),
             html.p(ApiLine({"api_base": API_BASE})),
-            # ReactPy matches unkeyed children by position, so the cards get a
-            # wrapper of their own: hiding one then cannot shift the counter and
-            # the details panel to new positions, which would reset their state.
-            html.div(
-                {"class_name": "cards"},
-                [
-                    Card(
-                        title=project.title,
-                        count=project.count,
-                        tone="accent" if project.featured else "plain",
-                        footer=lambda title, count: html.a({"href": f"#{title.lower()}"}, f"Open {title} ({count})"),
-                        on_hide=make_hide(project.title),
-                        # A key keeps each card matched to its project when an earlier one is hidden.
-                        key=project.title,
-                    )
-                    for project in projects
-                    if project.title not in hidden
-                ],
+            # Every card inside reads the board's name from this context.
+            BoardContext(
+                # ReactPy matches unkeyed children by position, so the cards get a
+                # wrapper of their own: hiding one then cannot shift the counter and
+                # the details panel to new positions, which would reset their state.
+                html.div(
+                    {"class_name": "cards"},
+                    [
+                        Card(
+                            title=project.title,
+                            count=project.count,
+                            tone="accent" if project.featured else "plain",
+                            footer=lambda title, count: html.a({"href": f"#{title.lower()}"}, f"Open {title} ({count})"),
+                            on_hide=make_hide(project.title),
+                            # A key keeps each card matched to its project when an earlier one is hidden.
+                            key=project.title,
+                        )
+                        for project in projects
+                        if project.title not in hidden
+                    ],
+                ),
+                value="Projects",
             ),
             Counter(),
             Details(),

@@ -1,0 +1,9 @@
+# Reflex's counterpart of a conditional directive is `rx.cond`, the component
+# that shows one of two children depending on a var.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'rx.cnod(' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.cond(DetailsState.open, rx.text("Details are visible")),'
+new = 'rx.cnod(DetailsState.open, rx.text("Details are visible")),'
