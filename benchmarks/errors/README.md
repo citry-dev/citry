@@ -178,6 +178,9 @@ git ls-tree --full-tree <commit>:benchmarks/errors \
 `run.json` also says whether those inputs had uncommitted changes when
 the run started (`inputs_changed`); then no commit has them.
 
+"Citry" is a FastAPI app that renders the pages from its own routes and
+adds Citry's routes with `citry.contrib.fastapi.mount()`, as Citry's
+FastAPI starter does.
 "Rusty + HTMX + Alpine" is the Django app with its templates rendered by
 [Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
 an experimental Rust version of Django's template engine.
@@ -270,6 +273,15 @@ writes a part of the page, not from its tools:
   error stays in `$error('search')`, which the page does not show. In
   Reflex the search handler reads the field by name, so the misspelling
   raises a `KeyError` on the server.
+- **m45, m48 and m61 in Citry:** Citry 0.6.0 does not check links, so
+  the browser is the first to report them.
+  [PR #233](https://github.com/citry-dev/citry/pull/233) adds a
+  `citry check` rule that asks the FastAPI app which pages and files it
+  serves, but no release has it yet. m45 and m48 are expected to become
+  warnings once a release with it is measured and both `citry` stages
+  pass `--app app.main:citry_app`, the module that calls `mount()`. m61
+  is expected to stay a runtime error, because the rule does not check a
+  parameter type that only the route function declares.
 - **m45:** Django, Rusty, Jinja, Tetra, django-unicorn and
   django-components build the link from the route's name, so the page fails to render.
   Next.js's `typedRoutes` checks a link's path against the app's routes,
@@ -370,10 +382,11 @@ writes a part of the page, not from its tools:
 - **m61:** the project route takes a numeric id. Django, Rusty,
   django-components, django-unicorn, Tetra and Jinja build the link from
   the route's name, and building it with `alpha` fails when the page
-  renders. Citry and FastHTML check the number only when the link is
-  followed, with a 404. ReactPy's router shows the app's `Page not
-  found` route and Nuxt's route check shows Nuxt's 404 page, both in the
-  browser and with no error, and Next.js's and Reflex's route parts take
+  renders. Citry's FastAPI route and FastHTML's route check the number
+  only when the link is followed: FastAPI answers with a 422 validation
+  error, and FastHTML with a 404. ReactPy's router shows the app's
+  `Page not found` route and Nuxt's route check shows Nuxt's 404 page,
+  both in the browser and with no error, and Next.js's and Reflex's route parts take
   any text, so their pages read `Project alpha`.
 - **m62:** TypeScript in Next.js and pyright in Reflex report
   `disabled="false"`; Nuxt's types accept the text. Everywhere else the
@@ -961,10 +974,13 @@ defaults, where the framework has no preset); a rule outside the preset
 is a project's own choice, not a framework setting. Every Python stack
 keeps pyright's standard mode, because its strict mode fails code that
 the frameworks' docs write: it reports 43 errors in the clean Django
-app, 65 in the django-components app and 2 in the Citry app, mostly
+app, 65 in the django-components app and 3 in the Citry app, mostly
 parameters written without a type, as django-components' docs write
 `get_template_data(self, args, kwargs, slots, context)`, and values
-whose type pyright cannot work out. ruff's unused-argument rules (ARG), the counterpart of ESLint's
+whose type pyright cannot work out. One of the Citry app's three is its
+FastAPI lifespan function: Citry's FastAPI guide annotates it as
+returning `AsyncIterator`, and strict mode reports that annotation as
+deprecated. ruff's unused-argument rules (ARG), the counterpart of ESLint's
 unused-variable check, would report arguments the frameworks require a
 method to accept, 14 times in the clean Citry app and 24 times in the
 django-components app.
