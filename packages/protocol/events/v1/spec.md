@@ -469,8 +469,8 @@ handler accepts or loosen any other check. Its error cases are:
   field or `"yes"` for a `bool` field, is an `invalid_args` error for that
   field.
 - A mark on a call whose `args` hold non-text JSON values is still a valid
-  call. Text values at any depth, inside lists and objects too, gain the
-  conversion; numbers, booleans, and `null` bind by the ordinary JSON rules.
+  call. Text values gain the conversion at any depth, inside lists and
+  nested data classes too; numbers, booleans, and `null` bind by the ordinary JSON rules.
 
 ### Send order
 

@@ -225,3 +225,14 @@ def test_an_unsaved_edit_to_a_data_class_in_another_module_turns_the_rules_off(t
     codes = {diagnostic.code for diagnostic in browser_diagnostics(document, project, open_documents)}
 
     assert not codes & _PAYLOAD_CODES
+
+
+def test_a_closed_data_class_file_with_windows_line_endings_keeps_the_rules_on(tmp_path):
+    app_file, source = _app_with_forms_module(tmp_path, '<button @c-click="save({amont: 1})">a</button>')
+    forms_file = tmp_path / "forms.py"
+    forms_file.write_bytes(forms_file.read_bytes().replace(b"\n", b"\r\n"))
+
+    assert [code for code, _covered, _message in _findings(tmp_path, app_file, source)] == [
+        "citry.browser.missing-server-event-field",
+        "citry.browser.unknown-server-event-field",
+    ]

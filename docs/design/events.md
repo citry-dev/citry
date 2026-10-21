@@ -2397,8 +2397,9 @@ source-aware rule (3.3) as the urlencoded no-JS codec (6.2): `"3"` fills an
 browser also adds the name and value of the submit button that sent the
 form, as a no-JS post does. The JS path and the no-JS path therefore
 deliver the same values for the same form, except for a file input, whose
-file name a no-JS post sends as text. Arguments written in the binding are JSON values, so they carry no
-mark and are checked strictly. Control `name` attributes map to
+file name a no-JS post sends as text. Arguments written in the binding
+are JSON values, so they carry no mark and are checked strictly. Control
+`name` attributes map to
 schema fields, schema validation produces the 422 `fieldErrors` map for
 the error display, and a failed submit re-renders nothing, so the DOM
 keeps the user's input:

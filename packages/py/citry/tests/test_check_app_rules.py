@@ -738,6 +738,24 @@ def test_the_benchmark_form_field_mistake_is_reported(tmp_path):
                 )
             ],
         ),
+        # An image button sends where it was clicked, never its bare name.
+        (
+            '<form @c-submit.prevent="save"><input name="q"><input type="image" name="go" src="go.svg" alt="Go">'
+            "</form>",
+            QueryIn,
+            [
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'go.x', which server event 'save' does not declare, so the server"
+                    " rejects the submit.",
+                ),
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'go.y', which server event 'save' does not declare, so the server"
+                    " rejects the submit.",
+                ),
+            ],
+        ),
         # A form that shows every control it sends, without the required one.
         (
             '<form @c-submit.prevent="save"><button>Go</button></form>',
@@ -770,7 +788,11 @@ def test_form_fields_the_server_rejects_are_reported(tmp_path, form, data_class,
         '<form @c-submit.prevent="save"><input name="q"><input name="other" form="elsewhere"></form>',
         '<form @c-submit.prevent="save"><input name="q"><input type="file" name="upload"></form>',
         '<form @c-submit.prevent="save"><input name="q"><button type="button" name="go">Go</button></form>',
-        '<form @c-submit.prevent="save"><input name="q"><input type="image" name="go" src="go.svg" alt="Go"></form>',
+        # A button whose click is prevented never submits.
+        '<form @c-submit.prevent="save"><input name="q"><button name="add" @click.prevent="addRow">+</button></form>',
+        # Vue's `^name` and `.name` shorthands bind the name as an expression.
+        '<form @c-submit.prevent="save"><input ^name="field"></form>',
+        '<form @c-submit.prevent="save"><input name="q"><button ^type="kind" name="go">Go</button></form>',
         '<form @c-submit.prevent="save"><fieldset disabled><input name="x"></fieldset><input name="q"></form>',
         '<form @c-submit.prevent="save"><input name="x" v-bind="attrs"><input name="q"></form>',
         # A required field may come from a control the template cannot see.

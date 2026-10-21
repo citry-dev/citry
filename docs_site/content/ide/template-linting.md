@@ -960,13 +960,17 @@ or may send under another name:
 - a disabled control, including one inside a disabled `<fieldset>` or
   with a bound `:disabled`;
 - a control tied to another form by its `form` attribute;
-- a file input, an image input, and a button that cannot submit;
+- a file input, a button that cannot submit, and a button whose click
+  is prevented, as in `@click.prevent`;
 - a control whose `type` or `name` is written as an expression, or that
   has an attribute spread such as `v-bind="attrs"`.
 
 It also leaves out the host's CSRF field, such as Django's
 `csrfmiddlewaretoken`, because the server removes it before it checks the
-`data` class ([CSRF in forms](/security/#csrf-tokens-in-forms)).
+`data` class ([CSRF in forms](/security/#csrf-tokens-in-forms)). An image
+button, `<input type="image">`, sends where it was clicked as `x` and
+`y`, or `go.x` and `go.y` for `name="go"`, so Citry checks those names
+instead.
 
 A required field without a control is reported only when the template
 shows every control the form can send. The check is off for a form that

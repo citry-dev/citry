@@ -726,6 +726,26 @@ def test_untraced_component_templates_follow_project_imports_only(tmp_path):
     ]
 
 
+def test_app_components_read_a_decorated_component_the_app_lists():
+    source = (
+        "from citry import Component\n"
+        "from app.registry import register\n"
+        "@register\n"
+        "class Listed(Component):\n"
+        "    template = '<p>listed</p>'\n"
+        "@register\n"
+        "class Unlisted(Component):\n"
+        "    template = '<p>unlisted</p>'\n"
+    )
+
+    # Reading the file alone, a decorator may replace the class, so neither
+    # template is read; the app's record proves the listed one.
+    assert discover_python_templates(source).regions == ()
+    assert [
+        region.component_name for region in discover_python_templates(source, app_components={"Listed": True}).regions
+    ] == ["Listed"]
+
+
 def test_app_components_find_templates_whose_base_comes_from_another_module():
     source = (
         "from app.base import AppBase, JinjaBase, register\n"

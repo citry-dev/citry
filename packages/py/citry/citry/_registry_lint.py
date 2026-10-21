@@ -759,7 +759,9 @@ _IN_PLACE_CONDITIONS = frozenset({"c-if", "c-elif", "c-else"})
 def _set_attribute(attr: Any) -> str | None:
     """Return the attribute an attribute key sets, lowercased, whether written plainly or bound."""
     key = _ascii_lower(attr.key.content)
-    for prefix in (":", "v-bind:", "c-"):
+    # `.name` and `^name` are Vue's shorthands for `:name.prop` and
+    # `:name.attr`.
+    for prefix in (":", "v-bind:", "c-", ".", "^"):
         if key.startswith(prefix):
             # A modifier such as `.prop` still sets the same name.
             return key[len(prefix) :].split(".", 1)[0]
@@ -810,12 +812,19 @@ class _FormControls:
 
     def _control(self, lower: str, attrs: Any, base_index: int, *, disabled: bool) -> None:
         name_attr = None
+        image_type = None
+        # Whether the browser may leave the control out of this form's submit.
         sometimes = disabled
+        # Whether its type means it never sends its name as text.
+        unsent_type = False
         for attr in attrs:
             key = _ascii_lower(attr.key.content)
             sets = _set_attribute(attr)
             if key == "name":
                 name_attr = attr
+            elif lower == "button" and _prevents_click(key):
+                # A button whose click is prevented never submits the form.
+                sometimes = True
             elif sets == "name":
                 # A name written as an expression may be anything.
                 self.complete = False
@@ -827,17 +836,45 @@ class _FormControls:
                 sometimes = True
             elif sets == "type" and lower in {"input", "button"}:
                 inner = attr.inner_value
-                unsent = _UNSENT_INPUT_TYPES if lower == "input" else _UNSENT_BUTTON_TYPES
-                if key != "type" or inner is None or _ascii_lower(inner.content.strip()) in unsent:
+                written_type = None if key != "type" or inner is None else _ascii_lower(inner.content.strip())
+                if written_type is None:
+                    # A type written as an expression may be any of them.
                     sometimes = True
+                elif written_type in (_UNSENT_INPUT_TYPES if lower == "input" else _UNSENT_BUTTON_TYPES):
+                    unsent_type = True
+                    if written_type == "image" and lower == "input":
+                        image_type = inner
         inner = None if name_attr is None else name_attr.inner_value
+        if image_type is not None:
+            # An image button that submits the form sends where it was
+            # clicked, as `x` and `y`, or `name.x` and `name.y`, and never
+            # its bare name, so the bare name is not one the form sends.
+            if not sometimes:
+                prefix = f"{inner.content}." if inner is not None and inner.content else ""
+                for axis in ("x", "y"):
+                    self.sent.append(
+                        FormControlName(
+                            prefix + axis,
+                            base_index + image_type.start_index,
+                            base_index + image_type.end_index,
+                        )
+                    )
+            return
         if inner is None or not inner.content:
             return
         self.names.add(inner.content)
-        if not sometimes:
+        if not sometimes and not unsent_type:
             self.sent.append(
                 FormControlName(inner.content, base_index + inner.start_index, base_index + inner.end_index)
             )
+
+
+def _prevents_click(key: str) -> bool:
+    """Return whether an attribute is a click listener with the ``.prevent`` modifier."""
+    for prefix in ("@click", "v-on:click", "@c-click"):
+        if key.startswith(prefix) and ".prevent" in key[len(prefix) :]:
+            return True
+    return False
 
 
 def server_event_form_findings(

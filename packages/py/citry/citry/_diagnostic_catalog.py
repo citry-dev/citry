@@ -449,16 +449,18 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'not checked when the browser may not send it with this form or may send '
                                               'it under another name: it is disabled, by its own disabled attribute, a '
                                               'bound :disabled, or a disabled <fieldset>; it is tied to another form '
-                                              'by its form attribute; it is a file input, an image input, or a button '
-                                              'that cannot submit; its type or name is written as an expression; or it '
-                                              'has an attribute spread such as v-bind="attrs". Neither are the host\'s '
-                                              'CSRF field names that the server removes before it checks the data '
-                                              'class, by default csrfmiddlewaretoken. A Pydantic data class is not '
-                                              'checked, because Pydantic converts values and may read a field under '
-                                              'another name. When several components share the template, it is checked '
-                                              'only when they use the same data class for the handler. citry check '
-                                              'needs your application for this rule, and the editor reports it once it '
-                                              'has loaded your application.'},
+                                              'by its form attribute; it is a file input, a button that cannot submit, '
+                                              'or a button whose click is prevented, as in @click.prevent; its type or '
+                                              'name is written as an expression; or it has an attribute spread such as '
+                                              'v-bind="attrs". An image input sends where it was clicked, as x and y, '
+                                              'or name.x and name.y, so those names are checked instead of its name. '
+                                              "Neither are the host's CSRF field names that the server removes before "
+                                              'it checks the data class, by default csrfmiddlewaretoken. A Pydantic '
+                                              'data class is not checked, because Pydantic converts values and may '
+                                              'read a field under another name. When several components share the '
+                                              'template, it is checked only when they use the same data class for the '
+                                              'handler. citry check needs your application for this rule, and the '
+                                              'editor reports it once it has loaded your application.'},
  'citry.browser.unknown-server-event': {'code': 'citry.browser.unknown-server-event',
                                         'constant': 'BROWSER_UNKNOWN_SERVER_EVENT',
                                         'defaultSeverity': 'error',

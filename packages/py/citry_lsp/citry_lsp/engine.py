@@ -11069,7 +11069,11 @@ def _definition_unchanged(
     open_documents: Mapping[str, DocumentState] | None,
 ) -> bool:
     """Return whether a class or function reads the same in the editor as in the file on disk."""
-    current = _python_source(source_file, document, open_documents)
+    documents = {document.uri: document, **(open_documents or {})}
+    found_open, current = _synchronized_document_source(source_file, documents)
+    # A file no editor buffer holds is the file on disk, which the app read.
+    if not found_open:
+        return True
     saved = _saved_python_source(source_file)
     if current is None or saved is None:
         return False

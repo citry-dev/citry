@@ -5457,10 +5457,16 @@ def _ast_component_declarations(
             # component when the loaded application registers it, for
             # example when its base class comes from another module. A
             # traceable class keeps the rules below, so the app never
-            # changes how a class this file already proves is read.
+            # changes how a class this file already proves is read. A
+            # decorated class, which this file alone never proves, is read
+            # when the app lists it too.
             accepted_by_app = False
             inherited_language: object
-            if not component_bases and app_components is not None and statement.name in app_components:
+            if (
+                (not component_bases or statement.decorator_list)
+                and app_components is not None
+                and statement.name in app_components
+            ):
                 accepted_by_app = True
                 # The app read the template language through the class's
                 # bases; anything it could not prove native skips the template.

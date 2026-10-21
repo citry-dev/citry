@@ -110,7 +110,9 @@ declare the field as `str` and convert it in the handler.
 
 The submit button that sent the form adds its own `name` and `value`, if
 it has a `name`, so `<button name="action" value="save">` sends
-`action="save"`.
+`action="save"`. An image button, `<input type="image">`, sends where it
+was clicked as `x` and `y` instead, which a data class does not declare,
+so use a `<button>` with an image inside it.
 
 ## `EventError` field errors
 
