@@ -386,8 +386,8 @@ writes a part of the page, not from its tools:
   only when the link is followed: FastAPI answers with a 422 validation
   error, and FastHTML with a 404. ReactPy's router shows the app's
   `Page not found` route and Nuxt's route check shows Nuxt's 404 page,
-  both in the browser and with no error, and Next.js's and Reflex's route parts take
-  any text, so their pages read `Project alpha`.
+  both in the browser and with no error, and Next.js's and Reflex's
+  route parts take any text, so their pages read `Project alpha`.
 - **m62:** TypeScript in Next.js and pyright in Reflex report
   `disabled="false"`; Nuxt's types accept the text. Everywhere else the
   search button is silently disabled.
