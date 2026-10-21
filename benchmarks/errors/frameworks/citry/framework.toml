@@ -1,18 +1,17 @@
 key = "citry"
 name = "Citry"
 notes = """
-The baseline follows Citry's FastAPI starter (examples/starters/fastapi),
-because a FastAPI app with Citry mounted is the setup Citry recommends,
-and its Getting Started guide serves pages the same way: one Citry engine
-in app/citry_app.py, components in app/components/, and a FastAPI app in
-app/main.py, served by uvicorn. Its routes render the pages, and
-`citry.contrib.fastapi.mount()` adds Citry's routes under /citry, as the
-starter and Citry's FastAPI guide do. Published packages: citry 0.6.0,
-citry-core 1.8.0, fastapi 0.141.1 with starlette 1.6.0 and pydantic
-2.13.4 (the versions the starter's lockfile has), uvicorn 0.52.4, and
-citry-lsp 0.2.0, which installs ty 0.0.89, the Python type checker Citry
-runs on template expressions. They are locked in baseline/uv.lock for
-Python 3.12.
+The baseline follows Citry's FastAPI starter (examples/starters/fastapi):
+one Citry engine in app/citry_app.py, components in app/components/, and a
+FastAPI app in app/main.py, served by uvicorn. The benchmark measures
+Citry served from FastAPI, the setup Citry's Getting Started guide also
+uses. Its routes render the pages, and `citry.contrib.fastapi.mount()`
+adds Citry's routes under /citry, as the starter and Citry's FastAPI guide
+do. Published packages: citry 0.6.0, citry-core 1.8.0, fastapi 0.141.1
+with starlette 1.6.0 and pydantic 2.13.4 (the versions the starter's
+lockfile has), uvicorn 0.52.4, and citry-lsp 0.2.0, which installs ty
+0.0.89, the Python type checker Citry runs on template expressions. They
+are locked in baseline/uv.lock for Python 3.12.
 
 The editor stage has two parts. It assumes a VS Code user runs both the
 Citry extension, which Citry's docs recommend, and Pylance, which VS
@@ -27,13 +26,13 @@ with pyright 1.1.414, installed only so the benchmark can run it, in
 turned on uses (Pylance's own default is "off"). pyright checks every .py
 file, while Pylance by default reports only open files.
 
-The check stage is `citry --app app.citry_app:citry_app check`, the command
-the starter README tells developers to run, and ruff with its default rules,
-the Python linter most projects add (the starter installs none). A ruff
-finding fails the command, so it counts as an error. Citry has no
-production build, so there is no build stage. Every stage
-and the server get a fixed `CITRY_SECRET`, because the starter's engine
-refuses to start without one.
+The check stage is `citry --app app.main:citry_app check`, the command the
+starter README tells developers to run once Citry PR #236 lands, and ruff
+with its default rules, the Python linter most projects add (the starter
+installs none). A ruff finding fails the command, so it counts as an
+error. Citry has no production build, so there is no build stage. Every
+stage and the server get a fixed `CITRY_SECRET`, because the starter's
+engine refuses to start without one.
 
 The README names the heading's message `board.title`. Here it is
 `board-title`, because a Fluent message ID cannot contain a dot, and
@@ -82,21 +81,24 @@ into the CSS variable `--accent` on the board page's own elements, the
 heading among them. The FastAPI starter has a single page route and
 serves no static files, so app/main.py adds the About and project pages
 as two more FastAPI routes, and serves app/static/, where the owner's
-avatar lives, with FastAPI's `StaticFiles`, as FastAPI's docs show. The project route
-declares its number as `project_id: int`, the way FastAPI's docs type a
-path parameter, so FastAPI answers /projects/alpha (m61) with a 422
-validation error. A misspelled page (m45) or image (m48) gets a 404.
+avatar lives, with FastAPI's `StaticFiles`, as FastAPI's docs show. The
+project route declares its number as `project_id: int`, the way FastAPI's
+docs type a path parameter, so FastAPI answers /projects/alpha (m61)
+with a 422 validation error. A misspelled page (m45) or image (m48) gets
+a 404.
 
-Citry 0.6.0 does not check links, so m45, m48 and m61 are first reported
-in the browser. Citry PR #233 adds a `citry check` rule,
+Both `citry` stages and the editor setting in .vscode/settings.json load
+the app as `app.main:citry_app`, the module that calls `mount()`, so a
+Citry release with a link check can ask FastAPI which pages and files the
+app serves. Citry PR #236 moves the FastAPI starter's check to the same
+target. Citry 0.6.0 does not check links, so m45, m48 and m61 are first
+reported in the browser. Citry PR #233 adds a `citry check` rule,
 `citry.template.unknown-url`, that asks the app mounted with
 `citry.contrib.fastapi.mount()` whether it serves each literal link, but
-no release has it yet. These cells are expected to move once a Citry
-release with that rule is measured: m45 and m48 to a warning, if both
-`citry` stages then pass `--app app.main:citry_app`, the module that
-calls `mount()`.
-That rule does not check a parameter type that only the route function
-declares, such as `project_id: int`, so m61 stays a runtime error.
+no release has it yet. Once a Citry release with that rule is measured,
+m45 and m48 are expected to become warnings. The rule does not check a
+parameter type that only the route function declares, such as
+`project_id: int`, so m61 is expected to stay a runtime error.
 
 The browser always runs Vue's production build, so Vue's development
 warnings never appear, and no Citry case can end as a runtime warning
@@ -137,7 +139,7 @@ command = [
 [[stages]]
 stage = "editor"
 label = "Citry language server (citry check --types)"
-argv = ["{venv}/bin/citry", "--app", "app.citry_app:citry_app", "check", "--types", "--format", "json"]
+argv = ["{venv}/bin/citry", "--app", "app.main:citry_app", "check", "--types", "--format", "json"]
 parser = "citry-json"
 timeout = 600
 env = { CITRY_SECRET = "benchmark-only-secret-not-for-production" }
@@ -152,7 +154,7 @@ timeout = 600
 [[stages]]
 stage = "check"
 label = "citry check"
-argv = ["{venv}/bin/citry", "--app", "app.citry_app:citry_app", "check", "--format", "json"]
+argv = ["{venv}/bin/citry", "--app", "app.main:citry_app", "check", "--format", "json"]
 parser = "citry-json"
 timeout = 600
 env = { CITRY_SECRET = "benchmark-only-secret-not-for-production" }
