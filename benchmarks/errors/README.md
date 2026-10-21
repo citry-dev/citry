@@ -129,19 +129,17 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 results. Rerunning them with nothing changed took 8 seconds: it repeated
 only the browser checks of the 4 cases whose journey stops on an error
 page, which are never stored. Every framework repeats such cases on each
-run. A full run of the eleven frameworks' 682 cases with nothing stored
-(`--no-cache`) took about 35 minutes on the same machine; most of it is
-the Nuxt cases, which run one at a time, and the Next.js builds.
-Before m51 to m63 were added, ReactPy's 49 cases, run on their own,
-took about 2 minutes, and django-unicorn's about 3. Tetra's 62 cases,
-run on their own after m51 to m63 were added, took about 4. Reflex's 49
-cases, run on their own before m51 to m63 were added, took about 1.5
-minutes, because its tools reported 31 of its 40 ported mistakes and
-only the other 9 started its development server. Each journey loads the
-page again in every browser check, and the `search`, `about` and
-`project` journeys bring
-each framework to five (FastHTML to four). It is not part of routine CI.
-Run it at each Citry release, and when a framework's pinned versions
+run. A full run of the twelve frameworks' 744 cases with nothing stored
+(`--no-cache`) took about 37 minutes on the same machine; most of it is
+the Nuxt cases, which run one at a time, and the Next.js builds. Before
+m51 to m63 were added, ReactPy's 49 cases, run on their own, took about 2
+minutes, and django-unicorn's about 3. Tetra's 62 cases, run on their own
+after m51 to m63 were added, took about 4. Reflex's 62 cases took about 2,
+because its tools reported 37 of its 53 ported mistakes and only the other
+16 started its development server. Each journey loads the page again in
+every browser check, and the `search`, `about` and `project` journeys
+bring each framework to five (FastHTML to four). It is not part of routine
+CI. Run it at each Citry release, and when a framework's pinned versions
 change.
 
 ## Latest result
@@ -156,9 +154,9 @@ Each report starts by naming what the run scored: the commit it started
 from and the git tree of the benchmark's inputs, which are `cases/`,
 `catalogue.toml`, `frameworks/` and `runner/`. The published `results/`
 folder is not an input, because it changes after the run that wrote it.
-When GitHub merges a stack of pull requests it rebases them, so the
-commit a run names may no longer exist on the branch; the tree id stays
-the same as long as the inputs do. To check that a commit has the inputs
+When a stack of pull requests is rebased or squash-merged, as GitHub
+can do when it merges them, the commit a run names may no longer exist
+on the branch; the tree id stays the same as long as the inputs do. To check that a commit has the inputs
 a published run scored, work out its tree id and compare:
 
 ```bash
@@ -185,7 +183,9 @@ to the server and replaces the component's HTML with the HTML the server
 sends back. "Tetra" is the Django app with its interactive parts
 rewritten as components of [Tetra](https://www.tetraframework.com/),
 whose components the server renders and whose Alpine code in the browser
-calls their Python methods on the server.
+calls their Python methods on the server. "Reflex" is
+[Reflex](https://reflex.dev/), which compiles components written in Python
+into a React app that talks to a Python backend over a WebSocket.
 
 Some differences between cells come from how each framework naturally
 writes a part of the page, not from its tools:
@@ -228,13 +228,12 @@ writes a part of the page, not from its tools:
   `save(amount='1')` calls `save(amount=1)`, and so is Reflex, which
   converts an event's argument the same way. Tetra passes the text to the
   method unchanged, so adding it to the total fails with a server error.
-- **m35:** Citry, FastHTML and Next.js declare the card's footer as
-  required, so leaving it out is reported before the app runs;
-  django-components declares it required too, and reports it when the
-  page renders. A Django block is always
-  optional, and so is a Nuxt slot whose type does not mark it required, so
-  the cards silently lose their footer links; Jinja's macro fails when it
-  calls the missing fill.
+- **m35:** Citry, FastHTML, Reflex and Next.js declare the card's footer
+  as required, so leaving it out is reported before the app runs;
+  django-components declares it required too, and reports it when the page
+  renders. A Django block is always optional, and so is a Nuxt slot whose
+  type does not mark it required, so the cards silently lose their footer
+  links; Jinja's macro fails when it calls the missing fill.
 - **m36 and m37:** a Django block takes no arguments, so the card hands
   its footer no data of its own, and both cells are n/a. Citry's fill
   names its slot data as one record (`data="card"`), the first form its
@@ -288,11 +287,15 @@ writes a part of the page, not from its tools:
   django-unicorn reports nothing, and clicking Hide on the first card
   leaves Alpha on the page. Tetra reports nothing either: without a key,
   every card resumes from the same saved state when the list renders
-  again, so after Hide both cards left show the title Gamma.
+  again, so after Hide both cards left show the title Gamma. Reflex
+  keys each card by its position when it has no key of its own, and its
+  cards keep no state in the browser, so nothing reports the missing key
+  and the page looks the same.
 - **m52:** nothing reports a `<div>` inside a `<p>` before the app runs,
   except Nuxt, whose ESLint fails to parse the template. Next.js reports
-  it in the browser as a hydration error, and Citry fails to render the
-  page because Vue rejects the template. Elsewhere the browser splits
+  it in the browser as a hydration error, React reports it in the
+  browser in Reflex too, and Citry fails to render the page because Vue rejects
+  the template. Elsewhere the browser splits
   the paragraph without a message.
 - **m53, m54, m56 and m57:** djLint checks alt text (H013), ARIA
   attribute names (H048), repeated attributes (H037) and repeated ids
@@ -305,25 +308,33 @@ writes a part of the page, not from its tools:
   django-unicorn's plain `aria-expandd`. Next.js's next/image requires
   `alt` in its types, and its ESLint warns about a misspelled ARIA name,
   which React also reports in the browser. Nuxt's `strictTemplates`
-  reports the unknown ARIA name. Nothing reports a repeated id in Citry,
-  Next.js, Nuxt, FastHTML or ReactPy.
+  reports the unknown ARIA name. In Reflex, pyright reports the class
+  given twice, because a repeated keyword is a Python syntax error, and
+  React reports the misspelled ARIA name in the browser; nothing reports
+  the missing alt text. Nothing reports a repeated id in Citry, Next.js,
+  Nuxt, FastHTML, ReactPy or Reflex.
 - **m55:** a bound `aria-expanded` is typed as `true` or `false` in
   TypeScript, so Citry, Next.js and Nuxt report `yes` and `no` in the
   editor. The Alpine apps, Tetra's included, django-unicorn's `yesno`
-  filter, FastHTML's
-  script and ReactPy's attribute dictionary accept any text.
+  filter, FastHTML's script, ReactPy's attribute dictionary and Reflex's
+  `aria_expanded` accept any text.
 - **m58 and m59:** a loop over a number and a misspelled length filter
   or helper are type errors where the template is checked as code
   (Citry, Next.js, Nuxt, FastHTML and ReactPy). In the Django, Rusty,
   django-components, Jinja and django-unicorn templates they fail when
   the page renders. So does Tetra's loop, but Tetra compiles every
   component's template when Django starts, so the misspelled filter in
-  its card list's template fails `manage.py check`.
+  its card list's template fails `manage.py check`. In Reflex, pyright
+  reports the misspelled `length()`, and only `reflex compile` reports
+  the loop over a number, because pyright cannot see the type of a field of
+  a project inside the list.
 - **m60:** a handler that takes one more argument than the card's event
   sends is a type error in Next.js, Nuxt, ReactPy and django-unicorn.
   Next.js reports it on the handler itself. Nuxt, ReactPy and
   django-unicorn report it where the handler is called or returned, so
-  those three cells are marked `°`. Citry's and FastHTML's handlers are
+  those three cells are marked `°`. In Reflex, pyright reports it too,
+  where the page passes the event to the card, so its cell is marked `°`
+  as well. Citry's and FastHTML's handlers are
   browser JavaScript, which nothing checks, and the missing reason only
   prints as `undefined`. The Django, Rusty, django-components and Jinja
   apps hide a card with an inline statement, so the cell is n/a. Tetra's
@@ -337,14 +348,16 @@ writes a part of the page, not from its tools:
   renders. Citry and FastHTML check the number only when the link is
   followed, with a 404. ReactPy's router shows the app's `Page not
   found` route and Nuxt's route check shows Nuxt's 404 page, both in the
-  browser and with no error, and Next.js's route segments take any text,
-  so its page reads `Project alpha`.
-- **m62:** only TypeScript in Next.js reports `disabled="false"`;
-  Nuxt's types accept the text. Everywhere else the search button is
-  silently disabled.
+  browser and with no error, and Next.js's and Reflex's route parts take
+  any text, so their pages read `Project alpha`.
+- **m62:** TypeScript in Next.js and pyright in Reflex report
+  `disabled="false"`; Nuxt's types accept the text. Everywhere else the
+  search button is silently disabled.
 - **m63:** Nuxt's vue-tsc and ESLint report a `v-model` on the form, and
   Citry fails to render the page, with an internal message about
-  `v-model` helpers rather than one that names the form. In the other
+  `v-model` helpers rather than one that names the form. `reflex
+  compile` reports that a form has no `on_change` event, at the first
+  line of the form's call, so Reflex's cell is marked `°`. In the other
   apps nothing reports the binding. Alpine's `x-model` and React's
   `onChange` in Next.js read the value from the field's `input` event,
   which bubbles up to the form, so typing still updates the line; only
@@ -612,14 +625,12 @@ the rule on stricter settings below. In a trial run without the types on
 
 
 In Reflex ([`frameworks/reflex/`](frameworks/reflex/) holds its app and
-notes) the page is written as Python functions, as in ReactPy, but
-Reflex compiles them into a React app. Its development server serves that app with
-Vite, and the browser sends each click to a Python backend over a
-WebSocket. Its cases have been run, but its cells are not in the
-published results yet; they join the next published run.
-pyright, ruff and `reflex compile` report 31 of its 40 ported mistakes
-before the app runs, so only 9 cases needed the browser check. Where its
-cells, or the reason behind them, differ from ReactPy's:
+notes) the page is written as Python functions, as in ReactPy, but Reflex
+compiles them into a React app. Its development server serves that app
+with Vite, and the browser sends each click to a Python backend over a
+WebSocket. pyright, ruff and `reflex compile` report 37 of its 53 ported
+mistakes before the app runs, so only 16 cases needed the browser check.
+Where its cells, or the reason behind them, differ from ReactPy's:
 
 - **m02, m04, m05, m25, m26, m29 and m35:** the card and the status line
   are plain typed Python functions, so pyright reports a misspelled or
@@ -648,6 +659,15 @@ cells, or the reason behind them, differ from ReactPy's:
   answers a misspelled file path with the app's page and status 200, so
   the image shows broken, nothing reports an error, and the case reads
   as "silently wrong".
+- **m09:** pyright reports `type="sumbit"`, because Reflex types a
+  button's `type` as its allowed values; `reflex compile` reports it too.
+- **m21:** the conditional is the component `rx.cond`, so pyright reports
+  a misspelled `rx.cnod`; ReactPy writes the condition as plain Python,
+  so its cell is n/a.
+- **m37:** the footer gets the count as a typed `Var[int]`, so pyright
+  reports joining it to text with `+`.
+- **m40:** the API line reads a typed state field, so pyright reports the
+  misspelling.
 - **m18, m32 and m41:** prevented. Reflex builds an event's payload from
   the handler's own parameter names, so the page never writes the field
   name `amount`; it converts the text `"1"` to the number the handler
@@ -657,7 +677,8 @@ cells, or the reason behind them, differ from ReactPy's:
 m03, m14, m15, m30, m34 and m46 are n/a, for the same reasons as in
 ReactPy: the inputs are Python arguments, nothing is rendered on the
 server, Reflex has no translations, the hide event already carries the
-card's title, and no browser code reads the reply to a click.
+card's title, and no browser code reads the reply to a click. m51 to m63
+are described with the other frameworks above.
 
 ## The reference page
 

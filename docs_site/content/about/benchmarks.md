@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and ten others report the same 62 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and eleven others report the same 62 developer mistakes.
 ---
 
 # Benchmarks
@@ -72,7 +72,7 @@ noise.
 
 The earlier a mistake is reported, the less time it costs you.
 
-We wrote the same small app in Citry and ten other frameworks, made
+We wrote the same small app in Citry and eleven other frameworks, made
 the same 62 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**. Rusty is the Django app with its
@@ -94,6 +94,8 @@ Tetra is the Django app with its interactive parts rewritten as
 components of [Tetra](https://www.tetraframework.com/): the server
 renders each component, and the component's Alpine code in the browser
 calls its Python methods on the server.
+[Reflex](https://reflex.dev/) compiles components written in Python into
+a React app, which sends each click to a Python backend.
 
 <c-error-benchmark-chart
   title="How the 62 mistakes ended in each framework"
@@ -118,7 +120,7 @@ calls its Python methods on the server.
 
 - **Before the app runs: 29 of 60** (28 errors, 1 warning). Two of
   the 62 mistakes don't apply to Citry. Next.js 44 of 56, Nuxt 39 of
-  57, ReactPy 23 of 55, FastHTML 20 of 48, django-unicorn 12 of 54,
+  57, Reflex 37 of 53, ReactPy 23 of 55, FastHTML 20 of 48, django-unicorn 12 of 54,
   Tetra 9 of 56, Django + HTMX + Alpine 6 of 51, Rusty + HTMX + Alpine 6 of 49,
   django-components + HTMX + Alpine 6 of 53, Jinja + HTMX + Alpine 5
   of 50.
@@ -193,6 +195,10 @@ calls its Python methods on the server.
   directives and component events. Both linters report a missing list
   key, and Next.js's also warns about accessibility mistakes such as a
   misspelled ARIA attribute.
+- **Why Reflex comes close**: its components are typed Python functions
+  and its state fields have types, so Pylance checks component inputs,
+  reads of state fields and event arguments, and `reflex compile` checks
+  prop values, event names and loops before the app runs.
 
 ### How we measured { #errors-how-we-measured }
 
@@ -201,7 +207,7 @@ calls its Python methods on the server.
 - **Citry**: the editor extension's language server (measured with
   `citry check --types`) and `citry check`.
 - **Every Python stack** (Citry, Django, Rusty, Jinja, Tetra,
-  django-unicorn, django-components, FastHTML, ReactPy):
+  django-unicorn, django-components, FastHTML, ReactPy, Reflex):
   Pylance with type checking on (measured with pyright in standard mode), and
   ruff with its default rules.
 - **Django, Rusty, Jinja, Tetra, django-unicorn and django-components**:
@@ -213,6 +219,8 @@ calls its Python methods on the server.
   look; its build command,
   `manage.py tetrabuild`, reports a script's syntax error but still
   succeeds, so that counts as a warning.
+- **Reflex**: `reflex compile --dry`, which builds every page without
+  starting the app.
 - **Next.js and Nuxt**: the editor's TypeScript checks (tsc for
   Next.js; vue-tsc and the Vue compiler's errors for Nuxt), ESLint, and
   the production build.
@@ -241,9 +249,9 @@ calls its Python methods on the server.
     - **Tetra**: a type on every public attribute (the values it sends
       to the browser). Tetra has no setting for this; it checks a
       value's type only where the attribute declares one.
-    - **Citry, Django, Rusty, FastHTML and django-unicorn**: none of
-      their settings adds a kind of check the others make, so they keep
-      their defaults.
+    - **Citry, Django, Rusty, FastHTML, django-unicorn and Reflex**:
+      none of their settings adds a kind of check the others make, so
+      they keep their defaults.
 - **Setup**: the project layout from each framework's docs or starter,
   with default settings unless the
   [benchmark notes](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)

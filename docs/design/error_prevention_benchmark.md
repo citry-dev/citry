@@ -165,9 +165,9 @@ as a check stage.
   changes, and the git tree id of the benchmark's inputs (`cases/`,
   `catalogue.toml`, `frameworks/` and `runner/`, without the published
   `results/`), and the report prints them, so the cases it scored can be
-  read back from that commit. The tree id is there because a rebase, such
-  as GitHub's when it merges a stack of pull requests, gives the commit a
-  new hash; any commit whose inputs give the same tree id has the same
+  read back from that commit. The tree id is there because a rebase or a
+  squash merge, which GitHub can do when it merges a stack of pull
+  requests, gives the commit a new hash; any commit whose inputs give the same tree id has the same
   cases and tools. The README shows the two git commands that work it
   out.
 - A report that points away from the change counts only with an `indirect`
@@ -324,7 +324,7 @@ with `--jobs 5` on a 10-core machine. Running every browser check as well,
 one case at a time, took about 280 seconds. A rerun with nothing changed
 took 8 seconds, because the browser checks of the 4 cases whose journey
 stops on an error page are never stored and run again. A full run of the
-eleven frameworks (682 cases) with nothing stored took about 35 minutes
+twelve frameworks (744 cases) with nothing stored took about 37 minutes
 with the default `--jobs 5`, most of it the Nuxt cases, which run one at
 a time. It is not part of routine CI. Its result changes only when a
 case, a pinned version or Citry changes, so it is run at each Citry

@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261021T005054Z",
+  "run": "20261021T075938Z",
   "frameworks": [
     {
       "key": "citry",
@@ -37,6 +37,10 @@
     {
       "key": "reactpy",
       "name": "ReactPy"
+    },
+    {
+      "key": "reflex",
+      "name": "Reflex"
     },
     {
       "key": "nuxt",
@@ -5063,7 +5067,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):",
-        "error: [21/Oct/2026 01:16:40] \"GET / HTTP/1.1\" 500 296108"
+        "error: [21/Oct/2026 08:26:41] \"GET / HTTP/1.1\" 500 296108"
       ]
     },
     {
@@ -6444,11 +6448,11 @@
       "cell": "Rw",
       "reason": null,
       "evidence": [
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(10b9b33b0, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x10b95be20>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(10b9b3410, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b95bf60>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(10b9b3470, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10bae40e0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(10bae8770, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10bae5e40>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(10bae8710, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10bae62a0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109b6f3b0, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x109b13e20>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109b6f410, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x109b13f60>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109b6f470, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x109ca40e0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109ca8770, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x109ca5e40>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109ca84d0, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x109ca62a0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
       ]
     },
     {
@@ -6567,6 +6571,699 @@
       "cell": "M",
       "reason": null,
       "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m01-component-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"crad\" is not defined",
+        "ruff 0.15.5 (default rules): F821 Undefined name `crad`",
+        "reflex compile --dry (Reflex 0.9.10.post2): NameError NameError: name 'crad' is not defined\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m02-input-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"title\"",
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"titel\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: card() got an unexpected keyword argument 'titel'\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m03-input-type-literal",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Reflex has no markup. A component's inputs are Python call arguments, so passing the count as a string is a value computed in code, which is mistake m17.\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m04-missing-required-input",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"title\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: card() missing 1 required positional argument: 'title'\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m05-slot-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"fotter\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: card() got an unexpected keyword argument 'fotter'\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m06-server-handler-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"sav\" for class \"type[CounterState]\"\n\u00a0\u00a0Attribute \"sav\" is unknown",
+        "reflex compile --dry (Reflex 0.9.10.post2): AttributeError AttributeError: type object 'CounterState' has no attribute 'sav'. Did you mean: 'save'?\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m07-undefined-variable",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"ownr\" for class \"type[BoardState]\"\n\u00a0\u00a0Attribute \"ownr\" is unknown",
+        "reflex compile --dry (Reflex 0.9.10.post2): AttributeError AttributeError: type object 'BoardState' has no attribute 'ownr'. Did you mean: 'owner'?\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m08-attribute-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "reflex compile --dry (Reflex 0.9.10.post2): VarAttributeError reflex_base.utils.exceptions.VarAttributeError: The State var `board.board.BoardState.owner` of type <class 'board.board.Owner'> has no attribute 'nmae' or may have been annotated wrongly.\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m09-attribute-value",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"Literal['sumbit']\" cannot be assigned to parameter \"type\" of type \"Var[Literal['button', 'reset', 'submit']] | Literal['button', 'reset', 'submit'] | None\" in function \"create\"\n\u00a0\u00a0Type \"Literal['sumbit']\" i...",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: Invalid var passed for prop Button.type, expected type typing.Literal['submit', 'reset', 'button'], got value sumbit of type <class 'str'>.\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m10-attribute-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m11-element-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue \"bxo\" is not a known attribute of module \"reflex\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): AttributeError AttributeError: No reflex attribute bxo\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m12-server-only-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m13-state-field-typo",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: [Reflex Backend Exception]",
+        "error:  Traceback (most recent call last):",
+        "error: AttributeError: 'CounterState' object has no attribute 'cuont'. Did you mean: "
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m14-hydration-mismatch",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Reflex's components are Python functions that Reflex calls once, when it compiles the app, and the React code they produce renders from the state the backend sends. Nothing in a page function runs in the browser, so no component can branch on whether it runs there, and a render on the server and the first render in the browser start from the same code and state. (The development server this benchmark runs also renders nothing on the server: the generated React Router config sets `ssr: false`.)\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m15-i18n-key",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Reflex has no translations built in, and its docs set none up, so the heading is a plain Python string and there is no message key to misspell.\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m16-css-class",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m17-input-type-code",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"StringVar[str]\" cannot be assigned to parameter \"count\" of type \"Var[int]\" in function \"card\"\n\u00a0\u00a0\"StringVar[str]\" is not assignable to \"Var[int]\"\n\u00a0\u00a0\u00a0\u00a0Type parameter \"VAR_TYPE@Var\" is covariant, but \"str\" is..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m18-payload-field",
+      "status": "prevented",
+      "bucket": null,
+      "cell": "P",
+      "reason": "Reflex builds an event's payload from the handler's own parameter names: `CounterState.save(1)` sends `{amount: 1}` because `save` declares `amount`, so the page never writes the field's name and cannot misspell it. Reflex's types name an event's arguments `value`, `value2` and so on, not after the handler's parameters, so the page writes them by position, as the clean app does. Writing the handler's name anyway, `save(amont=1)`, is not the natural form: pyright rejects the handler's parameter names there, the correct `save(amount=1)` too, and `reflex compile` reports `amont` as an extra argument.\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m19-client-expression-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright \"(\" was not closed",
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No overloads for \"cond\" match the provided arguments\n\u00a0\u00a0Argument types: (Unknown)",
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright \"(\" was not closed",
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright Expected expression",
+        "ruff 0.15.5 (default rules): invalid-syntax Expected an expression"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m20-component-script-syntax",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright Expected expression",
+        "ruff 0.15.5 (default rules): invalid-syntax Expected an expression",
+        "reflex compile --dry (Reflex 0.9.10.post2): SyntaxError SyntaxError: invalid syntax"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m21-directive-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue \"cnod\" is not a known attribute of module \"reflex\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): AttributeError AttributeError: No reflex attribute cnod\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m22-unclosed-tag",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright \"(\" was not closed",
+        "Pylance, type checking on (pyright 1.1.414, standard): pyright Statements must be separated by newlines or semicolons",
+        "ruff 0.15.5 (default rules): invalid-syntax unexpected EOF while parsing",
+        "reflex compile --dry (Reflex 0.9.10.post2): SyntaxError SyntaxError: '(' was never closed"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m23-expression-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportOperatorIssue Operator \"+\" not supported for types \"Var[str]\" and \"Literal[1]\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): VarTypeError reflex_base.utils.exceptions.VarTypeError: Unsupported Operand type(s) for +: StringCastedVar, int\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m24-undeclared-event",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"on_hdie\" is not defined",
+        "ruff 0.15.5 (default rules): F821 Undefined name `on_hdie`",
+        "reflex compile --dry (Reflex 0.9.10.post2): NameError NameError: name 'on_hdie' is not defined. Did you mean: 'on_hide'?\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m25-browser-input-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"open\"",
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"opne\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: status() got an unexpected keyword argument 'opne'\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m26-browser-input-missing",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"open\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: status() missing 1 required positional argument: 'open'\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m27-browser-input-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"StringVar[str]\" cannot be assigned to parameter \"open\" of type \"Var[bool]\" in function \"status\"\n\u00a0\u00a0\"StringVar[str]\" is not assignable to \"Var[bool]\"\n\u00a0\u00a0\u00a0\u00a0Type parameter \"VAR_TYPE@Var\" is covariant, but \"str\"..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m28-input-written-by-child",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "ruff 0.15.5 (default rules): F841 Local variable `open` is assigned to but never used",
+        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x10952a020> -> None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m29-listener-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue No parameter named \"on_hdie\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: card() got an unexpected keyword argument 'on_hdie'\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m30-event-payload-type",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The card's Hide button sends the event the page gave it, `BoardState.hide(project.title)`, which already carries the card's title, so the card sends no value of its own whose type could be wrong.\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m31-dom-event-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "reflex compile --dry (Reflex 0.9.10.post2): ValueError ValueError: The Button does not take in an `on_clik` event trigger. Valid triggers for Button: ['on_blur', 'on_click', 'on_context_menu', 'on_double_click', 'on_focus', 'on_mount', 'on_mouse_down', 'on_mouse_enter', 'on_mouse_leave', 'on_mous..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m32-payload-type",
+      "status": "prevented",
+      "bucket": null,
+      "cell": "P",
+      "reason": "Reflex turns an event's argument into the type the handler declares before the handler runs: it reads the handler's type hints and converts a string with the deserializer for that type (`_transform_event_payload` in reflex_base/event/processor/base_state_processor.py, with `int` among the deserializers in reflex_base/utils/serializers.py). So `CounterState.save(\"1\")` calls `save(amount=1)`, and the count goes from 0 to 1. The catalogue counts such a conversion as prevented. pyright would report the string as an error in the editor.\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m33-payload-missing-field",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"EventCallback[int]\" cannot be assigned to parameter \"on_click\" of type \"EventType[()] | EventType[PointerEventInfo] | None\" in function \"create\"\n\u00a0\u00a0Type \"EventCallback[int]\" is not assignable to type \"Event...",
+        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerArgTypeMismatchError reflex_base.utils.exceptions.EventHandlerArgTypeMismatchError: Event handler on_click expects <class 'reflex_base.event.PointerEventInfo'> for argument amount but got <class 'int'> as annotated in CounterState.save inste..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m34-reply-field",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Reflex runs the Add button's event handler on the server, and the handler changes the counter's state; Reflex then sends the browser the state fields that changed. No browser code reads a reply to the click, so there is no reply field to misspell.\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m35-required-slot-missing",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"footer\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: card() missing 1 required positional argument: 'footer'\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m36-slot-data-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"titel\" is not defined",
+        "ruff 0.15.5 (default rules): F821 Undefined name `titel`",
+        "reflex compile --dry (Reflex 0.9.10.post2): NameError NameError: name 'titel' is not defined. Did you mean: 'title'?\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m37-slot-data-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportOperatorIssue Operator \"+\" not supported for types \"str\" and \"Var[int]\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): VarTypeError reflex_base.utils.exceptions.VarTypeError: Unsupported Operand type(s) for +: str, NumberCastedVar\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m38-state-read-typo",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"cuont\" for class \"type[CounterState]\"\n\u00a0\u00a0Attribute \"cuont\" is unknown",
+        "reflex compile --dry (Reflex 0.9.10.post2): AttributeError AttributeError: type object 'CounterState' has no attribute 'cuont'. Did you mean: 'count'?\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m39-state-type",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot assign to attribute \"count\" for class \"CounterState*\"\n\u00a0\u00a0\"str\" is not assignable to \"int\""
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m40-browser-value-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"api_bsae\" for class \"type[BoardState]\"\n\u00a0\u00a0Attribute \"api_bsae\" is unknown",
+        "reflex compile --dry (Reflex 0.9.10.post2): AttributeError AttributeError: type object 'BoardState' has no attribute 'api_bsae'. Did you mean: 'api_base'?\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m41-browser-value-not-json",
+      "status": "prevented",
+      "bucket": null,
+      "cell": "P",
+      "reason": "A Reflex developer who keeps the API base as a path writes `pathlib.Path`, and Reflex converts a `Path` it sends to the browser into its text with its own serializer (`serialize_path` in reflex_base/utils/serializers.py), so the browser receives `/api` and the page is unchanged. Under the decision on conversions in the plan (docs/design/error_prevention_benchmark_plan.md, decisions on question 3), a framework that converts the value for the developer counts as prevented. Reflex has no serializer for every path class: a field typed `PurePosixPath` is rejected when the state class is defined.\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m42-secret-sent-to-browser",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m43-css-variable-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m44-form-field-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: [Reflex Backend Exception]",
+        "error:  Traceback (most recent call last):",
+        "error: KeyError: 'q'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m45-link-route-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m46-i18n-argument",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Reflex has no translations built in, and its docs set none up, as for m15. The subtitle joins the text and the owner's name directly, so there is no message argument to misname.\n",
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m47-template-path",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportMissingImports Import \"board.crad\" could not be resolved",
+        "reflex compile --dry (Reflex 0.9.10.post2): ModuleNotFoundError ModuleNotFoundError: No module named 'board.crad'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m48-asset-path",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m49-input-choice",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"Var[Literal['acent', 'plain']]\" cannot be assigned to parameter \"tone\" of type \"Var[Literal['plain', 'accent']]\" in function \"card\"\n\u00a0\u00a0\"Var[Literal['acent', 'plain']]\" is not assignable to \"Var[Literal['pla..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m51-list-key-missing",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: In HTML, %s cannot be a descendant of <%s>.\nThis will cause a hydration error.%s <div> p \n\n  ...\n    <App params={{}} loaderData={null} actionData={undefined} matches={[...]}>\n      <Outlet>\n        <RenderedRoute match={{params:{}, ...}} routeContext={{outlet:null, ...}}>\n          <WithC...",
+        "error: <%s> cannot contain a nested %s.\nSee this log for the ancestor stack trace. p <div>",
+        "error: In HTML, %s cannot be a descendant of <%s>.\nThis will cause a hydration error.%s <div> p \n\n  ...\n    <App params={{}} loaderData={null} actionData={undefined} matches={[...]}>\n      <Outlet>\n        <RenderedRoute match={{params:{}, ...}} routeContext={{outlet:null, ...}}>\n          <WithC...",
+        "error: <%s> cannot contain a nested %s.\nSee this log for the ancestor stack trace. p <div>",
+        "error: In HTML, %s cannot be a descendant of <%s>.\nThis will cause a hydration error.%s <div> p \n\n  ...\n    <App params={{}} loaderData={null} actionData={undefined} matches={[...]}>\n      <Outlet>\n        <RenderedRoute match={{params:{}, ...}} routeContext={{outlet:null, ...}}>\n          <WithC..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Parameter \"class_name\" is already assigned",
+        "ruff 0.15.5 (default rules): invalid-syntax Duplicate keyword argument \"class_name\"",
+        "reflex compile --dry (Reflex 0.9.10.post2): SyntaxError SyntaxError: keyword argument repeated: class_name"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "reflex compile --dry (Reflex 0.9.10.post2): ForeachVarError reflex_components_core.core.foreach.ForeachVarError: Could not foreach over var `reflex___state____state__board___board____board_state.projects_rx_state_?.at?.(0)?.[\"count\"]` of type <class 'int'>. See https://reflex.dev/docs/library/dyn..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"lenght\" for class \"ArrayVar[Sequence[Project]]\"\n\u00a0\u00a0Attribute \"lenght\" is unknown",
+        "reflex compile --dry (Reflex 0.9.10.post2): VarAttributeError reflex_base.utils.exceptions.VarAttributeError: The State var board.board.BoardState.projects of type list[board.board.Project] has no attribute 'lenght' or may have been annotated wrongly.\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m60-handler-arguments",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E\u00b0",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"EventCallback[str]\" cannot be assigned to parameter \"on_hide\" of type \"EventType[()]\" in function \"card\"\n\u00a0\u00a0Type \"EventCallback[str]\" is not assignable to type \"EventType[()]\"\n\u00a0\u00a0\u00a0\u00a0\"EventCallback[str]\" is in...",
+        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerArgTypeMismatchError reflex_base.utils.exceptions.EventHandlerArgTypeMismatchError: Event handler on_click expects <class 'reflex_base.event.PointerEventInfo'> for argument reason but got <class 'str'> as annotated in BoardState.hide instead..."
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"Literal['false']\" cannot be assigned to parameter \"disabled\" of type \"Var[bool] | bool | None\" in function \"create\"\n\u00a0\u00a0Type \"Literal['false']\" is not assignable to type \"Var[bool] | bool | None\"\n\u00a0\u00a0\u00a0\u00a0\"Litera...",
+        "reflex compile --dry (Reflex 0.9.10.post2): TypeError TypeError: Invalid var passed for prop Button.disabled, expected type <class 'bool'>, got value false of type <class 'str'>.\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
+      "mistake": "m63-binding-on-non-input",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C\u00b0",
+      "reason": null,
+      "evidence": [
+        "reflex compile --dry (Reflex 0.9.10.post2): ValueError ValueError: The Form does not take in an `on_change` event trigger. Valid triggers for Form: ['on_blur', 'on_clear_server_errors', 'on_click', 'on_context_menu', 'on_double_click', 'on_focus', 'on_mount', 'on_mouse_down', 'on_mouse_enter', 'o..."
+      ]
     },
     {
       "framework": "nuxt",
