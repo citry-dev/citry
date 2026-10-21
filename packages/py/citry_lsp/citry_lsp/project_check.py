@@ -119,6 +119,7 @@ async def _check_project_python_types(
         await infer_js_data_value_types(analyzer, project, documents)
         if analyzer.failure is not None:
             raise TyUnavailableError(analyzer.failure)
+        non_json_files = project.js_data_files_with_non_json_answers()
         for uri, document in sorted(documents.items()):
             findings = await semantic_diagnostics(analyzer, document, project, documents)
             # The editor shows nothing when ty fails, but a command must say so.
@@ -131,8 +132,11 @@ async def _check_project_python_types(
             # once ty has typed it, such as a module constant holding a path,
             # so the command reports those warnings too. Warnings Citry's own
             # rules give without ty are left to the registry check, which
-            # already reports them.
-            reported = [*findings, *_ty_js_data_type_diagnostics(document, project, untyped, documents)]
+            # already reports them. Finding them reads every component, so
+            # only a file where ty found such a type is searched.
+            reported = list(findings)
+            if path.resolve() in non_json_files:
+                reported.extend(_ty_js_data_type_diagnostics(document, project, untyped, documents))
             results.extend(
                 ProjectTypeFinding(path, document.source, diagnostic)
                 for diagnostic in sorted(
