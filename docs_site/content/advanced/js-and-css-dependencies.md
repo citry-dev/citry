@@ -106,6 +106,10 @@ unsupported value: data sent to the browser must contain only dicts,
 lists, strings, numbers, booleans, and None, got datetime.
 ```
 
+A [`Secret`][citry.Secret] is refused too, with an error that names the
+key holding it; see
+[Keep tokens off the page](/vue/component-options/#keep-tokens-off-the-page).
+
 Convert such values in `js_data()` first:
 
 ```python
@@ -195,6 +199,8 @@ CSS, such as one with a top-level `;` or a `</style` end tag.
 
     Citry can deliver these values as a stylesheet at a URL. Anyone who
     has the URL can download it, so never put a secret in `css_data()`.
+    A value wrapped in [`Secret`][citry.Secret] raises `ValueError` when
+    the component renders.
 
 ## Name CSS classes
 

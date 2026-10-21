@@ -78,7 +78,7 @@ from citry._template_data_source import (
     analyze_css_data_source,
     analyze_template_data_source,
 )
-from citry._vue.json_data import _json_plain
+from citry._vue.json_data import _json_plain, _secret_key_path, _SecretInBrowserDataError
 from citry._vue_compile_lint import lint_vue_compile
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
@@ -2387,12 +2387,15 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
         if not issues:
             # A bare module-level name, such as `API_BASE`, has no type in
             # the source, but the loaded module holds the value js_data()
-            # sends, so the browser's own JSON check can run on it.
+            # sends, so the browser's own JSON check can run on it. The same
+            # holds for a name written inside a dict or list literal, such as
+            # `{"config": {"token": SECRET_TOKEN}}`.
             issues = tuple(
                 dict.fromkeys(
                     issue
-                    for value, wire_type in zip(values, wire_types, strict=True)
-                    if wire_type.kind == "unknown" and (issue := module_values(value.strip())) is not None
+                    for value in values
+                    for name in _names_sent_as_written(value)
+                    if (issue := module_values(name)) is not None
                 )
             )
         if not issues:
@@ -2412,6 +2415,33 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
             )
         )
     return findings
+
+
+def _names_sent_as_written(value_source: str) -> list[str]:
+    """
+    Return the bare names whose values a `js_data()` value sends unchanged.
+
+    That is the value itself when it is a name, and each name that is a
+    whole item of a dict, list, or tuple literal inside it. A name used any
+    other way, such as `len(TOKEN.get_secret_value())`, is left out,
+    because the browser receives what the expression computes, not the
+    name's value.
+    """
+    try:
+        node = ast.parse(value_source.strip(), mode="eval").body
+    except (SyntaxError, ValueError):
+        return []
+    names: list[str] = []
+    pending = [node]
+    while pending:
+        current = pending.pop(0)
+        if isinstance(current, ast.Name):
+            names.append(current.id)
+        elif isinstance(current, ast.Dict):
+            pending.extend(current.values)
+        elif isinstance(current, (ast.List, ast.Tuple)):
+            pending.extend(current.elts)
+    return names
 
 
 def _js_data_module_values(component: type[Component], source: str) -> Callable[[str], str | None]:
@@ -2454,6 +2484,14 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         value = namespace[name]
         try:
             _json_plain(value)
+        except _SecretInBrowserDataError:
+            # Rendering would raise for this value, so name the key that
+            # holds the Secret, the way the runtime error does.
+            path = _secret_key_path(value) or ""
+            return (
+                f"{name}{path} holds a citry.Secret, which Citry never sends to the browser; "
+                "read the value on the server instead"
+            )
         except TypeError:
             return f"{name} holds a value of type {type(value).__name__}, which cannot be sent to the browser as JSON"
         except ValueError as exc:

@@ -142,6 +142,81 @@ Two kinds of key fail:
   names, so the browser catches the clash: the component fails when it
   first appears on the page.
 
+## Keep tokens off the page { #keep-tokens-off-the-page }
+
+Everything `js_data()` returns ends up in the page source, where any
+visitor can read it. A natural first attempt sends an API token along
+with the other settings:
+
+```python
+API_TOKEN = os.environ["API_TOKEN"]
+
+
+def js_data(self, kwargs, slots):
+    # Wrong: every visitor can read the token in the page source
+    return {"apiBase": "/api", "token": API_TOKEN}
+```
+
+The browser needs the data the token unlocks, not the token itself. Wrap
+the token in [`Secret`][citry.Secret] where you load it, read it on the
+server with `get_secret_value()`, and send the browser only the result:
+
+```citry
+import os
+
+from citry import Component, Secret
+
+API_TOKEN = Secret(os.environ["API_TOKEN"])
+
+
+class Board(Component):
+    def template_data(self, kwargs, slots):
+        # Right: the token is used on the server only
+        token = API_TOKEN.get_secret_value()
+        return {"rows": load_rows(token)}
+
+    def js_data(self, kwargs, slots):
+        return {"apiBase": "/api"}
+
+    template = """
+      <ul>
+        <c-for each="row in rows">
+          <li>{{ row }}</li>
+        </c-for>
+      </ul>
+    """
+```
+
+On the server a `Secret` is safe to pass around. In a template,
+`{{ token }}` shows `***`. You can also pass it to a child component;
+annotate the child's `Kwargs` field as `Secret[str]` so a plain string
+passed there is rejected.
+
+If a `Secret` ends up anywhere in `js_data()` anyway, Citry refuses to
+send it. Rendering the page raises a `TypeError` that names the
+component and the key, before any HTML is sent:
+
+```text
+TypeError: Board.js_data()["token"] holds a citry.Secret, and Citry
+never sends a Secret to the browser, where anyone could read it in
+the page source. ...
+```
+
+[`citry --app ... check`](/advanced/cli/#check-component-templates)
+reports it before the page runs, as the
+[`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)
+warning, when it can see the `Secret`: a module constant that
+`js_data()` returns by name, or a field annotated `Secret[str]`.
+Rendering also fails, with `ValueError`, when `css_data()` or a
+[State](/events/state/) field holds a `Secret`.
+
+!!! warning "A plain string is not detected"
+
+    Citry knows a value is secret only when you wrap it. A token kept in
+    a plain `str` is sent like any other string, and so is the result of
+    `get_secret_value()` once you return it from `js_data()` or write it
+    into a template.
+
 ## `onServerRender` callback { #react-after-a-server-render }
 
 Some code has to run again each time the server renders the component,

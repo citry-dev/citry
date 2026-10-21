@@ -199,6 +199,7 @@ from citry.nodes import (
     StaticHtmlAttr,
     TemplateHtmlAttr,
 )
+from citry.secret import Secret
 from citry.settings import (
     CitrySettings,
     LintSettings,
@@ -364,6 +365,7 @@ __all__ = [
     "RouteRequest",
     "RouteResponse",
     "SchemaInfo",
+    "Secret",
     "SecurityCspMode",
     "SecurityError",
     "SecurityJavascriptMode",

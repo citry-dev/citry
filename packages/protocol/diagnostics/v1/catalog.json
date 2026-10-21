@@ -525,8 +525,8 @@
       "constant": "JS_DATA_UNSUPPORTED_TYPE",
       "title": "JsData field is not a JSON type",
       "summary": "A JsData field has a type that cannot be sent to the browser as JSON, such as a set or a date. Editor help treats the value as any.",
-      "when": "A declared or inferred JsData field has a type that strict JSON cannot carry, such as bytes, a set, a callable, a date or time, or a whole class instance. With your application loaded, citry check also reads a module constant that js_data() returns by name, such as API_BASE, and reports it when its value is not JSON. The editor and citry check --types also report a value that ty, the Python type checker Citry runs, types as a standard library type JSON cannot carry, such as PurePosixPath, datetime, Decimal, UUID, a set, or complex.",
-      "fix": "Convert the value to JSON-friendly data in js_data(), such as a list, a string, or a dict of plain values, and change the JsData annotation to match.",
+      "when": "A declared or inferred JsData field has a type that strict JSON cannot carry, such as bytes, a set, a callable, a date or time, or a whole class instance. A citry.Secret counts too: Citry never sends one to the browser, and rendering the component raises TypeError. With your application loaded, citry check also reads a module constant that js_data() returns by name, such as API_BASE or a SECRET_TOKEN = Secret(...), and reports it when its value is not JSON. The editor and citry check --types also report a value that ty, the Python type checker Citry runs, types as a standard library type JSON cannot carry, such as PurePosixPath, datetime, Decimal, UUID, a set, or complex, or as a Secret.",
+      "fix": "Convert the value to JSON-friendly data in js_data(), such as a list, a string, or a dict of plain values, and change the JsData annotation to match. For a Secret, read its value on the server with get_secret_value() where you need it, and leave it out of js_data().",
       "defaultSeverity": "warning",
       "surfaces": [
         "check",

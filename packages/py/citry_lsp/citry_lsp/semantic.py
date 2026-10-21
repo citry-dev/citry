@@ -598,13 +598,14 @@ _UNPROVEN_TY_DISPLAY = re.compile(r"\bUnknown\b|@Todo|\.\.\. omitted \d+")
 _TY_DISPLAY_STRING = re.compile(r'"(?:[^"\\]|\\.)*"' + r"|'(?:[^'\\]|\\.)*'")
 
 
-# Standard library types that never cross Citry's strict JSON wire, each
-# with the reason the js-data warning gives. ty's answer naming one of these
-# is kept, so the editor and `citry check --types` can report the value.
-# Any other class is dropped instead: it may be a TypedDict, which is sent
-# as an object, or a type Citry cannot judge. ty names a class without its
-# module, so a project class that shares one of these names, such as its
-# own `Path`, gets the same warning.
+# Standard library types that never cross Citry's strict JSON wire, plus
+# Citry's own `Secret` marker, each with the reason the js-data warning
+# gives. ty's answer naming one of these is kept, so the editor and
+# `citry check --types` can report the value. Any other class is dropped
+# instead: it may be a TypedDict, which is sent as an object, or a type
+# Citry cannot judge. ty names a class without its module, so a project
+# class that shares one of these names, such as its own `Path`, gets the
+# same warning.
 _STANDARD_NON_JSON_TYPES = {
     **dict.fromkeys(
         (
@@ -626,6 +627,9 @@ _STANDARD_NON_JSON_TYPES = {
     **dict.fromkeys(("bytes", "bytearray", "memoryview", "complex"), "values are not JSON-serializable"),
     "set": "sets are not JSON-serializable",
     "frozenset": "sets are not JSON-serializable",
+    # The same text as `citry._json_wire.SECRET_NOT_SENT_REASON`, written
+    # out so the editor keeps working with a citry release that predates it.
+    "Secret": "values are never sent to the browser; read the value on the server instead",
 }
 
 
@@ -638,8 +642,14 @@ def _json_type_from_ty_display(display: str) -> JsonWireType | None:
     A literal is widened to its kind, as Citry's own rules do for a
     `js_data()` constant. A standard library type that JSON cannot carry,
     such as `PurePosixPath` or `set[int]`, gives an unknown type with the
-    reason, alone or as one member of a union.
+    reason, alone or as one member of a union. A `Secret` anywhere in the
+    display, such as `dict[str, Secret[str]]` or `Secret[Unknown]`, gives
+    the Secret reason.
     """
+    # Whatever a Secret wraps, and whatever holds it, rendering refuses the
+    # value, so this runs before the check that drops unproven displays.
+    if _display_names_secret(display):
+        return JsonWireType("unknown", unsupported=(f"Secret {_STANDARD_NON_JSON_TYPES['Secret']}",))
     if _UNPROVEN_TY_DISPLAY.search(_TY_DISPLAY_STRING.sub('""', display)):
         return None
     reasons = _standard_non_json_reasons(display)
@@ -649,6 +659,21 @@ def _json_type_from_ty_display(display: str) -> JsonWireType | None:
     if wire_type.unsupported or _has_unknown_part(wire_type):
         return None
     return _widened_json_type(wire_type)
+
+
+def _display_names_secret(display: str) -> bool:
+    """Return whether ty's display of a type names `Secret` anywhere, such as inside `list[...]`."""
+    try:
+        node = ast.parse(display, mode="eval")
+    except SyntaxError:
+        return False
+    # ty names a class without its module, so the last part of a name is
+    # compared; a string inside `Literal[...]` is a value and never matches.
+    return any(
+        (isinstance(part, ast.Name) and part.id == "Secret")
+        or (isinstance(part, ast.Attribute) and part.attr == "Secret")
+        for part in ast.walk(node)
+    )
 
 
 def _standard_non_json_reasons(display: str) -> tuple[str, ...]:

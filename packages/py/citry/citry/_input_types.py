@@ -20,6 +20,7 @@ than ``isinstance``, and runs the slower test only when that fails.
 from __future__ import annotations
 
 import numbers
+import re
 import sys
 import types
 import typing
@@ -38,6 +39,7 @@ from citry.constness import (
     _schema_has_generated_dataclass_init,
     const_value,
 )
+from citry.secret import Secret
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -195,6 +197,10 @@ class _MissingValue:
 _MISSING = _MissingValue()
 
 
+# How an expected-type label names Secret, such as `list[citry.secret.Secret[str]]`.
+_SECRET_IN_LABEL = re.compile(r"\bSecret\b")
+
+
 def _raise_type_error(
     component_class: type[Component],
     role: str,
@@ -218,7 +224,28 @@ def _raise_type_error(
         if role == "Kwargs" and isinstance(value, str):
             # A plain template attribute always passes text.
             fix += f' In a template, write c-{name}="..." to pass a Python value instead of text.'
-    msg = f"{component_class.__name__}.{role}.{name} expects {expected}, got {type_name} ({_short_repr(value)}). {fix}"
+    shown = _short_repr(value)
+    if Secret in matcher.accepted or _SECRET_IN_LABEL.search(expected):
+        # The field expects a Secret, alone or inside a container such as
+        # list[Secret[str]], but got a bare value, which is most likely the
+        # secret itself. Error messages end up in logs and error pages, so
+        # the message must not print it.
+        shown = "value hidden"
+    if Secret in matcher.accepted:
+        type_name = _class_label(type(value))
+        if role in {"Kwargs", "TemplateData"}:
+            fix = (
+                "Wrap the value where it is created, as Secret(value), so it shows as *** in templates, "
+                "logs, and error messages."
+            )
+        else:
+            # JsData, CssData, and State go to the browser, which never
+            # receives a Secret, so wrapping the value would only move the error.
+            fix = (
+                f"Citry never sends a Secret to the browser, so a {role} field cannot hold one. Remove the "
+                "field, and read the value on the server where you need it."
+            )
+    msg = f"{component_class.__name__}.{role}.{name} expects {expected}, got {type_name} ({shown}). {fix}"
     raise TypeError(msg)
 
 

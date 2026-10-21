@@ -19,6 +19,7 @@ from pytest_lsp import ClientServerConfig, LanguageClient
 
 import citry
 from citry._checker import CheckFinding, CheckReport
+from citry._json_wire import SECRET_NOT_SENT_REASON
 from citry.commands.check import _with_type_findings
 from citry_lsp import project as project_module
 from citry_lsp.engine import (
@@ -1590,6 +1591,10 @@ _SECRET_REASON = "Secret values are never sent to the browser; read the value on
         # Citry never sends its own Secret marker, whatever it holds.
         ("Secret[str]", (_SECRET_REASON,)),
         ("Secret[bytes] | None", (_SECRET_REASON,)),
+        # Nested, or wrapping a value ty could not type, is still a Secret.
+        ("dict[str, Secret[str]]", (_SECRET_REASON,)),
+        ("list[Secret[str]]", (_SECRET_REASON,)),
+        ("Secret[Unknown]", (_SECRET_REASON,)),
         # Any other class may be a TypedDict, which is sent as an object.
         ("Task", None),
         ("Unknown | PurePosixPath", None),
@@ -1599,6 +1604,12 @@ def test_ty_displays_of_standard_non_json_types_keep_their_reason(display, reaso
     value = _json_type_from_ty_display(display)
 
     assert (value.unsupported if value is not None else None) == reasons
+
+
+def test_the_ty_secret_reason_matches_citrys_own():
+    # citry-lsp keeps its own copy so it works with an older citry; the two
+    # texts must stay equal so both checks give the same advice.
+    assert f"Secret {SECRET_NOT_SENT_REASON}" == _SECRET_REASON
 
 
 def test_a_bound_string_the_attribute_rule_reports_is_not_reported_by_typescript(tmp_path):

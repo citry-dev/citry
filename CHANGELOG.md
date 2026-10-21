@@ -98,6 +98,13 @@
   or `<form>`, the render error now names each such element with its
   template and line, and lists the elements `v-model` works on, instead
   of an internal Vue compiler message.
+- You can now wrap a server-only value, such as an API token, in
+  `citry.Secret` (`API_TOKEN = Secret(os.environ["API_TOKEN"])`,
+  annotated `Secret[str]`), and Citry refuses to send it to the browser.
+  Rendering fails with an error naming the component and key when
+  `js_data()`, `css_data()`, or State holds one, `citry check` warns about
+  one in `js_data()`, and a template shows it as `***`
+  ([details](https://citry.dev/vue/component-options/#keep-tokens-off-the-page)).
 
 ### Changed
 
@@ -152,6 +159,9 @@
   and range inputs now send their text, so a handler that reads
   `event.args` directly, or a Pydantic model in strict mode, gets `"3"`
   instead of `3`, as it already did without JavaScript.
+- With your application loaded, `citry check` now also reports a module
+  constant that `js_data()` writes inside a dict or list, such as
+  `{"auth": {"token": TOKEN}}`, when its value cannot be sent as JSON.
 
 ### Fixes
 

@@ -77,3 +77,5 @@
 - `citry.js-data.unsupported-type` also covers a module constant that
   `js_data()` returns and a value that ty types as a standard type JSON
   cannot carry.
+- `citry.js-data.unsupported-type` also covers a `citry.Secret` in
+  `js_data()` or a `JsData` field.

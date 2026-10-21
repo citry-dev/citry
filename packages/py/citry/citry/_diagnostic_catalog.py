@@ -1163,7 +1163,8 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                   'title': 'Unsupported set value'}],
                                     'fix': 'Convert the value to JSON-friendly data in js_data(), such as a list, a '
                                            'string, or a dict of plain values, and change the JsData annotation to '
-                                           'match.',
+                                           'match. For a Secret, read its value on the server with get_secret_value() '
+                                           'where you need it, and leave it out of js_data().',
                                     'messages': {'default': "JsData field '{name}' is not a clean JSON value: "
                                                             '{detail}. Browser tooling will treat its type as '
                                                             'unknown.'},
@@ -1175,12 +1176,15 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                     'title': 'JsData field is not a JSON type',
                                     'when': 'A declared or inferred JsData field has a type that strict JSON cannot '
                                             'carry, such as bytes, a set, a callable, a date or time, or a whole class '
-                                            'instance. With your application loaded, citry check also reads a module '
-                                            'constant that js_data() returns by name, such as API_BASE, and reports it '
-                                            'when its value is not JSON. The editor and citry check --types also '
-                                            'report a value that ty, the Python type checker Citry runs, types as a '
-                                            'standard library type JSON cannot carry, such as PurePosixPath, datetime, '
-                                            'Decimal, UUID, a set, or complex.'},
+                                            'instance. A citry.Secret counts too: Citry never sends one to the '
+                                            'browser, and rendering the component raises TypeError. With your '
+                                            'application loaded, citry check also reads a module constant that '
+                                            'js_data() returns by name, such as API_BASE or a SECRET_TOKEN = '
+                                            'Secret(...), and reports it when its value is not JSON. The editor and '
+                                            'citry check --types also report a value that ty, the Python type checker '
+                                            'Citry runs, types as a standard library type JSON cannot carry, such as '
+                                            'PurePosixPath, datetime, Decimal, UUID, a set, or complex, or as a '
+                                            'Secret.'},
  'citry.parse.configuration': {'code': 'citry.parse.configuration',
                                'constant': 'PARSE_CONFIGURATION',
                                'defaultSeverity': 'error',

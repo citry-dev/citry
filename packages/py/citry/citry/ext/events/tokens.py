@@ -55,6 +55,8 @@ from types import UnionType
 from typing import TYPE_CHECKING, Any, Union, cast, get_args, get_origin, get_type_hints
 from weakref import WeakKeyDictionary
 
+from citry._vue.json_data import _secret_key_path
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from datetime import timedelta
@@ -341,6 +343,9 @@ def _validate_state_values(state_dict: dict[str, Any], class_id: str) -> None:
         try:
             _canonical_json(value)
         except (TypeError, ValueError) as err:
+            secret_message = _secret_in_state_message(class_id, field_name, value)
+            if secret_message is not None:
+                raise ValueError(secret_message) from err
             raise ValueError(f"Component {class_id}: State field {field_name!r} is not strict JSON.") from err
 
 
@@ -363,6 +368,9 @@ def _state_dict(state: Any, class_id: str) -> dict[str, Any]:
         except (TypeError, ValueError) as err:
             if isinstance(err, ValueError) and "Circular reference" in str(err):
                 raise
+            secret_message = _secret_in_state_message(class_id, state_field.name, value)
+            if secret_message is not None:
+                raise ValueError(secret_message) from err
             msg = (
                 f"Component {class_id}: State field {state_field.name!r} holds a value"
                 f" ({_state_value_description(value)}) which is not JSON-serializable under strict rules."
@@ -843,6 +851,20 @@ def _b64url_decode(text: str) -> bytes:
 def _canonical_json(obj: Any) -> str:
     """Deterministic JSON: sorted keys and compact separators, so a token is byte-stable."""
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
+def _secret_in_state_message(class_id: str, field_name: str, value: object) -> str | None:
+    """Explain a ``citry.Secret`` in a State field, or return None when the field holds none."""
+    # Only called after JSON encoding failed, so ordinary State pays nothing.
+    path = _secret_key_path(value)
+    if path is None:
+        return None
+    where = f" at {path}" if path else ""
+    return (
+        f"Component {class_id}: State field {field_name!r} holds a citry.Secret{where}. State holds only plain "
+        "JSON values, and with the default storage every visitor can read them in the page, so Citry refuses "
+        "a Secret there. Read the secret in the event handler instead, for example from your settings."
+    )
 
 
 def _state_value_description(value: Any) -> str:

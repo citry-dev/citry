@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from math import isfinite
 
+from citry.secret import Secret
+
 # A CSS function call: a name followed by an opening parenthesis,
 # e.g. `calc(100% - 20px)`, `var(--color)`, `rgba(255, 0, 0, 0.5)`.
 _CSS_FUNC_RE = re.compile(r"^[a-zA-Z0-9_-]+\(")
@@ -160,6 +162,14 @@ def serialize_css_var_value(value: object) -> str:
         serialized = (
             _serialize_css_string(value) if any(char.isspace() for char in value) and not is_css_func(value) else value
         )
+    elif type(value) is Secret:
+        # The stylesheet holding these values can be fetched by URL, so a
+        # wrapped secret gets its own reason rather than the generic one.
+        msg = (
+            "it holds a citry.Secret, and Citry never sends a Secret to the browser. "
+            "Read the value with get_secret_value() in server code that needs it and leave it out of css_data()."
+        )
+        raise TypeError(msg)
     else:
         msg = f"CSS data values must be strings, numbers, or None; {type(value).__name__} is not supported."
         raise TypeError(msg)

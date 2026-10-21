@@ -14,10 +14,11 @@ leaves others to you:
 | A user edits the values a handler receives | Signs State so it cannot be changed silently | Validate State and check permissions in every handler |
 | Another site posts to your event routes | Rejects cross-site calls | Keep your framework's CSRF check on |
 | A template expression reaches dangerous Python | Runs expressions in a sandbox | Put only safe objects in the template context |
+| A secret ends up in the page source | Refuses to send a value wrapped in `Secret` | Wrap each secret in `Secret` and read it on the server |
 | Injected scripts on the page | Nothing until you opt in | Send a Content Security Policy with a nonce |
 
 The first two rows apply to every app that uses
-[server events](/events/), and the third to every app. The Content
+[server events](/events/), and the next two to every app. The Content
 Security Policy (CSP) sections later on are optional hardening.
 
 ## Treat State as input { #treat-state-as-client-input }
@@ -29,8 +30,11 @@ cannot change them silently, but it does not encrypt them. Fields listed in
 `State._model` (every public field, by default) can also be changed on
 purpose through `$state` and two-way `:c-*` bindings.
 
-Keep secrets out of State. Store a small record id instead, then load the
-record and check the current user's permission in every handler:
+Keep secrets out of State, because with the default storage visitors can
+read it. Citry refuses a value wrapped in
+[`Secret`](#keep-secrets-on-the-server) there, but not a secret kept in a
+plain string. Store a small record id instead, then load the record and
+check the current user's permission in every handler:
 
 ```citry
 class ProjectPanel(Component):
@@ -355,6 +359,32 @@ app = Citry(sandbox_expressions=False)
 A successful render gives the same output either way. Builtins are still
 missing, and a walrus assignment (`:=`) still writes into the template's
 variables. Only the blocked accesses behave differently.
+
+## Keep secrets server-side { #keep-secrets-on-the-server }
+
+Every value a component returns from `js_data()` or `css_data()`, and,
+with the default storage, every State value, ends up in the page or in
+files the page loads, where any visitor can read it. Wrap an API key,
+token, or password in [`Secret`][citry.Secret] where you load it:
+
+```python
+import os
+
+from citry import Secret
+
+API_TOKEN = Secret(os.environ["API_TOKEN"])
+```
+
+Citry then refuses to send it to the browser: rendering fails with an
+error that names the component and the key. `citry --app ... check` also
+warns about a `Secret` it can see in `js_data()`, such as a module
+constant. Read the value on the server with `get_secret_value()` where
+you need it. In a template it shows as `***`.
+
+Citry detects only the values you wrap. A secret kept in a plain string
+is sent like any other text. See
+[Keep tokens off the page](/vue/component-options/#keep-tokens-off-the-page)
+for a full example.
 
 ## Use a CSP nonce { #apply-a-request-csp-nonce-centrally }
 

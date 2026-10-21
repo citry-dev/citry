@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -81,7 +82,13 @@ from .direct import (
     DirectProjectionRender,
     DirectPythonComponentRender,
 )
-from .json_data import _copy_evaluated_json, _json_plain, _vue_attribute_value
+from .json_data import (
+    _copy_evaluated_json,
+    _json_plain,
+    _secret_key_path,
+    _SecretInBrowserDataError,
+    _vue_attribute_value,
+)
 from .leaf_program import (
     LeafCallChildren,
     LeafProgramFragment,
@@ -348,6 +355,23 @@ def _rebase_metadata(values: list[_RebasableMetadataT], offset: int) -> list[_Re
             }
             for value in values
         ],
+    )
+
+
+def _secret_in_js_data_message(citry: Citry, class_id: str | None, js_data: object) -> str:
+    """Explain which ``js_data()`` key holds a ``citry.Secret`` and how to keep it on the server."""
+    # The class name is what the author wrote; the class id carries a hash
+    # suffix, so it is only the fallback for a class no longer registered.
+    label = class_id or "component"
+    with contextlib.suppress(KeyError):
+        if class_id:
+            label = citry.get_component_by_class_id(class_id).__name__
+    path = _secret_key_path(js_data) or ""
+    return (
+        f"{label}.js_data(){path} holds a citry.Secret, and Citry never sends a Secret to the browser, "
+        "where anyone could read it in the page source. Read the value with get_secret_value() in server "
+        "code that needs it, such as template_data() or an event handler, and leave it out of js_data(). "
+        "If an extension adds this key in on_component_data, fix it there."
     )
 
 
@@ -728,6 +752,10 @@ def assemble_typed_render(
             raise UnsupportedPreparedView("component occurrence has no captured js_data")
         try:
             frame_data = _json_plain(raw_frame_data)
+        except _SecretInBrowserDataError as error:
+            # The author wrapped this value to keep it on the server, so say
+            # exactly which key holds it rather than only that a type is wrong.
+            raise TypeError(_secret_in_js_data_message(citry, frame.class_id, raw_frame_data)) from error
         except (TypeError, ValueError) as error:
             # js_data() is the author's code, and the bare conversion error
             # names neither the component nor what to return instead.

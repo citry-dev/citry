@@ -61,6 +61,9 @@ All notable changes to `citry-lsp` are documented here.
 - The editor reports a parent method used as a child component's event
   listener, such as `@hide="hideCard"`, when its parameters do not accept
   the values the child's typed `emits` declares.
+- The editor and `citry check --types` warn when a `js_data()` value is a
+  `citry.Secret`, alone or inside a list or dict
+  (`citry.js-data.unsupported-type`).
 
 ### Changed
 
