@@ -46,8 +46,8 @@ Every component whose template reads Python values defines
 `template_data()`, as each component in the FastAPI starter does; Citry's
 Getting Started guide defines it only when a value must be computed.
 Citry 0.6.0 skipped a template's Python expressions when its component
-defined neither `template_data()` nor `TemplateData`; the measured
-sources check them either way. No case measures a component without the
+defined neither `template_data()` nor `TemplateData`; the Citry
+measured here checks them either way (#202). No case measures a component without the
 method; a manual check of m23's card with its `template_data()` removed
 still reported the type error.
 
@@ -123,9 +123,10 @@ kind of check. Considered and left off:
   change it. A test build of Citry's check with `strict` on changed no
   finding.
 - Pydantic models for `Kwargs`, which Citry's docs show, would check
-  input types when a component renders. Citry already checks them when
-  a component renders, and ty checks them in the editor, so they add no
-  kind of check.
+  input types when a component renders. Citry already checks each
+  input's outer type then, and ty checks inputs in the editor, so
+  Pydantic would add only checks of nested types, such as the items of
+  a `list[str]`.
 - `mode="development"` changes only how translations are loaded, and
   the browser gets Vue's production build in either mode.
 """

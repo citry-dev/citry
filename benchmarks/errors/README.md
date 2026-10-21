@@ -94,14 +94,17 @@ Citry release ships with its results already measured. Its lockfile
 installs citry and citry-lsp from `packages/py/`, built as a release
 would be, and citry-core from PyPI at the version citry pins. A change
 to citry-core's Rust code is therefore measured only once a citry-core
-release has it. `prepare` installs the two packages again whenever a
-file in their folders changes. It first checks that the app's
-`uv.lock` still matches their sources, development dependency groups
-included, and that citry still pins the citry-core version the app
-overrides; when either has changed, it stops and asks you to update
-`frameworks/citry/baseline/` and run `uv lock` there. Each run's
-`run.json` lists these packages under `from_checkout`, and the report
-names them with the run's commit.
+release has it. Each run's `run.json` lists the packages built from the
+repository under `from_checkout`, and the report names them with the
+run's commit.
+
+`prepare` installs those two packages again whenever a file in their
+folders changes. Before it does, it checks two things and stops when
+either has changed: that the app's `uv.lock` still matches their
+sources, development dependency groups included, and that the
+citry-core version `frameworks/citry/baseline/pyproject.toml` installs
+is still the one citry pins. To fix either, update that file and run
+`uv lock` in `frameworks/citry/baseline/`.
 
 `run` takes `--framework` and `--mistake`, each repeatable, to run part of
 the matrix, and `--skip-runtime` to run the static stages only. Installed
@@ -133,22 +136,23 @@ finish in.
 
 `run` also reuses what earlier runs stored. It keeps each case's raw tool
 output and browser check in `.benchmarks/errors/results/` (not to be
-confused with the committed `results/` report folder), and a later run runs
-only the cases whose inputs changed: the case itself, its framework's
+confused with the committed `results/` report folder), and a later run
+runs only the cases whose inputs changed: the case itself, its framework's
 folder, what that framework's environment installed (for the Citry app,
 the files of citry and citry-lsp it built from this repository), the
-runner code that runs the tools and the browser, the installed
-Playwright, the Node and Python versions, the operating system version, a few environment variables
-the tools read, or the cache folder's location. Output that may say more
-about the machine than the case is not kept: a tool that timed out or was
-killed, a server that never answered, a journey that stopped early, and
-everything from a run whose clean app for that framework had a problem.
-Scoring and the report are always worked out again from the stored output,
-so a change to them needs no rerun. `run.json` in the run's folder under
-`.benchmarks/errors/runs/` lists the clean apps and cases that came from
-earlier runs, and `--no-cache` runs everything again. Use it after changing
-something outside those inputs that could change a tool's output, such as a
-package installed by hand into `.benchmarks/errors/envs/`.
+runner code that runs the tools and the browser, the installed Playwright,
+the Node and Python versions, the operating system version, a few
+environment variables the tools read, or the cache folder's location.
+Output that may say more about the machine than the case is not kept: a
+tool that timed out or was killed, a server that never answered, a journey
+that stopped early, and everything from a run whose clean app for that
+framework had a problem. Scoring and the report are always worked out
+again from the stored output, so a change to them needs no rerun.
+`run.json` in the run's folder under `.benchmarks/errors/runs/` lists the
+clean apps and cases that came from earlier runs, and `--no-cache` runs
+everything again. Use it after changing something outside those inputs
+that could change a tool's output, such as a package installed by hand
+into `.benchmarks/errors/envs/`.
 
 On a 10-core machine with 24 GB of memory, a full run of the twelve
 frameworks' 756 cases with nothing stored (`--no-cache`) takes about 14
@@ -242,9 +246,10 @@ writes a part of the page, not from its tools:
   the browser; m26 and m27 do not apply; and m28 is "prevented", because
   assigning `open` from the nested component changes the parent's value as
   intended. FastHTML's page uses plain scripts with no browser-side
-  components, so it has no status line and m25 to m28 do not apply.
-  Citry's check reports all four, including text bound to the boolean
-  prop (m27) and a child that assigns to its own prop (m28).
+  components, so it has no status line and m25 to m28 do not apply. In
+  Citry, `citry check` and the editor report all four, including text
+  bound to the boolean prop (m27) and a child that assigns to its own prop
+  (m28).
 - **m30 and m34:** most pages need no value in the hide event, and most
   never read the server's reply as data, so m30 applies to three
   frameworks and m34 to one: Citry's, Tetra's and django-unicorn's cards
@@ -266,9 +271,9 @@ writes a part of the page, not from its tools:
 - **m36 and m37:** a Django block takes no arguments, so the card hands
   its footer no data of its own, and both cells are n/a. Citry's fill
   names its slot data as one record (`data="card"`), the first form its
-  docs show. `citry check --types` checks `card` against the data type
-  the slot declares, so the editor reports both the misspelled field
-  (m36) and the number joined to text (m37). Jinja's
+  docs show. The editor, measured with `citry check --types`, checks
+  `card` against the data type the slot declares and reports both the
+  misspelled field (m36) and the number joined to text (m37). Jinja's
   m36 is an error when the page renders, because its app turns on
   `StrictUndefined` (see [Each framework's tools](#each-frameworks-tools)).
 - **m38:** Django, Rusty and django-components read the session with a
@@ -280,15 +285,16 @@ writes a part of the page, not from its tools:
 - **m43:** Nuxt reports a CSS variable whose name differs from the one
   the server sets. Its page reads the server's value with Vue's
   `v-bind('board?.accent')`, so the misspelled name reads a property the
-  board data does not have, which vue-tsc reports. Citry's check warns
-  that nothing sets `--acent` and suggests the `css_data()` key.
+  board data does not have, which vue-tsc reports. `citry check` and
+  the editor warn that nothing sets `--acent` and suggest the
+  `css_data()` key.
   Elsewhere the heading silently changes color.
-- **m44:** Citry's form sends its fields to a server event, and Citry's
-  check compares the field names with the ones the event declares, so it
-  reports `qeury`. Elsewhere nothing compares a form field's name with
-  the name the server reads, so the search shows no `Searched:` line. In
-  Reflex the search handler reads the field by name, so the misspelling
-  raises a `KeyError` on the server.
+- **m44:** Citry's form sends its fields to a server event, and `citry
+  check` and the editor compare the field names with the ones the event
+  declares, so they report `qeury`. Elsewhere nothing compares a form
+  field's name with the name the server reads, so the search shows no
+  `Searched:` line. In Reflex the search handler reads the field by name,
+  so the misspelling raises a `KeyError` on the server.
 - **m45, m48 and m61 in Citry:** both `citry` stages load the app from
   `app.main`, the module that calls `mount()`, so `citry check` asks
   FastAPI which pages and files the app serves and warns about the
@@ -300,7 +306,7 @@ writes a part of the page, not from its tools:
   django-components build the link from the route's name, so the page fails to render.
   Next.js's `typedRoutes` checks a link's path against the app's routes,
   so the editor reports it. Citry and FastHTML link by path and get a 404
-  when the link is clicked; Citry's check warns about the path first. Nuxt's `typedPages` checks a link given by
+  when the link is clicked. Nuxt's `typedPages` checks a link given by
   route name, but the page links by path, as Nuxt's routing docs show
   first, so its router prints only a warning in the browser. ReactPy's
   router changes the page in the browser, so the link shows the app's
@@ -333,8 +339,8 @@ writes a part of the page, not from its tools:
   place. The Django, Rusty, django-components, Jinja and FastHTML pages
   render the cards on the server and only hide one in the browser, so
   the cell is n/a. Next.js's and Nuxt's ESLint rules report the missing
-  key, and ReactPy's debug mode prints a warning. Citry's check reports
-  the missing `#c-key` before the app runs.
+  key, and ReactPy's debug mode prints a warning. `citry check` and the
+  editor report the missing `#c-key` before the app runs.
   django-unicorn reports nothing, and clicking Hide on the first card
   leaves Alpha on the page. Tetra reports nothing either: without a key,
   every card resumes from the same saved state when the list renders
@@ -342,10 +348,10 @@ writes a part of the page, not from its tools:
   keys each card by its position when it has no key of its own, and its
   cards keep no state in the browser, so nothing reports the missing key
   and the page looks the same.
-- **m52:** only Nuxt and Citry report a `<div>` inside a `<p>` before
-  the app runs: Nuxt's ESLint fails to parse the template, and Citry's
-  check reports the nesting. Next.js reports it in the browser as a
-  hydration error, and React reports it in the browser in Reflex too.
+- **m52:** only Nuxt and Citry report a `<div>` inside a `<p>` before the
+  app runs: Nuxt's ESLint fails to parse the template, and `citry check`
+  and the editor report the nesting. Next.js reports it in the browser as
+  a hydration error, and React reports it in the browser in Reflex too.
   Elsewhere the browser splits the paragraph without a message.
 - **m53, m54, m56 and m57:** djLint checks alt text (H013), ARIA
   attribute names (H048), repeated attributes (H037) and repeated ids
@@ -361,9 +367,10 @@ writes a part of the page, not from its tools:
   reports the unknown ARIA name. In Reflex, pyright reports the class
   given twice, because a repeated keyword is a Python syntax error, and
   React reports the misspelled ARIA name in the browser; nothing reports
-  the missing alt text. Citry's check warns about the missing alt text
-  and reports the misspelled ARIA name (the bound one included), the
-  repeated attribute and the repeated id. Nothing reports a repeated id
+  the missing alt text. `citry check` and the editor warn about the
+  missing alt text and report the misspelled ARIA name even though it
+  is bound (`:aria-expandd`), the repeated attribute and the repeated
+  id. Nothing reports a repeated id
   in Next.js, Nuxt, FastHTML, ReactPy or Reflex.
 - **m55:** a bound `aria-expanded` is typed as `true` or `false` in
   TypeScript, so Citry, Next.js and Nuxt report `yes` and `no` in the
@@ -387,15 +394,15 @@ writes a part of the page, not from its tools:
   those three cells are marked `°`. In Reflex, pyright reports it too,
   where the page passes the event to the card, so its cell is marked `°`
   as well. Citry's handler is a method in the page's browser code, which
-  Citry's TypeScript check reads, but nothing compares its parameters
-  with what the card's `hide` event sends. FastHTML's handler is browser
-  JavaScript, which nothing checks. In both, the missing reason only
-  prints as `undefined`. The Django, Rusty, django-components and Jinja
-  apps hide a card with an inline statement, so the cell is n/a. Tetra's
-  handler is a Python method that `@public.listen` subscribes to the
-  event; when the class is defined, Tetra checks that such a method
-  takes exactly one argument, so the second argument fails
-  `manage.py check`.
+  `citry check --types` type-checks with TypeScript, but nothing compares
+  its parameters with what the card's `hide` event sends. FastHTML's
+  handler is browser JavaScript, which nothing checks. In both, the
+  missing reason only prints as `undefined`. The Django, Rusty,
+  django-components and Jinja apps hide a card with an inline statement,
+  so the cell is n/a. Tetra's handler is a Python method that
+  `@public.listen` subscribes to the event; when the class is defined,
+  Tetra checks that such a method takes exactly one argument, so the
+  second argument fails `manage.py check`.
 - **m61:** the project route takes a numeric id. Django, Rusty,
   django-components, django-unicorn, Tetra and Jinja build the link from
   the route's name, and building it with `alpha` fails when the page
@@ -405,11 +412,11 @@ writes a part of the page, not from its tools:
   `Page not found` route and Nuxt's route check shows Nuxt's 404 page,
   both in the browser and with no error, and Next.js's and Reflex's
   route parts take any text, so their pages read `Project alpha`.
-- **m62:** TypeScript in Next.js, pyright in Reflex and Citry's check
-  report `disabled="false"`; Nuxt's types accept the text. Everywhere else the
-  search button is silently disabled.
-- **m63:** Nuxt's vue-tsc and ESLint and Citry's check report a
-  `v-model` on the form. `reflex
+- **m62:** TypeScript in Next.js, pyright in Reflex, and `citry check` and
+  the editor in Citry report `disabled="false"`; Nuxt's types accept the
+  text. Everywhere else the search button is silently disabled.
+- **m63:** Nuxt's vue-tsc and ESLint report a `v-model` on the form,
+  and so do `citry check` and the editor. `reflex
   compile` reports that a form has no `on_change` event, at the first
   line of the form's call, so Reflex's cell is marked `°`. In the other
   apps nothing reports the binding. Alpine's `x-model` and React's
@@ -425,8 +432,9 @@ writes a part of the page, not from its tools:
   the others, shows no difference. Whether or not the line follows the
   typing, these cells read "never" and count as missed.
 
-The gaps this benchmark found in Citry are tracked in
-[#207](https://github.com/citry-dev/citry/issues/207).
+[#207](https://github.com/citry-dev/citry/issues/207) tracks the gaps
+the first 24 mistakes found in Citry; the later gaps m30, m50, m60 and
+m61 are not in it yet.
 
 Rusty's cells match Django's except four:
 
