@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import random
@@ -17,17 +18,17 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 
 from .config import DEFAULT_JOURNEY, ConfigError
 from .work import command_env, placeholder
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Coroutine, Iterator
     from pathlib import Path
     from typing import IO
 
-    from playwright.sync_api import Browser, Page
+    from playwright.async_api import Browser, Page
 
     from .config import Framework, Runtime, Step
 
@@ -227,16 +228,18 @@ def _describe(error: Exception) -> str:
     return f"{type(error).__name__}: {(str(error).splitlines() or [''])[0]}"
 
 
-def _open_page(browser: Browser, observation: Observation) -> Page:
+async def _open_page(browser: Browser, observation: Observation) -> Page:
     """
     Open a page in a new browser context, recording its console, errors and failed responses.
 
-    A new context has no cookies or storage from an earlier journey, so each
-    journey starts the way a first visit does. The server keeps whatever an
-    earlier journey saved, the same in the clean app's run and the case's,
-    apart from what the case's mistake changed.
+    A new context has no cookies or storage from another journey, so each
+    journey starts the way a first visit does, and journeys open at the same
+    time do not share a session. The server keeps whatever the default
+    journey saved, the same in the clean app's run and the case's, apart
+    from what the case's mistake changed.
     """
-    page = browser.new_context().new_page()
+    context = await browser.new_context()
+    page = await context.new_page()
     page.on(
         "console",
         lambda message: (
@@ -259,74 +262,117 @@ def _open_page(browser: Browser, observation: Observation) -> Page:
     return page
 
 
-def _play(page: Page, steps: tuple[Step, ...], settle_ms: int) -> None:
+async def _play(page: Page, steps: tuple[Step, ...], settle_ms: int) -> None:
     """Run a journey's steps, then wait for the requests they started and for the page to settle."""
     for step in steps:
         # `.first` keeps a selector that matches every card's button, such as
         # Hide, pointed at the first card, the same one in every framework.
         if step.action == "click":
-            page.locator(step.selector).first.click(timeout=_STEP_TIMEOUT_MS)
+            await page.locator(step.selector).first.click(timeout=_STEP_TIMEOUT_MS)
         elif step.action == "fill":
-            page.locator(step.selector).first.fill(step.text, timeout=_STEP_TIMEOUT_MS)
+            await page.locator(step.selector).first.fill(step.text, timeout=_STEP_TIMEOUT_MS)
         elif step.action == "press" and step.selector:
-            page.locator(step.selector).first.press(step.key, timeout=_STEP_TIMEOUT_MS)
+            await page.locator(step.selector).first.press(step.key, timeout=_STEP_TIMEOUT_MS)
         elif step.action == "press":
             # With no selector the key goes to whatever an earlier step focused.
-            page.keyboard.press(step.key)
+            await page.keyboard.press(step.key)
         elif step.action == "wait":
-            page.wait_for_timeout(step.ms)
+            await page.wait_for_timeout(step.ms)
         else:
             # The loader accepts only the actions above, so this is an action
             # added to STEP_KEYS without a branch here.
             raise ConfigError(f"the browser check cannot run step action {step.action!r}")
-    page.wait_for_load_state("networkidle", timeout=15_000)
-    page.wait_for_timeout(settle_ms)
+    await page.wait_for_load_state("networkidle", timeout=15_000)
+    await page.wait_for_timeout(settle_ms)
 
 
-def _default_journey(browser: Browser, url: str, runtime: Runtime, observation: Observation) -> None:
+async def _default_journey(browser: Browser, url: str, runtime: Runtime, observation: Observation) -> None:
     """Record the page after it loads, after the default journey's steps, and after a reload."""
-    page = _open_page(browser, observation)
+    page = await _open_page(browser, observation)
     try:
-        page.goto(url, wait_until="networkidle", timeout=60_000)
-        page.wait_for_timeout(runtime.settle_ms)
-        observation.snapshot_loaded = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
-        _play(page, runtime.journeys[DEFAULT_JOURNEY], runtime.settle_ms)
+        await page.goto(url, wait_until="networkidle", timeout=60_000)
+        await page.wait_for_timeout(runtime.settle_ms)
+        observation.snapshot_loaded = await page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
+        await _play(page, runtime.journeys[DEFAULT_JOURNEY], runtime.settle_ms)
     except Exception as error:  # noqa: BLE001 - a broken page is an observation, not a runner failure
         observation.failure = _describe(error)
     try:
-        observation.snapshot = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
+        observation.snapshot = await page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
     except Exception as error:  # noqa: BLE001 - a page left mid-navigation is recorded, not raised
         observation.failure = observation.failure or f"record: {_describe(error)}"
     if not observation.failure:
         try:
-            page.reload(wait_until="networkidle", timeout=60_000)
-            page.wait_for_timeout(runtime.settle_ms)
-            observation.snapshot_reloaded = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
+            await page.reload(wait_until="networkidle", timeout=60_000)
+            await page.wait_for_timeout(runtime.settle_ms)
+            observation.snapshot_reloaded = await page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
         except Exception as error:  # noqa: BLE001 - same as above
             observation.failure = f"reload: {_describe(error)}"
-    # Closed before the next journey starts, so this page's timers and
-    # requests cannot change the server or add messages while it runs.
-    page.context.close()
+    # Closed before the other journeys start, so this page's timers and
+    # requests cannot change the server or add messages while they run.
+    await page.context.close()
 
 
-def _journey(
+async def _journey(
     browser: Browser, url: str, steps: tuple[Step, ...], settle_ms: int, observation: Observation
 ) -> JourneyRecord:
     """Load the page fresh, run one named journey's steps, and record the page at the end."""
     record = JourneyRecord()
-    page = _open_page(browser, observation)
+    page = await _open_page(browser, observation)
     try:
-        page.goto(url, wait_until="networkidle", timeout=60_000)
-        page.wait_for_timeout(settle_ms)
-        _play(page, steps, settle_ms)
+        await page.goto(url, wait_until="networkidle", timeout=60_000)
+        await page.wait_for_timeout(settle_ms)
+        await _play(page, steps, settle_ms)
     except Exception as error:  # noqa: BLE001 - a broken page is an observation, not a runner failure
         record.failure = _describe(error)
     try:
-        record.snapshot = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
+        record.snapshot = await page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
     except Exception as error:  # noqa: BLE001 - a page left mid-navigation is recorded, not raised
         record.failure = record.failure or f"record: {_describe(error)}"
-    page.context.close()
+    await page.context.close()
     return record
+
+
+async def _run_journeys(browser: Browser, url: str, runtime: Runtime, observation: Observation) -> None:
+    """
+    Run the default journey, then every other journey at the same time, each in its own browser context.
+
+    In every clean app only the default journey's `Add` saves anything on the
+    server, so it runs alone and ends first: every other journey then loads a
+    page that already shows what it saved, as a run of one journey after
+    another would. Those journeys only read from the server, so they do not
+    depend on each other's order, and running them together cuts a browser
+    check's time roughly in half, because most of a journey is waiting for
+    the page to settle. A framework whose server fails when it serves several
+    pages at once sets `journeys_at_once = false`, and its journeys run one
+    after another.
+    """
+    await _default_journey(browser, url, runtime, observation)
+    names = [name for name in runtime.journeys if name != DEFAULT_JOURNEY]
+    # Each journey writes its browser messages to a list of its own, joined
+    # below in the order framework.toml lists the journeys, so the evidence
+    # a case publishes does not change with which journey happened to log first.
+    messages = {name: Observation() for name in names}
+
+    def journey(name: str) -> Coroutine[None, None, JourneyRecord]:
+        return _journey(browser, url, runtime.journeys[name], runtime.settle_ms, messages[name])
+
+    if runtime.journeys_at_once:
+        records = await asyncio.gather(*(journey(name) for name in names))
+    else:
+        records = [await journey(name) for name in names]
+    observation.journeys.update(zip(names, records, strict=True))
+    for sink in messages.values():
+        observation.console_errors += sink.console_errors
+        observation.console_warnings += sink.console_warnings
+        observation.bad_responses += sink.bad_responses
+
+
+async def _browse(url: str, runtime: Runtime, observation: Observation) -> None:
+    """Start a browser, run every journey in it, and close it."""
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        await _run_journeys(browser, url, runtime, observation)
+        await browser.close()
 
 
 def observe(framework: Framework, env: Path, work: Path, log_path: Path) -> Observation:
@@ -374,16 +420,10 @@ def _observe_on(
                 observation.started = False
                 observation.failure = "the development server did not answer"
                 return observation
-            # Each call starts its own Playwright and browser: Playwright's
-            # synchronous API must not be shared between threads, and a
-            # browser that crashes then takes down only this case.
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch()
-                _default_journey(browser, url, runtime, observation)
-                for name, steps in runtime.journeys.items():
-                    if name != DEFAULT_JOURNEY:
-                        observation.journeys[name] = _journey(browser, url, steps, runtime.settle_ms, observation)
-                browser.close()
+            # Each call starts its own event loop, Playwright and browser:
+            # Playwright must not be shared between threads, and a browser
+            # that crashes then takes down only this case.
+            asyncio.run(_browse(url, runtime, observation))
         finally:
             # What the server prints once it is told to stop says nothing
             # about the page, and some of it comes only in some runs, such as

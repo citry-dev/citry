@@ -75,11 +75,11 @@ def test_a_changed_clean_app_runs_every_case_of_its_framework_again(toy: Toy) ->
     assert _reused(toy.run()) == []
 
 
-def test_rewording_the_notes_or_the_case_limit_keeps_the_stored_output(toy: Toy) -> None:
+def test_rewording_the_notes_or_the_server_limit_keeps_the_stored_output(toy: Toy) -> None:
     toy.run()
     definition = toy.root / "frameworks" / "toy" / "framework.toml"
     definition.write_text(
-        definition.read_text().replace('name = "Toy"\n', 'name = "Toy"\nnotes = "x"\nmax_jobs = 2\n')
+        definition.read_text().replace('name = "Toy"\n', 'name = "Toy"\nnotes = "x"\nmax_servers = 2\n')
     )
     assert _reused(toy.run()) == EVERYTHING
     # A change to a command does change what the tools print.
@@ -197,7 +197,14 @@ def test_nothing_finished_after_ctrl_c_is_stored(tmp_path: Path) -> None:
     stop = threading.Event()
     stop.set()
     context = cli.Context(
-        tmp_path, observe_runtime=True, reuse=True, environment="env", framework_digests={}, stop=stop
+        tmp_path,
+        observe_runtime=True,
+        reuse=True,
+        environment="env",
+        framework_digests={},
+        stop=stop,
+        tool_slots=threading.Semaphore(1),
+        browser_slots=threading.Semaphore(1),
     )
     cli._store(context, tmp_path / "entry", "key", [StageOutput(["tool"], exit_code=0)], None, None)
     assert not (tmp_path / "entry").exists()

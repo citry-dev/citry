@@ -106,6 +106,10 @@ class Runtime:
     journeys: dict[str, tuple[Step, ...]]
     env: dict[str, str] = field(default_factory=dict)
     settle_ms: int = 800
+    # Whether the journeys after the default one run at the same time. A
+    # server that cannot serve several pages at once without failing, such
+    # as ReactPy's, turns this off so they run one after another.
+    journeys_at_once: bool = True
 
 
 @dataclass(frozen=True)
@@ -118,9 +122,10 @@ class Framework:
     runtime: Runtime | None
     notes: str
     root: Path
-    # How many of this framework's cases may run at once, when fewer than the
-    # run's worker count; None means no limit of its own.
-    max_jobs: int | None = None
+    # How many of this framework's development servers may run at once, for
+    # a server that clashes with another one started beside it; None means
+    # no limit of its own. The static stages are not limited by it.
+    max_servers: int | None = None
 
     @property
     def baseline(self) -> Path:
@@ -244,12 +249,14 @@ def load_framework(root: Path) -> Framework:
         tomllib.loads(path.read_text(encoding="utf-8")),
         str(path),
         {"key", "name", "setup", "stages"},
-        {"runtime", "notes", "max_jobs"},
+        {"runtime", "notes", "max_servers"},
     )
-    max_jobs = data.get("max_jobs")
+    max_servers = data.get("max_servers")
     # Python treats `true` as the int 1, so a bool is rejected explicitly.
-    if max_jobs is not None and (not isinstance(max_jobs, int) or isinstance(max_jobs, bool) or max_jobs < 1):
-        raise ConfigError(f"{path} max_jobs must be a whole number of cases, 1 or more")
+    if max_servers is not None and (
+        not isinstance(max_servers, int) or isinstance(max_servers, bool) or max_servers < 1
+    ):
+        raise ConfigError(f"{path} max_servers must be a whole number of servers, 1 or more")
     if data["key"] != root.name:
         raise ConfigError(f"{path} key {data['key']!r} must match its folder name {root.name!r}")
     setup = _table(data["setup"], f"{path} [setup]", {"manifests", "command"})
@@ -277,8 +284,13 @@ def load_framework(root: Path) -> Framework:
             data["runtime"],
             f"{path} [runtime]",
             {"argv", "page_path", "journeys"},
-            {"ready_timeout", "env", "settle_ms"},
+            {"ready_timeout", "env", "settle_ms", "journeys_at_once"},
         )
+        journeys_at_once = raw.get("journeys_at_once", True)
+        # A string such as "false" would otherwise read as true and run the
+        # journeys at once for a server that cannot take it.
+        if not isinstance(journeys_at_once, bool):
+            raise ConfigError(f"{path} [runtime] journeys_at_once must be true or false")
         runtime = Runtime(
             argv=tuple(raw["argv"]),
             page_path=raw["page_path"],
@@ -286,6 +298,7 @@ def load_framework(root: Path) -> Framework:
             journeys=load_journeys(raw["journeys"], f"{path} [runtime.journeys]"),
             env=dict(raw.get("env", {})),
             settle_ms=int(raw.get("settle_ms", 800)),
+            journeys_at_once=journeys_at_once,
         )
     return Framework(
         key=data["key"],
@@ -296,7 +309,7 @@ def load_framework(root: Path) -> Framework:
         runtime=runtime,
         notes=data.get("notes", ""),
         root=root,
-        max_jobs=max_jobs,
+        max_servers=max_servers,
     )
 
 
