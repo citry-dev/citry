@@ -161,9 +161,15 @@ as a check stage.
   make the mistake. A case is not changed after its result is seen, except to
   fix a case that did not express its mistake.
 - The catalogue is frozen before a published run. Each run records the
-  commit it started from and whether the benchmark folder had uncommitted
-  changes, and the report prints both, so the cases it scored can be read
-  back from that commit.
+  commit it started from, whether the benchmark folder had uncommitted
+  changes, and the git tree id of the benchmark's inputs (`cases/`,
+  `catalogue.toml`, `frameworks/` and `runner/`, without the published
+  `results/`), and the report prints them, so the cases it scored can be
+  read back from that commit. The tree id is there because a rebase, such
+  as GitHub's when it merges a stack of pull requests, gives the commit a
+  new hash; any commit whose inputs give the same tree id has the same
+  cases and tools. The README shows the two git commands that work it
+  out.
 - A report that points away from the change counts only with an `indirect`
   note on the case. These notes are written after reading the tool output,
   so they are the one place where a result informs a case. To keep that in

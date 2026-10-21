@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
-from citry_errors import html_report, report
+from citry_errors import cli, html_report, report
 from citry_errors.compare import _normal, compare, problems
 from citry_errors.config import ConfigError, load_port
 from citry_errors.parsers import (
@@ -552,3 +553,50 @@ def test_chart_ticks_count_in_fives_from_ten_up() -> None:
     assert html_report._ticks(10) == [0, 5, 10]
     assert html_report._ticks(7) == [0, 2, 4, 6, 8]
     assert html_report._ticks(60) == [0, 20, 40, 60]
+
+
+def test_the_run_record_names_a_tree_of_the_inputs_that_a_rebase_keeps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def git(*argv: str, stdin: str | None = None) -> str:
+        # git is found on PATH, as the runner finds it.
+        completed = subprocess.run(
+            ["git", *argv],  # noqa: S607
+            cwd=tmp_path,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return completed.stdout.strip()
+
+    bench = tmp_path / "benchmarks" / "errors"
+    for name in ("cases/m01/x", "frameworks/x", "runner/src", "results/2026-01-01"):
+        (bench / name).mkdir(parents=True)
+        (bench / name / "file.txt").write_text(name)
+    (bench / "catalogue.toml").write_text("[[mistake]]\n")
+    git("init", "-q")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "root")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "inputs")
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "BENCH_ROOT", bench)
+    first = cli._source()
+    # The README's check: list the input entries of a commit and make one tree of them.
+    listing = git("ls-tree", "HEAD:benchmarks/errors", "cases", "catalogue.toml", "frameworks", "runner")
+    assert first["inputs_tree"] == git("mktree", stdin=listing + "\n")
+    assert not first["inputs_changed"]
+    # A new published result and a rebase that rewrites the commit keep the tree id.
+    (bench / "results" / "2026-01-01" / "file.txt").write_text("published")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "publish")
+    git("-c", "user.name=u", "-c", "user.email=u@u", "commit", "-q", "--amend", "-m", "rewritten")
+    second = cli._source()
+    assert second["commit"] != first["commit"]
+    assert second["inputs_tree"] == first["inputs_tree"]
+    # A change to a case is a different input, and shows as uncommitted until it is committed.
+    (bench / "cases" / "m01" / "x" / "file.txt").write_text("changed")
+    assert cli._source()["inputs_changed"]
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "case")
+    assert cli._source()["inputs_tree"] != first["inputs_tree"]

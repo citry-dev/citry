@@ -173,7 +173,9 @@ def write(run_dir: Path, output: Path) -> None:
     lines = [f"# Error-prevention results, run {run_dir.name}", ""]
     if source:
         dirty = " plus uncommitted changes to the benchmark" if source["benchmark_files_changed"] else ""
-        lines += [f"Cases and tools from commit `{source['commit']}`{dirty}.", ""]
+        # Runs recorded before the inputs tree was added have no tree id.
+        tree = f", benchmark inputs tree `{source['inputs_tree']}`" if source.get("inputs_tree") else ""
+        lines += [f"Cases and tools from commit `{source['commit']}`{tree}{dirty}.", ""]
 
     lines += ["## How each mistake ended", "", f"| Outcome | {names} |", "| --- |" + " --- |" * len(keys)]
     counts = {

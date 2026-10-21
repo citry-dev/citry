@@ -152,6 +152,23 @@ change.
 `results.json` has the first few findings behind each cell, and the
 findings that pointed away from the change without an `indirect` note.
 
+Each report starts by naming what the run scored: the commit it started
+from and the git tree of the benchmark's inputs, which are `cases/`,
+`catalogue.toml`, `frameworks/` and `runner/`. The published `results/`
+folder is not an input, because it changes after the run that wrote it.
+When GitHub merges a stack of pull requests it rebases them, so the
+commit a run names may no longer exist on the branch; the tree id stays
+the same as long as the inputs do. To check that a commit has the inputs
+a published run scored, work out its tree id and compare:
+
+```bash
+git ls-tree <commit>:benchmarks/errors \
+  cases catalogue.toml frameworks runner | git mktree
+```
+
+`run.json` also says whether those inputs had uncommitted changes when
+the run started (`inputs_changed`); then no commit has them.
+
 "Rusty + HTMX + Alpine" is the Django app with its templates rendered by
 [Django Rusty Templates](https://github.com/LilyFirefly/django-rusty-templates),
 an experimental Rust version of Django's template engine.

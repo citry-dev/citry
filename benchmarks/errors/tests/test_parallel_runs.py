@@ -357,6 +357,11 @@ def test_a_case_whose_browser_check_was_skipped_is_scored_as_a_static_error(toy:
     assert (by_mistake["m01-bad"]["bucket"], by_mistake["m01-bad"]["cell"]) == ("static-error", "C")
     assert by_mistake["m01-bad"]["runtime_skipped"] == "caught by toy check"
     matrix = (tmp_path / "report" / "matrix.md").read_text()
+    # The run names its commit and the tree of the benchmark's inputs, in each report.
+    source = json.loads((run_dir / "run.json").read_text())
+    assert f"benchmark inputs tree `{source['inputs_tree']}`" in matrix
+    assert summary["source"]["inputs_tree"] == source["inputs_tree"]
+    assert f"benchmark inputs tree {source['inputs_tree'][:12]}" in (tmp_path / "report" / "report.html").read_text()
     # Only a run with the browser check turned off has unscored cases.
     assert "Not scored" not in matrix
     assert "Not scored" not in (tmp_path / "report" / "report.html").read_text()

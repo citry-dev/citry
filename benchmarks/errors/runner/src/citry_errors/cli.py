@@ -108,17 +108,43 @@ def port_problems(framework: Framework, port: Port) -> list[str]:
     return []
 
 
-def _source() -> dict:
-    """Record the commit a run starts from, so a published result names the cases it scored."""
+# The parts of the benchmark folder that decide a run's result: the mistakes,
+# each framework's app and cases, and the runner. The published results
+# folder is left out, because it changes after the run that wrote it.
+INPUT_NAMES = ("cases", "catalogue.toml", "frameworks", "runner")
 
-    def git(*argv: str) -> str:
-        completed = subprocess.run(["git", *argv], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+
+def _source() -> dict:
+    """
+    Record what a run starts from, so a published result names the cases it scored.
+
+    A commit's hash changes when the branch is rebased, as GitHub does when it
+    merges a stack of pull requests, so the record also names the git tree of
+    the benchmark's inputs. That tree id stays the same as long as the inputs
+    do, and the README shows how to work it out again for any commit.
+    """
+
+    def git(*argv: str, stdin: str | None = None) -> str:
+        completed = subprocess.run(
+            ["git", *argv], cwd=REPO_ROOT, input=stdin, capture_output=True, text=True, check=False
+        )
         return completed.stdout.strip()
 
+    folder = BENCH_ROOT.relative_to(REPO_ROOT).as_posix()
     # Uncommitted changes under the benchmark folder mean the commit alone
     # does not describe the cases that ran.
-    changed = git("status", "--porcelain", "--", str(BENCH_ROOT.relative_to(REPO_ROOT)))
-    return {"commit": git("rev-parse", "HEAD"), "benchmark_files_changed": bool(changed)}
+    changed = git("status", "--porcelain", "--", folder)
+    inputs_changed = git("status", "--porcelain", "--", *(f"{folder}/{name}" for name in INPUT_NAMES))
+    # `git mktree` turns the listing of the input entries into one tree; the
+    # README gives the same two commands for checking a published run.
+    listing = git("ls-tree", f"HEAD:{folder}", *INPUT_NAMES)
+    inputs_tree = git("mktree", stdin=listing + "\n") if listing else ""
+    return {
+        "commit": git("rev-parse", "HEAD"),
+        "benchmark_files_changed": bool(changed),
+        "inputs_tree": inputs_tree,
+        "inputs_changed": bool(inputs_changed),
+    }
 
 
 _print_lock = threading.Lock()
