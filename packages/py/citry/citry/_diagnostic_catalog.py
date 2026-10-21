@@ -33,6 +33,7 @@ CSS_MISSPELLED_VARIABLE = 'citry.css.misspelled-variable'
 VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
 VUE_PYTHON_VARIABLE = 'citry.vue.python-variable'
 VUE_INVALID_EXPRESSION = 'citry.vue.invalid-expression'
+VUE_COMPILE_ERROR = 'citry.vue.compile-error'
 VUE_MISSPELLED_EVENT = 'citry.vue.misspelled-event'
 COMPONENT_JS_UNKNOWN_VARIABLE = 'citry.component-js.unknown-variable'
 COMPONENT_JS_UNKNOWN_MEMBER = 'citry.component-js.unknown-member'
@@ -1714,6 +1715,44 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                              'template data, a c-for or c-fill binding around it, template_globals, or '
                                              'the declared template_variables. In a template that several components '
                                              'share, every one of them must provide the name.'},
+ 'citry.vue.compile-error': {'code': 'citry.vue.compile-error',
+                             'configurableSeverity': True,
+                             'constant': 'VUE_COMPILE_ERROR',
+                             'defaultSeverity': 'error',
+                             'documentationPath': '/ide/diagnostics/#citry.vue.compile-error',
+                             'examples': [{'language': 'citry-html',
+                                           'source': '<table>\n  <div>Row</div>\n</table>',
+                                           'title': 'A div directly inside a table'}],
+                             'fix': "Follow the compiler's message. For a table, put rows in <tr> and cells in <td> or "
+                                    '<th>; for nested buttons, forms or links, close the outer one first or use '
+                                    'another element; for v-else, put it on the element right after the one with v-if '
+                                    'or v-else-if.',
+                             'messages': {'default': 'Vue cannot compile this template: {detail}'},
+                             'parameters': {'detail': 'What the compiler found, as one sentence.'},
+                             'summary': "Vue's compiler rejects the template, so a component that uses Vue fails to "
+                                        'render. Most often the browser would build a different element tree from the '
+                                        'one the template describes: a <div> directly inside a <table>, a <button> '
+                                        'inside a <button>, a <form> inside a <form>, or an <a> inside an <a>. A '
+                                        'v-else with no v-if right before it, and a component inside a Vue v-for, are '
+                                        'reported too.',
+                             'surfaces': ['check', 'lsp'],
+                             'title': "Template that Vue's compiler rejects",
+                             'when': 'Citry writes the Vue template that a render compiles, runs the same compiler on '
+                                     'it, and reports each error at the text you wrote. Every c-if, c-elif and c-else '
+                                     'branch, and the body of every c-for, is checked, but usually on its own, so a '
+                                     'mistake that spans the c-if or c-for tag, such as a <div> in a c-for directly '
+                                     'inside a <table>, may not be reported. A Vue expression with a syntax error is '
+                                     'reported as citry.vue.invalid-expression, and a block element inside a <p> as '
+                                     'citry.template.invalid-nesting, so this rule does not report them again, even '
+                                     'when those rules are turned off. A component inside a Vue v-for is reported only '
+                                     'by citry check with the application loaded, which can tell whether the component '
+                                     "is transparent or simple; such a component renders into its caller's HTML and "
+                                     'may sit inside a v-for. Content inside #c-ignore or <c-raw>, whether a '
+                                     "<c-element>'s content fits the tag Python chooses, where a component tag sits, "
+                                     'and attributes an extension handles, such as @c-click, are not checked, and a '
+                                     "template that uses an extension's own template syntax is skipped. citry check "
+                                     '--static and an editor that has not loaded your application report it too, with '
+                                     "the severity the component's own Lint class sets as a plain string."},
  'citry.vue.invalid-expression': {'code': 'citry.vue.invalid-expression',
                                   'configurableSeverity': True,
                                   'constant': 'VUE_INVALID_EXPRESSION',

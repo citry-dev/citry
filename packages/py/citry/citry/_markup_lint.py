@@ -75,6 +75,8 @@ class MarkupLintConsumer:
             is one typing slip from a DOM event, such as ``@clik``.
         rule_invalid_vue_expression: A Vue expression, such as the value of
             ``v-if`` or ``@click``, that is not valid JavaScript.
+        rule_vue_compile_error: Anything else Vue's compiler rejects in the
+            template, such as a ``<div>`` directly inside a ``<table>``.
         root_may_receive_attributes: Whether a parent's attributes may reach
             the component's single root element. Vue passes them there for a
             component with browser code, so an ``<img>`` root may get its
@@ -92,6 +94,7 @@ class MarkupLintConsumer:
     rule_invalid_model_target: _Severity = "error"
     rule_misspelled_event: _Severity = "warning"
     rule_invalid_vue_expression: _Severity = "error"
+    rule_vue_compile_error: _Severity = "error"
     root_may_receive_attributes: bool = True
 
     def __post_init__(self) -> None:
@@ -117,6 +120,7 @@ MARKUP_LINT_RULES = (
     "rule_invalid_model_target",
     "rule_misspelled_event",
     "rule_invalid_vue_expression",
+    "rule_vue_compile_error",
 )
 
 

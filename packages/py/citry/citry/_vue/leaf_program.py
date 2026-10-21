@@ -2444,6 +2444,31 @@ class LeafProgramNode(Node):
         )
 
 
+# The writers below produce the `<template>` a leaf program puts around one
+# `<c-if>` branch or one `<c-for>` body. `citry check` (`static_template.py`)
+# writes the same text for a body that a render compiles as a leaf program.
+
+
+def branch_opening(key: str, index: int) -> str:
+    """
+    Return the `<template>` that shows branch `index` of one `<c-if>`.
+
+    The server sends the number of the branch it chose in `key`.
+    """
+    directive = "v-if" if index == 0 else "v-else-if"
+    return f'<template {directive}="$citryPrepared.{key} === {index}">'
+
+
+def loop_opening(key: str) -> str:
+    """Return the `<template>` that repeats a `<c-for>` body once per row the server sends in `key`."""
+    return f'<template v-for="$citryPrepared in $citryPrepared.{key}">'
+
+
+def loop_empty_opening(key: str) -> str:
+    """Return the `<template>` that shows a `<c-empty>` body when the loop in `key` has no rows."""
+    return f'<template v-if="$citryPrepared.{key}.length === 0">'
+
+
 def compile_leaf_program(
     body: Sequence[object],
     *,
@@ -2805,8 +2830,7 @@ class _Compiler:
         self.if_index += 1
         branches: list[tuple[object, ...]] = []
         for index, branch in enumerate(node.branches):
-            directive = "v-if" if index == 0 else "v-else-if"
-            self.append(f'<template {directive}="$citryPrepared.{key} === {index}">')
+            self.append(branch_opening(key, index))
             self.scope_steps.append({"kind": "branch", "key": key, "index": index})
             compiled = self.compile_body(branch[2])
             self.scope_steps.pop()
@@ -2820,7 +2844,7 @@ class _Compiler:
         self.has_data_ops = True
         key = f"citryLoop{self.loop_index}"
         self.loop_index += 1
-        self.append(f'<template v-for="$citryPrepared in $citryPrepared.{key}">')
+        self.append(loop_opening(key))
         child = _Compiler(
             allow_i18n_passthrough=self.allow_i18n_passthrough,
             in_loop=True,
@@ -2844,7 +2868,7 @@ class _Compiler:
         self.append("</template>")
         empty: tuple[object, ...] = ()
         if len(node.branches) > 1:
-            self.append(f'<template v-if="$citryPrepared.{key}.length === 0">')
+            self.append(loop_empty_opening(key))
             self.scope_steps.append({"kind": "empty", "key": key})
             compiled_empty = self.compile_body(node.branches[1][2])
             self.scope_steps.pop()

@@ -37,6 +37,9 @@
 - Added configurable diagnostics for Vue code: `citry.vue.invalid-expression`
   and `citry.browser.invalid-model-target`, errors by default, and
   `citry.vue.misspelled-event`, a warning by default.
+- Added `citry.vue.compile-error`, the configurable error for a template that
+  Vue's compiler rejects. Its one parameter, `detail`, carries the
+  compiler's message.
 - `citry.template.invalid-attribute-value` also covers a boolean attribute
   with a value other than empty or its own name, with the message variant
   `boolean`.

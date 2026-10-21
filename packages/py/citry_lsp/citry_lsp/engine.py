@@ -56,6 +56,7 @@ from citry._registry_lint import (
     unknown_url_findings,
 )
 from citry._source_lines import source_lines
+from citry._vue_compile_lint import lint_vue_compile
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
     AlpineAttributeFinding,
@@ -864,6 +865,12 @@ def _html_attribute_lint_diagnostics(
                 markup_consumers,
                 parse_nested=parser,
             ),
+            *lint_vue_compile(
+                region.source_map.template_source,
+                parsed.template,
+                markup_consumers,
+                renders_in_place=_transparent_component_check(project),
+            ),
         ]
         for finding in findings:
             try:
@@ -887,6 +894,25 @@ def _html_attribute_lint_diagnostics(
                 )
             )
     return tuple(diagnostics)
+
+
+def _transparent_component_check(project: ProjectState) -> Callable[[str], bool | None] | None:
+    """
+    Say which component tags render in place in the caller's Vue template, as far as the catalog tells.
+
+    The catalog records `transparent` but not `simple`, so a component that is
+    not transparent may still render in place; it gets `None`, and the Vue
+    compile rule then does not report it inside a Vue `v-for`.
+    """
+    catalog = project.catalog
+    if catalog is None:
+        return None
+
+    def renders_in_place(name: str) -> bool | None:
+        record = catalog.get_tag(f"c-{name}")
+        return True if record is not None and record.transparent else None
+
+    return renders_in_place
 
 
 def _may_have_browser_code(owner: ComponentRecord, project: ProjectState) -> bool:

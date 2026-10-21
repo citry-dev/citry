@@ -79,6 +79,7 @@ from citry._template_data_source import (
     analyze_template_data_source,
 )
 from citry._vue.json_data import _json_plain
+from citry._vue_compile_lint import lint_vue_compile
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
@@ -750,6 +751,12 @@ def _check_template(
         *lint_misspelled_directives(template, directive_lint_consumers, parse_nested=nested_parser),
         *lint_markup(template, markup_lint_consumers, parse_nested=nested_parser),
         *lint_invalid_vue_expressions(template, browser_hosts, markup_lint_consumers, parse_nested=nested_parser),
+        *lint_vue_compile(
+            source.content,
+            template,
+            markup_lint_consumers,
+            renders_in_place=_component_renders_in_place(engine) if engine is not None else None,
+        ),
     ]
     for attribute_finding in attribute_findings:
         line, column = _byte_offset_coordinates(source.content, attribute_finding.start_index)
@@ -2214,6 +2221,25 @@ def _checker_markup_lint_consumer(engine: Citry, component: type[Component]) -> 
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
         root_may_receive_attributes=_may_have_browser_code(component),
     )
+
+
+def _component_renders_in_place(engine: Citry) -> Callable[[str], bool | None]:
+    """
+    Say whether a component tag renders in place in its caller's Vue template.
+
+    A `transparent` or `simple` component is copied into the caller's template
+    rather than called, so it may sit inside a Vue `v-for`. A tag the
+    application does not register returns `None`.
+    """
+
+    def renders_in_place(name: str) -> bool | None:
+        try:
+            component = engine.get(name.lower())
+        except NotRegistered:
+            return None
+        return bool(component.transparent or component.simple)
+
+    return renders_in_place
 
 
 def _may_have_browser_code(component: type[Component]) -> bool:

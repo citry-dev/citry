@@ -25,6 +25,12 @@
   on an element that holds no value, such as `<form>`
   (`rule_invalid_model_target`). A misspelled DOM event in a listener,
   such as `@clik`, is a warning (`rule_misspelled_event`).
+- `citry check` and the editor now run Vue's compiler over every template,
+  every `<c-if>` branch included, and report what it rejects at the line you
+  wrote, such as a `<div>` directly inside a `<table>`, a `<button>` inside a
+  `<button>`, or a `v-else` with no `v-if` before it, before a component that
+  uses Vue fails to render (`rule_vue_compile_error`, an error by default)
+  ([details](https://citry.dev/ide/template-linting/#templates-vue-cannot-compile)).
 - The misspelled-directive check now also reports a typo in a Vue
   directive, such as `v-iff` or `v-elif`, which otherwise stops the page
   with an error in the browser.

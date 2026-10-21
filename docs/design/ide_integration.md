@@ -52,6 +52,14 @@ application:
   event in a listener.
 - `rule_invalid_vue_expression` (`citry.vue.invalid-expression`): a Vue
   expression that is not valid JavaScript.
+- `rule_vue_compile_error` (`citry.vue.compile-error`): anything else
+  Vue's compiler rejects. Citry writes the Vue template a render would
+  compile (`citry/_vue/static_template.py`, using the same functions a
+  render uses to write each kind of node), compiles it, and maps each error
+  back to the authored text. Errors that point only at text Citry generated
+  are dropped, except a component inside a Vue `v-for`, which is reported on
+  the component's tag when the loaded application shows that the component
+  is neither `transparent` nor `simple`.
 
 `rule_undeclared_component_event` sets the severity of
 `citry.browser.undeclared-component-event`, which reads each child's
