@@ -489,7 +489,9 @@ the list.
 On a page that uses Vue, a component that `<c-for>` repeats must have a
 `#c-key`. A missing, `None`, or duplicate key makes the render fail. On an
 HTML element the key is optional, and `None` means no key. `0` and `""` are
-real keys.
+real keys. `citry --app ... check` reports a missing key when it can tell
+that the page uses Vue
+([Repeated components](/ide/template-linting/#find-repeated-components-without-keys)).
 
 `#c-key` is not an attribute. It never reaches the HTML or the component's
 inputs. Write it directly on an HTML element or a component tag. It fails in

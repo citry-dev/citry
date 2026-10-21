@@ -361,7 +361,10 @@ class TaskList(Component):
 
 Both `this.labels` and `this.upper` are `string[]`. These types can take a
 moment to appear after you open or save a file. A value that ty types as a
-class or as `Any`, or cannot type, stays `any`.
+class or as `Any`, or cannot type, stays `any`. A value that ty types as a
+standard library type that JSON cannot carry, such as a `PurePosixPath`, a
+`datetime`, or a set, gets the warning below, and `citry check --types`
+reports it too.
 
 Returning a whole class instance, such as `kwargs.task`, is a
 [`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)

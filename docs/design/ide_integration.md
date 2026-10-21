@@ -57,6 +57,30 @@ application:
 `citry.browser.undeclared-component-event`, which reads each child's
 `emits` and so needs the loaded application.
 
+These rules need facts that only the loaded application gives, so
+`citry check` runs them only with `--app`:
+
+- `rule_missing_component_key` (`citry.browser.missing-component-key`): a
+  component that `<c-for>` repeats without `#c-key`, when the template's
+  component or the repeated one makes the page use Vue.
+- `rule_prop_assignment` (`citry.browser.prop-assignment`): a component's
+  own template or JavaScript assigns to one of its props. The editor
+  reports it too once the application is loaded. A write in JavaScript is
+  at most a warning.
+- `rule_unknown_server_event_field`, `rule_missing_server_event_field`,
+  and `rule_incompatible_server_event_field`
+  (`citry.browser.*-server-event-field`): the literal arguments of an
+  `@c-*` call against the handler's `data` class. The editor does not
+  report them yet, because the handler description it receives does not
+  say whether a data class is a Pydantic model.
+- `rule_misspelled_css_variable` (`citry.css.misspelled-variable`): a
+  `var(--name)` one typing slip from a `css_data()` key.
+
+`citry check --static` notes, and the editor marks with an information
+diagnostic (`citry.check.template-not-checked`), a class with a literal
+template whose base class is imported from another module of the
+project, because reading one file cannot prove it is a component.
+
 Steps below that describe Alpine attributes,
 magics, and scope record the earlier Alpine design; where they conflict with
 the Vue runtime, [`vue.md`](vue.md) and the code win.
