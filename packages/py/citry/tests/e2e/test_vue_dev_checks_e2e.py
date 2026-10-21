@@ -262,3 +262,97 @@ $component({
     warnings, problems = _open(page, serve_document(html), _WIDE)
 
     assert (warnings, problems) == ([], [])
+
+
+# Both branches of a v-if only the browser can test, with the same wrapper tag
+# and attributes, differing only further down. The server writes both; the
+# browser shows the second.
+_SAME_TAG_BRANCHES = {
+    "text": (
+        """
+  <div v-if="wide"><b>Wide</b></div>
+  <div v-else><b>Narrow</b></div>
+""",
+        "computed: {wide() { return this.size > 5; }},",
+    ),
+    "attribute": (
+        """
+  <div v-if="wide"><span class="a">x</span></div>
+  <div v-else><span class="b">x</span></div>
+""",
+        "computed: {wide() { return this.size > 5; }},",
+    ),
+    "list": (
+        """
+  <ul v-if="wide"><li>A</li></ul>
+  <ul v-else><li>B</li></ul>
+""",
+        "computed: {wide() { return this.size > 5; }},",
+    ),
+    "button": (
+        """
+  <div
+    v-if="loggedIn"
+    class="panel"
+  ><button type="button">Log out</button></div>
+  <div
+    v-else
+    class="panel"
+  ><button type="submit">Log in</button></div>
+""",
+        "data() { return {loggedIn: false}; },",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", list(_SAME_TAG_BRANCHES))
+def test_same_tag_branches_of_a_browser_only_condition_are_silent(case: str, page: Any, serve_document: Any) -> None:
+    branches, options = _SAME_TAG_BRANCHES[case]
+    engine = Citry(autodiscover=False, mode="development")
+
+    class Status(Component):
+        citry = engine
+        template = """
+<p class="status">Status</p>
+"""
+        js = """
+$component({props: ['open'], emits: ['close']});
+"""
+
+    class Box(Component):
+        citry = engine
+
+        def js_data(self, kwargs: Any, slots: Any) -> dict[str, int]:
+            return {"size": 1}
+
+        template = f"""
+<section class="box">
+{branches}
+  <c-Status
+    :open="true"
+    @close="size = 0"
+  />
+</section>
+"""
+        js = f"""
+$component({{
+  {options}
+}});
+"""
+
+    class Page(Component):
+        citry = engine
+        template = """
+<!doctype html>
+<html>
+  <head><title>Box</title></head>
+  <body><main><c-Box /></main></body>
+</html>
+"""
+
+    html = Page().render().serialize()
+    assert "CitryVueDevChecks" in html, "the page must have a shell with served contents to compare"
+
+    warnings, problems = _open(page, serve_document(html), _WIDE)
+
+    assert (warnings, problems) == ([], [])

@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, replace
+from functools import cache
 from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -46,6 +47,15 @@ _HYDRATION_ADMISSION_EXTRA_KEY = "_citry_hydration_admission"
 # The browser half of the development check of server-rendered HTML. Only a
 # development page whose shells carry served contents includes it.
 DEV_CHECKS_SRC = Path(__file__).parent / "dev_checks.js"
+
+
+@cache
+def _dev_checks_source() -> str:
+    """Return the development check's script, read from disk on the first development page only."""
+    # A development server renders many pages; the file ships with the
+    # package and does not change while the process runs.
+    return DEV_CHECKS_SRC.read_text(encoding="utf8")
+
 
 # Capture the supported built-in insertion methods before application code can
 # replace class attributes. The hydration fast path admits no custom hook.
@@ -1242,7 +1252,7 @@ def prepare_vue_serialization(
         # script, so it runs before the module script below starts the app.
         # Only a page whose shells carry served contents has anything to
         # compare, so other pages, and every production page, go without it.
-        scripts.append(Script(kind="core", content=DEV_CHECKS_SRC.read_text(encoding="utf8")))
+        scripts.append(Script(kind="core", content=_dev_checks_source()))
     initial_styles: list[Style] = []
     # A mounted document links its stylesheets in <head> so the served HTML
     # paints with them; the runtime adopts those links instead of adding its

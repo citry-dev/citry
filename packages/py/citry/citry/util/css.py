@@ -7,6 +7,13 @@ from math import isfinite
 
 from citry.secret import Secret
 
+# The reason given when a `css_data()` value is a `Secret`; the caller puts
+# the component and the entry name in front of it.
+SECRET_IN_CSS_DATA_REASON = (
+    "holds a citry.Secret, and Citry never sends a Secret to the browser. "  # noqa: S105 - advice text
+    "Read the value with get_secret_value() in server code that needs it and leave it out of css_data()."
+)
+
 # A CSS function call: a name followed by an opening parenthesis,
 # e.g. `calc(100% - 20px)`, `var(--color)`, `rgba(255, 0, 0, 0.5)`.
 _CSS_FUNC_RE = re.compile(r"^[a-zA-Z0-9_-]+\(")
@@ -165,11 +172,7 @@ def serialize_css_var_value(value: object) -> str:
     elif type(value) is Secret:
         # The stylesheet holding these values can be fetched by URL, so a
         # wrapped secret gets its own reason rather than the generic one.
-        msg = (
-            "it holds a citry.Secret, and Citry never sends a Secret to the browser. "
-            "Read the value with get_secret_value() in server code that needs it and leave it out of css_data()."
-        )
-        raise TypeError(msg)
+        raise TypeError(f"it {SECRET_IN_CSS_DATA_REASON}")
     else:
         msg = f"CSS data values must be strings, numbers, or None; {type(value).__name__} is not supported."
         raise TypeError(msg)

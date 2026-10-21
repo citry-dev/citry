@@ -450,6 +450,14 @@ def test_a_method_named_as_a_child_listener_is_checked_against_the_payload(tmp_p
         ("citry.typescript.ts2345", "hideCard", 2),
         ("citry.typescript.ts2345", "hideCard", 3),
     ]
+    # TypeScript names an unlabeled payload value after the generated rest
+    # parameter in its message, so it reads `args_0`, the listener's first
+    # argument.
+    board = documents[(tmp_path / "board.html").as_uri()]
+    citry_findings = browser_diagnostics(board, project, documents)
+    messages = [item.message for item in check_document_types(board, project, documents, _command(), citry_findings)]
+    assert any("(args_0: " in message for message in messages), messages
+    assert not any("payload" in message for message in messages), messages
 
 
 def test_child_listener_helper_is_never_offered_as_a_completion(tmp_path):
@@ -983,8 +991,9 @@ def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_secret
             "app.py",
             "citry.js-data.unsupported-type",
             7,
-            "JsData field 'secretToken' is not a clean JSON value: Secret values are never sent to the browser;"
-            " read the value on the server instead. Browser tooling will treat its type as unknown.",
+            "JsData field 'secretToken' would send a citry.Secret to the browser: Secret values are never sent to"
+            " the browser; read the value on the server instead. Rendering raises TypeError whenever the value is a"
+            " Secret.",
         ),
     ]
 

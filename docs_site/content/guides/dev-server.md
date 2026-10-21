@@ -10,8 +10,8 @@ or CSS file to show up when you reload the page, without restarting the
 server. Turn on Citry's hot reload: when such a file changes, Citry forgets
 its stored copy, and the next render reads the file again.
 
-At the end, [Development mode](#development-mode) turns on checks that
-find mistakes only a running page shows.
+The last section, [Development mode](#development-mode), shows how to turn
+on checks for mistakes that only a running page shows.
 
 ## What reloads
 
@@ -273,8 +273,8 @@ Development mode turns on:
   [Production and deployment](/i18n/production/)).
 
 The checks cost time on every render and add a script to some pages, so
-leave them out of production. A production page carries none of their
-code.
+leave them out of production. A production page does not load that
+script.
 
 ### Repeated ids { #repeated-ids }
 
@@ -317,9 +317,9 @@ the ids in the HTML the server writes, so it does not see:
 - a repeat between an HTML fragment, or a part of the page that a server
   event renders again, and the page it lands in.
 
-Two cases name a component you may not expect. A component in both
-branches of a `v-if` written on the component's own tag, such as
-`<c-Panel v-if="wide" />` and `<c-Panel v-else />`, is counted twice and
-warns; put the condition on an element around each call instead. A
-component declared `simple` is part of its caller's HTML, so the warning
-names the caller.
+Two cases can surprise you. A component in both branches of a `v-if`
+written on its own tag, such as `<c-Panel v-if="wide" />` and
+`<c-Panel v-else />`, warns even though only one branch shows; put the
+condition on an element around each call. A
+[simple component](/performance/simple-components/) (`simple = True`)
+writes its HTML into its caller's, so the warning names the caller.

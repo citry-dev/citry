@@ -18,6 +18,7 @@ from typing import Literal
 import pytest
 
 from citry import Citry, Component, LintSettings
+from citry import _checker as citry_checker
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
 from citry._path_checks import PathLookup, register_path_checker
@@ -911,7 +912,8 @@ def test_a_var_one_slip_from_a_css_data_key_is_reported(tmp_path):
         (
             _CSS,
             "warning",
-            "Nothing sets --acent, so the browser ignores this declaration. Did you mean --accent, from css_data()?",
+            "Nothing sets --acent, so this property gets its initial or inherited value. "
+            "Did you mean --accent, from css_data()?",
         ),
     ]
 
@@ -1059,6 +1061,18 @@ def test_the_application_and_the_component_can_change_the_misspelled_class_sever
         # another class of the same family.
         ('<div class="col-1 mt-1"></div>', ".col-12 {} .mt-12 {}", ()),
         ('<li class="tab"></li>', ".tabs { display: flex; }", ()),
+        # So does a missing final `d` or `r` after an `e`, or `n` after an
+        # `e` or `w`, as in Bootstrap's state classes.
+        ('<button class="navbar-toggle"></button>', ".navbar-toggler { border: 0; }", ()),
+        ('<button class="disable"></button>', ".disabled { opacity: 0.5; }", ()),
+        ('<div class="collapse"></div>', ".collapsed { display: none; }", ()),
+        ('<div class="fade"></div>', ".faded { opacity: 0; }", ()),
+        ('<div class="close"></div>', ".closed { display: none; }", ()),
+        ('<div class="show"></div>', ".shown { display: block; }", ()),
+        # A slip inside a first part of one or two letters, a utility
+        # prefix, gives another real utility class.
+        ('<div class="p-4 m-auto"></div>', ".px-4 { padding: 0 1rem; } .ml-auto { margin-left: auto; }", ()),
+        ('<div class="mt-2"></div>', ".tm-2 { color: red; }", ()),
         # A pre-rendered `<style>` tag in Dependencies is read too.
         (
             _M16_TEMPLATE,
@@ -1075,6 +1089,62 @@ def test_classes_the_css_declares_or_cannot_judge_are_not_reported(tmp_path, tem
     findings = _findings(_class_engine(template, css, others=others), tmp_path, _CLASS, _UNDECLARED_CLASS)
 
     assert findings == []
+
+
+@pytest.mark.parametrize(
+    ("written", "styled"),
+    [
+        # A letter left out.
+        ("bord", "board"),
+        # Two neighboring letters swapped.
+        ("baord", "board"),
+        # Two neighboring letters swapped in a long part, after a short one.
+        ("ml-atuo", "ml-auto"),
+        # A slip in a hyphen-separated part longer than two characters.
+        ("navbar-toggelr", "navbar-toggler"),
+        ("mll-auto", "ml-auto"),
+        # A slip in a short part after the first, such as a size.
+        ("btn-gl", "btn-lg"),
+        ("text-ms", "text-sm"),
+        ("col-dm-6", "col-md-6"),
+        # A doubled final letter, and a dropped final letter that is not a
+        # family ending.
+        ("buttonn", "button"),
+        ("progresss", "progress"),
+        ("butto", "button"),
+        ("car", "card"),
+    ],
+)
+def test_a_slip_outside_family_endings_and_utility_prefixes_is_reported(tmp_path, written, styled):
+    engine = _class_engine(f'<div class="{written}"></div>', f".{styled} {{ color: red; }}")
+
+    assert [message.split("'")[1:4:2] for _code, _severity, message in _findings(engine, tmp_path, _CLASS)] == [
+        [written, styled],
+    ]
+
+
+def test_a_template_with_no_class_near_its_own_css_reads_no_other_stylesheet(tmp_path, monkeypatch):
+    # Gathering every stylesheet calls each component's get_dependencies()
+    # and reads files, which the on-by-default rule must not pay for when no
+    # class is close to the component's own CSS.
+    gathered: list[object] = []
+    original = citry_checker._dependency_stylesheets
+
+    def recording(components):
+        gathered.append(components)
+        return original(components)
+
+    monkeypatch.setattr(citry_checker, "_dependency_stylesheets", recording)
+    unrelated = _class_engine('<div class="layout"></div>', others=({"css": ".page { color: red; }"},))
+    without_css = _class_engine(_M16_TEMPLATE, None, others=({"css": ".page { color: red; }"},))
+
+    assert _findings(unrelated, tmp_path, _CLASS) == []
+    assert _findings(without_css, tmp_path, _CLASS) == []
+    assert gathered == []
+
+    _findings(_class_engine(_M16_TEMPLATE), tmp_path, _CLASS)
+
+    assert len(gathered) == 1
 
 
 def test_the_words_around_a_written_expression_are_still_checked(tmp_path):
@@ -1204,8 +1274,8 @@ def test_a_custom_property_nothing_sets_is_reported_when_the_rule_is_on(tmp_path
         (
             _UNDECLARED_VARIABLE,
             "warning",
-            "Nothing that Citry reads sets --gap, so the browser ignores this declaration unless a stylesheet or "
-            "script outside Citry sets it.",
+            "Nothing that Citry reads sets --gap, so this property gets its initial or inherited value unless "
+            "a stylesheet or script outside Citry sets it.",
             1,
             15,
         ),

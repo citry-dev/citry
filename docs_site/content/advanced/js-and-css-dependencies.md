@@ -106,10 +106,6 @@ unsupported value: data sent to the browser must contain only dicts,
 lists, strings, numbers, booleans, and None, got datetime.
 ```
 
-A [`Secret`][citry.Secret] is refused too, with an error that names the
-key holding it; see
-[Keep tokens off the page](/vue/component-options/#keep-tokens-off-the-page).
-
 Convert such values in `js_data()` first:
 
 ```python
@@ -121,6 +117,11 @@ def js_data(self, kwargs: Kwargs, slots):
         "user": kwargs.user.model_dump(mode="json"),
     }
 ```
+
+Returning a [`Secret`][citry.Secret] raises the same `TypeError`, and the
+error names the key that holds it. Leave it out of `js_data()` and read
+it on the server; see
+[Keep tokens off the page](/vue/component-options/#keep-tokens-off-the-page).
 
 Returning a dataclass or Pydantic instance as the whole result works:
 Citry turns its fields into the top-level keys. Values inside those fields
@@ -200,7 +201,7 @@ CSS, such as one with a top-level `;` or a `</style` end tag.
     Citry can deliver these values as a stylesheet at a URL. Anyone who
     has the URL can download it, so never put a secret in `css_data()`.
     A value wrapped in [`Secret`][citry.Secret] raises `ValueError` when
-    the component renders.
+    the component renders, even when the component has no CSS.
 
 ## Name CSS classes
 

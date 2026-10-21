@@ -18,8 +18,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from citry import Citry, Component
-from citry._vue.capture import UnsupportedPreparedView
+from citry._vue.capture import UnsupportedPreparedView, template_location
 from citry._vue.compiler import VueCompilerDiagnosticsError
+from citry._vue.direct_capture import Assembly
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -299,9 +300,101 @@ def test_element_key_from_python_beside_c_key_names_the_element() -> None:
     # removed, as the template parser's own errors do.
     with pytest.raises(
         UnsupportedPreparedView,
-        match=r"The <div> element that starts at line 3, column 3 of its template has '#c-key' and also gets",
+        match=r"The <div> element in template \S+::Page, line 3, column 3 has '#c-key' and also gets",
     ):
         _render(Page())
+
+
+def test_element_key_conflict_names_the_template_file(tmp_path: Path) -> None:
+    registry = Citry(autodiscover=False)
+    template = tmp_path / "rows.html"
+    template.write_text(
+        '<p>a</p>\n<c-for each="item in [1]">\n  <div #c-key="item" c-key="\'other\'">x</div>\n</c-for>\n'
+    )
+
+    class Page(Component):
+        citry = registry
+        template_file = str(template)
+        js = _VUE_JS
+
+    with pytest.raises(UnsupportedPreparedView) as info:
+        _render(Page())
+    assert f"The <div> element in template {template}, line 3, column 3 has '#c-key'" in str(info.value)
+
+
+def test_element_key_conflict_in_template_valued_attribute_counts_from_the_template() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Holder(Component):
+        citry = registry
+        template = """
+            <div>{{ body }}</div>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"body": kwargs["body"]}
+
+    class Page(Component):
+        citry = registry
+        template = """
+            <p>a</p>
+            <c-holder c-body="<>
+              <c-for each='item in [1]'>
+                <div #c-key='item' c-key='1'>x</div>
+              </c-for></>" />
+        """
+        js = _VUE_JS
+
+    # Line 5 of the template, not line 3 of the attribute value.
+    with pytest.raises(
+        UnsupportedPreparedView,
+        match=r"The <div> element in template \S+::Page, line 5, column 5 has '#c-key'",
+    ):
+        _render(Page())
+
+
+def test_element_key_beside_authored_key_names_both_fixes() -> None:
+    registry = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = registry
+        template = """
+            <div
+              key="browser"
+              #c-key="'server'"
+              v-show="shown"
+            >value</div>
+        """
+        js = """
+            export default { data() { return { shown: true } } }
+        """
+
+    with pytest.raises(UnsupportedPreparedView) as info:
+        _render(Page())
+    message = str(info.value)
+    assert re.search(r"'key' on the <div> element in template \S+::Page, line 2, column 1 sets the same", message)
+    assert "Keep '#c-key' if Python should set the key, or remove '#c-key' and keep 'key'." in message
+
+
+def test_template_location_counts_from_the_top_of_the_template() -> None:
+    template = '<p>a</p>\n<c-holder c-body="<>\n  <i>x</i></>" />\n'
+    attribute = "<>\n  <i>x</i></>"
+    offset = attribute.index("<i>")
+    # A template-valued attribute's offsets count from its value, so they are
+    # shifted to where the value starts in the template.
+    assert template_location(attribute, offset, "page.html", template, with_column=True) == (
+        "in template page.html, line 3, column 3"
+    )
+    assert template_location(template, 0, "page.html", template) == "in template page.html, line 1"
+    # When the value appears twice, its start cannot be told, so the line is
+    # given within the attribute.
+    twice = template + template
+    assert template_location(attribute, offset, "page.html", twice) == (
+        "in template page.html, on line 2 of the template inside an attribute such as c-body"
+    )
+    assert template_location(template, len("<p>a</p>\n"), None, None, with_column=True) == (
+        "on line 2, column 1 of its template"
+    )
 
 
 # v-model on an element that holds no value (m63)
@@ -397,6 +490,97 @@ def test_model_in_simple_child_names_the_child_template() -> None:
 
     with pytest.raises(ValueError, match=r"in template \S+::Inner, line 2: v-model does not work on <div>"):
         _render(Page())
+
+
+def test_model_in_simple_child_called_from_template_valued_attribute() -> None:
+    # The attribute's HTML renders into the caller's Vue template, and so
+    # does the simple component it calls.
+    registry = Citry(autodiscover=False)
+
+    class Inner(Component):
+        citry = registry
+        simple = True
+        template = """
+            <div v-model="query">x</div>
+        """
+
+    class Holder(Component):
+        citry = registry
+        template = """
+            <div>{{ body }}</div>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"body": kwargs["body"]}
+
+    class Page(Component):
+        citry = registry
+        template = """
+            <c-holder c-body="<><c-inner /></>" />
+        """
+        js = _VUE_JS
+
+    with pytest.raises(ValueError, match=r"in template \S+::Inner, line 2: v-model does not work on <div>"):
+        _render(Page())
+
+
+def test_page_that_compiles_never_lists_the_templates_behind_a_definition(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Only a failed compile needs the authored templates behind a Vue
+    # template, so a page that compiles, here with a transparent component
+    # copied into its caller, never builds that list.
+    def fail(self: Assembly, definition_id: str) -> tuple[str, ...]:
+        raise AssertionError("a successful render listed the templates behind a definition")
+
+    monkeypatch.setattr(Assembly, "template_types", fail)
+    registry = Citry(autodiscover=False)
+
+    class Field(Component):
+        citry = registry
+        transparent = True
+        template = """
+            <label><input v-model="query" /></label>
+        """
+
+    class Page(Component):
+        citry = registry
+        template = """
+            <main><c-field /></main>
+        """
+        js = _VUE_JS
+
+    assert "<input>" in _render(Page())
+
+
+def test_compile_failure_lists_the_transparent_templates_behind_a_definition() -> None:
+    registry = Citry(autodiscover=False)
+    seen: list[tuple[str, ...]] = []
+    original = Assembly.template_types
+
+    def record(self: Assembly, definition_id: str) -> tuple[str, ...]:
+        types = original(self, definition_id)
+        seen.append(types)
+        return types
+
+    class Field(Component):
+        citry = registry
+        transparent = True
+        template = """
+            <label><span v-model="query">x</span></label>
+        """
+
+    class Page(Component):
+        citry = registry
+        template = """
+            <main><c-field /></main>
+        """
+        js = _VUE_JS
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Assembly, "template_types", record)
+        with pytest.raises(ValueError, match="Check each v-model below"):
+            _render(Page())
+    # The page's own component first, then the transparent one copied in.
+    assert seen == [(Page.class_id, Field.class_id)]
 
 
 def test_model_error_keeps_compiler_text_when_no_element_is_found() -> None:

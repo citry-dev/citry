@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import html as html_module
 import re
-import warnings
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from citry._caller_warnings import warn_at_caller
 from citry._output_html import OutputAttr, OutputTemplate, scan_output_html
 
 _ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
@@ -105,7 +105,8 @@ class _CspRenderValidator:
         body = "\n".join(f"- {finding.display()}" for finding in self._findings)
         message = f"Citry found {len(self._findings)} strict-CSP incompatibility issue(s):\n{body}"
         if self._mode == "warn":
-            warnings.warn(message, RuntimeWarning, stacklevel=4)
+            # Point at the author's serialize call, wherever Citry noticed it.
+            warn_at_caller(message, RuntimeWarning)
             return
         raise ValueError(message)
 

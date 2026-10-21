@@ -308,13 +308,20 @@ class LintSettings:
             it only with your application loaded. The default is
             ``"warning"``.
         rule_misspelled_css_class: Severity for a class in a template's
-            static ``class`` attribute that is one typing slip from a class
-            the component's own ``css`` or ``css_file`` styles, such as
-            ``bord`` for ``.board``, when no registered component's CSS,
-            ``Dependencies`` stylesheet, or template ``<style>`` element
-            declares the class as written. The element renders without
-            those styles. ``citry check`` reports it only with your
-            application loaded. The default is ``"warning"``.
+            static ``class`` attribute that is one typing slip (two
+            neighboring letters swapped, one doubled, or one left out) from
+            a class the component's own ``css`` or ``css_file`` styles, such
+            as ``bord`` for ``.board``. It is reported only when no CSS
+            Citry reads declares the class as written: no registered
+            component's CSS, ``Dependencies`` stylesheet, or template
+            ``<style>`` element. Slips that usually name another class of
+            the same family are not reported: a moved, doubled, or dropped
+            digit (``col-1`` for ``.col-12``), an added or dropped final
+            ``s``, ``d``, ``r``, or ``n`` (``collapse`` for ``.collapsed``),
+            and a slip inside a hyphen-separated part of one or two
+            characters (``p-4`` for ``.px-4``). ``citry check`` reports it
+            only with your application loaded. The default is
+            ``"warning"``.
         rule_undeclared_css_class: Severity for every class in a template's
             static ``class`` attribute that no CSS Citry reads declares: no
             registered component's ``css``, ``css_file``, inline or
@@ -590,12 +597,12 @@ class CitrySettings:
             manifest, it must still match the sources, so delete or
             recompile it after editing translations. Turning a page into
             HTML issues a ``RuntimeWarning`` when two elements on it share
-            an ``id``, naming the components that wrote them. And in the
-            browser, a part of a server-rendered page that Vue builds in
-            the browser logs a console warning when Vue's first render
-            differs from the HTML the server sent. Production pages carry
-            none of the browser check's code. An unrecognized value raises
-            ``ValueError`` at construction.
+            an ``id``, naming the components that wrote them. And Citry
+            logs a browser console warning when Vue's first render of a
+            part Vue builds in the browser differs from the HTML the
+            server sent. A production page does not load this browser
+            check. An unrecognized value raises ``ValueError`` at
+            construction.
         template_globals: Variables exposed to every component's template
             without being returned from each ``template_data()``. They are
             merged into every component's template variables on render, so a

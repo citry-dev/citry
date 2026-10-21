@@ -1164,6 +1164,7 @@ class EventsDispatcher:
             max_bytes=meta.max_bytes,
             storage=meta.storage,
             cache=ctx.citry.cache,
+            component_name=plan.comp_cls.__name__,
         )
         if plan.instance_id is None:
             # No instance, no client registry entry to refresh; the caller is

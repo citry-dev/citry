@@ -82,6 +82,9 @@ UNKNOWN_JSON_TYPE = JsonWireType("unknown")
 # values are ...". citry_lsp keeps a copy of this text for the types ty
 # reports, and a test there keeps the two equal.
 SECRET_NOT_SENT_REASON = "values are never sent to the browser; read the value on the server instead"  # noqa: S105 - advice text
+# The whole reason an annotation or a value typed as a Secret gets, which a
+# caller compares with to word its message for a Secret.
+SECRET_UNSUPPORTED_REASON = f"Secret {SECRET_NOT_SENT_REASON}"
 # The ways an annotation names `citry.Secret`: imported by name, through the
 # package, or by the import path Citry writes for a schema field.
 _SECRET_NAMES = frozenset({"Secret", "citry.Secret", "citry.secret.Secret"})
@@ -278,7 +281,7 @@ def _annotation_type(node: ast.expr) -> JsonWireType:
         name = _qualified_name(node.value)
         arguments = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
         if name in _SECRET_NAMES:
-            return _unsupported(f"Secret {SECRET_NOT_SENT_REASON}")
+            return _unsupported(SECRET_UNSUPPORTED_REASON)
         # `Annotated` metadata and TypedDict key markers wrap the value type,
         # however the annotation spells their module.
         if name in {
@@ -341,7 +344,7 @@ def _annotation_type(node: ast.expr) -> JsonWireType:
     if name in {"Any", "typing.Any"}:
         return _unsupported("Any does not prove a strict JSON value")
     if name in _SECRET_NAMES:
-        return _unsupported(f"Secret {SECRET_NOT_SENT_REASON}")
+        return _unsupported(SECRET_UNSUPPORTED_REASON)
     if name in {"bytes", "bytearray", "memoryview"}:
         return _unsupported(f"{name} values are not JSON-serializable")
     if name in {
@@ -608,6 +611,7 @@ def _js_property(name: str) -> str:
 
 __all__ = [
     "SECRET_NOT_SENT_REASON",
+    "SECRET_UNSUPPORTED_REASON",
     "UNKNOWN_JSON_TYPE",
     "JsonWireField",
     "JsonWireKind",

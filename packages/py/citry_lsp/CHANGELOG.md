@@ -58,9 +58,9 @@ All notable changes to `citry-lsp` are documented here.
   module of your project, and `citry check --types` type-checks them.
   Without the application, or for a class added or renamed since it
   loaded, the editor marks the class with an information message.
-- The editor reports a parent method used as a child component's event
-  listener, such as `@hide="hideCard"`, when its parameters do not accept
-  the values the child's typed `emits` declares.
+- The editor and `citry check --types` report a parent method used as a
+  child component's event listener, such as `@hide="hideCard"`, when its
+  parameters do not accept the values the child's typed `emits` declares.
 - The editor and `citry check --types` warn when a `js_data()` value is a
   `citry.Secret`, alone or inside a list or dict
   (`citry.js-data.unsupported-type`).

@@ -18,6 +18,8 @@ from citry.analysis import JsonWireType, build_reveal_shadow, json_wire_type_fro
 from citry_lsp.engine import (
     _I18N_CALL_SIGNATURES,
     _I18N_OPERATION_SIGNATURES,
+    SECRET_NOT_SENT_REASON,
+    SECRET_UNSUPPORTED_REASON,
     DocumentState,
     ExpressionShadow,
     ExpressionShadowGroup,
@@ -627,9 +629,7 @@ _STANDARD_NON_JSON_TYPES = {
     **dict.fromkeys(("bytes", "bytearray", "memoryview", "complex"), "values are not JSON-serializable"),
     "set": "sets are not JSON-serializable",
     "frozenset": "sets are not JSON-serializable",
-    # The same text as `citry._json_wire.SECRET_NOT_SENT_REASON`, written
-    # out so the editor keeps working with a citry release that predates it.
-    "Secret": "values are never sent to the browser; read the value on the server instead",
+    "Secret": SECRET_NOT_SENT_REASON,
 }
 
 
@@ -649,7 +649,7 @@ def _json_type_from_ty_display(display: str) -> JsonWireType | None:
     # Whatever a Secret wraps, and whatever holds it, rendering refuses the
     # value, so this runs before the check that drops unproven displays.
     if _display_names_secret(display):
-        return JsonWireType("unknown", unsupported=(f"Secret {_STANDARD_NON_JSON_TYPES['Secret']}",))
+        return JsonWireType("unknown", unsupported=(SECRET_UNSUPPORTED_REASON,))
     if _UNPROVEN_TY_DISPLAY.search(_TY_DISPLAY_STRING.sub('""', display)):
         return None
     reasons = _standard_non_json_reasons(display)

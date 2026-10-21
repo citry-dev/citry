@@ -14,7 +14,9 @@ written as it would look once the project wraps the token in a Secret.
 from __future__ import annotations
 
 import copy
+import hmac
 import pickle
+import types
 from dataclasses import dataclass
 
 import pytest
@@ -23,6 +25,7 @@ from citry import Citry, Component, Const, Secret
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
 from citry._json_wire import json_wire_type_from_annotation
+from citry.ext.cache import CacheKeyError
 
 try:
     import pydantic
@@ -88,6 +91,48 @@ def test_equality_and_hashing_follow_the_value():
     assert {Secret("a"): 1}[Secret("a")] == 1
     with pytest.raises(TypeError, match="unhashable"):
         hash(Secret(["a"]))
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "equal"),
+    [
+        ("s3cr3t", "s3cr3t", True),
+        ("s3cr3t", "s3cr3x", False),
+        # compare_digest accepts only ASCII text, so text goes in as bytes.
+        ("päss", "päss", True),
+        ("päss", "pass", False),
+        # A lone surrogate cannot be encoded strictly.
+        ("\ud800", "\ud800", True),
+        (b"raw", b"raw", True),
+        (b"raw", b"rax", False),
+    ],
+)
+def test_text_and_bytes_secrets_compare_in_constant_time(monkeypatch, left, right, equal):
+    compared: list[tuple[bytes, bytes]] = []
+    original = hmac.compare_digest
+
+    def recording(a, b):
+        compared.append((a, b))
+        return original(a, b)
+
+    monkeypatch.setattr(hmac, "compare_digest", recording)
+
+    assert (Secret(left) == Secret(right)) is equal
+    assert len(compared) == 1
+
+
+def test_other_secrets_compare_with_equality(monkeypatch):
+    monkeypatch.setattr(hmac, "compare_digest", lambda *_args: pytest.fail("only for text and bytes"))
+
+    assert Secret(12345) == Secret(12345)
+    assert Secret(["a"]) == Secret(["a"])
+    # Text never equals bytes, as in Python itself.
+    assert Secret("raw") != Secret(b"raw")
+
+
+def test_the_hash_is_not_the_bare_value():
+    # A bare hash() of a small int is the int itself.
+    assert hash(Secret(12345)) != 12345
 
 
 def test_truth_follows_the_value():
@@ -211,8 +256,47 @@ def test_a_secret_in_css_data_fails_the_render():
         def css_data(self, kwargs, slots):
             return {"token": SECRET_TOKEN}
 
-    with pytest.raises(ValueError, match=r"css_data\(\) entry 'token' cannot be emitted: it holds a citry\.Secret"):
+    with pytest.raises(ValueError, match=r"Component Banner: css_data\(\) entry 'token' holds a citry\.Secret"):
         str(Banner())
+
+
+@pytest.mark.parametrize(
+    "assets",
+    [
+        # No CSS or JavaScript: nothing would send css_data() anywhere.
+        {},
+        # JavaScript only: still no stylesheet to read the values.
+        {"js": _COMPONENT_JS},
+    ],
+)
+def test_a_secret_in_css_data_fails_without_css(assets):
+    # The mistake must show before the component gets CSS, not only after.
+    engine = Citry(autodiscover=False)
+
+    def css_data(self, kwargs, slots):
+        return {"accent": "red", "token": SECRET_TOKEN}
+
+    banner = type(
+        "Banner",
+        (Component,),
+        {"citry": engine, "template": "<p>Banner</p>", "css_data": css_data, **assets},
+    )
+
+    with pytest.raises(ValueError, match=r"Component Banner: css_data\(\) entry 'token' holds a citry\.Secret"):
+        str(banner())
+
+
+def test_plain_css_data_without_css_still_renders():
+    engine = Citry(autodiscover=False)
+
+    class Banner(Component):
+        citry = engine
+        template = "<p>Banner</p>"
+
+        def css_data(self, kwargs, slots):
+            return {"accent": "red"}
+
+    assert "Banner" in str(Banner())
 
 
 def test_a_secret_in_state_fails_the_render():
@@ -234,7 +318,8 @@ def test_a_secret_in_state_fails_the_render():
             def refresh(self, state, request):
                 return None
 
-    with pytest.raises(ValueError, match=r"State field 'token' holds a citry\.Secret") as error:
+    # The class name is what the author wrote; the class id adds a hash.
+    with pytest.raises(ValueError, match=r"Component Panel: State field 'token' holds a citry\.Secret") as error:
         str(Panel(token=SECRET_TOKEN))
     assert "s3cr3t" not in str(error.value)
 
@@ -390,6 +475,25 @@ def test_a_plain_value_in_a_secret_jsdata_field_says_to_remove_the_field():
 
 
 @pytest.mark.skipif(pydantic is None, reason="needs pydantic")
+@pytest.mark.parametrize(("hide_input", "shown"), [(False, True), (True, False)])
+def test_pydantic_prints_a_plain_secret_unless_the_model_hides_input(hide_input, shown):
+    # Pydantic's own error, not Citry's, so only the model's config keeps
+    # the value out; the docs tell authors to set it.
+    engine = Citry(autodiscover=False)
+
+    class Kwargs(pydantic.BaseModel):
+        model_config = pydantic.ConfigDict(hide_input_in_errors=hide_input)
+
+        token: Secret[str]
+
+    card = type("Card", (Component,), {"citry": engine, "template": "<p>{{ token }}</p>", "Kwargs": Kwargs})
+
+    with pytest.raises(pydantic.ValidationError) as error:
+        str(card(token="s3cr3t"))  # noqa: S106
+    assert ("s3cr3t" in str(error.value)) is shown
+
+
+@pytest.mark.skipif(pydantic is None, reason="needs pydantic")
 def test_a_pydantic_kwargs_field_accepts_a_secret():
     engine = Citry(autodiscover=False)
 
@@ -412,6 +516,48 @@ def test_a_plain_string_secret_is_still_sent():
     board = _board_page(Citry(autodiscover=False), {"secretToken": "s3cr3t"})
 
     assert "s3cr3t" in str(board())
+
+
+def _cached_badge(engine: Citry, cache: type) -> type[Component]:
+    return type(
+        "CachedBadge",
+        (Component,),
+        {
+            "citry": engine,
+            "template": "<span>{{ token }}</span>",
+            "Kwargs": type("Kwargs", (), {"__annotations__": {"token": Secret[str], "user_id": int}}),
+            "Cache": cache,
+        },
+    )
+
+
+def test_a_cached_child_cannot_key_on_a_secret():
+    # Hashing the secret into the key would make the key depend on it, so
+    # the error asks for another value to vary on.
+    badge = _cached_badge(Citry(autodiscover=False), type("Cache", (), {"enabled": True}))
+
+    with pytest.raises(CacheKeyError) as error:
+        str(badge(token=SECRET_TOKEN, user_id=7))
+
+    message = str(error.value)
+    assert type(error.value) is CacheKeyError
+    assert error.value.path == "vary['token']"
+    assert "a citry.Secret cannot be part of a render-cache key" in message
+    assert "such as a user or tenant id" in message
+    assert "Convert it to supported built-in values" not in message
+    assert "s3cr3t" not in message
+
+
+def test_a_cached_child_with_a_secret_renders_when_it_varies_on_something_else():
+    def vary(self, kwargs, slots):
+        return {"user": kwargs["user_id"]}
+
+    badge = _cached_badge(Citry(autodiscover=False), type("Cache", (), {"enabled": True, "vary": vary}))
+
+    html = str(badge(token=SECRET_TOKEN, user_id=7))
+
+    assert "***" in html
+    assert "s3cr3t" not in html
 
 
 ################################################
@@ -451,25 +597,110 @@ class M42NestedPage(Component):
         return {"auth": {"token": SECRET_TOKEN}, "keys": [API_BASE, SECRET_TOKEN]}
 
 
-_NEVER_SENT_ADVICE = (
-    "holds a citry.Secret, which Citry never sends to the browser; read the value on the server instead."
-    " Browser tooling will treat its type as unknown"
-)
+def _secret_finding(field: str, where: str) -> tuple[str, str]:
+    return (
+        "warning",
+        f"JsData field '{field}' would send a citry.Secret to the browser: {where} is a Secret; read the value"
+        " on the server instead. Rendering raises TypeError whenever the value is a Secret.",
+    )
 
 
 def test_m42_check_reports_a_secret_module_constant(tmp_path):
     assert _findings(_M42_ENGINE, tmp_path) == [
-        (
-            "warning",
-            f"JsData field 'secretToken' is not a clean JSON value: SECRET_TOKEN {_NEVER_SENT_ADVICE}.",
-        ),
-        (
-            "warning",
-            f"JsData field 'config' is not a clean JSON value: API_CONFIG[\"keys\"][1] {_NEVER_SENT_ADVICE}.",
-        ),
+        _secret_finding("secretToken", "SECRET_TOKEN"),
+        _secret_finding("config", 'API_CONFIG["keys"][1]'),
         # A name written inside a dict or list literal is read too.
-        ("warning", f"JsData field 'auth' is not a clean JSON value: SECRET_TOKEN {_NEVER_SENT_ADVICE}."),
-        ("warning", f"JsData field 'keys' is not a clean JSON value: SECRET_TOKEN {_NEVER_SENT_ADVICE}."),
+        _secret_finding("auth", "SECRET_TOKEN"),
+        _secret_finding("keys", "SECRET_TOKEN"),
+    ]
+
+
+# A module the app imports, such as its settings, and a settings object.
+secret_settings = types.ModuleType("secret_settings")
+secret_settings.API_TOKEN = SECRET_TOKEN  # type: ignore[attr-defined]
+SETTINGS = types.SimpleNamespace(auth=types.SimpleNamespace(token=SECRET_TOKEN))
+TOKENS = (SECRET_TOKEN,)
+
+
+class LazySettings:
+    # Reading this runs code, which a static check must not do.
+    @property
+    def API_TOKEN(self) -> Secret[str]:  # noqa: N802
+        return SECRET_TOKEN
+
+
+LAZY_SETTINGS = LazySettings()
+
+
+class ProxySettings:
+    # Like Django's settings: reading an attribute may run code, even after
+    # a value has been stored on the object.
+    def __getattr__(self, name: str) -> object:
+        return SECRET_TOKEN
+
+
+PROXY_SETTINGS = ProxySettings()
+PROXY_SETTINGS.__dict__["API_TOKEN"] = SECRET_TOKEN
+
+
+class TokenList(list):
+    # Unpacking this runs its own code, which the check must not run.
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        return iter([SECRET_TOKEN])
+
+
+CUSTOM_TOKENS = TokenList()
+# A module whose `Const` is not Citry's: what it returns is unknown.
+other_helpers = types.ModuleType("other_helpers")
+other_helpers.Const = lambda _value: "plain"  # type: ignore[attr-defined]
+
+
+def get_token() -> Secret[str]:
+    return SECRET_TOKEN
+
+
+_SENT_FORMS_ENGINE = Citry(autodiscover=False)
+
+
+class SecretSentFormsPage(Component):
+    citry = _SENT_FORMS_ENGINE
+    template = "<p></p>"
+
+    def js_data(self, kwargs, slots):
+        return {
+            "fromModule": {"token": secret_settings.API_TOKEN},
+            "fromObject": SETTINGS.auth.token,
+            "starred": ["public", *TOKENS],
+            "branch": None if kwargs.get("anonymous") else SECRET_TOKEN,
+            "marked": Const(SECRET_TOKEN),
+        }
+
+
+class SecretComputedPage(Component):
+    citry = _SENT_FORMS_ENGINE
+    template = "<p></p>"
+
+    def js_data(self, kwargs, slots):
+        # Each value is computed by code, or never sent, so the check stays
+        # silent.
+        return {
+            "called": get_token(),
+            "property": LAZY_SETTINGS.API_TOKEN,
+            "otherConst": other_helpers.Const(SECRET_TOKEN),
+            "proxy": PROXY_SETTINGS.API_TOKEN,
+            "customList": [*CUSTOM_TOKENS],
+            # Unpacking a dict sends its keys only.
+            "dictKeys": [*{"token": SECRET_TOKEN}],
+        }
+
+
+def test_check_reads_a_secret_through_attributes_unpacking_branches_and_const(tmp_path):
+    assert sorted(_findings(_SENT_FORMS_ENGINE, tmp_path)) == [
+        _secret_finding("branch", "SECRET_TOKEN"),
+        _secret_finding("fromModule", "secret_settings.API_TOKEN"),
+        _secret_finding("fromObject", "SETTINGS.auth.token"),
+        _secret_finding("marked", "SECRET_TOKEN"),
+        _secret_finding("starred", "TOKENS[0]"),
     ]
 
 
@@ -498,8 +729,8 @@ class SecretKwargsPage(Component):
 
 def test_check_reports_a_secret_jsdata_field_and_kwargs_value(tmp_path):
     message = (
-        f"JsData field 'token' is not a clean JSON value: {_SECRET_DETAIL}."
-        " Browser tooling will treat its type as unknown."
+        f"JsData field 'token' would send a citry.Secret to the browser: {_SECRET_DETAIL}."
+        " Rendering raises TypeError whenever the value is a Secret."
     )
 
     assert _findings(_ANNOTATION_ENGINE, tmp_path) == [("warning", message), ("warning", message)]

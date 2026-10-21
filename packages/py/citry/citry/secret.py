@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import TYPE_CHECKING, Any, Generic, NoReturn, TypeVar, final
 
 if TYPE_CHECKING:
@@ -23,13 +24,21 @@ class Secret(Generic[T]):
     returns to the browser, where anyone can read it in the page source.
     Wrap a value in `Secret` to have Citry refuse to send it.
 
-    Rendering a component whose `js_data()` holds a `Secret` anywhere in its
-    result raises `TypeError` that names the component and the key, before
-    any HTML is sent. A `Secret` in a
+    Rendering a component raises a `TypeError` that names the component and
+    the key, before any HTML is sent, when a `Secret` is anywhere in the
+    dicts and lists `js_data()` returns. A `Secret` in a
     [`Component.css_data()`][citry.Component.css_data] value or a State
-    field raises `ValueError`. `citry --app ... check` also warns when it can
-    see the `Secret` in `js_data()`: a module constant returned by name, or
-    a field annotated `Secret[...]`.
+    field raises `ValueError`, whether or not the component has CSS.
+    `citry --app ... check` also warns when it can see the `Secret`: a
+    module-level `Secret` that `js_data()` puts in its result, such as
+    `{"token": API_TOKEN}`, or reads as a stored attribute, such as
+    `settings.API_TOKEN` (not through a property or a lazy settings object),
+    or a `JsData` field annotated `Secret[str]`.
+
+    A `Secret` that `js_data()` returns in another place, such as inside a
+    dataclass instance nested in the result, as a dict key, or in a set, is
+    refused too, but by the `TypeError` for any value JSON cannot carry,
+    which does not name the key.
 
     On the server a `Secret` keeps its value hidden. Call
     [`get_secret_value()`][citry.Secret.get_secret_value] where you need the
@@ -39,21 +48,36 @@ class Secret(Generic[T]):
     template or to a child component's `Kwargs` is allowed and never prints
     the value.
 
+    A child that uses the render cache cannot take a `Secret` this way.
+    Without `Cache.vary()`, its cache key is built from all of its kwargs,
+    and a `Secret` cannot be part of a key, so rendering raises
+    [`CacheKeyError`][citry.ext.cache.CacheKeyError]. Return values that are
+    not secret, such as a user id, from that child's `Cache.vary()`, or
+    leave the child uncached.
+
     Annotate a `Kwargs` or `TemplateData` field as `Secret[str]` (or
     `Secret[bytes]`, and so on) so a plain value passed there is rejected.
     The type in brackets is only for type checkers:
     [`check_input_types`][citry.LintSettings] tests that the value is a
-    `Secret`, not what it holds.
+    `Secret`, not what it holds. When `Kwargs` is a Pydantic model,
+    Pydantic's own error for a plain value prints that value; add
+    `model_config = ConfigDict(hide_input_in_errors=True)` to the model to
+    keep it out of the message.
 
-    A `Secret` cannot be changed after it is created. Two secrets are equal
-    when their values are equal, but a `Secret` never equals a plain value:
-    `API_TOKEN == sent` is always `False`. To check a value a user sent, use
-    `hmac.compare_digest(API_TOKEN.get_secret_value(), sent)`, which takes
-    the same time whatever the input. A `Secret` hashes like its
-    value, so it can be a dict key when the value can. `bool()` is the
-    truth value of the wrapped value, so `if token:` tells whether a token
-    is set. Copying or pickling a `Secret` keeps the value, so a pickle
-    still holds it in readable form.
+    A `Secret` never equals a plain value: `API_TOKEN == sent` is always
+    `False`. To check a value a user sent, use
+    `hmac.compare_digest(API_TOKEN.get_secret_value().encode(), sent.encode())`,
+    which takes the same time however much of the input matches. Compare
+    bytes, as here: `compare_digest` raises `TypeError` for text that is
+    not ASCII. Two secrets are equal when their
+    values are equal. When both values are `str` or `bytes`, they are
+    compared with `hmac.compare_digest` too; other values with `==`.
+
+    A `Secret` cannot be changed after it is created. It can be a dict key
+    when its value is hashable, and equal secrets hash alike. `bool()` is
+    the truth value of the wrapped value, so `if token:` tells whether a
+    token is set. Copying or pickling a `Secret` keeps the value, so a
+    pickle still holds it in readable form.
 
     Citry detects only values you wrap. A secret kept in a plain `str` is
     sent like any other string.
@@ -158,12 +182,26 @@ class Secret(Generic[T]):
         # Secret against a guessed string by accident.
         if not isinstance(other, Secret):
             return NotImplemented
-        return bool(self._secret_value == other._secret_value)
+        left: object = self._secret_value
+        right: object = other._secret_value
+        # `==` on text stops at the first differing character, so the time it
+        # takes tells an attacker how much of a guess was right.
+        # compare_digest takes the same time whatever matches, but accepts
+        # only ASCII text, so text is compared as its UTF-8 bytes. A lone
+        # surrogate cannot be encoded strictly, and "surrogatepass" keeps it
+        # from raising.
+        if type(left) is str and type(right) is str:
+            return hmac.compare_digest(left.encode("utf-8", "surrogatepass"), right.encode("utf-8", "surrogatepass"))
+        if type(left) is bytes and type(right) is bytes:
+            return hmac.compare_digest(left, right)
+        return bool(left == right)
 
     def __hash__(self) -> int:
         # Equal secrets hash alike; an unhashable value makes the Secret
-        # unhashable too, as a tuple holding it would be. The value is mixed
-        # with a tag because `hash(12345)` is 12345 itself.
+        # unhashable too, as a tuple holding it would be. A bare `hash()` of
+        # a small int is the int itself, so the tag keeps a printed hash from
+        # showing such a value as it is. It does not hide the value from
+        # anyone who can hash a guess the same way and compare.
         return hash(("citry.Secret", self._secret_value))
 
     def __bool__(self) -> bool:

@@ -53,12 +53,25 @@ _CUSTOM_PROPERTY_IN_CODE = re.compile(r"""["'`]--([A-Za-z0-9_-]+)["'`]|(?<![\w-]
 # A shorter name is too often a different, real class one letter away.
 _MIN_CLASS_TYPO_LENGTH = 3
 
-# `{{ ... }}` in a plain attribute, which Citry renders as typed.
+# Endings that turn one real class into another of the same family, keyed
+# by the letter the template leaves off and mapped to the letters it must
+# follow (empty means any): `tab` and `tabs`, `collapse` and `collapsed`,
+# `navbar-toggle` and `navbar-toggler`, `show` and `shown`. Only a missing
+# ending counts, so a doubled final letter, as in `buttonn`, and a dropped
+# letter elsewhere, as in `butto`, are still reported.
+_FAMILY_ENDINGS = {"s": "", "d": "e", "r": "e", "n": "ew"}
+
+# A first hyphen-separated part this short is usually a utility prefix, such
+# as `m`, `ml`, `p`, or `px` in `m-auto` and `px-4`, where the names one slip
+# away are real classes too.
+_MAX_UTILITY_PREFIX_LENGTH = 2
+
+# `{{ ... }}` in a plain attribute, which Citry renders exactly as written.
 # An unclosed `{{` runs to the end of the value.
 _WRITTEN_EXPRESSION = re.compile(r"\{\{.*?(?:\}\}|\Z)", re.DOTALL)
 
-# A `<style>` element's `type` or `lang` that names something other than CSS,
-# such as `lang="scss"`, which Citry cannot read.
+# The `<style>` `type` or `lang` values that mean CSS. Any other value, such
+# as `lang="scss"`, names a language Citry cannot read.
 _CSS_STYLE_TYPES = frozenset({"", "css", "text/css"})
 
 
@@ -144,7 +157,7 @@ def code_custom_properties(source: str) -> frozenset[str]:
 def lint_misspelled_css_classes(
     classes: Collection[TemplateClass],
     own: CssDeclarations,
-    declared: CssDeclarations,
+    declared: Callable[[], CssDeclarations],
     *,
     severity: Literal["ignore", "warning", "error"] = "warning",
 ) -> tuple[CssLintFinding, ...]:
@@ -156,16 +169,15 @@ def lint_misspelled_css_classes(
     not scoped, so any stylesheet, script, or test may use any class name.
     A class is therefore reported only when no CSS Citry reads declares it,
     and only when it is that close to one of the component's own selectors.
-    Two near misses are real, different classes too often to report: a slip
-    that moves, doubles, or drops a digit, such as ``col-1`` next to
-    ``col-12``, and a missing final ``s``, such as ``tab`` next to
-    ``tabs``.
+    Some near misses are real, different classes too often to report; see
+    ``_is_class_typo``.
 
     Args:
         classes: The classes in the template's static ``class`` attributes.
         own: What the component's own ``css`` or ``css_file`` declares.
-        declared: What every stylesheet Citry reads declares, ``own``
-            included.
+        declared: Returns what every stylesheet Citry reads declares, ``own``
+            included. Building that reads every component's stylesheets, so
+            it is called only once a class is close to one of ``own``.
         severity: ``rule_misspelled_css_class``.
 
     Returns:
@@ -174,13 +186,25 @@ def lint_misspelled_css_classes(
     """
     if severity == "ignore" or not own.classes:
         return ()
-    suggestions = sorted(own.classes)
+    # A slip changes the length by at most one, so each class is compared
+    # only with the selectors of its own length and the two next to it,
+    # not with every selector of a large stylesheet.
+    by_length: dict[int, list[str]] = {}
+    for name in sorted(own.classes):
+        by_length.setdefault(len(name), []).append(name)
     findings: list[CssLintFinding] = []
     for item in classes:
-        if len(item.name) < _MIN_CLASS_TYPO_LENGTH or declared.declares_class(item.name):
+        if len(item.name) < _MIN_CLASS_TYPO_LENGTH:
             continue
-        suggestion = next((name for name in suggestions if _is_class_typo(item.name, name)), None)
-        if suggestion is None:
+        nearby = (
+            name
+            for length in (len(item.name) - 1, len(item.name), len(item.name) + 1)
+            for name in by_length.get(length, ())
+        )
+        # The alphabetically first match is the suggestion, so the message
+        # does not depend on the order of a set.
+        suggestion = min((name for name in nearby if _is_class_typo(item.name, name)), default=None)
+        if suggestion is None or declared().declares_class(item.name):
             continue
         findings.append(
             CssLintFinding(
@@ -374,16 +398,50 @@ def _is_class_typo(written: str, expected: str) -> bool:
     """
     Return whether a template class is a typing slip of a class the component's CSS styles.
 
-    A slip that moves, doubles, or drops a digit, such as ``col-1`` for
-    ``col-12``, and a missing final ``s``, such as ``tab`` for ``tabs``,
-    usually name a different class of the same family, so they do not
-    count.
+    Three kinds of slip usually name a different class of the same family,
+    so they do not count:
+
+    - one that moves, doubles, or drops a digit, such as ``col-1`` for
+      ``col-12``;
+    - a missing final ``s``, or a missing final ``d`` or ``r`` after an
+      ``e``, or ``n`` after an ``e`` or ``w``, such as ``tab`` for
+      ``tabs``, ``collapse`` for ``collapsed``, ``navbar-toggle`` for
+      ``navbar-toggler``, or ``show`` for ``shown``;
+    - one inside a first hyphen-separated part of one or two characters,
+      such as ``p-4`` for ``px-4`` or ``m-auto`` for ``ml-auto``.
     """
     if not one_slip_from(written, expected):
         return False
     if _without_digits(written) == _without_digits(expected):
         return False
-    return expected != f"{written}s"
+    if _missing_family_ending(written, expected):
+        return False
+    return not _slip_in_short_prefix(written, expected)
+
+
+def _missing_family_ending(written: str, expected: str) -> bool:
+    """Return whether ``expected`` is ``written`` plus one of the family endings in ``_FAMILY_ENDINGS``."""
+    if len(expected) != len(written) + 1 or not expected.startswith(written) or not written:
+        return False
+    after = _FAMILY_ENDINGS.get(expected[-1])
+    return after is not None and (not after or written[-1] in after)
+
+
+def _slip_in_short_prefix(written: str, expected: str) -> bool:
+    """Return whether the slip falls in the first hyphen-separated part, and that part is short in both names."""
+    written_parts = written.split("-")
+    expected_parts = expected.split("-")
+    # A slip that adds or drops a hyphen changes the parts themselves, so it
+    # is not a slip inside one part.
+    if len(written_parts) != len(expected_parts) or len(written_parts) < 2:
+        return False
+    # Only the first part is a utility prefix; a short later part, as in
+    # `btn-lg` or `text-sm`, is a size whose slips are real typos.
+    return (
+        written_parts[1:] == expected_parts[1:]
+        and len(written_parts[0]) <= _MAX_UTILITY_PREFIX_LENGTH
+        and len(expected_parts[0]) <= _MAX_UTILITY_PREFIX_LENGTH
+    )
 
 
 def _without_digits(name: str) -> str:

@@ -39,7 +39,7 @@ from citry._diagnostic_catalog import (
     TEMPLATE_MARKER_NAME_INVALID,
     TEMPLATE_UNKNOWN_COMPONENT,
 )
-from citry._diagnostics import diagnostic_documentation_url, render_diagnostic
+from citry._diagnostics import diagnostic_definition, diagnostic_documentation_url, render_diagnostic
 from citry._html_attribute_values import ENUMERATED_VALUES as ENUMERATED_ATTRIBUTE_VALUES
 from citry._html_attribute_values import HTML_ELEMENTS as HTML_ELEMENT_NAMES
 from citry._i18n_directives import looks_like_i18n_binding
@@ -2382,7 +2382,7 @@ def _template_expression_block(
         # function typed from the payload makes TypeScript compare its
         # parameters, and the finding lands on the method name.
         prefix = (
-            f"{opening}\n/** @type {{(handler: (...payload: {listener.arguments}) => unknown) => void}} */ "
+            f"{opening}\n/** @type {{(handler: (...args: {listener.arguments}) => unknown) => void}} */ "
             f"var {_CHILD_LISTENER_HELPER};\n{_CHILD_LISTENER_HELPER}((\n"
         )
         suffix = "\n));\n"
@@ -11432,6 +11432,15 @@ def _js_data_type_diagnostics(
             if not root.wire_type.unsupported:
                 continue
             detail = "; ".join(root.wire_type.unsupported)
+            # A Secret fails the render rather than only losing its browser
+            # type, so it gets the message that says so, when the installed
+            # citry's catalog has it.
+            variant = (
+                "secret"
+                if SECRET_UNSUPPORTED_REASON in root.wire_type.unsupported
+                and "secret" in diagnostic_definition(JS_DATA_UNSUPPORTED_TYPE).messages
+                else "default"
+            )
             for location in _js_data_root_locations(root, open_documents):
                 path = file_uri_path(location.uri)
                 if path is None or path.resolve() != canonical:
@@ -11445,13 +11454,21 @@ def _js_data_type_diagnostics(
                 )
                 found[key] = types.Diagnostic(
                     location.range,
-                    render_diagnostic(JS_DATA_UNSUPPORTED_TYPE, name=root.name, detail=detail),
+                    render_diagnostic(JS_DATA_UNSUPPORTED_TYPE, variant=variant, name=root.name, detail=detail),
                     severity=types.DiagnosticSeverity.Warning,
                     code=JS_DATA_UNSUPPORTED_TYPE,
                     code_description=types.CodeDescription(diagnostic_documentation_url(JS_DATA_UNSUPPORTED_TYPE)),
                     source="citry",
                 )
     return tuple(found[key] for key in sorted(found))
+
+
+# The same text as `citry._json_wire.SECRET_NOT_SENT_REASON`, written out so
+# the editor keeps working with a citry release that predates it. A `Secret`
+# value's reason starts with "Secret ", and the js-data warning looks for that
+# reason to pick its Secret message.
+SECRET_NOT_SENT_REASON = "values are never sent to the browser; read the value on the server instead"  # noqa: S105
+SECRET_UNSUPPORTED_REASON = f"Secret {SECRET_NOT_SENT_REASON}"
 
 
 def _js_data_public_name_diagnostics(

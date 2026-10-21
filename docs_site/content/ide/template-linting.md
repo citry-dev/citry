@@ -54,7 +54,7 @@ them. There is no separate editor setting.
 | [`citry.browser.missing-form-field`](/ide/diagnostics/#citry.browser.missing-form-field) | A submitted form without a control for a field the handler requires | error |
 | [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A `var(--name)` that misspells a `css_data()` key | warning |
 | [`citry.css.misspelled-class`](/ide/diagnostics/#citry.css.misspelled-class) | A class one typo away from a class in the component's CSS, such as `bord` for `.board` | warning |
-| [`citry.css.undeclared-class`](/ide/diagnostics/#citry.css.undeclared-class) | A class that no component CSS declares | off |
+| [`citry.css.undeclared-class`](/ide/diagnostics/#citry.css.undeclared-class) | A class that no CSS read by Citry declares | off |
 | [`citry.css.undeclared-variable`](/ide/diagnostics/#citry.css.undeclared-variable) | A `var(--name)` that nothing sets | off |
 | [`citry.template.unknown-url`](/ide/diagnostics/#citry.template.unknown-url) | A link to a path your app has no page or file for | warning |
 
@@ -1065,7 +1065,8 @@ application.
 
 Each key that `css_data()` returns becomes a CSS custom property with the
 same name, such as `--accent` for the key `accent`. A typo in `var()` reads
-a property that nothing sets, so the browser ignores the declaration:
+a property that nothing sets, so the CSS property using it gets its
+inherited or initial value instead:
 
 ```citry
 class Board(Component):
@@ -1074,9 +1075,10 @@ class Board(Component):
 
     css = """
       h1 {
-        /* Warning: Nothing sets --acent, so the browser
-           ignores this declaration. Did you mean
-           --accent, from css_data()? */
+        /* Warning: Nothing sets --acent, so this
+           property gets its initial or inherited
+           value. Did you mean --accent, from
+           css_data()? */
         color: var(--acent);
       }
     """
@@ -1122,15 +1124,13 @@ The CSS that Citry reads is, for every component your app registers:
   language such as `lang="scss"`.
 
 Citry reports a class in a static `class` attribute, one written as plain
-text, when it is one typing slip from a class that the component's own
-`css` or `css_file` styles, and no CSS that Citry reads styles the class
-as written. A typing slip is two neighboring letters swapped, one letter
-typed twice, or one letter left out. A slip that moves, doubles, or
-drops a digit, such as
-`col-1` next to `.col-12`, and a missing final `s`, such as `tab` next to
-`.tabs`, usually name another class, so they are not reported. A `class`
-on a component tag is checked too: the component receives it as an input
-and usually puts it on one of its elements.
+text, when no CSS that Citry reads styles it and it is one typing slip
+from a class that the component's own `css` or `css_file` styles. A typing
+slip is two neighboring letters swapped, one letter typed twice, or one
+letter left out.
+
+A `class` on a component tag is checked too: the component receives it as
+an input and usually puts it on one of its elements.
 
 These are not checked:
 
@@ -1140,7 +1140,16 @@ These are not checked:
   changes;
 - a class shorter than three characters;
 - a class on a tag that renders no element of its own, such as `<c-if>`
-  or `<template>`.
+  or `<template>`;
+- a slip that usually names another class of the same family:
+    - a moved, doubled, or dropped digit, such as `col-1` next to
+      `.col-12`;
+    - a missing final `s`, such as `tab` next to `.tabs`, or a missing
+      final `d`, `r`, or `n` after an `e` (or `n` after a `w`), such as
+      `collapse` next to `.collapsed`, `navbar-toggle` next to
+      `.navbar-toggler`, or `show` next to `.shown`;
+    - a slip in a first part of one or two characters before a hyphen,
+      such as `p-4` next to `.px-4` or `m-auto` next to `.ml-auto`.
 
 The rule is a warning by default. Only `citry --app ... check` reports
 it; the editor does not. If a stylesheet that Citry does not read styles
@@ -1173,7 +1182,8 @@ reported again:
 <div class="card-header">Title</div>
 ```
 
-It skips the same classes as the misspelled class rule, except that it
+Like the misspelled class rule, it skips bound classes, the words inside
+`{{ }}`, and classes on tags that render no element. Unlike that rule, it
 also checks classes shorter than three characters. The editor does not
 run it.
 
@@ -1230,9 +1240,10 @@ class Card(Component):
     css = """
       .card {
         /* Warning: Nothing that Citry reads sets
-           --card-gap, so the browser ignores this
-           declaration unless a stylesheet or script
-           outside Citry sets it. */
+           --card-gap, so this property gets its
+           initial or inherited value unless a
+           stylesheet or script outside Citry
+           sets it. */
         padding: var(--card-gap);
       }
     """

@@ -53,3 +53,24 @@ class CacheKeyError(ValueError):
             f"Invalid render-cache key value at {path}: {reason}. Convert it to supported built-in values in "
             'Cache.vary() or <c-cache c-vary="...">.'
         )
+
+
+def _secret_cache_key_error(path: str) -> CacheKeyError:
+    """
+    Return the error for a ``citry.Secret`` that reached a render-cache key.
+
+    The generic advice, to convert the value to built-in values, would lead
+    an author to put ``get_secret_value()`` into the key, which makes the
+    key depend on the secret, so this message says to vary on something
+    else. It stays a plain ``CacheKeyError``, so the type the author sees
+    and catches is the documented one.
+    """
+    error = CacheKeyError(path, "a citry.Secret cannot be part of a render-cache key")
+    error.args = (
+        f"Invalid render-cache key value at {path}: {error.reason}, because anyone who can read the cache "
+        "could then test guesses of the secret against the key. Vary the cache on values that are not "
+        'secret, such as a user or tenant id, in Cache.vary() or <c-cache c-vary="...">. A cached component '
+        "without Cache.vary() is keyed on all of its kwargs, so give it a Cache.vary() or pass the secret to "
+        "a child component that is not cached.",
+    )
+    return error

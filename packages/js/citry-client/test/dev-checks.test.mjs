@@ -125,6 +125,189 @@ test("every branch of a browser-only condition in the served HTML is not a diffe
   assert.equal(differenceOf(served, browser), null);
 });
 
+test("same-tag branches of a browser-only condition pair by what is inside them", () => {
+  // The server writes both branches of `v-if`/`v-else` with the same wrapper tag and
+  // attributes, and the browser shows the second one. Each case pairs the browser's branch
+  // with its own served copy, so none of them is a difference.
+  const cases = [
+    // Text further down: <div v-if="wide"><b>Wide</b></div><div v-else><b>Narrow</b></div>
+    [
+      [
+        element("div", {}, [element("b", {}, [text("Wide")])]),
+        element("div", {}, [element("b", {}, [text("Narrow")])]),
+      ],
+      [comment("v-if"), element("div", {}, [element("b", {}, [text("Narrow")])])],
+    ],
+    // An attribute further down.
+    [
+      [
+        element("div", {}, [element("span", { class: "a" }, [text("x")])]),
+        element("div", {}, [element("span", { class: "b" }, [text("x")])]),
+      ],
+      [comment("v-if"), element("div", {}, [element("span", { class: "b" }, [text("x")])])],
+    ],
+    // A list in each branch.
+    [
+      [element("ul", {}, [element("li", {}, [text("A")])]), element("ul", {}, [element("li", {}, [text("B")])])],
+      [comment("v-if"), element("ul", {}, [element("li", {}, [text("B")])])],
+    ],
+    // Wrappers with the same class, and a button whose type differs in each branch.
+    [
+      [
+        element("div", { class: "panel" }, [element("button", { type: "button" }, [text("Log out")])]),
+        element("div", { class: "panel" }, [element("button", { type: "submit" }, [text("Log in")])]),
+      ],
+      [comment("v-if"), element("div", { class: "panel" }, [element("button", { type: "submit" }, [text("Log in")])])],
+    ],
+  ];
+  for (const [served, browser] of cases) assert.equal(differenceOf(served, browser), null);
+});
+
+test("a branch the browser changed before the first render is still a difference", () => {
+  // The server wrote one branch, and created() made the browser show the other.
+  const served = [element("div", {}, [element("b", {}, [text("Wide")])])];
+  const browser = [element("div", {}, [element("b", {}, [text("Narrow")])])];
+  const difference = differenceOf(served, browser);
+  assert.equal(difference.kind, "text");
+  assert.equal(difference.served, "Wide");
+  assert.equal(difference.browser, "Narrow");
+});
+
+test("a large nested shell stays fast and still finds a deep difference", () => {
+  // Three levels of same-tag elements, with one served-only element at each level, as the
+  // server writes for a browser-only v-if. Scoring every pair by its whole subtree would score
+  // millions of pairs; the shell's budget keeps the work near the size of the contents.
+  const size = 16;
+  const tree = (extra, leaf) =>
+    Array.from({ length: size + extra }, (_, outer) =>
+      element(
+        "section",
+        {},
+        Array.from({ length: size + extra }, (_, middle) =>
+          element(
+            "div",
+            {},
+            Array.from({ length: size + extra }, (_, inner) => element("span", {}, [text(leaf(outer, middle, inner))])),
+          ),
+        ),
+      ),
+    );
+  const same = (outer, middle, inner) => `${outer}-${middle}-${inner}`;
+  const started = Date.now();
+  assert.equal(differenceOf(tree(1, same), tree(0, same)), null);
+  // About a quarter of a second here; without the budget it takes over half a minute.
+  assert.ok(Date.now() - started < 5000);
+  const changed = (outer, middle, inner) =>
+    outer === 0 && middle === 0 && inner === 0 ? "changed" : same(outer, middle, inner);
+  // The served side has the same element count here, so the change cannot be a served-only
+  // branch and is reported.
+  const difference = differenceOf(tree(0, same), tree(0, changed));
+  assert.equal(difference.kind, "text");
+  assert.equal(difference.served, "0-0-0");
+  assert.equal(difference.browser, "changed");
+});
+
+test("whole-subtree scores stay within the budget when children never pair", () => {
+  // One served-only <div> makes every <div> pair a candidate for a whole-subtree score, and
+  // each such score pairs 150 by 150 children. The budget stops those scores early.
+  const divs = (count, tag) =>
+    Array.from({ length: count }, () =>
+      element(
+        "div",
+        {},
+        Array.from({ length: 150 }, () => element(tag)),
+      ),
+    );
+  const started = Date.now();
+  assert.equal(differenceOf(divs(61, "span"), divs(60, "b")), null);
+  // Well under a second here; without the budget it takes several seconds.
+  assert.ok(Date.now() - started < 2000);
+});
+
+test("a long table does not use up the budget that same-tag branches need", () => {
+  const table = () =>
+    element(
+      "table",
+      {},
+      Array.from({ length: 60 }, (_, row) =>
+        element(
+          "tr",
+          {},
+          Array.from({ length: 5 }, (_, cell) => element("td", {}, [text(`r${row}c${cell}`)])),
+        ),
+      ),
+    );
+  const served = [
+    table(),
+    element("div", {}, [element("b", {}, [text("Wide")])]),
+    element("div", {}, [element("b", {}, [text("Narrow")])]),
+  ];
+  const browser = [table(), element("div", {}, [element("b", {}, [text("Narrow")])])];
+  assert.equal(differenceOf(served, browser), null);
+});
+
+test("many similar cards before same-tag branches leave budget for the branches", () => {
+  // Cards that differ in their text are told apart by that text, without a full comparison
+  // of each pair, so 80 of them do not use up the shell's budget.
+  const card = (index) =>
+    element("div", { class: "card" }, [
+      element("h3", {}, [text(`T${index}`)]),
+      element("p", {}, [text(`body ${index}`)]),
+      element(
+        "ul",
+        {},
+        [0, 1, 2].map((item) => element("li", {}, [text(`${index}.${item}`)])),
+      ),
+    ]);
+  const cards = (extra) => [
+    ...Array.from({ length: 80 }, (_, index) => card(index)),
+    ...(extra ? [element("div", { class: "card" }, [element("b", {}, [text("Loading")])])] : []),
+  ];
+  const served = [
+    element("section", {}, cards(true)),
+    element("section", {}, [
+      element("div", {}, [element("b", {}, [text("Wide")])]),
+      element("div", {}, [element("b", {}, [text("Narrow")])]),
+    ]),
+  ];
+  const browser = [
+    element("section", {}, cards(false)),
+    element("section", {}, [comment("v-if"), element("div", {}, [element("b", {}, [text("Narrow")])])]),
+  ];
+  assert.equal(differenceOf(served, browser), null);
+});
+
+test("text compared inside whole-subtree scores counts against the budget", () => {
+  // Code blocks with many highlighted spans between text, beside one served-only block. The
+  // blocks hold the same text, so the cheap text check passes and every pair of blocks gets a
+  // full comparison, which compares hundreds of text runs.
+  const block = (index) =>
+    element("div", {}, [
+      element(
+        "pre",
+        {},
+        Array.from({ length: 210 }, (_, item) => [element("span", {}, [text(`t${item}`)]), text(` op${item} `)]).flat(),
+      ),
+    ]);
+  const started = Date.now();
+  const served = [...Array.from({ length: 20 }, (_, index) => block(index)), element("div", {}, [text("extra")])];
+  const browser = Array.from({ length: 20 }, (_, index) => block(index));
+  assert.equal(differenceOf(served, browser), null);
+  // About half a second here; charging nothing for the text took about ten seconds.
+  assert.ok(Date.now() - started < 5000);
+});
+
+test("a list that browser code reorders before the first render is a difference", () => {
+  // The rows' text sits below each row element, and both sides hold the same rows.
+  const row = (value) => element("li", {}, [element("span", {}, [text(value)])]);
+  const served = ["A", "B", "C", "D"].map(row);
+  const browser = ["B", "C", "D", "A"].map(row);
+  const difference = differenceOf(served, browser);
+  assert.equal(difference.kind, "text");
+  assert.equal(difference.served, "A");
+  assert.equal(difference.browser, "B");
+});
+
 test("text branches of a browser-only condition are not a difference", () => {
   // The browser's parser joins the two served branches into one text node.
   const servedJoined = [element("span", {}, [text("WideNarrow")])];
@@ -163,6 +346,23 @@ test("boolean attributes and values Vue sets as properties agree with the served
   assert.equal(differenceOf(served, browser).name, "value");
 });
 
+test("a value Vue holds only as a DOM property is named with that value", () => {
+  const served = [element("input", { type: "checkbox", checked: "" })];
+  const input = element("input", { type: "checkbox" });
+  input.checked = false;
+  const difference = differenceOf(served, [input]);
+  assert.equal(difference.name, "checked");
+  const message = devChecks().warningText("Form_1", difference);
+  assert.match(message, /the server sent checked="" and the browser shows the checked property as false\./);
+  const textInput = element("input");
+  textInput.value = "Grace";
+  const valueMessage = devChecks().warningText(
+    "Form_1",
+    differenceOf([element("input", { value: "Ada" })], [textInput]),
+  );
+  assert.match(valueMessage, /the server sent value="Ada" and the browser shows the value property as "Grace"\./);
+});
+
 test("data-allow-mismatch silences the kinds it names, as in Vue", () => {
   const served = () => [element("p", { title: "a" }, [element("time", {}, [text("10:00")])])];
   const browser = (allow) => [
@@ -190,7 +390,9 @@ test("the warning names the component, the difference, and the fix", () => {
     message,
     /On <button>, the server sent aria-expanded="false" and the browser shows aria-expanded="true"\./,
   );
-  assert.match(message, /mounted\(\)/);
+  // The advice fits both causes: state set too early, and a deliberate change.
+  assert.match(message, /set that state in mounted\(\) instead\./);
+  assert.match(message, /If the difference is deliberate, such as a mounted\(\) hook that edits the page, add /);
   assert.match(message, /data-allow-mismatch/);
 });
 

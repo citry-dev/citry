@@ -303,11 +303,10 @@ except for details a script might notice:
 
 ## First render warnings { #first-render-warnings }
 
-When a part of the page changes the moment Vue starts, such as a panel
-that opens on wide windows, the console usually says nothing. Vue builds
-that part in the browser (see
-[Browser-built parts](#parts-vue-builds-in-the-browser)), so it never
-compares it with the HTML the server sent.
+A part of the page can change the moment Vue starts, such as a panel
+that opens on wide windows. If that part is one Vue builds in the browser
+(see [Browser-built parts](#parts-vue-builds-in-the-browser)), Vue never
+compares it with the HTML the server sent, so the console says nothing.
 
 With `Citry(mode="development")`, Citry compares the two and logs a
 console warning that names the component and the first difference:
@@ -323,11 +322,11 @@ aria-expanded="true". ...
 The name is the component's class name with a short code that tells
 apart classes with the same name.
 
-The usual cause is browser code that changes state before Vue's first
+The usual cause is browser code that sets state before Vue's first
 render. Here `open` comes from `js_data()`, so the server rendered the
 panel closed:
 
-```javascript
+```js
 // Wrong: the first render already differs from the served HTML
 $component({
   created() {
@@ -339,7 +338,7 @@ $component({
 Change the state after the first render instead, so the page starts as
 served and then opens:
 
-```javascript
+```js
 // Right: the first render matches the served HTML
 $component({
   mounted() {
@@ -348,7 +347,7 @@ $component({
 });
 ```
 
-When the difference is intended, such as a clock that the browser
+When the difference is deliberate, such as a clock that the browser
 updates, add Vue's `data-allow-mismatch` attribute to the element. Leave
 it empty to accept every difference there, or list the kinds to accept:
 `text`, `children`, `class`, `style`, or `attribute`:
@@ -364,8 +363,8 @@ In a part Vue would otherwise adopt, the attribute makes Vue build the
 element's parent in the browser too, so that parent loses focus and typed
 text as Vue starts.
 
-The check runs only in development mode; a production page carries none
-of its code. What it compares:
+The check runs only in development mode; a production page does not
+load it. What it compares:
 
 - It compares only values the server also has, such as `js_data()` keys
   and values from Python. State that starts in `data()` or `setup()`
@@ -375,6 +374,12 @@ of its code. What it compares:
   browser shows differently. An element or text that only one side has
   is not reported, because the server leaves out what only the browser
   knows and sends every branch of a `v-if` that depends on browser state.
+  For the same reason, a row that browser code removes from a list, or
+  moves within it, before the first render may go unreported.
+- When both branches of a `v-if` that depends on browser state use the
+  same tag, and a browser-only `v-for` of that tag sits beside them, the
+  check can compare the wrong branch and warn. Give the two branches
+  different classes, and it compares them correctly.
 - It compares the first render only. State changed in `mounted()`, after
   an `await`, or by a later update is not compared. A change that a
   `mounted()` hook makes to the page directly, without going through

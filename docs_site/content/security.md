@@ -30,11 +30,12 @@ cannot change them silently, but it does not encrypt them. Fields listed in
 `State._model` (every public field, by default) can also be changed on
 purpose through `$state` and two-way `:c-*` bindings.
 
-Keep secrets out of State, because with the default storage visitors can
-read it. Citry refuses a value wrapped in
-[`Secret`](#keep-secrets-on-the-server) there, but not a secret kept in a
-plain string. Store a small record id instead, then load the record and
-check the current user's permission in every handler:
+Keep secrets out of State. A value wrapped in
+[`Secret`](#keep-secrets-on-the-server) makes the render fail, but a
+secret in a plain string goes into the page like any other value. Store
+a small record id instead, then
+load the record and check the current user's permission in every
+handler:
 
 ```citry
 class ProjectPanel(Component):
@@ -362,10 +363,10 @@ variables. Only the blocked accesses behave differently.
 
 ## Keep secrets server-side { #keep-secrets-on-the-server }
 
-Every value a component returns from `js_data()` or `css_data()`, and,
-with the default storage, every State value, ends up in the page or in
-files the page loads, where any visitor can read it. Wrap an API key,
-token, or password in [`Secret`][citry.Secret] where you load it:
+Visitors can read everything a component returns from `js_data()` or
+`css_data()`, and, with the default storage, its State: it ends up in the
+page or in files the page loads. Wrap an API key, token, or password in
+[`Secret`][citry.Secret] where you load it:
 
 ```python
 import os
@@ -377,9 +378,10 @@ API_TOKEN = Secret(os.environ["API_TOKEN"])
 
 Citry then refuses to send it to the browser: rendering fails with an
 error that names the component and the key. `citry --app ... check` also
-warns about a `Secret` it can see in `js_data()`, such as a module
-constant. Read the value on the server with `get_secret_value()` where
-you need it. In a template it shows as `***`.
+warns before the page runs when `js_data()` puts a module-level `Secret`
+in its result, such as `{"token": API_TOKEN}`. Read the value on the
+server with `get_secret_value()` where you need it. In a template it
+shows as `***`.
 
 Citry detects only the values you wrap. A secret kept in a plain string
 is sent like any other text. See

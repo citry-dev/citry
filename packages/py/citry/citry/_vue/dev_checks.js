@@ -4,9 +4,10 @@
  * The server sends this script only with Citry(mode="development"), and only on a page whose
  * served HTML Vue hydrates and that has at least one shell with served contents. A shell is an
  * element the server marks with data-allow-mismatch="children": Vue adopts the element itself
- * but builds its children in the browser, because the server cannot write them the way Vue
- * would. The runtime (`_vue/client.js`) removes the served children right before Vue hydrates,
- * so Vue never reports a difference there, not even in its own development build.
+ * (keeps the server's node) but builds its children in the browser, because the server cannot
+ * write them the way Vue would. The runtime (`_vue/client.js`) removes the served children right
+ * before Vue hydrates, so Vue never reports a difference there, not even in its own development
+ * build.
  *
  * This script compares what the server sent inside each shell with what Vue's first render
  * built there, and logs one console warning per shell that differs. The usual cause is browser
@@ -30,6 +31,14 @@
   // in order could pair the wrong two elements, so such a parent's elements are not compared.
   // Only very long lists reach it, not ordinary markup.
   const MAX_ALIGNMENT_CELLS = 40000;
+  // Scoring a pair of elements by their whole subtree compares the subtrees too. A shell spends
+  // at most this many steps on such scores: each score, the text it reads first, and the nodes
+  // and element pairs compared inside it. Past it, pairs score by their own attributes and text
+  // only, and two same-tag branches can pair the wrong way.
+  const MAX_SUBTREE_CELLS = 40000;
+  // Scores nest one level per element level, so very deep markup would run out of stack. Past
+  // this depth a score stops and the pair keeps its own attributes-and-text score.
+  const MAX_SUBTREE_DEPTH = 64;
   // Vue names a component it registers with `name`; Citry's runtime uses this prefix with the
   // component's type key (its class name plus a short code) when the author gave no name.
   const CITRY_NAME_PREFIX = "CitryComponent_";
@@ -153,6 +162,7 @@
 
   // Vue sets some attributes as DOM properties (an input's value, checked, selected, muted), and
   // the browser does not write those back as attributes. Compare the property instead.
+  const UNREFLECTED_PROPERTIES = new Set(["value", "checked", "selected", "muted"]);
   const propertyAgrees = (element, name, served) => {
     if (!(name in element)) return false;
     const value = element[name];
@@ -198,6 +208,11 @@
       if (browserValue === attribute.value) continue;
       if (browserValue === null && propertyAgrees(browser, attribute.localName, attribute.value)) continue;
       if (browserValue !== null && sameBooleanValue(name, attribute.value, browserValue)) continue;
+      // Vue sets these as DOM properties, which the browser never writes back as attributes, so
+      // "no checked" would misdescribe the page: name the property's value instead.
+      const property = attribute.localName;
+      if (browserValue === null && UNREFLECTED_PROPERTIES.has(property) && property in browser)
+        return {kind: "attribute", name, served: attribute.value, browser: browser[property], property: true};
       return {kind: "attribute", name, served: attribute.value, browser: browserValue};
     }
     return null;
@@ -208,71 +223,196 @@
   // of a script or noscript is not markup Vue renders.
   const OPAQUE_CHILDREN = new Set(["template", "textarea", "script", "noscript"]);
 
+  // Own attributes plus the text directly inside: what two elements show without looking at
+  // their child elements. Pairing uses it to rule a pair out cheaply, and on its own for a tag
+  // the served side has no more of than the browser, or once the shell's budget for
+  // whole-subtree scores is spent.
   const shallowDifference = (served, browser, boundary) =>
     attributeDifference(served, browser, boundary) ||
     (OPAQUE_CHILDREN.has(browser.localName) || allowedHere(browser, "text", boundary)
       ? null
       : textDifference(Array.from(served.childNodes), Array.from(browser.childNodes)));
 
-  // Pair served elements with browser elements of the same tag, keeping both orders, so the most
-  // pairs agree. The served side can hold extra elements (every branch of a condition only the
-  // browser can test) and the browser side can hold extra ones (a list only the browser knows),
-  // so an element left without a partner is not a difference.
-  const pairElements = (servedElements, browserElements, boundary) => {
-    const rows = servedElements.length, columns = browserElements.length;
-    if (rows === 0 || columns === 0) return [];
-    if (rows * columns > MAX_ALIGNMENT_CELLS) return [];
-    // A pair of the same tag scores 2, and 1 more when the two agree, so of two candidates the
-    // matching one wins, while a differing pair still beats leaving both elements unpaired.
-    const weight = (row, column) => {
-      const served = servedElements[row], browser = browserElements[column];
-      if (!sameTag(served, browser)) return 0;
-      return shallowDifference(served, browser, boundary) ? 2 : 3;
+  // One comparison of a shell's served contents with Vue's first render.
+  const createComparison = boundary => {
+    // The first difference between a served element and a browser element, subtree included,
+    // keyed by both elements. Pairing scores some candidate pairs with it (see pairElements),
+    // and the walk reuses those results instead of comparing the pair again.
+    const known = new Map();
+    // Each element's subtree text without whitespace, as one string and as its text pieces in
+    // order, read once per element.
+    const subtreeTexts = new Map();
+    const subtreeText = element => {
+      let value = subtreeTexts.get(element);
+      if (value === undefined) {
+        const pieces = [];
+        const stack = [element];
+        while (stack.length) {
+          const node = stack.pop();
+          if (isText(node)) {
+            const piece = withoutSpace(node.data);
+            if (piece) pieces.push(piece);
+          } else if (isElement(node) && !OPAQUE_CHILDREN.has(node.localName)) {
+            const children = node.childNodes;
+            for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
+          }
+        }
+        value = {whole: pieces.join(""), pieces};
+        subtreeTexts.set(element, value);
+        // Reading the text costs about one step per piece, paid once per element.
+        subtreeCellsLeft -= pieces.length;
+      }
+      return value;
     };
-    const score = Array.from({length: rows + 1}, () => new Array(columns + 1).fill(0));
-    for (let row = rows - 1; row >= 0; row--)
-      for (let column = columns - 1; column >= 0; column--) {
-        const paired = weight(row, column);
-        score[row][column] = Math.max(
-          score[row + 1][column],
-          score[row][column + 1],
-          paired ? paired + score[row + 1][column + 1] : 0,
-        );
+    // Whether two subtrees' text could agree, given that either side may hold text the other
+    // leaves out: the server writes every branch of a browser-only condition, and the browser
+    // shows text only it can compute. Most pairs that differ fail here, at a fraction of a full
+    // score's cost. It misses agreement only when both sides hold text the other lacks.
+    const textCouldAgree = (served, browser) => {
+      const servedText = subtreeText(served), browserText = subtreeText(browser);
+      return textAgrees(servedText.whole, browserText.pieces) || textAgrees(browserText.whole, servedText.pieces);
+    };
+    // What whole-subtree scores may still spend, in scores and element pairs; see
+    // MAX_SUBTREE_CELLS. `subtreeDepth` counts the scores in progress, so the pairs compared
+    // inside them are charged too.
+    let subtreeCellsLeft = MAX_SUBTREE_CELLS;
+    let subtreeDepth = 0;
+    // Thrown when a whole-subtree score runs past the budget; the score in progress then falls
+    // back to the pair's own attributes and text, and keeps nothing it had not finished.
+    const OUT_OF_BUDGET = {};
+
+    const elementDifference = (served, browser) => {
+      let row = known.get(served);
+      if (row === undefined) {
+        row = new Map();
+        known.set(served, row);
       }
-    const pairs = [];
-    let row = 0, column = 0;
-    while (row < rows && column < columns) {
-      const paired = weight(row, column);
-      if (paired && score[row][column] === paired + score[row + 1][column + 1]) {
-        pairs.push([servedElements[row++], browserElements[column++]]);
-      } else if (score[row][column] === score[row + 1][column]) {
-        row++;
-      } else {
-        column++;
+      if (row.has(browser)) return row.get(browser);
+      const own = attributeDifference(served, browser, boundary);
+      const difference = own
+        ? {...own, element: browser}
+        : OPAQUE_CHILDREN.has(browser.localName)
+          ? null
+          : childrenDifference(Array.from(served.childNodes), Array.from(browser.childNodes), browser);
+      row.set(browser, difference);
+      return difference;
+    };
+
+    // Pair served elements with browser elements of the same tag, keeping both orders, so the
+    // most pairs agree. The served side can hold extra elements (every branch of a condition
+    // only the browser can test) and the browser side can hold extra ones (a list only the
+    // browser knows), so an element left without a partner is not a difference.
+    const pairElements = (servedElements, browserElements) => {
+      const rows = servedElements.length, columns = browserElements.length;
+      if (rows === 0 || columns === 0) return [];
+      if (rows * columns > MAX_ALIGNMENT_CELLS) {
+        // Inside a score, a list this long is a cost the budget cannot pay.
+        if (subtreeDepth > 0) throw OUT_OF_BUDGET;
+        return [];
       }
-    }
-    return pairs;
+      if (subtreeDepth > 0) {
+        // Pairs compared inside a whole-subtree score are part of that score's cost.
+        subtreeCellsLeft -= rows * columns;
+        if (subtreeCellsLeft < 0) throw OUT_OF_BUDGET;
+      }
+      // Two branches of a browser-only v-if can share a tag and attributes and differ only
+      // further down, and the browser's branch must pair with its own served copy, not with the
+      // first one. That needs the whole subtree, but only for a tag the served side has more of.
+      // When the served side has no more of a tag than the browser, the pairing treats the
+      // elements as the same ones, possibly moved or changed, and scores them by their own
+      // attributes and text so such a change stays visible. Browser-only elements of the same
+      // tag can hide a served-only branch from this count, and then the branches can pair the
+      // wrong way.
+      const extra = new Set();
+      const counts = new Map();
+      for (const element of servedElements) {
+        const tag = element.namespaceURI + " " + element.localName;
+        counts.set(tag, (counts.get(tag) || 0) + 1);
+      }
+      for (const element of browserElements) {
+        const tag = element.namespaceURI + " " + element.localName;
+        counts.set(tag, (counts.get(tag) || 0) - 1);
+      }
+      for (const [tag, count] of counts) if (count > 0) extra.add(tag);
+      const differs = (served, browser) => {
+        // A difference in the pair's own attributes or text is also one in its subtree, and
+        // costs far less to find, so only a pair that agrees there may be compared further.
+        if (shallowDifference(served, browser, boundary) !== null) return true;
+        if (!extra.has(served.namespaceURI + " " + served.localName) || subtreeCellsLeft <= 0) return false;
+        if (subtreeDepth >= MAX_SUBTREE_DEPTH) return false;
+        subtreeCellsLeft--;
+        if (!textCouldAgree(served, browser)) return true;
+        if (subtreeCellsLeft <= 0) return false;
+        subtreeDepth++;
+        try {
+          return elementDifference(served, browser) !== null;
+        } catch (error) {
+          if (error !== OUT_OF_BUDGET) throw error;
+          // The own attributes and text agree, which is all a shallow score would read.
+          return false;
+        } finally {
+          subtreeDepth--;
+        }
+      };
+      // A pair of the same tag scores 2, and 1 more when the two agree, so of two candidates
+      // the agreeing one wins, while a differing pair still beats leaving both unpaired.
+      const weights = servedElements.map(served =>
+        browserElements.map(browser => (sameTag(served, browser) ? (differs(served, browser) ? 2 : 3) : 0)),
+      );
+      const score = Array.from({length: rows + 1}, () => new Array(columns + 1).fill(0));
+      for (let row = rows - 1; row >= 0; row--)
+        for (let column = columns - 1; column >= 0; column--) {
+          const paired = weights[row][column];
+          score[row][column] = Math.max(
+            score[row + 1][column],
+            score[row][column + 1],
+            paired ? paired + score[row + 1][column + 1] : 0,
+          );
+        }
+      const pairs = [];
+      let row = 0, column = 0;
+      while (row < rows && column < columns) {
+        const paired = weights[row][column];
+        if (paired && score[row][column] === paired + score[row + 1][column + 1]) {
+          pairs.push([servedElements[row++], browserElements[column++]]);
+        } else if (score[row][column] === score[row + 1][column]) {
+          row++;
+        } else {
+          column++;
+        }
+      }
+      return pairs;
+    };
+
+    // Find the first difference between served nodes and browser nodes under one parent, depth
+    // first, as {kind, name?, served, browser, element}. `element` is the browser element the
+    // difference belongs to (the parent, for a text difference).
+    const childrenDifference = (servedNodes, browserNodes, browserParent) => {
+      if (browserParent !== boundary && allowedHere(browserParent, "children", boundary)) return null;
+      if (subtreeDepth > 0) {
+        // Comparing the text runs inside a score is part of its cost, about one step per pair of
+        // nodes.
+        subtreeCellsLeft -= (servedNodes.length + 1) * (browserNodes.length + 1);
+        if (subtreeCellsLeft < 0) throw OUT_OF_BUDGET;
+      }
+      if (!allowedHere(browserParent, "text", boundary)) {
+        const text = textDifference(servedNodes, browserNodes);
+        if (text) return {...text, element: browserParent};
+      }
+      for (const [served, browser] of pairElements(servedNodes.filter(isElement), browserNodes.filter(isElement))) {
+        const difference = elementDifference(served, browser);
+        if (difference) return difference;
+      }
+      return null;
+    };
+
+    return childrenDifference;
   };
 
-  // Find the first difference between served nodes and browser nodes under one parent, depth
-  // first, as {kind, name?, served, browser, element}. `element` is the browser element the
-  // difference belongs to (the parent, for a text difference).
-  const childrenDifference = (servedNodes, browserNodes, browserParent, boundary) => {
-    if (browserParent !== boundary && allowedHere(browserParent, "children", boundary)) return null;
-    if (!allowedHere(browserParent, "text", boundary)) {
-      const text = textDifference(servedNodes, browserNodes);
-      if (text) return {...text, element: browserParent};
-    }
-    const pairs = pairElements(servedNodes.filter(isElement), browserNodes.filter(isElement), boundary);
-    for (const [served, browser] of pairs) {
-      const own = attributeDifference(served, browser, boundary);
-      if (own) return {...own, element: browser};
-      if (OPAQUE_CHILDREN.has(browser.localName)) continue;
-      const nested = childrenDifference(Array.from(served.childNodes), Array.from(browser.childNodes), browser, boundary);
-      if (nested) return nested;
-    }
-    return null;
-  };
+  // Compare the served nodes and browser nodes directly inside `browserParent`, within the
+  // shell `boundary`; see createComparison.
+  const childrenDifference = (servedNodes, browserNodes, browserParent, boundary) =>
+    createComparison(boundary)(servedNodes, browserNodes, browserParent);
 
   // Map each element Vue created to the vnode that created it, by walking the rendered vnode
   // tree from the host. The production build keeps `el`, `component`, `subTree` and `ctx` on
@@ -324,9 +464,13 @@
     if (difference.kind === "text")
       return "In " + where + ", the server sent the text " + quoted(difference.served) +
         " and the browser shows " + quoted(difference.browser) + ".";
+    const shown = difference.property
+      ? "the " + difference.name + " property as " + JSON.stringify(difference.browser)
+      : difference.browser === null
+        ? "no " + difference.name
+        : difference.name + "=" + quoted(difference.browser);
     return "On " + where + ", the server sent " + difference.name + "=" + quoted(difference.served) +
-      " and the browser shows " + (difference.browser === null ? "no " + difference.name : difference.name +
-      "=" + quoted(difference.browser)) + ".";
+      " and the browser shows " + shown + ".";
   };
 
   // The data-allow-mismatch value that accepts exactly this kind of difference.
@@ -335,11 +479,14 @@
 
   const warningText = (component, difference) =>
     "[Citry] " + component + ": Vue's first render in the browser differs from the HTML the server sent, " +
-    "so the page changes as Vue starts. " + describeDifference(difference) + " This usually means browser " +
-    "code changed state before the first render, such as created() reading window.matchMedia: set that " +
-    "state in mounted() instead. If the difference is intended, add data-allow-mismatch=\"" +
-    allowValue(difference) + "\" to " + describeElement(difference.element) + ". Citry runs this check " +
-    "only with Citry(mode=\"development\").";
+    "so the page changes as Vue starts. " + describeDifference(difference) + " The usual cause is browser " +
+    "code that sets state before the first render, such as created() reading window.matchMedia: set that " +
+    "state in mounted() instead. " +
+    // The check cannot tell that cause from a deliberate change, such as a mounted() hook that edits
+    // the page directly, so the advice names both.
+    "If the difference is deliberate, such as a mounted() hook that edits the page, add " +
+    "data-allow-mismatch=\"" + allowValue(difference) + "\" to " + describeElement(difference.element) +
+    ". Citry runs this check only with Citry(mode=\"development\").";
 
   // Keep each shell's served children before the runtime removes them. Called by the runtime in
   // the same task as the mount, so the page cannot change in between.

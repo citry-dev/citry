@@ -70,8 +70,10 @@
   `build_inferred_template_shadow()`, keyed by the `slot_target` that
   `TemplatePythonControl` now records.
 - With your application loaded, `citry check` now warns when `js_data()`
-  sends a module constant that JSON cannot carry, such as a
-  `PurePosixPath`.
+  sends a module-level value that JSON cannot carry, such as a
+  `PurePosixPath`, also inside a dict or list, unpacked with `*`, in
+  either branch of a conditional expression, inside `Const(...)`, or read
+  as a stored attribute such as `settings.API_TOKEN`.
 - `Citry.inspect_components()` now says, for each Events handler, whether
   an argument key the data class does not declare fails the call
   (`extra_fields`) and whether Citry or Pydantic checks the values
@@ -90,26 +92,20 @@
   [props and events guide](https://citry.dev/vue/props-and-events/) shows
   how to type an event's values so both the child's `$emit` and the
   parent's method are checked.
-- When a page that uses Vue fails because a repeated component has no
-  `#c-key`, or two repetitions share one, the error now names the
-  component tag, its template and line, the repeated value, and the fix.
-  For nested loops it says to combine the loop values into one key.
-- When `v-model` sits on an element that holds no value, such as `<div>`
-  or `<form>`, the render error now names each such element with its
-  template and line, and lists the elements `v-model` works on, instead
-  of an internal Vue compiler message.
 - You can now wrap a server-only value, such as an API token, in
-  `citry.Secret` (`API_TOKEN = Secret(os.environ["API_TOKEN"])`,
-  annotated `Secret[str]`), and Citry refuses to send it to the browser.
-  Rendering fails with an error naming the component and key when
-  `js_data()`, `css_data()`, or State holds one, `citry check` warns about
-  one in `js_data()`, and a template shows it as `***`
+  `citry.Secret`, and Citry refuses to send it to the browser: rendering
+  fails with an error naming the component and key when `js_data()`,
+  `css_data()`, or State holds one, `citry check` warns about one in
+  `js_data()`, and a template shows it as `***`. Annotate a field as
+  `Secret[str]` to reject a plain string. A cached component cannot take
+  a `Secret` input unless its `Cache.vary()` leaves the secret out
   ([details](https://citry.dev/vue/component-options/#keep-tokens-off-the-page)).
-- With your application loaded, `citry check` now warns about a class
-  that misspells one the component's CSS styles, such as `class="bord"`
-  when the CSS styles `.board`, which otherwise renders unstyled with no
-  error (`rule_misspelled_css_class`).
-- Two stricter CSS checks are available, off by default:
+- With your application loaded, `citry check` now warns when a template
+  class misspells one the component's CSS styles, such as `class="bord"`
+  for `.board`; such an element renders unstyled with no error
+  (`rule_misspelled_css_class`,
+  [details](https://citry.dev/ide/template-linting/#find-misspelled-css-classes)).
+- You can now turn on two stricter CSS checks, off by default:
   `rule_undeclared_css_class` reports every template class that no CSS
   Citry reads declares, and `rule_undeclared_css_variable` reports every
   `var(--name)` without a fallback that nothing sets. Turn them on in
@@ -122,7 +118,7 @@
 - With `Citry(mode="development")`, the browser console now warns when
   Vue's first render of a part it builds in the browser differs from the
   HTML the server sent, for example a `created()` hook that opens a panel
-  on wide windows. Production pages carry none of this check's code
+  on wide windows. A production page does not load the check
   ([details](https://citry.dev/vue/server-rendering/#first-render-warnings)).
 
 ### Changed
@@ -169,8 +165,14 @@
   or the prop's own name. They also check both results of a condition
   whose results are literals.
 - The render error for a component that `<c-for>` repeats without
-  `#c-key`, or with a duplicate one, now names the tag, its template, and
-  the line.
+  `#c-key`, or with a duplicate one, now names the tag, its template and
+  line, and the repeated value, and says to combine the loop values into
+  one key when loops are nested. An element whose `#c-key` clashes with
+  another key now names its template, line and column.
+- The render error for `v-model` on an element that holds no value, such
+  as `<div>` or `<form>`, now names each such element with its template
+  and line and lists the elements `v-model` works on, instead of an
+  internal Vue compiler message.
 - A form submitted through `@c-submit` now gives the handler the same
   values as the same form posted without JavaScript: text such as `"3"`
   fills an `int` or `float` field, a checked checkbox fills a `bool`
@@ -178,9 +180,6 @@
   and range inputs now send their text, so a handler that reads
   `event.args` directly, or a Pydantic model in strict mode, gets `"3"`
   instead of `3`, as it already did without JavaScript.
-- With your application loaded, `citry check` now also reports a module
-  constant that `js_data()` writes inside a dict or list, such as
-  `{"auth": {"token": TOKEN}}`, when its value cannot be sent as JSON.
 
 ### Fixes
 
@@ -202,6 +201,9 @@
 - On Python 3.10, a browser update to an Events `State` field annotated as
   a parameterized container, such as `tuple[str, ...]` or `set[str]`, no
   longer fails with a server error.
+- A `security_csp="warn"` or `security_javascript="warn"` warning now
+  points at the line in your code that turned the page into HTML, not at
+  a line inside Citry.
 
 ## v0.6.0
 

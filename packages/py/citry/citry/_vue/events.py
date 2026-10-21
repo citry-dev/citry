@@ -12,6 +12,7 @@ from threading import Lock
 from typing import TYPE_CHECKING, TypedDict, cast
 from weakref import WeakKeyDictionary, ref
 
+from citry._browser_expressions import _nested_template
 from citry._markup_lint import find_invalid_model_targets
 from citry._vue.capture import render_prepared_direct, render_prepared_marker_replacement
 from citry._vue.compiler import HELPER_CONTRACT, CompiledRender, NativeCompiler, VueCompilerDiagnosticsError
@@ -25,7 +26,7 @@ from citry.component import Component, ComponentMeta
 from citry.component_registry import NotRegistered
 from citry.ext.dependencies.scripts import uses_component
 from citry.ext.events.emission import EXTRA_KEY, EventInstanceEntry, build_events_manifest
-from citry_core.template_parser import ParseOptions, TemplateElement, parse_template
+from citry_core.template_parser import HtmlAttrKind, ParseOptions, TemplateElement, parse_template
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -1136,10 +1137,7 @@ def _model_target_message(assembly: Assembly, definition_id: str, error: VueComp
     names fails whenever it renders. When it finds nothing, the message names
     the component and keeps the compiler's text.
     """
-    definition = next((item for item in assembly.view.definitions if item.id == definition_id), None)
-    type_keys = assembly.definition_template_types.get(definition_id) or (
-        (definition.type_key,) if definition is not None else ()
-    )
+    type_keys = assembly.template_types(definition_id)
     classes: list[type[Component]] = []
     for type_key in type_keys:
         if assembly.component_for_type is None:
@@ -1179,6 +1177,11 @@ def _model_target_message(assembly: Assembly, definition_id: str, error: VueComp
     # author meets them one render at a time.
     other_codes = sorted(error.codes() - {_MODEL_HELPER_MISMATCH})
     if not locations:
+        # Reached when the search cannot see the v-model. One known case: a
+        # template-valued attribute written without the `<>...</>` wrapper,
+        # such as c-body="<b>Hi</b> <div v-model='q'></div>", still renders
+        # as a template, but the search (like rule_invalid_model_target)
+        # only reads a value wrapped in `<>...</>`, so it names no element.
         where = f" (template {owner_origin})" if owner_origin else ""
         return (
             f"Vue could not compile {owner_label}{where}: a v-model in it is on an element or component that"
@@ -1218,7 +1221,13 @@ def _with_simple_callees(classes: list[type[Component]]) -> list[type[Component]
 
 
 def _component_tags(template: Template) -> list[str]:
-    """Return every ``<c-*>`` tag name in a parsed template, including inside element bodies."""
+    """
+    Return every ``<c-*>`` tag name in a parsed template.
+
+    The search reaches into element bodies and into template-valued
+    attributes such as ``c-body="<>...</>"``, whose HTML renders into the
+    same Vue template as the element's own.
+    """
     tags: list[str] = []
     pending = [template]
     while pending:
@@ -1230,6 +1239,15 @@ def _component_tags(template: Template) -> list[str]:
             tag = node.start_tag.name.content
             if tag.lower().startswith("c-"):
                 tags.append(tag)
+            for attr in node.start_tag.attrs:
+                inner = attr.inner_value
+                if attr.kind != HtmlAttrKind.Template or inner is None:
+                    continue
+                # Read the value the way `citry check` does, so this search
+                # and the rule that names the v-model see the same templates.
+                nested = _nested_template(inner.content, parse_template)
+                if nested is not None:
+                    pending.append(nested[0])
             body = getattr(node, "body", None)
             if body is not None:
                 pending.append(body)

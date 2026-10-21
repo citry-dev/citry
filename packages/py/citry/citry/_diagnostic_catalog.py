@@ -846,16 +846,20 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                         'component tag, holds a class of three or more characters that is one typing '
                                         "slip from a class selector in the component's own css or css_file: two "
                                         'neighboring letters swapped, one letter typed twice, or one letter left out. '
-                                        'A slip that moves, doubles, or drops a digit, such as col-1 for col-12, and a '
-                                        'missing final s, such as tab for tabs, do not count. The class is reported '
-                                        'only when no CSS that Citry reads declares it: no selector in a registered '
-                                        "component's css, css_file, inline or local-file Dependencies stylesheet, or "
-                                        'template <style> element that holds CSS names it, and no attribute selector '
-                                        'such as [class^="btn-"] matches it. Bound classes, such as :class, '
-                                        'v-bind:class, and c-class, words inside {{ }} in a class attribute, and '
-                                        'classes on tags that render no element, such as c-if or template, are not '
-                                        'checked. citry check needs your application for this rule; the editor does '
-                                        'not run it.'},
+                                        'Three kinds of slip usually name another class of the same family, so they do '
+                                        'not count: one that moves, doubles, or drops a digit, such as col-1 for '
+                                        'col-12; a missing final s, or a missing final d or r after an e, or n after '
+                                        'an e or w, such as tab for tabs, collapse for collapsed, navbar-toggle for '
+                                        'navbar-toggler, or show for shown; and one inside a first hyphen-separated '
+                                        'part of one or two characters, such as p-4 for px-4 or m-auto for ml-auto. '
+                                        'The class is reported only when no CSS that Citry reads declares it: no '
+                                        "selector in a registered component's css, css_file, inline or local-file "
+                                        'Dependencies stylesheet, or template <style> element that holds CSS names it, '
+                                        'and no attribute selector such as [class^="btn-"] matches it. Bound classes, '
+                                        'such as :class, v-bind:class, and c-class, words inside {{ }} in a class '
+                                        'attribute, and classes on tags that render no element, such as c-if or '
+                                        'template, are not checked. citry check needs your application for this rule; '
+                                        'the editor does not run it.'},
  'citry.css.misspelled-variable': {'code': 'citry.css.misspelled-variable',
                                    'configurableSeverity': True,
                                    'constant': 'CSS_MISSPELLED_VARIABLE',
@@ -867,15 +871,15 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                    'fix': "Use the key's exact name. If another stylesheet sets this property on "
                                           'purpose, add a fallback, as in var(--name, inherit), or set '
                                           'rule_misspelled_css_variable to "ignore" for this component.',
-                                   'messages': {'default': 'Nothing sets --{name}, so the browser ignores this '
-                                                           'declaration. Did you mean --{suggestion}, from '
+                                   'messages': {'default': 'Nothing sets --{name}, so this property gets its initial '
+                                                           'or inherited value. Did you mean --{suggestion}, from '
                                                            'css_data()?'},
                                    'parameters': {'name': 'The custom property as written, without the leading --.',
                                                   'suggestion': 'The css_data() key one typing slip away.'},
                                    'summary': "A component's CSS reads a custom property that is one typing slip from "
                                               'a key its css_data() returns, such as var(--acent) for accent. Nothing '
-                                              'sets that property, so the browser ignores the declaration: the '
-                                              'property inherits from the parent element or takes its initial value.',
+                                              'sets that property, so the CSS property that reads it gets its '
+                                              'inherited or initial value.',
                                    'surfaces': ['check'],
                                    'title': 'Misspelled css_data() variable',
                                    'when': "A var(--name) in the component's own css or css_file has no fallback "
@@ -930,13 +934,14 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                           'var(--name, 1rem), or, for a component that reads properties a stylesheet '
                                           'outside Citry sets, set rule_undeclared_css_variable to "ignore" in its '
                                           'Lint class.',
-                                   'messages': {'default': 'Nothing that Citry reads sets --{name}, so the browser '
-                                                           'ignores this declaration unless a stylesheet or script '
-                                                           'outside Citry sets it.'},
+                                   'messages': {'default': 'Nothing that Citry reads sets --{name}, so this property '
+                                                           'gets its initial or inherited value unless a stylesheet or '
+                                                           'script outside Citry sets it.'},
                                    'parameters': {'name': 'The custom property as written, without the leading --.'},
                                    'summary': "A component's CSS reads a custom property with var(--name) and no "
                                               'fallback, and nothing that Citry reads sets it. Unless a stylesheet or '
-                                              'script outside Citry sets it, the browser ignores the declaration.',
+                                              'script outside Citry sets it, the CSS property that reads it gets its '
+                                              'inherited or initial value.',
                                    'surfaces': ['check'],
                                    'title': 'Custom property that nothing sets',
                                    'when': 'The rule is off by default, because it also reports properties that a site '
@@ -1284,25 +1289,35 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                            'match. For a Secret, read its value on the server with get_secret_value() '
                                            'where you need it, and leave it out of js_data().',
                                     'messages': {'default': "JsData field '{name}' is not a clean JSON value: "
-                                                            '{detail}. Browser tooling will treat its type as '
-                                                            'unknown.'},
+                                                            '{detail}. Browser tooling will treat its type as unknown.',
+                                                 'secret': "JsData field '{name}' would send a citry.Secret to the "
+                                                           'browser: {detail}. Rendering raises TypeError whenever the '
+                                                           'value is a Secret.'},
                                     'parameters': {'detail': 'Why the value is not a clean JSON type.',
                                                    'name': 'JsData field name.'},
                                     'summary': 'A JsData field has a type that cannot be sent to the browser as JSON, '
-                                               'such as a set or a date. Editor help treats the value as any.',
+                                               'such as a set or a date. Editor help treats the value as any. A '
+                                               'citry.Secret is reported too, because rendering refuses to send one.',
                                     'surfaces': ['check', 'lsp'],
                                     'title': 'JsData field is not a JSON type',
                                     'when': 'A declared or inferred JsData field has a type that strict JSON cannot '
                                             'carry, such as bytes, a set, a callable, a date or time, or a whole class '
                                             'instance. A citry.Secret counts too: Citry never sends one to the '
                                             'browser, and rendering the component raises TypeError. With your '
-                                            'application loaded, citry check also reads a module constant that '
-                                            'js_data() returns by name, such as API_BASE or a SECRET_TOKEN = '
-                                            'Secret(...), and reports it when its value is not JSON. The editor and '
-                                            'citry check --types also report a value that ty, the Python type checker '
-                                            'Citry runs, types as a standard library type JSON cannot carry, such as '
-                                            'PurePosixPath, datetime, Decimal, UUID, a set, or complex, or as a '
-                                            'Secret.'},
+                                            'application loaded, citry check also reads a module-level value that '
+                                            'js_data() puts in its result, such as {"token": API_TOKEN} for API_TOKEN '
+                                            '= Secret(...), and reports it when its value is not JSON. It reads such a '
+                                            'value when it is the whole result, a value or item of a dict, list, or '
+                                            'tuple literal in it, a name unpacked into a list such as [*TOKENS], '
+                                            'either branch of a conditional expression, or the argument of Const(...); '
+                                            'the value may be an attribute of a module-level name, such as '
+                                            'settings.API_TOKEN, when reading it runs no code: a property, or an '
+                                            "object with a __getattr__ hook such as Django's lazy settings, is not "
+                                            'read. Without --types, a value that a call computes, such as get_token(), '
+                                            'is not read. The editor and citry check --types also report a value that '
+                                            'ty, the Python type checker Citry runs, types as a standard library type '
+                                            'JSON cannot carry, such as PurePosixPath, datetime, Decimal, UUID, a set, '
+                                            'or complex, or as a Secret.'},
  'citry.parse.configuration': {'code': 'citry.parse.configuration',
                                'constant': 'PARSE_CONFIGURATION',
                                'defaultSeverity': 'error',

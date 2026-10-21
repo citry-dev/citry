@@ -32,7 +32,8 @@ from typing import TYPE_CHECKING
 
 from citry.constness import const_value
 from citry.ext.dependencies.types import Script, ScriptType, Style
-from citry.util.css import serialize_css_var_value, validate_css_var_name
+from citry.secret import Secret
+from citry.util.css import SECRET_IN_CSS_DATA_REASON, serialize_css_var_value, validate_css_var_name
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -758,10 +759,34 @@ def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCaptur
     )
 
 
+def _reject_secret_css_data(comp_cls: type[Component], css_data: Mapping[str, object]) -> None:
+    """
+    Raise when a ``css_data()`` value is a ``citry.Secret``, whether or not the component has CSS.
+
+    A component without CSS never builds the stylesheet that would refuse
+    the value, so without this check the same mistake would fail only once
+    CSS is added. The caller skips it when ``css_data()`` returned nothing,
+    so most renders pay nothing.
+
+    Raises:
+        ValueError: When an entry holds a ``Secret``, naming the component
+            by its class name, as the ``js_data()`` and State errors do,
+            and the entry.
+
+    """
+    for name, value in css_data.items():
+        if type(const_value(value)) is Secret:
+            msg = f"Component {comp_cls.__name__}: css_data() entry {name!r} {SECRET_IN_CSS_DATA_REASON}"
+            raise ValueError(msg)
+
+
 def _cache_component_css_vars_capture(
     comp_cls: type[Component],
     css_data: Mapping[str, object],
 ) -> _VariablesScriptCapture | None:
+    # Checked before the early return below, so a Secret fails the render
+    # whether or not the component has CSS to read it.
+    _reject_secret_css_data(comp_cls, css_data)
     if not has_component_asset("css", comp_cls):
         return None
     # JSON encoding rejects non-finite numbers before the canonical capture can

@@ -250,8 +250,9 @@ class TestElementIgnore:
         with pytest.raises(UnsupportedPreparedView) as excinfo:
             _assemble(Page())
         message = str(excinfo.value)
-        assert message.startswith(
-            "'#c-ignore' on the <div> element that starts at line 1, column 1, keeps the element's contents"
+        assert re.match(
+            r"'#c-ignore' on the <div> element in template \S+::Page, line 1, column 1, keeps the element's contents",
+            message,
         )
         assert "cannot hold the component Kid." in message
         assert "Move it outside the <div> element." in message

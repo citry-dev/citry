@@ -395,9 +395,10 @@ Both `this.labels` and `this.upper` are `string[]`. These types can take a
 moment to appear after you open or save a file. A value that ty types as a
 class or as `Any`, or cannot type, stays `any`. A value that ty types as a
 standard library type that JSON cannot carry, such as a `PurePosixPath`, a
-`datetime`, or a set, or as a [`Secret`][citry.Secret], alone or inside a
-list or dict, gets the `citry.js-data.unsupported-type` warning described
-next, and `citry check --types` reports it too.
+`datetime`, or a set, gets the `citry.js-data.unsupported-type` warning
+described next, and `citry check --types` reports it too. So does a value
+that ty types as a [`Secret`][citry.Secret], or as a list or dict that
+holds one, because rendering the component would fail.
 
 Returning a whole class instance, such as `kwargs.task`, is a
 [`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)
@@ -505,8 +506,9 @@ A listener that names a parent method without calling it, such as
 `@drop-task="move"`, is checked too, because Vue calls the method with the
 emitted values. TypeScript reports a method that needs more values than the
 child sends, or a parameter of an unrelated type, such as a number where
-the child sends a string. A method with no typed parameters, a `null`
-validator, and a child whose `emits` is an array are not checked. See
+the child sends a string. A method with no typed parameters, an event
+declared with `null` in place of the function, as in `hide: null`, and a
+declared event of a child whose `emits` is an array are not checked. See
 [Catch payload mistakes](/vue/props-and-events/#catch-payload-mistakes)
 for the full rules.
 
@@ -852,8 +854,10 @@ are not checked.
 A listener for an event the child does not declare gets the DOM event of
 that name as `$event`, because Vue then passes the listener to the child's
 root element. A listener that names a method without calling it, such as
-`@click="select"`, is checked against that DOM event too. When the child lists its events as an
-array, or Citry cannot read its `emits`, `$event` is `any`.
+`@click="select"`, is checked against that DOM event too. This holds even
+when the child lists its events as an array. For a declared event of a
+child whose `emits` is an array, or any event of a child whose `emits`
+Citry cannot read, `$event` is `any`.
 
 ### Typing inside `data()`
 

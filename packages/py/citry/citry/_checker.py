@@ -12,6 +12,7 @@ import textwrap
 import tokenize
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import GetSetDescriptorType, MappingProxyType, MemberDescriptorType, ModuleType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message
@@ -69,6 +70,7 @@ from citry._diagnostic_catalog import (
 from citry._diagnostics import render_diagnostic
 from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._inline_assets import normalize_inline_asset
+from citry._json_wire import SECRET_UNSUPPORTED_REASON
 from citry._linting import _component_lint_info
 from citry._markup_lint import MARKUP_LINT_RULES
 from citry._path_checks import PathVerdict, check_paths, has_path_checkers, is_citry_path
@@ -157,6 +159,7 @@ from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
 from citry.component import Component
 from citry.component_registry import NotRegistered
+from citry.constness import Const
 from citry.ext.dependencies.types import Style
 from citry.ext.events.csrf import csrf_field_names
 from citry.ext.events.extension import _component_events_info
@@ -176,7 +179,7 @@ from citry_core.template_parser import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
 
     from citry.citry import Citry
     from citry.ext.i18n.extension import I18nExtension
@@ -2403,14 +2406,18 @@ def _css_class_findings(
         for component in misspelled_owners:
             own = own.merged(known_css.own(component))
         misspelled_severities = {lints[component].rule_misspelled_css_class for component in misspelled_owners}
+        # Gathering every stylesheet Citry reads calls each component's
+        # get_dependencies() and reads its files. The rule is on by default
+        # and most templates have no near miss, so it is gathered only once
+        # a class is one slip from the component's own CSS.
         class_findings: list[CssLintFinding] = list(
             lint_misspelled_css_classes(
                 used.classes,
                 own,
-                known_css.declared(),
+                known_css.declared,
                 severity="error" if "error" in misspelled_severities else "warning",
             )
-            if misspelled_owners
+            if own.classes
             else ()
         )
         if undeclared_active:
@@ -2594,6 +2601,7 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
                     origin=f"{_class_label(component)}.JsData.{field.name}",
                     message=render_diagnostic(
                         JS_DATA_UNSUPPORTED_TYPE,
+                        variant="secret" if SECRET_UNSUPPORTED_REASON in wire_type.unsupported else "default",
                         name=field.name,
                         detail="; ".join(wire_type.unsupported),
                     ),
@@ -2642,20 +2650,21 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
             for value in values
         ]
         issues = tuple(dict.fromkeys(issue for item in wire_types for issue in item.unsupported))
+        holds_secret = SECRET_UNSUPPORTED_REASON in issues
         if not issues:
             # A bare module-level name, such as `API_BASE`, has no type in
             # the source, but the loaded module holds the value js_data()
             # sends, so the browser's own JSON check can run on it. The same
             # holds for a name written inside a dict or list literal, such as
             # `{"config": {"token": SECRET_TOKEN}}`.
-            issues = tuple(
-                dict.fromkeys(
-                    issue
-                    for value in values
-                    for name in _names_sent_as_written(value)
-                    if (issue := module_values(name)) is not None
-                )
-            )
+            module_issues = [
+                issue
+                for value in values
+                for sent in _names_sent_as_written(value)
+                if (issue := module_values(sent)) is not None
+            ]
+            issues = tuple(dict.fromkeys(issue.detail for issue in module_issues))
+            holds_secret = any(issue.secret for issue in module_issues)
         if not issues:
             continue
         definition = root.definitions[-1]
@@ -2664,6 +2673,9 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
                 origin=f"{source_file} ({_class_label(component)}.js_data)",
                 message=render_diagnostic(
                     JS_DATA_UNSUPPORTED_TYPE,
+                    # Rendering raises for a Secret, so the message says that
+                    # rather than that only editor typing degrades.
+                    variant="secret" if holds_secret else "default",
                     name=root.name,
                     detail="; ".join(issues),
                 ),
@@ -2675,40 +2687,154 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
     return findings
 
 
-def _names_sent_as_written(value_source: str) -> list[str]:
+@dataclass(frozen=True, slots=True)
+class _SentName:
     """
-    Return the bare names whose values a `js_data()` value sends unchanged.
+    A module-level name whose value `js_data()` sends unchanged.
 
-    That is the value itself when it is a name, and each name that is a
-    whole item of a dict, list, or tuple literal inside it. A name used any
-    other way, such as `len(TOKEN.get_secret_value())`, is left out,
-    because the browser receives what the expression computes, not the
-    name's value.
+    Attributes:
+        path: The name and the attributes read from it, such as
+            `("settings", "API_TOKEN")` for `settings.API_TOKEN`.
+        starred: Whether the value is unpacked into a list, as in
+            `[*TOKENS]`, so its items are sent rather than the value itself.
+        wrappers: The callee of each `Const(...)` call around the value,
+            written the same way as `path`. The value counts only when each
+            one is Citry's `Const`, which sends what it wraps unchanged.
+
+    """
+
+    path: tuple[str, ...]
+    starred: bool = False
+    wrappers: tuple[tuple[str, ...], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _ModuleValueIssue:
+    """Why a module-level value that `js_data()` sends cannot reach the browser."""
+
+    detail: str
+    # Rendering raises TypeError for a Secret, which the message then says.
+    secret: bool
+
+
+def _names_sent_as_written(value_source: str) -> list[_SentName]:
+    """
+    Return the module-level names whose values a `js_data()` value sends unchanged.
+
+    That is the value itself when it is a name or an attribute of one, such
+    as `settings.API_TOKEN`, and each such name that is a whole item of a
+    dict, list, or tuple literal inside it, unpacked with `*` into one,
+    either branch of a conditional expression, or the first argument of a
+    `Const(...)` call. A name used any other way, such as
+    `len(TOKEN.get_secret_value())` or `get_token()`, is left out, because
+    the browser receives what the expression computes, not the name's
+    value.
     """
     try:
         node = ast.parse(value_source.strip(), mode="eval").body
     except (SyntaxError, ValueError):
         return []
-    names: list[str] = []
-    pending = [node]
+    names: list[_SentName] = []
+    pending: list[tuple[ast.expr, bool, tuple[tuple[str, ...], ...]]] = [(node, False, ())]
     while pending:
-        current = pending.pop(0)
-        if isinstance(current, ast.Name):
-            names.append(current.id)
+        current, starred, wrappers = pending.pop(0)
+        path = _attribute_path(current)
+        if path is not None:
+            names.append(_SentName(path, starred=starred, wrappers=wrappers))
+        elif isinstance(current, ast.Dict) and starred:
+            # `[*{"a": TOKEN}]` sends the dict's keys, not its values.
+            pending.extend((key, False, wrappers) for key in current.keys if key is not None)
         elif isinstance(current, ast.Dict):
-            pending.extend(current.values)
+            # `{**CONFIG}` has no key, and sends CONFIG's items, which the
+            # JSON check reads the same way as CONFIG itself.
+            pending.extend((value, False, wrappers) for value in current.values)
         elif isinstance(current, (ast.List, ast.Tuple)):
-            pending.extend(current.elts)
+            pending.extend(
+                (item.value, True, wrappers) if isinstance(item, ast.Starred) else (item, False, wrappers)
+                for item in current.elts
+            )
+        elif isinstance(current, ast.IfExp):
+            # Either branch may be the one sent, so both are read.
+            pending.extend([(current.body, starred, wrappers), (current.orelse, starred, wrappers)])
+        elif isinstance(current, ast.Call) and current.args and not isinstance(current.args[0], ast.Starred):
+            # Only a call that may be `Const` is followed; the issue check
+            # confirms the callee on the loaded module before it counts.
+            callee = _attribute_path(current.func)
+            if callee is not None and callee[-1] == "Const":
+                pending.append((current.args[0], starred, (*wrappers, callee)))
     return names
 
 
-def _js_data_module_values(component: type[Component], source: str) -> Callable[[str], str | None]:
+def _attribute_path(node: ast.expr) -> tuple[str, ...] | None:
+    """Return `("a", "b", "c")` for a name or attribute chain `a.b.c`, or None for any other expression."""
+    attributes: list[str] = []
+    while isinstance(node, ast.Attribute):
+        attributes.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    return (node.id, *reversed(attributes))
+
+
+# The getters behind `cls.__dict__` and `cls.__mro__`, taken from `type`
+# itself, so a metaclass that defines either name cannot run code when the
+# check reads a class.
+_CLASS_NAMESPACE = type.__dict__["__dict__"]
+_CLASS_MRO = type.__dict__["__mro__"]
+# The names whose definition on a class makes reading an attribute run code.
+_ATTRIBUTE_HOOKS = ("__getattr__", "__getattribute__")
+# Every ordinary class also holds a `__dict__` entry: the getter Python
+# builds for it, which runs no user code. Any other kind, such as a
+# property, could.
+_BUILT_IN_GETTERS = (GetSetDescriptorType, MemberDescriptorType)
+# Classes whose attribute reading Citry knows runs no user code.
+_PLAIN_ATTRIBUTE_CLASSES = (object, type, ModuleType)
+
+
+def _read_stored_attribute(owner: object, name: str) -> tuple[bool, object]:
     """
-    Return a check that says why a bare name in a component's `js_data()` holds a value JSON cannot carry.
+    Read an attribute that is stored on a module, a class, or an instance, without calling any code.
+
+    A property, a `__getattr__` hook, or a lazy settings object, such as
+    Django's `settings`, would run code to produce the value, which a static
+    check must not do. So the owner's class and its bases must leave
+    attribute reading alone, and only a value stored in the owner's own
+    `__dict__` counts. A class attribute that is itself a descriptor, such
+    as a property or a method, does not count either, because reading it
+    through the class calls it.
+
+    Returns:
+        Whether the value was found, and the value.
+
+    """
+    try:
+        for base in _CLASS_MRO.__get__(type(owner)):
+            if base in _PLAIN_ATTRIBUTE_CLASSES:
+                continue
+            namespace = _CLASS_NAMESPACE.__get__(base)
+            if any(hook in namespace for hook in _ATTRIBUTE_HOOKS):
+                return False, None
+            if "__dict__" in namespace and type(namespace["__dict__"]) not in _BUILT_IN_GETTERS:
+                return False, None
+        stored = object.__getattribute__(owner, "__dict__")
+        # A dict subclass could run code in `in` or `[]`.
+        if type(stored) not in (dict, MappingProxyType) or name not in stored:
+            return False, None
+        value = stored[name]
+    except Exception:  # noqa: BLE001 - an exotic object must not stop the check
+        return False, None
+    if isinstance(owner, type) and hasattr(type(value), "__get__"):
+        return False, None
+    return True, value
+
+
+def _js_data_module_values(component: type[Component], source: str) -> Callable[[_SentName], _ModuleValueIssue | None]:
+    """
+    Return a check that says why a module-level value in a component's `js_data()` cannot be sent as JSON.
 
     The check answers None for a name that `js_data()` binds itself, for a
-    name its module does not define, and for a value the browser can
-    receive.
+    name its module does not define, for an attribute it cannot read
+    without running code, and for a value the browser can receive.
     """
     owner = next(
         (candidate for candidate in _static_class_mro(component) if "js_data" in _static_class_dict(candidate)), None
@@ -2716,11 +2842,11 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
     module = sys.modules.get(getattr(owner, "__module__", "")) if owner is not None else None
     qualname = _safe_class_text(owner, "__qualname__") if owner is not None else None
     if module is None or qualname is None:
-        return lambda _name: None
+        return lambda _sent: None
     try:
         scope = _python_qualified_scope(ast.parse(source), qualname)
     except (SyntaxError, ValueError):
-        return lambda _name: None
+        return lambda _sent: None
     method = next(
         (
             statement
@@ -2730,30 +2856,58 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         None,
     )
     if method is None:
-        return lambda _name: None
+        return lambda _sent: None
     local_names = _function_local_names(source, method)
     if local_names is None:
-        return lambda _name: None
+        return lambda _sent: None
     namespace = vars(module)
 
-    def issue(name: str) -> str | None:
-        if not name.isidentifier() or name in local_names or name not in namespace:
+    def resolve(path: tuple[str, ...]) -> tuple[bool, object]:
+        root = path[0]
+        # A name js_data() binds itself hides the module name of the same
+        # spelling, so the module's value is not what it sends.
+        if not root.isidentifier() or root in local_names or root not in namespace:
+            return False, None
+        value = namespace[root]
+        for name in path[1:]:
+            found, value = _read_stored_attribute(value, name)
+            if not found:
+                return False, None
+        return True, value
+
+    def issue(sent: _SentName) -> _ModuleValueIssue | None:
+        # A call that only looks like `Const(...)` may compute anything.
+        for wrapper in sent.wrappers:
+            found, callee = resolve(wrapper)
+            if not found or callee is not Const:
+                return None
+        found, value = resolve(sent.path)
+        if not found:
             return None
-        value = namespace[name]
+        label = ".".join(sent.path)
+        if sent.starred:
+            # `[*TOKENS]` sends TOKENS' items as a list; anything other than
+            # a plain collection would run code to produce them.
+            if type(value) not in {list, tuple, set, frozenset, dict}:
+                return None
+            value = list(cast("Iterable[object]", value))
         try:
             _json_plain(value)
         except _SecretInBrowserDataError:
             # Rendering would raise for this value, so name the key that
             # holds the Secret, the way the runtime error does.
             path = _secret_key_path(value) or ""
-            return (
-                f"{name}{path} holds a citry.Secret, which Citry never sends to the browser; "
-                "read the value on the server instead"
+            return _ModuleValueIssue(
+                f"{label}{path} is a Secret; read the value on the server instead",
+                secret=True,
             )
         except TypeError:
-            return f"{name} holds a value of type {type(value).__name__}, which cannot be sent to the browser as JSON"
+            return _ModuleValueIssue(
+                f"{label} holds a value of type {type(value).__name__}, which cannot be sent to the browser as JSON",
+                secret=False,
+            )
         except ValueError as exc:
-            return str(exc)
+            return _ModuleValueIssue(str(exc), secret=False)
         return None
 
     return issue

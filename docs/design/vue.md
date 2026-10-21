@@ -3401,11 +3401,11 @@ the non-browser tests prepare.
 
 Those checks cover the server's half. A shell, an element whose children
 Vue builds in the browser, hides the other half: its served contents can
-differ from Vue's first render when browser code changes state before that
+differ from Vue's first render when browser code sets state before that
 render, and Vue does not report it. With `Citry(mode="development")` the
-runtime compares the two and logs a console warning; production pages carry
-neither the flag nor the check's script. The design and its limits are in
-[`dev_prod_mode.md`](dev_prod_mode.md) section 5.1.
+runtime compares the two and logs a console warning; a production page has
+no `development` configuration flag and does not load the check. The design
+and its limits are in [`dev_prod_mode.md`](dev_prod_mode.md) section 5.1.
 
 ### Compile during serialization, before delivery
 

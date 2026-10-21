@@ -192,9 +192,31 @@ On the server a `Secret` is safe to pass around. In a template,
 annotate the child's `Kwargs` field as `Secret[str]` so a plain string
 passed there is rejected.
 
-If a `Secret` ends up anywhere in `js_data()` anyway, Citry refuses to
-send it. Rendering the page raises a `TypeError` that names the
-component and the key, before any HTML is sent:
+When the child's `Kwargs` is a Pydantic model, Pydantic's error for a
+plain string prints that string. Turn that off in the model's config:
+
+```python
+from pydantic import BaseModel, ConfigDict
+
+
+class Kwargs(BaseModel):
+    # Keeps a plain string passed as `token` out of the error
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    token: Secret[str]
+```
+
+A child that uses the [render cache](/performance/caching/) cannot take
+a `Secret` with the default cache key, which is built from all of its
+kwargs: a `Secret` cannot be part of a key, so rendering raises
+[`CacheKeyError`][citry.ext.cache.CacheKeyError]. Return values that are
+not secret, such as a user id, from the child's `Cache.vary()`, or leave
+the child uncached.
+
+If a `Secret` ends up anywhere in the dicts and lists `js_data()`
+returns, Citry refuses to send it. Rendering the page raises a
+`TypeError` that names the component and the key, before any HTML is
+sent:
 
 ```text
 TypeError: Board.js_data()["token"] holds a citry.Secret, and Citry
@@ -202,13 +224,21 @@ never sends a Secret to the browser, where anyone could read it in
 the page source. ...
 ```
 
+A `Secret` inside a dataclass instance, used as a dict key, or put in a
+set is refused too, but the `TypeError` then does not name the key.
+
 [`citry --app ... check`](/advanced/cli/#check-component-templates)
 reports it before the page runs, as the
 [`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)
-warning, when it can see the `Secret`: a module constant that
-`js_data()` returns by name, or a field annotated `Secret[str]`.
+warning, when it can see the `Secret`: a module-level `Secret` that
+`js_data()` puts in its result, such as `{"token": API_TOKEN}`, or a
+`JsData` field annotated `Secret[str]`. It also reads an attribute such
+as `settings.API_TOKEN` when reading it runs no code, so not a property
+or a lazy settings object such as Django's. Without `--types`, it does
+not see a `Secret` that a call returns, such as `get_token()`.
 Rendering also fails, with `ValueError`, when `css_data()` or a
-[State](/events/state/) field holds a `Secret`.
+[State](/events/state/) field holds a `Secret`, whether or not the
+component has CSS.
 
 !!! warning "A plain string is not detected"
 

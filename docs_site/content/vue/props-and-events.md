@@ -208,10 +208,14 @@ The check follows these rules:
 - A method whose parameters have no type comment takes any values, so it
   is not checked. Once one parameter has a type, every parameter without
   a default counts as required.
-- With the array form, such as `emits: ["hide"]`, or a `null` function,
-  the payload can be anything, so nothing is checked.
+- With the array form, such as `emits: ["hide"]`, or `null` in place of
+  the function, as in `hide: null`, a declared event's payload can be
+  anything, so its listener is not checked. A listener for an event the
+  child does not declare is checked against the DOM event of that name,
+  even with the array form.
 - A parameter whose type is narrower than the payload, such as
-  `"a" | "b"` where the child sends any string, is not reported.
+  `"a" | "b"` where the child sends any string, is not reported, because
+  the check does not compare types that strictly.
 - Only a name from the parent's `methods` is checked. A function stored
   in `data()`, or a member such as `store.hide`, is not.
 - A listener that calls the method, such as `@hide="hideCard($event)"`,

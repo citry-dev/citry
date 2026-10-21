@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from citry import Citry, Component
+from citry._vue import serialization
 from citry._vue.serialization import DEV_CHECKS_SRC
 
 # A global the check's script defines; only the script contains it.
@@ -139,3 +140,32 @@ def test_development_page_without_served_shells_carries_only_the_flag() -> None:
 def test_the_check_script_ships_as_a_readable_file() -> None:
     # Development pages inline this file, so the package must include it.
     assert _SCRIPT_MARKER in DEV_CHECKS_SRC.read_text(encoding="utf8")
+
+
+def test_the_check_script_is_read_from_disk_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A development server renders page after page; only the first one that
+    # needs the script reads the file, and a production page never does.
+    reads: list[str] = []
+    real_path = DEV_CHECKS_SRC
+
+    class CountingPath:
+        def read_text(self, encoding: str) -> str:
+            reads.append(encoding)
+            return real_path.read_text(encoding=encoding)
+
+    monkeypatch.setattr(serialization, "DEV_CHECKS_SRC", CountingPath())
+    serialization._dev_checks_source.cache_clear()
+    # Empty the cache again afterwards: it holds text read through the
+    # patched path, which no later test should rely on.
+    try:
+        _shell_page(Citry(autodiscover=False))().render().serialize()
+        assert reads == []
+        page = _shell_page(Citry(autodiscover=False, mode="development"))
+        first = page().render().serialize()
+        second = page().render().serialize()
+    finally:
+        serialization._dev_checks_source.cache_clear()
+
+    assert reads == ["utf8"]
+    assert _SCRIPT_MARKER in first
+    assert _SCRIPT_MARKER in second

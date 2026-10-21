@@ -59,6 +59,7 @@ from .capture import (
     is_native_state_tag,
     is_vue_directive_name,
     prepared_spread_index,
+    template_location,
     vue_owned_native_marker,
     vue_owned_native_properties,
 )
@@ -125,14 +126,38 @@ class Assembly:
     # the first such directive, so the compiled child's root can be checked
     # once every definition is compiled.
     root_directive_occurrences: Mapping[str, tuple[str, str, str]] = field(default_factory=dict)
-    # For each definition, the class ids of the components whose authored
-    # templates its Vue template was written from: its own component first,
-    # then each transparent component copied into it. Only read to explain a
-    # compile failure in terms of the template the author wrote.
-    definition_template_types: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
-    # Turns one of those class ids back into its component class, or raises
-    # KeyError when the app has unregistered it since the render started.
+    # A transparent component has no Vue definition: its template is copied
+    # into the definition of another occurrence. These map each transparent
+    # render id to that occurrence and to the transparent component's class
+    # id. The assembly collects them anyway; `template_types` reads them only
+    # when a compile failure must be explained, so a page that compiles pays
+    # nothing for them.
+    transparent_template_owners: Mapping[str, str] = field(default_factory=dict)
+    transparent_class_ids: Mapping[str, str] = field(default_factory=dict)
+    # Turns a class id back into its component class, or raises KeyError
+    # when the app has unregistered it since the render started.
     component_for_type: Callable[[str], type[Component]] | None = None
+
+    def template_types(self, definition_id: str) -> tuple[str, ...]:
+        """
+        Return the class ids of the components whose authored templates a definition was written from.
+
+        Its own component comes first, then each transparent component copied
+        into an occurrence that uses it. Used to explain a compile failure in
+        terms of the template the author wrote.
+        """
+        definition = next((item for item in self.view.definitions if item.id == definition_id), None)
+        if definition is None:
+            return ()
+        types = [definition.type_key]
+        definition_of = {item.id: item.definition_id for item in self.view.occurrences}
+        for render_id, owner_occurrence in self.transparent_template_owners.items():
+            class_id = self.transparent_class_ids.get(render_id)
+            if class_id is None or definition_of.get(owner_occurrence) != definition_id:
+                continue
+            if class_id not in types:
+                types.append(class_id)
+        return tuple(types)
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,7 +396,7 @@ def _secret_in_js_data_message(citry: Citry, class_id: str | None, js_data: obje
         f"{label}.js_data(){path} holds a citry.Secret, and Citry never sends a Secret to the browser, "
         "where anyone could read it in the page source. Read the value with get_secret_value() in server "
         "code that needs it, such as template_data() or an event handler, and leave it out of js_data(). "
-        "If an extension adds this key in on_component_data, fix it there."
+        "If an extension adds this key in its on_component_data hook, change the extension."
     )
 
 
@@ -2385,8 +2410,8 @@ def assemble_typed_render(
                         # the tag and the two attributes are what can be named.
                         other = source_targets["key"]
                         raise UnsupportedPreparedView(
-                            f"'{other}' on <{part.tag}> sets the same attribute as '#c-key'. Keep '#c-key' to key"
-                            f" the element from Python, or remove it and keep '{other}'."
+                            f"'{other}' on <{part.tag}> sets the same attribute as '#c-key'. Keep '#c-key' if"
+                            f" Python should set the key, or remove '#c-key' and keep '{other}'."
                         )
                     alias = f"citry-dynamic-{_digest(occurrence_types[occurrence_id], dynamic_site_index)[:16]}"
                     dynamic_site_index += 1
@@ -2729,27 +2754,16 @@ def assemble_typed_render(
         for occurrence_id, render_id in occurrence_to_render.items()
     ):
         raise AssertionError("canonical prepared occurrence render identity changed ownership")
-    # Each definition is written from its own component's template plus the
-    # transparent components copied into an occurrence that uses it. Built
-    # from data the assembly already collected, so a page that compiles
-    # costs only this loop.
-    definition_of = {item.id: item.definition_id for item in occurrences}
-    template_types: dict[str, list[str]] = {item.id: [item.type_key] for item in definitions.values()}
-    for render_id, owner_occurrence in transparent_template_owners.items():
-        class_id = transparent_class_ids.get(render_id)
-        owner_definition = definition_of.get(owner_occurrence)
-        if class_id is None or owner_definition is None:
-            continue
-        types = template_types[owner_definition]
-        if class_id not in types:
-            types.append(class_id)
     return Assembly(
         view,
         dict(render_to_occurrence),
         dict(occurrence_to_render),
         compile_inputs,
         root_directive_occurrences,
-        {definition_id: tuple(types) for definition_id, types in template_types.items()},
+        # Handed over as collected: the assembly is done with them, and
+        # Assembly.template_types reads them only to explain a failure.
+        transparent_template_owners,
+        transparent_class_ids,
         citry.get_component_by_class_id,
     )
 
@@ -2856,22 +2870,9 @@ def _call_site(call: _PreparedCallMetadata | None, citry: Citry) -> str:
     if call is None:
         return "in a component rendered from Python"
     # Call spans are byte offsets into the authored template source.
-    line = call.source.encode()[: call.source_span[0]].count(b"\n") + 1
-    if not call.origin:
-        return f"on line {line} of its template"
-    template_source = _template_source_for_origin(citry, call.origin)
-    if template_source is not None and call.source != template_source:
-        # A call inside a template-valued attribute, such as c-body="...",
-        # has spans that count from the attribute value. Shift the line by
-        # where that value starts, when it appears in the template once.
-        start = template_source.find(call.source)
-        if start < 0 or template_source.find(call.source, start + 1) >= 0:
-            return f"in template {call.origin}, on line {line} of a template-valued attribute"
-        line += template_source[:start].count("\n")
-    # "In template" matches the template parser's own errors, and tells the
-    # reader that an inline template's line counts from the template string,
-    # not from the top of the Python file.
-    return f"in template {call.origin}, line {line}"
+    return template_location(
+        call.source, call.source_span[0], call.origin, _template_source_for_origin(citry, call.origin)
+    )
 
 
 def _missing_key_message(call: _PreparedCallMetadata | None, citry: Citry) -> str:
@@ -2892,8 +2893,8 @@ def _duplicate_key_message(call: _PreparedCallMetadata | None, key: str, citry: 
     # repetitions an outer loop makes, so the fix names nested loops too.
     return (
         f"<{tag}> {_call_site(call, citry)} has a duplicate #c-key, {key!r}: two of its repetitions got that"
-        " value. Each repetition needs its own key, also across nested loops: combine the outer and inner"
-        " loop values into one key."
+        " value. Each repetition needs its own key. When this loop is inside another loop, combine the outer"
+        " and inner loop values into one key."
     )
 
 
@@ -3241,10 +3242,16 @@ _IGNORED_CONTENTS_ALLOWED = (
 
 def _ignored_element_label(part: PreparedElementOpen) -> str:
     """Name a `#c-ignore` element and where the template writes it."""
-    from citry.ext.events.bindings import _line_column  # noqa: PLC0415
-
-    line, column = _line_column(part.source, part.span[0])
-    return f"'#c-ignore' on the <{part.tag}> element that starts at line {line}, column {column},"
+    template = part.template
+    # Spans are byte offsets into the authored template source.
+    location = template_location(
+        part.source,
+        part.span[0],
+        template.origin if template is not None else None,
+        template.source if template is not None else None,
+        with_column=True,
+    )
+    return f"'#c-ignore' on the <{part.tag}> element {location},"
 
 
 def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int) -> int:

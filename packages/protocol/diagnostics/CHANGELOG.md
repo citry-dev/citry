@@ -85,3 +85,7 @@
 - `defaultSeverity` now accepts `ignore` for a rule that is off until the
   application turns it on. It requires `configurableSeverity: true`, and
   the public reference shows such a rule as off.
+- `citry.js-data.unsupported-type` adds the message variant `secret`,
+  used when the value is a `citry.Secret`.
+- The `citry.css.misspelled-variable` and `citry.css.undeclared-variable`
+  messages now say the property gets its initial or inherited value.

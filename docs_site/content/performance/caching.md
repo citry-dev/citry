@@ -306,6 +306,16 @@ dictionary key inside it. A value that breaks a limit, or uses an
 unsupported type, raises [`CacheKeyError`][citry.ext.cache.CacheKeyError]
 when the component renders.
 
+### Secrets in the key
+
+With the default key, a cached component that receives a
+[`Secret`][citry.Secret] in its kwargs raises
+[`CacheKeyError`][citry.ext.cache.CacheKeyError] when it renders.
+Anyone who can read the cache could test guesses of the secret against a
+key built from it, so Citry refuses. Return values that are not secret,
+such as a user or tenant id, from `Cache.vary()`, or leave the component
+uncached.
+
 ### `Const` values in keys
 
 The default component key treats a value wrapped in [`Const`][citry.Const]

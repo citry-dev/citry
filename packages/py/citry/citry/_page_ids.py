@@ -12,9 +12,10 @@ check, so it costs nothing there.
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+
+from citry._caller_warnings import warn_at_caller
 
 # Elements whose start tag never has a matching end tag in the HTML.
 _VOID_TAGS = frozenset(
@@ -164,7 +165,9 @@ class PageIdCheck:
             "a component used more than once, build the id from a value the component receives. "
             'Citry runs this check only with Citry(mode="development").'
         )
-        warnings.warn(message, RuntimeWarning, stacklevel=4)
+        # The author fixes this in a component, so point at their render or
+        # serialize call, not at whichever Citry frame noticed it.
+        warn_at_caller(message, RuntimeWarning)
 
 
 def _describe_place(component: str, origin: str | None, count: int) -> str:
