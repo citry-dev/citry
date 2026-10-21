@@ -33,7 +33,7 @@ state through `aria-expanded`, which the page's script updates.
 
 FastHTML's components are plain functions that receive values only as \
 arguments, and FastHTML gives the page no way to provide a value to the \
-functions it calls. So the cards leave out the reference page's \
+functions it calls, and no shared state of its own. So the cards leave out the reference page's \
 `Board: Projects` line, and m50 does not apply.
 
 The search form submits back to the page with GET, and the page's route \

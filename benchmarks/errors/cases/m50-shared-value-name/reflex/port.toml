@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "board/card.py", contains = "SharedState.bord_name" }
+mistake = { file = "board/card.py", contains = "BoardInfoState.bord_name" }
 
 [[edits]]
 file = "board/card.py"
-old = "SharedState.board_name"
-new = "SharedState.bord_name"
+old = "BoardInfoState.board_name"
+new = "BoardInfoState.bord_name"

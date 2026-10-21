@@ -64,8 +64,9 @@ class Card(Component):
 
     # The footer slot is filled by the card list. Tetra renders a slot's
     # content with the card's own variables, so the fill reads `title` and
-    # `count` from the card. `board_name` comes from the context processor in
-    # board/context_processors.py, which every component's template receives.
+    # `count` from the card. `board_name` is not a card attribute: it comes
+    # from the context processor in board/context_processors.py, whose values
+    # every component's template receives.
     template: django_html = """
     <div class="card card--{{ tone }}">
       <h2>{{ title }}: {{ count }} tasks</h2>

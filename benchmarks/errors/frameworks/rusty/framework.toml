@@ -57,8 +57,8 @@ markup reads the board's `open` through the scope Alpine shares with it. Its \
 Close button dispatches a `close` event, and a listener on the board sets \
 `open` to false.
 
-The card reads the board's name from the context its include inherits, as \
-in the Django app.
+As in the Django app, the view puts `board_name` in the page's context, \
+and the card's template reads it through the `{% include %}`.
 
 The heading's color, the search form, the avatar, and the About and project \
 pages with their `{% url %}` links are written as in the Django app, apart \

@@ -35,8 +35,9 @@ public/, the first form the Next.js image docs show. So a misspelled file
 
 The board's name reaches every card through a React context, BoardContext
 in app/board-context.tsx. The page is a server component, which cannot
-provide a context, so it wraps the board in a client component that does,
-as the Next.js docs on context providers show, and each card reads it with
+provide a context, so it wraps the board in BoardProvider, a client
+component in the same file that provides the context, as the Next.js docs
+on context providers show. Each card reads the name with
 `useContext(BoardContext)`.
 
 Settings changed from the default. The benchmark turns on a framework's

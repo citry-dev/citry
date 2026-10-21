@@ -29,7 +29,8 @@ The board page calls `provide('boardName', 'Projects')`, and Card.vue reads it w
 `inject<string>('boardName')`, the string key Vue's provide/inject guide uses first, with the
 type argument its TypeScript guide gives for a string key. Exporting a typed `InjectionKey`
 symbol and importing it in both files, which the TypeScript guide also shows, would make a
-misspelled key an undefined name, which vue-tsc reports.
+misspelled key an undefined name, which vue-tsc reports. Nuxt's own shared state,
+`useState('boardName', ...)`, would make a misspelled key a new, empty state, with no warning.
 
 The benchmark adds typescript 6.0.3 and vue-tsc 3.3.13 as dev dependencies, only to run the
 editor stage. The starter installs neither. Nuxt does not type-check during `nuxt dev` or

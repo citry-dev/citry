@@ -1,8 +1,8 @@
 import reflex as rx
 
 
-class SharedState(rx.State):
-    """Values any component reads straight from the state, without taking them as arguments.
+class BoardInfoState(rx.State):
+    """The board's values, which any component reads straight from the state, not as arguments.
 
     A separate module, because the card cannot import the page's module, which imports the card.
     """
