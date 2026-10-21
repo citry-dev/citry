@@ -13,7 +13,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
@@ -304,9 +304,12 @@ def observe(framework: Framework, env: Path, work: Path, log_path: Path) -> Obse
     runtime = framework.runtime
     if runtime is None:
         raise ConfigError(f"{framework.key} has no [runtime] section")
+    # A second port is reserved only for a server that names one, so the
+    # other frameworks keep the same reservations as before.
+    needs_backend_port = any("{backend_port}" in part for part in (*runtime.argv, *runtime.env.values()))
     for _attempt in range(_PORT_ATTEMPTS):
-        with reserve_port() as port:
-            observation = _observe_on(framework, runtime, env, work, log_path, port)
+        with reserve_port() as port, reserve_port() if needs_backend_port else nullcontext(0) as backend_port:
+            observation = _observe_on(framework, runtime, env, work, log_path, port, backend_port)
         # The log is read from the file: a server that never answered keeps an
         # empty `server_log` in its observation, as the comparison expects.
         if observation.started or not _PORT_IN_USE.search(log_path.read_text(errors="replace")):
@@ -315,16 +318,16 @@ def observe(framework: Framework, env: Path, work: Path, log_path: Path) -> Obse
 
 
 def _observe_on(
-    framework: Framework, runtime: Runtime, env: Path, work: Path, log_path: Path, port: int
+    framework: Framework, runtime: Runtime, env: Path, work: Path, log_path: Path, port: int, backend_port: int
 ) -> Observation:
-    argv = [placeholder(part, framework, env, work, port) for part in runtime.argv]
+    argv = [placeholder(part, framework, env, work, port, backend_port) for part in runtime.argv]
     url = f"http://127.0.0.1:{port}{runtime.page_path}"
     observation = Observation()
     with log_path.open("w") as log:
         process = subprocess.Popen(
             argv,
             cwd=work,
-            env=command_env(framework, env, work, runtime.env, port),
+            env=command_env(framework, env, work, runtime.env, port, backend_port),
             stdout=log,
             stderr=subprocess.STDOUT,
             # A new process group lets the whole dev server tree be stopped at once.
@@ -346,6 +349,12 @@ def _observe_on(
                         observation.journeys[name] = _journey(browser, url, steps, runtime.settle_ms, observation)
                 browser.close()
         finally:
+            # What the server prints once it is told to stop, such as Reflex
+            # reporting that its frontend process was killed, says nothing
+            # about the page, so the record ends where the browser check did.
+            # The log file keeps everything.
+            recorded = os.fstat(log.fileno()).st_size
             _stop(process)
-    observation.server_log = log_path.read_text(errors="replace").splitlines()
+    with log_path.open("rb") as file:
+        observation.server_log = file.read(recorded).decode(errors="replace").splitlines()
     return observation

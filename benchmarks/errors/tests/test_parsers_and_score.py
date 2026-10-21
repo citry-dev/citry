@@ -18,6 +18,7 @@ from citry_errors.parsers import (
     eslint_json,
     exit_status,
     pyright_json,
+    python_traceback,
     ruff_json,
     tsc,
 )
@@ -477,6 +478,44 @@ def test_a_failing_build_takes_the_first_file_its_output_names() -> None:
     out = f"[plugin vite:vue] {WORK}/app/components/Card.vue:15:5\nElement is missing end tag.\n" + "frame\n" * 20
     [finding] = exit_status(out, "", 1, WORK)
     assert (finding.file, finding.line) == ("app/components/Card.vue", 15)
+
+
+def test_a_python_traceback_points_at_the_last_frame_in_the_working_copy() -> None:
+    out = "\n".join(
+        [
+            "Traceback (most recent call last):",
+            '  File "/venv/lib/python3.12/site-packages/reflex/reflex.py", line 590, in compile',
+            "    prerequisites.get_compiled_app(dry_run=dry)",
+            f'  File "{WORK}/board/board.py", line 40, in page',
+            "    return rx.box(header())",
+            f'  File "{WORK}/board/board.py", line 132, in header',
+            '    rx.text("Owner: ", BoardState.owner.nmae),',
+            "                       ^^^^^^^^^^^^^^^^^^^^^",
+            '  File "/venv/lib/python3.12/site-packages/reflex_base/vars/object.py", line 352, in __getattr__',
+            "    raise VarAttributeError(msg)",
+            "reflex_base.utils.exceptions.VarAttributeError: The State var has no attribute 'nmae'.",
+            "Happened while evaluating page 'index'",
+        ]
+    )
+    [finding] = python_traceback(out, "", 1, WORK)
+    assert (finding.file, finding.line, finding.code) == ("board/board.py", 132, "VarAttributeError")
+    assert finding.message.splitlines() == [
+        "reflex_base.utils.exceptions.VarAttributeError: The State var has no attribute 'nmae'.",
+        "Happened while evaluating page 'index'",
+    ]
+
+
+def test_a_python_syntax_error_and_a_failure_outside_the_app_are_read_as_well() -> None:
+    syntax = "\n".join(
+        [f'  File "{WORK}/board/card.py", line 9', "    rx.text(title +)", "        ^", "SyntaxError: invalid syntax"]
+    )
+    [finding] = python_traceback("", syntax, 1, WORK)
+    assert (finding.file, finding.line, finding.code) == ("board/card.py", 9, "SyntaxError")
+    # No frame in the working copy: the failure is read as `exit` reads it, unlocated.
+    elsewhere = '  File "<frozen runpy>", line 88, in _run_code\nRuntimeError: bun could not be downloaded\n'
+    [finding] = python_traceback(elsewhere, "", 1, WORK)
+    assert (finding.file, finding.line, finding.code) == (None, None, "exit-1")
+    assert python_traceback("compiled", "", 0, WORK) == []
 
 
 def test_an_import_failure_counts_and_a_file_name_must_match_whole() -> None:

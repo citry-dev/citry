@@ -291,6 +291,51 @@ def esbuild(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Findin
     return findings
 
 
+# One frame of a Python traceback, `  File "/path/app.py", line 12, in index`,
+# or the first line of a SyntaxError report, which has no `in` part.
+_PYTHON_FRAME = re.compile(r'^\s*File "(?P<file>[^"]+)", line (?P<line>\d+)')
+# The line that names the exception, such as
+# `reflex_base.utils.exceptions.VarAttributeError: The State var ...`.
+_PYTHON_EXCEPTION = re.compile(r"^(?P<name>[A-Za-z_][\w.]*(?:Error|Exception|Exit|Interrupt|Warning)): ?(?P<msg>.*)$")
+
+
+def python_traceback(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding]:
+    """
+    Read a Python command that fails with a traceback, such as `reflex compile`.
+
+    The app's own code is the last frame of the traceback that lies in the
+    working copy; the frames below it are the framework's. That frame's file
+    and line are where a developer would look, so the finding points there,
+    and its code is the exception's class name. A failure with no frame in
+    the working copy is read as `exit` reads it.
+    """
+    if exit_code == 0:
+        return []
+    text = _strip_ansi(stdout + "\n" + stderr)
+    lines = text.splitlines()
+    location: tuple[str, int] | None = None
+    last_frame = -1
+    for index, line in enumerate(lines):
+        match = _PYTHON_FRAME.match(line)
+        if not match:
+            continue
+        last_frame = index
+        path = relative(match["file"], work)
+        # A path that `relative` left as it was lies outside the working
+        # copy: a framework file, or a `<frozen ...>` module.
+        if path != match["file"].strip():
+            location = (path, int(match["line"]))
+    if location is None:
+        return exit_status(stdout, stderr, exit_code, work)
+    # The exception line and the notes after it, such as Reflex's
+    # `Happened while evaluating page 'index'`, follow the last frame.
+    after = [line.strip() for line in lines[last_frame + 1 :] if line.strip()]
+    named = next((match for line in after if (match := _PYTHON_EXCEPTION.match(line))), None)
+    code = named["name"].rsplit(".", 1)[-1] if named else f"exit-{exit_code}"
+    start = after.index(named.string.strip()) if named else 0
+    return [Finding(location[0], location[1], "error", code, "\n".join(after[start : start + 4]))]
+
+
 def exit_status(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding]:
     """Treat a failing command as one unlocated error, quoting the end of its output."""
     if exit_code == 0:
@@ -323,5 +368,6 @@ PARSE = {
     "ruff-json": ruff_json,
     "djlint": djlint,
     "esbuild": esbuild,
+    "python-traceback": python_traceback,
     "exit": exit_status,
 }

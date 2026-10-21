@@ -27,6 +27,8 @@ framework, the earliest stage that reported it.
    points within `window` lines of the mistake line (three by default). A
    failing command with no location takes the first file and line its output names;
    with none, it counts only when its message names the changed file. A
+   check that fails with a Python traceback, such as Reflex's compile
+   check, points at the traceback's last frame inside the app. A
    finding elsewhere can still come from the change: a
    parser reports an unclosed tag at the outer element, and a type checker
    reports a wrong value where it is used. It can also be a side effect, such
