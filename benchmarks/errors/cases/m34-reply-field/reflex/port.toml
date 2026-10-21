@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+Reflex runs the Add button's event handler on the server, and the handler changes the counter's state; Reflex then sends the browser the state fields that changed. No browser code reads a reply to the click, so there is no reply field to misspell.
+"""

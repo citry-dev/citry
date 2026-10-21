@@ -3,5 +3,5 @@ mistake = { file = "templates/index.html", contains = '"crad.html"' }
 
 [[edits]]
 file = "templates/index.html"
-old = '{% from "card.html" import card %}'
-new = '{% from "crad.html" import card %}'
+old = '{% from "card.html" import card with context %}'
+new = '{% from "crad.html" import card with context %}'

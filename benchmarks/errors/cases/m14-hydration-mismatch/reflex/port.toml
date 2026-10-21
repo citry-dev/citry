@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+Reflex's components are Python functions that Reflex calls once, when it compiles the app, and the React code they produce renders from the state the backend sends. Nothing in a page function runs in the browser, so no component can branch on whether it runs there, and a render on the server and the first render in the browser start from the same code and state. (The development server this benchmark runs also renders nothing on the server: the generated React Router config sets `ssr: false`.)
+"""

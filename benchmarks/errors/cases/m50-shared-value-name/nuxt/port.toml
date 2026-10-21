@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/Card.vue", contains = "inject<string>('bordName')" }
+
+[[edits]]
+file = "app/components/Card.vue"
+old = "inject<string>('boardName')"
+new = "inject<string>('bordName')"

@@ -1,0 +1,8 @@
+# The footer joins the count to text with `+`, as if it were text.
+status = "ported"
+mistake = { file = 'board/board.py', contains = '(" + count + ")"' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'f"Open {title} ({count})"'
+new = 'f"Open {title} (" + count + ")"'

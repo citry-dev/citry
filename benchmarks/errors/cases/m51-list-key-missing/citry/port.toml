@@ -4,9 +4,9 @@ mistake = { file = 'app/components/board_page.py', contains = '<c-Card' }
 [[edits]]
 file = 'app/components/board_page.py'
 old = '''
-                <c-Card
-                  #c-key="project.slug"
+                  <c-Card
+                    #c-key="project.slug"
 '''
 new = '''
-                <c-Card
+                  <c-Card
 '''

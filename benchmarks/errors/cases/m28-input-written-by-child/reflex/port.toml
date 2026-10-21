@@ -1,0 +1,26 @@
+# The status line's Close button runs a function of its own that assigns
+# `False` to its `open` input, as a React developer would. In Python the
+# assignment makes `open` a new local name in `close`.
+status = "ported"
+mistake = { file = 'board/status.py', contains = 'open = False' }
+
+[indirect]
+reason = "`reflex compile` calls the function given as `on_click` to build the button's event, and reports at the Close button's line that it returned nothing instead of an event, because its only statement is the assignment to `open`."
+codes = ["EventHandlerValueError"]
+
+[[edits]]
+file = 'board/status.py'
+old = '''
+-> rx.Component:
+    return rx.text('''
+new = '''
+-> rx.Component:
+    def close():
+        open = False
+
+    return rx.text('''
+
+[[edits]]
+file = 'board/status.py'
+old = 'on_click=on_close)'
+new = 'on_click=close)'

@@ -1,0 +1,13 @@
+# Reflex runs the toggle's behavior on the server, so the code that defines it
+# is a Python event handler; here it has lost its operand.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'self.open = not' }
+
+[[edits]]
+file = 'board/board.py'
+old = '''
+        self.open = not self.open
+'''
+new = '''
+        self.open = not
+'''

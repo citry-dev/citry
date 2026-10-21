@@ -1,0 +1,4 @@
+status = "prevented"
+reason = """
+Reflex turns an event's argument into the type the handler declares before the handler runs: it reads the handler's type hints and converts a string with the deserializer for that type (`_transform_event_payload` in reflex_base/event/processor/base_state_processor.py, with `int` among the deserializers in reflex_base/utils/serializers.py). So `CounterState.save("1")` calls `save(amount=1)`, and the count goes from 0 to 1. The catalogue counts such a conversion as prevented. pyright would report the string as an error in the editor.
+"""

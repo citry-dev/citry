@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'rx.cond(DetailsState.open, "yes", "no")' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'aria_expanded=DetailsState.open'
+new = 'aria_expanded=rx.cond(DetailsState.open, "yes", "no")'

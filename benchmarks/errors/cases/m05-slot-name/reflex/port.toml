@@ -1,0 +1,11 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'fotter=lambda' }
+
+[indirect]
+reason = "Python points an error in a call that spans several lines at the call's first line, so `reflex compile`'s TypeError for the unknown `fotter` keyword names the line of `return card(`, a few lines above the misspelled keyword."
+codes = ["TypeError"]
+
+[[edits]]
+file = 'board/board.py'
+old = 'footer=lambda title, count:'
+new = 'fotter=lambda title, count:'

@@ -13,7 +13,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
@@ -25,6 +25,7 @@ from .work import command_env, placeholder
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
+    from typing import IO
 
     from playwright.sync_api import Browser, Page
 
@@ -39,8 +40,23 @@ if TYPE_CHECKING:
 # `id` that links and labels point to, and whether a control is disabled, so
 # a mistake in one of those reads as a different page rather than the same one. `:disabled` is
 # the state the browser applies, so `disabled="false"` counts as disabled, as
-# it does for the user.
-_SNAPSHOT = """() => {
+# it does for the user. For an image it records whether the image loaded, so
+# a broken image reads as a different page even when the server answered
+# its URL without an error status.
+#
+# Before it records anything it waits, at most `waitMs` (`_IMAGE_WAIT_MS` in a
+# run), for every
+# image that has not finished, so an image still loading when the page went
+# quiet is not read as broken in one run and loaded in the other. An image
+# the browser never requests, such as a lazy one far below the fold, uses up
+# that wait and records as not loaded in every run.
+_IMAGE_WAIT_MS = 2_000
+_SNAPSHOT = """async (waitMs) => {
+  const pending = [...document.images].filter((img) => !img.complete).map((img) => new Promise((done) => {
+    img.addEventListener('load', done, {once: true});
+    img.addEventListener('error', done, {once: true});
+  }));
+  await Promise.race([Promise.all(pending), new Promise((done) => setTimeout(done, waitMs))]);
   const skip = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 'NOSCRIPT']);
   const elements = [];
   for (const el of document.querySelectorAll('body *')) {
@@ -51,14 +67,15 @@ _SNAPSHOT = """() => {
     elements.push([
       el.tagName, el.getAttribute('title'), el.type ?? null, style.color, style.display, style.visibility,
       style.borderColor, el.getAttribute('alt'), el.getAttribute('id'), aria, el.matches(':disabled'),
+      el.tagName === 'IMG' ? el.complete && el.naturalWidth > 0 : null,
     ]);
   }
   return {text: document.body ? document.body.innerText : '', elements};
 }"""
 
-# Where each element's id and its aria-* pairs sit in a page record, in the
-# order `_SNAPSHOT` writes them.
-_ID, _ARIA = 8, 9
+# Where each element's id, its aria-* pairs and, for an image, whether it
+# loaded sit in a page record, in the order `_SNAPSHOT` writes them.
+_ID, _ARIA, _LOADED = 8, 9, 11
 # How long one step waits for its element before the journey counts as failed.
 _STEP_TIMEOUT_MS = 5_000
 # Dev servers listen on ports from this range. It sits below the range the
@@ -77,8 +94,14 @@ _ports_lock = threading.Lock()
 # How many ports a server gets in all: one, plus a new one each time it could
 # not listen because another program took its port after it was checked.
 _PORT_ATTEMPTS = 3
-# Python and Node print the first two; Django's runserver prints the third.
-_PORT_IN_USE = re.compile(r"address already in use|EADDRINUSE|port is already in use", re.IGNORECASE)
+# Python and Node print the first two; Django's runserver prints the third,
+# and Reflex the third with the port number in it (`Frontend port: 20001 is
+# already in use.`).
+_PORT_IN_USE = re.compile(r"address already in use|EADDRINUSE|port(?::? \d+)? is already in use", re.IGNORECASE)
+# How long the server's log must stay unchanged before the record of its
+# output ends, and the longest the runner waits for that.
+_LOG_QUIET_S = 0.3
+_LOG_QUIET_LIMIT_S = 5.0
 
 
 @dataclass
@@ -170,6 +193,19 @@ def _wait_ready(url: str, process: subprocess.Popen, timeout: int) -> bool:
     return False
 
 
+def _quiet_size(log: IO[str]) -> int:
+    """Wait until the server's log stops growing, then give its size in bytes."""
+    deadline = time.monotonic() + _LOG_QUIET_LIMIT_S
+    size = os.fstat(log.fileno()).st_size
+    while time.monotonic() < deadline:
+        time.sleep(_LOG_QUIET_S)
+        grown = os.fstat(log.fileno()).st_size
+        if grown == size:
+            break
+        size = grown
+    return size
+
+
 def _stop(process: subprocess.Popen) -> None:
     """Stop the server's whole process group; a server that already exited at startup is fine."""
     try:
@@ -253,19 +289,19 @@ def _default_journey(browser: Browser, url: str, runtime: Runtime, observation: 
     try:
         page.goto(url, wait_until="networkidle", timeout=60_000)
         page.wait_for_timeout(runtime.settle_ms)
-        observation.snapshot_loaded = page.evaluate(_SNAPSHOT)
+        observation.snapshot_loaded = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
         _play(page, runtime.journeys[DEFAULT_JOURNEY], runtime.settle_ms)
     except Exception as error:  # noqa: BLE001 - a broken page is an observation, not a runner failure
         observation.failure = _describe(error)
     try:
-        observation.snapshot = page.evaluate(_SNAPSHOT)
+        observation.snapshot = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
     except Exception as error:  # noqa: BLE001 - a page left mid-navigation is recorded, not raised
         observation.failure = observation.failure or f"record: {_describe(error)}"
     if not observation.failure:
         try:
             page.reload(wait_until="networkidle", timeout=60_000)
             page.wait_for_timeout(runtime.settle_ms)
-            observation.snapshot_reloaded = page.evaluate(_SNAPSHOT)
+            observation.snapshot_reloaded = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
         except Exception as error:  # noqa: BLE001 - same as above
             observation.failure = f"reload: {_describe(error)}"
     # Closed before the next journey starts, so this page's timers and
@@ -286,7 +322,7 @@ def _journey(
     except Exception as error:  # noqa: BLE001 - a broken page is an observation, not a runner failure
         record.failure = _describe(error)
     try:
-        record.snapshot = page.evaluate(_SNAPSHOT)
+        record.snapshot = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
     except Exception as error:  # noqa: BLE001 - a page left mid-navigation is recorded, not raised
         record.failure = record.failure or f"record: {_describe(error)}"
     page.context.close()
@@ -304,9 +340,12 @@ def observe(framework: Framework, env: Path, work: Path, log_path: Path) -> Obse
     runtime = framework.runtime
     if runtime is None:
         raise ConfigError(f"{framework.key} has no [runtime] section")
+    # A second port is reserved only for a server that names one, so a
+    # server that needs one port takes only one.
+    needs_backend_port = any("{backend_port}" in part for part in (*runtime.argv, *runtime.env.values()))
     for _attempt in range(_PORT_ATTEMPTS):
-        with reserve_port() as port:
-            observation = _observe_on(framework, runtime, env, work, log_path, port)
+        with reserve_port() as port, reserve_port() if needs_backend_port else nullcontext(0) as backend_port:
+            observation = _observe_on(framework, runtime, env, work, log_path, port, backend_port)
         # The log is read from the file: a server that never answered keeps an
         # empty `server_log` in its observation, as the comparison expects.
         if observation.started or not _PORT_IN_USE.search(log_path.read_text(errors="replace")):
@@ -315,16 +354,16 @@ def observe(framework: Framework, env: Path, work: Path, log_path: Path) -> Obse
 
 
 def _observe_on(
-    framework: Framework, runtime: Runtime, env: Path, work: Path, log_path: Path, port: int
+    framework: Framework, runtime: Runtime, env: Path, work: Path, log_path: Path, port: int, backend_port: int
 ) -> Observation:
-    argv = [placeholder(part, framework, env, work, port) for part in runtime.argv]
+    argv = [placeholder(part, framework, env, work, port, backend_port) for part in runtime.argv]
     url = f"http://127.0.0.1:{port}{runtime.page_path}"
     observation = Observation()
     with log_path.open("w") as log:
         process = subprocess.Popen(
             argv,
             cwd=work,
-            env=command_env(framework, env, work, runtime.env, port),
+            env=command_env(framework, env, work, runtime.env, port, backend_port),
             stdout=log,
             stderr=subprocess.STDOUT,
             # A new process group lets the whole dev server tree be stopped at once.
@@ -346,6 +385,18 @@ def _observe_on(
                         observation.journeys[name] = _journey(browser, url, steps, runtime.settle_ms, observation)
                 browser.close()
         finally:
-            _stop(process)
-    observation.server_log = log_path.read_text(errors="replace").splitlines()
+            # What the server prints once it is told to stop says nothing
+            # about the page, and some of it comes only in some runs, such as
+            # granian's `Unexpected exit from worker-1` under `reflex run`; it
+            # would make the clean app or a case report an error at random. So
+            # the record ends where the browser check did, once the server has
+            # finished printing what the last journey caused. The log file
+            # keeps everything.
+            try:
+                recorded = _quiet_size(log)
+            finally:
+                # The server is stopped even when its log cannot be read.
+                _stop(process)
+    with log_path.open("rb") as file:
+        observation.server_log = file.read(recorded).decode(errors="replace").splitlines()
     return observation

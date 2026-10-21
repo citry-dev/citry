@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
-from citry_errors import html_report, report
+from citry_errors import cli, html_report, report
 from citry_errors.compare import _normal, compare, problems
 from citry_errors.config import ConfigError, load_port
 from citry_errors.parsers import (
@@ -18,6 +19,7 @@ from citry_errors.parsers import (
     eslint_json,
     exit_status,
     pyright_json,
+    python_traceback,
     ruff_json,
     tsc,
 )
@@ -479,6 +481,57 @@ def test_a_failing_build_takes_the_first_file_its_output_names() -> None:
     assert (finding.file, finding.line) == ("app/components/Card.vue", 15)
 
 
+def test_a_python_traceback_points_at_the_last_frame_in_the_working_copy() -> None:
+    out = "\n".join(
+        [
+            "Traceback (most recent call last):",
+            '  File "/venv/lib/python3.12/site-packages/reflex/reflex.py", line 590, in compile',
+            "    prerequisites.get_compiled_app(dry_run=dry)",
+            f'  File "{WORK}/board/board.py", line 40, in page',
+            "    return rx.box(header())",
+            f'  File "{WORK}/board/board.py", line 132, in header',
+            '    rx.text("Owner: ", BoardState.owner.nmae),',
+            "                       ^^^^^^^^^^^^^^^^^^^^^",
+            '  File "/venv/lib/python3.12/site-packages/reflex_base/vars/object.py", line 352, in __getattr__',
+            "    raise VarAttributeError(msg)",
+            "reflex_base.utils.exceptions.VarAttributeError: The State var has no attribute 'nmae'.",
+            "Happened while evaluating page 'index'",
+        ]
+    )
+    [finding] = python_traceback(out, "", 1, WORK)
+    assert (finding.file, finding.line, finding.code) == ("board/board.py", 132, "VarAttributeError")
+    assert finding.message.splitlines() == [
+        "reflex_base.utils.exceptions.VarAttributeError: The State var has no attribute 'nmae'.",
+        "Happened while evaluating page 'index'",
+    ]
+
+
+def test_a_python_syntax_error_and_a_failure_outside_the_app_are_read_as_well() -> None:
+    syntax = "\n".join(
+        [f'  File "{WORK}/board/card.py", line 9', "    rx.text(title +)", "        ^", "SyntaxError: invalid syntax"]
+    )
+    [finding] = python_traceback("", syntax, 1, WORK)
+    assert (finding.file, finding.line, finding.code) == ("board/card.py", 9, "SyntaxError")
+    # No frame in the working copy: the failure is read as `exit` reads it, unlocated.
+    elsewhere = '  File "<frozen runpy>", line 88, in _run_code\nRuntimeError: bun could not be downloaded\n'
+    [finding] = python_traceback(elsewhere, "", 1, WORK)
+    assert (finding.file, finding.line, finding.code) == (None, None, "exit-1")
+    assert python_traceback("compiled", "", 0, WORK) == []
+
+
+def test_a_python_traceback_takes_the_exception_from_the_unindented_line() -> None:
+    frame = f'  File "{WORK}/board/board.py", line 12, in page'
+    # A source line shaped like `Name: text` is indented under its frame, so it is not the exception.
+    bare = f'{frame}\n    note: "assert"\n    assert ready\nAssertionError'
+    [finding] = python_traceback(bare, "", 1, WORK)
+    assert (finding.line, finding.code, finding.message) == (12, "AssertionError", "AssertionError")
+    named = f"{frame}\njinja2.exceptions.TemplateNotFound: index.html"
+    assert python_traceback(named, "", 1, WORK)[0].code == "TemplateNotFound"
+    # A frame in a folder a tool generated, such as Reflex's `.web`, is not the app's code.
+    generated = f'{frame}\n  File "{WORK}/.web/backend/x.py", line 3, in f\nValueError: bad'
+    assert python_traceback(generated, "", 1, WORK)[0].line == 12
+
+
 def test_an_import_failure_counts_and_a_file_name_must_match_whole() -> None:
     crash = Finding(None, None, "error", "citry.app-failure", "NameError: name 'x' is not defined")
     assert score_stage("check", "citry check", [], [crash], "app/data.py", 3, 3).error
@@ -500,3 +553,64 @@ def test_chart_ticks_count_in_fives_from_ten_up() -> None:
     assert html_report._ticks(10) == [0, 5, 10]
     assert html_report._ticks(7) == [0, 2, 4, 6, 8]
     assert html_report._ticks(60) == [0, 20, 40, 60]
+
+
+def test_the_run_record_names_a_tree_of_the_inputs_that_a_rebase_keeps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def git(*argv: str, stdin: str | None = None, cwd: Path = tmp_path) -> str:
+        # git is found on PATH, as the runner finds it.
+        completed = subprocess.run(
+            ["git", *argv],  # noqa: S607
+            cwd=cwd,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return completed.stdout.strip()
+
+    bench = tmp_path / "benchmarks" / "errors"
+    for name in ("cases/m01/x", "frameworks/x", "runner/src", "results/2026-01-01"):
+        (bench / name).mkdir(parents=True)
+        (bench / name / "file.txt").write_text(name)
+    (bench / "catalogue.toml").write_text("[[mistake]]\n")
+    git("init", "-q")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "root")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "inputs")
+    monkeypatch.setattr(cli, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(cli, "BENCH_ROOT", bench)
+    first = cli._source()
+    # The README's check: list the input entries of a commit and make one tree of them.
+    listing = git(
+        "ls-tree", "--full-tree", "HEAD:benchmarks/errors", "cases", "catalogue.toml", "frameworks", "runner"
+    )
+    assert first["inputs_tree"] == git("mktree", stdin=listing + "\n")
+    # `--full-tree` makes the listing the same when git runs from inside the benchmark folder.
+    inside = git(
+        "ls-tree",
+        "--full-tree",
+        "HEAD:benchmarks/errors",
+        "cases",
+        "catalogue.toml",
+        "frameworks",
+        "runner",
+        cwd=bench,
+    )
+    assert inside == listing
+    assert not first["inputs_changed"]
+    # A new published result and a rebase that rewrites the commit keep the tree id.
+    (bench / "results" / "2026-01-01" / "file.txt").write_text("published")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "publish")
+    git("-c", "user.name=u", "-c", "user.email=u@u", "commit", "-q", "--amend", "-m", "rewritten")
+    second = cli._source()
+    assert second["commit"] != first["commit"]
+    assert second["inputs_tree"] == first["inputs_tree"]
+    # A change to a case is a different input, and shows as uncommitted until it is committed.
+    (bench / "cases" / "m01" / "x" / "file.txt").write_text("changed")
+    assert cli._source()["inputs_changed"]
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "case")
+    assert cli._source()["inputs_tree"] != first["inputs_tree"]

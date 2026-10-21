@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'rx.image(src="/avatar.svg",' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.image(src="/avatar.svg", alt=BoardState.owner.name, width='
+new = 'rx.image(src="/avatar.svg", width='

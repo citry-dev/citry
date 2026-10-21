@@ -1,0 +1,4 @@
+status = "prevented"
+reason = """
+Reflex builds an event's payload from the handler's own parameter names: `CounterState.save(1)` sends `{amount: 1}` because `save` declares `amount`, so the page never writes the field's name and cannot misspell it. Reflex's types name an event's arguments `value`, `value2` and so on, not after the handler's parameters, so the page writes them by position, as the clean app does. Writing the handler's name anyway, `save(amont=1)`, is not the natural form: pyright rejects the handler's parameter names there, the correct `save(amount=1)` too, and `reflex compile` reports `amont` as an extra argument.
+"""

@@ -1,0 +1,20 @@
+# The page's hide handler now also takes a reason, while the card's Hide
+# button still sends the event with only the title.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'def hide(self, title: str, reason: str)' }
+
+[indirect]
+reason = "The handler now needs a second argument, so `BoardState.hide(project.title)` leaves one unfilled, and the event that results still needs a value. pyright reports that where the page passes the event to the card's `on_hide`, and `reflex compile` where the card's Hide button uses it as `on_click`, whose browser event cannot fill a `reason` text."
+codes = ["reportArgumentType", "EventHandlerArgTypeMismatchError"]
+
+[[edits]]
+file = 'board/board.py'
+old = '''
+    def hide(self, title: str) -> None:
+        self.hidden.append(title)
+'''
+new = '''
+    def hide(self, title: str, reason: str) -> None:
+        print(f"Hid {title}: {reason}")
+        self.hidden.append(title)
+'''

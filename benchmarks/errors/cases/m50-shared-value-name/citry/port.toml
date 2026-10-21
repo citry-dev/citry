@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/components/card.py", contains = 'self.inject("bord")' }
+
+[[edits]]
+file = "app/components/card.py"
+old = 'self.inject("board")'
+new = 'self.inject("bord")'

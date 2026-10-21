@@ -69,13 +69,16 @@ def prepare(framework: Framework) -> Path:
     return env
 
 
-def placeholder(value: str, framework: Framework, env: Path, work: Path, port: int = 0) -> str:
+def placeholder(value: str, framework: Framework, env: Path, work: Path, port: int = 0, backend_port: int = 0) -> str:
     return value.format_map(
         {
             "env": str(env),
             "venv": str(env / ".venv"),
             "work": str(work),
             "port": str(port),
+            # A second port, for a development server that runs its backend
+            # apart from the server that answers the page.
+            "backend_port": str(backend_port),
             "repo": str(REPO_ROOT),
             "framework": str(framework.root),
         }
@@ -83,7 +86,12 @@ def placeholder(value: str, framework: Framework, env: Path, work: Path, port: i
 
 
 def command_env(
-    framework: Framework, env: Path, work: Path, extra: dict[str, str] | None = None, port: int = 0
+    framework: Framework,
+    env: Path,
+    work: Path,
+    extra: dict[str, str] | None = None,
+    port: int = 0,
+    backend_port: int = 0,
 ) -> dict[str, str]:
     """Run every tool with the framework's own environment first on PATH and the app importable."""
     base = {key: value for key, value in os.environ.items() if key not in {"VIRTUAL_ENV", "PYTHONPATH"}}
@@ -92,8 +100,11 @@ def command_env(
     base["NEXT_TELEMETRY_DISABLED"] = "1"
     base["NUXT_TELEMETRY_DISABLED"] = "1"
     base["PYTHONDONTWRITEBYTECODE"] = "1"
+    # A Python server writes what it prints straight to its log, so it is
+    # there while the page is checked, not only when the server exits.
+    base["PYTHONUNBUFFERED"] = "1"
     for key, value in (extra or {}).items():
-        base[key] = placeholder(value, framework, env, work, port)
+        base[key] = placeholder(value, framework, env, work, port, backend_port)
     return base
 
 

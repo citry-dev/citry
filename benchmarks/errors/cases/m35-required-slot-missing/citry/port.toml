@@ -6,12 +6,12 @@ mistake = { file = "app/components/board_page.py", contains = "<c-Card" }
 [[edits]]
 file = "app/components/board_page.py"
 old = '''
-                >
-                  <c-fill name="footer" data="card">
-                    <a c-href="'#' + project.slug">Open {{ card.title }} ({{ card.count }})</a>
-                  </c-fill>
-                </c-Card>
+                  >
+                    <c-fill name="footer" data="card">
+                      <a c-href="'#' + project.slug">Open {{ card.title }} ({{ card.count }})</a>
+                    </c-fill>
+                  </c-Card>
 '''
 new = '''
-                />
+                  />
 '''

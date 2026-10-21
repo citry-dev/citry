@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "app/card.tsx", contains = "useContext(BordContext)" }
+
+[[edits]]
+file = "app/card.tsx"
+old = "useContext(BoardContext)"
+new = "useContext(BordContext)"

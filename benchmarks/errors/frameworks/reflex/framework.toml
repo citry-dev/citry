@@ -1,0 +1,257 @@
+key = "reflex"
+name = "Reflex"
+notes = """
+The app follows the layout `reflex init` writes: rxconfig.py names the app, \
+board/board.py defines the pages, and assets/ holds the stylesheet and the \
+avatar. Components are Python functions that return Reflex components, \
+mostly Radix Themes components as in the starter (`rx.heading`, \
+`rx.text`, `rx.button`, `rx.card`, `rx.link`, `rx.input`), plus `rx.image` \
+and `rx.form`. Server data and every value the page changes live in \
+`rx.State` classes, written in the typed style Reflex's docs show: each \
+field is annotated `rx.Field[...]` and each event handler is marked \
+`@rx.event`. Without that style pyright sees neither the fields' types nor \
+the handlers' arguments. Reflex 0.9.10.post2 matches the Reflex app in \
+benchmarks/web, and so do the other Python packages it shares; all are \
+locked in baseline/uv.lock for Python 3.12.13. The browser packages are \
+locked in baseline/reflex.lock, the folder where Reflex keeps the \
+frontend's package.json and bun.lock for a project to commit; `reflex run` \
+installs exactly those versions, because Reflex's `frozen_lockfile` \
+setting is on by default. Reflex installs them with Bun 1.3.14, the version \
+it pins, which the setup command downloads into the environment. Vite runs \
+on the machine's Node.js, as in the Next.js and Nuxt apps; with a Node.js \
+older than 22.22.0, Reflex warns and runs Vite on Bun. With no uvicorn \
+installed, Reflex runs its Python backend on granian, its other supported \
+server; the benchmarks/web app installs uvicorn because it serves its \
+production build with it.
+
+How the page runs: Reflex compiles the Python components into a React app. \
+In development, `reflex run` serves that app with Vite on one port and runs \
+the Python backend on a second one. The browser opens a WebSocket to the \
+backend, which sends it the state; each click sends an event back, the \
+backend runs the Python handler, and it sends the fields that changed. So \
+every value the reference page calls browser-side state (the details \
+panel's `open`, the hidden cards, the saved count) is state the backend \
+keeps for each browser tab. A reload keeps the tab, so the clean page \
+still shows `Saved: 1`, the open details and the hidden card after the \
+reload. Every other journey opens a new browser context, which is a new tab \
+to Reflex, so it starts from fresh state: `Saved: 0` and all three cards.
+
+Server data lives in state fields because that is how a Reflex page gets \
+values from the server while it runs. A plain Python constant used in a \
+page is written into the compiled React code when the app compiles, so it \
+would not be server data passed to the browser, which several mistakes \
+(m12, m40 to m42) are about.
+
+The parts of the page:
+- BoardState holds the server data: `owner` and `projects` (dataclasses), \
+`api_base`, the heading's `accent` color, and the titles of the hidden \
+cards. `SECRET_TOKEN` is the backend-only var `_secret_token` (Reflex calls \
+a state field a var): Reflex keeps a field whose name starts with an \
+underscore on the backend and leaves it out of the state it sends to the \
+browser. A page that reads it anyway gets its value written into the \
+compiled page, so m12 shows the secret with no error. The \
+cards come from the computed var `visible_projects`, rendered with \
+`rx.foreach`; a computed var is a value Reflex works out again from \
+`projects` and `hidden` whenever they change.
+- card (board/card.py) is a function that takes `title: rx.Var[str]`, \
+`count: rx.Var[int]`, `tone: rx.Var[Literal["plain", "accent"]]`, a \
+`footer` function and an `on_hide` event. It hands its title and count back \
+to the page by calling `footer(title, count)`, and the page passes a lambda \
+that builds the link, as the FastHTML and ReactPy apps do. The page passes \
+`on_hide=BoardState.hide(project.title)`, an event that already carries \
+the card's title, the way Reflex's docs pass arguments to a handler, so the \
+card sends no value of its own. The card and the status line are plain \
+functions, the form Reflex's docs show first for reusable pieces of a page: \
+Reflex calls them while it compiles, and pyright checks every call against \
+their parameters. Reflex's other form, a function marked `@rx.memo`, makes \
+a React component of its own; pyright accepts any arguments in a call to \
+one, and `reflex compile` reports a missing prop instead.
+- BoardInfoState (board/board_info.py) holds the board's name in the var \
+`board_name`, which every card reads as `BoardInfoState.board_name`. \
+Reflex has no context that a component provides to the ones inside it; a \
+value that many components share lives in a state, which any component \
+reads directly. It sits in its own module because the card cannot import \
+board/board.py, which imports the card. (It is an ordinary `rx.State`, not \
+Reflex's `rx.SharedState`, which shares one state between browser tabs.)
+- Counter: Add sends `CounterState.save(1)` to the handler \
+`save(self, amount: int)`, which adds the amount to `count`. The event's \
+argument is written by position: Reflex's types name an event's arguments \
+`value`, `value2` and so on, not after the handler's parameters, so pyright \
+reports `save(amount=1)` as an error, although Reflex itself accepts it. \
+The browser still sends `{amount: 1}`, keyed by the handler's parameter.
+- Details: DetailsState keeps `open`, which the Details button toggles and \
+reports through `aria-expanded`. The status line (board/status.py) is a \
+function that takes `open: rx.Var[bool]` and an `on_close` event, which its \
+Close button sends.
+- Search: the field shows SearchState's `query` and sends each change to \
+`set_query`, so the `Searching for:` line repeats what is typed. Submitting \
+the form sends its fields to `search(self, form_data)` as a dictionary, \
+which reads `form_data["q"]`. That dictionary is how Reflex's docs read a \
+form, and it is the one place where a field name reaches the server.
+- The API line renders `api_base` from the state. Reflex has no separate \
+browser code for a developer to write here: the React app Reflex compiles \
+is the browser code, and the server value reaches it as a state field.
+- Links: `rx.link` with the paths `/about` and `/projects/1`, as Reflex's \
+docs link pages. The project page's route is `/projects/[project_id]`, and \
+the page reads the part as `rx.State.project_id`, the var Reflex adds for \
+it, as its docs show. pyright cannot see a var Reflex adds when the page is \
+registered, so that one line silences pyright's attribute check, the one \
+change the clean app needs for pyright.
+- Styles and files: `rx.App(stylesheets=["/app.css"])` loads \
+assets/app.css. The page's outer box sets `--accent` from the state in its \
+`style`, and app.css reads it. Reflex serves assets/ at the site's root, so \
+the avatar is `/avatar.svg`. The subtitle `Owned by Ada` reads the owner \
+from the state, since Reflex has no translations (m15 and m46 do not \
+apply).
+- rxconfig.py keeps the Radix Themes plugin `reflex init` adds and leaves \
+out its Tailwind and sitemap plugins: the page has no Tailwind classes and \
+needs no sitemap. The sitemap plugin is on unless a config disables it, \
+and Reflex prints a warning until it is either listed or disabled, so the \
+config disables it.
+
+editor: Reflex ships no editor extension that checks an app. VS Code with \
+Pylance is used as the most common Python setup, with type checking turned \
+on. It is measured with pyright 1.1.414, the engine Pylance runs, from the \
+command line with `typeCheckingMode = "standard"` set in pyproject.toml, \
+which Pylance reads too (Pylance's own default is "off"). The baseline adds \
+pyright as a dev dependency only to take this measurement. Reflex's types \
+let pyright check a field read from a state class in a page \
+(`CounterState.count`), the arguments of a call to a component function, \
+and the arguments of an event. pyright accepts any name in three places: \
+an attribute of a field that holds an object, such as `owner.name`; an \
+assignment to an attribute of `self` inside an event handler, such as \
+`self.count += amount`, because Reflex's state class defines \
+`__setattr__`; and an unknown keyword on a Reflex component. Reflex reports an unknown event \
+trigger such as `on_clik` when it compiles the page, and passes any other \
+unknown keyword, such as `titel`, on as a CSS property.
+
+A misspelled file path reports no error: in development, React Router's handler \
+in the Vite server answers a file path that does not exist, such as a \
+misspelled image, with the app's page and status 200. The image shows \
+broken, but nothing reports an error, so m48 is silently wrong; only the \
+page comparison sees it, because it records whether each image loaded. The page names \
+the avatar by its URL, as Reflex's docs show for a file in assets/; \
+naming it with `rx.asset("avatar.svg")` instead would make `reflex \
+compile` report a misspelled file, because `rx.asset` checks that the \
+file exists.
+
+check: ruff with its default rules, and `reflex compile --dry`. A ruff \
+finding fails the command, so it counts as an error. `reflex compile` is \
+the command Reflex's CLI offers to compile the app without running it, and \
+`--dry` keeps it from writing the compiled pages. It imports the app \
+and builds every page's components, and on the way Reflex checks, among \
+other things, that a field read in a page exists on its object, that \
+`rx.foreach` gets a list, that a component's props have the types it \
+declares, that an event trigger such as `on_click` exists, and that a \
+handler's arguments fit the event. A failure is a Python traceback, which \
+the runner's `python-traceback` parser turns into a finding at the last \
+frame inside the app, named after the exception. There is no build stage: \
+`reflex export`, the production build, runs the same compile step and then \
+Vite on the generated React code, and the page has no JavaScript of its own \
+for Vite to reject.
+
+runtime: `reflex run`, Reflex's development server, with the page on the \
+runner's port and the backend on a second reserved port. Reflex keeps its \
+Bun in the environment (REFLEX_DIR), and Bun keeps its package downloads \
+there too (BUN_INSTALL_CACHE_DIR), so every case installs the frontend's \
+packages from that one store. Reflex's check for a newer release and its \
+telemetry are turned off, because both would reach the network. When the \
+runner stops the server, Reflex reports its killed frontend process as an \
+error; the runner leaves what a server prints after the stop out of the \
+record.
+
+Stricter settings: none changed from the default. The benchmark turns on a \
+framework's stricter check when other frameworks here have the same kind \
+of check. Reflex's checks at compile time are always on, React's strict \
+mode (`react_strict_mode`) is on by default, and `state_auto_setters`, \
+which would give every field an event handler that sets it, is off by \
+default, which is the stricter choice. Considered and left off: \
+`REFLEX_PERF_MODE=raise` turns Reflex's warning about a state larger than \
+its size limit into an error, a kind of check no other framework here has \
+and no mistake reaches; `REFLEX_REACT_OWNER_STACKS` only adds the component \
+stack to React's warnings, so it adds no check; and `frozen_lockfile`, on \
+by default, only pins the browser packages.
+"""
+
+[setup]
+manifests = [".python-version", "pyproject.toml", "uv.lock"]
+# `pyright --version` downloads pyright's npm package once, and the last
+# command installs the Bun release Reflex pins into the environment, so the
+# first measured run spends its timeouts on neither download.
+command = [
+  "sh", "-c",
+  "uv sync --frozen && .venv/bin/pyright --version && REFLEX_DIR={env}/.reflex .venv/bin/python -c 'from reflex.utils.js_runtimes import install_bun; install_bun()'",
+]
+
+[[stages]]
+stage = "editor"
+label = "Pylance, type checking on (pyright 1.1.414, standard)"
+argv = ["{venv}/bin/pyright", "--outputjson", "--pythonpath", "{venv}/bin/python"]
+parser = "pyright-json"
+timeout = 300
+env = { PYRIGHT_PYTHON_IGNORE_WARNINGS = "1" }
+
+[[stages]]
+stage = "check"
+label = "ruff 0.15.5 (default rules)"
+# --isolated: a real project's ruff reads only its own settings, not those of
+# a repository it happens to sit in.
+argv = ["{venv}/bin/ruff", "check", "--isolated", "--no-respect-gitignore", "--output-format", "json", "."]
+parser = "ruff-json"
+timeout = 300
+
+[[stages]]
+stage = "check"
+label = "reflex compile --dry (Reflex 0.9.10.post2)"
+# Reflex builds every page's components from the Python code and checks
+# them as it goes; --dry stops before it writes the frontend's files.
+argv = ["{venv}/bin/reflex", "compile", "--dry", "--no-rich"]
+parser = "python-traceback"
+timeout = 300
+# Reflex keeps its Bun in REFLEX_DIR, by default in the user's data folder;
+# the environment holds it instead. The version check and telemetry would
+# reach the network.
+env = { REFLEX_DIR = "{env}/.reflex", REFLEX_CHECK_LATEST_VERSION = "false", REFLEX_TELEMETRY_ENABLED = "false" }
+
+[runtime]
+# `reflex run` is Reflex's development server: Vite serves the page on one
+# port and the Python backend answers its events on a second one.
+argv = ["{venv}/bin/reflex", "run", "--frontend-port", "{port}", "--backend-port", "{backend_port}"]
+# BUN_INSTALL_CACHE_DIR keeps the npm packages Bun downloads in the
+# environment, shared by every case; each case's install then copies them
+# from there.
+env = { REFLEX_DIR = "{env}/.reflex", REFLEX_CHECK_LATEST_VERSION = "false", REFLEX_TELEMETRY_ENABLED = "false", BUN_INSTALL_CACHE_DIR = "{env}/.bun-cache" }
+page_path = "/"
+ready_timeout = 300
+settle_ms = 1000
+[runtime.journeys]
+# Every click sends an event to the backend over a WebSocket, so the waits
+# let each reply arrive before the next click.
+default = [
+  { action = "click", selector = "button:text-is('Add')" },
+  { action = "wait", ms = 500 },
+  { action = "click", selector = "button:text-is('Details')" },
+  { action = "wait", ms = 300 },
+  { action = "click", selector = "button:text-is('Hide')" },
+]
+# Opens the details, closes them from the status line, and opens them again.
+status = [
+  { action = "click", selector = "button:text-is('Details')" },
+  { action = "wait", ms = 300 },
+  { action = "click", selector = "button:text-is('Close')" },
+  { action = "wait", ms = 300 },
+  { action = "click", selector = "button:text-is('Details')" },
+]
+# Types into the search field and submits the form.
+search = [
+  { action = "fill", selector = "form[role=search] input", text = "alpha" },
+  { action = "press", selector = "form[role=search] input", key = "Enter" },
+]
+# Follows the About link to its page.
+about = [
+  { action = "click", selector = "a:text-is('About')" },
+]
+# Follows the project link to its page.
+project = [
+  { action = "click", selector = "a:text-is('Project 1')" },
+]

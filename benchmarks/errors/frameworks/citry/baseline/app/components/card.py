@@ -22,7 +22,9 @@ class Card(Component):
         footer: SlotInput[FooterData]
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
-        return {"title": kwargs.title, "count": kwargs.count, "tone": kwargs.tone}
+        # The page provides the board's name to every card, so no card takes it as an input.
+        board = self.inject("board")
+        return {"title": kwargs.title, "count": kwargs.count, "tone": kwargs.tone, "board_name": board.name}
 
     def js_data(self, kwargs: Kwargs, slots: Slots):
         # The Hide button tells the page which card to hide.
@@ -34,6 +36,7 @@ class Card(Component):
         v-show="!hiddenTitles.includes(title)"
       >
         <h2>{{ title }}: {{ count }} tasks</h2>
+        <p>Board: {{ board_name }}</p>
         <footer class="card__footer">
           <c-slot
             name="footer"

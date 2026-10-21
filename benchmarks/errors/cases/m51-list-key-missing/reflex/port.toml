@@ -1,0 +1,13 @@
+# The card loses the key its project's title gave it. Reflex then keys each
+# item `rx.foreach` renders by its position in the list.
+status = "ported"
+mistake = { file = 'board/card.py', contains = 'class_name=f"card card--{tone}",' }
+
+[[edits]]
+file = 'board/card.py'
+old = """
+        # The project's title keys the card, so React matches each card to its
+        # project when an earlier one is hidden.
+        key=title,
+"""
+new = ""
