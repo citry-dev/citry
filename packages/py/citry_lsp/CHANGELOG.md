@@ -21,6 +21,15 @@ All notable changes to `citry-lsp` are documented here.
   boolean attribute with a value such as `disabled="false"`, and, once
   your application loads, a lowercase listener on a component for an
   event the child does not declare, such as `@hdie`.
+- Once your application loads, the editor reports a component that
+  assigns to its own prop, such as `@click="open = false"`, at the
+  severity `rule_prop_assignment` sets.
+- The editor and `citry check --types` warn about a `js_data()` value that
+  ty types as a standard type JSON cannot carry, such as a
+  `PurePosixPath`, a `datetime`, or a set.
+- The editor marks a class whose template it skips, because the
+  component's base class comes from another module of your project, with
+  an information message.
 
 ### Changed
 

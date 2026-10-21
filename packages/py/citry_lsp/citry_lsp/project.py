@@ -779,6 +779,14 @@ class ProjectState:
         """
         return self._js_data_inferred.get((source_file.resolve(), source, qualname), {})
 
+    def js_data_files_with_non_json_answers(self) -> frozenset[Path]:
+        """Return the files where ty typed some `js_data()` value as a type JSON cannot carry."""
+        return frozenset(
+            source_file
+            for (source_file, _source, _qualname), answers in self._js_data_inferred.items()
+            if any(answer.unsupported for answer in answers.values())
+        )
+
     def has_js_data_inferred_types(self, source_file: Path, source: str, qualname: str) -> bool:
         """Return whether ty has answered for this exact source in this project generation."""
         key = (source_file.resolve(), source, qualname)

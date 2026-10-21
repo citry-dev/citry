@@ -6938,7 +6938,8 @@ def test_native_vue_component_props_report_required_and_proven_incompatible_valu
     assert ["expects number" in finding.message for finding in incompatible] == [False, True, False]
     assert ["expects unknown[]" in finding.message for finding in incompatible] == [False, False, True]
     assert ["this binding is number" in finding.message for finding in incompatible] == [True, False, True]
-    assert ["this binding is string" in finding.message for finding in incompatible] == [False, True, False]
+    # A string literal is named by its text.
+    assert ['this binding is "many"' in finding.message for finding in incompatible] == [False, True, False]
     value_markers = (
         (':required-title="1"', len(':required-title="')),
         (":requiredCount=\"'many'\"", len(':requiredCount="')),
@@ -7139,3 +7140,25 @@ class Card(Component):
         line_of("Citry.vue.use(42)"),
         line_of("{ wait: false }"),
     }, diagnostics
+
+
+def test_a_template_whose_base_comes_from_the_project_is_marked_as_unchecked(tmp_path):
+    (tmp_path / "base.py").write_text("from citry import Component\nclass BaseCard(Component):\n    pass\n", "utf-8")
+    source = (
+        "from base import BaseCard\n"
+        "from django_components import Component\n"
+        "class Card(BaseCard):\n"
+        "    template = '<article titel=\"x\"></article>'\n"
+        "class Other(Component):\n"
+        "    template = '<p></p>'\n"
+    )
+    project = ProjectState(ProjectStatus(interpreter="python", workspace=str(tmp_path), mode="syntax-only"))
+    document = DocumentState((tmp_path / "card.py").as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    # Nothing is wrong with the code, so the note is information; a class
+    # from an installed package is not marked.
+    (notice,) = [item for item in document.diagnostics if item.code == "citry.check.template-not-checked"]
+    assert notice.severity == types.DiagnosticSeverity.Information
+    assert notice.range == types.Range(_position(source, "Card(Base"), _position(source, "Card(Base", len("Card")))
+    assert "it extends BaseCard, which comes from another module" in notice.message

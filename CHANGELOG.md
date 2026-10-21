@@ -28,6 +28,30 @@
 - The misspelled-directive check now also reports a typo in a Vue
   directive, such as `v-iff` or `v-elif`, which otherwise stops the page
   with an error in the browser.
+- With your application loaded, `citry check` now reports more mistakes
+  that fail only when the page runs
+  ([details](https://citry.dev/ide/template-linting/)):
+  - a component that `<c-for>` repeats without `#c-key` on a page that uses
+    Vue (`rule_missing_component_key`);
+  - a component that assigns to its own prop, such as
+    `@click="open = false"` (`rule_prop_assignment`), which the editor
+    reports too;
+  - `@c-*` arguments the server would reject: an unknown key, a missing
+    required field, or a literal of the wrong type, such as
+    `save({amount: '1'})` for an `int` field
+    (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
+    `rule_incompatible_server_event_field`);
+  - a `var(--name)` that misspells a `css_data()` key, such as
+    `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
+
+  These are errors by default except the CSS check, so `citry check` may
+  now fail on an existing project.
+- With your application loaded, `citry check` now warns when `js_data()`
+  sends a module constant that JSON cannot carry, such as a
+  `PurePosixPath`.
+- `citry check --static` now lists, as a note, each template it skips
+  because the component's base class comes from another module of your
+  project.
 
 ### Changed
 
@@ -68,9 +92,18 @@
   it probably means (`hide`). DOM event names such as `@click` still
   pass. Set `rule_undeclared_component_event` to change the severity,
   which is a warning by default.
+- `citry check` and the editor now report a string for a Boolean Vue prop,
+  such as `:open="open ? 'open' : 'closed'"`, unless the string is empty
+  or the prop's own name. They also check both results of a condition
+  whose results are literals.
+- The render error for a component that `<c-for>` repeats without
+  `#c-key`, or with a duplicate one, now names the tag, its template, and
+  the line.
 
 ### Fixes
 
+- An Events data class field annotated as `Literal[...]` now accepts the
+  values it lists. Every call used to fail with "Unsupported annotation".
 - An Events `State` field annotated as a tuple is a tuple again in event
   handlers, instead of the list that JSON turned it into.
 - On Python 3.10, a browser update to an Events `State` field annotated as

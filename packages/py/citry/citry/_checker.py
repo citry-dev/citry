@@ -5,8 +5,11 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import symtable
+import sys
+import textwrap
 import tokenize
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -20,9 +23,13 @@ from citry._class_introspection import (
 from citry._component_introspection import _loaded_python_file
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
+    BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
     BROWSER_INVALID_STATE_BINDING_TARGET,
+    BROWSER_MISSING_COMPONENT_KEY,
     BROWSER_MISSING_COMPONENT_PROP,
+    BROWSER_MISSING_SERVER_EVENT_FIELD,
     BROWSER_UNKNOWN_SERVER_EVENT,
+    BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
     BROWSER_UNKNOWN_STATE_FIELD,
     CHECK_PYTHON_SOURCE_UNREADABLE,
     CHECK_TEMPLATE_DECLARATION,
@@ -30,6 +37,7 @@ from citry._diagnostic_catalog import (
     CHECK_TEMPLATE_FILE_UNREADABLE,
     CHECK_TEMPLATE_LANGUAGE_UNSUPPORTED,
     CHECK_TEMPLATE_NAMESPACE_UNAVAILABLE,
+    CHECK_TEMPLATE_NOT_CHECKED,
     CHECK_TEMPLATE_VALUE_INVALID,
     I18N_ARGUMENT_INVALID,
     I18N_CATALOG_INVALID,
@@ -47,7 +55,18 @@ from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._inline_assets import normalize_inline_asset
 from citry._linting import _component_lint_info
 from citry._markup_lint import MARKUP_LINT_RULES
-from citry._template_data_source import TemplateDataSourceShape, analyze_template_data_source
+from citry._registry_lint import (
+    server_event_calls,
+    server_event_payload_findings,
+    template_has_vue_attributes,
+    unkeyed_repeated_component_calls,
+)
+from citry._template_data_source import (
+    TemplateDataSourceShape,
+    analyze_css_data_source,
+    analyze_template_data_source,
+)
+from citry._vue.json_data import _json_plain
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
@@ -60,13 +79,16 @@ from citry.analysis import (
     BrowserExpression,
     BrowserProp,
     ComponentJsLintConsumer,
+    ComponentJsLintFinding,
     JsonWireType,
     MarkupLintConsumer,
     MarkupLintFinding,
     MisspelledDirectiveFinding,
     MisspelledDirectiveLintConsumer,
     TemplateLintConsumer,
+    UntracedComponentTemplate,
     VueLintConsumer,
+    VueLintFinding,
     analyze_browser_component_source,
     analyze_js_data_source,
     browser_component_prop_findings,
@@ -83,13 +105,17 @@ from citry.analysis import (
     browser_state_bindings,
     component_js_i18n_owners,
     discover_python_templates,
+    discover_untraced_component_templates,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_component_js_prop_assignments,
     lint_invalid_vue_expressions,
     lint_markup,
+    lint_misspelled_css_variables,
     lint_misspelled_directives,
+    lint_prop_assignments,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -99,6 +125,7 @@ from citry.analysis import (
     lint_unknown_vue_variables,
     lint_vue_python_variables,
     mark_literal_findings,
+    project_module_exists,
 )
 from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
@@ -196,12 +223,11 @@ class _BrowserSource:
 def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
     """Check a registry when one is available, otherwise scan definite literals."""
     if selection.failure is not None:
-        return CheckReport(
-            findings=tuple(_check_static(cwd)),
-            app_failure=selection.failure,
-        )
+        findings, notes = _check_static(cwd)
+        return CheckReport(findings=tuple(findings), app_failure=selection.failure, notes=tuple(notes))
     if selection.engine is None:
-        return CheckReport(findings=tuple(_check_static(cwd)))
+        findings, notes = _check_static(cwd)
+        return CheckReport(findings=tuple(findings), notes=tuple(notes))
 
     engine = selection.engine
     try:
@@ -209,10 +235,8 @@ def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
         registrations = engine.components
         rules = build_tag_rules(engine)
     except (Exception, SystemExit) as exc:  # noqa: BLE001 - tooling degrades on project-code failures
-        return CheckReport(
-            findings=tuple(_check_static(cwd)),
-            app_failure=app_failure_message(exc),
-        )
+        findings, notes = _check_static(cwd)
+        return CheckReport(findings=tuple(findings), app_failure=app_failure_message(exc), notes=tuple(notes))
 
     return CheckReport(
         findings=tuple(_check_registry(engine, registrations, rules)),
@@ -232,6 +256,7 @@ def _check_registry(
     findings: list[CheckFinding] = []
     sources: dict[tuple[object, ...], _TemplateSource] = {}
     browser_sources: dict[tuple[object, ...], _BrowserSource] = {}
+    css_sources: dict[tuple[object, ...], _BrowserSource] = {}
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None
 
@@ -292,6 +317,7 @@ def _check_registry(
             )
         findings.extend(_check_js_data_types(engine, comp_cls))
         _collect_browser_source(engine, comp_cls, browser_sources)
+        _collect_browser_source(engine, comp_cls, css_sources, kind="css")
         class_label = _class_label(comp_cls)
         try:
             owner, inline, filepath = _find_pair_declaration(comp_cls, "template", "template_file")
@@ -398,6 +424,9 @@ def _check_registry(
             elif component_props[consumer] != declared:
                 component_props[consumer] = None
 
+    # The repeated-component rule reads a child's template to see whether it
+    # makes the page use Vue.
+    component_templates = {consumer: source.content for source in sources.values() for consumer in source.consumers}
     for source in sources.values():
         try:
             lint_consumers = tuple(_checker_lint_consumer(engine, component) for component in source.consumers)
@@ -461,12 +490,15 @@ def _check_registry(
                 foreign_options=foreign_options,
                 nested_foreign_options=nested_foreign_options,
                 component_props=component_props,
+                component_templates=component_templates,
             )
         )
     for browser_source in browser_sources.values():
         findings.extend(
             _check_browser_source(engine, browser_source, i18n_profiles or {}, i18n_configured=i18n_configured)
         )
+    for css_source in css_sources.values():
+        findings.extend(_check_css_source(engine, css_source))
     return findings
 
 
@@ -524,9 +556,16 @@ def _checker_foreign_options(
     return ParseOptions(list(agreed_spans))
 
 
-def _check_static(cwd: Path) -> list[CheckFinding]:
-    """Parse literals conservatively matched to local component subclasses."""
+def _check_static(cwd: Path) -> tuple[list[CheckFinding], list[str]]:
+    """
+    Parse literals conservatively matched to local component subclasses.
+
+    Returns the findings, and a note for each class whose template this
+    mode cannot check because its base class comes from another module.
+    """
     findings: list[CheckFinding] = []
+    notes: list[str] = []
+    root = cwd.resolve()
     for path in _iter_py_files(cwd):
         try:
             with tokenize.open(path) as source_file:
@@ -543,6 +582,16 @@ def _check_static(cwd: Path) -> list[CheckFinding]:
             continue
         findings.extend(
             _static_notice_finding(path, notice.component_name, notice.message) for notice in discovery.notices
+        )
+        resolved = path.resolve()
+        # A note, not a finding: nothing is wrong, but this mode skips the
+        # template, and the developer should know which ones it skipped.
+        notes.extend(
+            _untraced_template_note(path, untraced)
+            for untraced in discover_untraced_component_templates(
+                source,
+                is_project_module=_project_module_check(resolved, root),
+            )
         )
         for region in discovery.regions:
             # Without the application only the owners' own Lint classes are
@@ -562,7 +611,7 @@ def _check_static(cwd: Path) -> list[CheckFinding]:
                     markup_lint_consumers=tuple(lint.markup_consumer() for lint in region.owner_lint),
                 ),
             )
-    return findings
+    return findings, notes
 
 
 def _check_template(
@@ -583,6 +632,7 @@ def _check_template(
     foreign_options: ParseOptions | None = None,
     nested_foreign_options: Callable[[str], ParseOptions | None] | None = None,
     component_props: Mapping[type[Component], tuple[BrowserProp, ...] | None] | None = None,
+    component_templates: Mapping[type[Component], str] | None = None,
 ) -> list[CheckFinding]:
     """Parse one source and, in registry mode, inspect component tag names."""
     try:
@@ -778,6 +828,17 @@ def _check_template(
         )
     if engine is not None and source.consumers:
         findings.extend(_emit_findings(engine, source, browser_hosts))
+        findings.extend(
+            _missing_component_key_findings(
+                engine,
+                source,
+                template,
+                component_templates or {},
+                parse_nested=nested_parser,
+                rules=rules,
+            )
+        )
+        findings.extend(_server_event_payload_findings(engine, source, template, parse_nested=nested_parser))
     for target_error in browser_state_binding_target_errors(template, parse_nested=nested_parser):
         findings.append(
             _browser_template_finding(
@@ -1757,8 +1818,270 @@ def _emit_findings(
                     for component in source.consumers
                 ],
             ),
+            # Every owner must declare the name as a prop, so an owner
+            # without readable JavaScript leaves nothing to report.
+            *lint_prop_assignments(
+                browser_hosts,
+                () if None in owner_sources else [text for text in owner_sources if text is not None],
+                severities=[
+                    _component_lint_info(engine, component).rule_prop_assignment for component in source.consumers
+                ],
+            ),
         )
     ]
+
+
+def _missing_component_key_findings(
+    engine: Citry,
+    source: _TemplateSource,
+    template: Template,
+    component_templates: Mapping[type[Component], str],
+    *,
+    parse_nested: Callable[[str], Template],
+    rules: Mapping[str, TagRules] | None,
+) -> list[CheckFinding]:
+    """
+    Report components that `<c-for>` repeats without `#c-key` on a page that uses Vue.
+
+    On such a page Vue matches each repeated component by its key, and the
+    render fails at the loop's second item when there is none. Whether the
+    page uses Vue is decided for the whole page, which the check cannot
+    see, so it reports a call only when the template's own component or the
+    repeated component is known to make the page use Vue.
+    """
+    calls = unkeyed_repeated_component_calls(template, parse_nested=parse_nested)
+    if not calls:
+        return []
+    active = [
+        rule_severity
+        for component in source.consumers
+        if (rule_severity := _component_lint_info(engine, component).rule_missing_component_key) != "ignore"
+    ]
+    if not active:
+        return []
+    severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
+    vue_cache: dict[type[Component], bool] = {}
+
+    def uses_vue(component: type[Component]) -> bool:
+        if component not in vue_cache:
+            vue_cache[component] = _makes_page_use_vue(component, component_templates.get(component), rules)
+        return vue_cache[component]
+
+    owner_uses_vue = any(uses_vue(component) for component in source.consumers)
+    findings: list[CheckFinding] = []
+    for call in calls:
+        try:
+            child = engine.get(call.tag.lower().removeprefix("c-"))
+        except NotRegistered:
+            continue
+        # These render into their caller's HTML instead of as a component of
+        # their own, so the loop never needs to tell them apart.
+        if child.transparent or child.simple is True or child._citry_dynamic_selector:
+            continue
+        if not owner_uses_vue and not uses_vue(child):
+            continue
+        finding = _browser_template_finding(
+            source.origin,
+            source.content,
+            call.start_index,
+            call.end_index,
+            BROWSER_MISSING_COMPONENT_KEY,
+            tag=call.tag,
+        )
+        findings.append(replace(finding, severity=severity))
+    return findings
+
+
+def _makes_page_use_vue(
+    component: type[Component],
+    template_source: str | None,
+    rules: Mapping[str, TagRules] | None,
+) -> bool:
+    """
+    Return whether rendering a component makes its page use Vue, as far as its class and template show.
+
+    The page uses Vue when any component on it has component JavaScript,
+    browser data, an `Events` class, or a Vue attribute in its template. A
+    `State` class alone does not count.
+    """
+    events = _component_events_info(component)
+    if (events is not None and events.events_cls is not None) or _sends_browser_data(component):
+        return True
+    try:
+        _owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
+    except (Exception, SystemExit):  # noqa: BLE001 - an unreadable declaration proves nothing
+        return False
+    if inline is not None or filepath is not None:
+        return True
+    if template_source is None:
+        return False
+    try:
+        template = parse_template(template_source, user_rules=dict(rules) if rules is not None else None)
+    except (SyntaxError, ValueError):
+        return False
+    return template_has_vue_attributes(
+        template,
+        parse_nested=lambda value: parse_template(value, user_rules=dict(rules) if rules is not None else None),
+    )
+
+
+def _sends_browser_data(component: type[Component]) -> bool:
+    """
+    Return whether a component is known to send at least one value to the browser.
+
+    The page uses Vue only when the data `js_data()` returns is not empty, so
+    a `JsData` class with no fields, or a `js_data()` the source shows
+    always returns `{}`, does not count. A `js_data()` whose source cannot be
+    read may return data, so it counts.
+    """
+    schema = component.citry.inspect_component(component).schemas.js_data
+    if schema.kind == "fields":
+        return bool(schema.fields)
+    if component.js_data is Component.js_data:
+        return False
+    analyzed = _disk_js_data_shape(component)
+    return analyzed is None or bool(analyzed[2].roots) or analyzed[2].completeness != "closed"
+
+
+def _server_event_payload_findings(
+    engine: Citry,
+    source: _TemplateSource,
+    template: Template,
+    *,
+    parse_nested: Callable[[str], Template],
+) -> list[CheckFinding]:
+    """Check the literal arguments of `@c-*` bindings against each handler's data class."""
+    handlers = _shared_event_handlers(source.consumers)
+    if not handlers:
+        return []
+    findings: list[CheckFinding] = []
+    for call in server_event_calls(template, frozenset(handlers), parse_nested=parse_nested):
+        data_class, query_string = handlers[call.handler]
+        for finding in server_event_payload_findings(call, data_class, query_string=query_string):
+            setting = _PAYLOAD_RULES[finding.code]
+            active = [
+                rule_severity
+                for component in source.consumers
+                if (rule_severity := getattr(_component_lint_info(engine, component), setting)) != "ignore"
+            ]
+            if not active:
+                continue
+            start = _byte_offset_coordinates(source.content, finding.start_index)
+            end = _byte_offset_coordinates(source.content, finding.end_index)
+            findings.append(
+                CheckFinding(
+                    source.origin,
+                    finding.message,
+                    finding.code,
+                    severity="error" if "error" in active else "warning",
+                    start_index=finding.start_index,
+                    end_index=finding.end_index,
+                    line=start[0],
+                    column=start[1],
+                    end_line=end[0],
+                    end_column=end[1],
+                )
+            )
+    return findings
+
+
+# The setting that controls each server-event payload finding.
+_PAYLOAD_RULES = {
+    BROWSER_UNKNOWN_SERVER_EVENT_FIELD: "rule_unknown_server_event_field",
+    BROWSER_MISSING_SERVER_EVENT_FIELD: "rule_missing_server_event_field",
+    BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD: "rule_incompatible_server_event_field",
+}
+
+
+def _shared_event_handlers(consumers: list[type[Component]]) -> dict[str, tuple[type | None, bool]]:
+    """
+    Return each handler name every owner declares, with the data class they all use and whether GET may send it.
+
+    A template shared by several components runs each binding against the
+    component that renders it, so a handler is checked only when every owner
+    has it with the same data class. Any other handler is left out. A
+    handler that accepts GET may receive its arguments as a query string.
+    """
+    shared: dict[str, tuple[type | None, bool]] | None = None
+    for component in consumers:
+        info = _component_events_info(component)
+        current = (
+            {}
+            if info is None
+            else {name: (handler.data_schema, "GET" in handler.methods) for name, handler in info.handlers.items()}
+        )
+        if shared is None:
+            shared = current
+            continue
+        shared = {
+            name: (schema, query_string or current[name][1])
+            for name, (schema, query_string) in shared.items()
+            if name in current and current[name][0] is schema
+        }
+    return shared or {}
+
+
+def _check_css_source(engine: Citry, source: _BrowserSource) -> list[CheckFinding]:
+    """Report `var(--name)` in one component CSS source that looks like a misspelled `css_data()` key."""
+    active = [
+        rule_severity
+        for component in source.consumers
+        if (rule_severity := _component_lint_info(engine, component).rule_misspelled_css_variable) != "ignore"
+    ]
+    if not active:
+        return []
+    keys: set[str] = set()
+    for component in source.consumers:
+        component_keys = _css_data_keys(engine, component)
+        # One owner whose keys are not all known may set any property.
+        if component_keys is None:
+            return []
+        keys.update(component_keys)
+    return [
+        _browser_source_finding(
+            source.origin,
+            source.content,
+            finding.start_index,
+            finding.end_index,
+            finding.code,
+            finding.message,
+            finding.severity,
+        )
+        for finding in lint_misspelled_css_variables(
+            source.content,
+            keys,
+            severity="error" if "error" in active else "warning",
+        )
+    ]
+
+
+def _css_data_keys(engine: Citry, component: type[Component]) -> frozenset[str] | None:
+    """Return every key a component's `css_data()` or `CssData` returns, or None when the set is not known."""
+    schema = engine.inspect_component(component).schemas.css_data
+    if schema.kind == "fields" and schema.namespace_policy == "closed":
+        return frozenset(field.name for field in schema.fields)
+    if schema.kind != "absent":
+        return None
+    for candidate in _static_class_mro(component):
+        if "css_data" not in _static_class_dict(candidate):
+            continue
+        if candidate is Component:
+            # Component's own `css_data()` returns no keys.
+            return frozenset()
+        source_file = _loaded_python_file(candidate)
+        qualname = _safe_class_text(candidate, "__qualname__")
+        if source_file is None or qualname is None:
+            return None
+        try:
+            with tokenize.open(source_file) as source_stream:
+                text = source_stream.read()
+        except (OSError, SyntaxError, UnicodeError):
+            return None
+        shape = analyze_css_data_source(text, qualname)
+        if shape is None or shape.completeness != "closed":
+            return None
+        return frozenset(root.name for root in shape.roots)
+    return None
 
 
 def _checker_markup_lint_consumer(engine: Citry, component: type[Component]) -> MarkupLintConsumer:
@@ -1895,7 +2218,13 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
     # type a value such as `kwargs.task.lane` from `Task.lane`.
     wire_classes = kwargs_wire_classes(component) if member_types else KwargsWireClasses()
     member_annotations = {name: wire_classes.members for name in member_types}
+    module_values = _js_data_module_values(component, source)
     for root in shape.roots:
+        values = [
+            value
+            for definition in root.definitions
+            if (value := _range_source(source, definition.value_range)) is not None
+        ]
         wire_types = [
             json_wire_type_from_expression(
                 value,
@@ -1903,10 +2232,20 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
                 member_annotations=member_annotations,
                 classes=wire_classes.classes,
             )
-            for definition in root.definitions
-            if (value := _range_source(source, definition.value_range)) is not None
+            for value in values
         ]
         issues = tuple(dict.fromkeys(issue for item in wire_types for issue in item.unsupported))
+        if not issues:
+            # A bare module-level name, such as `API_BASE`, has no type in
+            # the source, but the loaded module holds the value js_data()
+            # sends, so the browser's own JSON check can run on it.
+            issues = tuple(
+                dict.fromkeys(
+                    issue
+                    for value, wire_type in zip(values, wire_types, strict=True)
+                    if wire_type.kind == "unknown" and (issue := module_values(value.strip())) is not None
+                )
+            )
         if not issues:
             continue
         definition = root.definitions[-1]
@@ -1924,6 +2263,77 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
             )
         )
     return findings
+
+
+def _js_data_module_values(component: type[Component], source: str) -> Callable[[str], str | None]:
+    """
+    Return a check that says why a bare name in a component's `js_data()` holds a value JSON cannot carry.
+
+    The check answers None for a name that `js_data()` binds itself, for a
+    name its module does not define, and for a value the browser can
+    receive.
+    """
+    owner = next(
+        (candidate for candidate in _static_class_mro(component) if "js_data" in _static_class_dict(candidate)), None
+    )
+    module = sys.modules.get(getattr(owner, "__module__", "")) if owner is not None else None
+    qualname = _safe_class_text(owner, "__qualname__") if owner is not None else None
+    if module is None or qualname is None:
+        return lambda _name: None
+    try:
+        scope = _python_qualified_scope(ast.parse(source), qualname)
+    except (SyntaxError, ValueError):
+        return lambda _name: None
+    method = next(
+        (
+            statement
+            for statement in getattr(scope, "body", ())
+            if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef)) and statement.name == "js_data"
+        ),
+        None,
+    )
+    if method is None:
+        return lambda _name: None
+    local_names = _function_local_names(source, method)
+    if local_names is None:
+        return lambda _name: None
+    namespace = vars(module)
+
+    def issue(name: str) -> str | None:
+        if not name.isidentifier() or name in local_names or name not in namespace:
+            return None
+        value = namespace[name]
+        try:
+            _json_plain(value)
+        except TypeError:
+            return f"{name} holds a value of type {type(value).__name__}, which cannot be sent to the browser as JSON"
+        except ValueError as exc:
+            return str(exc)
+        return None
+
+    return issue
+
+
+def _function_local_names(source: str, function: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str] | None:
+    """
+    Return every name a function binds for itself, which hides a module name of the same spelling.
+
+    Python's own symbol table decides, so a parameter, an assignment, an
+    import, an `except ... as` name, a `match` capture, and a nested `def`
+    all count, while a `global` name does not. None means the source could
+    not be read.
+    """
+    text = ast.get_source_segment(source, function)
+    if text is None:
+        return None
+    try:
+        table = symtable.symtable(textwrap.dedent(text), "<js_data>", "exec")
+    except (SyntaxError, ValueError):
+        return None
+    scope = next((child for child in table.get_children() if child.get_name() == function.name), None)
+    if scope is None:
+        return None
+    return frozenset(symbol.get_name() for symbol in scope.get_symbols() if symbol.is_local() or symbol.is_parameter())
 
 
 def _disk_js_data_shape(
@@ -1952,22 +2362,25 @@ def _collect_browser_source(
     engine: Citry,
     component: type[Component],
     sources: dict[tuple[object, ...], _BrowserSource],
+    *,
+    kind: Literal["js", "css"] = "js",
 ) -> None:
-    """Collect supported inline/file component JavaScript without executing loaders."""
+    """Collect supported inline/file component JavaScript, or CSS with ``kind="css"``, without executing loaders."""
     try:
-        owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
+        owner, inline, filepath = _find_pair_declaration(component, kind, f"{kind}_file")
     except (Exception, SystemExit):  # noqa: BLE001 - one invalid component must not stop the batch
         return
     if inline is None and filepath is None:
         return
-    if _effective_class_value(component, "js_lang") is not None:
+    # A `js_lang` or `css_lang` value names a source language Citry does not read.
+    if _effective_class_value(component, f"{kind}_lang") is not None:
         return
     if type(inline) is str:
-        inline_key: tuple[object, ...] = (id(owner), "js")
+        inline_key: tuple[object, ...] = (id(owner), kind)
         existing = sources.get(inline_key)
         if existing is None:
             sources[inline_key] = _BrowserSource(
-                f"{_class_label(owner)}.js",
+                f"{_class_label(owner)}.{kind}",
                 normalize_inline_asset(inline),
                 [component],
             )
@@ -2073,6 +2486,15 @@ def _check_browser_source(
             proven_owner_spans=i18n_owner_spans,
         )
     )
+    js_findings: tuple[ComponentJsLintFinding | VueLintFinding, ...] = (
+        *lint_undeclared_component_js_emits(source.content),
+        *lint_component_js_prop_assignments(
+            source.content,
+            severities=[
+                _component_lint_info(engine, component).rule_prop_assignment for component in source.consumers
+            ],
+        ),
+    )
     findings.extend(
         _browser_source_finding(
             source.origin,
@@ -2083,7 +2505,7 @@ def _check_browser_source(
             finding.message,
             finding.severity,
         )
-        for finding in lint_undeclared_component_js_emits(source.content)
+        for finding in js_findings
     )
     event_names = _shared_event_names(source.consumers)
     if event_names is None:
@@ -2446,6 +2868,21 @@ def _error_detail(exc: BaseException) -> str:
     detail = str(exc)
     error_type = type(exc).__name__
     return f"{error_type}: {detail}" if detail else error_type
+
+
+def _project_module_check(file: Path, root: Path) -> Callable[[str, int], bool]:
+    """Return whether an import in ``file`` names a module of the project under ``root``."""
+
+    def check(module: str, level: int) -> bool:
+        return project_module_exists(module, level, file=file, root=root)
+
+    return check
+
+
+def _untraced_template_note(path: Path, untraced: UntracedComponentTemplate) -> str:
+    """Write the note for a template `--static` skips, with its file, line, and code."""
+    message = render_diagnostic(CHECK_TEMPLATE_NOT_CHECKED, component=untraced.component_name, base=untraced.base)
+    return f"{path}:{untraced.line}: {message} [{CHECK_TEMPLATE_NOT_CHECKED}]"
 
 
 def _static_notice_finding(path: Path, component_name: str, message: str) -> CheckFinding:

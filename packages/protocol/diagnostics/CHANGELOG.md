@@ -44,3 +44,19 @@
   (`configurableSeverity: true`), also covers plain lowercase listener
   names that are not DOM events, and has the message variant `suggestion`
   that names a declared event one typing slip away.
+- Added configurable diagnostics that `citry check` reports with the
+  application loaded: `citry.browser.missing-component-key`,
+  `citry.browser.prop-assignment` (also reported by the language server,
+  with the message variant `v-model`),
+  `citry.browser.unknown-server-event-field` (variants `suggestion` and
+  `no-data`), `citry.browser.missing-server-event-field`, and
+  `citry.browser.incompatible-server-event-field`, all errors by default,
+  and `citry.css.misspelled-variable`, a warning by default.
+- Added `citry.check.template-not-checked`, an information diagnostic for a
+  class whose template `citry check --static` and the language server skip
+  because its base class comes from another module.
+- `citry.browser.incompatible-component-prop` also covers a string for a
+  Boolean prop and both results of a condition whose results are literals.
+- `citry.js-data.unsupported-type` also covers a module constant that
+  `js_data()` returns and a value that ty types as a standard type JSON
+  cannot carry.

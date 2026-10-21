@@ -204,6 +204,12 @@ class TemplateLintInfo:
     rule_misspelled_event: LintSeverity = "warning"
     rule_invalid_vue_expression: LintSeverity = "error"
     rule_undeclared_component_event: LintSeverity = "warning"
+    rule_missing_component_key: LintSeverity = "error"
+    rule_prop_assignment: LintSeverity = "error"
+    rule_unknown_server_event_field: LintSeverity = "error"
+    rule_missing_server_event_field: LintSeverity = "error"
+    rule_incompatible_server_event_field: LintSeverity = "error"
+    rule_misspelled_css_variable: LintSeverity = "warning"
 
     def __post_init__(self) -> None:
         if (

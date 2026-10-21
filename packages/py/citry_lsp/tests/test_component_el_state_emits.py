@@ -362,3 +362,42 @@ def test_array_emits_type_declared_listeners_as_any_and_others_as_events(tmp_pat
             assert not [message for message in errors if "parameter of type 'null'" in message], errors
         else:
             assert _probe_message(expected) in errors, errors
+
+
+_PROP_JS = """$component({
+  props: { open: { type: Boolean, required: true } },
+  methods: { close() { this.open = false; } },
+});
+"""
+
+
+@pytest.mark.parametrize(
+    ("lint", "expected"),
+    [
+        (
+            "",
+            [
+                ("card.html", types.DiagnosticSeverity.Error),
+                # A write in the component's JavaScript is at most a warning.
+                ("card.js", types.DiagnosticSeverity.Warning),
+            ],
+        ),
+        ("rule_prop_assignment='ignore'", []),
+    ],
+)
+def test_assignments_to_an_own_prop_are_reported(tmp_path, lint, expected):
+    template = '<button @click="open = false">Close</button><p v-text="open ? 1 : 2"></p>'
+    project, javascript_document, template_document, documents = _project(tmp_path, template, _PROP_JS, lint=lint)
+
+    found = [
+        (name, item)
+        for name, document in (("card.html", template_document), ("card.js", javascript_document))
+        for item in browser_diagnostics(document, project, documents)
+        if item.code == "citry.browser.prop-assignment"
+    ]
+
+    assert [(name, item.severity) for name, item in found] == expected
+    for name, item in found:
+        source = template if name == "card.html" else _PROP_JS
+        assert item.range.start == _position(source, "open = false")
+        assert item.range.end == _position(source, "open = false", len("open"))

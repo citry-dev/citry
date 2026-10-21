@@ -1068,7 +1068,10 @@ primitives (`int`/`float` cross-coercion, `str` to `UUID | datetime |
 date | time | Decimal | Enum`, which parse from strings because a
 string is their canonical JSON encoding, `list` to `tuple`/`set`,
 nested annotated
-classes from objects); extra keys are a 422, missing required fields are
+classes from objects, and `Literal[...]`, which accepts a value equal to
+one of its listed values after that value's own type rule, so a form
+post's `"2"` binds to `Literal[1, 2]` and `true` never matches `1`; any
+other value is the per-field 422 "Expected one of ..."); extra keys are a 422, missing required fields are
 a 422 with per-field messages, never a host 500. A JSON payload sending
 a string where the schema declares `int`, `float`, or `bool` is a 422,
 not a coercion: JSON can express those types natively, so a mistyped
@@ -2360,14 +2363,22 @@ One element may carry several event bindings for different DOM events;
 each evaluates its own expression against the same element (an e2e test
 case, section 13).
 
-**Form fields populate the data schema.** When the triggering event is a
-form's `submit`, the runtime serializes the form's named controls into
-the wire args payload (explicit expression args win on collision),
-mirroring the urlencoded no-JS codec (6.2): the JS path and the no-JS
-path deliver the same call. Control `name` attributes map to schema
-fields, schema validation produces the 422 `fieldErrors` map for the error
-display, and a failed submit re-renders nothing, so the DOM keeps the
-user's input:
+**Form fields populate the data schema.** When a binding names only the
+handler, as `@c-submit.prevent="submit"` and `submit()` do, and the event
+comes from a `<form>`, the runtime sends the form's named controls as the
+wire args payload. Arguments written in the binding replace the form's
+fields instead of joining them: `@c-submit.prevent="submit({draft: true})"`
+sends only `{draft: true}`. The browser sends each control's value as a
+string, except that a `number` or `range` input holding a number sends
+that number, and a name with several values, such as several checked
+checkboxes, sends a list of strings. An unchecked checkbox sends nothing,
+and file inputs are left out. The payload is JSON, so it
+is checked strictly; only the urlencoded no-JS codec (6.2) binds strings
+to `int`, `float`, and `bool` fields, so the two paths can deliver
+different values for the same form. Control `name` attributes map to
+schema fields, schema validation produces the 422 `fieldErrors` map for
+the error display, and a failed submit re-renders nothing, so the DOM
+keeps the user's input:
 
 ```html
 <form @c-submit.prevent="submit">

@@ -18,7 +18,11 @@ The coercion table, exactly (anything else is a per-field error):
 - ``str`` to ``UUID`` / ``datetime`` / ``date`` / ``time`` / ``Decimal`` /
   ``Enum`` (ISO strings, by enum value),
 - ``list`` to ``tuple`` / ``set``,
-- nested annotated classes from objects.
+- nested annotated classes from objects,
+- a ``Literal[...]`` field accepts a value equal to one of its listed
+  values after that value's own rule above (an Enum member by its value),
+  so ``"2"`` from a form post binds to ``Literal[1, 2]`` and ``true`` never
+  matches ``1``.
 
 The binding is source-aware (design 3.3). A JSON payload stays strict for
 ``int`` / ``float`` / ``bool`` fields: JSON expresses those types natively,
@@ -45,7 +49,7 @@ from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import UnionType
-from typing import Any, NamedTuple, Union, get_args, get_origin, get_type_hints
+from typing import Any, Literal, NamedTuple, Union, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from citry.ext.events.files import UploadedFile
@@ -262,6 +266,36 @@ def _schema_info(schema_cls: type) -> tuple[type, tuple[_FieldSpec, ...]]:
     return converted, specs
 
 
+def payload_fields(schema_cls: type) -> tuple[_FieldSpec, ...] | None:
+    """
+    Return the fields a ``data`` class accepts from the wire, for ``citry check``.
+
+    Returns None for a Pydantic model, whose own rules decide what it
+    accepts, and for a class whose annotations cannot be resolved, which
+    fails at the first call anyway.
+    """
+    if _is_pydantic_model(schema_cls):
+        return None
+    try:
+        return _schema_info(schema_cls)[1]
+    except Exception:  # noqa: BLE001 - an unresolvable annotation is reported when the handler runs
+        return None
+
+
+def json_value_error(annotation: Any, value: Any, *, bind_strings: bool = False) -> str | None:
+    """
+    Return the message the server gives for ``value`` in a field annotated ``annotation``, or None when it fits.
+
+    By default ``value`` is checked as a JSON payload is, without the string
+    rules of a form post, because the browser sends ``@c-*`` arguments as
+    JSON. ``bind_strings`` applies those rules, as for a GET query string.
+    """
+    errors: dict[str, str] = {}
+    if _coerce(value, annotation, "", errors, bind_strings=bind_strings) is not _INVALID:
+        return None
+    return next(iter(errors.values()), None)
+
+
 def _validate_object(
     schema_cls: type,
     mapping: Mapping[str, Any],
@@ -347,6 +381,8 @@ def _coerce(value: Any, annotation: Any, path: str, errors: dict[str, str], *, b
     origin = get_origin(annotation)
     if origin in (Union, UnionType):
         return _coerce_union(value, annotation, path, errors, bind_strings=bind_strings)
+    if origin is Literal:
+        return _coerce_literal(value, annotation, path, errors, bind_strings=bind_strings)
     if origin in (list, tuple, set):
         return _coerce_container(value, annotation, origin, path, errors, bind_strings=bind_strings)
     if origin is dict or origin is Mapping:
@@ -546,6 +582,37 @@ def _coerce_union(value: Any, annotation: Any, path: str, errors: dict[str, str]
             return coerced
     names = " or ".join(_type_name(member) for member in non_none)
     return _fail(errors, path, f"Expected {names}, got {_value_type_name(value)}.")
+
+
+def _coerce_literal(value: Any, annotation: Any, path: str, errors: dict[str, str], *, bind_strings: bool) -> Any:
+    """Coerce a ``Literal[...]`` value: it must equal one of the listed values, with that value's type."""
+    members = get_args(annotation)
+    for member in members:
+        # The wire carries an Enum member as its value, so the value is what
+        # the payload must match, read by the value's own type.
+        expected = member.value if isinstance(member, Enum) else member
+        # Each listed value is read by its own type's rule, so a form post's
+        # "2" still binds to `Literal[1, 2]`, as for a plain field of that type.
+        scratch: dict[str, str] = {}
+        coerced = _coerce(value, type(expected), path, scratch, bind_strings=bind_strings)
+        # Python counts True == 1, so the type is compared too: JSON keeps
+        # `true` and `1` apart, and so does the field.
+        if coerced is not _INVALID and type(coerced) is type(expected) and coerced == expected:
+            return member
+    # Values are shown as the browser writes them, an Enum member by its value.
+    listed = ", ".join(_literal_value_text(member.value if isinstance(member, Enum) else member) for member in members)
+    return _fail(errors, path, f"Expected one of {listed}, got {_literal_value_text(value)}.")
+
+
+def _literal_value_text(value: Any) -> str:
+    """Show a scalar itself, in JSON spelling, so a wrong choice reads as that choice; anything else by its type."""
+    if isinstance(value, str):
+        return _short_repr(value)
+    if isinstance(value, bool) or value is None:
+        return _value_type_name(value) if value is None else str(value).lower()
+    if isinstance(value, (int, float)):
+        return repr(value)
+    return _value_type_name(value)
 
 
 def _coerce_container(

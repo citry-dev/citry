@@ -133,6 +133,12 @@ _TEMPLATE_RULE_FIELDS = (
     "rule_misspelled_event",
     "rule_invalid_vue_expression",
     "rule_undeclared_component_event",
+    "rule_missing_component_key",
+    "rule_prop_assignment",
+    "rule_unknown_server_event_field",
+    "rule_missing_server_event_field",
+    "rule_incompatible_server_event_field",
+    "rule_misspelled_css_variable",
 )
 
 
@@ -243,6 +249,37 @@ class LintSettings:
             in ``emits``, such as ``@hdie`` for ``hide``. The listener
             usually never runs. ``citry check`` reports it only with your
             application loaded. The default is ``"warning"``.
+        rule_missing_component_key: Severity for a component that
+            ``<c-for>`` repeats without a ``#c-key`` on a page that uses Vue,
+            which fails to render once the loop has two items. ``citry
+            check`` reports it only with your application loaded. The
+            default is ``"error"``.
+        rule_prop_assignment: Severity for a component that assigns to one
+            of its own Vue props, such as ``@click="open = false"``. Props
+            are read-only, so the value does not change. An assignment in the
+            component's JavaScript, such as ``this.open = false``, is at most
+            a warning. ``citry check`` reports it only with your application
+            loaded. The default is ``"error"``.
+        rule_unknown_server_event_field: Severity for an ``@c-*`` binding
+            that sends a key the handler's data class does not declare, such
+            as ``save({amont: 1})``. The server rejects the call. ``citry
+            check`` reports it only with your application loaded. The
+            default is ``"error"``.
+        rule_missing_server_event_field: Severity for an ``@c-*`` binding
+            that leaves out a field the handler's data class requires. The
+            server rejects the call. ``citry check`` reports it only with
+            your application loaded. The default is ``"error"``.
+        rule_incompatible_server_event_field: Severity for an ``@c-*``
+            binding that sends a literal value the handler's data class does
+            not accept, such as ``save({amount: '1'})`` for an ``int``
+            field. The server rejects the call. ``citry check`` reports it
+            only with your application loaded. The default is ``"error"``.
+        rule_misspelled_css_variable: Severity for a ``var(--name)`` in a
+            component's CSS that is one typing slip from a key its
+            ``css_data()`` returns, such as ``var(--acent)`` for
+            ``accent``. Nothing sets the property. ``citry check`` reports
+            it only with your application loaded. The default is
+            ``"warning"``.
         check_input_types: Check that each value a component receives has
             the type its annotation names. On by default, in development and
             in production. Unlike the ``rule_*`` settings, this check runs
@@ -294,6 +331,12 @@ class LintSettings:
     rule_misspelled_event: LintSeverity = "warning"
     rule_invalid_vue_expression: LintSeverity = "error"
     rule_undeclared_component_event: LintSeverity = "warning"
+    rule_missing_component_key: LintSeverity = "error"
+    rule_prop_assignment: LintSeverity = "error"
+    rule_unknown_server_event_field: LintSeverity = "error"
+    rule_missing_server_event_field: LintSeverity = "error"
+    rule_incompatible_server_event_field: LintSeverity = "error"
+    rule_misspelled_css_variable: LintSeverity = "warning"
     check_input_types: bool = True
 
     # Hidden from type checkers so they keep checking calls against the

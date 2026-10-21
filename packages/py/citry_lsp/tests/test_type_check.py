@@ -17,7 +17,7 @@ from lsprotocol import types
 from pygls.exceptions import JsonRpcInvalidParams
 from pytest_lsp import ClientServerConfig, LanguageClient
 
-from citry._checker import CheckReport
+from citry._checker import CheckFinding, CheckReport
 from citry.commands.check import _with_type_findings
 from citry_lsp import project as project_module
 from citry_lsp.engine import (
@@ -29,9 +29,9 @@ from citry_lsp.engine import (
     template_lint_diagnostics,
     type_check_projections,
 )
-from citry_lsp.project import load_project
-from citry_lsp.project_check import check_project_python_types
-from citry_lsp.protocol import PROTOCOL_VERSION, TYPE_CHECK_METHOD
+from citry_lsp.project import ProjectState, load_project
+from citry_lsp.project_check import ProjectTypeFinding, check_project_python_types
+from citry_lsp.protocol import PROTOCOL_VERSION, TYPE_CHECK_METHOD, ProjectStatus
 from citry_lsp.semantic import _json_type_from_ty_display, infer_js_data_value_types
 from citry_lsp.server import CitryLanguageServer
 from citry_lsp.type_analysis import TyAnalyzer
@@ -702,6 +702,48 @@ def test_check_project_python_types_reports_ty_findings_like_the_editor(tmp_path
     assert found[0].diagnostic.source == "Citry (ty)"
 
 
+# Case m41-browser-value-not-json in benchmarks/errors/cases: js_data()
+# sends a constant from another module that holds a path, so only ty can
+# tell its type.
+_PATH_SETTINGS = """from pathlib import PurePosixPath
+API_BASE = PurePosixPath("/api")
+"""
+_PATH_APP = """from citry import Citry, Component
+from settings import API_BASE
+engine = Citry(autodiscover=False)
+class Board(Component):
+    citry = engine
+    template = "<p></p>"
+    def js_data(self, kwargs, slots):
+        return {"apiBase": API_BASE, "ids": {1, 2}}
+"""
+
+
+def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_path(tmp_path, monkeypatch):
+    (tmp_path / "settings.py").write_text(_PATH_SETTINGS, encoding="utf-8")
+    (tmp_path / "app.py").write_text(_PATH_APP, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+
+    found = check_project_python_types(project, tmp_path)
+
+    # The editor's js-data warning, at the key, once ty names the type. The
+    # set literal needs no ty, so the registry check reports it instead.
+    assert [
+        (item.path.name, item.diagnostic.code, item.diagnostic.range.start.line, item.diagnostic.message)
+        for item in found
+    ] == [
+        (
+            "app.py",
+            "citry.js-data.unsupported-type",
+            7,
+            "JsData field 'apiBase' is not a clean JSON value: PurePosixPath values are not serialized by Citry's"
+            " JSON wire format. Browser tooling will treat its type as unknown.",
+        ),
+    ]
+
+
 # Without a template_data() of its own, the component inherits the one on
 # Citry's base class, outside this workspace, and its Kwargs fields reach
 # the template.
@@ -843,6 +885,46 @@ def test_check_types_stops_when_ty_cannot_run(tmp_path, monkeypatch, capsys):
 
     assert exited.value.code == 2
     assert "--types cannot run ty: Python expression analysis is unavailable" in capsys.readouterr().err
+
+
+def test_check_types_reports_a_js_data_warning_once_per_file_and_place(tmp_path, monkeypatch):
+    # The registry check and ty both prove app.py's value is not JSON; the
+    # same place in other.py comes only from ty, so it is kept.
+    (tmp_path / "app.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "other.py").write_text("x = 1\n", encoding="utf-8")
+    warning = types.Diagnostic(
+        types.Range(types.Position(0, 0), types.Position(0, 1)),
+        "JsData field 'x' is not a clean JSON value.",
+        severity=types.DiagnosticSeverity.Warning,
+        code="citry.js-data.unsupported-type",
+    )
+    ready = ProjectState(ProjectStatus(interpreter="python", workspace=str(tmp_path), registry_ready=True))
+    monkeypatch.setattr("citry_lsp.typescript.find_typescript_compiler", lambda _cwd: ("tsc",))
+    monkeypatch.setattr("citry_lsp.project.load_project", lambda _cwd, _app, **_options: ready)
+    monkeypatch.setattr("citry_lsp.project_check.project_documents", lambda _project, _cwd: {})
+    monkeypatch.setattr(
+        "citry_lsp.project_check.check_project_python_types",
+        lambda _project, _cwd, _documents: tuple(
+            ProjectTypeFinding(tmp_path / name, "x = 1\n", warning) for name in ("app.py", "other.py")
+        ),
+    )
+    monkeypatch.setattr("citry_lsp.typescript.check_project_types", lambda *_args: ())
+    registry = CheckFinding(
+        f"{tmp_path / 'app.py'} (app.Board.js_data)",
+        "JsData field 'x' is not a clean JSON value: x holds a value of type set.",
+        "citry.js-data.unsupported-type",
+        "warning",
+        0,
+        1,
+        0,
+        0,
+        0,
+        1,
+    )
+
+    report = _with_type_findings(CheckReport((registry,), None, ()), "app:engine", tmp_path)
+
+    assert [finding.origin for finding in report.findings] == [registry.origin, f"{tmp_path / 'other.py'}:1:1"]
 
 
 def test_check_types_waits_longer_than_the_editor_for_the_app_to_load(tmp_path, monkeypatch, capsys):
@@ -1198,6 +1280,26 @@ def test_ty_type_displays_become_json_types(display, expected):
     value = _json_type_from_ty_display(display)
 
     assert (value.javascript if value is not None else None) == expected
+
+
+@pytest.mark.parametrize(
+    ("display", "reasons"),
+    [
+        ("PurePosixPath", ("PurePosixPath values are not serialized by Citry's JSON wire format",)),
+        ("pathlib.Path", ("Path values are not serialized by Citry's JSON wire format",)),
+        ("datetime | None", ("datetime values are not serialized by Citry's JSON wire format",)),
+        ("set[int]", ("sets are not JSON-serializable",)),
+        ("frozenset[str]", ("sets are not JSON-serializable",)),
+        ("complex", ("complex values are not JSON-serializable",)),
+        # Any other class may be a TypedDict, which is sent as an object.
+        ("Task", None),
+        ("Unknown | PurePosixPath", None),
+    ],
+)
+def test_ty_displays_of_standard_non_json_types_keep_their_reason(display, reasons):
+    value = _json_type_from_ty_display(display)
+
+    assert (value.unsupported if value is not None else None) == reasons
 
 
 def test_a_bound_string_the_attribute_rule_reports_is_not_reported_by_typescript(tmp_path):

@@ -82,10 +82,12 @@ from citry._browser_expressions import (
     python_event_handler_coordinates as _python_event_handler_coordinates,
 )
 from citry._diagnostic_catalog import (
+    BROWSER_PROP_ASSIGNMENT,
     BROWSER_UNDECLARED_COMPONENT_EVENT,
     BROWSER_UNDECLARED_EMIT,
     COMPONENT_JS_UNKNOWN_MEMBER,
     COMPONENT_JS_UNKNOWN_VARIABLE,
+    CSS_MISSPELLED_VARIABLE,
     FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
     FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
     FORMAT_HOST_SYNTAX,
@@ -200,6 +202,7 @@ from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from pathlib import Path
 
     from citry._template_data_source import TemplateDataSourceShape
     from citry_core.template_parser import Template
@@ -2080,6 +2083,241 @@ def _declared_event_suggestion(event: str, analysis: BrowserComponentSourceAnaly
     return None
 
 
+# An assignment or update right after a name, as in `open = false`,
+# `count += 1`, or `count++`. `==`, `===`, and `=>` are not assignments.
+_WRITE_AFTER_NAME = re.compile(rb"\s*(?:(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?![=>])|\+\+|--)")
+# An update right before a name, as in `++count`, possibly through `this.`.
+_UPDATE_BEFORE_NAME = re.compile(rb"(?:\+\+|--)\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?$")
+
+
+def _declared_prop_names(source: str) -> frozenset[str] | None:
+    """Return the props a component's JavaScript declares, or None when its source cannot be read."""
+    analysis = analyze_browser_component_source(source)
+    if not analysis.valid:
+        return None
+    return frozenset(item.exposed_name for item in analysis.public_names if item.origin == "props")
+
+
+def _writes_name(source: bytes, start: int, end: int) -> bool:
+    """Return whether the name at ``source[start:end]`` is assigned or updated there."""
+    if _WRITE_AFTER_NAME.match(source, end):
+        return True
+    update = _UPDATE_BEFORE_NAME.search(source[:start])
+    # `++` or `--` right after a value, as in `a--` before a line break, ends
+    # that value's expression, so it does not update the name that follows.
+    return update is not None and not re.search(rb"[\w$)\]]\s*$", source[: update.start()])
+
+
+def lint_prop_assignments(
+    expressions: Sequence[BrowserExpression],
+    component_sources: Sequence[str],
+    *,
+    severities: Sequence[Literal["ignore", "warning", "error"]] = (),
+) -> tuple[VueLintFinding, ...]:
+    """
+    Report Vue expressions in a component's template that assign to one of its own props.
+
+    Vue props are read-only: `@click="open = false"` in the component that
+    receives `open` leaves the value unchanged and only logs a warning in
+    the browser. This reports an assignment (`=`, `+=`, and the other
+    assignment operators), an update (`++`, `--`), and `v-model` bound to a
+    prop. A write to a field of an object prop, such as `open.count = 1`, is
+    allowed by Vue and not reported, and neither is a name that an enclosing
+    `v-for` or slot binds.
+
+    Args:
+        expressions: The Vue expressions of one template.
+        component_sources: The JavaScript of every component that renders
+            the template. A name is reported only when every one of them
+            declares it as a prop.
+        severities: ``rule_prop_assignment`` of every component that renders
+            the template. A finding is reported unless all of them ignore
+            the rule, and it is an error when any says ``"error"``. With
+            none, findings are errors.
+
+    Returns:
+        Findings spanning each written name.
+
+    """
+    active = [severity for severity in (severities or ("error",)) if severity != "ignore"]
+    if not active or not component_sources:
+        return ()
+    severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
+    declared = [_declared_prop_names(source) for source in component_sources]
+    # A source the analyzer cannot read may not declare the name as a prop.
+    if any(names is None for names in declared):
+        return ()
+    props = frozenset.intersection(*(names for names in declared if names is not None))
+    if not props:
+        return ()
+    findings: list[VueLintFinding] = []
+    for expression in expressions:
+        # Only a Vue expression written as authored maps its offsets one to
+        # one; the arguments of a server call are sent, not evaluated here.
+        if expression.host != "vue" or expression.transform not in {"identity", "v-model"}:
+            continue
+        if expression.transform == "v-model":
+            name = expression.source.strip()
+            if name in props and name not in expression.bindings:
+                findings.append(_prop_assignment_finding(name, expression, severity, variant="v-model"))
+            continue
+        encoded = expression.source.encode("utf-8")
+        for reference in analyze_browser_expression(expression).references:
+            if reference.name not in props or reference.name in expression.bindings:
+                continue
+            start = reference.start_index - expression.start_index
+            end = reference.end_index - expression.start_index
+            if _writes_name(encoded, start, end):
+                findings.append(
+                    VueLintFinding(
+                        name=reference.name,
+                        message=render_diagnostic(BROWSER_PROP_ASSIGNMENT, name=reference.name),
+                        code=BROWSER_PROP_ASSIGNMENT,
+                        severity=severity,
+                        start_index=reference.start_index,
+                        end_index=reference.end_index,
+                    )
+                )
+    return tuple(findings)
+
+
+def _prop_assignment_finding(
+    name: str,
+    expression: BrowserExpression,
+    severity: Literal["warning", "error"],
+    *,
+    variant: str,
+) -> VueLintFinding:
+    return VueLintFinding(
+        name=name,
+        message=render_diagnostic(BROWSER_PROP_ASSIGNMENT, variant=variant, name=name),
+        code=BROWSER_PROP_ASSIGNMENT,
+        severity=severity,
+        start_index=expression.start_index,
+        end_index=expression.end_index,
+    )
+
+
+def lint_component_js_prop_assignments(
+    source: str,
+    *,
+    severities: Sequence[Literal["ignore", "warning", "error"]] = (),
+) -> tuple[VueLintFinding, ...]:
+    """
+    Report component JavaScript that assigns to one of the component's own props, such as `this.open = false`.
+
+    Only a write through `this` or the `$component` context counts, because
+    the analyzer proves those receivers are the component. The operator
+    after the name is read from the text, so a finding is at most a warning,
+    even when the rule says ``"error"``.
+
+    Args:
+        source: The component's JavaScript.
+        severities: ``rule_prop_assignment`` of every component that runs
+            this JavaScript, combined as for ``lint_prop_assignments``.
+
+    Returns:
+        Warning findings spanning each written prop name.
+
+    """
+    active = [severity for severity in (severities or ("error",)) if severity != "ignore"]
+    if not active:
+        return ()
+    analysis = analyze_browser_component_source(source)
+    if not analysis.valid:
+        return ()
+    props = frozenset(item.exposed_name for item in analysis.public_names if item.origin == "props")
+    encoded = source.encode("utf-8")
+    return tuple(
+        VueLintFinding(
+            name=reference.name,
+            message=render_diagnostic(BROWSER_PROP_ASSIGNMENT, name=reference.name),
+            code=BROWSER_PROP_ASSIGNMENT,
+            severity="warning",
+            start_index=reference.start_index,
+            end_index=reference.end_index,
+        )
+        for reference in analysis.member_references
+        if reference.name in props and _writes_name(encoded, reference.start_index, reference.end_index)
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CssVariableFinding:
+    """One ``var(--name)`` in component CSS that looks like a misspelled ``css_data()`` key."""
+
+    name: str
+    suggestion: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+# A custom property the CSS sets itself, as in `--accent: red`.
+_CSS_CUSTOM_PROPERTY_DECLARATION = re.compile(r"(?<![\w-])--([\w-]+)\s*:")
+
+
+def lint_misspelled_css_variables(
+    source: str,
+    keys: Collection[str],
+    *,
+    severity: Literal["ignore", "warning", "error"] = "warning",
+) -> tuple[CssVariableFinding, ...]:
+    """
+    Report ``var(--name)`` in a component's CSS that is one typing slip from a ``css_data()`` key.
+
+    Citry sets one custom property per ``css_data()`` key, named after the
+    key. When a ``var()`` names a property nothing sets, the browser ignores
+    the declaration without an error: the property inherits from the parent
+    element or takes its initial value.
+    Only a name one typing slip from a key is reported, because a site
+    stylesheet or a parent component may set any other property. A ``var()``
+    with a fallback, and a property the same CSS sets itself, are left alone.
+
+    Args:
+        source: The component's own CSS.
+        keys: Every key the component's ``css_data()`` or ``CssData`` returns.
+            Pass them only when the full set is known.
+        severity: ``rule_misspelled_css_variable``.
+
+    Returns:
+        Findings spanning each ``--name``, in source order.
+
+    """
+    if severity == "ignore" or not keys:
+        return ()
+    # Comments are blanked so a commented-out declaration does not count.
+    uncommented = re.sub(r"/\*.*?\*/", lambda match: " " * len(match.group(0)), source, flags=re.DOTALL)
+    declared = {match.group(1) for match in _CSS_CUSTOM_PROPERTY_DECLARATION.finditer(uncommented)}
+    boundaries = _utf8_boundaries(source)
+    findings: list[CssVariableFinding] = []
+    for name, start, end, terminated in _css_var_arguments(source):
+        # `var(--x, fallback)` still has a value, and an unterminated or
+        # escaped argument is not one Citry reads exactly.
+        if not name or not terminated or name in keys or name in declared:
+            continue
+        after = _skip_css_trivia(source, end)
+        if source[after : after + 1] != ")":
+            continue
+        suggestion = next((key for key in sorted(keys) if one_slip_from(name, key)), None)
+        if suggestion is None:
+            continue
+        findings.append(
+            CssVariableFinding(
+                name=name,
+                suggestion=suggestion,
+                message=render_diagnostic(CSS_MISSPELLED_VARIABLE, name=name, suggestion=suggestion),
+                code=CSS_MISSPELLED_VARIABLE,
+                severity=severity,
+                start_index=boundaries[start],
+                end_index=boundaries[end],
+            )
+        )
+    return tuple(findings)
+
+
 def component_listener_event(expression: BrowserExpression) -> str | None:
     """
     Return the event name of a `@name` or `v-on:name` listener on a component tag.
@@ -3440,6 +3678,154 @@ class PythonTemplateNotice:
 
     component_name: str
     message: str
+
+
+@dataclass(frozen=True, slots=True)
+class UntracedComponentTemplate:
+    """
+    One class with a literal template whose base class comes from another module of the project.
+
+    The class may well be a component, but nothing in its own file proves
+    it, so tools that read files one at a time do not check its template.
+
+    Attributes:
+        component_name: The class name.
+        base: The imported class it extends, directly or through a class
+            in the same file, as written, such as ``BaseCard``.
+        line: The 1-based line of the class name.
+        start_column: The character in that line where the class name starts.
+        end_column: The character in that line where the class name ends.
+
+    """
+
+    component_name: str
+    base: str
+    line: int
+    start_column: int
+    end_column: int
+
+
+def discover_untraced_component_templates(
+    source: str,
+    *,
+    is_project_module: Callable[[str, int], bool],
+) -> tuple[UntracedComponentTemplate, ...]:
+    """
+    Find classes that set a literal template but whose component base Citry cannot see from this file.
+
+    A class counts when it sits at module level, sets ``template`` to a
+    string literal that contains a tag, is not proven to be a Citry
+    component, and one of its bases is imported from a module of the
+    project, directly or through a base class defined in the same file.
+    A base from an installed package, such as another framework's
+    ``Component``, does not count. A base written as ``module.Name`` is not
+    followed.
+
+    Args:
+        source: The Python source of one file.
+        is_project_module: Return whether ``from <module> import ...`` with
+            the given module name and number of leading dots imports a
+            module of the project.
+
+    Returns:
+        The classes in source order. Empty when the source does not parse.
+
+    """
+    try:
+        module = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return ()
+    proven = {declaration.name for declaration, _language in _ast_component_declarations(module)}
+    imported: dict[str, tuple[str, int]] = {}
+    classes: dict[str, ast.ClassDef] = {}
+    found: list[UntracedComponentTemplate] = []
+    # Lines are counted as Python's parser counts them, like `lineno`.
+    lines = source_lines(source)
+    for statement in module.body:
+        if isinstance(statement, ast.ImportFrom):
+            for alias in statement.names:
+                imported[alias.asname or alias.name] = (statement.module or "", statement.level)
+            continue
+        if not isinstance(statement, ast.ClassDef):
+            continue
+        classes[statement.name] = statement
+        if statement.name in proven or not _sets_markup_template(statement):
+            continue
+        base = _project_base(statement, imported, classes, is_project_module, seen=set())
+        if base is None:
+            continue
+        line = lines[statement.lineno - 1] if statement.lineno <= len(lines) else ""
+        # The class name follows `class` on the statement's first line.
+        match = re.search(rf"\bclass\s+({re.escape(statement.name)})\b", line)
+        start = match.start(1) if match else 0
+        found.append(
+            UntracedComponentTemplate(statement.name, base, statement.lineno, start, start + len(statement.name))
+        )
+    return tuple(found)
+
+
+def _sets_markup_template(class_node: ast.ClassDef) -> bool:
+    """Return whether a class body sets ``template`` to a string literal that contains a tag."""
+    for statement in class_node.body:
+        value = statement.value if isinstance(statement, (ast.Assign, ast.AnnAssign)) else None
+        if value is None or "template" not in _template_statement_bound_names(statement):
+            continue
+        # Other frameworks use `template` for a file name or a plain format
+        # string; a Citry template has markup.
+        if isinstance(value, ast.Constant) and isinstance(value.value, str) and "<" in value.value:
+            return True
+    return False
+
+
+def _project_base(
+    class_node: ast.ClassDef,
+    imported: Mapping[str, tuple[str, int]],
+    classes: Mapping[str, ast.ClassDef],
+    is_project_module: Callable[[str, int], bool],
+    *,
+    seen: set[str],
+) -> str | None:
+    """Return the imported class, as written, that a class extends directly or through a class in this file."""
+    seen.add(class_node.name)
+    for base in class_node.bases:
+        if not isinstance(base, ast.Name):
+            continue
+        origin = imported.get(base.id)
+        if origin is not None and is_project_module(*origin):
+            return base.id
+        # A base defined earlier in this file may itself extend an imported class.
+        local = classes.get(base.id)
+        if local is not None and local.name not in seen:
+            found = _project_base(local, imported, classes, is_project_module, seen=seen)
+            if found is not None:
+                return found
+    return None
+
+
+def project_module_exists(module: str, level: int, *, file: Path, root: Path) -> bool:
+    """
+    Return whether ``from <module> import ...`` in ``file`` imports a module of the project under ``root``.
+
+    A relative import counts when its target is inside ``root``. An absolute
+    one counts when ``root`` or a directory between it and the file holds
+    the module as a ``.py`` file or a package, which covers a project run
+    from a parent directory.
+    """
+    parts = [part for part in module.split(".") if part]
+    if level:
+        base = file.parent
+        for _step in range(level - 1):
+            base = base.parent
+        candidates = [base]
+    else:
+        candidates = [directory for directory in (file.parent, *file.parent.parents) if directory.is_relative_to(root)]
+    resolved_root = root.resolve()
+    for directory in candidates:
+        target = directory.joinpath(*parts)
+        for path in (target.with_suffix(".py"), target / "__init__.py") if parts else (directory / "__init__.py",):
+            if path.is_file() and path.resolve().is_relative_to(resolved_root):
+                return True
+    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -5732,6 +6118,7 @@ __all__ = [
     "ComponentSourceLint",
     "CssDataCompletion",
     "CssDataReference",
+    "CssVariableFinding",
     "JsonWireField",
     "JsonWireKind",
     "JsonWireType",
@@ -5769,6 +6156,7 @@ __all__ = [
     "TemplatePythonValueType",
     "TemplateTagUse",
     "UnknownComponentUse",
+    "UntracedComponentTemplate",
     "VueLintConsumer",
     "VueLintFinding",
     "WireClass",
@@ -5809,6 +6197,7 @@ __all__ = [
     "css_data_references",
     "discover_python_component_assets",
     "discover_python_templates",
+    "discover_untraced_component_templates",
     "finish_python_component_assets",
     "format_python_component_assets",
     "format_python_templates",
@@ -5816,9 +6205,12 @@ __all__ = [
     "json_wire_type_from_expression",
     "lint_alpine_attributes",
     "lint_attribute_values",
+    "lint_component_js_prop_assignments",
     "lint_invalid_vue_expressions",
     "lint_markup",
+    "lint_misspelled_css_variables",
     "lint_misspelled_directives",
+    "lint_prop_assignments",
     "lint_undeclared_component_js_emits",
     "lint_undeclared_component_listeners",
     "lint_undeclared_template_emits",
@@ -5830,6 +6222,7 @@ __all__ = [
     "mark_literal_findings",
     "merge_json_wire_types",
     "prepare_python_component_assets",
+    "project_module_exists",
     "python_class_asset_resolution_signature",
     "python_class_defines_direct_method",
     "python_class_direct_method_first_line",

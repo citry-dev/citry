@@ -26,6 +26,8 @@ from citry.analysis import (
     css_data_completion_at,
     css_data_reference_at,
     css_data_references,
+    discover_untraced_component_templates,
+    project_module_exists,
     python_application_lint_variable_range,
     python_component_lint_variable_range,
     template_tag_uses,
@@ -678,3 +680,45 @@ def test_source_map_long_unicode_lines_keep_utf16_columns():
     line_bytes = len(line.encode("utf-8"))
     assert source_map.map_range(line_bytes - 4, line_bytes) == LspRange(LspPosition(0, 8009), LspPosition(0, 8011))
     assert source_map.map_range(line_bytes + 1, line_bytes + 2) == LspRange(LspPosition(1, 0), LspPosition(1, 1))
+
+
+def test_untraced_component_templates_follow_project_imports_only(tmp_path):
+    package = tmp_path / "app"
+    (package / "ui").mkdir(parents=True)
+    for path in (package / "__init__.py", package / "ui" / "__init__.py", package / "ui" / "base.py"):
+        path.write_text("", encoding="utf-8")
+    card = package / "ui" / "card.py"
+    source = (
+        "from citry import Component\n"
+        "from .base import BaseCard\n"
+        "from app.ui.base import Mixin\n"
+        "from installed import Widget\n"
+        "import app.ui.base as base\n"
+        "class Local(BaseCard):\n"
+        "    pass\n"
+        "class Card(Local):\n"
+        "    template = '<article></article>'\n"
+        "class Mixed(Mixin, Widget):\n"
+        "    template: str = '<p></p>'\n"
+        "class FromPackage(Widget):\n"
+        "    template = '<p></p>'\n"
+        "class Plain(BaseCard):\n"
+        "    template = 'card.html'\n"
+        "class Dotted(base.BaseCard):\n"
+        "    template = '<p></p>'\n"
+        "class Proven(Component):\n"
+        "    template = '<p></p>'\n"
+    )
+
+    found = discover_untraced_component_templates(
+        source,
+        is_project_module=lambda module, level: project_module_exists(module, level, file=card, root=tmp_path),
+    )
+
+    # A base defined in the file is followed to the class it imports; an installed
+    # package, a template that is a file name, a dotted base, and a proven
+    # component are not reported.
+    assert [(item.component_name, item.base, item.line, item.start_column) for item in found] == [
+        ("Card", "BaseCard", 8, 6),
+        ("Mixed", "Mixin", 10, 6),
+    ]

@@ -495,7 +495,7 @@
       "constant": "JS_DATA_UNSUPPORTED_TYPE",
       "title": "JsData field is not a JSON type",
       "summary": "A JsData field has a type that cannot be sent to the browser as JSON, such as a set or a date. Editor help treats the value as any.",
-      "when": "A declared or inferred JsData field has a type that strict JSON cannot carry, such as bytes, a set, a callable, a date or time, or a whole class instance.",
+      "when": "A declared or inferred JsData field has a type that strict JSON cannot carry, such as bytes, a set, a callable, a date or time, or a whole class instance. With your application loaded, citry check also reads a module constant that js_data() returns by name, such as API_BASE, and reports it when its value is not JSON. The editor and citry check --types also report a value that ty, the Python type checker Citry runs, types as a standard library type JSON cannot carry, such as PurePosixPath, datetime, Decimal, UUID, a set, or complex.",
       "fix": "Convert the value to JSON-friendly data in js_data(), such as a list, a string, or a dict of plain values, and change the JsData annotation to match.",
       "defaultSeverity": "warning",
       "surfaces": [
@@ -537,6 +537,34 @@
         "conditional": "JsData field '{name}' conflicts with a reserved or component-defined public instance name when supplied."
       },
       "documentationPath": "/ide/diagnostics/#citry.js-data.public-name-collision"
+    },
+    {
+      "code": "citry.css.misspelled-variable",
+      "constant": "CSS_MISSPELLED_VARIABLE",
+      "title": "Misspelled css_data() variable",
+      "summary": "A component's CSS reads a custom property that is one typing slip from a key its css_data() returns, such as var(--acent) for accent. Nothing sets that property, so the browser ignores the declaration: the property inherits from the parent element or takes its initial value.",
+      "when": "A var(--name) in the component's own css or css_file has no fallback value, the same CSS does not set --name itself, every key that css_data() or CssData returns is known, name is not one of them, and name is one typing slip from one of them: two neighboring letters swapped, one letter typed twice, or one letter left out. Properties that a parent component or a site stylesheet sets are not reported unless they are that close to a key. citry check needs your application for this rule.",
+      "fix": "Use the key's exact name. If another stylesheet sets this property on purpose, add a fallback, as in var(--name, inherit), or set rule_misspelled_css_variable to \"ignore\" for this component.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The custom property as written, without the leading --.",
+        "suggestion": "The css_data() key one typing slip away."
+      },
+      "messages": {
+        "default": "Nothing sets --{name}, so the browser ignores this declaration. Did you mean --{suggestion}, from css_data()?"
+      },
+      "examples": [
+        {
+          "title": "A dropped letter",
+          "language": "css",
+          "source": "h1 {\n  color: var(--acent);\n}"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.css.misspelled-variable"
     },
     {
       "code": "citry.vue.unknown-variable",
@@ -932,7 +960,7 @@
       "constant": "BROWSER_INCOMPATIBLE_COMPONENT_PROP",
       "title": "Incompatible Vue prop",
       "summary": "A Vue prop on a component tag gets a value of a type the child component does not accept.",
-      "when": "A :prop or v-bind:prop value on a component tag has a type Citry knows, from a literal, JsData, or a loop binding, and the child's declared Vue prop type does not accept it.",
+      "when": "A :prop or v-bind:prop value on a component tag has a type Citry knows, from a literal, a condition whose two results are literals, JsData, or a loop binding, and the child's declared Vue prop type does not accept it. For a Boolean prop, Vue turns the string '' and the prop's own name, hyphenated, into true, so any other string literal is reported.",
       "fix": "Pass a value of the type the child declares, or change the child's prop type.",
       "defaultSeverity": "error",
       "surfaces": [
@@ -952,9 +980,158 @@
           "title": "Wrong literal type",
           "language": "citry-html",
           "source": "<c-card :count=\"'many'\" />"
+        },
+        {
+          "title": "A string for a Boolean prop",
+          "language": "citry-html",
+          "source": "<c-status :open=\"open ? 'open' : 'closed'\" />"
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.browser.incompatible-component-prop"
+    },
+    {
+      "code": "citry.browser.missing-component-key",
+      "constant": "BROWSER_MISSING_COMPONENT_KEY",
+      "title": "Repeated component without #c-key",
+      "summary": "A component that a <c-for> loop repeats has no #c-key, on a page that uses Vue. The page fails to render as soon as the loop has two items.",
+      "when": "A registered component tag sits inside a <c-for> body, or carries c-for itself, and has no #c-key. It is reported when the template's component or the repeated component makes the page use Vue: it has component JavaScript, js_data() or JsData, an Events class, or a Vue attribute (v-*, @, or :) in its template. A transparent component and a simple=True component are not reported, because they render into their caller's HTML. Another component on the same page can also make it use Vue, which this check cannot see. citry check needs your application for this rule.",
+      "fix": "Add #c-key with a value that identifies each item and stays the same, such as #c-key=\"task.id\".",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "tag": "Component tag as written in the template."
+      },
+      "messages": {
+        "default": "<{tag}> repeats inside <c-for> but has no #c-key. This page uses Vue, and the render fails when the loop has two items."
+      },
+      "examples": [
+        {
+          "title": "A card per project",
+          "language": "citry-html",
+          "source": "<c-for each=\"project in projects\">\n  <c-Card c-title=\"project.title\" />\n</c-for>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.browser.missing-component-key"
+    },
+    {
+      "code": "citry.browser.prop-assignment",
+      "constant": "BROWSER_PROP_ASSIGNMENT",
+      "title": "Assignment to a Vue prop",
+      "summary": "A component changes a prop it receives from its parent. Vue props are read-only, so the assignment does not change the value and Vue logs a warning instead.",
+      "when": "In the component's own template, a Vue expression assigns to one of the component's declared props with =, +=, or another assignment operator, or with ++ or --, or binds it with v-model. In the component's JavaScript, it is reported for an assignment through this or the $component context, such as this.open = false. Citry finds the assignment by reading the text after the name, so the JavaScript check reports at most a warning. A write to a field of an object prop, such as open.count = 1, is not reported, and neither is a name that a v-for or slot binds. citry check needs your application for this rule, and the editor reports it once it has loaded your application.",
+      "fix": "Emit an event and let the parent change the value, as in $emit('close'), or copy the prop into the component's own data and change the copy.",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "name": "The prop's name."
+      },
+      "messages": {
+        "default": "Prop '{name}' is read-only, so this assignment does not change it. Emit an event to let the parent change it.",
+        "v-model": "v-model writes to prop '{name}', which is read-only, so the input cannot change it. Emit an event to let the parent change it."
+      },
+      "examples": [
+        {
+          "title": "Closing from the child",
+          "language": "citry-html",
+          "source": "<button @click=\"open = false\">Close</button>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.browser.prop-assignment"
+    },
+    {
+      "code": "citry.browser.unknown-server-event-field",
+      "constant": "BROWSER_UNKNOWN_SERVER_EVENT_FIELD",
+      "title": "Unknown server event field",
+      "summary": "An @c-* binding sends an object with a key that the handler's data class does not declare. The server rejects the call, and the handler does not run.",
+      "when": "The arguments of an @c-* binding, such as @c-click=\"save({amont: 1})\", are an object literal with a key the handler's data class does not declare, or the handler takes no data parameter. A key written next to a ... spread is still checked. A Pydantic data class is not checked, because Pydantic ignores extra keys. When several components share the template, it is checked only when they use the same data class for the handler. citry check needs your application for this rule.",
+      "fix": "Correct the key, or add the field to the handler's data class.",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The key as written.",
+        "event": "The server event's name.",
+        "suggestion": "The declared field one typing slip from the key."
+      },
+      "messages": {
+        "default": "Server event '{event}' has no field '{name}', so the server rejects this call.",
+        "suggestion": "Server event '{event}' has no field '{name}', so the server rejects this call. Did you mean '{suggestion}'?",
+        "no-data": "Server event '{event}' takes no data, so the server rejects this call because of field '{name}'."
+      },
+      "examples": [
+        {
+          "title": "A typo in a field name",
+          "language": "citry-html",
+          "source": "<button @c-click=\"save({amont: 1})\">Add</button>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.browser.unknown-server-event-field"
+    },
+    {
+      "code": "citry.browser.missing-server-event-field",
+      "constant": "BROWSER_MISSING_SERVER_EVENT_FIELD",
+      "title": "Missing server event field",
+      "summary": "An @c-* binding calls a server event without a field that the handler's data class requires. The server rejects the call, and the handler does not run.",
+      "when": "The arguments of an @c-* binding are an object literal with no ... spread and no computed key, and they leave out a field that has no default; or the binding sends no arguments, as in save or save(), from an element that cannot contain a form, such as a button. A binding with no arguments on a <form>, or for the submit event, is not reported, because the browser then sends the form's fields. A Pydantic data class is not checked. When several components share the template, it is checked only when they use the same data class for the handler. citry check needs your application for this rule.",
+      "fix": "Send the field, or give it a default in the handler's data class.",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The required field's name.",
+        "event": "The server event's name."
+      },
+      "messages": {
+        "default": "Server event '{event}' requires field '{name}', which this call does not send, so the server rejects it."
+      },
+      "examples": [
+        {
+          "title": "No arguments for a required field",
+          "language": "citry-html",
+          "source": "<button @c-click=\"save()\">Add</button>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.browser.missing-server-event-field"
+    },
+    {
+      "code": "citry.browser.incompatible-server-event-field",
+      "constant": "BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD",
+      "title": "Wrong type for a server event field",
+      "summary": "An @c-* binding sends a literal value that the handler's data class does not accept for that field. The server rejects the call, and the handler does not run.",
+      "when": "A key in the object literal of an @c-* binding has a literal value, such as '1', true, 2.5, or null, or a condition whose two results are literals, and the server's check for that field rejects it. The browser sends the arguments as JSON, which the server checks strictly: a string is not turned into a number. For a handler that accepts GET, the browser may send them as a query string instead, which the server reads as text, so a value is reported only when both ways fail. Values that are not literals are not checked. A Pydantic data class is not checked, because Pydantic converts values. When several components share the template, it is checked only when they use the same data class for the handler. citry check needs your application for this rule.",
+      "fix": "Send a value of the type the field declares, such as 1 instead of '1'.",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The field's name.",
+        "event": "The server event's name.",
+        "detail": "The server's message for this value."
+      },
+      "messages": {
+        "default": "Server event '{event}' rejects this value for field '{name}': {detail}"
+      },
+      "examples": [
+        {
+          "title": "A string for an int field",
+          "language": "citry-html",
+          "source": "<button @c-click=\"save({amount: '1'})\">Add</button>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.browser.incompatible-server-event-field"
     },
     {
       "code": "citry.check.template-declaration",
@@ -1083,6 +1260,34 @@
         "default": "Citry could not inspect this template's variables: {detail}"
       },
       "documentationPath": "/ide/diagnostics/#citry.check.template-namespace-unavailable"
+    },
+    {
+      "code": "citry.check.template-not-checked",
+      "constant": "CHECK_TEMPLATE_NOT_CHECKED",
+      "title": "Template checked only with the application",
+      "summary": "A class sets a template, but it extends a class from another module of your project, so the editor and citry check --static cannot tell that it is a component and do not check its template.",
+      "when": "A class in a Python file sets template to a string literal that contains a tag, Citry cannot prove from that file that the class is a component, and it extends a class imported from a module of your project, directly or through a class defined in the same file. A class from an installed package does not count. citry check --static lists it as a note, and the editor shows it as information on the class name. citry check with your application loaded reads the component registry and checks the template, so it does not report this.",
+      "fix": "Nothing is wrong with the code. Run citry check with your application loaded, as in citry --app module:engine check, to check the template.",
+      "defaultSeverity": "information",
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "component": "The class name.",
+        "base": "The imported class it extends, as written."
+      },
+      "messages": {
+        "default": "Citry cannot tell from this file that {component} is a component, because it extends {base}, which comes from another module, so this template is checked only by citry check with your application loaded."
+      },
+      "examples": [
+        {
+          "title": "A base class from another module",
+          "language": "citry",
+          "source": "from app.base import BaseCard\n\n\nclass Card(BaseCard):\n    template = \"\"\"\n      <article>{{ title }}</article>\n    \"\"\""
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.check.template-not-checked"
     },
     {
       "code": "citry.check.python-source-unreadable",
