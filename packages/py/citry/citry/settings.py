@@ -584,12 +584,18 @@ class CitrySettings:
             ``"development"``. In ``"production"``, each configured i18n
             catalog package must ship a valid compiled manifest, written by
             ``citry ext run i18n compile``; creating the ``Citry`` instance
-            raises ``ValueError`` when it is missing or does not match. In
-            ``"development"``, Citry reads the Fluent sources directly; if
-            the package also contains a compiled manifest, it must still
-            match the sources, so delete or recompile it after editing
-            translations. An unrecognized value raises ``ValueError`` at
-            construction.
+            raises ``ValueError`` when it is missing or does not match.
+            ``"development"`` turns on three things. Citry reads the Fluent
+            sources directly; if the package also contains a compiled
+            manifest, it must still match the sources, so delete or
+            recompile it after editing translations. Turning a page into
+            HTML issues a ``RuntimeWarning`` when two elements on it share
+            an ``id``, naming the components that wrote them. And in the
+            browser, a part of a server-rendered page that Vue builds in
+            the browser logs a console warning when Vue's first render
+            differs from the HTML the server sent. Production pages carry
+            none of the browser check's code. An unrecognized value raises
+            ``ValueError`` at construction.
         template_globals: Variables exposed to every component's template
             without being returned from each ``template_data()``. They are
             merged into every component's template variables on render, so a

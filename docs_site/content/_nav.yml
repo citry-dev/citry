@@ -137,7 +137,7 @@ areas:
           - { title: Upgrade to 0.6.0, path: /guides/upgrading-to-0-6-0/, needs_review: true }
           - { title: Use Citry with HTMX, path: /guides/htmx/, needs_review: true }
           - { title: Troubleshooting, path: /guides/troubleshooting/, needs_review: true }
-          - { title: Hot reload, path: /guides/dev-server/, needs_review: true }
+          - { title: Hot reload and dev mode, path: /guides/dev-server/, needs_review: true }
           - { title: Migrate from django-components, path: /guides/migrate-from-django-components/, needs_review: true }
           - { title: Migrate from Component.View, path: /guides/migrate-from-component-view/, needs_review: true }
           - { title: Migrate from django-unicorn, path: /guides/migrate-from-django-unicorn/, needs_review: true }

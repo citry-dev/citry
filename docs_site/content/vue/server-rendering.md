@@ -301,6 +301,89 @@ except for details a script might notice:
 - The Vue host has no `data-v-app` attribute. Listen for `citry:ready` to
   know the page is ready.
 
+## First render warnings { #first-render-warnings }
+
+When a part of the page changes the moment Vue starts, such as a panel
+that opens on wide windows, the console usually says nothing. Vue builds
+that part in the browser (see
+[Browser-built parts](#parts-vue-builds-in-the-browser)), so it never
+compares it with the HTML the server sent.
+
+With `Citry(mode="development")`, Citry compares the two and logs a
+console warning that names the component and the first difference:
+
+```text
+[Citry] Details_05bc14: Vue's first render in the browser
+differs from the HTML the server sent, so the page changes
+as Vue starts. On <button>, the server sent
+aria-expanded="false" and the browser shows
+aria-expanded="true". ...
+```
+
+The name is the component's class name with a short code that tells
+apart classes with the same name.
+
+The usual cause is browser code that changes state before Vue's first
+render. Here `open` comes from `js_data()`, so the server rendered the
+panel closed:
+
+```javascript
+// Wrong: the first render already differs from the served HTML
+$component({
+  created() {
+    this.open = window.matchMedia('(min-width: 60rem)').matches;
+  },
+});
+```
+
+Change the state after the first render instead, so the page starts as
+served and then opens:
+
+```javascript
+// Right: the first render matches the served HTML
+$component({
+  mounted() {
+    this.open = window.matchMedia('(min-width: 60rem)').matches;
+  },
+});
+```
+
+When the difference is intended, such as a clock that the browser
+updates, add Vue's `data-allow-mismatch` attribute to the element. Leave
+it empty to accept every difference there, or list the kinds to accept:
+`text`, `children`, `class`, `style`, or `attribute`:
+
+```citry-html
+<time
+  data-allow-mismatch="text"
+  v-text="now"
+></time>
+```
+
+In a part Vue would otherwise adopt, the attribute makes Vue build the
+element's parent in the browser too, so that parent loses focus and typed
+text as Vue starts.
+
+The check runs only in development mode; a production page carries none
+of its code. What it compares:
+
+- It compares only values the server also has, such as `js_data()` keys
+  and values from Python. State that starts in `data()` or `setup()`
+  exists only in the browser, so the server leaves it out and the check
+  never sees it.
+- It reports a text or an attribute value the server sent that the
+  browser shows differently. An element or text that only one side has
+  is not reported, because the server leaves out what only the browser
+  knows and sends every branch of a `v-if` that depends on browser state.
+- It compares the first render only. State changed in `mounted()`, after
+  an `await`, or by a later update is not compared. A change that a
+  `mounted()` hook makes to the page directly, without going through
+  state, is compared.
+- It compares only the parts Vue builds in the browser. In a part Vue
+  adopts, Vue reports a difference itself as "Hydration completed but
+  contains mismatches". A page Vue replaces and a part the server sent
+  empty are not compared.
+
 ## See also
 
 - [Security and CSP](/vue/csp/) for nonces and pages without JavaScript.

@@ -219,7 +219,9 @@ class Citry:
 
         # The build environment (dev_prod_mode.md), validated in the settings.
         # Read directly off the instance by the pieces that vary by environment:
-        # the built-in extension set below, and how i18n loads catalog packages.
+        # the built-in extension set below, how i18n loads catalog packages, the
+        # serialization check for repeated ids, and the browser check of
+        # server-rendered HTML (its flag and script in the page configuration).
         self.mode: Literal["production", "development"] = self.settings.mode
 
         # The cache backend (docs/design/dependencies.md section 10): derived

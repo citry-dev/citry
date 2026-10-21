@@ -125,8 +125,16 @@ kind of check. Considered and left off:
 - Pydantic models for `Kwargs`, which Citry's docs show, would check
   input types again when a component renders. ty already checks them in
   the editor, so they could only repeat that check at a later stage.
-- `mode="development"` changes only how translations are loaded, and
-  the browser gets Vue's production build in either mode.
+- `mode="development"`. In Citry 0.6.0 it changes only how translations
+  are loaded, and the browser gets Vue's production build in either mode.
+  A later Citry adds two development-mode checks that report while the
+  page runs: a console warning when Vue's first render of a part it
+  builds in the browser differs from the served HTML (m14 on the runner's
+  wide window), and a server warning for an id repeated across a page
+  (m57 repeats an id inside one template, which `citry check` already
+  reports). Whether the benchmark turns development mode on, as the Nuxt
+  port's `nuxt dev` keeps Vue's development warnings on, is decided once
+  a release with those checks is measured.
 """
 
 [setup]

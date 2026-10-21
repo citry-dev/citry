@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, get_args
 
 from citry._csp_validation import _CspRenderValidator
 from citry._javascript_policy import _JavascriptPolicy
+from citry._page_ids import PageIdCheck
 from citry._serialization_security import _ScriptSecurityMaterializer
 from citry.attrs import format_attrs
 from citry.citry_render import (
@@ -636,6 +637,12 @@ def serialize_render_result(
     omit_handler_marker = f"data-citry-omit-handler-{token_hex(16)}" if session.security_javascript == "omit" else None
 
     deferred_children: list[_FrameStackItem] = []
+    # With Citry(mode="development"), count the ids each component writes so
+    # an id repeated across the page is reported. Production skips it.
+    id_check = PageIdCheck() if owner is not None and owner.mode == "development" else None
+    # Child render ids whose HTML the browser may never show (a component
+    # inside a Vue `v-if` branch, say), so the id check skips them.
+    uncounted_ids: set[str] = set()
 
     def build_frames(stack: list[_FrameStackItem]) -> None:
         while stack:
@@ -659,6 +666,10 @@ def serialize_render_result(
                 omit_handler_marker,
                 compensate_textarea_lf=not vue_runtime_installed,
             )
+            if id_check is not None:
+                # The frame holds only this component's own HTML: each child
+                # is still a <template> placeholder, so it counts its own ids.
+                _add_frame_ids(id_check, render, frame, children, key, uncounted_ids)
 
             # A render only gets its component's marker when it is that component's
             # root render; a transparent component's output (is_component_root
@@ -784,6 +795,23 @@ def serialize_render_result(
             else:
                 full_html.append(html)
         return full_html[0]
+
+    if id_check is not None:
+        # A client-mounted document skips its body's components above. The
+        # check still needs their ids, so it builds their HTML separately and
+        # throws it away, leaving this serialization's own state untouched.
+        _add_deferred_ids(
+            id_check,
+            [(item[0], item[3]) for item in deferred_children],
+            uncounted_ids,
+            placeholder_nonce=placeholder_nonce,
+            omit_handler_marker=omit_handler_marker,
+            compensate_textarea_lf=not vue_runtime_installed,
+        )
+        id_check.report()
+        # A page that cannot hydrate builds those components again below;
+        # they are counted already, so the frame builder stops counting.
+        id_check = None
 
     if javascript_policy is not None:
         javascript_policy.validate_pre_extension_html(html, component_classes=component_classes)
@@ -1349,6 +1377,62 @@ def _append_frame_parts_with_fallback_tracking(
             # A DeferredComponent here means render() never resolved it.
             msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
             raise RuntimeError(msg)
+
+
+def _add_frame_ids(
+    id_check: PageIdCheck,
+    render: CitryRender,
+    frame: str,
+    children: list[tuple[CitryRender, str]],
+    key: str,
+    uncounted_ids: set[str],
+) -> None:
+    """
+    Count the ids in one component's own HTML, naming the component and its template.
+
+    A frame the browser may never show passes that on to all its children
+    instead of counting; otherwise the frame's own uncounted children are
+    added to ``uncounted_ids``.
+    """
+    if key in uncounted_ids:
+        uncounted_ids.update(child_id for _, child_id in children)
+        return
+    render_frame = render.frame
+    name = render_frame.class_name or render_frame.class_id or "the page"
+    template_record = render.context.template_record
+    uncounted_ids.update(id_check.add(frame, name, template_record.origin if template_record is not None else None))
+
+
+def _add_deferred_ids(
+    id_check: PageIdCheck,
+    renders: list[tuple[CitryRender, str]],
+    uncounted_ids: set[str],
+    *,
+    placeholder_nonce: str,
+    omit_handler_marker: str | None,
+    compensate_textarea_lf: bool,
+) -> None:
+    """
+    Count the ids of components whose HTML this serialization skipped.
+
+    The frames are built into throwaway lists, so the placeholders they
+    record never reach the serialize hooks.
+    """
+    scratch_placeholders: dict[str, str] = {}
+    stack = list(renders)
+    while stack:
+        render, key = stack.pop()
+        children: list[tuple[CitryRender, str]] = []
+        frame = _build_frame(
+            render,
+            children,
+            scratch_placeholders,
+            placeholder_nonce,
+            omit_handler_marker,
+            compensate_textarea_lf=compensate_textarea_lf,
+        )
+        _add_frame_ids(id_check, render, frame, children, key, uncounted_ids)
+        stack.extend(children)
 
 
 def _build_frame(

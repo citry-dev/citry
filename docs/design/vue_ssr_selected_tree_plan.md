@@ -282,6 +282,14 @@ How the pieces fit:
    an authored `data-allow-mismatch` in adopted content, leaves it out of
    shell contents, and rejects raw HTML blocks that carry it, so every marked
    element the runtime finds is a shell the server wrote.
+5. With `Citry(mode="development")` the configuration also carries
+   `"development": true`, and a page with served shell contents inlines
+   `citry/_vue/dev_checks.js`. The runtime then keeps each shell's served
+   children before emptying it and, right after the mount, logs a console
+   warning where Vue's first render contradicts them. The comparison and
+   its limits are in [`dev_prod_mode.md`](dev_prod_mode.md) section 5.1.
+   A production configuration has no `development` key; the runtime treats
+   any value other than `true` as production.
 
 Error modes and limits:
 

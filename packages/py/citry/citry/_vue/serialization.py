@@ -9,6 +9,7 @@ import re
 from dataclasses import dataclass, replace
 from html import escape
 from html.parser import HTMLParser
+from pathlib import Path
 from secrets import token_hex
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
@@ -41,6 +42,11 @@ _BODY_OPEN_RE = re.compile(r"<body(?:\s[^>]*)?>", re.IGNORECASE)
 _BODY_CLOSE_RE = re.compile(r"</body\s*>", re.IGNORECASE)
 # The latest hydration decision for one serialization (a HydrationAdmission).
 _HYDRATION_ADMISSION_EXTRA_KEY = "_citry_hydration_admission"
+
+# The browser half of the development check of server-rendered HTML. Only a
+# development page whose shells carry served contents includes it.
+DEV_CHECKS_SRC = Path(__file__).parent / "dev_checks.js"
+
 # Capture the supported built-in insertion methods before application code can
 # replace class attributes. The hydration fast path admits no custom hook.
 _BUILTIN_DEPENDENCIES_ON_SERIALIZE = DependenciesExtension.on_serialize
@@ -1182,6 +1188,11 @@ def prepare_vue_serialization(
             # so the runtime removes the Citry HTML the server wrote there
             # right before Vue hydrates, and Vue builds those contents anew.
             configuration["emptyShells"] = True
+    # Development-only browser behavior reads this flag. A production page
+    # leaves the key out, so it carries no extra bytes.
+    development = ctx.citry.mode == "development"
+    if development:
+        configuration["development"] = True
     if script_security is not None and script_security.csp_nonce is not None:
         configuration["nonce"] = script_security.csp_nonce
     if mounted:
@@ -1225,6 +1236,13 @@ def prepare_vue_serialization(
             else:
                 scripts.append(Script(kind="core", url=source["url"], attrs=attrs))
     scripts.extend(cast("Any", plugin).script for plugin in browser_plugins.values())
+    if development and configuration.get("emptyShells") is True:
+        # The runtime compares each shell's served contents with Vue's first
+        # render only when this script is on the page. It is a classic
+        # script, so it runs before the module script below starts the app.
+        # Only a page whose shells carry served contents has anything to
+        # compare, so other pages, and every production page, go without it.
+        scripts.append(Script(kind="core", content=DEV_CHECKS_SRC.read_text(encoding="utf8")))
     initial_styles: list[Style] = []
     # A mounted document links its stylesheets in <head> so the served HTML
     # paints with them; the runtime adopts those links instead of adding its

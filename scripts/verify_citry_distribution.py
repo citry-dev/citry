@@ -593,6 +593,8 @@ assert _runtime_js() == delivered_runtime.read_text(encoding="utf-8")
 # The bundle inputs stay in the repository; only the bundled runtime ships.
 for bundle_input in ("vue.js", "client.js", "events.js", "fragments.js"):
     assert not root.joinpath("_vue", bundle_input).is_file(), bundle_input
+# Development pages inline the browser development checks from the package.
+assert root.joinpath("_vue/dev_checks.js").is_file()
 assert root.joinpath("ext/i18n/client/vue-plugin.source.js").is_file()
 assert root.joinpath("py.typed").is_file()
 

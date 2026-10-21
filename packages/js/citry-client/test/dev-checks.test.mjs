@@ -1,0 +1,267 @@
+/**
+ * The development check that compares a shell's served HTML with Vue's first render
+ * (`citry/_vue/dev_checks.js`). The comparison runs over a small fake DOM here; the browser tests
+ * in `tests/e2e/test_vue_dev_checks_e2e.py` run it on real pages.
+ */
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import vm from "node:vm";
+
+const source = await readFile(new URL("../../../py/citry/citry/_vue/dev_checks.js", import.meta.url), "utf8");
+
+function devChecks() {
+  const context = { console };
+  context.globalThis = context;
+  vm.runInNewContext(source, context);
+  return context.CitryVueDevChecks;
+}
+
+// Just enough of the DOM for the comparison: elements with attributes, a parsed style, and
+// parent links, text nodes and comments.
+function element(tag, attributes = {}, children = []) {
+  const node = {
+    nodeType: 1,
+    localName: tag,
+    namespaceURI: "http://www.w3.org/1999/xhtml",
+    parentElement: null,
+    attributes: Object.entries(attributes).map(([name, value]) => ({
+      name,
+      localName: name,
+      value,
+      namespaceURI: null,
+    })),
+    childNodes: children,
+    getAttribute(name) {
+      return this.attributes.find((attribute) => attribute.name === name)?.value ?? null;
+    },
+    hasAttribute(name) {
+      return this.getAttribute(name) !== null;
+    },
+    getAttributeNS(_namespace, name) {
+      return this.getAttribute(name);
+    },
+  };
+  const declarations = (attributes.style || "")
+    .split(";")
+    .map((part) => part.split(":").map((value) => value.trim()))
+    .filter(([name]) => name);
+  node.style = Object.assign(
+    declarations.map(([name]) => name),
+    { getPropertyValue: (name) => declarations.find(([key]) => key === name)?.[1] ?? "" },
+  );
+  for (const child of children) if (child.nodeType === 1) child.parentElement = node;
+  return node;
+}
+const text = (data) => ({ nodeType: 3, data });
+const comment = (data) => ({ nodeType: 8, data });
+
+// Compare served children with browser children inside a shell element, as the runtime does.
+function differenceOf(served, browser) {
+  const shell = element("section", { "data-allow-mismatch": "children" }, browser);
+  return devChecks().childrenDifference(served, browser, shell, shell);
+}
+
+test("identical served and browser contents give no difference", () => {
+  const make = () => [
+    element("button", { type: "button", "aria-expanded": "false" }, [text(" Details ")]),
+    element("p", { class: "status" }, [text("Status: "), element("span", {}, [text("closed")])]),
+  ];
+  assert.equal(differenceOf(make(), make()), null);
+});
+
+test("an attribute value the server wrote and the browser changed is a difference", () => {
+  const served = [element("button", { "aria-expanded": "false" }, [text("Details")])];
+  const browser = [element("button", { "aria-expanded": "true" }, [text("Details")])];
+  const difference = differenceOf(served, browser);
+  assert.equal(difference.kind, "attribute");
+  assert.equal(difference.name, "aria-expanded");
+  assert.equal(difference.served, "false");
+  assert.equal(difference.browser, "true");
+  assert.equal(difference.element, browser[0]);
+});
+
+test("an attribute the server wrote that the browser removed is a difference", () => {
+  const served = [element("button", { disabled: "" })];
+  const browser = [element("button")];
+  const difference = differenceOf(served, browser);
+  assert.equal(difference.name, "disabled");
+  assert.equal(difference.browser, null);
+});
+
+test("server text that the browser shows differently is a difference", () => {
+  const served = [element("span", {}, [text("closed")])];
+  const browser = [element("span", {}, [text("open")])];
+  const difference = differenceOf(served, browser);
+  assert.equal(difference.kind, "text");
+  assert.equal(difference.served, "closed");
+  assert.equal(difference.browser, "open");
+});
+
+test("parts only the browser knows are not differences", () => {
+  // The server leaves out an attribute, a text node, and list items it cannot compute.
+  const served = [
+    element("article", { class: "card" }, [element("h2"), text("Static ")]),
+    element("ol"),
+    element("span", {}, []),
+  ];
+  const browser = [
+    element("article", { class: "card", title: "Hello" }, [
+      element("h2", {}, [text("Hello")]),
+      text("Static "),
+      text("HELLO"),
+    ]),
+    element("ol", {}, [text(""), element("li", {}, [text("aa")]), element("li", {}, [text("bb")]), text("")]),
+    element("span", {}, [text("browser only")]),
+  ];
+  assert.equal(differenceOf(served, browser), null);
+});
+
+test("every branch of a browser-only condition in the served HTML is not a difference", () => {
+  // The server writes both branches; the browser shows the second, with a comment where the
+  // first would be.
+  const served = [element("p", { class: "wide" }, [text("big")]), element("p", { class: "narrow" }, [text("small")])];
+  const browser = [comment("v-if"), element("p", { class: "narrow" }, [text("small")])];
+  assert.equal(differenceOf(served, browser), null);
+});
+
+test("text branches of a browser-only condition are not a difference", () => {
+  // The browser's parser joins the two served branches into one text node.
+  const servedJoined = [element("span", {}, [text("WideNarrow")])];
+  const browserOne = [element("span", {}, [text(""), text("Narrow"), text("")])];
+  assert.equal(differenceOf(servedJoined, browserOne), null);
+  // Branches separated by an element leave an extra served run of text.
+  const servedRuns = [element("span", {}, [text("A"), element("b"), text("B")])];
+  const browserRun = [element("span", {}, [comment("v-if"), text("B")])];
+  assert.equal(differenceOf(servedRuns, browserRun), null);
+});
+
+test("text the browser keeps in several nodes matches the served text node", () => {
+  const served = [element("p", {}, [text("Status: open now")])];
+  const browser = [element("p", {}, [text("Status: "), comment("v-if"), text("open"), text(" now")])];
+  assert.equal(differenceOf(served, browser), null);
+});
+
+test("served classes and style properties must be present in the browser", () => {
+  const served = [element("div", { class: "card", style: "color: red" })];
+  const agreeing = [element("div", { class: "card card--open", style: "color: red; display: none" })];
+  assert.equal(differenceOf(served, agreeing), null);
+  const missingClass = [element("div", { class: "panel", style: "color: red" })];
+  assert.equal(differenceOf(served, missingClass).name, "class");
+  const changedStyle = [element("div", { class: "card", style: "color: blue" })];
+  assert.equal(differenceOf(served, changedStyle).name, "style");
+});
+
+test("boolean attributes and values Vue sets as properties agree with the served attribute", () => {
+  const served = [element("input", { checked: "", value: "Ada" }), element("option", { selected: "selected" })];
+  const browserInput = element("input");
+  browserInput.checked = true;
+  browserInput.value = "Ada";
+  const browser = [browserInput, element("option", { selected: "" })];
+  assert.equal(differenceOf(served, browser), null);
+  browserInput.value = "Grace";
+  assert.equal(differenceOf(served, browser).name, "value");
+});
+
+test("data-allow-mismatch silences the kinds it names, as in Vue", () => {
+  const served = () => [element("p", { title: "a" }, [element("time", {}, [text("10:00")])])];
+  const browser = (allow) => [
+    element("p", { title: "b", "data-allow-mismatch": allow }, [element("time", {}, [text("10:01")])]),
+  ];
+  assert.equal(differenceOf(served(), browser("")), null);
+  // "attribute" covers the element's own attributes, not text further down.
+  assert.equal(differenceOf(served(), browser("attribute")).kind, "text");
+  // "children" covers text and attributes below the element, not its own attributes.
+  assert.equal(differenceOf(served(), browser("children")).name, "title");
+  assert.equal(differenceOf(served(), browser("children,attribute")), null);
+});
+
+test("the warning names the component, the difference, and the fix", () => {
+  const browser = element("button", { "aria-expanded": "true" });
+  const message = devChecks().warningText("Details_1138d1", {
+    kind: "attribute",
+    name: "aria-expanded",
+    served: "false",
+    browser: "true",
+    element: browser,
+  });
+  assert.match(message, /^\[Citry\] Details_1138d1: /);
+  assert.match(
+    message,
+    /On <button>, the server sent aria-expanded="false" and the browser shows aria-expanded="true"\./,
+  );
+  assert.match(message, /mounted\(\)/);
+  assert.match(message, /data-allow-mismatch/);
+});
+
+test("a browser-only display: none from v-show is not a difference", () => {
+  // The server keeps the element's own display when only the browser can test its v-show.
+  const served = [element("div", { style: "display: flex" })];
+  assert.equal(differenceOf(served, [element("div", { style: "display: none" })]), null);
+  assert.equal(differenceOf(served, [element("div", { style: "display: grid" })]).name, "style");
+});
+
+test("the nearest data-allow-mismatch decides a text difference, as in Vue", () => {
+  const served = [element("div", {}, [element("p", {}, [text("10:00")])])];
+  const browser = [
+    element("div", { "data-allow-mismatch": "text" }, [
+      element("p", { "data-allow-mismatch": "class" }, [text("10:01")]),
+    ]),
+  ];
+  // The <p> carries the attribute without "text", so the outer "text" does not apply.
+  assert.equal(differenceOf(served, browser).kind, "text");
+});
+
+test("the warning names the data-allow-mismatch value that accepts the difference", () => {
+  const checks = devChecks();
+  const paragraph = element("p", { class: "status" });
+  const textMessage = checks.warningText("Status_1", {
+    kind: "text",
+    served: "closed",
+    browser: "open",
+    element: paragraph,
+  });
+  assert.match(textMessage, /add data-allow-mismatch="text" to <p class="status">/);
+  const classMessage = checks.warningText("Status_1", {
+    kind: "attribute",
+    name: "class",
+    served: "a",
+    browser: "b",
+    element: paragraph,
+  });
+  assert.match(classMessage, /data-allow-mismatch="class"/);
+});
+
+test("a failure while keeping the served contents is logged and never thrown", () => {
+  const errors = [];
+  const context = { console: { error: (...args) => errors.push(args), warn() {} } };
+  context.globalThis = context;
+  vm.runInNewContext(source, context);
+  const host = {
+    querySelectorAll() {
+      throw new Error("broken host");
+    },
+  };
+  const check = context.CitryVueDevChecks.captureShells(host);
+  check.compare();
+  assert.equal(errors.length, 1);
+  assert.match(String(errors[0][0]), /development check/);
+});
+
+test("a failure while comparing is logged and never thrown", () => {
+  const errors = [];
+  const context = { console: { error: (...args) => errors.push(args), warn() {} } };
+  context.globalThis = context;
+  vm.runInNewContext(source, context);
+  const shell = element("section", { "data-allow-mismatch": "children" }, [element("p", {}, [text("x")])]);
+  shell.parentElement = { closest: () => null };
+  const host = { querySelectorAll: () => [shell] };
+  Object.defineProperty(host, "_vnode", {
+    get() {
+      throw new Error("broken vnode");
+    },
+  });
+  shell.isConnected = true;
+  context.CitryVueDevChecks.captureShells(host).compare();
+  assert.equal(errors.length, 1);
+});
