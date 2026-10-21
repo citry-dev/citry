@@ -9,6 +9,8 @@ neighbors must stay silent.
 """
 
 import re
+import sys
+import types
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Literal
@@ -24,7 +26,9 @@ from citry._registry_lint import (
     root_relative_path,
     server_event_payload_from_description,
 )
+from citry.ext.dependencies import Style
 from citry.ext.events import event
+from citry.util.html import Markup
 
 try:
     import pydantic
@@ -931,6 +935,377 @@ def test_other_custom_properties_are_not_reported(tmp_path, css):
 
 def test_a_component_without_known_css_data_keys_is_not_checked(tmp_path):
     assert _findings(_css_engine("h1 { color: var(--acent); }"), tmp_path, _CSS) == []
+
+
+################################################
+# A MISSPELLED OR UNDECLARED CSS CLASS
+################################################
+
+_CLASS = "citry.css.misspelled-class"
+_UNDECLARED_CLASS = "citry.css.undeclared-class"
+
+# The board page of the error benchmark's baseline app, with the edit of case
+# m16-css-class applied: the template writes `bord` for the `.board` its CSS
+# styles.
+_M16_TEMPLATE = """
+  <h1>Projects</h1>
+  <div class="bord" id="board" title="Board">
+    <p>Owner</p>
+  </div>
+"""
+_M16_CSS = """
+  h1 {
+    color: var(--accent);
+  }
+
+  .board {
+    color: rgb(0, 128, 0);
+  }
+"""
+
+
+def _class_engine(
+    template: str,
+    css: str | None = _M16_CSS,
+    *,
+    lint: LintSettings | None = None,
+    owner: dict[str, object] | None = None,
+    others: tuple[dict[str, object], ...] = (),
+) -> Citry:
+    engine = Citry(autodiscover=False) if lint is None else Citry(autodiscover=False, lint=lint)
+    namespace: dict[str, object] = {"citry": engine, "template": template, "__module__": __name__, **(owner or {})}
+    if css is not None:
+        namespace["css"] = css
+    type("Board", (Component,), namespace)
+    for index, other in enumerate(others):
+        type(f"Other{index}", (Component,), {"citry": engine, "template": "<p></p>", "__module__": __name__, **other})
+    return engine
+
+
+def test_a_class_one_slip_from_the_components_own_css_is_reported(tmp_path):
+    report = _report(_class_engine(_M16_TEMPLATE), tmp_path)
+
+    assert [(item.code, item.severity, item.message, item.line, item.column) for item in report.findings] == [
+        (
+            _CLASS,
+            "warning",
+            "No CSS that Citry reads styles the class 'bord'. Did you mean 'board', from this component's CSS?",
+            # The finding starts at the class name inside the attribute value.
+            2,
+            12,
+        ),
+    ]
+
+
+def test_a_misspelled_class_is_reported_once_among_other_classes_and_on_a_component_tag(tmp_path):
+    template = """
+      <div class="layout   bord">
+        <c-Other0 class="bord" />
+      </div>
+    """
+    css = ".layout { display: grid; } .board { color: green; }"
+
+    findings = _findings(_class_engine(template, css, others=({},)), tmp_path, _CLASS, _UNDECLARED_CLASS)
+
+    assert [(code, message.split("'")[1]) for code, _severity, message in findings] == [
+        (_CLASS, "bord"),
+        (_CLASS, "bord"),
+    ]
+
+
+def test_the_application_and_the_component_can_change_the_misspelled_class_severity(tmp_path):
+    raised = _class_engine(_M16_TEMPLATE, lint=LintSettings(rule_misspelled_css_class="error"))
+    off = _class_engine(_M16_TEMPLATE, owner={"Lint": type("Lint", (), {"rule_misspelled_css_class": "ignore"})})
+
+    assert [(code, severity) for code, severity, _message in _findings(raised, tmp_path, _CLASS)] == [
+        (_CLASS, "error"),
+    ]
+    assert _findings(off, tmp_path, _CLASS) == []
+
+
+@pytest.mark.parametrize(
+    ("template", "css", "others"),
+    [
+        # The class the CSS styles.
+        ('<div class="board"></div>', _M16_CSS, ()),
+        # Another registered component's CSS styles `bord`.
+        (_M16_TEMPLATE, _M16_CSS, ({"css": ".bord { color: red; }"},)),
+        # Its selector names `bord` past the first class, inside @media.
+        (_M16_TEMPLATE, _M16_CSS, ({"css": "@media print { .page > .bord:hover { color: red; } }"},)),
+        # A `<style>` element in another component's template styles it.
+        (_M16_TEMPLATE, _M16_CSS, ({"template": "<style>.card.bord { color: red; }</style>"},)),
+        # So does a stylesheet in another component's Dependencies.
+        (
+            _M16_TEMPLATE,
+            _M16_CSS,
+            ({"Dependencies": type("Dependencies", (), {"css": [Style(content=":is(.bord) { color: red; }")]})},),
+        ),
+        # Bound classes are known only when the page renders.
+        ("<div :class=\"'bord'\"></div>", _M16_CSS, ()),
+        ("<div v-bind:class=\"'bord'\"></div>", _M16_CSS, ()),
+        ("<div c-class=\"'bord'\"></div>", _M16_CSS, ()),
+        # Words inside `{{ }}`, which Citry renders as written, are an
+        # expression the author meant to bind, not classes.
+        ('<div class="board {{ bord }}"></div>', _M16_CSS, ()),
+        # The CSS styles both classes of a compound selector.
+        ('<div class="board active"></div>', ".board.active { color: red; }", ()),
+        # The class sits in a nested rule inside @media.
+        ('<div class="board"></div>', "@media (min-width: 40em) { main { .board { color: red; } } }", ()),
+        # A two-letter class is too often a real, different name.
+        ('<div class="bx"></div>', ".box { color: red; }", ()),
+        # Text in a comment, a string, or a value is not a selector.
+        ('<div class="bord"></div>', "/* .board */ a::after { content: '.board'; margin: .5em; }", ()),
+        # A slip that drops a digit, or a missing final `s`, usually names
+        # another class of the same family.
+        ('<div class="col-1 mt-1"></div>', ".col-12 {} .mt-12 {}", ()),
+        ('<li class="tab"></li>', ".tabs { display: flex; }", ()),
+        # A pre-rendered `<style>` tag in Dependencies is read too.
+        (
+            _M16_TEMPLATE,
+            _M16_CSS,
+            ({"Dependencies": type("Dependencies", (), {"css": [Markup("<style>.bord { color: red; }</style>")]})},),
+        ),
+        # A slip that would only be a replaced letter is not a typo here.
+        ('<div class="beard"></div>', _M16_CSS, ()),
+        # Without CSS of its own, the template has nothing to misspell.
+        (_M16_TEMPLATE, None, ()),
+    ],
+)
+def test_classes_the_css_declares_or_cannot_judge_are_not_reported(tmp_path, template, css, others):
+    findings = _findings(_class_engine(template, css, others=others), tmp_path, _CLASS, _UNDECLARED_CLASS)
+
+    assert findings == []
+
+
+def test_the_words_around_a_written_expression_are_still_checked(tmp_path):
+    # Citry renders `class="bord {{ kind }}"` as typed, so `bord` reaches
+    # the page.
+    findings = _findings(_class_engine('<div class="bord {{ kind }}"></div>'), tmp_path, _CLASS)
+
+    assert [message.split("'")[1] for _code, _severity, message in findings] == ["bord"]
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        {"template": '<style lang="scss">.bord { color: red; }</style>'},
+        {"Dependencies": type("Dependencies", (), {"css": [Markup('<style type="text/x-scss">.bord {}</style>')]})},
+    ],
+)
+def test_a_style_element_in_another_language_declares_nothing(tmp_path, other):
+    engine = _class_engine(_M16_TEMPLATE, others=(other,))
+
+    assert [code for code, _severity, _message in _findings(engine, tmp_path, _CLASS)] == [_CLASS]
+
+
+def test_a_class_declared_in_a_dependencies_file_is_not_reported(tmp_path):
+    stylesheet = tmp_path / "site.css"
+    stylesheet.write_text(".bord { color: red; }\n", encoding="utf-8")
+    dependencies = type("Dependencies", (), {"css": [stylesheet]})
+
+    engine = _class_engine(_M16_TEMPLATE, others=({"Dependencies": dependencies},))
+
+    assert _findings(engine, tmp_path, _CLASS) == []
+
+
+def test_undeclared_classes_are_not_reported_by_default(tmp_path):
+    engine = _class_engine('<div class="card-header"></div>', ".board { color: red; }")
+
+    assert _findings(engine, tmp_path, _UNDECLARED_CLASS) == []
+
+
+def test_every_undeclared_class_is_reported_when_the_rule_is_on(tmp_path):
+    template = """
+      <div class="board card-header md:flex btn-primary icon-x">
+        <span class="bord"></span>
+      </div>
+    """
+    css = r"""
+      .board { color: red; }
+      .md\:flex { display: flex; }
+      [class^="btn-"] { border: 0; }
+      [class*="ICON" i] { width: 1em; }
+    """
+
+    findings = _findings(
+        _class_engine(template, css, lint=LintSettings(rule_undeclared_css_class="warning")),
+        tmp_path,
+        _CLASS,
+        _UNDECLARED_CLASS,
+    )
+
+    # `bord` gets the misspelled-class finding, with its suggestion, and no
+    # second one.
+    assert [(code, severity, message) for code, severity, message in findings] == [
+        (_UNDECLARED_CLASS, "warning", "No CSS that Citry reads styles the class 'card-header'."),
+        (
+            _CLASS,
+            "warning",
+            "No CSS that Citry reads styles the class 'bord'. Did you mean 'board', from this component's CSS?",
+        ),
+    ]
+
+
+def test_one_component_can_turn_the_undeclared_class_rule_on(tmp_path):
+    lint = type("Lint", (), {"rule_undeclared_css_class": "error"})
+
+    engine = _class_engine('<div class="card"></div>', owner={"Lint": lint})
+
+    assert _findings(engine, tmp_path, _UNDECLARED_CLASS) == [
+        (_UNDECLARED_CLASS, "error", "No CSS that Citry reads styles the class 'card'."),
+    ]
+
+
+################################################
+# A CUSTOM PROPERTY NOTHING SETS
+################################################
+
+_UNDECLARED_VARIABLE = "citry.css.undeclared-variable"
+_VARIABLES_ON = LintSettings(rule_undeclared_css_variable="warning")
+# The rule reads each component's Python module for `--name` strings, and
+# this test module holds every case's CSS, so the components here name a
+# module that is not loaded.
+_UNLOADED_MODULE = "citry_tests_unloaded_css_components"
+
+
+def _variable_engine(
+    css: str,
+    *,
+    lint: LintSettings | None = _VARIABLES_ON,
+    keys: dict[str, str] | None = None,
+    template: str = "<h1>Board</h1>",
+    others: tuple[dict[str, object], ...] = (),
+) -> Citry:
+    engine = Citry(autodiscover=False) if lint is None else Citry(autodiscover=False, lint=lint)
+    namespace: dict[str, object] = {"citry": engine, "template": template, "css": css, "__module__": _UNLOADED_MODULE}
+    if keys is not None:
+        namespace["CssData"] = type("CssData", (), {"__annotations__": dict.fromkeys(keys, str)})
+        namespace["css_data"] = _css_data_returning(keys)
+    type("Board", (Component,), namespace)
+    for index, other in enumerate(others):
+        type(
+            f"Other{index}",
+            (Component,),
+            {"citry": engine, "template": "<p></p>", "__module__": _UNLOADED_MODULE, **other},
+        )
+    return engine
+
+
+def test_custom_properties_nothing_sets_are_not_reported_by_default(tmp_path):
+    engine = _variable_engine("h1 { padding: var(--gap); }", lint=None)
+
+    assert _findings(engine, tmp_path, _UNDECLARED_VARIABLE) == []
+
+
+def test_a_custom_property_nothing_sets_is_reported_when_the_rule_is_on(tmp_path):
+    report = _report(_variable_engine("h1 {\n  padding: var(--gap);\n}\n"), tmp_path)
+
+    assert [(item.code, item.severity, item.message, item.line, item.column) for item in report.findings] == [
+        (
+            _UNDECLARED_VARIABLE,
+            "warning",
+            "Nothing that Citry reads sets --gap, so the browser ignores this declaration unless a stylesheet or "
+            "script outside Citry sets it.",
+            1,
+            15,
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("css", "keys", "template", "others"),
+    [
+        # A fallback still gives a value.
+        ("h1 { padding: var(--gap, 1rem); }", None, "<h1></h1>", ()),
+        # The CSS sets it, or registers it with @property.
+        (":root { --gap: 1rem; } h1 { padding: var(--gap); }", None, "<h1></h1>", ()),
+        (
+            "@property --gap { syntax: '<length>'; inherits: true; initial-value: 0; } h1 { padding: var(--gap); }",
+            None,
+            "<h1></h1>",
+            (),
+        ),
+        # css_data() sets it.
+        ("h1 { padding: var(--gap); }", {"gap": "1rem"}, "<h1></h1>", ()),
+        # Another component's css_data() or CSS sets it.
+        (
+            "h1 { padding: var(--gap); }",
+            None,
+            "<h1></h1>",
+            (
+                {
+                    "CssData": type("CssData", (), {"__annotations__": {"gap": str}}),
+                    "css_data": _css_data_returning({"gap": "1rem"}),
+                },
+            ),
+        ),
+        ("h1 { padding: var(--gap); }", None, "<h1></h1>", ({"css": ".page { --gap: 2rem; }"},)),
+        # A template sets it in a style attribute or names it in a style binding.
+        ("h1 { padding: var(--gap); }", None, '<h1 style="--gap: 1rem"></h1>', ()),
+        ("h1 { padding: var(--gap); }", None, "<h1 :style=\"{'--gap': size}\"></h1>", ()),
+        ("h1 { padding: var(--gap); }", None, "<h1 c-style=\"{'--gap': size}\"></h1>", ()),
+        # A component's JavaScript sets it.
+        (
+            "h1 { padding: var(--gap); }",
+            None,
+            "<h1></h1>",
+            ({"js": "$component({ mounted() { this.$el.style.setProperty('--gap', '1rem'); } });"},),
+        ),
+        # A commented-out var() reads nothing.
+        ("/* h1 { padding: var(--gap); } */", None, "<h1></h1>", ()),
+    ],
+)
+def test_custom_properties_something_sets_are_not_reported(tmp_path, css, keys, template, others):
+    engine = _variable_engine(css, keys=keys, template=template, others=others)
+
+    assert _findings(engine, tmp_path, _UNDECLARED_VARIABLE) == []
+
+
+def test_a_custom_property_a_python_module_names_counts_as_set(tmp_path, monkeypatch):
+    # A component may build its style attribute in Python, as in
+    # `f"--gap: {size};"` passed through `c-style`.
+    module_file = tmp_path / "gap_components.py"
+    module_file.write_text('GAP_STYLE = f"--gap: {1}rem;"\n', encoding="utf-8")
+    module = types.ModuleType("citry_tests_gap_components")
+    module.__file__ = str(module_file)
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+
+    engine = _variable_engine("h1 { padding: var(--gap); }")
+    type("Spacer", (Component,), {"citry": engine, "template": "<p></p>", "__module__": module.__name__})
+
+    assert _findings(engine, tmp_path, _UNDECLARED_VARIABLE) == []
+
+
+def test_a_misspelled_css_data_key_gets_one_finding(tmp_path):
+    engine = _variable_engine("h1 { color: var(--acent); }", keys={"accent": "blue"})
+
+    assert [code for code, _severity, _message in _findings(engine, tmp_path, _CSS, _UNDECLARED_VARIABLE)] == [_CSS]
+
+
+def test_a_component_whose_css_data_keys_are_unknown_is_not_checked_for_unset_properties(tmp_path):
+    # Dynamic's own --space may come from its css_data(). Board's --gap is
+    # still checked: a key only Dynamic sets is not known, so a component
+    # reading it would be reported, which the docs state as a limit.
+    def css_data(self, kwargs, slots):
+        return kwargs
+
+    engine = _variable_engine("h1 { padding: var(--gap); }", others=())
+    type(
+        "Dynamic",
+        (Component,),
+        {
+            "citry": engine,
+            "template": "<p></p>",
+            "css": "p { margin: var(--space); }",
+            "css_data": css_data,
+            "__module__": _UNLOADED_MODULE,
+        },
+    )
+
+    assert [
+        re.findall(r"--[\w-]+", message)
+        for _code, _severity, message in _findings(engine, tmp_path, _UNDECLARED_VARIABLE)
+    ] == [["--gap"]]
 
 
 ################################################

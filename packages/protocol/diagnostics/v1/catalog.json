@@ -597,6 +597,88 @@
       "documentationPath": "/ide/diagnostics/#citry.css.misspelled-variable"
     },
     {
+      "code": "citry.css.misspelled-class",
+      "constant": "CSS_MISSPELLED_CLASS",
+      "title": "Misspelled CSS class",
+      "summary": "A class in a template is one typing slip from a class the component's own CSS styles, such as bord for board. No CSS that Citry reads styles the class as written, so the element renders without those styles.",
+      "when": "A static class attribute in a component's template, on an HTML element or a component tag, holds a class of three or more characters that is one typing slip from a class selector in the component's own css or css_file: two neighboring letters swapped, one letter typed twice, or one letter left out. A slip that moves, doubles, or drops a digit, such as col-1 for col-12, and a missing final s, such as tab for tabs, do not count. The class is reported only when no CSS that Citry reads declares it: no selector in a registered component's css, css_file, inline or local-file Dependencies stylesheet, or template <style> element that holds CSS names it, and no attribute selector such as [class^=\"btn-\"] matches it. Bound classes, such as :class, v-bind:class, and c-class, words inside {{ }} in a class attribute, and classes on tags that render no element, such as c-if or template, are not checked. citry check needs your application for this rule; the editor does not run it.",
+      "fix": "Use the class name the CSS styles. If a stylesheet that Citry does not read styles this class on purpose, set rule_misspelled_css_class to \"ignore\" for this component.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The class as written.",
+        "suggestion": "The class from the component's CSS one typing slip away."
+      },
+      "messages": {
+        "default": "No CSS that Citry reads styles the class '{name}'. Did you mean '{suggestion}', from this component's CSS?"
+      },
+      "examples": [
+        {
+          "title": "A dropped letter",
+          "language": "citry",
+          "source": "class Board(Component):\n    template = \"\"\"\n      <div class=\"bord\"></div>\n    \"\"\"\n\n    css = \"\"\"\n      .board {\n        display: grid;\n      }\n    \"\"\""
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.css.misspelled-class"
+    },
+    {
+      "code": "citry.css.undeclared-class",
+      "constant": "CSS_UNDECLARED_CLASS",
+      "title": "Class that no CSS declares",
+      "summary": "A class in a template is not named by any CSS that Citry reads, so either nothing styles it or a stylesheet outside Citry does.",
+      "when": "The rule is off by default, because it also reports classes from a site stylesheet or a CSS framework such as Tailwind, and classes used only by JavaScript or tests. With rule_undeclared_css_class set to \"warning\" or \"error\", it reports each class in a static class attribute, on an HTML element or a component tag, that no CSS Citry reads declares. A class counts as declared when a selector in a registered component's css, css_file, inline or local-file Dependencies stylesheet, or template <style> element that holds CSS names it anywhere, as in .name, .card .name, .name:hover, or :is(.name), including inside @media and nested rules, or when an attribute selector such as [class~=\"name\"] or [class^=\"btn-\"] matches it. Citry does not read stylesheets linked by URL, local files that cannot be read as UTF-8, sources written in another language through css_lang, or <link> tags in templates, so their classes are reported. Bound classes, words inside {{ }} in a class attribute, and classes on tags that render no element are not checked, and a class that citry.css.misspelled-class reports is not reported again. citry check needs your application for this rule; the editor does not run it.",
+      "fix": "Add CSS for the class to a component, or remove the class. For a component that uses classes from a stylesheet Citry does not read, set rule_undeclared_css_class to \"ignore\" in its Lint class.",
+      "defaultSeverity": "ignore",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The class as written."
+      },
+      "messages": {
+        "default": "No CSS that Citry reads styles the class '{name}'."
+      },
+      "examples": [
+        {
+          "title": "A class without CSS",
+          "language": "citry-html",
+          "source": "<div class=\"card-header\">Title</div>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.css.undeclared-class"
+    },
+    {
+      "code": "citry.css.undeclared-variable",
+      "constant": "CSS_UNDECLARED_VARIABLE",
+      "title": "Custom property that nothing sets",
+      "summary": "A component's CSS reads a custom property with var(--name) and no fallback, and nothing that Citry reads sets it. Unless a stylesheet or script outside Citry sets it, the browser ignores the declaration.",
+      "when": "The rule is off by default, because it also reports properties that a site stylesheet, a design system, or a script outside Citry sets. With rule_undeclared_css_variable set to \"warning\" or \"error\", it reports each var(--name) without a fallback value in a component's own css or css_file when nothing that Citry reads sets --name. Citry counts as setting it: a --name: declaration or an @property --name rule in a registered component's css, css_file, inline or local-file Dependencies stylesheet, or template <style> element that holds CSS; a css_data() or CssData key called name on any registered component; a style attribute in a template that sets --name; and the text --name in quotes, or followed by a colon, in a :style or c-style binding, in a component's JavaScript, or in the Python module that defines a component. A component whose own css_data() keys Citry cannot all read is not checked, but a property that only such a component sets is still reported where another component reads it. A var() in a template's style attribute is not checked, and a var() that citry.css.misspelled-variable reports is not reported again. citry check needs your application for this rule; the editor does not run it.",
+      "fix": "Set the property in a component's CSS or css_data(), add a fallback, as in var(--name, 1rem), or, for a component that reads properties a stylesheet outside Citry sets, set rule_undeclared_css_variable to \"ignore\" in its Lint class.",
+      "defaultSeverity": "ignore",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The custom property as written, without the leading --."
+      },
+      "messages": {
+        "default": "Nothing that Citry reads sets --{name}, so the browser ignores this declaration unless a stylesheet or script outside Citry sets it."
+      },
+      "examples": [
+        {
+          "title": "A property set nowhere",
+          "language": "css",
+          "source": ".card {\n  padding: var(--card-gap);\n}"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.css.undeclared-variable"
+    },
+    {
       "code": "citry.vue.unknown-variable",
       "constant": "VUE_UNKNOWN_VARIABLE",
       "title": "Unknown Vue variable",

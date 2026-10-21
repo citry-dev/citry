@@ -53,6 +53,9 @@ them. There is no separate editor setting.
 | [`citry.browser.unknown-form-field`](/ide/diagnostics/#citry.browser.unknown-form-field) | A control in a submitted form whose `name` the handler does not accept | error |
 | [`citry.browser.missing-form-field`](/ide/diagnostics/#citry.browser.missing-form-field) | A submitted form without a control for a field the handler requires | error |
 | [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A `var(--name)` that misspells a `css_data()` key | warning |
+| [`citry.css.misspelled-class`](/ide/diagnostics/#citry.css.misspelled-class) | A class one typo away from a class in the component's CSS, such as `bord` for `.board` | warning |
+| [`citry.css.undeclared-class`](/ide/diagnostics/#citry.css.undeclared-class) | A class that no component CSS declares | off |
+| [`citry.css.undeclared-variable`](/ide/diagnostics/#citry.css.undeclared-variable) | A `var(--name)` that nothing sets | off |
 | [`citry.template.unknown-url`](/ide/diagnostics/#citry.template.unknown-url) | A link to a path your app has no page or file for | warning |
 
 ## Fix unknown names
@@ -203,7 +206,7 @@ to destructure it.
 
 Each rule has a `rule_*` setting on `LintSettings` that accepts `"ignore"`,
 `"warning"`, or `"error"`. Warnings are shown but do not fail `citry check`;
-errors do. These are the defaults:
+errors do, and `"ignore"` turns the rule off. These are the defaults:
 
 ```python
 from citry import Citry, LintSettings
@@ -236,6 +239,9 @@ app = Citry(
         rule_missing_server_event_field="error",
         rule_incompatible_server_event_field="error",
         rule_misspelled_css_variable="warning",
+        rule_misspelled_css_class="warning",
+        rule_undeclared_css_class="ignore",
+        rule_undeclared_css_variable="ignore",
     ),
 )
 ```
@@ -819,7 +825,9 @@ So `c-if` and `c-else` branches may share an id. `v-show` does not count,
 because a hidden element is still in the page.
 
 The same id in two different templates is not reported, even when both
-render on one page.
+render on one page. Development mode reports that case when Citry
+turns the page into HTML; see
+[Repeated ids](/guides/dev-server/#repeated-ids).
 
 ## Images without alt text { #find-images-without-alt-text }
 
@@ -1081,6 +1089,182 @@ fallback value, such as `var(--acent, blue)`, and a property the same CSS
 sets itself are not reported, and neither is a component whose
 `css_data()` keys Citry cannot all read. The rule is a warning by default
 and needs your application, so only `citry --app ... check` reports it.
+To find every `var()` that nothing sets, turn on
+[unset CSS variables](#find-unset-css-variables).
+
+## Misspelled CSS classes { #find-misspelled-css-classes }
+
+A typo in a `class` attribute leaves the element without its styles, and
+the browser does not say why:
+
+```citry
+class Board(Component):
+    template = """
+      {# Warning: No CSS that Citry reads styles the
+         class 'bord'. Did you mean 'board', from this
+         component's CSS? #}
+      <div class="bord"></div>
+    """
+
+    css = """
+      .board {
+        display: grid;
+      }
+    """
+```
+
+The CSS that Citry reads is, for every component your app registers:
+
+- its `css` or `css_file`;
+- the stylesheets in its `Dependencies` that are inline, such as
+  `Style(content=...)`, or local files; not a stylesheet linked by URL;
+- the `<style>` elements in its template that hold CSS, not another
+  language such as `lang="scss"`.
+
+Citry reports a class in a static `class` attribute, one written as plain
+text, when it is one typing slip from a class that the component's own
+`css` or `css_file` styles, and no CSS that Citry reads styles the class
+as written. A typing slip is two neighboring letters swapped, one letter
+typed twice, or one letter left out. A slip that moves, doubles, or
+drops a digit, such as
+`col-1` next to `.col-12`, and a missing final `s`, such as `tab` next to
+`.tabs`, usually name another class, so they are not reported. A `class`
+on a component tag is checked too: the component receives it as an input
+and usually puts it on one of its elements.
+
+These are not checked:
+
+- a class set by `:class` or `c-class`;
+- the words inside `{{ }}` in a `class` attribute. Citry shows a plain
+  attribute's text exactly as written, so use `c-class` for a value that
+  changes;
+- a class shorter than three characters;
+- a class on a tag that renders no element of its own, such as `<c-if>`
+  or `<template>`.
+
+The rule is a warning by default. Only `citry --app ... check` reports
+it; the editor does not. If a stylesheet that Citry does not read styles
+the class on purpose, set `rule_misspelled_css_class` to `"ignore"` in
+that component's `Lint` class
+([Override one component](#override-one-component)).
+
+## Classes without CSS { #find-classes-without-css }
+
+This rule is off by default. Turn it on to find every class in a template
+that no CSS styles, such as a class whose rule you deleted:
+
+```python
+app = Citry(
+    lint=LintSettings(
+        rule_undeclared_css_class="warning",
+    ),
+)
+```
+
+`citry --app ... check` then reports each class in a static `class`
+attribute that the [CSS Citry reads](#find-misspelled-css-classes) does
+not declare. A class that the
+[misspelled class](#find-misspelled-css-classes) rule reports is not
+reported again:
+
+```citry-html
+{# Warning: No CSS that Citry reads styles the
+   class 'card-header'. #}
+<div class="card-header">Title</div>
+```
+
+It skips the same classes as the misspelled class rule, except that it
+also checks classes shorter than three characters. The editor does not
+run it.
+
+The rule also reports classes that work, which is why it is off by
+default:
+
+- classes from a stylesheet linked by URL or with a `<link>` tag, such as
+  a site stylesheet or a CSS framework;
+- utility classes that a build tool such as Tailwind generates;
+- classes used only by JavaScript or by tests, such as `js-toggle`;
+- classes styled by a stylesheet written in another language, with
+  `css_lang` or a template `<style lang="...">`, or in a local file that
+  is not UTF-8 text;
+- the classes of a component library you install, which you cannot
+  change.
+
+To check only your own components, leave the rule off in `LintSettings`
+and turn it on in their `Lint` class:
+
+```citry
+class Board(Component):
+    class Lint:
+        rule_undeclared_css_class = "warning"
+```
+
+Or turn it on for the app and set it to `"ignore"` in the `Lint` class of
+each component that uses a CSS framework.
+
+A selector declares a class wherever it names it: `.name`, `.card .name`,
+`.name:hover`, `:is(.name)`, and inside `@media` or a nested rule. An
+attribute selector such as `[class~="name"]` declares it too, and
+`[class^="btn-"]` declares every class that starts with `btn-`. A class
+in a comment, a string, or a property value does not count. As in a
+browser, an unclosed comment runs to the end of the stylesheet, so no
+class after it counts.
+
+## Unset CSS variables { #find-unset-css-variables }
+
+This rule is off by default. Turn it on to find every `var(--name)` that
+reads a custom property nothing sets:
+
+```python
+app = Citry(
+    lint=LintSettings(
+        rule_undeclared_css_variable="warning",
+    ),
+)
+```
+
+With the rule on, Citry reports a `var()` that nothing sets:
+
+```citry
+class Card(Component):
+    css = """
+      .card {
+        /* Warning: Nothing that Citry reads sets
+           --card-gap, so the browser ignores this
+           declaration unless a stylesheet or script
+           outside Citry sets it. */
+        padding: var(--card-gap);
+      }
+    """
+```
+
+Citry checks each `var(--name)` in a component's own `css` or `css_file`
+that has no fallback value; `var(--card-gap, 1rem)` is never reported. It
+counts these as setting `--name`:
+
+- a `--name: value` declaration or an `@property --name` rule in the
+  [CSS Citry reads](#find-misspelled-css-classes);
+- a `css_data()` or `CssData` key called `name` on any component. Citry
+  sets each key on that component's root element, and everything inside
+  it, other components included, inherits the value;
+- a `style` attribute in a template that sets `--name`;
+- the text `--name` in quotes, or followed by a colon, in a `:style` or
+  `c-style` binding, in a component's JavaScript, or in the Python module
+  that defines a component, as in `setProperty('--name', value)` or
+  `f"--name: {value};"`.
+
+A `var()` inside a template's `style` attribute is not checked. A
+component whose `css_data()` keys Citry cannot all read is skipped,
+because it may set any property, but a property that only such a
+component sets is still reported where another component reads it. A
+`var()` that the
+[misspelled CSS variable](#find-misspelled-css-variables) rule reports is
+not reported again. The editor does not run this rule.
+
+The rule also reports properties that a site stylesheet, a design system,
+or a script outside Citry sets, which is why it is off by default. Set it
+to `"ignore"` in the `Lint` class of a component that reads such
+properties, or turn it on only in the components you want checked.
 
 ## Links to missing pages { #find-links-to-missing-pages }
 
@@ -1198,7 +1382,10 @@ which reads each child's `emits`, and the rules for
 [repeated components](#find-repeated-components-without-keys),
 [prop assignments](#find-prop-assignments),
 [server event arguments](#check-server-event-arguments),
-[CSS variables](#find-misspelled-css-variables), and
+[misspelled CSS variables](#find-misspelled-css-variables),
+[misspelled CSS classes](#find-misspelled-css-classes),
+[classes without CSS](#find-classes-without-css),
+[unset CSS variables](#find-unset-css-variables), and
 [links](#find-links-to-missing-pages).
 
 They still run every rule that reads only the template: the Alpine,

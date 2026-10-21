@@ -105,6 +105,16 @@
   `js_data()`, `css_data()`, or State holds one, `citry check` warns about
   one in `js_data()`, and a template shows it as `***`
   ([details](https://citry.dev/vue/component-options/#keep-tokens-off-the-page)).
+- With your application loaded, `citry check` now warns about a class
+  that misspells one the component's CSS styles, such as `class="bord"`
+  when the CSS styles `.board`, which otherwise renders unstyled with no
+  error (`rule_misspelled_css_class`).
+- Two stricter CSS checks are available, off by default:
+  `rule_undeclared_css_class` reports every template class that no CSS
+  Citry reads declares, and `rule_undeclared_css_variable` reports every
+  `var(--name)` without a fallback that nothing sets. Turn them on in
+  `LintSettings` or in a component's `Lint` class
+  ([details](https://citry.dev/ide/template-linting/#find-classes-without-css)).
 
 ### Changed
 

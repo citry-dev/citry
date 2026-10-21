@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 import symtable
 import sys
 import textwrap
@@ -21,6 +22,17 @@ from citry._class_introspection import (
     _static_class_mro,
 )
 from citry._component_introspection import _loaded_python_file
+from citry._css_lint import (
+    CssLintFinding,
+    TemplateCss,
+    code_custom_properties,
+    lint_misspelled_css_classes,
+    lint_undeclared_css_classes,
+    lint_undeclared_css_variables,
+    style_type_is_css,
+    template_css,
+)
+from citry._css_scan import ClassPattern, CssDeclarations, scan_css
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
@@ -93,6 +105,7 @@ from citry.analysis import (
     BrowserProp,
     ComponentJsLintConsumer,
     ComponentJsLintFinding,
+    CssVariableFinding,
     JsonWireType,
     MarkupLintConsumer,
     MarkupLintFinding,
@@ -144,10 +157,12 @@ from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
 from citry.component import Component
 from citry.component_registry import NotRegistered
+from citry.ext.dependencies.types import Style
 from citry.ext.events.csrf import csrf_field_names
 from citry.ext.events.extension import _component_events_info
 from citry.settings import LintSettings
 from citry.tag_rules import build_tag_rules
+from citry.util.html import decode_attribute_entities
 from citry_core.i18n import I18nCompileError
 from citry_core.template_parser import (
     RESERVED_TAG_NAMES,
@@ -277,6 +292,9 @@ def _check_registry(
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None
     links = _LinkCheck(verdicts={}, failures={})
+    # The CSS rules compare each template with every component's CSS, so the
+    # template facts they need are kept until every template has been read.
+    css_templates: list[tuple[_TemplateSource, TemplateCss]] = []
 
     i18n = engine.extensions._extensions_by_name.get("i18n")
     # Component messages make i18n available without configuring it; only a
@@ -510,14 +528,17 @@ def _check_registry(
                 component_props=component_props,
                 component_templates=component_templates,
                 links=links,
+                css_templates=css_templates,
             )
         )
     for browser_source in browser_sources.values():
         findings.extend(
             _check_browser_source(engine, browser_source, i18n_profiles or {}, i18n_configured=i18n_configured)
         )
+    known_css = _KnownCss(engine, components, css_sources, browser_sources, css_templates)
+    findings.extend(_css_class_findings(engine, css_templates, known_css))
     for css_source in css_sources.values():
-        findings.extend(_check_css_source(engine, css_source))
+        findings.extend(_check_css_source(engine, css_source, known_css))
     return findings, links.notes()
 
 
@@ -653,8 +674,14 @@ def _check_template(
     component_props: Mapping[type[Component], tuple[BrowserProp, ...] | None] | None = None,
     component_templates: Mapping[type[Component], str] | None = None,
     links: _LinkCheck | None = None,
+    css_templates: list[tuple[_TemplateSource, TemplateCss]] | None = None,
 ) -> list[CheckFinding]:
-    """Parse one source and, in registry mode, inspect component tag names."""
+    """
+    Parse one source and, in registry mode, inspect component tag names.
+
+    With ``css_templates``, the template's classes and CSS are appended to
+    it, because the CSS rules can run only once every template has been read.
+    """
     try:
         template = parse_template(
             source.content,
@@ -867,6 +894,8 @@ def _check_template(
         findings.extend(_server_event_payload_findings(engine, source, template, parse_nested=nested_parser))
         if links is not None:
             findings.extend(_unknown_url_findings(engine, source, template, links, parse_nested=nested_parser))
+        if css_templates is not None:
+            css_templates.append((source, template_css(template, parse_nested=nested_parser)))
     for target_error in browser_state_binding_target_errors(template, parse_nested=nested_parser):
         findings.append(
             _browser_template_finding(
@@ -2151,22 +2180,41 @@ def _shared_event_handlers(consumers: list[type[Component]]) -> dict[str, tuple[
     return shared or {}
 
 
-def _check_css_source(engine: Citry, source: _BrowserSource) -> list[CheckFinding]:
-    """Report `var(--name)` in one component CSS source that looks like a misspelled `css_data()` key."""
-    active = [
-        rule_severity
-        for component in source.consumers
-        if (rule_severity := _component_lint_info(engine, component).rule_misspelled_css_variable) != "ignore"
-    ]
-    if not active:
+def _check_css_source(engine: Citry, source: _BrowserSource, known_css: _KnownCss) -> list[CheckFinding]:
+    """Report `var(--name)` in one component CSS source that misspells a `css_data()` key, or that nothing sets."""
+    lints = [_component_lint_info(engine, component) for component in source.consumers]
+    misspelled_active = [lint.rule_misspelled_css_variable for lint in lints]
+    undeclared_active = [lint.rule_undeclared_css_variable for lint in lints]
+    misspelled_active = [severity for severity in misspelled_active if severity != "ignore"]
+    undeclared_active = [severity for severity in undeclared_active if severity != "ignore"]
+    if not misspelled_active and not undeclared_active:
         return []
     keys: set[str] = set()
     for component in source.consumers:
-        component_keys = _css_data_keys(engine, component)
+        component_keys = known_css.css_data_keys(component)
         # One owner whose keys are not all known may set any property.
         if component_keys is None:
             return []
         keys.update(component_keys)
+    findings: list[CssVariableFinding | CssLintFinding] = list(
+        lint_misspelled_css_variables(
+            source.content,
+            keys,
+            severity="error" if "error" in misspelled_active else "warning",
+        )
+        if misspelled_active
+        else ()
+    )
+    if undeclared_active:
+        findings.extend(
+            lint_undeclared_css_variables(
+                source.content,
+                keys | known_css.custom_properties(),
+                severity="error" if "error" in undeclared_active else "warning",
+                # A misspelled key already has a finding with a suggestion.
+                reported={(finding.start_index, finding.end_index) for finding in findings},
+            )
+        )
     return [
         _browser_source_finding(
             source.origin,
@@ -2177,12 +2225,222 @@ def _check_css_source(engine: Citry, source: _BrowserSource) -> list[CheckFindin
             finding.message,
             finding.severity,
         )
-        for finding in lint_misspelled_css_variables(
-            source.content,
-            keys,
-            severity="error" if "error" in active else "warning",
-        )
+        for finding in findings
     ]
+
+
+@dataclass(slots=True)
+class _KnownCss:
+    """
+    The CSS that Citry reads for one `citry check` run, shared by the CSS rules.
+
+    It covers every registered component: its `css` or `css_file`, the
+    inline and local-file stylesheets in its `Dependencies`, and its
+    template's `<style>` elements and `style` attributes; for custom
+    properties also the `--name` strings in its JavaScript and Python module,
+    and the keys its `css_data()` returns. Each part is read the first time
+    a rule needs it, so a run with every CSS rule off reads nothing more.
+    """
+
+    engine: Citry
+    components: list[type[Component]]
+    css_sources: Mapping[tuple[object, ...], _BrowserSource]
+    browser_sources: Mapping[tuple[object, ...], _BrowserSource]
+    css_templates: list[tuple[_TemplateSource, TemplateCss]]
+    # What each component's own `css` or `css_file` declares.
+    own_declarations: dict[type[Component], CssDeclarations] | None = None
+    declarations: CssDeclarations | None = None
+    # Each component's `css_data()` keys, or None for a component whose keys
+    # Citry cannot list; filled in as the rules ask.
+    keys: dict[type[Component], frozenset[str] | None] | None = None
+    known_properties: frozenset[str] | None = None
+
+    def own(self, component: type[Component]) -> CssDeclarations:
+        """Return what the component's own `css` or `css_file` declares."""
+        if self.own_declarations is None:
+            self.own_declarations = {}
+            for css_source in self.css_sources.values():
+                scanned = scan_css(css_source.content)
+                for consumer in css_source.consumers:
+                    self.own_declarations[consumer] = scanned
+        return self.own_declarations.get(component, CssDeclarations())
+
+    def declared(self) -> CssDeclarations:
+        """Return what every stylesheet Citry reads declares."""
+        if self.declarations is None:
+            # One set per kind, built once: merging declarations one sheet at
+            # a time would copy the growing sets for every component.
+            classes: set[str] = set()
+            patterns: dict[ClassPattern, None] = {}
+            properties: set[str] = set()
+            parts = [
+                *(self.own(component) for component in self.components),
+                *(scan_css(text) for text in _dependency_stylesheets(self.components)),
+                *(used.declarations for _source, used in self.css_templates),
+            ]
+            for part in parts:
+                classes.update(part.classes)
+                patterns.update(dict.fromkeys(part.class_patterns))
+                properties.update(part.custom_properties)
+            self.declarations = CssDeclarations(
+                classes=frozenset(classes),
+                class_patterns=tuple(patterns),
+                custom_properties=frozenset(properties),
+            )
+        return self.declarations
+
+    def css_data_keys(self, component: type[Component]) -> frozenset[str] | None:
+        """Return the component's `css_data()` keys, reading its source at most once per run."""
+        if self.keys is None:
+            self.keys = {}
+        if component not in self.keys:
+            self.keys[component] = _css_data_keys(self.engine, component)
+        return self.keys[component]
+
+    def custom_properties(self) -> frozenset[str]:
+        """Return every custom property that something Citry reads sets, without the leading `--`."""
+        if self.known_properties is None:
+            # Citry sets each `css_data()` key on its component's root
+            # element, and every element inside it, other components'
+            # included, inherits the value.
+            properties = {key for component in self.components for key in self.css_data_keys(component) or ()}
+            properties.update(self.declared().custom_properties)
+            # A script or Python code may set a property by name, as in
+            # `style.setProperty("--gap", ...)` or `f"--accent: {color};"`.
+            for browser_source in self.browser_sources.values():
+                properties.update(code_custom_properties(browser_source.content))
+            for source in _python_module_sources(self.components):
+                properties.update(code_custom_properties(source))
+            self.known_properties = frozenset(properties)
+        return self.known_properties
+
+
+# A `<style>` element in a pre-rendered `Dependencies` tag, such as
+# `Markup("<style>.card { ... }</style>")`.
+_STYLE_ELEMENT = re.compile(r"<style\b([^>]*)>(.*?)</style\s*>", re.IGNORECASE | re.DOTALL)
+# A `type` or `lang` attribute in such a tag's attribute text.
+_STYLE_TYPE_ATTRIBUTE = re.compile(r"""\b(?:type|lang)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.IGNORECASE)
+
+
+def _dependency_stylesheets(components: list[type[Component]]) -> list[str]:
+    """
+    Return the text of every `Dependencies` stylesheet Citry can read.
+
+    That is an inline `Style(content=...)`, a pre-rendered `<style>` tag, and
+    a local file that reads as UTF-8. A stylesheet linked by URL is not
+    read. Resolving `Dependencies` calls any callable entry the component
+    declares, as a render does; a declaration that raises is skipped.
+    """
+    texts: dict[object, str] = {}
+    for component in components:
+        try:
+            dependencies = component.get_dependencies()
+        except (Exception, SystemExit):  # noqa: BLE001, S112 - one bad declaration must not stop the batch
+            continue
+        for entries in dependencies.css.values():
+            for entry in entries:
+                if isinstance(entry, Style):
+                    if entry.content:
+                        texts.setdefault(("inline", entry.content), entry.content)
+                elif isinstance(entry, Path):
+                    if ("file", entry) not in texts:
+                        try:
+                            texts[("file", entry)] = entry.read_text(encoding="utf-8")
+                        except (OSError, UnicodeError):
+                            continue
+                elif callable(getattr(entry, "__html__", None)):
+                    try:
+                        html = str(entry.__html__())
+                    except (Exception, SystemExit):  # noqa: BLE001, S112 - one bad entry must not stop the batch
+                        continue
+                    for match in _STYLE_ELEMENT.finditer(html):
+                        # A tag such as `<style type="text/x-scss">` holds a
+                        # language Citry cannot read.
+                        types = [
+                            next(value for value in found.groups() if value is not None)
+                            for found in _STYLE_TYPE_ATTRIBUTE.finditer(match.group(1))
+                        ]
+                        if all(style_type_is_css(decode_attribute_entities(value)) for value in types):
+                            texts.setdefault(("inline", match.group(2)), match.group(2))
+    return list(texts.values())
+
+
+def _python_module_sources(components: list[type[Component]]) -> list[str]:
+    """Return the source of each module that defines a registered component, read once per file."""
+    sources: dict[Path, str] = {}
+    for component in components:
+        path = _loaded_python_file(component)
+        if path is None or path in sources:
+            continue
+        try:
+            with tokenize.open(path) as stream:
+                sources[path] = stream.read()
+        except (OSError, SyntaxError, UnicodeError):
+            continue
+    return list(sources.values())
+
+
+def _css_class_findings(
+    engine: Citry,
+    css_templates: list[tuple[_TemplateSource, TemplateCss]],
+    known_css: _KnownCss,
+) -> list[CheckFinding]:
+    """Report template classes that misspell a class the component's CSS styles, or that no CSS declares."""
+    findings: list[CheckFinding] = []
+    for source, used in css_templates:
+        if not used.classes:
+            continue
+        lints = {component: _component_lint_info(engine, component) for component in source.consumers}
+        misspelled_owners = [
+            component for component, lint in lints.items() if lint.rule_misspelled_css_class != "ignore"
+        ]
+        undeclared_active = [
+            lint.rule_undeclared_css_class for lint in lints.values() if lint.rule_undeclared_css_class != "ignore"
+        ]
+        # A template shared by several components is compared with the CSS of
+        # each one that checks it.
+        own = CssDeclarations()
+        for component in misspelled_owners:
+            own = own.merged(known_css.own(component))
+        misspelled_severities = {lints[component].rule_misspelled_css_class for component in misspelled_owners}
+        class_findings: list[CssLintFinding] = list(
+            lint_misspelled_css_classes(
+                used.classes,
+                own,
+                known_css.declared(),
+                severity="error" if "error" in misspelled_severities else "warning",
+            )
+            if misspelled_owners
+            else ()
+        )
+        if undeclared_active:
+            class_findings.extend(
+                lint_undeclared_css_classes(
+                    used.classes,
+                    known_css.declared(),
+                    severity="error" if "error" in undeclared_active else "warning",
+                    # A misspelled class already has a finding with a suggestion.
+                    reported={(finding.start_index, finding.end_index) for finding in class_findings},
+                )
+            )
+        for finding in sorted(class_findings, key=lambda item: (item.start_index, item.end_index)):
+            line, column = _byte_offset_coordinates(source.content, finding.start_index)
+            end_line, end_column = _byte_offset_coordinates(source.content, finding.end_index)
+            findings.append(
+                CheckFinding(
+                    source.origin,
+                    finding.message,
+                    finding.code,
+                    severity=finding.severity,
+                    start_index=finding.start_index,
+                    end_index=finding.end_index,
+                    line=line,
+                    column=column,
+                    end_line=end_line,
+                    end_column=end_column,
+                )
+            )
+    return findings
 
 
 def _css_data_keys(engine: Citry, component: type[Component]) -> frozenset[str] | None:

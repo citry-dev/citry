@@ -79,3 +79,9 @@
   cannot carry.
 - `citry.js-data.unsupported-type` also covers a `citry.Secret` in
   `js_data()` or a `JsData` field.
+- Added `citry.css.misspelled-class` (a warning), and
+  `citry.css.undeclared-class` and `citry.css.undeclared-variable`, both
+  off by default; `citry check` reports them with the application loaded.
+- `defaultSeverity` now accepts `ignore` for a rule that is off until the
+  application turns it on. It requires `configurableSeverity: true`, and
+  the public reference shows such a rule as off.

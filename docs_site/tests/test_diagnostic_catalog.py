@@ -80,3 +80,21 @@ def test_diagnostic_block_shows_the_fix_before_the_exact_conditions() -> None:
 
     assert "Fix:</strong> Change &lt;the&gt; input.</p>" in rendered
     assert rendered.index("Example message.") < rendered.index("Fix:") < rendered.index("When this appears:")
+
+
+def test_an_off_by_default_rule_says_it_is_off_and_how_to_turn_it_on() -> None:
+    rendered = _diagnostic_block(
+        {
+            "code": "citry.example.strict",
+            "title": "Example strict rule",
+            "summary": "Something may be wrong.",
+            "when": "The application turns the rule on.",
+            "defaultSeverity": "ignore",
+            "configurableSeverity": True,
+            "surfaces": ["check"],
+            "messages": {"default": "Example message."},
+        }
+    )
+
+    assert "Default severity:</strong> off (<code>ignore</code>). Your application can turn it on." in rendered
+    assert "can change this severity" not in rendered

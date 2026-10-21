@@ -26,6 +26,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
+        "if": {
+          "properties": { "defaultSeverity": { "const": "ignore" } },
+          "required": ["defaultSeverity"]
+        },
+        "then": {
+          "properties": { "configurableSeverity": { "const": true } },
+          "required": ["configurableSeverity"]
+        },
         "required": [
           "code",
           "constant",
@@ -54,7 +62,8 @@
             "description": "What the reader changes to resolve the diagnostic, shown in the public reference."
           },
           "defaultSeverity": {
-            "enum": ["error", "warning", "information"]
+            "enum": ["error", "warning", "information", "ignore"],
+            "description": "The severity a finding gets unless the application changes it. \"ignore\" marks a rule that is off until the application turns it on, and requires configurableSeverity: true."
           },
           "configurableSeverity": { "type": "boolean" },
           "surfaces": {

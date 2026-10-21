@@ -15,7 +15,9 @@ GENERATOR_PATH = ROOT / "scripts/generate_diagnostic_catalog.py"
 CODE_RE_FULL = re.compile(r"citry\.[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")
 CONSTANT_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 SURFACES = frozenset({"parser", "formatter", "check", "lsp", "vscode"})
-SEVERITIES = frozenset({"error", "warning", "information"})
+# "ignore" marks a rule that is off until the application turns it on, so
+# only a rule whose severity the application can change may use it.
+SEVERITIES = frozenset({"error", "warning", "information", "ignore"})
 IMPLEMENTATION_ROOTS = (
     ROOT / "crates/citry_core_py/src",
     ROOT / "crates/citry_i18n/src",
@@ -137,6 +139,8 @@ def _validate_catalog(catalog: Any, problems: list[str]) -> tuple[set[str], tupl
             problems.append(f"{label}.defaultSeverity is invalid")
         if "configurableSeverity" in raw and type(raw["configurableSeverity"]) is not bool:
             problems.append(f"{label}.configurableSeverity must be a boolean")
+        elif raw["defaultSeverity"] == "ignore" and raw.get("configurableSeverity") is not True:
+            problems.append(f"{label}.defaultSeverity may be ignore only when configurableSeverity is true")
         surfaces = raw["surfaces"]
         if (
             type(surfaces) is not list

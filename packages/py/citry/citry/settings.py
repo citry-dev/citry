@@ -142,6 +142,9 @@ _TEMPLATE_RULE_FIELDS = (
     "rule_unknown_form_field",
     "rule_missing_form_field",
     "rule_misspelled_css_variable",
+    "rule_misspelled_css_class",
+    "rule_undeclared_css_class",
+    "rule_undeclared_css_variable",
     "rule_unknown_url",
 )
 
@@ -304,6 +307,32 @@ class LintSettings:
             ``accent``. Nothing sets the property. ``citry check`` reports
             it only with your application loaded. The default is
             ``"warning"``.
+        rule_misspelled_css_class: Severity for a class in a template's
+            static ``class`` attribute that is one typing slip from a class
+            the component's own ``css`` or ``css_file`` styles, such as
+            ``bord`` for ``.board``, when no registered component's CSS,
+            ``Dependencies`` stylesheet, or template ``<style>`` element
+            declares the class as written. The element renders without
+            those styles. ``citry check`` reports it only with your
+            application loaded. The default is ``"warning"``.
+        rule_undeclared_css_class: Severity for every class in a template's
+            static ``class`` attribute that no CSS Citry reads declares: no
+            registered component's ``css``, ``css_file``, inline or
+            local-file ``Dependencies`` stylesheet, or template ``<style>``
+            element. Classes from a site stylesheet or a CSS framework such
+            as Tailwind, and classes used only by JavaScript or tests, are
+            reported too, so the default is ``"ignore"``, which turns the
+            rule off. ``citry check`` reports it only with your application
+            loaded.
+        rule_undeclared_css_variable: Severity for every ``var(--name)``
+            without a fallback in a component's ``css`` or ``css_file``
+            when nothing Citry reads sets ``--name``: no registered
+            component's CSS, ``css_data()`` key, template ``style``
+            attribute or binding, JavaScript, or Python module. Properties
+            that a site stylesheet, a design system, or a script outside
+            Citry sets are reported too, so the default is ``"ignore"``,
+            which turns the rule off. ``citry check`` reports it only with
+            your application loaded.
         rule_unknown_url: Severity for a literal ``href``, ``src``, or
             ``action`` path, such as ``/abuot``, that none of your app's
             routes or static files serves. ``citry check`` and the editor
@@ -373,6 +402,9 @@ class LintSettings:
     rule_unknown_form_field: LintSeverity = "error"
     rule_missing_form_field: LintSeverity = "error"
     rule_misspelled_css_variable: LintSeverity = "warning"
+    rule_misspelled_css_class: LintSeverity = "warning"
+    rule_undeclared_css_class: LintSeverity = "ignore"
+    rule_undeclared_css_variable: LintSeverity = "ignore"
     rule_unknown_url: LintSeverity = "warning"
     check_input_types: bool = True
 

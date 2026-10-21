@@ -89,6 +89,52 @@ These rules need facts that only the loaded application gives, so
 
 - `rule_misspelled_css_variable` (`citry.css.misspelled-variable`): a
   `var(--name)` one typing slip from a `css_data()` key.
+- `rule_misspelled_css_class` (`citry.css.misspelled-class`, a warning by
+  default): a class in a static `class` attribute that is one typing slip
+  from a class selector in the component's own `css` or `css_file`, when
+  no CSS that Citry reads (listed below) declares the class as written. A
+  slip that moves, doubles, or drops a digit (`col-1` for `col-12`) and a missing final `s`
+  (`tab` for `tabs`) do not count, because they usually name another class
+  of the same family.
+- `rule_undeclared_css_class` (`citry.css.undeclared-class`) and
+  `rule_undeclared_css_variable` (`citry.css.undeclared-variable`), both
+  off by default (`"ignore"`): every static class that no CSS Citry reads
+  declares, and every `var(--name)` without a fallback in a component's
+  own CSS that nothing Citry reads sets. They also report classes and
+  properties that a stylesheet or script outside Citry provides, which is
+  why a project turns them on only when its CSS lives in its components.
+
+  The three rules need every registered component's CSS, because a class
+  or a property one component uses may come from another.
+  `citry/_css_scan.py` is the one reader of selectors and custom property
+  declarations (`var()` reads are found by `_css_var_arguments` in
+  `citry/analysis.py`, which the `css_data()` variable rule shares). It
+  records which classes a selector names (anywhere in it, including
+  `@scope` preludes and `[class...]` attribute selectors) and which custom
+  properties a declaration or `@property` rule sets, skipping comments,
+  strings, escapes, `url(...)`, and declaration values. It walks nested
+  blocks with a stack, so deeply nested CSS cannot exhaust Python's call
+  stack. `citry/_css_lint.py` reads each template's static classes,
+  `<style>` elements, `style` attributes, and `:style`/`c-style` bindings,
+  and holds the rules. `_check_registry` keeps each template's classes
+  until every template has been read, then reads the CSS that Citry reads
+  at most once per run, only when a rule asks (`_KnownCss`): every
+  component's `css` or `css_file`, the `Dependencies` stylesheets that are
+  inline (`Style(content=...)` or a pre-rendered `<style>` tag) or local
+  UTF-8 files, its template's `<style>` elements that hold CSS, and, for custom
+  properties, the `--name` strings in its JavaScript and its Python module
+  and every component's `css_data()` keys.
+
+  Error modes: a stylesheet linked by URL, a local file that cannot be
+  read as UTF-8, a `Dependencies` declaration that raises, a `css_lang`
+  source, and CSS an `on_css_loaded` hook adds are not read, so their
+  classes and properties are reported by the two off-by-default rules. A
+  component whose `css_data()` keys cannot be listed is not checked for
+  unset properties, but its keys do not count for other components
+  either. CSS is read close to how a browser reads it: an unclosed
+  comment hides the rest of its stylesheet. The editor does not run these rules, as it
+  does not run the `css_data()` variable rule: it would need every
+  component's CSS from the app worker.
 - `rule_unknown_url` (`citry.template.unknown-url`, a warning by default):
   a literal root-relative `href`, `src`, or `action` path on an HTML
   element that the host app does not serve. Citry does not know the host's
