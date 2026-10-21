@@ -45,13 +45,18 @@ def local_sources(framework: Framework) -> dict[str, Path]:
     if not manifest.is_file():
         return {}
     sources = tomllib.loads(manifest.read_text(encoding="utf-8")).get("tool", {}).get("uv", {}).get("sources", {})
+    found = {}
     # Sorted by name, so the digests below do not depend on the order the
     # table lists them in.
-    return {
-        name: (framework.baseline / source["path"]).resolve()
-        for name, source in sorted(sources.items())
-        if isinstance(source, dict) and "path" in source
-    }
+    for name, source in sorted(sources.items()):
+        if not isinstance(source, dict) or "path" not in source:
+            continue
+        if source.get("editable"):
+            # An editable install leaves only a pointer to the folder, so the
+            # installed files the stored results are keyed by would never change.
+            raise ConfigError(f"{manifest} installs {name} as editable; the benchmark needs a built install")
+        found[name] = (framework.baseline / source["path"]).resolve()
+    return found
 
 
 def source_files(folder: Path) -> list[str]:
@@ -78,8 +83,10 @@ def local_source_digest(framework: Framework) -> str:
     Hash the files of every package the clean app installs from disk.
 
     A change to them can change what the installed package does, so the
-    runner installs the package again when this digest changes. It hashes
-    the package's tests and notes too, which costs only a rebuild.
+    runner installs the package again when this digest changes. It also
+    hashes files the package does not install, such as its tests and
+    changelog, so editing one rebuilds the package but keeps the stored
+    results, which follow `installed_local_digest`.
     """
     digest = hashlib.sha256()
     for name, path in local_sources(framework).items():
@@ -128,25 +135,74 @@ def _check_lock(framework: Framework) -> None:
     Stop when the clean app's uv.lock no longer matches the sources of a package it installs from disk.
 
     `uv sync --frozen` installs whatever the lock says without comparing it
-    with those sources, so a dependency they add, or a new citry-core pin,
-    would be left out silently. uv runs in the clean app's folder, because
-    it resolves `${PROJECT_ROOT}` in the Citry app's overrides against the
-    folder it starts in.
+    with those sources, so a dependency they add would be left out
+    silently. uv also counts the packages' development dependency groups,
+    which are never installed here, so a change to those asks for a new
+    lock too. uv runs in the clean app's folder, because it resolves
+    `${PROJECT_ROOT}` in the Citry app's overrides against the folder it
+    starts in.
     """
     if not local_sources(framework) or not (framework.baseline / "uv.lock").is_file():
         return
-    result = subprocess.run(
-        ["uv", "lock", "--check", "--directory", str(framework.baseline)],
-        env={key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"},
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    # UV_FROZEN would make `--check` accept any lock that parses.
+    environment = {key: value for key, value in os.environ.items() if key not in {"VIRTUAL_ENV", "UV_FROZEN"}}
+    try:
+        result = subprocess.run(
+            ["uv", "lock", "--check", "--directory", str(framework.baseline)],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise ConfigError(f"{framework.key} installs packages from disk, which needs uv on PATH") from None
     if result.returncode != 0:
         raise ConfigError(
             f"{framework.baseline / 'uv.lock'} does not match the sources it installs from disk; "
             f"run `uv lock` in that folder:\n{result.stderr[-2000:]}"
         )
+
+
+_EXACT_PIN = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)\s*==\s*(?P<version>[^\s;,]+)\s*$")
+
+
+def _exact_pins(requirements: list[str]) -> dict[str, str]:
+    """Give the exact versions (`name==1.2.3`) among `requirements`, by normalized package name."""
+    return {
+        re.sub(r"[-_.]+", "-", match["name"]).lower(): match["version"]
+        for requirement in requirements
+        if (match := _EXACT_PIN.match(requirement))
+    }
+
+
+def _check_overrides(framework: Framework) -> None:
+    """
+    Stop when the clean app overrides a version that a package it installs from disk pins differently.
+
+    The Citry app overrides citry-core's version by hand, because this
+    repository's own settings would build citry-core from its Rust sources
+    instead. The lock records the overridden version only, so `uv lock
+    --check` cannot see citry raise its pin, and citry would run against a
+    citry-core it was not released with.
+    """
+    manifest = framework.baseline / "pyproject.toml"
+    if not manifest.is_file():
+        return
+    data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    overrides = _exact_pins(data.get("tool", {}).get("uv", {}).get("override-dependencies", []))
+    for name, path in local_sources(framework).items():
+        source_manifest = path / "pyproject.toml"
+        if not overrides or not source_manifest.is_file():
+            continue
+        pins = _exact_pins(
+            tomllib.loads(source_manifest.read_text(encoding="utf-8")).get("project", {}).get("dependencies", [])
+        )
+        for dependency, version in pins.items():
+            if dependency in overrides and overrides[dependency] != version:
+                raise ConfigError(
+                    f"{manifest} overrides {dependency} to {overrides[dependency]}, but {name} pins "
+                    f"{dependency}=={version}; change the override and run `uv lock` in that folder"
+                )
 
 
 def _remove_old_builds(framework: Framework) -> None:
@@ -155,11 +211,15 @@ def _remove_old_builds(framework: Framework) -> None:
 
     setuptools copies the sources into build/lib and builds the wheel from
     there, keeping what an earlier build copied, so a module deleted or
-    renamed since would still be installed.
+    renamed since would still be installed. The folder is deleted only when
+    git ignores it, so nothing a developer keeps there is lost.
     """
     for path in local_sources(framework).values():
-        if path.is_dir():
-            shutil.rmtree(path / "build", ignore_errors=True)
+        if not (path / "build").is_dir():
+            continue
+        ignored = subprocess.run(["git", "check-ignore", "-q", "build"], cwd=path, check=False).returncode == 0
+        if ignored:
+            shutil.rmtree(path / "build")
 
 
 def _manifest_digest(framework: Framework) -> str:
@@ -185,6 +245,7 @@ def prepare(framework: Framework) -> Path:
     digest = _manifest_digest(framework)
     if marker.is_file() and json.loads(marker.read_text()).get("digest") == digest:
         return env
+    _check_overrides(framework)
     _check_lock(framework)
     env.mkdir(parents=True, exist_ok=True)
     marker.unlink(missing_ok=True)

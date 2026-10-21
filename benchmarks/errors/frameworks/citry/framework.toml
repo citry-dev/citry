@@ -7,15 +7,15 @@ FastAPI app in app/main.py, served by uvicorn. The benchmark measures
 Citry served from FastAPI, the setup Citry's Getting Started guide also
 uses. Its routes render the pages, and `citry.contrib.fastapi.mount()`
 adds Citry's routes under /citry, as the starter and Citry's FastAPI guide
-do. citry and citry-lsp are not the PyPI releases: they are built from
-this repository's sources in packages/py/, as a release would be
-installed, so they include unreleased changes while still declaring
-versions 0.6.0 and 0.2.0. Each report names the commit. The rest comes
-from PyPI: citry-core 1.8.0, the version citry pins, fastapi 0.141.1
-with starlette 1.6.0 and pydantic 2.13.4 (the versions the starter's
-lockfile has), uvicorn 0.52.4, and ty 0.0.89, which citry-lsp installs:
-the Python type checker Citry runs on template expressions. They are
-locked in baseline/uv.lock for Python 3.12.
+do. citry and citry-lsp are not the PyPI releases: uv builds them from
+this repository's sources in packages/py/ and installs them the way it
+installs a release, so they include unreleased changes while still
+declaring versions 0.6.0 and 0.2.0. Each report names the commit. The
+rest comes from PyPI: citry-core 1.8.0, the version citry pins, fastapi
+0.141.1 with starlette 1.6.0 and pydantic 2.13.4 (the versions the
+starter's lockfile has), uvicorn 0.52.4, and ty 0.0.89, the Python type
+checker Citry runs on template expressions, which citry-lsp installs.
+They are locked in baseline/uv.lock for Python 3.12.
 
 The editor stage has two parts. It assumes a VS Code user runs both the
 Citry extension, which Citry's docs recommend, and Pylance, which VS
@@ -48,8 +48,8 @@ Getting Started guide defines it only when a value must be computed.
 Citry 0.6.0 skipped a template's Python expressions when its component
 defined neither `template_data()` nor `TemplateData`; the measured
 sources check them either way. No case measures a component without the
-method; a one-off check of m23's card without it still reported the
-type error.
+method; a manual check of m23's card with its `template_data()` removed
+still reported the type error.
 
 m15 is ported because Citry's translations are a built-in extension that
 needs nothing extra installed, as Django's are. The starter itself has no
@@ -59,15 +59,17 @@ The counter's value lives in the page's browser-held state, so after the
 reload the clean page shows `Saved: 0` again, where the other frameworks
 show `Saved: 1`.
 
-m12 reads `SECRET_TOKEN` in Vue code, which Citry's unknown variable
-rule checks; a closely related form goes unreported: returning it from
-`js_data()`, which sends it to the browser, reports nothing, which m42
-measures. m21 misspells the Vue directive `v-if`; a misspelled
-server-side `c-if`, such as the one that shows the search form's
-`Searched:` line, is reported too (`citry.template.misspelled-directive`),
-though no case measures it. In the Next.js and Nuxt ports of m12, reading the secret in
-browser code also sends it: the server renders it into the page before the
-browser reports a hydration error.
+m12 reads `SECRET_TOKEN` in Vue code, which Citry's unknown-variable
+rule checks. Returning it from `js_data()` instead, which sends it to
+the browser, reports nothing; m42 measures that. In the Next.js and
+Nuxt ports of m12, reading the secret in browser code also sends it:
+the server renders it into the page before the browser reports a
+hydration error.
+
+m21 misspells the Vue directive `v-if`. A misspelled server-side `c-if`,
+such as the one that shows the search form's `Searched:` line, is
+reported too (`citry.template.misspelled-directive`), though no case
+measures it.
 
 The board page wraps the cards in `<c-provide key="board" name="Projects">`,
 and each card reads the board's name in `template_data()` with
@@ -91,11 +93,11 @@ a 404.
 Both `citry` stages and the editor setting in .vscode/settings.json load
 the app as `app.main:citry_app`, the module that calls `mount()`, as the
 FastAPI starter does, so `citry check` can ask FastAPI which pages and
-files the app serves. Its `citry.template.unknown-url` rule warns about
-the misspelled page (m45) and image (m48); the browser still gets the
-404. The rule does not check a parameter type that only the route
-function declares, such as `project_id: int`, so m61 is first reported
-by FastAPI's 422.
+files the app serves. `citry check`'s `citry.template.unknown-url` rule
+warns about the misspelled page (m45) and image (m48); the browser still
+gets the 404. The rule does not check a parameter type that only the
+route function declares, such as `project_id: int`, so m61 is first
+reported by FastAPI's 422.
 
 The browser always runs Vue's production build, so Vue's development
 warnings never appear, and no Citry case can end as a runtime warning
@@ -106,8 +108,8 @@ on a framework's stricter check when other frameworks here have the same
 kind of check. Considered and left off:
 - Citry's own lint rules are all on by default: each starts as a warning
   or an error, and raising a warning to an error is not turning a check
-  on (m29, m31, m41, m43, m45, m48 and m53 end as warnings because of
-  such rules).
+  on (m29, m31, m43, m45, m48 and m53 end as warnings because of such
+  rules; m41's check of `js_data()` values is always a warning).
 - ty's rules that are off by default. `citry check --types` honors the
   project's `[tool.ty.rules]`, but it keeps only ty's findings inside
   template expressions. One of these rules, `possibly-unresolved-reference`,
@@ -121,8 +123,9 @@ kind of check. Considered and left off:
   change it. A test build of Citry's check with `strict` on changed no
   finding.
 - Pydantic models for `Kwargs`, which Citry's docs show, would check
-  input types when a component renders. Citry already checks them there,
-  and ty checks them in the editor, so they add no kind of check.
+  input types when a component renders. Citry already checks them when
+  a component renders, and ty checks them in the editor, so they add no
+  kind of check.
 - `mode="development"` changes only how translations are loaded, and
   the browser gets Vue's production build in either mode.
 """
@@ -133,9 +136,9 @@ manifests = ["pyproject.toml", "uv.lock", ".python-version", "package.json", "pa
 # the lockfile names citry and citry-lsp by paths relative to that folder
 # (see baseline/pyproject.toml); UV_PROJECT_ENVIRONMENT still installs into
 # the shared environment. uv builds a package from a folder again only when
-# that folder's pyproject.toml changes, so --reinstall-package builds both
-# from their current sources each time this step runs. The runner runs this
-# step again whenever their sources change.
+# that folder's pyproject.toml, setup.py or setup.cfg changes, so
+# --reinstall-package builds both from their current sources each time this
+# step runs. The runner runs this step again whenever their sources change.
 command = [
   "sh", "-c",
   """UV_PROJECT_ENVIRONMENT='{venv}' uv sync --directory '{framework}/baseline' --frozen --no-install-project \

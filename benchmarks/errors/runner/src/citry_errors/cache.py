@@ -106,10 +106,10 @@ def framework_digest(framework: Framework, env: Path) -> str:
     folder can reuse each other's output.
     """
     definition = tomllib.loads((framework.root / "framework.toml").read_text(encoding="utf-8"))
-    # The setup step's output is never stored, so a path it names, such as
-    # the Citry app's folder that uv runs in, does not tie the results to
-    # this checkout.
-    commands = json.dumps({key: value for key, value in definition.items() if key != "setup"})
+    # A path that only the setup step names, such as the Citry app's folder
+    # that uv runs in, never reaches a stage's output, so it does not tie
+    # the results to this checkout; nor does one in the prose notes.
+    commands = json.dumps({key: value for key, value in definition.items() if key not in {"setup", *_UNUSED_KEYS}})
     names_checkout = "{framework}" in commands or "{repo}" in commands
     digest = hashlib.sha256(f"{framework.root if names_checkout else ''}\0".encode())
     for name in _INSTALL_RECORDS:

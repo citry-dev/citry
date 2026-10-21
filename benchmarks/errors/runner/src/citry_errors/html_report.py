@@ -236,7 +236,7 @@ def _tint(color: str) -> str:
 
 def checkout_packages(source: dict[str, Any]) -> list[tuple[str, str, bool]]:
     """
-    List each framework whose packages this run built partly from this repository's sources rather than a release.
+    List each framework that installs some of its packages from this repository's sources rather than a release.
 
     Each item is the framework's key, its packages with their versions
     ("citry 0.6.0 and citry-lsp 0.2.0"), and whether those sources had

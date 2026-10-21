@@ -95,9 +95,11 @@ installs citry and citry-lsp from `packages/py/`, built as a release
 would be, and citry-core from PyPI at the version citry pins. A change
 to citry-core's Rust code is therefore measured only once a citry-core
 release has it. `prepare` installs the two packages again whenever a
-file in their folders changes, and first checks that the app's
-`uv.lock` still matches their sources; when it does not, it stops and
-asks you to run `uv lock` in `frameworks/citry/baseline/`. Each run's
+file in their folders changes. It first checks that the app's
+`uv.lock` still matches their sources, development dependency groups
+included, and that citry still pins the citry-core version the app
+overrides; when either has changed, it stops and asks you to update
+`frameworks/citry/baseline/` and run `uv lock` there. Each run's
 `run.json` lists these packages under `from_checkout`, and the report
 names them with the run's commit.
 
@@ -135,9 +137,8 @@ confused with the committed `results/` report folder), and a later run runs
 only the cases whose inputs changed: the case itself, its framework's
 folder, what that framework's environment installed (for the Citry app,
 the files of citry and citry-lsp it built from this repository), the
-runner code that
-runs the tools and the browser, the installed Playwright, the Node and
-Python versions, the operating system version, a few environment variables
+runner code that runs the tools and the browser, the installed
+Playwright, the Node and Python versions, the operating system version, a few environment variables
 the tools read, or the cache folder's location. Output that may say more
 about the machine than the case is not kept: a tool that timed out or was
 killed, a server that never answered, a journey that stopped early, and
@@ -226,7 +227,7 @@ writes a part of the page, not from its tools:
 - **m13:** some apps read the state field before writing it, so a
   misspelled field fails at runtime; others only write it, so the page is
   silently wrong.
-- **m14:** Citry 0.6.0 does not hydrate an element that passes values to
+- **m14:** Citry does not hydrate an element that passes values to
   a child component; Vue builds that element's contents in the browser
   and reports no mismatch there. The details panel passes `open` to
   `Status`, so the case is missed. In Next.js and Nuxt the same mistake is a runtime
@@ -241,10 +242,9 @@ writes a part of the page, not from its tools:
   the browser; m26 and m27 do not apply; and m28 is "prevented", because
   assigning `open` from the nested component changes the parent's value as
   intended. FastHTML's page uses plain scripts with no browser-side
-  components, so it has no status line and m25 to m28 do not apply. In
-  Citry, m27 passes the prop an expression, and Citry checks a prop's type
-  only when the value is written as a literal; nothing checks a child that
-  assigns to its own prop (m28).
+  components, so it has no status line and m25 to m28 do not apply.
+  Citry's check reports all four, including text bound to the boolean
+  prop (m27) and a child that assigns to its own prop (m28).
 - **m30 and m34:** most pages need no value in the hide event, and most
   never read the server's reply as data, so m30 applies to three
   frameworks and m34 to one: Citry's, Tetra's and django-unicorn's cards
@@ -266,9 +266,9 @@ writes a part of the page, not from its tools:
 - **m36 and m37:** a Django block takes no arguments, so the card hands
   its footer no data of its own, and both cells are n/a. Citry's fill
   names its slot data as one record (`data="card"`), the first form its
-  docs show. Citry reports a misspelled field only when the fill unpacks
-  the data (`data="{ title, count }"`), and does not check the type in
-  either form, so both mistakes show only when the page renders. Jinja's
+  docs show. `citry check --types` checks `card` against the data type
+  the slot declares, so the editor reports both the misspelled field
+  (m36) and the number joined to text (m37). Jinja's
   m36 is an error when the page renders, because its app turns on
   `StrictUndefined` (see [Each framework's tools](#each-frameworks-tools)).
 - **m38:** Django, Rusty and django-components read the session with a
@@ -277,31 +277,30 @@ writes a part of the page, not from its tools:
   an error.
 - **m42:** no framework's tools report a secret sent to the browser, and
   the page looks the same, so every cell is missed.
-- **m43:** only Nuxt reports a CSS variable whose name differs from the
-  one the server sets. Its page reads the server's value with Vue's
+- **m43:** Nuxt reports a CSS variable whose name differs from the one
+  the server sets. Its page reads the server's value with Vue's
   `v-bind('board?.accent')`, so the misspelled name reads a property the
-  board data does not have, which vue-tsc reports. Elsewhere the heading
-  silently changes color.
-- **m44:** nothing compares a form field's name with the name the server
-  reads, so the search shows no `Searched:` line. Citry's form calls a
-  server event, which rejects the call because `q` is missing, but the
-  error stays in `$error('search')`, which the page does not show. In
+  board data does not have, which vue-tsc reports. Citry's check warns
+  that nothing sets `--acent` and suggests the `css_data()` key.
+  Elsewhere the heading silently changes color.
+- **m44:** Citry's form sends its fields to a server event, and Citry's
+  check compares the field names with the ones the event declares, so it
+  reports `qeury`. Elsewhere nothing compares a form field's name with
+  the name the server reads, so the search shows no `Searched:` line. In
   Reflex the search handler reads the field by name, so the misspelling
   raises a `KeyError` on the server.
-- **m45, m48 and m61 in Citry:** Citry 0.6.0 does not check links, so
-  the browser is the first to report them.
-  [PR #233](https://github.com/citry-dev/citry/pull/233) adds a
-  `citry check` rule that asks the FastAPI app which pages and files it
-  serves, but no release has it yet. Both `citry` stages already load the
-  app from `app.main`, the module that calls `mount()`, so m45 and m48
-  are expected to become warnings once a release with the rule is
-  measured. m61 is expected to stay a runtime error, because the rule
-  does not check a parameter type that only the route function declares.
+- **m45, m48 and m61 in Citry:** both `citry` stages load the app from
+  `app.main`, the module that calls `mount()`, so `citry check` asks
+  FastAPI which pages and files the app serves and warns about the
+  misspelled page and image (`citry.template.unknown-url`); the browser
+  still gets the 404. The rule does not check a parameter type that only
+  the route function declares, so m61 is first reported by FastAPI's
+  422.
 - **m45:** Django, Rusty, Jinja, Tetra, django-unicorn and
   django-components build the link from the route's name, so the page fails to render.
   Next.js's `typedRoutes` checks a link's path against the app's routes,
   so the editor reports it. Citry and FastHTML link by path and get a 404
-  when the link is clicked. Nuxt's `typedPages` checks a link given by
+  when the link is clicked; Citry's check warns about the path first. Nuxt's `typedPages` checks a link given by
   route name, but the page links by path, as Nuxt's routing docs show
   first, so its router prints only a warning in the browser. ReactPy's
   router changes the page in the browser, so the link shows the app's
@@ -334,8 +333,8 @@ writes a part of the page, not from its tools:
   place. The Django, Rusty, django-components, Jinja and FastHTML pages
   render the cards on the server and only hide one in the browser, so
   the cell is n/a. Next.js's and Nuxt's ESLint rules report the missing
-  key, and ReactPy's debug mode prints a warning. Citry refuses to
-  render the page, with a message that names the missing `#c-key`.
+  key, and ReactPy's debug mode prints a warning. Citry's check reports
+  the missing `#c-key` before the app runs.
   django-unicorn reports nothing, and clicking Hide on the first card
   leaves Alpha on the page. Tetra reports nothing either: without a key,
   every card resumes from the same saved state when the list renders
@@ -343,12 +342,11 @@ writes a part of the page, not from its tools:
   keys each card by its position when it has no key of its own, and its
   cards keep no state in the browser, so nothing reports the missing key
   and the page looks the same.
-- **m52:** nothing reports a `<div>` inside a `<p>` before the app runs,
-  except Nuxt, whose ESLint fails to parse the template. Next.js reports
-  it in the browser as a hydration error, React reports it in the
-  browser in Reflex too, and Citry fails to render the page because Vue rejects
-  the template. Elsewhere the browser splits
-  the paragraph without a message.
+- **m52:** only Nuxt and Citry report a `<div>` inside a `<p>` before
+  the app runs: Nuxt's ESLint fails to parse the template, and Citry's
+  check reports the nesting. Next.js reports it in the browser as a
+  hydration error, and React reports it in the browser in Reflex too.
+  Elsewhere the browser splits the paragraph without a message.
 - **m53, m54, m56 and m57:** djLint checks alt text (H013), ARIA
   attribute names (H048), repeated attributes (H037) and repeated ids
   (H053) in the Django, Rusty, django-components, Jinja, Tetra and
@@ -363,8 +361,10 @@ writes a part of the page, not from its tools:
   reports the unknown ARIA name. In Reflex, pyright reports the class
   given twice, because a repeated keyword is a Python syntax error, and
   React reports the misspelled ARIA name in the browser; nothing reports
-  the missing alt text. Nothing reports a repeated id in Citry, Next.js,
-  Nuxt, FastHTML, ReactPy or Reflex.
+  the missing alt text. Citry's check warns about the missing alt text
+  and reports the misspelled ARIA name (the bound one included), the
+  repeated attribute and the repeated id. Nothing reports a repeated id
+  in Next.js, Nuxt, FastHTML, ReactPy or Reflex.
 - **m55:** a bound `aria-expanded` is typed as `true` or `false` in
   TypeScript, so Citry, Next.js and Nuxt report `yes` and `no` in the
   editor. The Alpine apps, Tetra's included, django-unicorn's `yesno`
@@ -386,8 +386,10 @@ writes a part of the page, not from its tools:
   django-unicorn report it where the handler is called or returned, so
   those three cells are marked `°`. In Reflex, pyright reports it too,
   where the page passes the event to the card, so its cell is marked `°`
-  as well. Citry's and FastHTML's handlers are
-  browser JavaScript, which nothing checks, and the missing reason only
+  as well. Citry's handler is a method in the page's browser code, which
+  Citry's TypeScript check reads, but nothing compares its parameters
+  with what the card's `hide` event sends. FastHTML's handler is browser
+  JavaScript, which nothing checks. In both, the missing reason only
   prints as `undefined`. The Django, Rusty, django-components and Jinja
   apps hide a card with an inline statement, so the cell is n/a. Tetra's
   handler is a Python method that `@public.listen` subscribes to the
@@ -403,12 +405,11 @@ writes a part of the page, not from its tools:
   `Page not found` route and Nuxt's route check shows Nuxt's 404 page,
   both in the browser and with no error, and Next.js's and Reflex's
   route parts take any text, so their pages read `Project alpha`.
-- **m62:** TypeScript in Next.js and pyright in Reflex report
-  `disabled="false"`; Nuxt's types accept the text. Everywhere else the
+- **m62:** TypeScript in Next.js, pyright in Reflex and Citry's check
+  report `disabled="false"`; Nuxt's types accept the text. Everywhere else the
   search button is silently disabled.
-- **m63:** Nuxt's vue-tsc and ESLint report a `v-model` on the form, and
-  Citry fails to render the page, with an internal message about
-  `v-model` helpers rather than one that names the form. `reflex
+- **m63:** Nuxt's vue-tsc and ESLint and Citry's check report a
+  `v-model` on the form. `reflex
   compile` reports that a form has no `on_change` event, at the first
   line of the form's call, so Reflex's cell is marked `°`. In the other
   apps nothing reports the binding. Alpine's `x-model` and React's
@@ -424,9 +425,8 @@ writes a part of the page, not from its tools:
   the others, shows no difference. Whether or not the line follows the
   typing, these cells read "never" and count as missed.
 
-The gaps the earlier 24-mistake run found in Citry are tracked in
-[#207](https://github.com/citry-dev/citry/issues/207); the gaps found by
-the mistakes added since (m25 to m63) are not in it yet.
+The gaps this benchmark found in Citry are tracked in
+[#207](https://github.com/citry-dev/citry/issues/207).
 
 Rusty's cells match Django's except four:
 
@@ -974,7 +974,7 @@ settings considered and left off, with the reason. These are on:
 | Jinja | `undefined=StrictUndefined` | Printing a name the template was not given, using it in `{% if %}` or looping over it raises an error, as Citry reports an unknown template name |
 | django-components | Pydantic models for `Kwargs`, `Slots` and the data classes, with djc-ext-pydantic and `extra='forbid'` | Input and data types are checked when a component renders (Citry, Next.js, Nuxt and FastHTML check them before the app runs); unknown input names are rejected, as with django-components' default classes |
 | Tetra | A type annotation on every public attribute (Tetra has no setting for this; it checks only annotated attributes) | Tetra checks each public attribute's value against its type when it writes the component's state into the page, as django-components' Pydantic models check its data when a component renders |
-| Nuxt | `vueCompilerOptions.strictTemplates` | vue-tsc reports an unknown component, element, attribute, directive or component event, the same kinds of names Next.js's tsc checks (Citry checks component names before the app runs) |
+| Nuxt | `vueCompilerOptions.strictTemplates` | vue-tsc reports an unknown component, element, attribute, directive or component event, the same kinds of names Next.js's tsc checks (Citry also checks these names before the app runs, and only warns about an unknown component event) |
 | Nuxt | `experimental.typedPages` | vue-tsc checks a `<NuxtLink>` or router call that names a route against the app's routes |
 | Next.js | `typedRoutes` | tsc checks a link's path against the app's routes, as the Django, Rusty, Jinja, Tetra, django-unicorn and django-components apps check a link's route when the page renders |
 | Next.js | `noUncheckedIndexedAccess`, `noImplicitOverride` and `verbatimModuleSyntax` in tsconfig.json | tsc treats a value read by index as possibly missing, requires `override` on a method that replaces its parent's, and requires `import type` for an import used only as a type; the tsconfig Nuxt generates turns all three on |
