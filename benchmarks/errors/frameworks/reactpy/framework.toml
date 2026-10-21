@@ -192,6 +192,12 @@ env = { REACTPY_DEBUG_MODE = "1", PYTHONUNBUFFERED = "1" }
 page_path = "/"
 ready_timeout = 180
 settle_ms = 1000
+# ReactPy 1.1.0 keeps the component being rendered in one list per thread,
+# and every page's connection renders on the server's one event loop
+# thread. Two pages rendering at the same moment then corrupt that list,
+# and the server logs `RuntimeError: Hook stack is in an invalid state`, so
+# the journeys after the default one run one after another.
+journeys_at_once = false
 [runtime.journeys]
 default = [
   { action = "click", selector = "button:text-is('Add')" },

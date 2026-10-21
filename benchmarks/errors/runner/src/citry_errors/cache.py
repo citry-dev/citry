@@ -45,9 +45,9 @@ _RUNNER_SOURCES = ("cache.py", "config.py", "execute.py", "runtime.py", "work.py
 # Pins the Playwright version, which pins the Chromium build.
 _RUNNER_PROJECT = ("pyproject.toml", "uv.lock")
 # Keys of framework.toml that do not change what a tool prints, so editing
-# them does not rerun every case: the prose notes, and how many cases may
-# run at once.
-_UNUSED_KEYS = ("notes", "max_jobs")
+# them does not rerun every case: the prose notes, and how many development
+# servers may run at once.
+_UNUSED_KEYS = ("notes", "max_servers")
 # Environment variables known to change what these tools print, such as
 # colors or Node's own options. The rest of the environment is not hashed:
 # it differs between shells, and these are the ones known to matter.
