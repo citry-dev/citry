@@ -387,10 +387,16 @@ def test_template_location_counts_from_the_top_of_the_template() -> None:
     )
     assert template_location(template, 0, "page.html", template) == "in template page.html, line 1"
     # When the value appears twice, its start cannot be told, so the line is
-    # given within the attribute.
+    # given within the attribute's value.
     twice = template + template
     assert template_location(attribute, offset, "page.html", twice) == (
-        "in template page.html, on line 2 of the template inside an attribute such as c-body"
+        "in template page.html, inside a template-valued attribute (line 2 of its value)"
+    )
+    assert template_location(attribute, offset, "page.html", twice, with_column=True) == (
+        "in template page.html, inside a template-valued attribute (line 2, column 3 of its value)"
+    )
+    assert template_location(attribute, offset, None, twice) == (
+        "in its template, inside a template-valued attribute (line 2 of its value)"
     )
     assert template_location(template, len("<p>a</p>\n"), None, None, with_column=True) == (
         "on line 2, column 1 of its template"

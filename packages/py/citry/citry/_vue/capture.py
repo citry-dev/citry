@@ -472,6 +472,15 @@ def format_prepared_element_attrs(value: PreparedElementOpen) -> tuple[str, ...]
     return tuple(rendered)
 
 
+def _line_and_column(prefix: str, *, with_column: bool) -> str:
+    """Return where the end of ``prefix`` sits, as ``line N`` or ``line N, column M``, counting from 1."""
+    line = prefix.count("\n") + 1
+    if not with_column:
+        return f"line {line}"
+    column = len(prefix.rsplit("\n", 1)[-1]) + 1
+    return f"line {line}, column {column}"
+
+
 def template_location(
     source: str,
     byte_offset: int,
@@ -488,7 +497,9 @@ def template_location(
     inside it. ``origin`` and ``template_source`` name the loaded template
     and give its text, so an attribute's offset can be shifted to count from
     the top of the template. Returns, for example,
-    ``in template cards.html, line 4``.
+    ``in template cards.html, line 4``, or, when the attribute's value cannot
+    be found in the template text,
+    ``in template cards.html, inside a template-valued attribute (line 2 of its value)``.
     """
     prefix = source.encode("utf-8")[:byte_offset].decode("utf-8", errors="ignore")
     if template_source is not None and source != template_source:
@@ -497,12 +508,13 @@ def template_location(
         # template once; otherwise the start cannot be told apart.
         start = template_source.find(source)
         if start < 0 or template_source.find(source, start + 1) >= 0:
-            line = prefix.count("\n") + 1
-            return f"in template {origin}, on line {line} of the template inside an attribute such as c-body"
+            # Count within the value instead, and say so, so the reader does
+            # not look for the line from the top of the template.
+            within = _line_and_column(prefix, with_column=with_column)
+            inside = f"inside a template-valued attribute ({within} of its value)"
+            return f"in template {origin}, {inside}" if origin else f"in its template, {inside}"
         prefix = template_source[:start] + prefix
-    line = prefix.count("\n") + 1
-    column = len(prefix.rsplit("\n", 1)[-1]) + 1
-    position = f"line {line}, column {column}" if with_column else f"line {line}"
+    position = _line_and_column(prefix, with_column=with_column)
     if not origin:
         return f"on {position} of its template"
     # "In template" matches the template parser's own errors, and tells the

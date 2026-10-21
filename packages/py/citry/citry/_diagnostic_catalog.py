@@ -846,20 +846,24 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                         'component tag, holds a class of three or more characters that is one typing '
                                         "slip from a class selector in the component's own css or css_file: two "
                                         'neighboring letters swapped, one letter typed twice, or one letter left out. '
-                                        'Three kinds of slip usually name another class of the same family, so they do '
-                                        'not count: one that moves, doubles, or drops a digit, such as col-1 for '
-                                        'col-12; a missing final s, or a missing final d or r after an e, or n after '
-                                        'an e or w, such as tab for tabs, collapse for collapsed, navbar-toggle for '
-                                        'navbar-toggler, or show for shown; and one inside a first hyphen-separated '
-                                        'part of one or two characters, such as p-4 for px-4 or m-auto for ml-auto. '
-                                        'The class is reported only when no CSS that Citry reads declares it: no '
-                                        "selector in a registered component's css, css_file, inline or local-file "
-                                        'Dependencies stylesheet, or template <style> element that holds CSS names it, '
-                                        'and no attribute selector such as [class^="btn-"] matches it. Bound classes, '
-                                        'such as :class, v-bind:class, and c-class, words inside {{ }} in a class '
-                                        'attribute, and classes on tags that render no element, such as c-if or '
-                                        'template, are not checked. citry check needs your application for this rule; '
-                                        'the editor does not run it.'},
+                                        'These slips usually name another class of the same family, so they do not '
+                                        'count: one that moves, doubles, or drops a digit, such as col-1 for col-12; a '
+                                        'missing final s after a letter other than s, such as tab for tabs; one of '
+                                        'these short words, as the whole class or as its last word after a hyphen or '
+                                        'underscore, next to its longer form: close (closed), collapse (collapsed), '
+                                        'disable (disabled), enable (enabled), fade (faded), mute (muted), show '
+                                        '(shown), slide (slider), and toggle (toggled or toggler), such as '
+                                        'navbar-toggle for navbar-toggler; and one letter typed twice or left out in a '
+                                        'first hyphen-separated part of one or two characters, such as p-4 for px-4 or '
+                                        'm-auto for ml-auto. Two letters swapped in that part, such as iu-button for '
+                                        'ui-button, are reported. The class is reported only when no CSS that Citry '
+                                        "reads declares it: no selector in a registered component's css, css_file, "
+                                        'inline or local-file Dependencies stylesheet, or template <style> element '
+                                        'that holds CSS names it, and no attribute selector such as [class^="btn-"] '
+                                        'matches it. Bound classes, such as :class, v-bind:class, and c-class, words '
+                                        'inside {{ }} in a class attribute, and classes on tags that render no '
+                                        'element, such as c-if or template, are not checked. citry check needs your '
+                                        'application for this rule; the editor does not run it.'},
  'citry.css.misspelled-variable': {'code': 'citry.css.misspelled-variable',
                                    'configurableSeverity': True,
                                    'constant': 'CSS_MISSPELLED_VARIABLE',
@@ -1290,9 +1294,9 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                            'where you need it, and leave it out of js_data().',
                                     'messages': {'default': "JsData field '{name}' is not a clean JSON value: "
                                                             '{detail}. Browser tooling will treat its type as unknown.',
-                                                 'secret': "JsData field '{name}' would send a citry.Secret to the "
-                                                           'browser: {detail}. Rendering raises TypeError whenever the '
-                                                           'value is a Secret.'},
+                                                 'secret': "JsData field '{name}' can hold a citry.Secret, and "
+                                                           'rendering this component raises TypeError when it does: '
+                                                           '{detail}.'},
                                     'parameters': {'detail': 'Why the value is not a clean JSON type.',
                                                    'name': 'JsData field name.'},
                                     'summary': 'A JsData field has a type that cannot be sent to the browser as JSON, '
@@ -1311,13 +1315,19 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                             'tuple literal in it, a name unpacked into a list such as [*TOKENS], '
                                             'either branch of a conditional expression, or the argument of Const(...); '
                                             'the value may be an attribute of a module-level name, such as '
-                                            'settings.API_TOKEN, when reading it runs no code: a property, or an '
-                                            "object with a __getattr__ hook such as Django's lazy settings, is not "
-                                            'read. Without --types, a value that a call computes, such as get_token(), '
-                                            'is not read. The editor and citry check --types also report a value that '
-                                            'ty, the Python type checker Citry runs, types as a standard library type '
-                                            'JSON cannot carry, such as PurePosixPath, datetime, Decimal, UUID, a set, '
-                                            'or complex, or as a Secret.'},
+                                            'config.API_TOKEN where config is a module or a plain class, when reading '
+                                            'it runs no code: a property, or an object with a __getattr__ hook such as '
+                                            "Django's lazy settings, is not read. A value read through an attribute is "
+                                            'judged only when it is built from plain dicts, lists, tuples, strings, '
+                                            'numbers, booleans, None, and Secrets. A module-level value holding '
+                                            "another kind of object is reported only when that object's class could "
+                                            'never pass the JSON check, so a lazy object or a dict subclass is '
+                                            'skipped. A value nested too deeply to read is skipped. Without --types, a '
+                                            'value that a call computes, such as get_token(), is not read. The editor '
+                                            'and citry check --types also report a value that ty, the Python type '
+                                            'checker Citry runs, types as a standard library type JSON cannot carry, '
+                                            'such as PurePosixPath, datetime, Decimal, UUID, a set, or complex, or as '
+                                            'a Secret.'},
  'citry.parse.configuration': {'code': 'citry.parse.configuration',
                                'constant': 'PARSE_CONFIGURATION',
                                'defaultSeverity': 'error',

@@ -316,12 +316,18 @@ class LintSettings:
             component's CSS, ``Dependencies`` stylesheet, or template
             ``<style>`` element. Slips that usually name another class of
             the same family are not reported: a moved, doubled, or dropped
-            digit (``col-1`` for ``.col-12``), an added or dropped final
-            ``s``, ``d``, ``r``, or ``n`` (``collapse`` for ``.collapsed``),
-            and a slip inside a hyphen-separated part of one or two
+            digit (``col-1`` for ``.col-12``); a missing final ``s`` after a
+            letter other than ``s`` (``tab`` for ``.tabs``); one of these
+            short words, as the whole class or as its last word after a
+            hyphen or underscore, next to its longer form: ``close``
+            (``closed``), ``collapse`` (``collapsed``), ``disable``
+            (``disabled``), ``enable`` (``enabled``), ``fade`` (``faded``),
+            ``mute`` (``muted``), ``show`` (``shown``), ``slide``
+            (``slider``), and ``toggle`` (``toggled`` or ``toggler``), as in
+            ``navbar-toggle`` for ``.navbar-toggler``; and one letter typed
+            twice or left out in a first hyphen-separated part of one or two
             characters (``p-4`` for ``.px-4``). ``citry check`` reports it
-            only with your application loaded. The default is
-            ``"warning"``.
+            only with your application loaded. The default is ``"warning"``.
         rule_undeclared_css_class: Severity for every class in a template's
             static ``class`` attribute that no CSS Citry reads declares: no
             registered component's ``css``, ``css_file``, inline or

@@ -991,9 +991,8 @@ def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_secret
             "app.py",
             "citry.js-data.unsupported-type",
             7,
-            "JsData field 'secretToken' would send a citry.Secret to the browser: Secret values are never sent to"
-            " the browser; read the value on the server instead. Rendering raises TypeError whenever the value is a"
-            " Secret.",
+            "JsData field 'secretToken' can hold a citry.Secret, and rendering this component raises TypeError"
+            " when it does: Secret values are never sent to the browser; read the value on the server instead.",
         ),
     ]
 

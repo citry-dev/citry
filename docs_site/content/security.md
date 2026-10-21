@@ -33,9 +33,8 @@ purpose through `$state` and two-way `:c-*` bindings.
 Keep secrets out of State. A value wrapped in
 [`Secret`](#keep-secrets-on-the-server) makes the render fail, but a
 secret in a plain string goes into the page like any other value. Store
-a small record id instead, then
-load the record and check the current user's permission in every
-handler:
+a small record id instead, then load the record and check the current
+user's permission in every handler:
 
 ```citry
 class ProjectPanel(Component):

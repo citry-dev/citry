@@ -1144,12 +1144,20 @@ These are not checked:
 - a slip that usually names another class of the same family:
     - a moved, doubled, or dropped digit, such as `col-1` next to
       `.col-12`;
-    - a missing final `s`, such as `tab` next to `.tabs`, or a missing
-      final `d`, `r`, or `n` after an `e` (or `n` after a `w`), such as
-      `collapse` next to `.collapsed`, `navbar-toggle` next to
-      `.navbar-toggler`, or `show` next to `.shown`;
-    - a slip in a first part of one or two characters before a hyphen,
-      such as `p-4` next to `.px-4` or `m-auto` next to `.ml-auto`.
+    - a missing final `s`, such as `tab` next to `.tabs`, unless the
+      class already ends in `s`, as `progres` next to `.progress` does;
+    - one of these short words next to its longer form, as the whole
+      class or as its last word after a hyphen or underscore, such as
+      `navbar-toggle` next to `.navbar-toggler`: `close` (`closed`),
+      `collapse` (`collapsed`), `disable` (`disabled`), `enable`
+      (`enabled`), `fade` (`faded`), `mute` (`muted`), `show` (`shown`),
+      `slide` (`slider`), and `toggle` (`toggled` or `toggler`). Any
+      other word missing its last letter, such as `heade` next to
+      `.header`, is reported;
+    - one letter typed twice or left out in a first part of one or two
+      characters before a hyphen, such as `p-4` next to `.px-4` or
+      `m-auto` next to `.ml-auto`. Two letters swapped there, such as
+      `iu-button` next to `.ui-button`, are reported.
 
 The rule is a warning by default. Only `citry --app ... check` reports
 it; the editor does not. If a stylesheet that Citry does not read styles

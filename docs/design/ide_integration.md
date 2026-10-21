@@ -95,10 +95,16 @@ These rules need facts that only the loaded application gives, so
   no CSS that Citry reads (listed below) declares the class as written.
   These slips do not count, because they usually name another class of the
   same family: a moved, doubled, or dropped digit (`col-1` for `col-12`); a
-  missing final `s` (`tab` for `tabs`); a missing final `d` or `r` after an
-  `e`, or `n` after an `e` or `w` (`disable` for `disabled`, `show` for
-  `shown`); and a slip in a first hyphen part of one or two characters
-  (`p-4` for `px-4`).
+  missing final `s` after a letter other than `s` (`tab` for `tabs`, while
+  `progres` for `progress` is reported); one of the short words `close`,
+  `collapse`, `disable`, `enable`, `fade`, `mute`, `show`, `slide`, and
+  `toggle`, as the whole class or its last word after a hyphen or
+  underscore, next to its longer form (`closed`, `collapsed`, `disabled`,
+  `enabled`, `faded`, `muted`, `shown`, `slider`, `toggled`, `toggler`), as
+  in `navbar-toggle` for `navbar-toggler`; and one letter typed twice or
+  left out in a first hyphen part of one or two characters (`p-4` for
+  `px-4`). Every other truncation (`heade` for `header`) and a swap in a
+  short first part (`iu-button` for `ui-button`) are reported.
 - `rule_undeclared_css_class` (`citry.css.undeclared-class`) and
   `rule_undeclared_css_variable` (`citry.css.undeclared-variable`), both
   off by default (`"ignore"`): every static class that no CSS Citry reads

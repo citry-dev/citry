@@ -376,10 +376,11 @@ load it. What it compares:
   knows and sends every branch of a `v-if` that depends on browser state.
   For the same reason, a row that browser code removes from a list, or
   moves within it, before the first render may go unreported.
-- When both branches of a `v-if` that depends on browser state use the
-  same tag, and a browser-only `v-for` of that tag sits beside them, the
-  check can compare the wrong branch and warn. Give the two branches
-  different classes, and it compares them correctly.
+- When a `v-if` that depends on browser state sits beside a `v-for` over
+  browser state, and both use the same tag, the check can pair the wrong
+  elements and report a difference the page does not have. Put the list
+  in its own wrapper element, or add `data-allow-mismatch` to each element
+  a warning names.
 - It compares the first render only. State changed in `mounted()`, after
   an `await`, or by a later update is not compared. A change that a
   `mounted()` hook makes to the page directly, without going through

@@ -53,13 +53,26 @@ _CUSTOM_PROPERTY_IN_CODE = re.compile(r"""["'`]--([A-Za-z0-9_-]+)["'`]|(?<![\w-]
 # A shorter name is too often a different, real class one letter away.
 _MIN_CLASS_TYPO_LENGTH = 3
 
-# Endings that turn one real class into another of the same family, keyed
-# by the letter the template leaves off and mapped to the letters it must
-# follow (empty means any): `tab` and `tabs`, `collapse` and `collapsed`,
-# `navbar-toggle` and `navbar-toggler`, `show` and `shown`. Only a missing
-# ending counts, so a doubled final letter, as in `buttonn`, and a dropped
-# letter elsewhere, as in `butto`, are still reported.
-_FAMILY_ENDINGS = {"s": "", "d": "e", "r": "e", "n": "ew"}
+# Short words whose longer forms are separate classes of the same family,
+# often a component and its state, mapped to those longer forms. A template
+# word from this list next to its longer form is not reported, so the list
+# names only the real shorter word: `collapse` for `.collapsed` is silent,
+# while a truncation such as `heade` for `.header` is reported.
+_FAMILY_WORDS: dict[str, frozenset[str]] = {
+    "close": frozenset({"closed"}),
+    "collapse": frozenset({"collapsed"}),
+    "disable": frozenset({"disabled"}),
+    "enable": frozenset({"enabled"}),
+    "fade": frozenset({"faded"}),
+    "mute": frozenset({"muted"}),
+    "show": frozenset({"shown"}),
+    "slide": frozenset({"slider"}),
+    "toggle": frozenset({"toggled", "toggler"}),
+}
+
+# Splits a class into the words whose last one `_FAMILY_WORDS` looks up, as
+# in `navbar-toggle` or the BEM `menu__toggle`.
+_CLASS_WORD_SEPARATOR = re.compile(r"[-_]+")
 
 # A first hyphen-separated part this short is usually a utility prefix, such
 # as `m`, `ml`, `p`, or `px` in `m-auto` and `px-4`, where the names one slip
@@ -403,12 +416,14 @@ def _is_class_typo(written: str, expected: str) -> bool:
 
     - one that moves, doubles, or drops a digit, such as ``col-1`` for
       ``col-12``;
-    - a missing final ``s``, or a missing final ``d`` or ``r`` after an
-      ``e``, or ``n`` after an ``e`` or ``w``, such as ``tab`` for
-      ``tabs``, ``collapse`` for ``collapsed``, ``navbar-toggle`` for
-      ``navbar-toggler``, or ``show`` for ``shown``;
-    - one inside a first hyphen-separated part of one or two characters,
-      such as ``p-4`` for ``px-4`` or ``m-auto`` for ``ml-auto``.
+    - a missing final ``s`` after a letter other than ``s``, such as
+      ``tab`` for ``tabs``, or a template class whose last word is in
+      ``_FAMILY_WORDS`` next to one of that word's listed longer forms,
+      such as ``collapse`` for ``collapsed`` or ``navbar-toggle`` for
+      ``navbar-toggler``;
+    - one letter typed twice or left out in a first hyphen-separated part
+      of one or two characters, such as ``p-4`` for ``px-4`` or ``m-auto``
+      for ``ml-auto``.
     """
     if not one_slip_from(written, expected):
         return False
@@ -420,15 +435,27 @@ def _is_class_typo(written: str, expected: str) -> bool:
 
 
 def _missing_family_ending(written: str, expected: str) -> bool:
-    """Return whether ``expected`` is ``written`` plus one of the family endings in ``_FAMILY_ENDINGS``."""
+    """Return whether ``expected`` is ``written`` plus a final ``s``, or a listed longer form of its last word."""
     if len(expected) != len(written) + 1 or not expected.startswith(written) or not written:
         return False
-    after = _FAMILY_ENDINGS.get(expected[-1])
-    return after is not None and (not after or written[-1] in after)
+    # `tab` next to `.tabs` names another class of the same family, but a
+    # word that already ends in `s`, such as `progres` next to `.progress`,
+    # is cut short.
+    if expected[-1] == "s":
+        return written[-1] != "s"
+    # Only the template's own last word is looked up, so a truncated word
+    # such as `heade` never matches, whatever letter the CSS adds.
+    last_word = _CLASS_WORD_SEPARATOR.split(written)[-1]
+    return last_word + expected[-1] in _FAMILY_WORDS.get(last_word, ())
 
 
 def _slip_in_short_prefix(written: str, expected: str) -> bool:
-    """Return whether the slip falls in the first hyphen-separated part, and that part is short in both names."""
+    """Return whether a letter is doubled or dropped in the first hyphen-separated part, and that part is short."""
+    # Two swapped letters give names of the same length, such as `iu-button`
+    # for `ui-button`. That is a typo, while a prefix one letter longer or
+    # shorter is usually another utility, as `p-4` and `px-4` are.
+    if len(written) == len(expected):
+        return False
     written_parts = written.split("-")
     expected_parts = expected.split("-")
     # A slip that adds or drops a hyphen changes the parts themselves, so it

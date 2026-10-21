@@ -264,9 +264,9 @@ $component({
     assert (warnings, problems) == ([], [])
 
 
-# Both branches of a v-if only the browser can test, with the same wrapper tag
-# and attributes, differing only further down. The server writes both; the
-# browser shows the second.
+# Both branches of a v-if only the browser can test, with the same wrapper tag,
+# differing further down or in a class. The server writes both; the browser
+# shows the second.
 _SAME_TAG_BRANCHES = {
     "text": (
         """
@@ -301,6 +301,34 @@ _SAME_TAG_BRANCHES = {
   ><button type="submit">Log in</button></div>
 """,
         "data() { return {loggedIn: false}; },",
+    ),
+    # A list only the browser builds, with the branches' tag, after branches
+    # that differ in their own class. With the first branch shown, the check
+    # still warns, a documented limit.
+    "beside a list": (
+        """
+  <div
+    v-if="wide"
+    class="wide"
+  ><b>Wide</b></div>
+  <div
+    v-else
+    class="narrow"
+  ><b>Narrow</b></div>
+  <div v-for="item in items"><i v-text="item"></i></div>
+""",
+        "computed: {wide() { return this.size > 5; }}, data() { return {items: ['one', 'two']}; },",
+    ),
+    # The shown branch holds a nested condition, whose branches the server
+    # both writes, and text only the browser computes. The static <div>
+    # before the branches agrees with the shown branch too.
+    "nested condition": (
+        """
+  <div>Intro</div>
+  <div v-if="wide"><span>Alpha</span><em></em></div>
+  <div v-else><span v-if="wide">X</span><span v-else>Y</span><em v-text="note"></em></div>
+""",
+        "computed: {wide() { return this.size > 5; }}, data() { return {note: 'Z'}; },",
     ),
 }
 

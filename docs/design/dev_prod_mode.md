@@ -136,36 +136,50 @@ How it works:
 The server writes a shell's contents from the values it knows: it leaves out
 a list, a text node or an attribute only the browser can compute, and it
 writes every branch of a condition only the browser can test. So the
-comparison is one-sided. It pairs elements of the same tag in order, choosing
-the pairing in which the most pairs agree. For a tag the served side has more
-of under one parent, where a served-only branch can exist, agreement counts
-the whole subtree, so when the server writes both branches of a browser-only
-`v-if`/`v-else` with the same tag, the browser's branch pairs with its own
-served copy. Such a pair is first checked cheaply: the two subtrees' texts
-must be able to agree, given that one side may hold text the other leaves
-out. When each side holds text the other lacks, the pair counts as differing.
-For other tags it counts the elements' own attributes and text, so a
-server-known list whose rows hold their text in child elements is still
-reported when `created()` reorders it, unless a served-only element of the
-same tag shares the parent. It ignores elements, attributes and text that
-only one side has, ignores comments and whitespace, and reports a served
-attribute value the browser changed or removed, a served class or style
-property missing in the browser, or served text the browser shows
-differently. An attribute Vue sets as a DOM property (`value`, `checked`,
-`selected`, `muted`) is compared through the property; when the browser
-element has no such attribute, the warning names the property's value. A
-`display: none` only the browser has is skipped, because the server keeps an
-element's own `display` when only the browser can test its `v-show`. When one
-parent has so many children that pairing them would take more than 40,000
-steps, its children are not compared. Comparing whole subtrees costs more at
-every level, so a shell spends at most 40,000 steps on it, counting each
-subtree score, the subtree text it reads, and the nodes and element pairs
-compared inside it, and a score nests at most 64 levels deep. Past that,
-pairs are scored by their own attributes and text only, and two same-tag
-branches can again pair the wrong way and warn. `data-allow-mismatch` on an
-element in Vue's render silences the kinds it names, with Vue's own reading
-of the value: the nearest element carrying it decides a text or children
-difference.
+comparison is one-sided. It pairs elements of the same tag in order. A score
+is how well two elements agree, used to choose which served element pairs
+with which browser element. The check picks the pairing with the most
+agreeing pairs and, among those, the most pairs, so an element the browser
+changed still pairs with its served copy and is reported, unless another
+browser element agrees with that copy. When the server wrote more elements of
+a tag under one parent than the browser built, one may be a branch only the
+server sent; for that tag the check scores each pair by its whole subtree. So
+when the server writes both branches of a browser-only `v-if`/`v-else` with
+the same tag, the browser's branch pairs with its own served copy.
+
+A pair of that tag is first checked cheaply: the two subtrees' texts must be
+able to agree, given that one side may hold text the other leaves out. When
+each side holds text the other lacks, as in a branch that holds both a nested
+browser-only `v-if` and text only the browser computes, this check rules the
+pair out. A browser element that the pairing leaves without an agreeing
+partner then has those ruled-out pairs compared in full, and when one of them
+agrees, the elements pair again. For other tags the score counts the
+elements' own attributes and text, so a server-known list whose rows hold
+their text in child elements is still reported when `created()` reorders it,
+unless a served-only element of the same tag shares the parent.
+
+The check ignores elements, attributes and text that only one side has,
+ignores comments and whitespace, and reports a served attribute value the
+browser changed or removed, a served class or style property missing in the
+browser, or served text the browser shows differently. An attribute Vue sets
+as a DOM property (`value`, `checked`, `selected`, `muted`) is compared
+through the property; when the browser element has no such attribute, the
+warning names the property's value. A `display: none` only the browser has is
+skipped, because the server keeps an element's own `display` when only the
+browser can test its `v-show`.
+
+When one parent has so many children that pairing them would take more than
+40,000 steps, its children are not compared. Whole-subtree scores cost more
+at every level, so a shell spends at most about 200,000 steps on them,
+counting each score, the subtree text it reads and searches, and the nodes,
+text and element pairs compared inside it, and a score nests at most 64
+levels deep. Past that, pairs not yet compared are scored by their own
+attributes and text only, and two same-tag branches can again pair the wrong
+way and warn.
+
+`data-allow-mismatch` on an element in Vue's render silences the kinds it
+names, with Vue's own reading of the value: the nearest element carrying it
+decides a text or children difference.
 
 Error modes and limits:
 
@@ -185,10 +199,13 @@ Error modes and limits:
   same reason a server-known list that `created()` filters, or a reordered
   list whose rows hold their text directly, can go unreported: a removed or
   moved row reads as an element only one side has.
-- Two same-tag branches of a browser-only `v-if` next to a browser-only
-  list of the same tag can pair the wrong way and warn, because the
-  browser-only elements hide the served-only branch from the element count.
-  Giving the branches different classes avoids it.
+- A browser-only `v-if` next to a browser-only list of the same tag, under
+  one parent, can pair the wrong way and warn: the list's elements hide the
+  served-only branch from the element count, so the pairing can match a
+  branch with a list element or with the other branch. Giving the branches
+  different classes does not avoid it in every order. The author puts the
+  list in its own wrapper element, or adds `data-allow-mismatch` to each
+  element a warning names.
 - Only shells are compared. Elements Vue adopts are Vue's to check: its
   production build logs "Hydration completed but contains mismatches."
   without details. A page that cannot hydrate sends HTML with Vue's

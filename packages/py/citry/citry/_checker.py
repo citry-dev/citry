@@ -10,9 +10,11 @@ import symtable
 import sys
 import textwrap
 import tokenize
+import weakref
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from types import GetSetDescriptorType, MappingProxyType, MemberDescriptorType, ModuleType
+from types import GetSetDescriptorType, MappingProxyType, MemberDescriptorType, ModuleType, WrapperDescriptorType
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message
@@ -159,10 +161,11 @@ from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
 from citry.component import Component
 from citry.component_registry import NotRegistered
-from citry.constness import Const
+from citry.constness import Const, _unwrap_const_markers
 from citry.ext.dependencies.types import Style
 from citry.ext.events.csrf import csrf_field_names
 from citry.ext.events.extension import _component_events_info
+from citry.secret import Secret
 from citry.settings import LintSettings
 from citry.tag_rules import build_tag_rules
 from citry.util.html import decode_attribute_entities
@@ -179,7 +182,7 @@ from citry_core.template_parser import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping
+    from collections.abc import Callable, Iterable
 
     from citry.citry import Citry
     from citry.ext.i18n.extension import I18nExtension
@@ -2694,7 +2697,7 @@ class _SentName:
 
     Attributes:
         path: The name and the attributes read from it, such as
-            `("settings", "API_TOKEN")` for `settings.API_TOKEN`.
+            `("config", "API_TOKEN")` for `config.API_TOKEN`.
         starred: Whether the value is unpacked into a list, as in
             `[*TOKENS]`, so its items are sent rather than the value itself.
         wrappers: The callee of each `Const(...)` call around the value,
@@ -2722,7 +2725,7 @@ def _names_sent_as_written(value_source: str) -> list[_SentName]:
     Return the module-level names whose values a `js_data()` value sends unchanged.
 
     That is the value itself when it is a name or an attribute of one, such
-    as `settings.API_TOKEN`, and each such name that is a whole item of a
+    as `config.API_TOKEN`, and each such name that is a whole item of a
     dict, list, or tuple literal inside it, unpacked with `*` into one,
     either branch of a conditional expression, or the first argument of a
     `Const(...)` call. A name used any other way, such as
@@ -2789,6 +2792,54 @@ _ATTRIBUTE_HOOKS = ("__getattr__", "__getattribute__")
 _BUILT_IN_GETTERS = (GetSetDescriptorType, MemberDescriptorType)
 # Classes whose attribute reading Citry knows runs no user code.
 _PLAIN_ATTRIBUTE_CLASSES = (object, type, ModuleType)
+# The exact types of a value the JSON check can read without running any
+# code the value's own class defines. A Secret is a leaf the check reports.
+_PLAIN_JSON_LEAVES = (type(None), bool, int, float, str, Secret)
+_PLAIN_JSON_KEYS = (type(None), bool, int, float, str)
+# Frames that rendering has already used when it starts reading data, so a
+# part this close to Python's recursion limit is never reached.
+_RECURSION_MARGIN = 200
+
+
+def _is_one_of(cls: type, classes: tuple[type, ...]) -> bool:
+    """Return whether ``cls`` is one of ``classes``, comparing identity so no metaclass ``__eq__`` runs."""
+    return any(cls is candidate for candidate in classes)
+
+
+def _stored_entry(namespace: object, name: str) -> tuple[bool, object]:
+    """
+    Return the entry ``name`` of a plain dict or a class namespace.
+
+    Looking the name up with ``in`` or ``[]`` would compare it with a key of
+    the same hash, which runs that key's ``__eq__`` when the key is not a
+    plain ``str``. So only exact ``str`` keys are compared.
+    """
+    if not _is_one_of(type(namespace), (dict, MappingProxyType)):
+        return False, None
+    for key, value in cast("Mapping[object, object]", namespace).items():
+        if type(key) is str and key == name:
+            return True, value
+    return False, None
+
+
+def _class_attribute(cls: type, name: str) -> tuple[bool, object]:
+    """Return the first value named ``name`` in the namespaces of ``cls`` and its bases, in MRO order."""
+    for base in _CLASS_MRO.__get__(cls):
+        found, value = _stored_entry(_CLASS_NAMESPACE.__get__(base), name)
+        if found:
+            return True, value
+    return False, None
+
+
+def _is_descriptor(value: object) -> bool:
+    """Return whether reading ``value`` as a class attribute calls its ``__get__``."""
+    return _class_attribute(type(value), "__get__")[0]
+
+
+def _is_data_descriptor(value: object) -> bool:
+    """Return whether ``value``, as a class attribute, wins over an instance's own ``__dict__`` entry."""
+    value_type = type(value)
+    return _class_attribute(value_type, "__set__")[0] or _class_attribute(value_type, "__delete__")[0]
 
 
 def _read_stored_attribute(owner: object, name: str) -> tuple[bool, object]:
@@ -2801,31 +2852,155 @@ def _read_stored_attribute(owner: object, name: str) -> tuple[bool, object]:
     attribute reading alone, and only a value stored in the owner's own
     `__dict__` counts. A class attribute that is itself a descriptor, such
     as a property or a method, does not count either, because reading it
-    through the class calls it.
+    through the class calls it. Every class and namespace is read through
+    `type`'s own getters, and names are compared only with exact `str`
+    keys, so no `__eq__`, `__hash__`, or metaclass hook runs.
 
     Returns:
         Whether the value was found, and the value.
 
     """
     try:
-        for base in _CLASS_MRO.__get__(type(owner)):
-            if base in _PLAIN_ATTRIBUTE_CLASSES:
+        owner_mro = _CLASS_MRO.__get__(type(owner))
+        for base in owner_mro:
+            if _is_one_of(base, _PLAIN_ATTRIBUTE_CLASSES):
                 continue
             namespace = _CLASS_NAMESPACE.__get__(base)
-            if any(hook in namespace for hook in _ATTRIBUTE_HOOKS):
+            if any(_stored_entry(namespace, hook)[0] for hook in _ATTRIBUTE_HOOKS):
                 return False, None
-            if "__dict__" in namespace and type(namespace["__dict__"]) not in _BUILT_IN_GETTERS:
+            found, getter = _stored_entry(namespace, "__dict__")
+            if found and not _is_one_of(type(getter), _BUILT_IN_GETTERS):
                 return False, None
-        stored = object.__getattribute__(owner, "__dict__")
-        # A dict subclass could run code in `in` or `[]`.
-        if type(stored) not in (dict, MappingProxyType) or name not in stored:
+        # A data descriptor of the same name on the owner's class, such as a
+        # property, is what Python returns, not the `__dict__` entry.
+        found, class_value = _class_attribute(type(owner), name)
+        if found and _is_data_descriptor(class_value):
             return False, None
-        value = stored[name]
+        stored = object.__getattribute__(owner, "__dict__")
+        # A dict subclass could run code when it is read.
+        found, value = _stored_entry(stored, name)
+        if not found:
+            return False, None
+        # Python calls a descriptor stored on a class when the class is read.
+        if any(base is type for base in owner_mro) and _is_descriptor(value):
+            return False, None
     except Exception:  # noqa: BLE001 - an exotic object must not stop the check
         return False, None
-    if isinstance(owner, type) and hasattr(type(value), "__get__"):
-        return False, None
     return True, value
+
+
+@dataclass(frozen=True, slots=True)
+class _OpaquePart:
+    """A part of a module value that the JSON check cannot read without running the part's own code."""
+
+    value: object
+    # Where the part sits, written the way Python reads it back, such as
+    # `["config"]["path"]`; empty for the value itself.
+    path: str
+    # Whether the part is a dict key rather than a value.
+    is_key: bool
+    # How many containers deep the part sits.
+    depth: int
+
+
+def _key_text(key: object) -> str:
+    """Write an exact built-in dict key the way Python reads it back, such as ``["name"]`` or ``[1]``."""
+    if type(key) is str:
+        return f"[{json.dumps(key, ensure_ascii=False)}]"
+    return f"[{key!r}]"
+
+
+def _first_opaque_part(value: object) -> _OpaquePart | None:
+    """
+    Return the first part of ``value`` that is not an exact built-in JSON type or a Secret, or None.
+
+    The JSON check reads a value with ``isinstance`` and ``.items()``, which
+    run code that a dict subclass or an object posing as another class, such
+    as Django's ``SimpleLazyObject``, defines. This walk compares exact types
+    only, so it runs none of it, and it does not recurse, so a deeply nested
+    value cannot stop the check.
+    """
+    pending: list[tuple[object, str, int]] = [(value, "", 0)]
+    seen: set[int] = set()
+    while pending:
+        current, path, depth = pending.pop()
+        # Citry's own Const proxy sends what it wraps unchanged.
+        unwrapped, current = _unwrap_const_markers(current)
+        if not unwrapped:
+            return _OpaquePart(current, path, is_key=False, depth=depth)
+        current_type = type(current)
+        if _is_one_of(current_type, _PLAIN_JSON_LEAVES):
+            continue
+        # A container that holds itself is the JSON check's to report, so
+        # the walk only stops at the second visit.
+        if id(current) in seen:
+            continue
+        if current_type is dict:
+            seen.add(id(current))
+            items = list(cast("dict[object, object]", current).items())
+            for key, _item in items:
+                if not _is_one_of(type(key), _PLAIN_JSON_KEYS):
+                    return _OpaquePart(key, path, is_key=True, depth=depth)
+            # Reversed so the stack pops them in the order the JSON check reads them.
+            pending.extend((item, f"{path}{_key_text(key)}", depth + 1) for key, item in reversed(items))
+        elif current_type is list or current_type is tuple:
+            seen.add(id(current))
+            items = list(enumerate(cast("list[object]", current)))
+            pending.extend((item, f"{path}[{index}]", depth + 1) for index, item in reversed(items))
+        else:
+            return _OpaquePart(current, path, is_key=False, depth=depth)
+    return None
+
+
+def _runs_only_builtin_code(base: type, entry: object) -> bool:
+    """
+    Return whether an attribute hook on ``base`` is Python's own C code from the standard library.
+
+    Many standard library types, such as ``Decimal`` or a bound method, list
+    a ``__getattribute__`` that is only the built-in lookup, which never
+    makes the value pass for another class. A weak reference proxy forwards
+    the lookup to the object it points at, and so may a C type from another
+    package, so those still count as hooks.
+    """
+    if type(entry) is not WrapperDescriptorType:
+        return False
+    # A weak reference proxy passes every lookup, `__class__` included, on
+    # to the object it points at.
+    if any(base is proxy for proxy in weakref.ProxyTypes):
+        return False
+    module = _safe_class_text(base, "__module__")
+    return module is not None and (module == "builtins" or module.split(".")[0] in sys.stdlib_module_names)
+
+
+def _never_json(value: object, *, is_key: bool = False) -> bool:
+    """
+    Return whether the JSON check refuses ``value`` whatever its class's own code would answer.
+
+    As a value, the check accepts a dict, list, or tuple subclass and any
+    registered ``Mapping``; as a dict key, it accepts a ``str`` subclass. An
+    object that redefines ``__class__`` or attribute lookup, as a lazy
+    object does, can pass for one of those. Only an object of any other
+    class is certain to be refused.
+    """
+    try:
+        value_type = type(value)
+        mro = _CLASS_MRO.__get__(value_type)
+        accepted: tuple[type, ...] = (str,) if is_key else (dict, list, tuple)
+        if any(_is_one_of(base, accepted) for base in mro):
+            return False
+        for base in mro:
+            if base is object:
+                continue
+            namespace = _CLASS_NAMESPACE.__get__(base)
+            for hook in ("__class__", *_ATTRIBUTE_HOOKS):
+                found, entry = _stored_entry(namespace, hook)
+                if found and not (hook != "__class__" and _runs_only_builtin_code(base, entry)):
+                    return False
+        # The key check is `isinstance(key, str)`, which no registry changes.
+        # The ABC check asks the class registry, not the value.
+        return is_key or not issubclass(value_type, Mapping)
+    except Exception:  # noqa: BLE001 - an exotic class must not stop the check
+        return False
 
 
 def _js_data_module_values(component: type[Component], source: str) -> Callable[[_SentName], _ModuleValueIssue | None]:
@@ -2860,15 +3035,18 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
     local_names = _function_local_names(source, method)
     if local_names is None:
         return lambda _sent: None
-    namespace = vars(module)
 
     def resolve(path: tuple[str, ...]) -> tuple[bool, object]:
         root = path[0]
         # A name js_data() binds itself hides the module name of the same
         # spelling, so the module's value is not what it sends.
-        if not root.isidentifier() or root in local_names or root not in namespace:
+        if not root.isidentifier() or root in local_names:
             return False, None
-        value = namespace[root]
+        # The module itself is read the same careful way as its attributes,
+        # because `sys.modules` may hold any object.
+        found, value = _read_stored_attribute(module, root)
+        if not found:
+            return False, None
         for name in path[1:]:
             found, value = _read_stored_attribute(value, name)
             if not found:
@@ -2888,26 +3066,51 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         if sent.starred:
             # `[*TOKENS]` sends TOKENS' items as a list; anything other than
             # a plain collection would run code to produce them.
-            if type(value) not in {list, tuple, set, frozenset, dict}:
+            if not _is_one_of(type(value), (list, tuple, set, frozenset, dict)):
                 return None
             value = list(cast("Iterable[object]", value))
+        opaque = _first_opaque_part(value)
+        if opaque is not None:
+            # A value reached through attributes is judged only when it is
+            # plain data. A module constant that holds something else is
+            # reported only when no code of its own could make it pass, and
+            # only within the depth rendering can read. Rendering fails with
+            # RecursionError somewhat before Python's recursion limit,
+            # because frames are already in use, so the cutoff leaves room.
+            name = _safe_class_text(type(opaque.value), "__name__")
+            if (
+                len(sent.path) > 1
+                or name is None
+                or opaque.depth >= sys.getrecursionlimit() - _RECURSION_MARGIN
+                or not _never_json(opaque.value, is_key=opaque.is_key)
+            ):
+                return None
+            what = "a dict key" if opaque.is_key else "a value"
+            return _ModuleValueIssue(
+                f"{label}{opaque.path} holds {what} of type {name}, which cannot be sent to the browser as JSON",
+                secret=False,
+            )
         try:
             _json_plain(value)
         except _SecretInBrowserDataError:
             # Rendering would raise for this value, so name the key that
             # holds the Secret, the way the runtime error does.
-            path = _secret_key_path(value) or ""
+            try:
+                path = _secret_key_path(value) or ""
+            except RecursionError:
+                path = ""
             return _ModuleValueIssue(
                 f"{label}{path} is a Secret; read the value on the server instead",
                 secret=True,
             )
-        except TypeError:
-            return _ModuleValueIssue(
-                f"{label} holds a value of type {type(value).__name__}, which cannot be sent to the browser as JSON",
-                secret=False,
-            )
+        except TypeError as exc:
+            return _ModuleValueIssue(f"{label}: {exc}", secret=False)
         except ValueError as exc:
-            return _ModuleValueIssue(str(exc), secret=False)
+            return _ModuleValueIssue(f"{label}: {exc}", secret=False)
+        except RecursionError:
+            # A value nested too deeply for the JSON check is left
+            # unjudged, so one constant cannot stop the whole check.
+            return None
         return None
 
     return issue

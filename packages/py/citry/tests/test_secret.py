@@ -93,10 +93,30 @@ def test_equality_and_hashing_follow_the_value():
         hash(Secret(["a"]))
 
 
+class _PlainText(str):
+    __slots__ = ()
+
+    # The constant-time path must not fall back to a subclass's own `==`.
+    def __eq__(self, other: object) -> bool:
+        pytest.fail("a str subclass is compared with compare_digest")
+
+    __hash__ = str.__hash__
+
+
+class _PlainBytes(bytes):
+    def __eq__(self, other: object) -> bool:
+        pytest.fail("a bytes subclass is compared with compare_digest")
+
+    __hash__ = bytes.__hash__
+
+
 @pytest.mark.parametrize(
     ("left", "right", "equal"),
     [
         ("s3cr3t", "s3cr3t", True),
+        (_PlainText("s3cr3t"), "s3cr3t", True),
+        (_PlainText("s3cr3t"), _PlainText("s3cr3x"), False),
+        (_PlainBytes(b"raw"), b"raw", True),
         ("s3cr3t", "s3cr3x", False),
         # compare_digest accepts only ASCII text, so text goes in as bytes.
         ("päss", "päss", True),
@@ -119,6 +139,40 @@ def test_text_and_bytes_secrets_compare_in_constant_time(monkeypatch, left, righ
 
     assert (Secret(left) == Secret(right)) is equal
     assert len(compared) == 1
+
+
+class _HashedText(str):
+    __slots__ = ()
+
+    def __hash__(self) -> int:
+        return 1
+
+
+class _ClaimsToBeText:
+    # `isinstance(value, str)` believes this property.
+    @property
+    def __class__(self) -> type:  # type: ignore[override]
+        return str
+
+
+class _HashedBytes(bytes):
+    def __hash__(self) -> int:
+        return 1
+
+    def __bytes__(self) -> bytes:
+        msg = "hashing reads the bytes without the subclass's own __bytes__"
+        raise AssertionError(msg)
+
+
+def test_a_subclass_secret_hashes_like_its_plain_equal():
+    assert Secret(_HashedText("a")) == Secret("a")
+    assert hash(Secret(_HashedText("a"))) == hash(Secret("a"))
+    assert Secret(_HashedBytes(b"a")) == Secret(b"a")
+    assert hash(Secret(_HashedBytes(b"a"))) == hash(Secret(b"a"))
+
+
+def test_an_object_claiming_to_be_text_is_compared_with_equality():
+    assert Secret(_ClaimsToBeText()) != Secret("a")
 
 
 def test_other_secrets_compare_with_equality(monkeypatch):
@@ -284,6 +338,53 @@ def test_a_secret_in_css_data_fails_without_css(assets):
 
     with pytest.raises(ValueError, match=r"Component Banner: css_data\(\) entry 'token' holds a citry\.Secret"):
         str(banner())
+
+
+@pytest.mark.parametrize("css", [None, "p { color: var(--theme); }"])
+@pytest.mark.parametrize(
+    ("value", "where"),
+    [
+        ([SECRET_TOKEN], "[0]"),
+        ({"dark": ("red", {"token": SECRET_TOKEN})}, '["dark"][1]["token"]'),
+        (Const([SECRET_TOKEN]), "[0]"),
+    ],
+)
+def test_a_secret_nested_in_css_data_gets_the_secret_message(css, value, where):
+    # With CSS, the stylesheet would otherwise refuse the list or dict with
+    # a message that does not mention the Secret; without CSS, nothing would
+    # refuse it until CSS is added.
+    engine = Citry(autodiscover=False)
+
+    def css_data(self, kwargs, slots):
+        return {"theme": value}
+
+    assets = {} if css is None else {"css": css}
+    banner = type(
+        "Banner", (Component,), {"citry": engine, "template": "<p>Banner</p>", "css_data": css_data, **assets}
+    )
+
+    with pytest.raises(
+        ValueError, match=r"Component Banner: css_data\(\) entry 'theme' holds a citry\.Secret at "
+    ) as error:
+        str(banner())
+    assert f"holds a citry.Secret at {where}, and Citry never sends a Secret" in str(error.value)
+
+
+def test_css_data_keys_off_the_path_to_a_secret_are_not_read():
+    # Only the keys leading to a Secret are written into the message, so a
+    # key whose text cannot be made does not break a render with no Secret.
+    class OddKey:
+        def __str__(self) -> str:
+            raise RuntimeError
+
+    engine = Citry(autodiscover=False)
+
+    def css_data(self, kwargs, slots):
+        return {"theme": {OddKey(): 1}}
+
+    banner = type("Banner", (Component,), {"citry": engine, "template": "<p>Banner</p>", "css_data": css_data})
+
+    assert "Banner" in str(banner())
 
 
 def test_plain_css_data_without_css_still_renders():
@@ -548,6 +649,32 @@ def test_a_cached_child_cannot_key_on_a_secret():
     assert "s3cr3t" not in message
 
 
+def test_a_secret_returned_by_vary_or_c_vary_is_refused():
+    engine = Citry(autodiscover=False)
+
+    def vary(self, kwargs, slots):
+        return {"token": kwargs["token"]}
+
+    badge = _cached_badge(engine, type("Cache", (), {"enabled": True, "vary": vary}))
+
+    class CachedFragment(Component):
+        citry = engine
+        template = """
+            <c-cache key="fragment" c-vary="[token]">
+              <p>Fragment</p>
+            </c-cache>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"token": SECRET_TOKEN}
+
+    with pytest.raises(CacheKeyError, match=r"a citry\.Secret cannot be part of a render-cache key") as from_vary:
+        str(badge(token=SECRET_TOKEN, user_id=7))
+    with pytest.raises(CacheKeyError, match=r"a citry\.Secret cannot be part of a render-cache key") as from_tag:
+        str(CachedFragment())
+    assert (from_vary.value.path, from_tag.value.path) == ("vary['token']", "vary[0]")
+
+
 def test_a_cached_child_with_a_secret_renders_when_it_varies_on_something_else():
     def vary(self, kwargs, slots):
         return {"user": kwargs["user_id"]}
@@ -600,8 +727,8 @@ class M42NestedPage(Component):
 def _secret_finding(field: str, where: str) -> tuple[str, str]:
     return (
         "warning",
-        f"JsData field '{field}' would send a citry.Secret to the browser: {where} is a Secret; read the value"
-        " on the server instead. Rendering raises TypeError whenever the value is a Secret.",
+        f"JsData field '{field}' can hold a citry.Secret, and rendering this component raises TypeError when it"
+        f" does: {where} is a Secret; read the value on the server instead.",
     )
 
 
@@ -704,6 +831,115 @@ def test_check_reads_a_secret_through_attributes_unpacking_branches_and_const(tm
     ]
 
 
+# Every call the check must not make: each records its own name here.
+_OPAQUE_CALLS: list[str] = []
+
+
+class RecordingMeta(type):
+    # Asking the class for any attribute it lacks, such as `__get__`, runs
+    # this hook.
+    def __getattr__(cls, name: str) -> object:
+        _OPAQUE_CALLS.append(f"metaclass {name}")
+        raise AttributeError(name)
+
+
+class OpaqueValue(metaclass=RecordingMeta):
+    pass
+
+
+class OpaqueHolder:
+    value = OpaqueValue()
+
+
+class LazyBox:
+    # Like Django's SimpleLazyObject: it passes for the class of the value
+    # it builds on first use, so `isinstance()` runs this property.
+    @property
+    def __class__(self) -> type:  # type: ignore[override]
+        _OPAQUE_CALLS.append("__class__")
+        return dict
+
+    def items(self) -> list[tuple[str, object]]:
+        _OPAQUE_CALLS.append("items")
+        return [("token", SECRET_TOKEN)]
+
+
+class RecordingDict(dict):  # type: ignore[type-arg]
+    def items(self):  # type: ignore[no-untyped-def]
+        _OPAQUE_CALLS.append("dict items")
+        return super().items()
+
+
+class ShadowedSettings:
+    # Python returns this property, not the instance's own `token` entry.
+    @property
+    def token(self) -> str:
+        return "public"
+
+
+SHADOWED_SETTINGS = ShadowedSettings()
+SHADOWED_SETTINGS.__dict__["token"] = SECRET_TOKEN
+LAZY_CONFIG = types.SimpleNamespace(lazy=LazyBox(), mapping=RecordingDict(token=SECRET_TOKEN))
+LAZY_CONSTANT = LazyBox()
+# Unwrapping a Const must not ask the wrapped object for its class.
+CONST_LAZY = Const(LazyBox())
+CONST_LAZY_LIST = [Const(LazyBox())]
+RECORDING_CONSTANT = RecordingDict(token=SECRET_TOKEN)
+
+
+def _nested_lists(depth: int, leaf: object) -> list[object]:
+    outer: list[object] = []
+    current = outer
+    for _ in range(depth):
+        inner: list[object] = []
+        current.append(inner)
+        current = inner
+    current.append(leaf)
+    return outer
+
+
+# Too deep for the JSON check's recursion, which must not stop `citry check`.
+DEEP_CONSTANT = _nested_lists(5000, SECRET_TOKEN)
+# Rendering fails with RecursionError before it reaches the object at the
+# bottom, so the object's type is not reported.
+DEEP_OBJECT = _nested_lists(5000, object())
+_OPAQUE_ENGINE = Citry(autodiscover=False)
+
+
+class OpaqueValuesPage(Component):
+    citry = _OPAQUE_ENGINE
+    template = "<p></p>"
+
+    def js_data(self, kwargs, slots):
+        return {
+            "described": OpaqueHolder.value,
+            "lazy": LAZY_CONFIG.lazy,
+            "mapping": LAZY_CONFIG.mapping,
+            "lazyConstant": LAZY_CONSTANT,
+            "recordingConstant": RECORDING_CONSTANT,
+            "shadowed": SHADOWED_SETTINGS.token,
+            "deep": DEEP_CONSTANT,
+            "deepObject": DEEP_OBJECT,
+            "constLazy": CONST_LAZY,
+            "constLazyList": CONST_LAZY_LIST,
+            # The check still reaches the values after the ones above.
+            "token": SECRET_TOKEN,
+        }
+
+
+def test_check_runs_no_code_of_a_value_it_reads_and_skips_what_it_cannot_judge(tmp_path):
+    _OPAQUE_CALLS.clear()
+
+    findings = _findings(_OPAQUE_ENGINE, tmp_path)
+
+    assert _OPAQUE_CALLS == []
+    # Only the plain module constant is reported. The others are left
+    # unjudged: an object that may pass for another class, also inside a
+    # Const, a dict subclass, a class attribute that a property hides, and
+    # a value nested too deeply.
+    assert findings == [_secret_finding("token", "SECRET_TOKEN")]
+
+
 _ANNOTATION_ENGINE = Citry(autodiscover=False)
 
 
@@ -729,8 +965,8 @@ class SecretKwargsPage(Component):
 
 def test_check_reports_a_secret_jsdata_field_and_kwargs_value(tmp_path):
     message = (
-        f"JsData field 'token' would send a citry.Secret to the browser: {_SECRET_DETAIL}."
-        " Rendering raises TypeError whenever the value is a Secret."
+        f"JsData field 'token' can hold a citry.Secret, and rendering this component raises TypeError when it"
+        f" does: {_SECRET_DETAIL}."
     )
 
     assert _findings(_ANNOTATION_ENGINE, tmp_path) == [("warning", message), ("warning", message)]

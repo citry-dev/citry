@@ -163,6 +163,47 @@ test("same-tag branches of a browser-only condition pair by what is inside them"
   for (const [served, browser] of cases) assert.equal(differenceOf(served, browser), null);
 });
 
+test("the shown second branch pairs with its own copy before a browser-only list of its tag", () => {
+  // <div v-if="wide" class="wide"> and <div v-else class="narrow">, then a browser-only
+  // <div v-for>. The browser's branch must pair with its own served copy, even though pairing
+  // each branch with a list row would pair more elements. With the first branch shown, the
+  // check still warns, a documented limit.
+  const served = [
+    element("div", { class: "wide" }, [element("b", {}, [text("Wide")])]),
+    element("div", { class: "narrow" }, [element("b", {}, [text("Narrow")])]),
+  ];
+  const browser = [
+    comment("v-if"),
+    element("div", { class: "narrow" }, [element("b", {}, [text("Narrow")])]),
+    element("div", {}, [element("i", {}, [text("one")])]),
+    element("div", {}, [element("i", {}, [text("two")])]),
+  ];
+  assert.equal(differenceOf(served, browser), null);
+});
+
+test("a branch with a nested condition and browser-only text pairs with its own served copy", () => {
+  // The shown branch holds a nested browser-only v-if, whose two branches the server both
+  // wrote, and an <em v-text> only the browser fills. Its served copy then holds text the
+  // browser lacks and lacks text the browser holds, as does the other branch.
+  const served = [
+    element("div", {}, [element("span", {}, [text("Alpha")]), element("em")]),
+    element("div", {}, [element("span", {}, [text("X")]), element("span", {}, [text("Y")]), element("em")]),
+  ];
+  const browser = (shown) => [
+    comment("v-if"),
+    element("div", {}, [comment("v-if"), element("span", {}, [text(shown)]), element("em", {}, [text("Z")])]),
+  ];
+  assert.equal(differenceOf(served, browser("Y")), null);
+  // A static <div> beside the branches agrees with the browser's branch too, since served text
+  // the browser lacks is allowed. The branch must still pair with its own served copy.
+  const intro = () => element("div", {}, [text("Intro")]);
+  assert.equal(differenceOf([intro(), ...served], [intro(), ...browser("Y")]), null);
+  // A nested branch the browser shows differently is still reported.
+  const difference = differenceOf(served, browser("Q"));
+  assert.equal(difference.kind, "text");
+  assert.equal(difference.browser, "Q");
+});
+
 test("a branch the browser changed before the first render is still a difference", () => {
   // The server wrote one branch, and created() made the browser show the other.
   const served = [element("div", {}, [element("b", {}, [text("Wide")])])];
@@ -175,8 +216,8 @@ test("a branch the browser changed before the first render is still a difference
 
 test("a large nested shell stays fast and still finds a deep difference", () => {
   // Three levels of same-tag elements, with one served-only element at each level, as the
-  // server writes for a browser-only v-if. Scoring every pair by its whole subtree would score
-  // millions of pairs; the shell's budget keeps the work near the size of the contents.
+  // server writes for a browser-only v-if. Comparing every pair by its whole subtree would
+  // compare millions of pairs.
   const size = 16;
   const tree = (extra, leaf) =>
     Array.from({ length: size + extra }, (_, outer) =>
@@ -195,7 +236,8 @@ test("a large nested shell stays fast and still finds a deep difference", () => 
   const same = (outer, middle, inner) => `${outer}-${middle}-${inner}`;
   const started = Date.now();
   assert.equal(differenceOf(tree(1, same), tree(0, same)), null);
-  // About a quarter of a second here; without the budget it takes over half a minute.
+  // About a quarter of a second here: most pairs differ in their text, so the quick text check
+  // rules them out without a full comparison. The limit only catches a large slowdown.
   assert.ok(Date.now() - started < 5000);
   const changed = (outer, middle, inner) =>
     outer === 0 && middle === 0 && inner === 0 ? "changed" : same(outer, middle, inner);
@@ -295,6 +337,33 @@ test("text compared inside whole-subtree scores counts against the budget", () =
   assert.equal(differenceOf(served, browser), null);
   // About half a second here; charging nothing for the text took about ten seconds.
   assert.ok(Date.now() - started < 5000);
+});
+
+test("searching the text of a pair counts against the budget", () => {
+  // Thousands of one-letter text pieces, and one piece the served side lacks, make the search
+  // for how the two texts line up try every position for every piece: millions of steps if
+  // nothing stops it. Count the steps through String.prototype.startsWith, which that search
+  // calls once per position, so the test does not depend on the machine's speed.
+  const context = { console, steps: 0 };
+  context.globalThis = context;
+  vm.createContext(context);
+  vm.runInContext(
+    "const startsWith = String.prototype.startsWith;" +
+      "String.prototype.startsWith = function (...args) { globalThis.steps++; return startsWith.apply(this, args); };",
+    context,
+  );
+  vm.runInContext(source, context);
+  const letters = (count, last) =>
+    element("div", {}, [
+      ...Array.from({ length: count }, () => element("i", {}, [text("a")])),
+      ...(last ? [element("i", {}, [text(last)])] : []),
+    ]);
+  const served = [letters(6000), element("div", {}, [text("other")])];
+  const browser = [letters(6000, "b")];
+  const shell = element("section", { "data-allow-mismatch": "children" }, browser);
+  assert.equal(context.CitryVueDevChecks.childrenDifference(served, browser, shell, shell), null);
+  // The shell's budget is 200,000 steps; an unbounded search takes about 18 million.
+  assert.ok(context.steps < 400000, `${context.steps} steps`);
 });
 
 test("a list that browser code reorders before the first render is a difference", () => {

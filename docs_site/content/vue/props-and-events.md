@@ -214,8 +214,10 @@ The check follows these rules:
   child does not declare is checked against the DOM event of that name,
   even with the array form.
 - A parameter whose type is narrower than the payload, such as
-  `"a" | "b"` where the child sends any string, is not reported, because
-  the check does not compare types that strictly.
+  `"a" | "b"` where the child sends any string, is not reported. The
+  check runs TypeScript with its `strict` option off, and TypeScript then
+  accepts a method whose parameter type is narrower than the value it
+  receives.
 - Only a name from the parent's `methods` is checked. A function stored
   in `data()`, or a member such as `store.hide`, is not.
 - A listener that calls the method, such as `@hide="hideCard($event)"`,

@@ -314,7 +314,8 @@ With the default key, a cached component that receives a
 Anyone who can read the cache could test guesses of the secret against a
 key built from it, so Citry refuses. Return values that are not secret,
 such as a user or tenant id, from `Cache.vary()`, or leave the component
-uncached.
+uncached. The same error happens when the value from `Cache.vary()` or
+`c-vary` holds a `Secret`.
 
 ### `Const` values in keys
 

@@ -82,8 +82,9 @@ UNKNOWN_JSON_TYPE = JsonWireType("unknown")
 # values are ...". citry_lsp keeps a copy of this text for the types ty
 # reports, and a test there keeps the two equal.
 SECRET_NOT_SENT_REASON = "values are never sent to the browser; read the value on the server instead"  # noqa: S105 - advice text
-# The whole reason an annotation or a value typed as a Secret gets, which a
-# caller compares with to word its message for a Secret.
+# The reason given for an annotation, or a value ty types, as a Secret.
+# `citry check` looks for this text to choose the Secret wording of its
+# message.
 SECRET_UNSUPPORTED_REASON = f"Secret {SECRET_NOT_SENT_REASON}"
 # The ways an annotation names `citry.Secret`: imported by name, through the
 # package, or by the import path Citry writes for a schema field.

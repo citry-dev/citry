@@ -11,7 +11,11 @@ neighbors must stay silent.
 import re
 import sys
 import types
+import weakref
+from collections import deque
 from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
 from pathlib import PurePosixPath
 from typing import Literal
 
@@ -40,6 +44,22 @@ except ImportError:
 # browser from a module constant.
 API_BASE = PurePosixPath("/api")
 PLAIN_API_BASE = "/api"
+# Standard library objects and dict keys the browser cannot receive either.
+PRICE = Decimal("1.5")
+RECENT = deque([1])
+PAGE_CLASS = PurePosixPath
+BY_PAIR = {(1, 2): "x"}
+BY_DAY = {date(2020, 1, 1): "x"}
+
+
+class _ProxiedDict(dict):  # type: ignore[type-arg]
+    pass
+
+
+# A weak proxy passes for the dict subclass it points at, which rendering
+# accepts, so it is not reported.
+_PROXIED = _ProxiedDict(a=1)
+DICT_PROXY = weakref.proxy(_PROXIED)
 
 
 def _findings(engine: Citry, tmp_path, *codes: str) -> list[tuple[str, str, str]]:
@@ -1061,18 +1081,22 @@ def test_the_application_and_the_component_can_change_the_misspelled_class_sever
         # another class of the same family.
         ('<div class="col-1 mt-1"></div>', ".col-12 {} .mt-12 {}", ()),
         ('<li class="tab"></li>', ".tabs { display: flex; }", ()),
-        # So does a missing final `d` or `r` after an `e`, or `n` after an
-        # `e` or `w`, as in Bootstrap's state classes.
+        # So does a listed short word next to its longer form, as in
+        # Bootstrap's state classes, also as the last word of a longer class.
         ('<button class="navbar-toggle"></button>', ".navbar-toggler { border: 0; }", ()),
+        ('<button class="menu__toggle"></button>', ".menu__toggled { border: 0; }", ()),
         ('<button class="disable"></button>', ".disabled { opacity: 0.5; }", ()),
+        ('<button class="enable"></button>', ".enabled { opacity: 1; }", ()),
         ('<div class="collapse"></div>', ".collapsed { display: none; }", ()),
         ('<div class="fade"></div>', ".faded { opacity: 0; }", ()),
         ('<div class="close"></div>', ".closed { display: none; }", ()),
         ('<div class="show"></div>', ".shown { display: block; }", ()),
-        # A slip inside a first part of one or two letters, a utility
-        # prefix, gives another real utility class.
+        ('<p class="text-mute"></p>', ".text-muted { color: gray; }", ()),
+        ('<div class="slide"></div>', ".slider { display: flex; }", ()),
+        # A letter added or left out in a first part of one or two letters,
+        # a utility prefix, gives another real utility class.
         ('<div class="p-4 m-auto"></div>', ".px-4 { padding: 0 1rem; } .ml-auto { margin-left: auto; }", ()),
-        ('<div class="mt-2"></div>', ".tm-2 { color: red; }", ()),
+        ('<div class="pp-4"></div>', ".p-4 { padding: 1rem; }", ()),
         # A pre-rendered `<style>` tag in Dependencies is read too.
         (
             _M16_TEMPLATE,
@@ -1113,6 +1137,22 @@ def test_classes_the_css_declares_or_cannot_judge_are_not_reported(tmp_path, tem
         ("progresss", "progress"),
         ("butto", "button"),
         ("car", "card"),
+        # A word cut short that is not a listed short word, whatever letter
+        # is left out, and a word ending in `s` that loses another `s`.
+        ("heade", "header"),
+        ("wrappe", "wrapper"),
+        ("containe", "container"),
+        ("foote", "footer"),
+        ("hidde", "hidden"),
+        ("selecte", "selected"),
+        ("dow", "down"),
+        ("ope", "open"),
+        ("card-heade", "card-header"),
+        ("progres", "progress"),
+        ("succes", "success"),
+        # Two letters swapped inside a short first part.
+        ("iu-button", "ui-button"),
+        ("mt-2", "tm-2"),
     ],
 )
 def test_a_slip_outside_family_endings_and_utility_prefixes_is_reported(tmp_path, written, styled):
@@ -1444,6 +1484,38 @@ def test_a_module_constant_the_browser_cannot_receive_is_reported(tmp_path):
         (_JS_DATA, "warning", f"({__name__}.ApiPage.js_data)"),
     ]
     assert "API_BASE holds a value of type PurePosixPath" in findings[0].message
+
+
+_STDLIB_ENGINE = Citry(autodiscover=False)
+
+
+class StdlibValuesPage(Component):
+    citry = _STDLIB_ENGINE
+    template = "<p></p>"
+
+    def js_data(self, kwargs, slots):
+        return {
+            "price": PRICE,
+            "recent": RECENT,
+            "pageClass": PAGE_CLASS,
+            "byPair": BY_PAIR,
+            "byDay": BY_DAY,
+            "proxy": DICT_PROXY,
+        }
+
+
+def test_module_constants_of_standard_library_types_and_their_dict_keys_are_reported(tmp_path):
+    # Their classes list Python's own attribute lookup, which cannot make
+    # them pass for a dict, list, or string.
+    findings = _report(_STDLIB_ENGINE, tmp_path).findings
+
+    assert sorted(item.message.split(": ", 1)[1].split(",", 1)[0] for item in findings) == [
+        "BY_DAY holds a dict key of type date",
+        "BY_PAIR holds a dict key of type tuple",
+        "PAGE_CLASS holds a value of type type",
+        "PRICE holds a value of type Decimal",
+        "RECENT holds a value of type deque",
+    ]
 
 
 ################################################

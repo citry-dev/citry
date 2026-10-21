@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hmac
-from typing import TYPE_CHECKING, Any, Generic, NoReturn, TypeVar, final
+from typing import TYPE_CHECKING, Any, Generic, NoReturn, TypeVar, cast, final
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -31,9 +31,9 @@ class Secret(Generic[T]):
     field raises `ValueError`, whether or not the component has CSS.
     `citry --app ... check` also warns when it can see the `Secret`: a
     module-level `Secret` that `js_data()` puts in its result, such as
-    `{"token": API_TOKEN}`, or reads as a stored attribute, such as
-    `settings.API_TOKEN` (not through a property or a lazy settings object),
-    or a `JsData` field annotated `Secret[str]`.
+    `{"token": API_TOKEN}`, or reads from an attribute stored on a module
+    or a plain class, such as `config.API_TOKEN` (not through a property or
+    a lazy settings object), or a `JsData` field annotated `Secret[str]`.
 
     A `Secret` that `js_data()` returns in another place, such as inside a
     dataclass instance nested in the result, as a dict key, or in a set, is
@@ -65,13 +65,18 @@ class Secret(Generic[T]):
     keep it out of the message.
 
     A `Secret` never equals a plain value: `API_TOKEN == sent` is always
-    `False`. To check a value a user sent, use
-    `hmac.compare_digest(API_TOKEN.get_secret_value().encode(), sent.encode())`,
-    which takes the same time however much of the input matches. Compare
-    bytes, as here: `compare_digest` raises `TypeError` for text that is
-    not ASCII. Two secrets are equal when their
-    values are equal. When both values are `str` or `bytes`, they are
-    compared with `hmac.compare_digest` too; other values with `==`.
+    `False`. To check a value a user sent, use `hmac.compare_digest`, which
+    takes the same time however much of the input matches:
+
+    ```python
+    token = API_TOKEN.get_secret_value().encode()
+    matches = hmac.compare_digest(token, sent.encode())
+    ```
+
+    Compare bytes, as here: `compare_digest` raises `TypeError` for text
+    that is not ASCII. Two secrets are equal when their values are equal.
+    When both values are `str`, or both are `bytes`, they are compared with
+    `hmac.compare_digest`. Any other values are compared with `==`.
 
     A `Secret` cannot be changed after it is created. It can be a dict key
     when its value is hashable, and equal secrets hash alike. `bool()` is
@@ -190,10 +195,19 @@ class Secret(Generic[T]):
         # only ASCII text, so text is compared as its UTF-8 bytes. A lone
         # surrogate cannot be encoded strictly, and "surrogatepass" keeps it
         # from raising.
-        if type(left) is str and type(right) is str:
-            return hmac.compare_digest(left.encode("utf-8", "surrogatepass"), right.encode("utf-8", "surrogatepass"))
-        if type(left) is bytes and type(right) is bytes:
-            return hmac.compare_digest(left, right)
+        # A str or bytes subclass holds the same text, so it takes the same
+        # constant-time path rather than falling back to its own `==`. The
+        # real class is tested, because `isinstance` would believe an
+        # object that only claims to be a str.
+        left_type = type(left)
+        right_type = type(right)
+        if issubclass(left_type, str) and issubclass(right_type, str):
+            return hmac.compare_digest(
+                str.encode(cast("str", left), "utf-8", "surrogatepass"),
+                str.encode(cast("str", right), "utf-8", "surrogatepass"),
+            )
+        if issubclass(left_type, bytes) and issubclass(right_type, bytes):
+            return hmac.compare_digest(cast("bytes", left), cast("bytes", right))
         return bool(left == right)
 
     def __hash__(self) -> int:
@@ -202,7 +216,7 @@ class Secret(Generic[T]):
         # a small int is the int itself, so the tag keeps a printed hash from
         # showing such a value as it is. It does not hide the value from
         # anyone who can hash a guess the same way and compare.
-        return hash(("citry.Secret", self._secret_value))
+        return hash(("citry.Secret", _plain_text(self._secret_value)))
 
     def __bool__(self) -> bool:
         return bool(self._secret_value)
@@ -227,6 +241,23 @@ class Secret(Generic[T]):
         from pydantic_core import core_schema  # noqa: PLC0415
 
         return core_schema.is_instance_schema(cls)
+
+
+def _plain_text(value: object) -> object:
+    """
+    Return a str or bytes subclass value as an exact str or bytes, and any other value unchanged.
+
+    Equality treats a subclass like its base type, so the hash must too:
+    a subclass's own ``__hash__`` could otherwise give equal secrets
+    different hashes.
+    """
+    value_type = type(value)
+    if value_type is not str and issubclass(value_type, str):
+        return str.__str__(cast("str", value))
+    if value_type is not bytes and issubclass(value_type, bytes):
+        # `bytes(value)` would call the subclass's own `__bytes__`.
+        return bytes.__getitem__(cast("bytes", value), slice(None))
+    return value
 
 
 __all__ = ["Secret"]

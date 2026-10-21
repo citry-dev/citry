@@ -28,12 +28,13 @@ import hashlib
 import json
 from dataclasses import dataclass
 from hashlib import md5, sha256
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from citry.constness import const_value
+from citry._class_introspection import _safe_class_text
+from citry.constness import _unwrap_const_markers, const_value
 from citry.ext.dependencies.types import Script, ScriptType, Style
 from citry.secret import Secret
-from citry.util.css import SECRET_IN_CSS_DATA_REASON, serialize_css_var_value, validate_css_var_name
+from citry.util.css import SECRET_IN_CSS_DATA_ADVICE, serialize_css_var_value, validate_css_var_name
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -761,23 +762,80 @@ def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCaptur
 
 def _reject_secret_css_data(comp_cls: type[Component], css_data: Mapping[str, object]) -> None:
     """
-    Raise when a ``css_data()`` value is a ``citry.Secret``, whether or not the component has CSS.
+    Raise when a ``css_data()`` value is or holds a ``citry.Secret``, whether or not the component has CSS.
 
     A component without CSS never builds the stylesheet that would refuse
     the value, so without this check the same mistake would fail only once
-    CSS is added. The caller skips it when ``css_data()`` returned nothing,
-    so most renders pay nothing.
+    CSS is added. With CSS, the stylesheet would refuse a list or dict with
+    a message that does not mention the Secret, so this check runs first
+    there too. The caller skips it when ``css_data()`` returned nothing, so
+    most renders pay nothing.
 
     Raises:
         ValueError: When an entry holds a ``Secret``, naming the component
             by its class name, as the ``js_data()`` and State errors do,
-            and the entry.
+            the entry, and where inside the entry the ``Secret`` sits.
 
     """
     for name, value in css_data.items():
-        if type(const_value(value)) is Secret:
-            msg = f"Component {comp_cls.__name__}: css_data() entry {name!r} {SECRET_IN_CSS_DATA_REASON}"
-            raise ValueError(msg)
+        path = _secret_path(value)
+        if path is None:
+            continue
+        where = f" at {path}" if path else ""
+        msg = f"Component {comp_cls.__name__}: css_data() entry {name!r} holds a citry.Secret{where}, "
+        raise ValueError(msg + SECRET_IN_CSS_DATA_ADVICE)
+
+
+def _secret_path(value: object) -> str | None:
+    """
+    Return where the first ``citry.Secret`` sits inside one ``css_data()`` value, or None when there is none.
+
+    The path is written the way Python reads it back, such as ``[0]`` or
+    ``["dark"]["token"]``, and is empty for a Secret that is the value
+    itself. Only built-in dicts, lists, and tuples are opened, because
+    reading any other object could run its code; such an object is not
+    searched, and with CSS the stylesheet then refuses it as a value CSS
+    cannot hold. The walk uses a list rather than recursion, so a deeply
+    nested value cannot exhaust Python's stack.
+    """
+    # Each entry keeps the keys that lead to it, and only the keys of the
+    # path to a Secret are turned into text, so no other key's code runs.
+    pending: list[tuple[object, tuple[object, ...]]] = [(value, ())]
+    seen: set[int] = set()
+    while pending:
+        current, keys = pending.pop()
+        # Markers are removed by their exact type, so a wrapped lazy object
+        # is not asked for its class.
+        unwrapped, current = _unwrap_const_markers(current)
+        if not unwrapped:
+            # A Const that wraps itself fails with its own error later.
+            continue
+        current_type = type(current)
+        if current_type is Secret:
+            return "".join(_key_text(key) for key in keys)
+        # A container that holds itself is opened only once.
+        if id(current) in seen:
+            continue
+        if current_type is dict:
+            seen.add(id(current))
+            items = list(cast("dict[object, object]", current).items())
+            # Reversed, so the first item is the first one taken back off the list.
+            pending.extend((item, (*keys, key)) for key, item in reversed(items))
+        elif current_type is list or current_type is tuple:
+            seen.add(id(current))
+            indexed = list(enumerate(cast("list[object]", current)))
+            pending.extend((item, (*keys, index)) for index, item in reversed(indexed))
+    return None
+
+
+def _key_text(key: object) -> str:
+    """Write one key of a path the way Python reads it back, or name the type of a key that has no plain text."""
+    if type(key) is str:
+        return f"[{json.dumps(key, ensure_ascii=False)}]"
+    if type(key) is int or type(key) is bool or type(key) is float or key is None:
+        return f"[{key!r}]"
+    # The key's own text could run its code, so only its type is named.
+    return f"[<{_safe_class_text(type(key), '__name__') or 'other'} key>]"
 
 
 def _cache_component_css_vars_capture(

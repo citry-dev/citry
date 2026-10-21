@@ -71,9 +71,9 @@
   `TemplatePythonControl` now records.
 - With your application loaded, `citry check` now warns when `js_data()`
   sends a module-level value that JSON cannot carry, such as a
-  `PurePosixPath`, also inside a dict or list, unpacked with `*`, in
-  either branch of a conditional expression, inside `Const(...)`, or read
-  as a stored attribute such as `settings.API_TOKEN`.
+  `PurePosixPath`, including one nested in a dict or list, behind a
+  conditional or `Const(...)`, or read as an attribute such as
+  `config.EXPORT_DIR`.
 - `Citry.inspect_components()` now says, for each Events handler, whether
   an argument key the data class does not declare fails the call
   (`extra_fields`) and whether Citry or Pydantic checks the values
@@ -96,8 +96,8 @@
   `citry.Secret`, and Citry refuses to send it to the browser: rendering
   fails with an error naming the component and key when `js_data()`,
   `css_data()`, or State holds one, `citry check` warns about one in
-  `js_data()`, and a template shows it as `***`. Annotate a field as
-  `Secret[str]` to reject a plain string. A cached component cannot take
+  `js_data()`, and a template shows it as `***`. Annotate a `Kwargs` field
+  as `Secret[str]` to reject a plain string. A cached component cannot take
   a `Secret` input unless its `Cache.vary()` leaves the secret out
   ([details](https://citry.dev/vue/component-options/#keep-tokens-off-the-page)).
 - With your application loaded, `citry check` now warns when a template
@@ -203,7 +203,9 @@
   longer fails with a server error.
 - A `security_csp="warn"` or `security_javascript="warn"` warning now
   points at the line in your code that turned the page into HTML, not at
-  a line inside Citry.
+  a line inside Citry. A warning from an Events response points at the
+  web framework code that called Citry, because your handler has already
+  returned.
 
 ## v0.6.0
 

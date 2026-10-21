@@ -31,11 +31,12 @@
   // in order could pair the wrong two elements, so such a parent's elements are not compared.
   // Only very long lists reach it, not ordinary markup.
   const MAX_ALIGNMENT_CELLS = 40000;
-  // Scoring a pair of elements by their whole subtree compares the subtrees too. A shell spends
-  // at most this many steps on such scores: each score, the text it reads first, and the nodes
-  // and element pairs compared inside it. Past it, pairs score by their own attributes and text
-  // only, and two same-tag branches can pair the wrong way.
-  const MAX_SUBTREE_CELLS = 40000;
+  // A whole-subtree score compares two elements' whole subtrees to decide how same-tag branches
+  // pair. It can cost far more than the walk itself, so a shell spends at most about this many
+  // steps on such scores: each comparison, the subtree text it reads and searches first, and the
+  // nodes, text and element pairs compared inside it. Past it, pairs score by their own
+  // attributes and text only, and two same-tag branches can pair the wrong way.
+  const MAX_SUBTREE_CELLS = 200000;
   // Scores nest one level per element level, so very deep markup would run out of stack. Past
   // this depth a score stops and the pair keeps its own attributes-and-text score.
   const MAX_SUBTREE_DEPTH = 64;
@@ -96,32 +97,50 @@
   };
 
   // Whether a served run of text agrees with a browser run, given as its text pieces. The two
-  // legitimate differences go in opposite directions: the server leaves out a text node only the
-  // browser can compute, so the served text may be the browser's pieces with some left out; and
-  // it writes every branch of a condition only the browser can test, so the served text may hold
-  // the browser's pieces, in order, with other text around them.
-  const textAgrees = (served, pieces) => {
-    let reachable = new Set([0]);
-    for (const piece of pieces) {
-      const next = new Set(reachable);
-      for (const position of reachable) if (served.startsWith(piece, position)) next.add(position + piece.length);
-      reachable = next;
-    }
-    if (reachable.has(served.length)) return true;
+  // legitimate differences go in opposite directions: the server writes every branch of a
+  // condition only the browser can test, so the served text may hold the browser's pieces, in
+  // order, with other text around them; and it leaves out a text node only the browser can
+  // compute, so the served text may be the browser's pieces with some left out.
+  //
+  // The first search costs about one step per piece. The second tracks every position the
+  // pieces can reach, so it can cost the number of pieces times the length of the served text;
+  // it runs only when the first fails. With a `meter` ({left}), each step is charged to it, and
+  // once it runs out the second search stops and the text counts as not agreeing. The caller
+  // reads the meter to stop its own work.
+  const textAgrees = (served, pieces, meter = null) => {
     let position = 0;
+    let inOrder = true;
     for (const piece of pieces) {
+      if (meter) meter.left--;
       const found = served.indexOf(piece, position);
-      if (found < 0) return false;
+      if (found < 0) {
+        inOrder = false;
+        break;
+      }
       position = found + piece.length;
     }
-    return true;
+    if (inOrder) return true;
+    let reachable = new Set([0]);
+    for (const piece of pieces) {
+      if (meter) {
+        meter.left -= reachable.size;
+        if (meter.left < 0) return false;
+      }
+      const next = new Set(reachable);
+      for (const reached of reachable) if (served.startsWith(piece, reached)) next.add(reached + piece.length);
+      reachable = next;
+    }
+    return reachable.has(served.length);
   };
 
   // Find a served text run that contradicts the browser's text. Runs are paired in order where
   // they agree. Between two agreeing pairs, a served run and a browser run in the same position
   // contradict each other only when both sides hold the same number of runs there; otherwise the
-  // extra runs are a branch only the server shows or text only the browser knows.
-  const textDifference = (servedNodes, browserNodes) => {
+  // extra runs are a branch only the server shows or text only the browser knows. `meter`, when
+  // given, is charged for the work; once it runs out the answer is null and the caller must stop.
+  const textDifference = (servedNodes, browserNodes, meter = null) => {
+    // Grouping the nodes into runs costs about one step per node.
+    if (meter) meter.left -= servedNodes.length + browserNodes.length;
     const servedRuns = textRuns(servedNodes).map(run => run.join(""));
     if (!servedRuns.length) return null;
     const browserTexts = textRuns(browserNodes);
@@ -129,11 +148,14 @@
     const servedKeys = servedRuns.map(withoutSpace);
     const rows = servedKeys.length, columns = browserRuns.length;
     const score = Array.from({length: rows + 1}, () => new Array(columns + 1).fill(0));
-    for (let row = rows - 1; row >= 0; row--)
+    for (let row = rows - 1; row >= 0; row--) {
       for (let column = columns - 1; column >= 0; column--)
-        score[row][column] = textAgrees(servedKeys[row], browserRuns[column])
+        score[row][column] = textAgrees(servedKeys[row], browserRuns[column], meter)
           ? 1 + score[row + 1][column + 1]
           : Math.max(score[row + 1][column], score[row][column + 1]);
+      // The meter ran out, so the caller stops; finishing the table would only spend more.
+      if (meter && meter.left < 0) return null;
+    }
     let row = 0, column = 0, gapRow = 0, gapColumn = 0;
     const checkGap = (endRow, endColumn) => {
       if (endRow - gapRow > 0 && endRow - gapRow === endColumn - gapColumn)
@@ -141,7 +163,8 @@
       return null;
     };
     while (row < rows && column < columns) {
-      if (textAgrees(servedKeys[row], browserRuns[column]) && score[row][column] === 1 + score[row + 1][column + 1]) {
+      const agrees = textAgrees(servedKeys[row], browserRuns[column], meter);
+      if (agrees && score[row][column] === 1 + score[row + 1][column + 1]) {
         const gap = checkGap(row, column);
         if (gap) return gap;
         gapRow = ++row;
@@ -226,12 +249,17 @@
   // Own attributes plus the text directly inside: what two elements show without looking at
   // their child elements. Pairing uses it to rule a pair out cheaply, and on its own for a tag
   // the served side has no more of than the browser, or once the shell's budget for
-  // whole-subtree scores is spent.
-  const shallowDifference = (served, browser, boundary) =>
+  // whole-subtree scores is spent. `meter`, when given, is charged for the text searches.
+  const shallowDifference = (served, browser, boundary, meter = null) =>
     attributeDifference(served, browser, boundary) ||
     (OPAQUE_CHILDREN.has(browser.localName) || allowedHere(browser, "text", boundary)
       ? null
-      : textDifference(Array.from(served.childNodes), Array.from(browser.childNodes)));
+      : textDifference(Array.from(served.childNodes), Array.from(browser.childNodes), meter));
+
+  // How a served element and a browser element pair: not at all (different tags), agreeing, or
+  // differing. TEXT_DIFFERS is a differing pair that only the quick text check (textCouldAgree)
+  // ruled out; the pairing may still compare it in full (see pairElements).
+  const UNPAIRED = 0, AGREES = 1, DIFFERS = 2, TEXT_DIFFERS = 3;
 
   // One comparison of a shell's served contents with Vue's first render.
   const createComparison = boundary => {
@@ -239,6 +267,20 @@
     // keyed by both elements. Pairing scores some candidate pairs with it (see pairElements),
     // and the walk reuses those results instead of comparing the pair again.
     const known = new Map();
+    // What whole-subtree scores may still spend; see MAX_SUBTREE_CELLS. Each score, the text it
+    // reads and searches, and the nodes and element pairs compared inside it are charged here.
+    // `subtreeDepth` counts the scores in progress, so work done inside them is charged too.
+    const budget = {left: MAX_SUBTREE_CELLS};
+    let subtreeDepth = 0;
+    // Thrown when a whole-subtree score runs past the budget; the score in progress then falls
+    // back to the pair's own attributes and text, and keeps nothing it had not finished.
+    const OUT_OF_BUDGET = {};
+    // Inside a score, work past the budget ends the score. Outside one, the walk's own text
+    // comparisons are neither limited nor charged; the quick text check is always charged.
+    const scoreMeter = () => (subtreeDepth > 0 ? budget : null);
+    const stopIfSpent = () => {
+      if (subtreeDepth > 0 && budget.left < 0) throw OUT_OF_BUDGET;
+    };
     // Each element's subtree text without whitespace, as one string and as its text pieces in
     // order, read once per element.
     const subtreeTexts = new Map();
@@ -260,26 +302,22 @@
         value = {whole: pieces.join(""), pieces};
         subtreeTexts.set(element, value);
         // Reading the text costs about one step per piece, paid once per element.
-        subtreeCellsLeft -= pieces.length;
+        budget.left -= pieces.length;
       }
       return value;
     };
     // Whether two subtrees' text could agree, given that either side may hold text the other
     // leaves out: the server writes every branch of a browser-only condition, and the browser
     // shows text only it can compute. Most pairs that differ fail here, at a fraction of a full
-    // score's cost. It misses agreement only when both sides hold text the other lacks.
+    // score's cost. It misses agreement when both sides hold text the other lacks, so a pair it
+    // rules out may still be compared in full (see pairElements).
     const textCouldAgree = (served, browser) => {
       const servedText = subtreeText(served), browserText = subtreeText(browser);
-      return textAgrees(servedText.whole, browserText.pieces) || textAgrees(browserText.whole, servedText.pieces);
+      return (
+        textAgrees(servedText.whole, browserText.pieces, budget) ||
+        textAgrees(browserText.whole, servedText.pieces, budget)
+      );
     };
-    // What whole-subtree scores may still spend, in scores and element pairs; see
-    // MAX_SUBTREE_CELLS. `subtreeDepth` counts the scores in progress, so the pairs compared
-    // inside them are charged too.
-    let subtreeCellsLeft = MAX_SUBTREE_CELLS;
-    let subtreeDepth = 0;
-    // Thrown when a whole-subtree score runs past the budget; the score in progress then falls
-    // back to the pair's own attributes and text, and keeps nothing it had not finished.
-    const OUT_OF_BUDGET = {};
 
     const elementDifference = (served, browser) => {
       let row = known.get(served);
@@ -298,10 +336,26 @@
       return difference;
     };
 
+    // Compare a pair by its whole subtree, as one score charged to the budget. Past the budget
+    // or the depth limit the answer is `fallback`: what the caller already knows of the pair.
+    const subtreeDiffers = (served, browser, fallback) => {
+      if (budget.left <= 0 || subtreeDepth >= MAX_SUBTREE_DEPTH) return fallback;
+      subtreeDepth++;
+      try {
+        return elementDifference(served, browser) !== null;
+      } catch (error) {
+        if (error !== OUT_OF_BUDGET) throw error;
+        return fallback;
+      } finally {
+        subtreeDepth--;
+      }
+    };
+
     // Pair served elements with browser elements of the same tag, keeping both orders, so the
-    // most pairs agree. The served side can hold extra elements (every branch of a condition
-    // only the browser can test) and the browser side can hold extra ones (a list only the
-    // browser knows), so an element left without a partner is not a difference.
+    // most pairs agree. Each candidate pair gets a score, how well the two elements agree, and
+    // the pairing with the best total wins. The served side can hold extra elements (every
+    // branch of a condition only the browser can test) and the browser side can hold extra ones
+    // (a list only the browser knows), so an element left without a partner is not a difference.
     const pairElements = (servedElements, browserElements) => {
       const rows = servedElements.length, columns = browserElements.length;
       if (rows === 0 || columns === 0) return [];
@@ -312,8 +366,8 @@
       }
       if (subtreeDepth > 0) {
         // Pairs compared inside a whole-subtree score are part of that score's cost.
-        subtreeCellsLeft -= rows * columns;
-        if (subtreeCellsLeft < 0) throw OUT_OF_BUDGET;
+        budget.left -= rows * columns;
+        stopIfSpent();
       }
       // Two branches of a browser-only v-if can share a tag and attributes and differ only
       // further down, and the browser's branch must pair with its own served copy, not with the
@@ -334,54 +388,78 @@
         counts.set(tag, (counts.get(tag) || 0) - 1);
       }
       for (const [tag, count] of counts) if (count > 0) extra.add(tag);
-      const differs = (served, browser) => {
+      const classify = (served, browser) => {
+        if (!sameTag(served, browser)) return UNPAIRED;
         // A difference in the pair's own attributes or text is also one in its subtree, and
         // costs far less to find, so only a pair that agrees there may be compared further.
-        if (shallowDifference(served, browser, boundary) !== null) return true;
-        if (!extra.has(served.namespaceURI + " " + served.localName) || subtreeCellsLeft <= 0) return false;
-        if (subtreeDepth >= MAX_SUBTREE_DEPTH) return false;
-        subtreeCellsLeft--;
-        if (!textCouldAgree(served, browser)) return true;
-        if (subtreeCellsLeft <= 0) return false;
-        subtreeDepth++;
-        try {
-          return elementDifference(served, browser) !== null;
-        } catch (error) {
-          if (error !== OUT_OF_BUDGET) throw error;
-          // The own attributes and text agree, which is all a shallow score would read.
-          return false;
-        } finally {
-          subtreeDepth--;
-        }
+        const shallow = shallowDifference(served, browser, boundary, scoreMeter());
+        stopIfSpent();
+        if (shallow !== null) return DIFFERS;
+        if (!extra.has(served.namespaceURI + " " + served.localName) || budget.left <= 0) return AGREES;
+        if (subtreeDepth >= MAX_SUBTREE_DEPTH) return AGREES;
+        budget.left--;
+        const textAgreesHere = textCouldAgree(served, browser);
+        stopIfSpent();
+        // When the budget ran out during the check, its answer is incomplete, and the pair falls
+        // back to its own attributes and text, which agree.
+        if (!textAgreesHere) return budget.left < 0 ? AGREES : TEXT_DIFFERS;
+        // The own attributes and text agree, which is all a shallow score would read.
+        return subtreeDiffers(served, browser, false) ? DIFFERS : AGREES;
       };
-      // A pair of the same tag scores 2, and 1 more when the two agree, so of two candidates
-      // the agreeing one wins, while a differing pair still beats leaving both unpaired.
-      const weights = servedElements.map(served =>
-        browserElements.map(browser => (sameTag(served, browser) ? (differs(served, browser) ? 2 : 3) : 0)),
-      );
-      const score = Array.from({length: rows + 1}, () => new Array(columns + 1).fill(0));
-      for (let row = rows - 1; row >= 0; row--)
-        for (let column = columns - 1; column >= 0; column--) {
+      const kinds = servedElements.map(served => browserElements.map(browser => classify(served, browser)));
+      // Agreeing pairs come first: one counts for more than every differing pair the pairing
+      // could hold, so a pairing never gives up an agreeing pair to pair more elements. Among
+      // pairings with the most agreeing pairs, a differing pair still beats leaving both
+      // unpaired, so an element the browser changed is paired and reported when nothing else
+      // agrees with its served copy.
+      const agreeing = Math.min(rows, columns) + 1;
+      const align = () => {
+        const weights = kinds.map(row => row.map(kind => (kind === AGREES ? agreeing : kind === UNPAIRED ? 0 : 1)));
+        const score = Array.from({length: rows + 1}, () => new Array(columns + 1).fill(0));
+        for (let row = rows - 1; row >= 0; row--)
+          for (let column = columns - 1; column >= 0; column--) {
+            const paired = weights[row][column];
+            score[row][column] = Math.max(
+              score[row + 1][column],
+              score[row][column + 1],
+              paired ? paired + score[row + 1][column + 1] : 0,
+            );
+          }
+        const pairs = [];
+        let row = 0, column = 0;
+        while (row < rows && column < columns) {
           const paired = weights[row][column];
-          score[row][column] = Math.max(
-            score[row + 1][column],
-            score[row][column + 1],
-            paired ? paired + score[row + 1][column + 1] : 0,
-          );
+          if (paired && score[row][column] === paired + score[row + 1][column + 1]) {
+            pairs.push([row++, column++]);
+          } else if (score[row][column] === score[row + 1][column]) {
+            row++;
+          } else {
+            column++;
+          }
         }
-      const pairs = [];
-      let row = 0, column = 0;
-      while (row < rows && column < columns) {
-        const paired = weights[row][column];
-        if (paired && score[row][column] === paired + score[row + 1][column + 1]) {
-          pairs.push([servedElements[row++], browserElements[column++]]);
-        } else if (score[row][column] === score[row + 1][column]) {
-          row++;
-        } else {
-          column++;
+        return pairs;
+      };
+      let pairs = align();
+      // The quick text check (textCouldAgree) rules out a branch's own served copy when the
+      // branch holds both a nested browser-only condition (text only the server wrote) and text
+      // only the browser computes. So a browser element the pairing left without an agreeing
+      // partner may be such a branch: its pairs that only the text check ruled out get a full
+      // comparison while budget remains, and when one of them agrees, the elements pair again.
+      // Past the budget such a pair keeps counting as differing, as the text check found.
+      const agreed = new Set();
+      for (const [row, column] of pairs) if (kinds[row][column] === AGREES) agreed.add(column);
+      let foundAgreement = false;
+      for (let column = 0; column < columns; column++) {
+        if (agreed.has(column)) continue;
+        for (let row = 0; row < rows; row++) {
+          if (kinds[row][column] !== TEXT_DIFFERS) continue;
+          const differing = subtreeDiffers(servedElements[row], browserElements[column], true);
+          kinds[row][column] = differing ? DIFFERS : AGREES;
+          if (!differing) foundAgreement = true;
         }
       }
-      return pairs;
+      if (foundAgreement) pairs = align();
+      return pairs.map(([row, column]) => [servedElements[row], browserElements[column]]);
     };
 
     // Find the first difference between served nodes and browser nodes under one parent, depth
@@ -389,14 +467,9 @@
     // difference belongs to (the parent, for a text difference).
     const childrenDifference = (servedNodes, browserNodes, browserParent) => {
       if (browserParent !== boundary && allowedHere(browserParent, "children", boundary)) return null;
-      if (subtreeDepth > 0) {
-        // Comparing the text runs inside a score is part of its cost, about one step per pair of
-        // nodes.
-        subtreeCellsLeft -= (servedNodes.length + 1) * (browserNodes.length + 1);
-        if (subtreeCellsLeft < 0) throw OUT_OF_BUDGET;
-      }
       if (!allowedHere(browserParent, "text", boundary)) {
-        const text = textDifference(servedNodes, browserNodes);
+        const text = textDifference(servedNodes, browserNodes, scoreMeter());
+        stopIfSpent();
         if (text) return {...text, element: browserParent};
       }
       for (const [served, browser] of pairElements(servedNodes.filter(isElement), browserNodes.filter(isElement))) {

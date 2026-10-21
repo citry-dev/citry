@@ -198,6 +198,8 @@ plain string prints that string. Turn that off in the model's config:
 ```python
 from pydantic import BaseModel, ConfigDict
 
+from citry import Secret
+
 
 class Kwargs(BaseModel):
     # Keeps a plain string passed as `token` out of the error
@@ -232,10 +234,11 @@ reports it before the page runs, as the
 [`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)
 warning, when it can see the `Secret`: a module-level `Secret` that
 `js_data()` puts in its result, such as `{"token": API_TOKEN}`, or a
-`JsData` field annotated `Secret[str]`. It also reads an attribute such
-as `settings.API_TOKEN` when reading it runs no code, so not a property
-or a lazy settings object such as Django's. Without `--types`, it does
-not see a `Secret` that a call returns, such as `get_token()`.
+`JsData` field annotated `Secret[str]`. It also reads an attribute stored
+on a module or a plain class, such as `config.API_TOKEN`. It skips an
+attribute whose reading runs code, such as a property or Django's lazy
+`settings`. Without `--types`, it does not see a `Secret` that a call
+returns, such as `get_token()`.
 Rendering also fails, with `ValueError`, when `css_data()` or a
 [State](/events/state/) field holds a `Secret`, whether or not the
 component has CSS.
