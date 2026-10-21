@@ -162,7 +162,7 @@ the same as long as the inputs do. To check that a commit has the inputs
 a published run scored, work out its tree id and compare:
 
 ```bash
-git ls-tree <commit>:benchmarks/errors \
+git ls-tree --full-tree <commit>:benchmarks/errors \
   cases catalogue.toml frameworks runner | git mktree
 ```
 

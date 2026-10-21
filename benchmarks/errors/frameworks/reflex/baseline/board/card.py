@@ -20,4 +20,7 @@ def card(
         # The card only announces the click; the page decides what hiding means.
         rx.button("Hide", type="button", on_click=on_hide),
         class_name=f"card card--{tone}",
+        # The project's title keys the card, so React matches each card to its
+        # project when an earlier one is hidden.
+        key=title,
     )

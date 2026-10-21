@@ -392,8 +392,11 @@ def _observe_on(
             # the record ends where the browser check did, once the server has
             # finished printing what the last journey caused. The log file
             # keeps everything.
-            recorded = _quiet_size(log)
-            _stop(process)
+            try:
+                recorded = _quiet_size(log)
+            finally:
+                # The server is stopped even when its log cannot be read.
+                _stop(process)
     with log_path.open("rb") as file:
         observation.server_log = file.read(recorded).decode(errors="replace").splitlines()
     return observation

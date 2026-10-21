@@ -213,7 +213,7 @@ argv = ["{venv}/bin/reflex", "run", "--frontend-port", "{port}", "--backend-port
 # BUN_INSTALL_CACHE_DIR keeps the npm packages Bun downloads in the
 # environment, shared by every case; each case's install then copies them
 # from there.
-env = { REFLEX_DIR = "{env}/.reflex", REFLEX_CHECK_LATEST_VERSION = "false", REFLEX_TELEMETRY_ENABLED = "false", BUN_INSTALL_CACHE_DIR = "{env}/.bun-cache", PYTHONUNBUFFERED = "1" }
+env = { REFLEX_DIR = "{env}/.reflex", REFLEX_CHECK_LATEST_VERSION = "false", REFLEX_TELEMETRY_ENABLED = "false", BUN_INSTALL_CACHE_DIR = "{env}/.bun-cache" }
 page_path = "/"
 ready_timeout = 300
 settle_ms = 1000

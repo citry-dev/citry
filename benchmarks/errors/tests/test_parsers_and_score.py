@@ -558,11 +558,11 @@ def test_chart_ticks_count_in_fives_from_ten_up() -> None:
 def test_the_run_record_names_a_tree_of_the_inputs_that_a_rebase_keeps(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def git(*argv: str, stdin: str | None = None) -> str:
+    def git(*argv: str, stdin: str | None = None, cwd: Path = tmp_path) -> str:
         # git is found on PATH, as the runner finds it.
         completed = subprocess.run(
             ["git", *argv],  # noqa: S607
-            cwd=tmp_path,
+            cwd=cwd,
             input=stdin,
             capture_output=True,
             text=True,
@@ -583,8 +583,22 @@ def test_the_run_record_names_a_tree_of_the_inputs_that_a_rebase_keeps(
     monkeypatch.setattr(cli, "BENCH_ROOT", bench)
     first = cli._source()
     # The README's check: list the input entries of a commit and make one tree of them.
-    listing = git("ls-tree", "HEAD:benchmarks/errors", "cases", "catalogue.toml", "frameworks", "runner")
+    listing = git(
+        "ls-tree", "--full-tree", "HEAD:benchmarks/errors", "cases", "catalogue.toml", "frameworks", "runner"
+    )
     assert first["inputs_tree"] == git("mktree", stdin=listing + "\n")
+    # `--full-tree` makes the listing the same when git runs from inside the benchmark folder.
+    inside = git(
+        "ls-tree",
+        "--full-tree",
+        "HEAD:benchmarks/errors",
+        "cases",
+        "catalogue.toml",
+        "frameworks",
+        "runner",
+        cwd=bench,
+    )
+    assert inside == listing
     assert not first["inputs_changed"]
     # A new published result and a rebase that rewrites the commit keep the tree id.
     (bench / "results" / "2026-01-01" / "file.txt").write_text("published")

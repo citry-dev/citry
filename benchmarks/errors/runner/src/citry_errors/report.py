@@ -172,7 +172,14 @@ def write(run_dir: Path, output: Path) -> None:
     source = json.loads(source_file.read_text()) if source_file.is_file() else {}
     lines = [f"# Error-prevention results, run {run_dir.name}", ""]
     if source:
-        dirty = " plus uncommitted changes to the benchmark" if source["benchmark_files_changed"] else ""
+        # Uncommitted changes to the inputs mean no commit has what the run
+        # scored; runs recorded before the inputs had their own flag use the
+        # whole folder's.
+        dirty = (
+            " plus uncommitted changes to the benchmark"
+            if source.get("inputs_changed", source["benchmark_files_changed"])
+            else ""
+        )
         # Runs recorded before the inputs tree was added have no tree id.
         tree = f", benchmark inputs tree `{source['inputs_tree']}`" if source.get("inputs_tree") else ""
         lines += [f"Cases and tools from commit `{source['commit']}`{tree}{dirty}.", ""]

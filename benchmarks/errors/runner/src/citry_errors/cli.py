@@ -128,7 +128,9 @@ def _source() -> dict:
         completed = subprocess.run(
             ["git", *argv], cwd=REPO_ROOT, input=stdin, capture_output=True, text=True, check=False
         )
-        return completed.stdout.strip()
+        # A failed command gives no text, so the record leaves its field empty
+        # rather than holding an id that names something else.
+        return completed.stdout.strip() if completed.returncode == 0 else ""
 
     folder = BENCH_ROOT.relative_to(REPO_ROOT).as_posix()
     # Uncommitted changes under the benchmark folder mean the commit alone
@@ -137,8 +139,15 @@ def _source() -> dict:
     inputs_changed = git("status", "--porcelain", "--", *(f"{folder}/{name}" for name in INPUT_NAMES))
     # `git mktree` turns the listing of the input entries into one tree; the
     # README gives the same two commands for checking a published run.
-    listing = git("ls-tree", f"HEAD:{folder}", *INPUT_NAMES)
-    inputs_tree = git("mktree", stdin=listing + "\n") if listing else ""
+    # `--full-tree` reads the path from the repository's root wherever git runs.
+    listing = git("ls-tree", "--full-tree", f"HEAD:{folder}", *INPUT_NAMES)
+    inputs_tree = ""
+    if len(listing.splitlines()) == len(INPUT_NAMES):
+        inputs_tree = git("mktree", stdin=listing + "\n")
+    if not inputs_tree:
+        # A tree of only some inputs would name a different set of cases, so
+        # the run records none and says why.
+        print(f"citry-errors: could not work out the tree id of {', '.join(INPUT_NAMES)}", file=sys.stderr)
     return {
         "commit": git("rev-parse", "HEAD"),
         "benchmark_files_changed": bool(changed),

@@ -258,7 +258,8 @@ def render(summary: dict[str, Any]) -> str:
         notice += f": cases and tools from commit {escape(source['commit'][:12])}"
         if source.get("inputs_tree"):
             notice += f", benchmark inputs tree {escape(source['inputs_tree'][:12])}"
-        notice += ", with uncommitted benchmark changes" if source.get("benchmark_files_changed") else ""
+        changed = source.get("inputs_changed", source.get("benchmark_files_changed"))
+        notice += ", with uncommitted benchmark changes" if changed else ""
     out.append(f'<p class="notice">{notice}.</p>')
 
     out.append('<section class="group"><details open><summary><h2>Outcomes</h2></summary><div class="group-body">')

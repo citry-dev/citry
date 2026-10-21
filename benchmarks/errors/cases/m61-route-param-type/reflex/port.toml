@@ -1,6 +1,5 @@
 # Reflex's route parts are always text, so the project page's route cannot
-# declare a numeric id; the link passes a project's name where the page
-# expects its number.
+# declare a numeric id; it takes any text, and the page shows `Project alpha`.
 status = "ported"
 mistake = { file = 'board/board.py', contains = '"/projects/alpha"' }
 
