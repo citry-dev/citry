@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261020T215449Z",
+  "run": "20261020T230018Z",
   "frameworks": [
     {
       "key": "citry",
@@ -2033,10 +2033,16 @@
       "framework": "jinja",
       "mistake": "m04-missing-required-input",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "runtime-error",
+      "cell": "R",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
     },
     {
       "framework": "jinja",
@@ -2079,10 +2085,16 @@
       "framework": "jinja",
       "mistake": "m08-attribute-typo",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "runtime-error",
+      "cell": "R",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
     },
     {
       "framework": "jinja",
@@ -2389,10 +2401,16 @@
       "framework": "jinja",
       "mistake": "m36-slot-data-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "runtime-error",
+      "cell": "R",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
     },
     {
       "framework": "jinja",
@@ -3583,7 +3601,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):",
-        "error: [20/Oct/2026 22:17:42] \"GET / HTTP/1.1\" 500 296040"
+        "error: [20/Oct/2026 23:22:46] \"GET / HTTP/1.1\" 500 295859"
       ]
     },
     {
@@ -4692,15 +4710,11 @@
       "framework": "nuxt",
       "mistake": "m01-component-name",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "error: Hydration completed but contains mismatches.",
-        "error: Hydration completed but contains mismatches.",
-        "error: Hydration completed but contains mismatches.",
-        "error: Hydration completed but contains mismatches."
+        "vue-tsc (Vue - Official): TS2339 Property 'Crad' does not exist on type '{}'."
       ]
     },
     {
@@ -4711,7 +4725,7 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "vue-tsc (Vue - Official): TS2345 Argument of type '{ key: string; titel: string; count: number; tone: \"plain\" | \"accent\"; onHide: any; }' is not assignable to parameter of type '{ readonly title: string; readonly count: number; readonly tone: \"plain\" | \"accent\"; readonly onHide?: (() => any) | un..."
+        "vue-tsc (Vue - Official): TS2561 Object literal may only specify known properties, but 'titel' does not exist in type '{ readonly title: string; readonly count: number; readonly tone: \"plain\" | \"accent\"; readonly onHide?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & Component..."
       ]
     },
     {
@@ -4793,24 +4807,22 @@
       "framework": "nuxt",
       "mistake": "m10-attribute-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2561 Object literal may only specify known properties, but 'titel' does not exist in type 'HTMLAttributes & ReservedProps'. Did you mean to write 'title'?"
+      ]
     },
     {
       "framework": "nuxt",
       "mistake": "m11-element-name",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "error: Hydration completed but contains mismatches.",
-        "error: Hydration completed but contains mismatches.",
-        "error: Hydration completed but contains mismatches.",
-        "error: Hydration completed but contains mismatches.",
-        "error: Hydration completed but contains mismatches."
+        "vue-tsc (Vue - Official): TS2339 Property 'dvi' does not exist on type '{}'."
       ]
     },
     {
@@ -4922,15 +4934,11 @@
       "framework": "nuxt",
       "mistake": "m21-directive-name",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
-        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+        "vue-tsc (Vue - Official): TS2551 Property 'vIff' does not exist on type 'GlobalDirectives'. Did you mean 'vIf'?"
       ]
     },
     {
@@ -4975,7 +4983,7 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "vue-tsc (Vue - Official): TS2345 Argument of type '{ opne: boolean; onClose: any; }' is not assignable to parameter of type '{ readonly open: boolean; readonly onClose?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & ComponentCustomProps & Record<...>'."
+        "vue-tsc (Vue - Official): TS2353 Object literal may only specify known properties, and 'opne' does not exist in type '{ readonly open: boolean; readonly onClose?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & ComponentCustomProps'."
       ]
     },
     {
@@ -4986,7 +4994,7 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "vue-tsc (Vue - Official): TS2345 Argument of type '{ onClose: any; }' is not assignable to parameter of type '{ readonly open: boolean; readonly onClose?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & ComponentCustomProps & Record<...>'."
+        "vue-tsc (Vue - Official): TS2345 Argument of type '{ onClose: any; }' is not assignable to parameter of type '{ readonly open: boolean; readonly onClose?: (() => any) | undefined; } & VNodeProps & AllowedComponentProps & ComponentCustomProps'."
       ]
     },
     {
@@ -5015,10 +5023,12 @@
       "framework": "nuxt",
       "mistake": "m29-listener-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2561 Object literal may only specify known properties, but 'onHdie' does not exist in type 'Partial<NonNullable<{ readonly title: string; readonly count: number; readonly tone: \"plain\" | \"accent\"; readonly onHide?: (() => any) | undefined; } & VNodeProps & AllowedCompo..."
+      ]
     },
     {
       "framework": "nuxt",
@@ -5745,14 +5755,12 @@
       "framework": "next",
       "mistake": "m45-link-route-name",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
-        "error: 404 http://127.0.0.1:<port>/abuot?_rsc=64EBvAagmAisvzuu",
-        "error: 404 http://127.0.0.1:<port>/abuot"
+        "tsc --noEmit (VS Code TypeScript): TS2820 Type '\"/abuot\"' is not assignable to type 'UrlObject | RouteImpl<\"/abuot\">'. Did you mean '\"/about\"'?",
+        "next build: TS2820 Type '\"/abuot\"' is not assignable to type 'UrlObject | RouteImpl<\"/abuot\">'. Did you mean '\"/about\"'?"
       ]
     },
     {

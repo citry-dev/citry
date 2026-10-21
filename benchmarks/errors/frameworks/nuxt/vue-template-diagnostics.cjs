@@ -62,7 +62,9 @@ for (const file of vueFiles(path.join(process.cwd(), "app"))) {
 
   if (template) {
     // language-core passes these options when no plugin listed in
-    // `vueCompilerOptions.plugins` changes them, and Nuxt's tsconfigs list none.
+    // `vueCompilerOptions.plugins` changes them. The plugins Nuxt's tsconfigs
+    // list (vue-router's route-block and typed-router plugins) only add
+    // generated code, and `strictTemplates` changes only the type check.
     const errors = [];
     const warnings = [];
     try {

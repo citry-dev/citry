@@ -130,19 +130,22 @@ Starlette's `debug` flag on and serves it with uvicorn. That flag changes \
 only the HTTP error pages, which no case reaches (every runtime error here \
 happens while ReactPy renders over the WebSocket), so the app keeps the \
 guide's `configure` form, which lets the runner pass the port on the \
-uvicorn command line. The one setting changed from ReactPy's defaults is debug mode, turned on with `REACTPY_DEBUG_MODE=1` (its default \
-is off). In debug mode ReactPy checks each element it sends against its \
-element format, checks that every attribute can be sent as JSON, warns \
-about a list child without a key, checks that each JavaScript component a \
-page asks for is exported by its file, logs more, and shows a component's \
-render error in the page in place of the component. The benchmark runs \
-each framework's development mode, and Next.js, through React, gives the \
-same kind of development warnings, so the rule on stricter settings turns \
-it on. It changes no cell: runs with `REACTPY_DEBUG_MODE=0` gave the same \
-49 cells. Each error it shows in the page is also logged without it, and \
-m41 fails either way (in debug mode when the element is built, otherwise \
-when the update is sent, which leaves the page blank while the browser \
-keeps reconnecting).
+uvicorn command line.
+
+The one setting changed from ReactPy's defaults is debug mode, turned on \
+with `REACTPY_DEBUG_MODE=1` (its default is off). In debug mode ReactPy \
+checks each element it sends against its element format, checks that every \
+attribute can be sent as JSON, warns about a list child without a key, \
+checks that each JavaScript component a page asks for is exported by its \
+file, logs more, and shows a component's render error in the page in place \
+of the component. The benchmark turns on a framework's stricter check when \
+other frameworks here have the same kind of check, and `next dev` and `nuxt \
+dev` run React's and Vue's development checks, such as React's warning for a \
+list item without a key, so this app turns it on. It changes no cell: runs \
+with `REACTPY_DEBUG_MODE=0` gave the same 49 cells. Each error it shows in \
+the page is also logged without it, and m41 fails either way (in debug mode \
+when the element is built, otherwise when the update is sent, which leaves \
+the page blank while the browser keeps reconnecting).
 
 Two cases changed after their first results, before any run was published, \
 because their first form did not match ReactPy's natural one. The page \

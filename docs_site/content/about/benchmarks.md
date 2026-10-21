@@ -113,7 +113,7 @@ the server, which sends back the component's new HTML.
 ### Where Citry stands { #errors-where-citry-stands }
 
 - **Before the app runs: 25 of 47** (24 errors, 1 warning). Two of
-  the 49 mistakes don't apply to Citry. Next.js 34 of 43, Nuxt 25 of
+  the 49 mistakes don't apply to Citry. Next.js 35 of 43, Nuxt 30 of
   44, ReactPy 19 of 42, FastHTML 17 of 36, django-unicorn 7 of 41,
   Django + HTMX + Alpine 3 of 40, Rusty + HTMX + Alpine 3 of 38,
   django-components + HTMX + Alpine 3 of 42, Jinja + HTMX + Alpine 2
@@ -168,14 +168,16 @@ the server, which sends back the component's new HTML.
 - **A similar mistake can go unreported.** The misspelled template
   directive above is a Vue one, `v-iff`, which fails in the browser. A
   misspelled server-side `c-if` isn't reported at all.
-- **Why Next.js leads**: TypeScript checks its HTML elements, attribute
-  names and values, and event names. Its server actions take typed
-  arguments, so a wrong or missing field in the data a button sends is
-  caught too.
+- **Why Next.js and Nuxt lead**: TypeScript checks Next.js's HTML
+  elements, attribute names and values, and event names. Its server
+  actions take typed arguments, so a wrong or missing field in the data
+  a button sends is caught too. Nuxt's template check, with its
+  `strictTemplates` setting on, reports unknown components, elements, attributes,
+  directives and component events.
 
 ### How we measured { #errors-how-we-measured }
 
-- **When**: 2026-10-20, Citry 0.6.0 and citry-core 1.8.0 from PyPI.
+- **When**: 2026-10-21, Citry 0.6.0 and citry-core 1.8.0 from PyPI.
   Every framework's versions are pinned in its app's lockfile.
 - **Citry**: the editor extension's language server (measured with
   `citry check --types`) and `citry check`.
@@ -193,22 +195,28 @@ the server, which sends back the component's new HTML.
 - **The running app**: each framework's server, started as its docs
   say, driven in Chromium through the same clicks. Server errors, error
   responses, and browser errors and warnings are recorded.
-- **django-components**: the app turns on one check that is off by
-  default. django-components' docs show how to check the types of a
-  component's inputs: declare them as Pydantic models and install
-  djc-ext-pydantic, an extension the django-components project
-  publishes. Other frameworks here check input types, so the benchmark
-  turns this on. Without it, django-components checks only that input
-  and slot names are known and that required ones are given, and two
-  of its runtime errors (a wrong-typed input in markup, an input value
-  outside its allowed choices) would be missed.
-- **ReactPy**: the app turns on ReactPy's debug mode, which is off by
-  default. It adds development checks, such as a warning for a list
-  item without a key, like the ones React gives in development. With it
-  off, every ReactPy result here stays the same.
-- **django-unicorn**: default settings. None of its settings adds a
-  stricter check.
-- **Other frameworks**: default settings.
+- **Stricter settings**: when a framework has a setting that turns on
+  a stricter check, and other frameworks here have the same kind of
+  check, the benchmark turns it on in that framework's app, so the
+  frameworks are compared like for like:
+    - **Jinja**: `StrictUndefined`, so printing a name the template
+      wasn't given is an error, not empty text.
+    - **django-components**: Pydantic models for component inputs with
+      the djc-ext-pydantic extension, as its docs show, so a
+      wrong-typed input is an error when the page renders.
+    - **Nuxt**: vue-tsc's `strictTemplates`, which reports unknown
+      components, elements, attributes, directives and component
+      events, and `typedPages`, which checks links that name a route
+      (the page links by path, so it doesn't change the link mistake).
+    - **Next.js**: `typedRoutes`, which checks a link's path against
+      the app's pages, and three stricter TypeScript options that Nuxt
+      turns on by default; they change no result.
+    - **ReactPy**: debug mode, which checks each element it sends and
+      warns about a list item without a key, like the checks React
+      makes in development.
+    - **Citry, Django, Rusty, FastHTML and django-unicorn**: none of
+      their settings adds a kind of check the others make, so they keep
+      their defaults.
 - **Setup**: the project layout from each framework's docs or starter,
   with default settings unless the
   [benchmark notes](https://github.com/citry-dev/citry/tree/main/benchmarks/errors)

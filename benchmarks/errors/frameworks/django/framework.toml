@@ -71,6 +71,29 @@ the project page's URL takes the number as `<int:project_id>`.
 runtime: `manage.py migrate`, because sessions are stored in the database and \
 need their table (the Django tutorial runs it too), then `manage.py runserver \
 --noreload`, so the runner stops a single process.
+
+Stricter settings: none changed from the default. The benchmark turns on a \
+framework's stricter check when other frameworks here have the same kind of \
+check, and Django has none that is off by default. No template setting makes \
+an undefined name raise: `string_if_invalid` only prints a marker in its \
+place, and the template `debug` option, already on with DEBUG, only adds line \
+numbers to errors. djLint's five rules that are off by default (T003, H006, \
+H017, H018, T028) check style and layout, which no other framework here \
+checks. The plan names three more tools, and none is added: none is part of \
+a Django project's usual setup, and none would report a mistake the cases \
+make. The Django Language Server (djls) checks tags, filters and block \
+structure, and django-extensions' `validate_templates` only loads each \
+template, but every template mistake here shows only when the page renders. \
+With django-stubs, the session and the functions the cases misuse still \
+accept any value. Two more options were considered and left off. Django \
+logs every name a template fails to look up, but only at the DEBUG level of \
+the `django.template` logger, which projects leave off; turning it on would \
+print a log line, not report an error, and the runner would count it only \
+because the logged text matches its error patterns. And VS Code can \
+type-check JavaScript files (`checkJs`), as Citry's check does for its \
+component scripts, but board.js uses the global `Alpine` object as Alpine's \
+docs write it, which checkJs reports twice as an unknown name in the clean \
+app. The Rusty and django-components apps follow this app on each point.
 """
 
 [setup]

@@ -1,5 +1,5 @@
 from django_components import Component, register
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 @register('counter')
@@ -7,6 +7,10 @@ class Counter(Component):
     template_file = 'counter.html'
 
     class Kwargs(BaseModel):
+        # Reject names the model does not declare, as django-components'
+        # default named tuples do; Pydantic's default ignores them.
+        model_config = ConfigDict(extra='forbid')
+
         count: int
 
     def get_template_data(self, args, kwargs: Kwargs, slots, context):

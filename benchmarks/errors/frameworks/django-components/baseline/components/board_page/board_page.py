@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from django.conf import settings
 from django_components import Component, register
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 @dataclass
@@ -29,21 +29,31 @@ class BoardPage(Component):
     css_file = 'board_page.css'
 
     class Kwargs(BaseModel):
+        # Reject names the model does not declare, as django-components'
+        # default named tuples do; Pydantic's default ignores them.
+        model_config = ConfigDict(extra='forbid')
+
         # The saved total, which the View below reads from the session.
         count: int
         # The text the search form submitted, or '' before any search.
         searched: str
 
     class TemplateData(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+
         owner: Owner
         cards: list[Project]
         count: int
         searched: str
 
     class JsData(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+
         api_base: str
 
     class CssData(BaseModel):
+        model_config = ConfigDict(extra='forbid')
+
         accent: str
 
     def get_template_data(self, args, kwargs: Kwargs, slots, context):

@@ -4,9 +4,10 @@ notes = """
 The baseline follows `npx create-next-app@latest` 16.3.5 with the recommended
 defaults: TypeScript, ESLint (eslint-config-next core-web-vitals and
 typescript presets), Tailwind CSS, the App Router, no src/ folder, the @/*
-alias and no React Compiler. tsconfig.json, eslint.config.mjs and
-postcss.config.mjs are the template's own. The differences from the
-starter:
+alias and no React Compiler. eslint.config.mjs and postcss.config.mjs
+are the template's own; tsconfig.json is the template's with three
+options added (see the settings changed below). The other differences
+from the starter:
 - react and react-dom are 19.3.0, matching the other benchmarks' Next.js app;
   create-next-app 16.3.5 itself writes 19.2.8. The App Router renders with
   the React copy bundled inside next, so this should not change a result.
@@ -30,8 +31,46 @@ is a next/image `<Image>`, because the starter's ESLint config warns on a
 plain `<img>` (@next/next/no-img-element), and its `src` is a path into
 public/, the first form the Next.js image docs show. So a misspelled file
 (m48) is a 404 at runtime; a static import of the file would fail
-`next build` instead. `typedRoutes`, which would type-check
-link paths such as m45's, is off, as it is by default.
+`next build` instead.
+
+Settings changed from the default. The benchmark turns on a framework's
+stricter check when other frameworks here have the same kind of check:
+- `typedRoutes: true` in next.config.ts. The Django, Django Rusty
+  Templates, Jinja, django-unicorn and django-components apps check each
+  link's route when the page renders. With it on, `next typegen` writes the app's
+  routes as types, and tsc reports a literal path that matches no route
+  in a next/link `href`, a next/form `action`, a router call or
+  `redirect()`, so a misspelled link (m45) is an editor error rather
+  than a 404.
+- `noUncheckedIndexedAccess`, `noImplicitOverride` and
+  `verbatimModuleSyntax` in tsconfig.json, the three checks beyond
+  `strict` that the tsconfig Nuxt generates turns on: tsc then treats a
+  value read from an array or a dictionary by index as possibly missing,
+  asks a class method that replaces its parent's to say so with
+  `override`, and asks an import used only as a type to say so with
+  `import type`. No case depends on any of them.
+The clean app needs no change for any of them.
+
+Considered and left off:
+- `experimental.typedEnv`, because the types it writes still accept any
+  `process.env` name, so it checks nothing.
+- `experimental.strictRouteTypes`, which checks what page and layout
+  files export, a kind of check no other framework here has.
+- `experimental.taint`, which adds no check by itself: it only lets code
+  call React's taint functions.
+- typescript-eslint's rules that read the code's types. eslint-config-next
+  has no option for them; they would be added by hand.
+- The jsx-a11y accessibility rules eslint-config-next leaves unset, such
+  as `label-has-associated-control`, which matches djLint's H042. The
+  benchmark keeps each linter's rules as the framework's preset sets
+  them, and no case reaches these rules: with jsx-a11y's whole strict
+  set on, neither the clean app nor any case gets a finding.
+Every `@next/next` rule in eslint-config-next is already on. The config
+turns off four React rules: `react/no-unknown-property` and
+`react/prop-types` repeat TypeScript's checks, `react/react-in-jsx-scope`
+does not apply to the JSX transform Next.js uses, and
+`react/jsx-no-target-blank` checks links that open a new tab, which no
+other framework here checks.
 
 Versions come from the lockfile: next 16.3.5, react and react-dom 19.3.0,
 typescript 5.9.3, @types/react and @types/react-dom 19.3.0, @types/node

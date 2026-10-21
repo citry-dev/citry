@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+import jinja2
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.routing import Mount, Route
@@ -15,7 +16,18 @@ SECRET_TOKEN = "s3cr3t"
 # The heading's color, which the stylesheet reads as the CSS variable --accent.
 ACCENT = "rgb(0, 0, 255)"
 
-templates = Jinja2Templates(directory="templates")
+# The same environment `Jinja2Templates(directory=...)` builds, plus
+# StrictUndefined: printing a name the template was not given, using it
+# in `{% if %}` or looping over it raises an error. Off by default; the
+# benchmark turns it on because other frameworks here report unknown
+# template names too.
+templates = Jinja2Templates(
+    env=jinja2.Environment(
+        loader=jinja2.FileSystemLoader("templates"),
+        autoescape=jinja2.select_autoescape(),
+        undefined=jinja2.StrictUndefined,
+    )
+)
 
 
 @dataclass
