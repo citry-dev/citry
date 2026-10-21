@@ -218,10 +218,23 @@ one, where it would change the page that every existing case is compared on.
   without editing it. Each journey adds one page load and its
   steps to every case of that framework.
 - **Each journey starts in a new browser context**, with no cookies or
-  storage from an earlier journey. The server is not restarted, so
-  journeys run in a fixed order, the default one first, and the clean app
-  and every case start each journey from the same server state, apart from
-  what the case's mistake itself saved.
+  storage from another journey. The server is not restarted, so the
+  default journey runs first and alone: in every clean app its `Add` click
+  is the only step that saves anything on the server, and every other
+  journey starts once it has ended. The clean app and every case then
+  start each journey from the same server state, apart from what the
+  case's mistake itself saved.
+- **The other journeys run at the same time**, each in its own browser
+  context against the same server. In every clean app they only read from
+  the server, so their order does not change what they record. Most of a
+  journey is waiting for the page to settle, so running them together
+  roughly halves a browser check's time: checked on its own, Citry's clean
+  app went from 27 to 13 seconds and Django's from 16 to 8. Each journey's
+  browser messages are kept apart and joined in the order `framework.toml`
+  lists the journeys, so the record does not depend on which journey
+  logged first. ReactPy 1.1.0 fails when it renders two pages at
+  the same moment, so its `framework.toml` sets `journeys_at_once = false`
+  and its journeys run one after another.
 - **What a record holds.** For each element: tag, `title`, the button type
   the browser settled on, computed text color, border color, display and
   visibility, `alt`, `id`, every `aria-*` attribute, the disabled state,
@@ -279,8 +292,13 @@ one, where it would change the page that every existing case is compared on.
 | A development server prints errors while the runner stops it, such as `[ERROR] Unexpected exit from worker-1`, which granian prints under `reflex run` in some runs and not others | After the last journey the runner waits until the server's log has not grown for 0.3 seconds (at most 5 seconds), and the record of its output ends there, before the stop signal; the `server.log` file keeps the rest. Without this, such a line would mark the clean app's run as broken, or a case as a runtime error, at random. Every command runs with `PYTHONUNBUFFERED=1`, so a Python server's printed output reaches the log while the page is checked |
 | An error the server prints only while it stops, or holds back until a child process exits | It does not count. `reflex run` keeps the Vite server's output to itself and prints it only when that process exits, so no Vite error reaches a Reflex record; at Reflex's default log level the developer does not see that output while the app runs either |
 | Another program takes a server's port after the runner checked it was free | The server cannot listen. When its log says the address is in use, the runner starts it again on another port, trying up to three ports in all. After that the case counts as a runtime error, as for any server that never answers, and its browser check is not stored |
-| Two `nuxt dev` servers start together | Each picks a port for its server-side hot reload from the same 21 ports, so both can pick the same one. Nuxt's `max_jobs = 1` runs its cases, static stages included, one at a time; other frameworks' cases still run beside the Nuxt case |
-| Parallel cases slow each other down | The clean apps run alone, before any case, so the page every case is compared with is recorded on a quiet machine. A case's browser check waits a fixed `settle_ms` after the page goes quiet, so a page that is still changing after that under load can read as "silently wrong". The development server's `ready_timeout` and each tool's timeout are minutes, far above a case's normal time, but the browser's own limits are seconds (five per step, 15 for the page to go quiet), so heavy load could make a journey fail and read as "silently wrong". A run with `--jobs 1` and one with the default gave the same cells for Jinja and FastHTML; a cell that changes between the two would point at this |
+| Two `nuxt dev` servers start together | Each picks a port for its server-side hot reload from the same 21 ports, so both can pick the same one. Nuxt's `max_servers = 1` runs one of its development servers at a time: a Nuxt case whose browser check is due waits while another Nuxt server runs, and its worker sits idle meanwhile. The static stages start no server, so several Nuxt cases run them at once, and other frameworks' cases run beside the Nuxt server. A `max_servers` that is not a whole number of 1 or more, such as `0`, `true` or `"2"`, makes loading fail, naming the file |
+| Parallel cases slow each other down | The clean apps run alone, before any case, so the page every case is compared with is recorded on a quiet machine. A case's browser check waits a fixed `settle_ms` after the page goes quiet, so a page that is still changing after that under load can read as "silently wrong". The development server's `ready_timeout` and each tool's timeout are minutes, far above a case's normal time, but the browser's own limits are seconds (five per step, 15 for the page to go quiet), so heavy load could make a journey fail and read as "silently wrong". A run with one case at a time and one with five gave the same cells for Jinja and FastHTML, and the full run with the default 10 browser checks at once, each running its journeys at the same time, gave the same cells as the earlier one with five cases at once and journeys one after another; a cell that changes between two such runs would point at this |
+| A journey other than the default one saves something on the server, which only a case's mistake could make it do | The journeys running beside it may load their page before or after the save, so what they record can differ between two runs of the same case, and nothing reports it. In every clean app only the default journey's `Add` saves anything, and it ends before the other journeys start |
+| Journeys running at the same time print to the browser console or the server log | Each journey's browser console messages and failed responses are kept apart and joined in the order `framework.toml` lists the journeys, so they reach the record in the same order in every run. The server log is one file, so its lines from those journeys are in whatever order the server wrote them. The comparison looks each line up on its own, never by its position, so that order changes no cell; it can only change which of the server's lines are shown as the first few evidence lines |
+| One of the journeys running at the same time stops early, or the browser itself fails | A journey that stops early records its failure and the others go on, as they do for a framework that runs its journeys one after another; a browser that crashes mid-journey usually fails each open journey this way. An error the journey does not catch, such as a browser context that cannot open, stops the case's worker as any runner error does, and the other journeys are cancelled when Playwright stops |
+| A framework's server fails when it serves several pages at the same moment, as ReactPy 1.1.0 does | The clean app's run shows the failure, such as ReactPy's `RuntimeError: Hook stack is in an invalid state` in the server log, and every cell of that framework is marked `!`. The failure depends on timing, so it can also appear in a case and not in the clean app, and that case then reads as a runtime error. Setting `journeys_at_once = false` under `[runtime]` in its `framework.toml` runs its journeys one after another. A value other than `true` or `false`, such as the text `"false"`, makes loading fail, naming the file |
+| More cases reach their static stages than `--static-jobs` allows, or their browser checks than `--jobs` allows | The extra cases wait for a free slot before that part starts. The run keeps `--jobs` plus `--static-jobs` cases going, so every slot can be busy at once, though a slot can still sit empty while every case waits for the other kind. A Nuxt case waiting for Nuxt's one server slot holds no browser slot meanwhile. A value below 1 for either option stops `run` before anything starts |
 | A case raises an unexpected error on its worker, such as a runner bug | No new case starts, the cases already running finish and stop their servers, and the run stops with that error and no `results.jsonl`. The cases that finished are stored, so the next run starts where this one stopped |
 | The tools write into the working copy, such as a production build | The development server starts from a fresh copy of the case, so the browser check sees the same files whether the tools ran in this run or their output was stored by an earlier one |
 | The run is stopped with Ctrl-C | No new case starts, and each running case stops before its next tool or browser check, so the run ends once the tools and browser checks already started have finished. Nothing that finishes after Ctrl-C is stored, because the signal also reaches the tools the running cases started. A tool killed by a signal is never stored either, whenever that happens |
@@ -317,16 +335,22 @@ one, where it would change the page that every existing case is compared on.
 
 A full run installs each framework once, then runs every tool for every case
 and starts the development server for each case that no tool reported as an
-error. Cases run side by side, `--jobs` at a time, and a run repeats only
-the cases whose inputs changed since an earlier run stored them. Jinja and
-FastHTML together (42 cases) took 211 seconds with `--jobs 1` and 54 seconds
-with `--jobs 5` on a 10-core machine. Running every browser check as well,
-one case at a time, took about 280 seconds. A rerun with nothing changed
-took 8 seconds, because the browser checks of the 4 cases whose journey
-stops on an error page are never stored and run again. A full run of the
-twelve frameworks (756 cases) with nothing stored took about 38 minutes
-with the default `--jobs 5`, most of it the Nuxt cases, which run one at
-a time. It is not part of routine CI. Its result changes only when a
+error. Cases run side by side, with `--static-jobs` of them in their static
+stages and `--jobs` of them in their browser checks at once, and a run
+repeats only the cases whose inputs changed since an earlier run stored
+them. A full run of the twelve frameworks (756 cases) with nothing stored
+took about 14 minutes (839 and 855 seconds in two runs) on a 10-core
+machine with the defaults of 10 browser checks and 5 cases' static stages
+at once. The clean apps took the first 148 seconds, one at a time. In the
+cases, each of the 417 browser checks took about 13 seconds under that
+load. In the 855-second run the processor was at least 95% busy in every
+sample taken while the cases ran (other work on the machine took part of
+it), so the processor, not waiting, sets the pace of the run. Before a
+browser check ran its journeys at the same time, with five cases at once,
+a check took about 20 seconds and the full run about 38 minutes, with the
+same cells. Most of a journey was fixed waiting: in Citry's clean app,
+18.5 of its 27 seconds were the `settle_ms` waits and the `wait` steps.
+It is not part of routine CI. Its result changes only when a
 case, a pinned version or Citry changes, so it is run at each Citry
 release. The runner's own tests run in seconds on small made-up tool
 output and need no network.

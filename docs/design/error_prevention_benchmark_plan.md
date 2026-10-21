@@ -1219,14 +1219,18 @@ any result was seen, as the catalogue header requires. Each new-framework PR
 **Full run time.** At the per-case times measured above, one case at a time
 with every browser check run, the full 63-mistake catalogue in 11
 frameworks (all but Reflex) would take about 1.6 hours. Three runner
-features cut this:
+features cut this, and a fourth came later:
 
-- **Several cases at once.** `run --jobs N` (default 5 on a 10-core
-  machine) runs cases of every framework side by side, after each clean
-  app has run alone. For Jinja and FastHTML it cut 211 seconds to 54, with
-  the same results. Nuxt runs one case at a time, because two `nuxt dev`
-  servers can pick the same hot-reload port, and Next.js and Nuxt builds
-  have not been timed side by side yet.
+- **Several cases at once.** `run` runs cases of every framework side by
+  side, after each clean app has run alone. Five cases at once cut Jinja
+  and FastHTML from 211 seconds to 54, with the same results. The run now
+  has two limits: `--static-jobs` cases in their static stages (default 5
+  on a 10-core machine) and `--jobs` browser checks (default 10). Nuxt
+  runs one development server at a time (`max_servers = 1`), because two
+  `nuxt dev` servers can pick the same hot-reload port; its static stages
+  run side by side. Each duration in this plan measured with `--jobs 5`
+  dates from when `--jobs` counted whole cases, so it means five cases at
+  once.
 - **No browser check after a static error.** A case a tool already
   reported as an error skips the browser check. In the 2026-10-20 run (24
   mistakes, six frameworks) that is 63 of 134 cases and about 38% of the
@@ -1238,6 +1242,13 @@ features cut this:
   only the browser checks of cases whose static error stops counting.
   Browser checks whose journey stopped early are never stored, so every run
   repeats those (4 of the 42 Jinja and FastHTML cases).
+- **Journeys at the same time.** A browser check runs the default journey
+  first, then its other journeys together, each in its own browser
+  context. That took a browser check from about 20 seconds to about 13
+  under load, and with the two limits above, the twelve-framework run from
+  about 38 minutes to about 14, with the same cells. ReactPy runs its
+  journeys one after another, because its server fails when it renders
+  two pages at the same moment.
 
 The run times in the PR table above are for one case at a time with every
 browser check run. With cases side by side and the skipped browser checks, a
@@ -1249,7 +1260,7 @@ estimate from the 2026-10-20 per-case times and the Jinja and FastHTML
 measurement. Measured since: about 35 minutes for eleven frameworks, 37
 for twelve, and 38 for twelve once m50 was added. Before m50, Reflex's 62
 cases took about 2 minutes, with no frontend build per case and no
-`max_jobs` limit.
+limit on its development servers.
 
 ---
 

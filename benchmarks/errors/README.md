@@ -97,12 +97,23 @@ keep them somewhere else. Only the compact report in `results/` is
 committed: `report.html`, a self-contained page with the chart and the full
 table that opens straight from disk, plus `matrix.md` and `results.json`.
 
-`run` runs several cases at once, from several frameworks side by side.
-`--jobs N` sets how many (by default half the CPUs, at most 8). Each clean
-app runs alone first, before any case, so the page that every case of its
-framework is compared with is recorded on a quiet machine. A framework can lower its own limit with `max_jobs` in
-`framework.toml`: Nuxt runs one case at a time, because two `nuxt dev`
-servers starting together can pick the same port for their hot reload.
+`run` runs several cases at once, from several frameworks side by side,
+with a separate limit for each part of a case. `--static-jobs N` sets how
+many cases run their static stages at once (by default half the CPUs, at
+most 8), because each tool keeps several cores busy. `--jobs N` sets how
+many browser checks run at once (by default one per CPU, at most 10). Its
+default is the higher of the two, because on a machine with cores to
+spare a browser check spends most of its time waiting for the page. A
+case waits for a free slot before each part starts. The run keeps
+`--jobs` plus `--static-jobs` cases going, so every slot can be busy at
+once, though a slot can still sit empty while every case waits for the
+other kind. Each clean app runs alone first, before any case, so the page
+that every case of its framework is compared with is recorded on a quiet
+machine. A framework can limit how many of its development servers run at
+once with `max_servers` in `framework.toml`: Nuxt runs one at a time,
+because two `nuxt dev` servers starting together can pick the same port
+for their hot reload. Nuxt's static stages start no server, so several
+Nuxt cases run them side by side.
 `results.jsonl` lists the cases in catalogue order, whatever order they
 finish in.
 
@@ -124,23 +135,23 @@ earlier runs, and `--no-cache` runs everything again. Use it after changing
 something outside those inputs that could change a tool's output, such as a
 package installed by hand into `.benchmarks/errors/envs/`.
 
-On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
-`--jobs 1` and under a minute with the default of 5, with the same
-results. Rerunning them with nothing changed took 8 seconds: it repeated
-only the browser checks of the 4 cases whose journey stops on an error
-page, which are never stored. Every framework repeats such cases on each
-run. A full run of the twelve frameworks' 756 cases with nothing stored
-(`--no-cache`) took about 38 minutes on the same machine; most of it is
-the Nuxt cases, which run one at a time, and the Next.js builds. Before
-m51 to m63 were added, ReactPy's 49 cases, run on their own, took about 2
-minutes, and django-unicorn's about 3. Before m50 was added, Tetra's 62
-cases, run on their own, took about 4, and Reflex's 62 cases about 2,
-because its tools reported 37 of its 53 ported mistakes and only the other
-16 started its development server. Each journey loads the page again in
-every browser check, and the `search`, `about` and `project` journeys
-bring each framework to five (FastHTML to four). It is not part of routine
-CI. Run it at each Citry release, and when a framework's pinned versions
-change.
+On a 10-core machine with 24 GB of memory, a full run of the twelve
+frameworks' 756 cases with nothing stored (`--no-cache`) takes about 14
+minutes with the default limits (10 browser checks and 5 cases' static
+stages at once). The clean apps take the first 2.5 minutes, one at a time.
+In the cases, each of the 417 browser checks took about 13 seconds, and
+the processor was at least 95% busy in every sample taken while the cases
+ran (other work on the machine took part of it), so more cases at once
+would not make the run faster. Each journey loads the page again, and
+every framework has five journeys (FastHTML four). When those journeys ran
+one after another and five cases ran at once, a browser check took about
+20 seconds, the browser checks were about 85% of the run's work (8,500 of
+10,000 seconds, the rest the static stages), and the same full run took
+about 38 minutes, with the same cells. A rerun with nothing changed
+repeats only the browser checks whose journey stops on an error page,
+which are never stored: 4 cases in Jinja and FastHTML, and a few in every
+other framework. It is not part of routine CI. Run it at each Citry
+release, and when a framework's pinned versions change.
 
 ## Latest result
 
@@ -757,14 +768,27 @@ shows `Saved: 1` too.
 **Every other journey** starts from a fresh load of the page in a new
 browser context, with no cookies or storage left from an earlier journey,
 runs its own steps, and records the page once at its end. The server is not
-restarted between journeys, so it keeps what earlier journeys saved, such as
-the count. Reflex is the exception: it keeps state for each browser tab,
-and a new browser context is a new tab, so each of its journeys starts
-from `Saved: 0` and all three cards. Journeys run in the order `framework.toml` lists them, after the
-default one, so the clean app and the case start each journey from the same
-server state, apart from what the mistake itself changed. Every case runs
-every journey of its framework, so a mistake is compared on every part of
-the page any journey reaches. Every framework lists three more journeys:
+restarted between journeys, so FastHTML, Jinja, Next.js and Nuxt, which
+keep the count in server memory, show `Saved: 1` in every later journey.
+Django, Django Rusty Templates and django-components keep it in the
+browser's session, and Reflex in state for each browser tab, so a new
+browser context starts from `Saved: 0`, as every journey does in Citry,
+django-unicorn, Tetra and ReactPy. The default journey runs first and
+alone, because in every clean app its `Add` is the only step that saves
+anything on the server. Because it ends first, the clean app and the case
+start each other journey from the same server state, apart from what the
+mistake itself changed. The other journeys then run at the same time,
+each in its own browser context. That roughly halves a browser check's
+time, because most of a journey is waiting for the page to settle. Each
+journey's browser messages are kept apart and joined in the order
+`framework.toml` lists the journeys, so the record does not depend on
+which journey logged first. ReactPy 1.1.0 fails when it renders two pages
+at the same moment (its server logs `RuntimeError: Hook stack is in an
+invalid state`), so its `framework.toml` sets `journeys_at_once = false`,
+a `[runtime]` key that is true by default, and its journeys run one after
+another. Every case runs every journey of its framework, so a mistake is
+compared on every part of the page any journey reaches. Every framework
+lists three more journeys:
 `search` types `alpha` into the search field and presses Enter, and
 `about` and `project` click the `About` and `Project 1` links. Every
 framework except FastHTML, which has no status line, also lists a `status`
