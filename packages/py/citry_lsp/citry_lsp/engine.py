@@ -37,6 +37,7 @@ from citry._html_attribute_values import ENUMERATED_VALUES as ENUMERATED_ATTRIBU
 from citry._html_attribute_values import HTML_ELEMENTS as HTML_ELEMENT_NAMES
 from citry._i18n_directives import looks_like_i18n_binding
 from citry._i18n_guards import i18n_configured_guarded_calls
+from citry._markup_lint import MARKUP_LINT_RULES
 from citry._source_lines import source_lines
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
@@ -53,6 +54,8 @@ from citry.analysis import (
     BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
+    MarkupLintConsumer,
+    MarkupLintFinding,
     MisspelledDirectiveFinding,
     MisspelledDirectiveLintConsumer,
     ShadowPythonDocument,
@@ -98,6 +101,8 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_invalid_vue_expressions,
+    lint_markup,
     lint_misspelled_directives,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
@@ -158,10 +163,11 @@ from citry_lsp.type_analysis import is_project_source_file
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
-    from citry._linting import TemplateVariableInfo
+    from citry._linting import TemplateLintInfo, TemplateVariableInfo
     from citry._template_data_source import TemplateDataSourceShape
+    from citry.settings import LintSeverity
     from citry_lsp.catalog import CatalogIndex, ComponentRecord, FieldRecord, SchemaRecord
     from citry_lsp.project import (
         I18nOutputRecord,
@@ -688,7 +694,7 @@ def _html_attribute_lint_diagnostics(
     project: ProjectState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> tuple[types.Diagnostic, ...]:
-    """Report Alpine leftovers, invalid enumerated values, and misspelled directives with each owner's severities."""
+    """Report the template rules that need no component data, with each owner's severities."""
     analysis = project.analysis
     parser = analysis.parse_template if analysis is not None else parse_template
     diagnostics: list[types.Diagnostic] = []
@@ -699,6 +705,7 @@ def _html_attribute_lint_diagnostics(
         consumers: list[AlpineAttributeLintConsumer] = []
         value_consumers: list[AttributeValueLintConsumer] = []
         directive_consumers: list[MisspelledDirectiveLintConsumer] = []
+        markup_consumers: list[MarkupLintConsumer] = []
         if analysis is not None:
             for owner in _template_consumers(document, region, project, open_documents):
                 # An owner missing from the analysis still belongs to this
@@ -707,6 +714,11 @@ def _html_attribute_lint_diagnostics(
                 consumers.append(AlpineAttributeLintConsumer(lint.rule_alpine_attribute, lint.rule_alpine_cloak))
                 value_consumers.append(AttributeValueLintConsumer(lint.rule_invalid_attribute_value))
                 directive_consumers.append(MisspelledDirectiveLintConsumer(lint.rule_misspelled_directive))
+                # Vue passes a parent's attributes to the root element only
+                # of a component with browser code.
+                markup_consumers.append(
+                    _markup_lint_consumer(lint, root_may_receive_attributes=_may_have_browser_code(owner, project))
+                )
             if not consumers:
                 # No proven owner: the application policy still applies,
                 # which is closer to the author's intent than the defaults.
@@ -715,6 +727,7 @@ def _html_attribute_lint_diagnostics(
                 )
                 value_consumers.append(AttributeValueLintConsumer(analysis.lint.rule_invalid_attribute_value))
                 directive_consumers.append(MisspelledDirectiveLintConsumer(analysis.lint.rule_misspelled_directive))
+                markup_consumers.append(_markup_lint_consumer(analysis.lint, root_may_receive_attributes=True))
         else:
             # Before the application loads, the owners' own Lint classes,
             # read from the current text, are all that is known. With no
@@ -722,10 +735,20 @@ def _html_attribute_lint_diagnostics(
             consumers.extend(lint.alpine_consumer() for lint in region.owner_lint)
             value_consumers.extend(lint.attribute_value_consumer() for lint in region.owner_lint)
             directive_consumers.extend(lint.directive_consumer() for lint in region.owner_lint)
-        findings: list[AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding] = [
+            markup_consumers.extend(lint.markup_consumer() for lint in region.owner_lint)
+        findings: list[
+            AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding | MarkupLintFinding
+        ] = [
             *lint_alpine_attributes(parsed.template, consumers, parse_nested=parser),
             *lint_attribute_values(parsed.template, value_consumers, parse_nested=parser),
             *lint_misspelled_directives(parsed.template, directive_consumers, parse_nested=parser),
+            *lint_markup(parsed.template, markup_consumers, parse_nested=parser),
+            *lint_invalid_vue_expressions(
+                parsed.template,
+                browser_expressions(parsed.template, parse_nested=parser),
+                markup_consumers,
+                parse_nested=parser,
+            ),
         ]
         for finding in findings:
             try:
@@ -749,6 +772,35 @@ def _html_attribute_lint_diagnostics(
                 )
             )
     return tuple(diagnostics)
+
+
+def _may_have_browser_code(owner: ComponentRecord, project: ProjectState) -> bool:
+    """Return whether Vue may render a component, so a parent's attributes may reach its single root element."""
+    if owner.assets.js.kind != "none" or owner.schemas.js_data.kind != "absent":
+        return True
+    # Browser data, State, or event handlers may make Vue render the
+    # component even without JavaScript of its own, as `citry check` also
+    # assumes. Anything the analysis does not show counts as browser code.
+    source = project.source_analysis
+    if source is None:
+        return True
+    js_data = source.js_data_chain(owner)
+    state = source.state_fields(owner)
+    handlers = source.event_handlers(owner)
+    if js_data is None or state is None or handlers is None:
+        return True
+    # The chain ends at the class that defines the `js_data()` that runs;
+    # only Component's own default sends nothing.
+    overrides_js_data = not js_data or (js_data[-1].module, js_data[-1].qualname) != ("citry.component", "Component")
+    return overrides_js_data or bool(state) or bool(handlers)
+
+
+def _markup_lint_consumer(lint: TemplateLintInfo, *, root_may_receive_attributes: bool) -> MarkupLintConsumer:
+    """Copy one component's severities for the HTML rules from its lint record."""
+    return MarkupLintConsumer(
+        **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
+        root_may_receive_attributes=root_may_receive_attributes,
+    )
 
 
 def i18n_diagnostics(
@@ -1341,7 +1393,9 @@ def browser_diagnostics(
                     expressions, _consumer_js_sources(consumers, project, document, open_documents)
                 ),
                 *lint_undeclared_component_listeners(
-                    expressions, lambda tag: _tag_js_source(tag, project, document, open_documents)
+                    expressions,
+                    lambda tag: _tag_js_source(tag, project, document, open_documents),
+                    severities=_undeclared_component_event_severities(consumers, project),
                 ),
             )
         )
@@ -1510,6 +1564,20 @@ def _consumer_js_sources(
             return ()
         sources.append(resolved[0])
     return tuple(sources)
+
+
+def _undeclared_component_event_severities(
+    consumers: Sequence[ComponentRecord],
+    project: ProjectState,
+) -> list[LintSeverity]:
+    """Return each owner's ``rule_undeclared_component_event``, the application's for an owner the analysis lacks."""
+    analysis = project.analysis
+    if analysis is None:
+        return []
+    return [
+        analysis.component_lint.get(owner.definition_id, analysis.lint).rule_undeclared_component_event
+        for owner in consumers
+    ]
 
 
 def _tag_js_source(

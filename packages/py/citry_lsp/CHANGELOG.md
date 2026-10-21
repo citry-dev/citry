@@ -11,6 +11,16 @@ All notable changes to `citry-lsp` are documented here.
 - Before your application loads, the editor uses the severity a
   component's own `Lint` class sets as a plain string, such as
   `rule_misspelled_directive = "ignore"`.
+- The editor reports a misspelled attribute, tag, `aria-*` name, or DOM
+  event (`titel`, `<dvi>`, `aria-expandd`, `@clik`), a `<div>` or other
+  block inside a `<p>`, a repeated `id`, an `<img>` without alt text, a
+  Vue expression that is not valid JavaScript, and `v-model` on an
+  element that holds no value. Each follows its `rule_*` setting, and
+  each works before your application loads.
+- The editor reports a typo in a Vue directive, such as `v-iff`, a
+  boolean attribute with a value such as `disabled="false"`, and, once
+  your application loads, a lowercase listener on a component for an
+  event the child does not declare, such as `@hdie`.
 
 ### Changed
 

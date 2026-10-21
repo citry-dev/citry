@@ -200,9 +200,27 @@ class TestTemplateAnalysis:
 
         assert restored.rule_misspelled_directive == "error"
         assert restored.rule_unknown_template_variable == "warning"
-        # Only that one field may be missing, and no field may be unknown.
+        # Only the later fields may be missing, and no field may be unknown.
         with pytest.raises(ValueError, match="exact supported fields"):
             TemplateLintInfo.from_dict({**record, "rule_from_the_future": "error"})
+
+    def test_lint_record_carries_the_template_rules_and_fills_in_missing_ones(self):
+        record = TemplateLintInfo(
+            "warning",
+            (),
+            rule_missing_image_alt="error",
+            rule_undeclared_component_event="ignore",
+        ).to_dict()
+        restored = TemplateLintInfo.from_dict(record)
+        assert (restored.rule_missing_image_alt, restored.rule_undeclared_component_event) == ("error", "ignore")
+        # A record from an older citry has none of these rules.
+        for name in ("rule_missing_image_alt", "rule_undeclared_component_event", "rule_invalid_vue_expression"):
+            del record[name]
+        older = TemplateLintInfo.from_dict(record)
+        assert (older.rule_missing_image_alt, older.rule_undeclared_component_event) == ("warning", "warning")
+        assert older.rule_invalid_vue_expression == "error"
+        with pytest.raises(ValueError, match="rule_duplicate_id"):
+            TemplateLintInfo("warning", (), rule_duplicate_id="fatal")  # type: ignore[arg-type]
         del record["rule_alpine_cloak"]
         with pytest.raises(ValueError, match="exact supported fields"):
             TemplateLintInfo.from_dict(record)
@@ -633,6 +651,24 @@ class TestTemplateOwnerLint:
         assert chosen.directive_consumer().rule_misspelled_directive == "ignore"
         with pytest.raises(ValueError, match="rule_misspelled_directive"):
             ComponentSourceLint(rule_misspelled_directive="fatal")  # type: ignore[arg-type]
+
+    def test_reads_the_html_rules_and_builds_their_consumer(self):
+        source = (
+            "class Card(Component):\n" + _TEMPLATE + "    class Lint:\n"
+            "        rule_missing_image_alt = 'error'\n"
+            "        rule_invalid_vue_expression = 'ignore'\n"
+        )
+        (lint,) = _owner_lint(source)["Card"]
+        assert lint == ComponentSourceLint(rule_missing_image_alt="error", rule_invalid_vue_expression="ignore")
+        consumer = lint.markup_consumer()
+        assert (consumer.rule_missing_image_alt, consumer.rule_invalid_vue_expression) == ("error", "ignore")
+        # Unset rules keep their defaults, and the source cannot show whether
+        # the component has browser code, so a root image may get its alt.
+        assert consumer.rule_duplicate_id == "error"
+        assert consumer.rule_misspelled_event == "warning"
+        assert consumer.root_may_receive_attributes is True
+        with pytest.raises(ValueError, match="rule_invalid_nesting"):
+            ComponentSourceLint(rule_invalid_nesting="fatal")  # type: ignore[arg-type]
 
 
 def test_source_map_long_unicode_lines_keep_utf16_columns():

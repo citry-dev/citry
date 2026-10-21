@@ -128,8 +128,11 @@ editor and `citry check` also check event names:
 
 - Emitting a name that `emits` does not list is an error:
   [`citry.browser.undeclared-emit`](/ide/diagnostics/#citry.browser.undeclared-emit).
-- Listening on a child for a name the child does not declare is a warning:
+- Listening on a child for a name the child does not declare, such as
+  `@hdie`, is a warning by default:
   [`citry.browser.undeclared-component-event`](/ide/diagnostics/#citry.browser.undeclared-component-event).
+  A DOM event name such as `@click` passes. To change the severity, see
+  [Component event names](/ide/template-linting/#find-misspelled-component-events).
 
 A prop named `on<Event>`, such as `onPing` for `ping`, also declares the
 event, as in Vue.

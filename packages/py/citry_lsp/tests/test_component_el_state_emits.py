@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 
 # Lane is a child component with a typed `emits` object, rendered by Card.
 _APP = """from pathlib import Path
-from citry import Citry, Component
-engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+from citry import Citry, Component, LintSettings
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, lint=LintSettings({lint}))
 class Lane(Component):
     citry = engine
     template_file = 'lane.html'
@@ -45,10 +45,11 @@ def _project(
     javascript: str,
     *,
     extra: str = "",
+    lint: str = "",
     lane_template: str = "<section/>",
     lane_js: str = _LANE_JS,
 ):
-    (tmp_path / "app.py").write_text(_APP.format(extra=extra), encoding="utf-8")
+    (tmp_path / "app.py").write_text(_APP.format(extra=extra, lint=lint), encoding="utf-8")
     (tmp_path / "card.html").write_text(template, encoding="utf-8")
     (tmp_path / "card.js").write_text(javascript, encoding="utf-8")
     (tmp_path / "lane.html").write_text(lane_template, encoding="utf-8")
@@ -294,13 +295,35 @@ def test_child_listener_names_are_checked(tmp_path):
     # `@click` may be a native event, and `@dropTask` matches `drop-task`.
     assert [(item.message, item.severity) for item in found] == [
         (
-            "Component 'c-lane' does not declare event 'drop-tsak' in its emits option.",
+            "Component 'c-lane' does not declare event 'drop-tsak' in its emits option. Did you mean 'drop-task'?",
             types.DiagnosticSeverity.Warning,
         )
     ]
     assert found[0].range == types.Range(
         _position(_PARENT_TEMPLATE, "@drop-tsak"), _position(_PARENT_TEMPLATE, "@drop-tsak", len("@drop-tsak"))
     )
+
+
+def test_child_listener_lowercase_typos_follow_the_application_severity(tmp_path):
+    template = '<c-Lane @closd="move($event)" @emptied="move($event)" @input="move($event)"></c-Lane>'
+    project, _javascript, template_document, documents = _project(
+        tmp_path,
+        template,
+        _PARENT_JS,
+        lint="rule_undeclared_component_event='error'",
+    )
+    found = [
+        item
+        for item in browser_diagnostics(template_document, project, documents)
+        if item.code == "citry.browser.undeclared-component-event"
+    ]
+    # `@input` is a DOM event and `@emptied` is declared; `@closd` is a typo.
+    assert [(item.message, item.severity) for item in found] == [
+        (
+            "Component 'c-lane' does not declare event 'closd' in its emits option. Did you mean 'closed'?",
+            types.DiagnosticSeverity.Error,
+        )
+    ]
 
 
 @pytest.mark.parametrize(

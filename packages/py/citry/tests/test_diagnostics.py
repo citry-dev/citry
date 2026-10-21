@@ -36,6 +36,16 @@ _LINT_RULE_CODES = {
     "rule_alpine_cloak": "citry.template.alpine-cloak",
     "rule_invalid_attribute_value": "citry.template.invalid-attribute-value",
     "rule_misspelled_directive": "citry.template.misspelled-directive",
+    "rule_misspelled_attribute": "citry.template.misspelled-attribute",
+    "rule_misspelled_element": "citry.template.misspelled-element",
+    "rule_unknown_aria_attribute": "citry.template.unknown-aria-attribute",
+    "rule_invalid_nesting": "citry.template.invalid-nesting",
+    "rule_duplicate_id": "citry.template.duplicate-id",
+    "rule_missing_image_alt": "citry.template.missing-image-alt",
+    "rule_invalid_model_target": "citry.browser.invalid-model-target",
+    "rule_misspelled_event": "citry.vue.misspelled-event",
+    "rule_invalid_vue_expression": "citry.vue.invalid-expression",
+    "rule_undeclared_component_event": "citry.browser.undeclared-component-event",
     "rule_i18n_cross_language_fallback": "citry.i18n.cross-language-fallback",
 }
 

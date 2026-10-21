@@ -11,6 +11,23 @@
   class sets as a plain string, such as `rule_alpine_attribute = "ignore"`.
   Editor tools can read the same values from
   `PythonTemplateRegion.owner_lint`, a tuple of `ComponentSourceLint`.
+- `citry check` and the editor now report HTML mistakes that the browser
+  passes over without an error: a misspelled attribute, tag, or `aria-*`
+  name (`titel`, `<dvi>`, `aria-expandd`), a block such as `<div>` inside
+  a `<p>`, two elements with the same `id`, and an `<img>` without alt
+  text. The image check is a warning and the others are errors, so
+  `citry check` may now fail on an existing project; each rule has a
+  `rule_*` setting
+  ([details](https://citry.dev/ide/template-linting/)).
+- `citry check` and the editor now report Vue mistakes that would stop a
+  component from rendering: an expression that is not valid JavaScript,
+  such as `v-if="open &&"` (`rule_invalid_vue_expression`), and `v-model`
+  on an element that holds no value, such as `<form>`
+  (`rule_invalid_model_target`). A misspelled DOM event in a listener,
+  such as `@clik`, is a warning (`rule_misspelled_event`).
+- The misspelled-directive check now also reports a typo in a Vue
+  directive, such as `v-iff` or `v-elif`, which otherwise stops the page
+  with an error in the browser.
 
 ### Changed
 
@@ -42,6 +59,15 @@
   attribute value the browser does not accept, such as
   `<button type="sumbit">`. Set `rule_invalid_attribute_value="warning"` in
   `LintSettings` to keep the previous behavior.
+- `citry check` now fails on a boolean attribute with a value such as
+  `disabled="false"`, which still disables the element. Leave the
+  attribute out to turn it off, or let Vue set it from a JavaScript
+  boolean, as in `:disabled="saving"`.
+- A listener on a component tag with a lowercase name the child does not
+  declare, such as `@hdie`, is now reported too, with the declared event
+  it probably means (`hide`). DOM event names such as `@click` still
+  pass. Set `rule_undeclared_component_event` to change the severity,
+  which is a warning by default.
 
 ### Fixes
 

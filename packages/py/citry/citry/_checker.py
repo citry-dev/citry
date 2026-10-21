@@ -46,6 +46,7 @@ from citry._diagnostics import render_diagnostic
 from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._inline_assets import normalize_inline_asset
 from citry._linting import _component_lint_info
+from citry._markup_lint import MARKUP_LINT_RULES
 from citry._template_data_source import TemplateDataSourceShape, analyze_template_data_source
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
@@ -60,6 +61,8 @@ from citry.analysis import (
     BrowserProp,
     ComponentJsLintConsumer,
     JsonWireType,
+    MarkupLintConsumer,
+    MarkupLintFinding,
     MisspelledDirectiveFinding,
     MisspelledDirectiveLintConsumer,
     TemplateLintConsumer,
@@ -84,6 +87,8 @@ from citry.analysis import (
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_invalid_vue_expressions,
+    lint_markup,
     lint_misspelled_directives,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
@@ -97,6 +102,7 @@ from citry.analysis import (
 )
 from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
+from citry.component import Component
 from citry.component_registry import NotRegistered
 from citry.ext.events.extension import _component_events_info
 from citry.settings import LintSettings
@@ -117,7 +123,6 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
     from citry.citry import Citry
-    from citry.component import Component
     from citry.ext.i18n.extension import I18nExtension
     from citry.settings import LintSeverity
     from citry_core.template_parser import TagRules, Template
@@ -408,6 +413,9 @@ def _check_registry(
                 MisspelledDirectiveLintConsumer(_component_lint_info(engine, component).rule_misspelled_directive)
                 for component in source.consumers
             )
+            markup_lint_consumers = tuple(
+                _checker_markup_lint_consumer(engine, component) for component in source.consumers
+            )
             foreign_options = _checker_foreign_options(
                 engine,
                 source,
@@ -446,6 +454,7 @@ def _check_registry(
                 alpine_lint_consumers=alpine_lint_consumers,
                 attribute_value_lint_consumers=attribute_value_lint_consumers,
                 directive_lint_consumers=directive_lint_consumers,
+                markup_lint_consumers=markup_lint_consumers,
                 i18n_manifest=i18n_manifest,
                 i18n_profiles=i18n_profiles,
                 i18n_configured=i18n_configured,
@@ -550,6 +559,7 @@ def _check_static(cwd: Path) -> list[CheckFinding]:
                         lint.attribute_value_consumer() for lint in region.owner_lint
                     ),
                     directive_lint_consumers=tuple(lint.directive_consumer() for lint in region.owner_lint),
+                    markup_lint_consumers=tuple(lint.markup_consumer() for lint in region.owner_lint),
                 ),
             )
     return findings
@@ -566,6 +576,7 @@ def _check_template(
     alpine_lint_consumers: tuple[AlpineAttributeLintConsumer, ...] = (),
     attribute_value_lint_consumers: tuple[AttributeValueLintConsumer, ...] = (),
     directive_lint_consumers: tuple[MisspelledDirectiveLintConsumer, ...] = (),
+    markup_lint_consumers: tuple[MarkupLintConsumer, ...] = (),
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None,
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None,
     i18n_configured: bool = False,
@@ -656,15 +667,20 @@ def _check_template(
             )
             for finding in lint_unknown_template_variables(template, lint_consumers)
         )
-    # The Alpine, attribute-value, and misspelled-directive rules need no
-    # component namespace, so static mode runs them too, with the
+    # The Alpine, attribute-value, misspelled-directive, and HTML rules
+    # need no component namespace, so static mode runs them too, with the
     # severities each owner's Lint class sets in its source. A rule no owner
     # sets uses its default, except that an invalid attribute value is then
     # a warning (see lint_attribute_values).
-    attribute_findings: list[AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding] = [
+    browser_hosts = browser_expressions(template, parse_nested=nested_parser)
+    attribute_findings: list[
+        AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding | MarkupLintFinding
+    ] = [
         *lint_alpine_attributes(template, alpine_lint_consumers, parse_nested=nested_parser),
         *lint_attribute_values(template, attribute_value_lint_consumers, parse_nested=nested_parser),
         *lint_misspelled_directives(template, directive_lint_consumers, parse_nested=nested_parser),
+        *lint_markup(template, markup_lint_consumers, parse_nested=nested_parser),
+        *lint_invalid_vue_expressions(template, browser_hosts, markup_lint_consumers, parse_nested=nested_parser),
     ]
     for attribute_finding in attribute_findings:
         line, column = _byte_offset_coordinates(source.content, attribute_finding.start_index)
@@ -683,7 +699,6 @@ def _check_template(
                 end_column=end_column,
             )
         )
-    browser_hosts = browser_expressions(template, parse_nested=nested_parser)
     if engine is not None and component_props is not None:
         sites = browser_component_prop_sites(template, parse_nested=nested_parser)
 
@@ -1734,9 +1749,51 @@ def _emit_findings(
                 browser_hosts,
                 () if None in owner_sources else [text for text in owner_sources if text is not None],
             ),
-            *lint_undeclared_component_listeners(browser_hosts, child_source),
+            *lint_undeclared_component_listeners(
+                browser_hosts,
+                child_source,
+                severities=[
+                    _component_lint_info(engine, component).rule_undeclared_component_event
+                    for component in source.consumers
+                ],
+            ),
         )
     ]
+
+
+def _checker_markup_lint_consumer(engine: Citry, component: type[Component]) -> MarkupLintConsumer:
+    """Build one component's severities for the HTML rules, and whether a parent's attributes reach its root."""
+    lint = _component_lint_info(engine, component)
+    return MarkupLintConsumer(
+        **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
+        root_may_receive_attributes=_may_have_browser_code(component),
+    )
+
+
+def _may_have_browser_code(component: type[Component]) -> bool:
+    """
+    Return whether a component may run Vue code, so Vue passes a parent's attributes to its single root element.
+
+    A component without browser code renders on the server only, where a
+    parent's attributes are inputs and never reach the root element.
+    """
+    # Browser data, State, or event handlers may make Vue render the
+    # component even without JavaScript of its own, so any of them counts.
+    # Every component class gets an `Events` class, so its handlers decide.
+    events = _component_events_info(component)
+    if (
+        component.JsData is not None
+        or component.js_data is not Component.js_data
+        or (events is not None and (events.handlers or events.state_cls is not None))
+    ):
+        return True
+    # A declared `js` or `js_file` is browser code; reading the source is
+    # not needed to know that.
+    try:
+        _owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
+    except (Exception, SystemExit):  # noqa: BLE001 - an unreadable declaration may still be browser code
+        return True
+    return inline is not None or filepath is not None
 
 
 def _disk_component_js_source(engine: Citry, component: type[Component]) -> str | None:

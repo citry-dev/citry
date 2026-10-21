@@ -1307,6 +1307,45 @@ def test_attribute_value_lint_says_a_header_pragma_belongs_in_a_response_header(
     assert "send it in the HTTP response instead." in findings[2].message
 
 
+def test_attribute_value_lint_reports_a_boolean_attribute_with_any_other_value():
+    source = (
+        '<button type="submit" disabled="false">Search</button><input required="true">'
+        '<option SELECTED="0"></option><video :muted="\'no\'"></video><details open="off"></details>'
+    )
+    assert _attribute_values(source) == [
+        ("disabled", "warning", "false"),
+        ("required", "warning", "true"),
+        ("SELECTED", "warning", "0"),
+        ("muted", "warning", "'no'"),
+        ("open", "warning", "off"),
+    ]
+    (finding,) = lint_attribute_values(parse_template('<button disabled="false">Search</button>'), ())
+    assert finding.message == (
+        "'disabled' on <button> is on whenever it is present, so 'false' still turns it on. "
+        "Write it with no value to turn it on, and leave it out to turn it off."
+    )
+
+
+def test_attribute_value_lint_tells_a_bound_boolean_string_to_bind_a_boolean():
+    (finding,) = lint_attribute_values(parse_template("<button :disabled=\"'false'\">Save</button>"), ())
+    assert finding.message == (
+        "'disabled' on <button> is on whenever it is present, so the string 'false' still turns it on. "
+        'Bind a JavaScript boolean instead, such as :disabled="false".'
+    )
+
+
+def test_attribute_value_lint_accepts_a_boolean_attributes_own_name_and_enumerated_false():
+    source = (
+        '<button disabled></button><button disabled=""></button><button disabled="disabled"></button>'
+        '<input READONLY="ReadOnly"><button :disabled="false"></button><button :disabled="busy"></button>'
+        # These take "true" and "false" as keywords; they are not boolean.
+        '<div draggable="false" spellcheck="false" contenteditable="false"></div>'
+        # A name that is boolean on another element only.
+        '<div disabled="false"></div>'
+    )
+    assert _attribute_values(source) == []
+
+
 def test_attribute_value_lint_maps_nested_template_offsets_into_the_outer_source():
     source = "<c-card c-header=\"<><i dir='up'></i></>\" /><p>ok</p>"
     assert _attribute_values(source) == [("dir", "warning", "up")]
@@ -1433,6 +1472,54 @@ def test_misspelled_directive_lint_reports_only_typos_on_custom_elements():
     ]
 
 
+def test_misspelled_directive_lint_reports_near_misses_of_vue_directives():
+    source = (
+        '<p v-iff="a"></p><p v-IFF="a"></p><p v-shwo="a"></p><p v-elseif="a"></p><p v-elif="a"></p>'
+        '<p v-esle></p><p v-modle="a"></p><p v-bnid:title="a"></p><p v-htm="a"></p>'
+        # Vue reads directives on component tags and custom elements too.
+        '<c-Card v-iff="a" /><my-el v-fro="x in y"></my-el>'
+    )
+    assert _directives(source) == [
+        ("v-iff", "v-if", "error"),
+        ("v-IFF", "v-if", "error"),
+        ("v-shwo", "v-show", "error"),
+        ("v-elseif", "v-else-if", "error"),
+        ("v-elif", "v-else-if", "error"),
+        ("v-esle", "v-else", "error"),
+        ("v-modle", "v-model", "error"),
+        ("v-bnid:title", "v-bind", "error"),
+        ("v-htm", "v-html", "error"),
+        ("v-iff", "v-if", "error"),
+        ("v-fro", "v-for", "error"),
+    ]
+    (finding,) = lint_misspelled_directives(parse_template('<p v-iff="open">Details are visible</p>'), ())
+    assert finding.message == (
+        "'v-iff' is not a Vue directive, so Vue looks for a custom directive of that name "
+        "and the page fails in the browser. "
+        "Did you mean 'v-if'?"
+    )
+
+
+def test_misspelled_directive_lint_skips_v_pre_and_unsupported_suggestions():
+    # Vue leaves v-pre content as written, and Citry rejects v-once and
+    # v-memo, so a typo of either gets no suggestion.
+    source = '<div v-pre v-iff="a"><p v-shwo="b"></p></div><p v-oncee></p><p v-mmeo="m"></p>'
+    assert _directives(source) == []
+    assert _directives('<div v-pre></div><p v-iff="a"></p>') == [("v-iff", "v-if", "error")]
+
+
+def test_misspelled_directive_lint_accepts_vue_directives_and_custom_directives():
+    source = (
+        '<p v-if="a" v-show="b" v-on:click.stop="c" v-bind:title="d" v-html="e"></p>'
+        '<input v-model.lazy="f"><p v-else></p><p v-cloak></p>'
+        # Custom directives, including words one letter short of a directive.
+        '<input v-autofocus><p v-tooltip="t"></p><p v-tex="m"></p><p v-mode="m"></p><p v-one="o"></p>'
+        # SVG is skipped like the c-* names.
+        '<svg><g v-iff="a"></g></svg>'
+    )
+    assert _directives(source) == []
+
+
 def test_misspelled_directive_lint_maps_nested_template_offsets_into_the_outer_source():
     source = "<c-card c-header=\"<><i c-iff='x'></i></>\" /><p>ok</p>"
     assert _directives(source) == [("c-iff", "c-if", "error")]
@@ -1469,6 +1556,10 @@ def test_attribute_value_lint_consumer_rejects_an_unknown_severity():
         ("@vue:mounted", "['drop-task']", False),
         # A plain lowercase name may be a native DOM event on the child's root.
         ("@select", "['drop-task']", False),
+        ("@focusin", "['drop-task']", False),
+        # Any other plain lowercase name is reported.
+        ("@hdie", "['hide']", True),
+        ("@closed", "['drop-task']", True),
         # A child without readable `emits` accepts any listener.
         ("@drop-tsak", "names", False),
     ],
@@ -1478,6 +1569,39 @@ def test_component_listener_names_follow_vue_matching(listener, declared, report
     source = f"$component({{ emits: {declared} }});"
     findings = lint_undeclared_component_listeners(browser_expressions(template), lambda _tag: source)
     assert bool(findings) is reported
+
+
+def test_component_listener_findings_suggest_the_declared_event_and_follow_severities():
+    template = parse_template('<c-card @hdie="hideCard" @drop-tsak="go" @dropTsak="go" @gone="x"></c-card>')
+    source = "$component({ emits: ['hide', 'dropTask'] });"
+    expressions = browser_expressions(template)
+
+    findings = lint_undeclared_component_listeners(expressions, lambda _tag: source)
+
+    # A listener one typing slip from a declared event names it, written
+    # the way the listener writes names.
+    assert [(finding.name, finding.severity, finding.message) for finding in findings] == [
+        (
+            "hdie",
+            "warning",
+            "Component 'c-card' does not declare event 'hdie' in its emits option. Did you mean 'hide'?",
+        ),
+        (
+            "drop-tsak",
+            "warning",
+            "Component 'c-card' does not declare event 'drop-tsak' in its emits option. Did you mean 'drop-task'?",
+        ),
+        (
+            "dropTsak",
+            "warning",
+            "Component 'c-card' does not declare event 'dropTsak' in its emits option. Did you mean 'dropTask'?",
+        ),
+        ("gone", "warning", "Component 'c-card' does not declare event 'gone' in its emits option."),
+    ]
+    # Every owner must ignore the rule to silence it, and "error" wins.
+    assert lint_undeclared_component_listeners(expressions, lambda _tag: source, severities=["ignore"]) == ()
+    raised = lint_undeclared_component_listeners(expressions, lambda _tag: source, severities=["ignore", "error"])
+    assert {finding.severity for finding in raised} == {"error"}
 
 
 def test_emit_checks_accept_on_props_and_shared_templates_need_every_owner():
