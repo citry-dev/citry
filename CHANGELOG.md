@@ -83,6 +83,13 @@
   accept `app_components`, the classes a loaded application registers in
   the file, so a tool can find the templates of components whose base
   class comes from another module.
+- `citry check --types` now reports a parent method used as a child
+  component's event listener, such as `@hide="hideCard"`, when it cannot
+  accept the values the child's typed `emits` declares, for example a
+  method that needs a second value the child never sends. The
+  [props and events guide](https://citry.dev/vue/props-and-events/) shows
+  how to type an event's values so both the child's `$emit` and the
+  parent's method are checked.
 
 ### Changed
 

@@ -115,8 +115,10 @@ The editor uses these types in the parent too. In
 `<c-Lane @drop-task="move($event)" />`, `$event` has the payload's type.
 So does the parameter of an inline function such as
 `@drop-task="(payload) => move(payload)"`, and `$event` in an
-`@c-drop-task` binding on that tag. Inside `this.$emit("")`, completion
-offers the declared names.
+`@c-drop-task` binding on that tag. A listener that names a method
+without calling it, as in `@drop-task="move"`, is checked against the
+payload; see [Catch payload mistakes](#catch-payload-mistakes). Inside
+`this.$emit("")`, completion offers the declared names.
 
 The function only types the payload. The Vue build Citry loads does not
 call it while the page runs, so return `true` and do not rely on it to
@@ -139,6 +141,87 @@ event, as in Vue.
 
 See [Emitted event names](/ide/vscode/#emitted-event-names) for the
 details.
+
+### Catch payload mistakes { #catch-payload-mistakes }
+
+When a child sends the wrong value, or the parent's method expects a value
+the child never sends, nothing fails right away. The method gets a number
+where it expected a title, or `undefined` for the missing value, and the
+page shows the wrong text. Declare the payload's type in `emits`, and the
+editor and `citry check --types` report both mistakes before the page
+runs.
+
+Here the child declares that `hide` sends a title. Sending its count is
+reported on `this.count`:
+
+```js
+$component({
+  emits: {
+    hide: (/** @type {string} */ title) => true,
+  },
+  data() {
+    return { title: "Inbox", count: 3 };
+  },
+  methods: {
+    close() {
+      // Reported: the count is a number, not a title.
+      this.$emit("hide", this.count);
+    },
+  },
+});
+```
+
+In the parent, a listener that names a method, such as
+`@hide="hideCard"`, is checked against the same payload. Vue calls the
+method with the values the child emits, so a method that needs a second
+value is reported on its name:
+
+```js
+$component({
+  methods: {
+    hideCard(
+      /** @type {string} */ title,
+      /** @type {string} */ reason,
+    ) {
+      console.info(`Hid ${title}: ${reason}`);
+    },
+  },
+});
+```
+
+```citry-html
+{# Reported: the card sends a title but no reason #}
+<c-Card @hide="hideCard" />
+```
+
+To fix it, give `reason` a default value, such as `reason = "closed"`, or
+have the child send both values and add a `reason` parameter to the
+`hide` function in its `emits`.
+
+The check follows these rules:
+
+- A method that takes fewer values than the child sends passes, because
+  JavaScript ignores extra arguments.
+- The child may leave out a value whose parameter has a default, or is
+  marked optional in a `@param {string} [reason]` comment above the
+  method.
+- A method whose parameters have no type comment takes any values, so it
+  is not checked. Once one parameter has a type, every parameter without
+  a default counts as required.
+- With the array form, such as `emits: ["hide"]`, or a `null` function,
+  the payload can be anything, so nothing is checked.
+- A parameter whose type is narrower than the payload, such as
+  `"a" | "b"` where the child sends any string, is not reported.
+- Only a name from the parent's `methods` is checked. A function stored
+  in `data()`, or a member such as `store.hide`, is not.
+- A listener that calls the method, such as `@hide="hideCard($event)"`,
+  or an inline function, is checked like any other call: `$event` has the
+  payload's type, and TypeScript reports a missing argument.
+
+The editor shows these as
+[TypeScript errors](/ide/vscode/#typescript-errors-in-component-javascript-and-templates).
+To run the same check in a terminal or CI, use
+[`citry check --types`](/advanced/cli/#check-types-with-typescript-and-ty).
 
 ## Vue on component tags { #use-vue-directives-on-a-component-tag }
 

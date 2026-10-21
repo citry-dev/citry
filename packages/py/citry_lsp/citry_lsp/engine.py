@@ -2131,7 +2131,9 @@ def browser_projection(
             # The generated helper is not a template name, so never offer it.
             owned_names = (*owned_names, _TEMPLATE_COMPONENT_SOURCE)
         if listener:
-            owned_names = (*owned_names, _CHILD_COMPONENT_EMITS)
+            # Hide the generated listener helpers; the second is declared only
+            # when the listener's value names a parent method.
+            owned_names = (*owned_names, _CHILD_COMPONENT_EMITS, _CHILD_LISTENER_HELPER)
         if _native_bound_attribute(expression) is not None:
             owned_names = (*owned_names, _BIND_ATTRIBUTE_HELPER)
         owns_position = _browser_projection_owns_position(
@@ -2374,6 +2376,16 @@ def _template_expression_block(
         # parameters take the child's payload types.
         prefix = f"{opening}\nvoid (/** @type {{(...args: {listener.arguments}) => unknown}} */ (\n"
         suffix = "\n));\n"
+    elif listener is not None and _listener_method(scope, expression) is not None:
+        # Vue calls a bare method name with the emitted values too. A cast
+        # would accept any related function, so passing the method to a
+        # function typed from the payload makes TypeScript compare its
+        # parameters, and the finding lands on the method name.
+        prefix = (
+            f"{opening}\n/** @type {{(handler: (...payload: {listener.arguments}) => unknown) => void}} */ "
+            f"var {_CHILD_LISTENER_HELPER};\n{_CHILD_LISTENER_HELPER}((\n"
+        )
+        suffix = "\n));\n"
     elif expression.mode == "statement":
         prefix = f"{opening}\n(function () {{\n"
         suffix = "\n})();\n"
@@ -2415,6 +2427,36 @@ _VUE_TYPES_PATH = (Path(__file__).parent / "types" / "node_modules" / "vue").res
 _BIND_ATTRIBUTE_HELPER = "__citryBindAttribute"
 # The generated helper that types one child component's prop value.
 _CHILD_PROP_HELPER = "__citryChildProp"
+# The generated helper that checks a parent method named as a child's event listener.
+_CHILD_LISTENER_HELPER = "__citryChildListener"
+
+
+def _listener_method(scope: _TemplateScope, expression: BrowserExpression) -> str | None:
+    """
+    Return the parent method a child component listener names, or `None`.
+
+    Vue calls a listener written as a bare name, such as `@hide="hideCard"`,
+    with every value the child emits. Only a name the parent's `methods`
+    declares is returned, because a `data()` value that starts as `null` and
+    later holds a function would look like a wrong handler. A name hidden by
+    a `v-for` or slot alias or by a `js_data()` key, a member such as
+    `foo.bar`, a call, and any other expression give `None`, so they are
+    typed as any other listener statement is.
+    """
+    # Without the parent's instance there are no `methods` to look in, and
+    # `@c-name` values are Citry's server event arguments, not Vue handlers.
+    if scope.instance is None or expression.host != "vue":
+        return None
+    name = expression.source.strip()
+    if not _is_js_variable_name(name) or name in expression.bindings:
+        return None
+    if any(root.name == name for root in scope.roots):
+        return None
+    if not any(
+        item.exposed_name == name and item.origin == "methods" for item in scope.instance.analysis.public_names
+    ):
+        return None
+    return name
 
 
 def _child_prop_type(expression: BrowserExpression, prop_types: Mapping[int, str] | None) -> str | None:

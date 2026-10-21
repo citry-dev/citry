@@ -17,6 +17,7 @@ from lsprotocol import types
 from pygls.exceptions import JsonRpcInvalidParams
 from pytest_lsp import ClientServerConfig, LanguageClient
 
+import citry
 from citry._checker import CheckFinding, CheckReport
 from citry.commands.check import _with_type_findings
 from citry_lsp import project as project_module
@@ -342,6 +343,132 @@ class Board(Component):
       });
     """
 '''
+
+
+_LISTENER_APP = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Card(Component):
+    citry = engine
+    template_file = 'card.html'
+    js_file = 'card.js'
+    def js_data(self, kwargs, slots):
+        return {'title': 'Inbox', 'count': 3}
+class Tag(Component):
+    citry = engine
+    template = '<span></span>'
+    js = "$component({ emits: ['hide'] });"
+class Board(Component):
+    citry = engine
+    template_file = 'board.html'
+    js_file = 'board.js'
+    def js_data(self, kwargs, slots):
+        return {'hideKey': 1, 'labels': ['Inbox']}
+"""
+# The card declares typed payloads; its button sends the count where the
+# `hide` validator expects the title.
+_LISTENER_CARD_JS = """$component({
+  emits: {
+    hide: (/** @type {string} */ title) => true,
+    closeCard: (/** @type {string} */ title) => true,
+  },
+});
+"""
+_LISTENER_CARD_HTML = """<button @click="$emit('hide', count)">Hide</button>"""
+_LISTENER_BOARD_JS = """$component({
+  methods: {
+    /**
+     * @param {string} title
+     * @param {string} reason
+     */
+    hideCard(title, reason) {},
+    hideCount(/** @type {number} */ count) {},
+    hideTitle(/** @type {string} */ title) {},
+    hideAll() {},
+    hideWithDefault(/** @type {string} */ title, reason = 'none') {},
+    /**
+     * @param {string} title
+     * @param {string} [reason]
+     */
+    hideOptional(title, reason) {},
+    hideUntyped(title, reason) {},
+    hideKey(/** @type {number} */ count) {},
+  },
+});
+"""
+# One listener per line, so each finding names its line. The first four
+# lines hold mistakes; the rest must stay quiet.
+_LISTENER_BOARD_HTML = (
+    '<c-Card @hide="hideCard" />\n'
+    '<c-Card @hide.once="hideCount" />\n'
+    '<c-Card @close-card="hideCard" />\n'
+    '<c-Card @click="hideCard" />\n'
+    '<c-Card @hide="hideTitle" />\n'
+    '<c-Card @hide="hideAll" />\n'
+    '<c-Card @hide="hideWithDefault" />\n'
+    '<c-Card @hide="hideOptional" />\n'
+    '<c-Card @hide="hideUntyped" />\n'
+    '<c-Tag @hide="hideCard" />\n'
+    '<c-Card @hide="hideMissing" />\n'
+    '<div v-for="hideCard in labels"><c-Card @hide="hideCard" /></div>\n'
+    '<c-Card @hide="hideKey" />\n'
+    '<c-Card @c-hide="hideCard" />\n'
+    '<button @click="hideCard">Hide</button>'
+)
+
+
+def test_a_method_named_as_a_child_listener_is_checked_against_the_payload(tmp_path):
+    project, documents = _documents(
+        tmp_path,
+        {
+            "card.js": ("javascript", _LISTENER_CARD_JS),
+            "card.html": ("citry-html", _LISTENER_CARD_HTML),
+            "board.js": ("javascript", _LISTENER_BOARD_JS),
+            "board.html": ("citry-html", _LISTENER_BOARD_HTML),
+        },
+        app=_LISTENER_APP,
+    )
+
+    # The child's own `$emit` checks the payload against its validator. With
+    # two declared events `$emit` has one overload per event.
+    assert [(code, text) for code, text, _range in _findings(tmp_path, "card.html", project, documents)] == [
+        ("citry.typescript.ts2769", "count"),
+    ]
+    # Vue calls a bare method name with the emitted values, so a method that
+    # needs a second value, or a value of another type, is reported on its
+    # name, after any modifier and in either spelling of the event name. An
+    # event the child does not declare reaches its root element, so the
+    # method gets a DOM event. A method that ignores values or makes them
+    # optional, an untyped method, the array form of `emits`, a name the
+    # parent does not declare, a `v-for` alias or `js_data()` key that hides
+    # a method, Citry's `@c-` server event arguments, and a DOM listener
+    # stay quiet.
+    assert [(code, text, found[0]) for code, text, found in _findings(tmp_path, "board.html", project, documents)] == [
+        ("citry.typescript.ts2345", "hideCard", 0),
+        ("citry.typescript.ts2345", "hideCount", 1),
+        ("citry.typescript.ts2345", "hideCard", 2),
+        ("citry.typescript.ts2345", "hideCard", 3),
+    ]
+
+
+def test_child_listener_helper_is_never_offered_as_a_completion(tmp_path):
+    project, documents = _documents(
+        tmp_path,
+        {
+            "card.js": ("javascript", _LISTENER_CARD_JS),
+            "card.html": ("citry-html", _LISTENER_CARD_HTML),
+            "board.js": ("javascript", _LISTENER_BOARD_JS),
+            "board.html": ("citry-html", _LISTENER_BOARD_HTML),
+        },
+        app=_LISTENER_APP,
+    )
+    document = documents[(tmp_path / "board.html").as_uri()]
+
+    projection = browser_projection(document, types.Position(0, len('<c-Card @hide="hide')), project, documents)
+
+    assert projection is not None
+    assert "__citryChildListener((\nhideCard\n));" in projection.source
+    assert "__citryChildListener" in projection.owned_root_names
 
 
 def test_inline_python_assets_map_through_indentation_without_false_positives(tmp_path):
@@ -810,6 +937,53 @@ def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_path(t
             7,
             "JsData field 'apiBase' is not a clean JSON value: PurePosixPath values are not serialized by Citry's"
             " JSON wire format. Browser tooling will treat its type as unknown.",
+        ),
+    ]
+
+
+# Case m42-secret-sent-to-browser in benchmarks/errors/cases, once the
+# project wraps its token in a Secret: js_data() sends a constant from
+# another module, so only ty can tell it is a Secret.
+_M42_SETTINGS = """from citry import Secret
+SECRET_TOKEN = Secret("s3cr3t")
+"""
+_M42_APP = """from citry import Citry, Component
+from settings import SECRET_TOKEN
+engine = Citry(autodiscover=False)
+class BoardPage(Component):
+    citry = engine
+    template = "<p></p>"
+    def js_data(self, kwargs, slots):
+        return {"apiBase": "/api", "hiddenTitles": [], "secretToken": SECRET_TOKEN}
+"""
+
+
+def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_secret(tmp_path, monkeypatch):
+    # An editable install of citry is found through an import hook that ty
+    # does not run, so ty is told where the package source is, as an
+    # ordinary installed citry would be found.
+    citry_source = Path(citry.__file__).resolve().parents[1]
+    ty_config = f"[environment]\nextra-paths = [{json.dumps(str(citry_source))}]\n"
+    (tmp_path / "ty.toml").write_text(ty_config, encoding="utf-8")
+    (tmp_path / "settings.py").write_text(_M42_SETTINGS, encoding="utf-8")
+    (tmp_path / "app.py").write_text(_M42_APP, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+
+    found = check_project_python_types(project, tmp_path)
+
+    # Only the Secret is reported; the plain values next to it are JSON.
+    assert [
+        (item.path.name, item.diagnostic.code, item.diagnostic.range.start.line, item.diagnostic.message)
+        for item in found
+    ] == [
+        (
+            "app.py",
+            "citry.js-data.unsupported-type",
+            7,
+            "JsData field 'secretToken' is not a clean JSON value: Secret values are never sent to the browser;"
+            " read the value on the server instead. Browser tooling will treat its type as unknown.",
         ),
     ]
 
@@ -1401,6 +1575,9 @@ def test_ty_type_displays_become_json_types(display, expected):
     assert (value.javascript if value is not None else None) == expected
 
 
+_SECRET_REASON = "Secret values are never sent to the browser; read the value on the server instead"  # noqa: S105
+
+
 @pytest.mark.parametrize(
     ("display", "reasons"),
     [
@@ -1410,6 +1587,9 @@ def test_ty_type_displays_become_json_types(display, expected):
         ("set[int]", ("sets are not JSON-serializable",)),
         ("frozenset[str]", ("sets are not JSON-serializable",)),
         ("complex", ("complex values are not JSON-serializable",)),
+        # Citry never sends its own Secret marker, whatever it holds.
+        ("Secret[str]", (_SECRET_REASON,)),
+        ("Secret[bytes] | None", (_SECRET_REASON,)),
         # Any other class may be a TypedDict, which is sent as an object.
         ("Task", None),
         ("Unknown | PurePosixPath", None),

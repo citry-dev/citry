@@ -500,6 +500,15 @@ The parameters of an inline function, such as
 `@drop-task="(payload) => move(payload)"`, get the same type, and so does
 `$event` in an `@c-drop-task` binding on that tag.
 
+A listener that names a parent method without calling it, such as
+`@drop-task="move"`, is checked too, because Vue calls the method with the
+emitted values. TypeScript reports a method that needs more values than the
+child sends, or a parameter of an unrelated type, such as a number where
+the child sends a string. A method with no typed parameters, a `null`
+validator, and a child whose `emits` is an array are not checked. See
+[Catch payload mistakes](/vue/props-and-events/#catch-payload-mistakes)
+for the full rules.
+
 On an HTML element, `$event` is the DOM event, such as `KeyboardEvent` for
 `@keydown`. A name the DOM does not define, such as `@board:notice`, is a
 `CustomEvent`, so `$event.detail` works.
@@ -585,6 +594,7 @@ TypeScript's own.
 | A syntax error in JavaScript inside a Python string | `const = 1` | 1000 to 1999 |
 | A bound HTML attribute value of the wrong type | `:style="1"` | 2345 |
 | A child component prop value of the wrong type | `:open="String(shown)"` for a Boolean prop | 2345 |
+| A parent method that does not accept a child event's values | `@drop-task="move"` where `move` needs two values | 2345 |
 
 A bound attribute on an HTML element is checked against Vue's types for that
 attribute, so `:style="1"` is an error while `:style="{ color: 'red' }"`
@@ -840,8 +850,9 @@ are not checked.
 
 A listener for an event the child does not declare gets the DOM event of
 that name as `$event`, because Vue then passes the listener to the child's
-root element. When the child lists its events as an array, or Citry cannot
-read its `emits`, `$event` is `any`.
+root element. A listener that names a method without calling it, such as
+`@click="select"`, is checked against that DOM event too. When the child lists its events as an
+array, or Citry cannot read its `emits`, `$event` is `any`.
 
 ### Typing inside `data()`
 
