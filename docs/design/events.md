@@ -3692,9 +3692,9 @@ Citry `@c-*` has one additional ownership rule: its server-handler name is
 validated, dispatched, and queued through the exact source parent Events
 anchor, never the child's nearest anchor. The child root remains the physical
 trigger and receives the per-trigger busy marker. A relocated `@c-submit`
-still collects named controls from the physical child form using the ordinary
-Events codec; an explicit source-authored argument object is merged afterward
-and wins on collisions. `:c-*` remains invalid on a component tag.
+written without arguments sends the named controls of the physical child form,
+as in 5.1; arguments written in the binding replace the form's fields, as they
+do on an element. `:c-*` remains invalid on a component tag.
 
 A handler authored inside the child's own template remains child-local. To
 grant child code an intentional parent capability, pass a callback through a
