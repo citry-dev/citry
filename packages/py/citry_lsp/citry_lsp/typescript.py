@@ -40,6 +40,7 @@ from citry._diagnostic_catalog import (
     I18N_ARGUMENT_INVALID,
     I18N_UNKNOWN_MESSAGE,
     TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+    VUE_INVALID_EXPRESSION,
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
 )
@@ -148,6 +149,9 @@ _CITRY_OWNED_CODES = frozenset(
         # A bound string such as `:dir="'rlt'"` is checked against the HTML
         # Standard's keywords, which also names the closest one.
         TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+        # A syntax error in a Vue expression is reported once, by Citry,
+        # rather than also through TypeScript's recovery errors around it.
+        VUE_INVALID_EXPRESSION,
     }
 )
 

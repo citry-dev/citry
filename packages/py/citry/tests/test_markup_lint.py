@@ -74,6 +74,8 @@ def test_misspelled_attribute_reports_each_binding_form(source, span, suggestion
         '<label c-fro="x"></label>',
         # Two-letter names are too short to read as a typo.
         '<div i="1" dr="2"></div>',
+        # A binding on Vue's <slot> is a slot prop with any name.
+        '<slot :tile="t" v-bind:clas="c"></slot>',
     ],
 )
 def test_misspelled_attribute_stays_silent(source):
@@ -162,6 +164,8 @@ def test_invalid_nesting_reports_the_benchmark_template():
         "<p><c-slot name='x'><table></table></c-slot></p>",
         "<p><my-el><section></section></my-el></p>",
         "<p><p>a</p></p>",
+        # Obsolete block elements close the paragraph too.
+        "<p><center>a</center></p>",
     ],
 )
 def test_invalid_nesting_descends_through_inline_elements_and_citry_blocks(source):
@@ -171,8 +175,10 @@ def test_invalid_nesting_descends_through_inline_elements_and_citry_blocks(sourc
 @pytest.mark.parametrize(
     "source",
     [
-        # The browser keeps these inside the button, table cell, or template.
+        # The browser keeps these inside the button, table cell, or template,
+        # and reads <noscript> content as text when scripts run.
         "<p><button><div>a</div></button></p>",
+        "<p><noscript><div>a</div></noscript></p>",
         "<p><template><div>a</div></template></p>",
         # What a component renders is not visible here.
         "<p><c-Card><div>a</div></c-Card></p><p><Card><div>a</div></Card></p>",
@@ -207,6 +213,7 @@ def test_duplicate_id_reports_the_benchmark_template():
         '<c-if cond="x"><div id="a"></div></c-if><c-else><div id="a"></div></c-else>',
         '<div v-if="x" id="a"></div><div v-else id="a"></div>',
         '<c-for each="x in y"><div id="a"></div></c-for>',
+        '<li c-for="x in y" id="a"></li><p c-empty id="a"></p><i id="a"></i>',
         '<li v-for="x in y" id="a"></li><li id="a"></li>',
         # Fills, slot fallbacks, component bodies, and templates.
         '<c-Card><c-fill name="a"><i id="a"></i></c-fill></c-Card><i id="a"></i>',
@@ -280,6 +287,14 @@ def test_missing_image_alt_skips_a_single_root_that_may_receive_a_parents_attrib
     )
     # An image that is not the only root is reported either way.
     assert _codes("<img src='a'><p>caption</p>") == ["missing-image-alt"]
+    # A root inside a top-level condition chain is still the only root Vue sees.
+    chain = '<c-if cond="a"><img :src="s"></c-if><c-else><img :src="t"></c-else>'
+    assert _markup(chain) == []
+    assert _codes(chain, (MarkupLintConsumer(root_may_receive_attributes=False),)) == [
+        "missing-image-alt",
+        "missing-image-alt",
+    ]
+    assert _codes('<c-if cond="a"><div><img :src="s"></div></c-if>') == ["missing-image-alt"]
 
 
 # --- citry.browser.invalid-model-target ---------------------------------------
@@ -301,6 +316,13 @@ def test_invalid_model_target_reports_other_elements_and_custom_elements():
         ("invalid-model-target", "v-model.lazy", "error"),
         ("invalid-model-target", "v-model", "error"),
     ]
+
+
+def test_vue_only_rules_skip_v_pre_content_and_html_rules_do_not():
+    # Vue leaves v-pre content as written, so its v-model and listeners are
+    # plain attributes; the browser still parses the HTML.
+    source = '<div v-pre v-model="a" @clik="b"><span v-model="x" @clik="y"><dvi></dvi></span></div>'
+    assert _codes(source) == ["misspelled-element"]
 
 
 def test_invalid_model_target_accepts_value_elements_and_components():
@@ -439,10 +461,17 @@ def test_invalid_vue_expression_checks_bindings_listeners_loops_and_server_call_
         '<b @click="a = 1; go()"></b><b @click="function (e) { go(e) }"></b><b @click="(e) => go(e)"></b>',
         # Custom directives are not Vue expressions Citry reads.
         '<i v-tooltip="not js ("></i>',
+        # Valueless bindings bind nothing or read the same-name variable.
+        '<i v-bind="" v-on=""></i>',
     ],
 )
 def test_invalid_vue_expression_stays_silent(source):
     assert _invalid(source) == []
+
+
+def test_invalid_vue_expression_reports_a_value_of_only_spaces():
+    # Only a binding with no value at all is Vue's same-name shorthand.
+    assert _invalid('<div :title="  "></div>') == [("  ", "error")]
 
 
 def test_invalid_vue_expression_follows_the_consumers_severity():

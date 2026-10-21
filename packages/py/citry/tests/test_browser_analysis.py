@@ -1326,6 +1326,14 @@ def test_attribute_value_lint_reports_a_boolean_attribute_with_any_other_value()
     )
 
 
+def test_attribute_value_lint_tells_a_bound_boolean_string_to_bind_a_boolean():
+    (finding,) = lint_attribute_values(parse_template("<button :disabled=\"'false'\">Save</button>"), ())
+    assert finding.message == (
+        "'disabled' on <button> is on whenever it is present, so the string 'false' still turns it on. "
+        'Bind a JavaScript boolean instead, such as :disabled="false".'
+    )
+
+
 def test_attribute_value_lint_accepts_a_boolean_attributes_own_name_and_enumerated_false():
     source = (
         '<button disabled></button><button disabled=""></button><button disabled="disabled"></button>'
@@ -1486,9 +1494,18 @@ def test_misspelled_directive_lint_reports_near_misses_of_vue_directives():
     ]
     (finding,) = lint_misspelled_directives(parse_template('<p v-iff="open">Details are visible</p>'), ())
     assert finding.message == (
-        "'v-iff' is not a Vue directive, so Vue looks for a custom directive of that name and the page fails. "
+        "'v-iff' is not a Vue directive, so Vue looks for a custom directive of that name "
+        "and the page fails in the browser. "
         "Did you mean 'v-if'?"
     )
+
+
+def test_misspelled_directive_lint_skips_v_pre_and_unsupported_suggestions():
+    # Vue leaves v-pre content as written, and Citry rejects v-once and
+    # v-memo, so a typo of either gets no suggestion.
+    source = '<div v-pre v-iff="a"><p v-shwo="b"></p></div><p v-oncee></p><p v-mmeo="m"></p>'
+    assert _directives(source) == []
+    assert _directives('<div v-pre></div><p v-iff="a"></p>') == [("v-iff", "v-if", "error")]
 
 
 def test_misspelled_directive_lint_accepts_vue_directives_and_custom_directives():

@@ -105,7 +105,8 @@ class MarkupLintConsumer:
             raise TypeError(msg)
 
 
-# The severity fields of MarkupLintConsumer, in the order the docs list them.
+# The severity fields of MarkupLintConsumer, in the order the LintSettings
+# docstring lists them.
 MARKUP_LINT_RULES = (
     "rule_misspelled_attribute",
     "rule_misspelled_element",
@@ -157,13 +158,13 @@ def lint_markup(
 
     A finding is reported unless every consumer ignores its rule, and it is
     an error when any reporting consumer says ``"error"``. With an empty
-    ``consumers``, which ``citry check --static`` and an editor without
-    project analysis pass for a template whose owner they cannot find, each
-    rule uses its default.
+    ``consumers``, which ``citry check --static`` and an editor that has not
+    loaded the application pass for a template whose owner they cannot find,
+    each rule uses its default.
 
     Args:
         template: Parsed Citry template AST.
-        consumers: Every proven component that consumes this physical template.
+        consumers: Every component known to render this template.
         parse_nested: Parser for template-valued attributes, so nested
             templates use the same parse options as the outer one.
 
@@ -206,14 +207,16 @@ def lint_invalid_vue_expressions(
     too.
 
     Skipped: a valueless ``:title``, which Vue 3.4 and later read as
-    ``:title="title"``; everything inside an element with ``v-pre``, which Vue
-    never compiles; and a dynamic slot name.
+    ``:title="title"``; everything on or inside an element with ``v-pre``,
+    which Vue never compiles; a dynamic slot name; and the value of a custom
+    directive, which Citry does not read, although Vue still fails on one
+    that is not valid JavaScript.
 
     Args:
         template: Parsed Citry template AST, used to find ``v-pre`` elements.
         expressions: The template's browser expressions, from
             ``browser_expressions``.
-        consumers: Every proven component that consumes this physical template.
+        consumers: Every component known to render this template.
         parse_nested: Parser for template-valued attributes, so nested
             templates use the same parse options as the outer one.
 
@@ -229,27 +232,22 @@ def lint_invalid_vue_expressions(
     for expression in expressions:
         if expression.transform == "dynamic-slot":
             continue
-        # `:title` with no value is Vue's same-name shorthand.
-        if not expression.source.strip() and expression.mode == "expression":
+        # `:title` with no value is Vue's same-name shorthand, and `v-on=""`
+        # or `v-bind=""` bind nothing. A value of only spaces is an error.
+        if not expression.source and expression.mode == "expression":
             continue
         if any(start <= expression.start_index < end for start, end in unchecked):
             continue
         if _vue_expression_is_valid(expression):
             continue
-        # An empty expression, such as `v-on=""`, has no text to mark, so
-        # the finding marks its attribute name instead.
-        start, end = expression.start_index, expression.end_index
-        if end <= start and expression.attribute_start_index is not None:
-            start = expression.attribute_start_index
-            end = expression.attribute_end_index or start
         found.append(
             MarkupLintFinding(
                 name=expression.attribute,
                 message=render_diagnostic(VUE_INVALID_EXPRESSION, attribute=expression.attribute),
                 code=VUE_INVALID_EXPRESSION,
                 severity=severity,
-                start_index=start,
-                end_index=end,
+                start_index=expression.start_index,
+                end_index=expression.end_index,
             )
         )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
@@ -392,9 +390,10 @@ _P_CLOSING_TAGS = frozenset(
     }
 )
 # Elements that hide an open `<p>` from what they contain ("button scope" in
-# the same section): a `<div>` inside `<p><button>` closes nothing.
+# the same section): a `<div>` inside `<p><button>` closes nothing. When
+# scripts run, the browser reads `<noscript>` content as text.
 _P_SCOPE_BOUNDARIES = frozenset(
-    {"applet", "button", "caption", "html", "marquee", "object", "table", "td", "template", "th"},
+    {"applet", "button", "caption", "html", "marquee", "noscript", "object", "table", "td", "template", "th"},
 )
 # Citry tags whose body renders in place, so an open `<p>` around them stays
 # open around their content: conditions, loops, and a slot's fallback.
@@ -403,7 +402,7 @@ _IN_PLACE_TAGS = frozenset({"c-if", "c-elif", "c-else", "c-for", "c-empty", "c-s
 # so an `id` inside them is not known to appear exactly once.
 _REPEATING_OR_CONDITIONAL_TAGS = frozenset({"c-if", "c-elif", "c-else", "c-for", "c-empty", "c-fill", "c-slot"})
 _REPEATING_OR_CONDITIONAL_ATTRIBUTES = frozenset(
-    {"c-if", "c-elif", "c-else", "c-for", "v-if", "v-else-if", "v-else", "v-for"},
+    {"c-if", "c-elif", "c-else", "c-for", "c-empty", "v-if", "v-else-if", "v-else", "v-for"},
 )
 # Names Vue reads on any element besides the HTML attributes.
 _VUE_SPECIAL_ATTRIBUTES = frozenset({"key", "ref", "ref_for", "ref_key", "is"})
@@ -428,6 +427,9 @@ class _Context:
     # Inside a condition, loop, fill, slot fallback, component body, or
     # `<template>`, so the content may render zero or several times.
     may_repeat: bool = False
+    # On or inside an element with `v-pre`, which Vue leaves as written, so
+    # the rules about Vue directives and listeners do not apply.
+    vue_skipped: bool = False
 
 
 @dataclass(slots=True)
@@ -443,15 +445,16 @@ class _MarkupWalker:
 
     def walk_template(self, template: Template, *, base_index: int) -> None:
         """Visit one template; a nested template starts with nothing open around it."""
-        nodes = [element._0 for element in template.elements if isinstance(element, TemplateElement.Node)]
-        # Vue passes a parent's attributes to a component's single root
-        # element, so a root `<img>` may receive `alt` from its parent.
-        # The parser builds a new node object on each access, so the root is
-        # identified by where its start tag begins.
-        single_root = nodes[0].start_tag.token.start_index if len(nodes) == 1 else None
-        self._walk(template, _Context(), base_index=base_index, single_root=single_root)
+        self._walk(template, _Context(), base_index=base_index, roots=_single_root_starts(template))
 
-    def _walk(self, template: Template, context: _Context, *, base_index: int, single_root: int | None = None) -> None:
+    def _walk(
+        self,
+        template: Template,
+        context: _Context,
+        *,
+        base_index: int,
+        roots: frozenset[int] = frozenset(),
+    ) -> None:
         for element in template.elements:
             if not isinstance(element, TemplateElement.Node):
                 continue
@@ -461,6 +464,7 @@ class _MarkupWalker:
             attrs = node.start_tag.attrs
             names = {_ascii_lower(attr.key.content) for attr in attrs}
             foreign = context.foreign or lower in {"svg", "math"}
+            vue_skipped = context.vue_skipped or "v-pre" in names
             html = not foreign and tag in HTML_ELEMENTS
             # A lowercase tag with a hyphen is a custom element; `c-*` tags are
             # Citry tags and PascalCase tags are Vue components.
@@ -468,7 +472,9 @@ class _MarkupWalker:
             component = not foreign and (tag != lower or (lower.startswith("c-") and lower != "c-element"))
             if not foreign:
                 self._check_element_name(node, tag, base_index)
-            if html and context.in_paragraph and lower in _P_CLOSING_TAGS:
+            # Obsolete block elements such as `<center>` close a paragraph too.
+            block = not foreign and (html or tag in OBSOLETE_ELEMENTS)
+            if block and context.in_paragraph and lower in _P_CLOSING_TAGS:
                 self._report(
                     "rule_invalid_nesting",
                     TEMPLATE_INVALID_NESTING,
@@ -490,8 +496,9 @@ class _MarkupWalker:
                     self._check_aria_attribute(attr, base_index)
                 if html:
                     self._check_attribute_name(tag, attr, base_index)
+                if html and not vue_skipped:
                     self._check_event_name(attr, base_index)
-                if html or custom:
+                if (html or custom) and not vue_skipped:
                     self._check_model_target(tag, lower, attr, base_index)
                 if not may_repeat:
                     self._record_id(attr, base_index)
@@ -505,13 +512,13 @@ class _MarkupWalker:
                         parsed, nested_start = nested
                         self._walk(
                             parsed,
-                            _Context(foreign=foreign, may_repeat=True),
+                            _Context(foreign=foreign, may_repeat=True, vue_skipped=vue_skipped),
                             base_index=base_index + inner.start_index + nested_start,
                         )
             if (
                 html
                 and lower == "img"
-                and not (node.start_tag.token.start_index == single_root and self.root_may_receive_attributes)
+                and not (node.start_tag.token.start_index in roots and self.root_may_receive_attributes)
             ):
                 self._check_image_alt(node, names, attrs, base_index)
             body = getattr(node, "body", None)
@@ -523,8 +530,12 @@ class _MarkupWalker:
                         in_paragraph=self._paragraph_stays_open(context, lower, html=html, component=component)
                         and not foreign,
                         may_repeat=may_repeat,
+                        vue_skipped=vue_skipped,
                     ),
                     base_index=base_index,
+                    # A root inside a top-level condition is still the
+                    # element Vue passes a parent's attributes to.
+                    roots=roots,
                 )
 
     @staticmethod
@@ -583,6 +594,9 @@ class _MarkupWalker:
         # `c-iff` is both `c-if` and an attribute `iff`; the misspelled
         # directive rule reports the `c-*` names that look like a directive.
         if prefix == "c-" and _looks_like_c_directive(lowered):
+            return
+        # On Vue's `<slot>`, a binding is a slot prop with any name.
+        if tag == "slot" and prefix in {":", "v-bind:"}:
             return
         accepted = (GLOBAL_ATTRIBUTES, ELEMENT_ATTRIBUTES.get(tag, ()), _VUE_SPECIAL_ATTRIBUTES)
         if any(lowered in names for names in accepted):
@@ -710,7 +724,8 @@ class _MarkupWalker:
         """Report an ``<img>`` that gives assistive technology no text."""
         if "rule_missing_image_alt" not in self.severities:
             return
-        # A spread may add `alt`, and an extension-owned name hides the rest.
+        # A spread may add `alt`, and an attribute name written in extension
+        # syntax may turn out to be `alt` once rendered.
         if names & {"c-bind", "v-bind"} or any(attr.foreign_parts for attr in attrs):
             return
         labelled = {_split_attribute_prefix(name)[1] for name in names}
@@ -785,6 +800,32 @@ class _MarkupWalker:
                 end_index=base_index + end_index,
             )
         )
+
+
+_CONDITION_TAGS = frozenset({"c-if", "c-elif", "c-else"})
+
+
+def _single_root_starts(template: Template) -> frozenset[int]:
+    """
+    Return where the start tag of each element that may be the template's only root begins.
+
+    Vue passes a parent's attributes to a component's single root element.
+    A template whose top level is one element, or a chain of ``c-if``,
+    ``c-elif``, and ``c-else`` blocks that each hold one element, has such a
+    root. The parser builds a new node object on each access, so an element
+    is identified by where its start tag begins.
+    """
+    nodes = [element._0 for element in template.elements if isinstance(element, TemplateElement.Node)]
+    if nodes and all(_ascii_lower(node.start_tag.name.content) in _CONDITION_TAGS for node in nodes):
+        starts: set[int] = set()
+        for node in nodes:
+            body = getattr(node, "body", None)
+            if body is not None:
+                starts.update(_single_root_starts(body))
+        return frozenset(starts)
+    if len(nodes) == 1:
+        return frozenset({nodes[0].start_tag.token.start_index})
+    return frozenset()
 
 
 def _split_attribute_prefix(written: str) -> tuple[str, str | None]:

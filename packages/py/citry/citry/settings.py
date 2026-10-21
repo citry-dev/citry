@@ -119,9 +119,9 @@ def _is_vue_variable_name(name: object) -> bool:
     return valid and references == [(name, 0, encoded_length)]
 
 
-# Severity settings that a component's Lint class and the record the app
-# worker sends the editor carry with no further data, so one list serves
-# every place that copies, checks, or combines them.
+# Rule severities that LintSettings, a component's Lint class, and the
+# editor's lint record each store as a plain string, so every place that
+# copies, checks, or combines them reads this one list.
 _TEMPLATE_RULE_FIELDS = (
     "rule_misspelled_attribute",
     "rule_misspelled_element",
@@ -185,8 +185,9 @@ class LintSettings:
             value outside the keywords that attribute accepts, such as
             ``draggable="treu"`` or ``<input type="datetime">``, or for a
             boolean attribute with a value other than its own name, such as
-            ``disabled="false"``, which still disables the element. The
-            browser ignores such a value or falls back to a default. The default is
+            ``disabled="false"``, which still disables the element. For an
+            enumerated value, the browser ignores it or falls back to a
+            default. The default is
             ``"error"``. ``citry check --static`` and an editor that has not
             loaded the application report it as a warning, because they
             cannot read your settings.
@@ -206,7 +207,7 @@ class LintSettings:
             shows up. An attribute of the element, such as ``c-id``, is not
             reported. It also covers a ``v-*`` name that looks like a
             misspelled Vue directive, such as ``v-iff``, which Vue looks up
-            as a custom directive, so the page fails. The default is
+            as a custom directive, so the page fails in the browser. The default is
             ``"error"``.
         rule_misspelled_attribute: Severity for an attribute on an HTML
             element that is one typing slip from an attribute the element

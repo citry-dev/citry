@@ -1766,11 +1766,11 @@ def _checker_markup_lint_consumer(engine: Citry, component: type[Component]) -> 
     lint = _component_lint_info(engine, component)
     return MarkupLintConsumer(
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
-        root_may_receive_attributes=_may_have_browser_code(engine, component),
+        root_may_receive_attributes=_may_have_browser_code(component),
     )
 
 
-def _may_have_browser_code(engine: Citry, component: type[Component]) -> bool:
+def _may_have_browser_code(component: type[Component]) -> bool:
     """
     Return whether a component may run Vue code, so Vue passes a parent's attributes to its single root element.
 
@@ -1787,10 +1787,8 @@ def _may_have_browser_code(engine: Citry, component: type[Component]) -> bool:
         or (events is not None and (events.handlers or events.state_cls is not None))
     ):
         return True
-    sources: dict[tuple[object, ...], _BrowserSource] = {}
-    _collect_browser_source(engine, component, sources)
-    if any(component in source.consumers for source in sources.values()):
-        return True
+    # A declared `js` or `js_file` is browser code; reading the source is
+    # not needed to know that.
     try:
         _owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
     except (Exception, SystemExit):  # noqa: BLE001 - an unreadable declaration may still be browser code

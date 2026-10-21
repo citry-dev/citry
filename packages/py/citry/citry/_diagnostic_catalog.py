@@ -109,16 +109,17 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                                 'or on a component.'},
                                         'parameters': {'tag': 'Tag name as written in the template.'},
                                         'summary': 'v-model is on an element that has no value to bind, such as a '
-                                                   '<form> or a <div>. The page fails when Vue compiles it.',
+                                                   '<form> or a <div>. The component fails to render when Citry '
+                                                   'compiles it for Vue.',
                                         'surfaces': ['check', 'lsp'],
                                         'title': 'v-model on an element that holds no value',
                                         'when': 'v-model, with or without modifiers such as .lazy, is on an HTML '
                                                 'element other than <input>, <textarea>, or <select>, or on a custom '
                                                 'element such as <my-picker>. Component tags, PascalCase Vue '
-                                                'components, and <c-element> are not reported, because they decide '
-                                                'what v-model binds. citry check --static and an editor that has not '
-                                                'loaded your application report it too, with the severity the '
-                                                "component's own Lint class sets as a plain string."},
+                                                'components, <c-element>, and v-pre content are not reported, because '
+                                                'they decide what v-model binds. citry check --static and an editor '
+                                                'that has not loaded your application report it too, with the severity '
+                                                "the component's own Lint class sets as a plain string."},
  'citry.browser.invalid-state-binding-target': {'code': 'citry.browser.invalid-state-binding-target',
                                                 'constant': 'BROWSER_INVALID_STATE_BINDING_TARGET',
                                                 'defaultSeverity': 'error',
@@ -169,9 +170,9 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                            {'language': 'citry-html',
                                                             'source': '<c-Card @hdie="hideCard"></c-Card>',
                                                             'title': 'A lowercase typo'}],
-                                              'fix': "Correct the event name, or add it to the child's emits. To make "
-                                                     'every listener match a declared event, set '
-                                                     'rule_undeclared_component_event to "error".',
+                                              'fix': "Correct the event name, or add it to the child's emits. It is a "
+                                                     'warning by default; to make an undeclared listener fail citry '
+                                                     'check, set rule_undeclared_component_event to "error".',
                                               'messages': {'default': "Component '{component}' does not declare event "
                                                                       "'{name}' in its emits option.",
                                                            'suggestion': "Component '{component}' does not declare "
@@ -880,19 +881,21 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                          'id must be unique in the page.'},
                                  'parameters': {'id': 'The repeated id value.'},
                                  'summary': 'Two elements in one template always render with the same literal id. An '
-                                            'id must be unique in the page, so label for=, aria-labelledby, URL '
-                                            'fragments, and getElementById find only the first element.',
+                                            "id must be unique in the page, so a label's for attribute, "
+                                            'aria-labelledby, URL fragments, and getElementById find only the first '
+                                            'element.',
                                  'surfaces': ['check', 'lsp'],
                                  'title': 'Duplicate element id',
                                  'when': 'Two elements have the same static id value, and neither is inside a '
                                          'condition or a loop: c-if, c-elif, c-else, c-for, or c-empty, as a tag or as '
-                                         'an attribute; v-if, v-else-if, v-else, or v-for; a c-fill, a <c-slot> '
-                                         'fallback, the body of a component tag, or a <template>. Those may render an '
-                                         'element zero or several times, so the check cannot know whether both appear. '
-                                         'v-show does not count, because a hidden element is still in the page. The '
-                                         'same id coming from two templates is not reported. citry check --static and '
-                                         'an editor that has not loaded your application report it too, with the '
-                                         "severity the component's own Lint class sets as a plain string."},
+                                         'an attribute on the element or around it; v-if, v-else-if, v-else, or v-for; '
+                                         'a c-fill, a <c-slot> fallback, the body of a component tag, or a <template>. '
+                                         'Those may render an element zero or several times, so the check cannot know '
+                                         'whether both appear. v-show does not count, because a hidden element is '
+                                         'still in the page. The same id coming from two templates is not reported. '
+                                         'citry check --static and an editor that has not loaded your application '
+                                         "report it too, with the severity the component's own Lint class sets as a "
+                                         'plain string.'},
  'citry.template.invalid-attribute-value': {'code': 'citry.template.invalid-attribute-value',
                                             'configurableSeverity': True,
                                             'constant': 'TEMPLATE_INVALID_ATTRIBUTE_VALUE',
@@ -907,13 +910,20 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                          {'language': 'citry-html',
                                                           'source': '<button disabled="false">Search</button>',
                                                           'title': 'A boolean attribute set to false'}],
-                                            'fix': 'Use one of the valid values the message lists. If a script on the '
+                                            'fix': 'Use one of the valid values the message lists. For a boolean '
+                                                   'attribute, write it with no value, leave it out, or bind a '
+                                                   'JavaScript boolean such as :disabled="saving". If a script on the '
                                                    'page reads its own values from the attribute, set '
                                                    'rule_invalid_attribute_value to "ignore" for that component.',
                                             'messages': {'boolean': "'{attribute}' on <{element}> is on whenever it is "
                                                                     "present, so '{value}' still turns it on. Write it "
                                                                     'with no value to turn it on, and leave it out to '
                                                                     'turn it off.',
+                                                         'boolean-binding': "'{attribute}' on <{element}> is on "
+                                                                            'whenever it is present, so the string '
+                                                                            "'{value}' still turns it on. Bind a "
+                                                                            'JavaScript boolean instead, such as '
+                                                                            ':{attribute}="false".',
                                                          'default': "'{value}' is not a valid value for '{attribute}' "
                                                                     'on <{element}>. Valid values: {allowed}.',
                                                          'empty': "'{attribute}' on <{element}> needs a value. Valid "
@@ -939,9 +949,9 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                            'value': 'Attribute value as written in the template.'},
                                             'summary': 'An HTML attribute that accepts only certain keywords, such as '
                                                        'draggable or type, has another value, or a boolean attribute '
-                                                       'such as disabled has a value other than its own name. The '
-                                                       'browser ignores the value or falls back to a default, with no '
-                                                       'error.',
+                                                       'such as disabled has a value other than empty or its own name, '
+                                                       'which still turns it on. The browser raises no error either '
+                                                       'way.',
                                             'surfaces': ['check', 'lsp'],
                                             'title': 'HTML attribute value the browser does not accept',
                                             'when': 'The value is not one of the keywords the HTML Standard lists for '
@@ -984,12 +994,12 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                             'open <p>: address, article, aside, blockquote, details, dialog, div, dl, '
                                             'dd, dt, fieldset, figcaption, figure, footer, form, h1 to h6, header, '
                                             'hgroup, hr, li, main, menu, nav, ol, p, pre, search, section, summary, '
-                                            'table, ul, and a few obsolete ones. Content inside <button>, <table>, '
-                                            '<template>, <svg>, <math>, a component tag, or <c-element> is not '
-                                            'checked, because the browser keeps it inside or the check cannot see what '
-                                            'renders there. citry check --static and an editor that has not loaded '
-                                            "your application report it too, with the severity the component's own "
-                                            'Lint class sets as a plain string.'},
+                                            'table, ul, and obsolete ones such as center and xmp. Content inside '
+                                            '<button>, <table>, <template>, <noscript>, <svg>, <math>, a component '
+                                            'tag, or <c-element> is not checked, because the browser keeps it inside '
+                                            'or the check cannot see what renders there. citry check --static and an '
+                                            'editor that has not loaded your application report it too, with the '
+                                            "severity the component's own Lint class sets as a plain string."},
  'citry.template.marker-name-invalid': {'code': 'citry.template.marker-name-invalid',
                                         'constant': 'TEMPLATE_MARKER_NAME_INVALID',
                                         'defaultSeverity': 'error',
@@ -1033,13 +1043,16 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'aria-label or aria-labelledby, and no role="none" or '
                                               'role="presentation". An image with a c-bind or v-bind spread is not '
                                               'reported, because the spread may add alt. Neither is an <img> that is a '
-                                              "component's only top-level element when the component may have browser "
-                                              'code, because Vue passes the alt that a parent writes on the '
-                                              "component's tag to that element. citry check without --static, and an "
-                                              'editor that has loaded your application, report that image when the '
-                                              'component has no browser code. citry check --static and an editor that '
-                                              'has not loaded your application report it too, with the severity the '
-                                              "component's own Lint class sets as a plain string."},
+                                              "component's only top-level element, or the only element in each block "
+                                              'of a top-level c-if, c-elif, and c-else chain, when the component may '
+                                              'have browser code (JavaScript, js_data(), State, or event handlers), '
+                                              "because Vue passes the alt that a parent writes on the component's tag "
+                                              'to that element. citry check without --static, and an editor that has '
+                                              'loaded your application, report that image when the component has no '
+                                              'browser code. citry check --static and an editor that has not loaded '
+                                              "your application report the other images too, but never a component's "
+                                              "only top-level <img>, with the severity the component's own Lint class "
+                                              'sets as a plain string.'},
  'citry.template.misspelled-attribute': {'code': 'citry.template.misspelled-attribute',
                                          'configurableSeverity': True,
                                          'constant': 'TEMPLATE_MISSPELLED_ATTRIBUTE',
@@ -1066,18 +1079,19 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                          'surfaces': ['check', 'lsp'],
                                          'title': 'Misspelled HTML attribute',
                                          'when': 'The attribute is not one the HTML Standard lists for that element or '
-                                                 'for every element, and it is one slip from one that is: two '
+                                                 'for every element, and it is one typing slip from one that is: two '
                                                  'neighboring letters swapped, one letter typed twice, or one letter '
                                                  'left out, such as titel, clas, or herf. A binding such as :titel, '
                                                  'v-bind:titel, or c-titel is checked by the attribute it sets. Letter '
                                                  'case does not matter. Names with a hyphen or a colon, such as '
                                                  'data-*, aria-*, or hx-*, bindings with a modifier such as .prop, '
-                                                 'component tags, custom elements, and elements inside <svg> or <math> '
-                                                 'are not checked. A c-* name that looks like a misspelled directive, '
-                                                 'such as c-fro, is reported as citry.template.misspelled-directive '
-                                                 'instead. citry check --static and an editor that has not loaded your '
-                                                 "application report it too, with the severity the component's own "
-                                                 'Lint class sets as a plain string.'},
+                                                 "component tags, custom elements, <c-element>, bindings on Vue's "
+                                                 '<slot>, and elements inside <svg> or <math> are not checked. A c-* '
+                                                 'name that looks like a misspelled directive, such as c-fro, is '
+                                                 'reported as citry.template.misspelled-directive instead. citry check '
+                                                 '--static and an editor that has not loaded your application report '
+                                                 "it too, with the severity the component's own Lint class sets as a "
+                                                 'plain string.'},
  'citry.template.misspelled-directive': {'code': 'citry.template.misspelled-directive',
                                          'configurableSeverity': True,
                                          'constant': 'TEMPLATE_MISSPELLED_DIRECTIVE',
@@ -1104,7 +1118,8 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                              "write '{suggestion}'.",
                                                       'vue-directive': "'{name}' is not a Vue directive, so Vue looks "
                                                                        'for a custom directive of that name and the '
-                                                                       "page fails. Did you mean '{suggestion}'?"},
+                                                                       'page fails in the browser. Did you mean '
+                                                                       "'{suggestion}'?"},
                                          'parameters': {'attribute': 'The attribute name the element renders, without '
                                                                      'c-.',
                                                         'name': 'Attribute name as written in the template.',
@@ -1129,14 +1144,16 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                  'attributes, the c-show, c-model, c-key, and c-ignore names are not '
                                                  'reported. Only HTML elements, custom elements, and <c-element> are '
                                                  'checked, not component tags or elements inside <svg> or <math>. A '
-                                                 'v-* name is reported on any element when it is not a Vue directive '
-                                                 'and it is one slip from one, such as v-iff, v-shwo, or v-IFF, or is '
-                                                 'a spelled-out v-else-if, such as v-elif or v-elseif. A custom '
-                                                 'directive whose name is one slip from a Vue directive is reported '
-                                                 'too; set the rule to "ignore" for that component. citry check '
-                                                 '--static and an editor that has not loaded your application report '
-                                                 "it too, with the severity the component's own Lint class sets as a "
-                                                 'plain string.'},
+                                                 'v-* name is reported on any element outside <svg>, <math>, and v-pre '
+                                                 'content, component tags included, when it is not a Vue directive and '
+                                                 'it is a typing slip (two neighboring letters swapped, one letter '
+                                                 'typed twice, or one letter left out) away from one, such as v-iff, '
+                                                 'v-shwo, or v-IFF, or is a spelled-out v-else-if, such as v-elif or '
+                                                 'v-elseif. A custom directive whose name is one slip from a Vue '
+                                                 'directive is reported too; set the rule to "ignore" for that '
+                                                 'component. citry check --static and an editor that has not loaded '
+                                                 "your application report it too, with the severity the component's "
+                                                 'own Lint class sets as a plain string.'},
  'citry.template.misspelled-element': {'code': 'citry.template.misspelled-element',
                                        'configurableSeverity': True,
                                        'constant': 'TEMPLATE_MISSPELLED_ELEMENT',
@@ -1153,20 +1170,21 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                        'parameters': {'suggestion': 'The HTML element the author probably meant.',
                                                       'tag': 'Tag name as written in the template.'},
                                        'summary': 'A tag looks like a typo of an HTML element, such as <dvi> for '
-                                                  '<div>. The browser renders an unknown element with no styles or '
-                                                  'behavior, and on a page that Vue renders, Vue looks for a component '
-                                                  'of that name and warns that it cannot find one.',
+                                                  '<div>. The browser renders it as an unknown element with no styles '
+                                                  'or behavior, with no error.',
                                        'surfaces': ['check', 'lsp'],
                                        'title': 'Misspelled HTML element',
                                        'when': 'The tag is lowercase, has no hyphen and no c- prefix, is not an HTML, '
-                                               "SVG, MathML, or obsolete HTML element or one of Vue's built-in tags "
-                                               'such as <component>, and is one slip from an HTML element: two '
+                                               "SVG, or obsolete HTML element or one of Vue's built-in tags such as "
+                                               '<component>, and is one typing slip from an HTML element: two '
                                                'neighboring letters swapped, one letter typed twice, or one letter '
                                                'left out. Any other unknown lowercase tag is not reported, because a '
-                                               'Vue plugin may register a component under that name. citry check '
-                                               '--static and an editor that has not loaded your application report it '
-                                               "too, with the severity the component's own Lint class sets as a plain "
-                                               'string.'},
+                                               'Vue plugin may register a component under that name. Elements inside '
+                                               '<svg> or <math> are not checked. Outside <math>, a MathML name one '
+                                               'slip from an HTML element, such as <min>, is reported, because there '
+                                               'it is more likely a typo of <main>. citry check --static and an editor '
+                                               'that has not loaded your application report it too, with the severity '
+                                               "the component's own Lint class sets as a plain string."},
  'citry.template.unknown-aria-attribute': {'code': 'citry.template.unknown-aria-attribute',
                                            'configurableSeverity': True,
                                            'constant': 'TEMPLATE_UNKNOWN_ARIA_ATTRIBUTE',
@@ -1192,14 +1210,14 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                       'was meant to have.',
                                            'surfaces': ['check', 'lsp'],
                                            'title': 'Unknown ARIA attribute',
-                                           'when': 'The name after a :, v-bind:, or c- prefix starts with aria- and is '
-                                                   'not a WAI-ARIA 1.2 or 1.3 state or property. Letter case does not '
-                                                   'matter. ARIA lets no page invent its own aria-* names, so every '
-                                                   'unknown name is reported, not only typos. Component tags are not '
-                                                   'checked, because there the name is an input. citry check --static '
-                                                   'and an editor that has not loaded your application report it too, '
-                                                   "with the severity the component's own Lint class sets as a plain "
-                                                   'string.'},
+                                           'when': 'The attribute name, after any :, v-bind:, or c- prefix, starts '
+                                                   'with aria- and is not a WAI-ARIA 1.2 or 1.3 state or property. '
+                                                   'Letter case does not matter. ARIA lets no page invent its own '
+                                                   'aria-* names, so every unknown name is reported, not only typos. '
+                                                   'Component tags are not checked, because there the name is an '
+                                                   'input. citry check --static and an editor that has not loaded your '
+                                                   "application report it too, with the severity the component's own "
+                                                   'Lint class sets as a plain string.'},
  'citry.template.unknown-component': {'code': 'citry.template.unknown-component',
                                       'constant': 'TEMPLATE_UNKNOWN_COMPONENT',
                                       'defaultSeverity': 'error',
@@ -1254,7 +1272,7 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                   'examples': [{'language': 'citry-html',
                                                 'source': '<p v-if="open &&">Details</p>',
                                                 'title': 'An unfinished condition'}],
-                                  'fix': 'Fix the expression so it is valid JavaScript.',
+                                  'fix': 'Complete or correct the expression, such as v-if="open && ready".',
                                   'messages': {'default': "The Vue expression in '{attribute}' is not valid "
                                                           'JavaScript, so Vue cannot compile this template.'},
                                   'parameters': {'attribute': 'Attribute that holds the expression, as written in the '
@@ -1268,11 +1286,12 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                           'such as &amp;&amp; are decoded the way Vue decodes them. A listener may '
                                           'also hold statements or a function expression. The arguments of a server '
                                           'call such as @c-click="save({...})" are checked too. A valueless :title, '
-                                          'which Vue reads as :title="title", everything inside an element with v-pre, '
-                                          'which Vue does not compile, and custom directive values are not checked. '
-                                          'citry check --static and an editor that has not loaded your application '
-                                          "report it too, with the severity the component's own Lint class sets as a "
-                                          'plain string.'},
+                                          'which Vue reads as :title="title", everything on or inside an element with '
+                                          'v-pre, which Vue does not compile, and custom directive values are not '
+                                          'checked, although Vue still fails on a custom directive value that is not '
+                                          'valid JavaScript. citry check --static and an editor that has not loaded '
+                                          "your application report it too, with the severity the component's own Lint "
+                                          'class sets as a plain string.'},
  'citry.vue.misspelled-event': {'code': 'citry.vue.misspelled-event',
                                 'configurableSeverity': True,
                                 'constant': 'VUE_MISSPELLED_EVENT',
@@ -1294,13 +1313,13 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                 'title': 'Misspelled DOM event',
                                 'when': 'The event name in @name or v-on:name, before any modifier, is all lowercase '
                                         "letters, is not a DOM event that the HTML Standard or Vue's types list, and "
-                                        'is one slip from one that is: two neighboring letters swapped, one letter '
-                                        'typed twice, or one letter left out. Names with a hyphen, a colon, or an '
-                                        'uppercase letter, and a few ordinary words such as scrolled and touched, are '
-                                        'not reported, because they are usually custom events. Component tags and '
-                                        'custom elements are not checked. citry check --static and an editor that has '
-                                        "not loaded your application report it too, with the severity the component's "
-                                        'own Lint class sets as a plain string.'},
+                                        'is one typing slip from one that is: two neighboring letters swapped, one '
+                                        'letter typed twice, or one letter left out. Names with a hyphen, a colon, or '
+                                        'an uppercase letter, and a few ordinary words such as scrolled and touched, '
+                                        'are not reported, because they are usually custom events. Component tags, '
+                                        'custom elements, and v-pre content are not checked. citry check --static and '
+                                        'an editor that has not loaded your application report it too, with the '
+                                        "severity the component's own Lint class sets as a plain string."},
  'citry.vue.python-variable': {'code': 'citry.vue.python-variable',
                                'configurableSeverity': True,
                                'constant': 'VUE_PYTHON_VARIABLE',
