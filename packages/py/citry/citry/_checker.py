@@ -14,7 +14,14 @@ import weakref
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from types import GetSetDescriptorType, MappingProxyType, MemberDescriptorType, ModuleType, WrapperDescriptorType
+from types import (
+    GetSetDescriptorType,
+    MappingProxyType,
+    MemberDescriptorType,
+    ModuleType,
+    SimpleNamespace,
+    WrapperDescriptorType,
+)
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message
@@ -2790,8 +2797,10 @@ _ATTRIBUTE_HOOKS = ("__getattr__", "__getattribute__")
 # builds for it, which runs no user code. Any other kind, such as a
 # property, could.
 _BUILT_IN_GETTERS = (GetSetDescriptorType, MemberDescriptorType)
-# Classes whose attribute reading Citry knows runs no user code.
-_PLAIN_ATTRIBUTE_CLASSES = (object, type, ModuleType)
+# Classes whose attribute reading Citry knows runs no user code. On Python
+# 3.10, SimpleNamespace lists its own C `__getattribute__` in its class
+# namespace, which would otherwise read as a hook that might run code.
+_PLAIN_ATTRIBUTE_CLASSES = (object, type, ModuleType, SimpleNamespace)
 # The exact types of a value the JSON check can read without running any
 # code the value's own class defines. A Secret is a leaf the check reports.
 _PLAIN_JSON_LEAVES = (type(None), bool, int, float, str, Secret)
