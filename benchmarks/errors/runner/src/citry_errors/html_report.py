@@ -234,6 +234,25 @@ def _tint(color: str) -> str:
     return f"background: color-mix(in srgb, {color} 30%, white)"
 
 
+def checkout_packages(source: dict[str, Any]) -> list[tuple[str, str, bool]]:
+    """
+    Give each framework a run installed partly from this repository's sources, instead of a release.
+
+    Each item is the framework's key, its packages with their versions
+    ("citry 0.6.0 and citry-lsp 0.2.0"), and whether those sources had
+    uncommitted changes. The version is the one the sources declare, which
+    a release may not have yet.
+    """
+    return [
+        (
+            key,
+            " and ".join(f"{package['name']} {package['version']}".strip() for package in packages),
+            any(package["changed"] for package in packages),
+        )
+        for key, packages in (source.get("from_checkout") or {}).items()
+    ]
+
+
 def render(summary: dict[str, Any]) -> str:
     frameworks = summary["frameworks"]
     by = {(row["framework"], row["mistake"]): row for row in summary["results"]}
@@ -261,6 +280,14 @@ def render(summary: dict[str, Any]) -> str:
         changed = source.get("inputs_changed", source.get("benchmark_files_changed"))
         notice += ", with uncommitted benchmark changes" if changed else ""
     out.append(f'<p class="notice">{notice}.</p>')
+    names = {framework["key"]: framework["name"] for framework in summary["frameworks"]}
+    for key, packages, dirty in checkout_packages(source):
+        # The commit is the run's own: the benchmark and the packages come from one checkout.
+        out.append(
+            f'<p class="notice">{escape(names.get(key, key))}: {escape(packages)} built from this '
+            f"repository at commit {escape(source['commit'][:12])}"
+            f"{' plus uncommitted changes to them' if dirty else ''}, not a published release.</p>"
+        )
 
     out.append('<section class="group"><details open><summary><h2>Outcomes</h2></summary><div class="group-body">')
     out.append('<article class="chart"><details open><summary><h3>How each mistake ended</h3></summary>')

@@ -8,6 +8,7 @@ import json
 import os
 import shutil
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
@@ -30,6 +31,69 @@ def env_dir(framework: Framework) -> Path:
     return CACHE / "envs" / framework.key
 
 
+def local_sources(framework: Framework) -> dict[str, Path]:
+    """
+    Give the packages the clean app's pyproject.toml installs from a folder or file on disk, by package name.
+
+    These are uv's `path` sources, such as the Citry app's citry and
+    citry-lsp, which come from this repository rather than from PyPI. Their
+    files live outside the framework's folder, so neither the lockfile nor
+    the framework's own files change when they do.
+    """
+    manifest = framework.baseline / "pyproject.toml"
+    if not manifest.is_file():
+        return {}
+    sources = tomllib.loads(manifest.read_text(encoding="utf-8")).get("tool", {}).get("uv", {}).get("sources", {})
+    # Sorted by name, so the digests below do not depend on the order the
+    # table lists them in.
+    return {
+        name: (framework.baseline / source["path"]).resolve()
+        for name, source in sorted(sources.items())
+        if isinstance(source, dict) and "path" in source
+    }
+
+
+def source_files(folder: Path) -> list[str]:
+    """
+    List the files in `folder` that git tracks, or would track, as paths relative to it.
+
+    Git's ignore rules leave out what a build writes beside the sources,
+    such as setuptools' build/ and *.egg-info/ folders, so building the
+    package does not count as a change to it.
+    """
+    completed = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=folder,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ConfigError(f"could not list the files of {folder} with git: {completed.stderr.decode()[-2000:]}")
+    return sorted({name for name in completed.stdout.decode().split("\0") if name})
+
+
+def local_source_digest(framework: Framework) -> str:
+    """
+    Hash the files of every package the clean app installs from disk.
+
+    A change to them changes what the installed package does, so it must
+    install the package again and run the cases again.
+    """
+    digest = hashlib.sha256()
+    for name, path in local_sources(framework).items():
+        digest.update(f"{name}\0".encode())
+        if path.is_file():
+            # A built wheel or archive named directly.
+            digest.update(path.read_bytes() + b"\0")
+            continue
+        for relative in source_files(path):
+            file = path / relative
+            # A tracked file deleted from the working tree is still listed.
+            content = file.read_bytes() if file.is_file() else b"<deleted>"
+            digest.update(relative.encode() + b"\0" + content + b"\0")
+    return digest.hexdigest()
+
+
 def _manifest_digest(framework: Framework) -> str:
     digest = hashlib.sha256()
     # The command is part of what the environment holds: a setup step that
@@ -39,6 +103,10 @@ def _manifest_digest(framework: Framework) -> str:
     for name in framework.setup_manifests:
         digest.update(name.encode())
         digest.update((framework.baseline / name).read_bytes())
+    # A package installed from its sources keeps the same lockfile entry when
+    # those sources change, so the sources themselves decide when to install
+    # it again.
+    digest.update(local_source_digest(framework).encode())
     return digest.hexdigest()
 
 

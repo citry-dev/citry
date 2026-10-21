@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 from .config import BENCH_ROOT, ConfigError
 from .execute import StageOutput
 from .runtime import Observation
-from .work import _IGNORED_NAMES
+from .work import _IGNORED_NAMES, local_source_digest
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -95,7 +95,8 @@ def framework_digest(framework: Framework, env: Path) -> str:
     Hash every file of a framework's folder, and what its environment `env` has installed.
 
     The folder holds the clean app, its lockfiles, helper scripts and
-    framework.toml. framework.toml is read and hashed without the keys in
+    framework.toml. The files of a package the app installs from disk, such
+    as Citry from this repository, are hashed too. framework.toml is read and hashed without the keys in
     `_UNUSED_KEYS`, so rewording its notes keeps the stored results; comments
     are dropped by the same reading. When a command names a file by its
     absolute path in the checkout (`{framework}` or `{repo}`), that path is
@@ -108,6 +109,10 @@ def framework_digest(framework: Framework, env: Path) -> str:
     for name in _INSTALL_RECORDS:
         record = env / name
         digest.update(name.encode() + b"\0" + (record.read_bytes() if record.is_file() else b"<none>") + b"\0")
+    # A package installed from its sources in this repository, such as the
+    # Citry app's citry, changes what the tools print without changing any
+    # file of the framework's folder or the install records above.
+    digest.update(f"local sources {local_source_digest(framework)}\0".encode())
     for path in sorted(framework.root.rglob("*")):
         relative = path.relative_to(framework.root)
         # Build output and installed packages never reach a working copy.

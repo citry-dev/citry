@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "The error-prevention benchmark's reference page, written in Citry"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "citry==0.6.0",
+  "citry",
   "fastapi==0.141.1",
   "uvicorn==0.52.4",
 ]
@@ -14,12 +14,32 @@ dependencies = [
 # which `citry check --types` runs. ruff is the Python linter most
 # projects add; the starter does not install it.
 dev = [
-  "citry-lsp==0.2.0",
+  "citry-lsp",
   "ruff==0.15.5",
 ]
 
 [tool.uv]
 package = false
+# citry and citry-lsp sit in this repository's own uv workspace, whose
+# settings ask for each other as editable installs and for citry-core
+# built from the Rust sources. These two overrides replace both requests:
+# citry is installed from its sources like the source below, and
+# citry-core comes from PyPI at the version packages/py/citry pins (a
+# runner test checks that the two versions match). uv must run from this
+# folder (`--directory`), because it reads ${PROJECT_ROOT} as the folder
+# it was started in.
+override-dependencies = [
+  "citry-core==1.8.0",
+  "citry @ file:///${PROJECT_ROOT}/../../../../../packages/py/citry",
+]
+
+# The benchmark measures the Citry in this repository, not a release, so a
+# release ships with its results already measured. uv builds each package
+# from its sources and installs that build, not an editable install, as a
+# release would be installed.
+[tool.uv.sources]
+citry = { path = "../../../../../packages/py/citry" }
+citry-lsp = { path = "../../../../../packages/py/citry_lsp" }
 
 # Type checking on, as in most typed Python projects: Pylance's "standard"
 # mode, which is also the pyright command line's default.

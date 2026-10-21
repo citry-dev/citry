@@ -131,9 +131,16 @@ kind of check. Considered and left off:
 
 [setup]
 manifests = ["pyproject.toml", "uv.lock", ".python-version", "package.json", "package-lock.json"]
+# uv runs in the clean app's folder, not in the copy of the manifests, because
+# the lockfile names citry and citry-lsp by their path in this repository
+# (see baseline/pyproject.toml); UV_PROJECT_ENVIRONMENT still installs into
+# the shared environment. uv keeps a package installed from a folder while
+# its version stays the same, so --reinstall-package builds both from their
+# current sources each time this step runs.
 command = [
   "sh", "-c",
-  "uv sync --frozen --no-install-project --python 3.12 && npm ci --no-audit --no-fund",
+  """UV_PROJECT_ENVIRONMENT='{venv}' uv sync --directory '{framework}/baseline' --frozen --no-install-project \
+  --python 3.12 --reinstall-package citry --reinstall-package citry-lsp && npm ci --no-audit --no-fund""",
 ]
 
 [[stages]]
