@@ -23,6 +23,7 @@ from citry._diagnostic_catalog import (
     BROWSER_MISSING_COMPONENT_PROP,
     BROWSER_UNKNOWN_SERVER_EVENT,
     BROWSER_UNKNOWN_STATE_FIELD,
+    CHECK_TEMPLATE_NOT_CHECKED,
     I18N_ARGUMENT_INVALID,
     I18N_CATALOG_INVALID,
     I18N_UNKNOWN_MESSAGE,
@@ -97,13 +98,16 @@ from citry.analysis import (
     css_data_completion_at,
     css_data_reference_at,
     css_data_references,
+    discover_untraced_component_templates,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
     lint_alpine_attributes,
     lint_attribute_values,
+    lint_component_js_prop_assignments,
     lint_invalid_vue_expressions,
     lint_markup,
     lint_misspelled_directives,
+    lint_prop_assignments,
     lint_undeclared_component_js_emits,
     lint_undeclared_component_listeners,
     lint_undeclared_template_emits,
@@ -114,6 +118,7 @@ from citry.analysis import (
     lint_vue_python_variables,
     mark_literal_findings,
     merge_json_wire_types,
+    project_module_exists,
     python_application_lint_variable_range,
     python_class_asset_resolution_signature,
     python_class_defines_direct_method,
@@ -599,6 +604,8 @@ class DocumentState:
             if result is not None:
                 parsed[region.key] = result
                 self.last_good[region.key] = result
+        if self.language_id == "python":
+            diagnostics.extend(_untraced_template_diagnostics(self.uri, source, project))
         self.parsed = parsed
         self.diagnostics = tuple(diagnostics)
 
@@ -620,6 +627,49 @@ class DocumentState:
     def js_region_at(self, position: types.Position) -> JsRegion | None:
         """Return the current authored JavaScript region containing a position."""
         return js_region_at_position(self.js_regions, _citry_position(position))
+
+
+def _untraced_template_diagnostics(uri: str, source: str, project: ProjectState) -> list[types.Diagnostic]:
+    """
+    Point out each class whose template the editor does not check, because its base class comes from another module.
+
+    The editor finds templates by reading one file at a time, so it cannot
+    tell that such a class is a component. Nothing is wrong with the code,
+    so this is information, not a warning.
+    """
+    path = file_uri_path(uri)
+    workspace = project.status.workspace
+    if path is None or not workspace:
+        return []
+    root = Path(workspace).resolve()
+    file = path.resolve()
+    if not file.is_relative_to(root):
+        return []
+    lines = source_lines(source)
+    diagnostics: list[types.Diagnostic] = []
+    for untraced in discover_untraced_component_templates(
+        source,
+        is_project_module=lambda module, level: project_module_exists(module, level, file=file, root=root),
+    ):
+        line = lines[untraced.line - 1] if untraced.line <= len(lines) else ""
+        diagnostics.append(
+            types.Diagnostic(
+                range=types.Range(
+                    types.Position(untraced.line - 1, _utf16_units(line[: untraced.start_column])),
+                    types.Position(untraced.line - 1, _utf16_units(line[: untraced.end_column])),
+                ),
+                message=render_diagnostic(
+                    CHECK_TEMPLATE_NOT_CHECKED,
+                    component=untraced.component_name,
+                    base=untraced.base,
+                ),
+                severity=types.DiagnosticSeverity.Information,
+                code=CHECK_TEMPLATE_NOT_CHECKED,
+                code_description=types.CodeDescription(diagnostic_documentation_url(CHECK_TEMPLATE_NOT_CHECKED)),
+                source="citry",
+            )
+        )
+    return diagnostics
 
 
 def template_lint_diagnostics(
@@ -1395,7 +1445,12 @@ def browser_diagnostics(
                 *lint_undeclared_component_listeners(
                     expressions,
                     lambda tag: _tag_js_source(tag, project, document, open_documents),
-                    severities=_undeclared_component_event_severities(consumers, project),
+                    severities=_owner_rule_severities(consumers, project, "rule_undeclared_component_event"),
+                ),
+                *lint_prop_assignments(
+                    expressions,
+                    _consumer_js_sources(consumers, project, document, open_documents),
+                    severities=_owner_rule_severities(consumers, project, "rule_prop_assignment"),
                 ),
             )
         )
@@ -1471,7 +1526,13 @@ def browser_diagnostics(
             )
         diagnostics.extend(
             _vue_finding_diagnostic(js_region, finding)
-            for finding in lint_undeclared_component_js_emits(js_region.source_map.template_source)
+            for finding in (
+                *lint_undeclared_component_js_emits(js_region.source_map.template_source),
+                *lint_component_js_prop_assignments(
+                    js_region.source_map.template_source,
+                    severities=_owner_rule_severities(js_consumers, project, "rule_prop_assignment"),
+                ),
+            )
         )
         js_lint_consumers = _component_js_lint_consumers(js_consumers, project)
         if js_lint_consumers is not None:
@@ -1566,18 +1627,16 @@ def _consumer_js_sources(
     return tuple(sources)
 
 
-def _undeclared_component_event_severities(
+def _owner_rule_severities(
     consumers: Sequence[ComponentRecord],
     project: ProjectState,
+    rule: str,
 ) -> list[LintSeverity]:
-    """Return each owner's ``rule_undeclared_component_event``, the application's for an owner the analysis lacks."""
+    """Return each owner's severity for one ``rule_*`` setting, the application's for an owner the analysis lacks."""
     analysis = project.analysis
     if analysis is None:
         return []
-    return [
-        analysis.component_lint.get(owner.definition_id, analysis.lint).rule_undeclared_component_event
-        for owner in consumers
-    ]
+    return [getattr(analysis.component_lint.get(owner.definition_id, analysis.lint), rule) for owner in consumers]
 
 
 def _tag_js_source(

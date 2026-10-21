@@ -226,6 +226,12 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
     except TypeScriptUnavailableError as exc:
         _type_check_error(str(exc))
     findings = list(report.findings)
+    # The registry check may already report a js_data() warning that the
+    # editor's check, run again here, finds at the same place.
+    reported = {
+        (finding.code, finding.line, finding.column, finding.end_line, finding.end_column)
+        for finding in report.findings
+    }
     for item in (*found, *python_found):
         # TypeScript findings are errors. A ty warning stays a warning, and
         # an information or hint finding, which the editor shows as a faint
@@ -236,6 +242,8 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
         start = item.diagnostic.range.start
         code = str(item.diagnostic.code)
         coordinates = _lsp_range_coordinates(item.source, item.diagnostic.range)
+        if coordinates is not None and (code, *coordinates[2:]) in reported:
+            continue
         findings.append(
             CheckFinding(
                 f"{item.path}:{start.line + 1}:{start.character + 1}",

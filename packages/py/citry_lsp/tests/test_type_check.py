@@ -702,6 +702,46 @@ def test_check_project_python_types_reports_ty_findings_like_the_editor(tmp_path
     assert found[0].diagnostic.source == "Citry (ty)"
 
 
+# The m41 benchmark: js_data() sends a constant from another module that
+# holds a path, so only ty can tell its type.
+_PATH_SETTINGS = """from pathlib import PurePosixPath
+API_BASE = PurePosixPath("/api")
+"""
+_PATH_APP = """from citry import Citry, Component
+from settings import API_BASE
+engine = Citry(autodiscover=False)
+class Board(Component):
+    citry = engine
+    template = "<p></p>"
+    def js_data(self, kwargs, slots):
+        return {"apiBase": API_BASE}
+"""
+
+
+def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_path(tmp_path, monkeypatch):
+    (tmp_path / "settings.py").write_text(_PATH_SETTINGS, encoding="utf-8")
+    (tmp_path / "app.py").write_text(_PATH_APP, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+
+    found = check_project_python_types(project, tmp_path)
+
+    # The editor's js-data warning, at the key, once ty names the type.
+    assert [
+        (item.path.name, item.diagnostic.code, item.diagnostic.range.start.line, item.diagnostic.message)
+        for item in found
+    ] == [
+        (
+            "app.py",
+            "citry.js-data.unsupported-type",
+            7,
+            "JsData field 'apiBase' is not a clean JSON value: PurePosixPath values are not serialized by Citry's"
+            " JSON wire format. Browser tooling will treat its type as unknown.",
+        ),
+    ]
+
+
 # Without a template_data() of its own, the component inherits the one on
 # Citry's base class, outside this workspace, and its Kwargs fields reach
 # the template.
@@ -1198,6 +1238,26 @@ def test_ty_type_displays_become_json_types(display, expected):
     value = _json_type_from_ty_display(display)
 
     assert (value.javascript if value is not None else None) == expected
+
+
+@pytest.mark.parametrize(
+    ("display", "reasons"),
+    [
+        ("PurePosixPath", ("PurePosixPath values are not serialized by Citry's JSON wire format",)),
+        ("pathlib.Path", ("Path values are not serialized by Citry's JSON wire format",)),
+        ("datetime | None", ("datetime values are not serialized by Citry's JSON wire format",)),
+        ("set[int]", ("sets are not JSON-serializable",)),
+        ("frozenset[str]", ("sets are not JSON-serializable",)),
+        ("complex", ("complex values are not JSON-serializable",)),
+        # Any other class may be a TypedDict, which is sent as an object.
+        ("Task", None),
+        ("Unknown | PurePosixPath", None),
+    ],
+)
+def test_ty_displays_of_standard_non_json_types_keep_their_reason(display, reasons):
+    value = _json_type_from_ty_display(display)
+
+    assert (value.unsupported if value is not None else None) == reasons
 
 
 def test_a_bound_string_the_attribute_rule_reports_is_not_reported_by_typescript(tmp_path):

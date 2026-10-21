@@ -1849,7 +1849,7 @@ def test_registry_check_reports_native_vue_component_prop_presence_and_literal_t
     assert [finding.code for finding in incompatible] == ["citry.browser.incompatible-component-prop"] * 3
     assert [finding.message for finding in incompatible] == [
         "Vue prop 'required-title' expects string, but this binding is number.",
-        "Vue prop 'requiredCount' expects number, but this binding is string.",
+        "Vue prop 'requiredCount' expects number, but this binding is \"many\".",
         "Vue prop 'requiredRows' expects unknown[], but this binding is number.",
     ]
     expected_ranges = (
@@ -1860,6 +1860,40 @@ def test_registry_check_reports_native_vue_component_prop_presence_and_literal_t
     assert [(finding.start_index, finding.end_index) for finding in incompatible] == [
         (start, start + width) for start, width in expected_ranges
     ]
+
+
+def test_registry_check_reports_a_boolean_prop_given_a_string_other_than_its_own_name(tmp_path):
+    # Vue turns '' and the prop's own name, hyphenated, into true for a
+    # Boolean prop; any other string arrives as that string.
+    value = "open ? 'required-default' : 'closed'"
+    template = f'<c-card :requiredTitle="\'x\'" :requiredCount="1" :requiredRows="[]" :requiredDefault="{value}" />'
+    findings = _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, template))
+
+    # Only the result the prop rejects is named; the span covers the whole value.
+    assert [finding.message for finding in findings] == [
+        "Vue prop 'requiredDefault' expects boolean, but this binding is \"closed\".",
+    ]
+    assert (findings[0].start_index, findings[0].end_index) == (
+        template.index(value),
+        template.index(value) + len(value),
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "''",
+        "'required-default'",
+        "flag ? '' : false",
+        "flag ? true : 'required-default'",
+        # A string whose text Citry does not read may be one of the two.
+        "`${name}`",
+        "cond ? label : 'x'",
+    ],
+)
+def test_registry_check_accepts_the_strings_vue_turns_into_true_for_a_boolean_prop(tmp_path, value):
+    template = f'<c-card :requiredTitle="\'x\'" :requiredCount="1" :requiredRows="[]" :requiredDefault="{value}" />'
+    assert _vue_component_prop_findings(_check_vue_component_prop_template(tmp_path, template)) == []
 
 
 def test_registry_check_tracks_vue_component_prop_spread_order_and_dynamic_uncertainty(tmp_path):

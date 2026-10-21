@@ -12,7 +12,7 @@ from citry._i18n_directives import (
     looks_like_i18n_binding,
     parse_i18n_binding_name,
 )
-from citry._json_wire import JsonWireType
+from citry._json_wire import JsonWireType, merge_json_wire_types
 from citry._state_binding_targets import (
     _custom_update_event_error,
     _element_of,
@@ -462,8 +462,12 @@ def browser_component_prop_findings(
             index, contribution = matches[-1]
             if index < last_dynamic:
                 continue
-            actual = value_type(contribution)
-            if _component_prop_accepts(prop.accepted_javascript, prop.required, actual):
+            # The message names only the part of the value the prop rejects,
+            # such as `'closed'` in `open ? 'open' : 'closed'`.
+            rejected = _rejected_prop_value(
+                prop.accepted_javascript, prop.required, prop.name, value_type(contribution)
+            )
+            if rejected is None:
                 continue
             findings.append(
                 BrowserComponentPropFinding(
@@ -471,7 +475,7 @@ def browser_component_prop_findings(
                     site.tag,
                     contribution.name or prop.name,
                     prop.accepted_javascript,
-                    actual.javascript,
+                    rejected.javascript,
                     contribution.value_start_index,
                     contribution.value_end_index,
                 )
@@ -483,14 +487,30 @@ def _vue_prop_name(name: str) -> str:
     return re.sub(r"-([A-Za-z0-9])", lambda match: match.group(1).upper(), name)
 
 
-def _component_prop_accepts(expected: str, required: bool, actual: JsonWireType) -> bool:
+def _rejected_prop_value(expected: str, required: bool, prop_name: str, actual: JsonWireType) -> JsonWireType | None:
+    """Return the parts of a value's type that a declared prop rejects, or None when it accepts them all."""
     if actual.kind == "union":
-        return all(_component_prop_accepts(expected, required, item) for item in actual.items)
+        rejected = [
+            part
+            for item in actual.items
+            if (part := _rejected_prop_value(expected, required, prop_name, item)) is not None
+        ]
+        return merge_json_wire_types(rejected) if rejected else None
     if actual.kind == "null" and not required:
-        return True
+        return None
     if actual.kind == "string" and "boolean" in {item.strip() for item in expected.split("|")}:
-        return True
-    return browser_client_prop_accepts(expected, actual)
+        # Vue turns `''` and the prop's own name, hyphenated, into `true` for
+        # a Boolean prop. Any other string stays a string. A string whose
+        # text is unknown may be one of those two, so it is not reported.
+        text = actual.literal
+        if not isinstance(text, str) or text in {"", _vue_hyphenated_prop_name(prop_name)}:
+            return None
+    return None if browser_client_prop_accepts(expected, actual) else actual
+
+
+def _vue_hyphenated_prop_name(name: str) -> str:
+    """Hyphenate a prop name the way Vue does: `isOpen` becomes `is-open`."""
+    return re.sub(r"\B([A-Z])", r"-\1", name).lower()
 
 
 @dataclass(frozen=True, slots=True)
@@ -827,7 +847,15 @@ def analyze_browser_component_source(source: str) -> BrowserComponentSourceAnaly
 
 
 def browser_literal_wire_type(source: str) -> JsonWireType:
-    """Infer broad JSON types from direct JavaScript literals only."""
+    """
+    Infer broad JSON types from direct JavaScript literals only.
+
+    A string literal with no escapes or `${}` keeps its text, because Vue
+    reads some strings by their text: a Boolean prop turns `''` and its own
+    name into `true`. A condition whose two results are both literals, such
+    as `open ? 'open' : 'closed'`, is either result. Anything else is
+    unknown.
+    """
     value = source.strip()
     if value in {"true", "false"}:
         return JsonWireType("boolean", literal=value == "true")
@@ -836,7 +864,14 @@ def browser_literal_wire_type(source: str) -> JsonWireType:
     if _javascript_number(value):
         return JsonWireType("number")
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'", "`"}:
-        return JsonWireType("string")
+        return JsonWireType("string", literal=_plain_string_literal_text(value))
+    branches = _conditional_branches(value)
+    if branches is not None:
+        consequent, alternate = (browser_literal_wire_type(branch) for branch in branches)
+        # Only a condition whose two results are both known says anything;
+        # merging an unknown result would hide that.
+        if consequent.kind != "unknown" and alternate.kind != "unknown":
+            return merge_json_wire_types((consequent, alternate))
     if value.startswith("[") and value.endswith("]"):
         return JsonWireType("array", (JsonWireType("unknown"),))
     if value.startswith("{") and value.endswith("}"):
@@ -2887,6 +2922,78 @@ def _identifier_start(char: str) -> bool:
 
 def _identifier_continue(char: str) -> bool:
     return _identifier_start(char) or char.isdigit()
+
+
+def _plain_string_literal_text(literal: str) -> str | None:
+    """
+    Return the text of a quoted JavaScript string with nothing to decode, or None.
+
+    A backslash escape or a template literal's `${}` would need JavaScript
+    to evaluate, so such a literal's text is left unknown rather than guessed.
+    """
+    body = literal[1:-1]
+    if "\\" in body or literal[0] in body or (literal[0] == "`" and "${" in body):
+        return None
+    return body
+
+
+# The brackets a conditional's `?` and `:` must sit outside of.
+_OPENING_BRACKETS = {"(": ")", "[": "]", "{": "}"}
+
+
+def _conditional_branches(source: str) -> tuple[str, str] | None:
+    """
+    Split `test ? a : b` at its top-level `?` and `:`, or return None.
+
+    This reads the text rather than a syntax tree, so it gives up on
+    anything it cannot split with certainty: a string with an escape, a
+    template literal, a second top-level `?` before the `:`, or unbalanced
+    brackets. Optional chaining (`?.`) and `??` are not a conditional's `?`.
+    """
+    question: int | None = None
+    colon: int | None = None
+    nested = 0
+    stack: list[str] = []
+    index = 0
+    while index < len(source):
+        char = source[index]
+        if char in {"'", '"', "`"}:
+            end = source.find(char, index + 1)
+            body = source[index + 1 : end]
+            if end < 0 or "\\" in body or (char == "`" and "${" in body):
+                return None
+            index = end + 1
+            continue
+        if char in _OPENING_BRACKETS:
+            stack.append(_OPENING_BRACKETS[char])
+        elif char in {")", "]", "}"}:
+            if not stack or stack.pop() != char:
+                return None
+        elif not stack and char == "?":
+            following = source[index + 1 : index + 2]
+            # `a?.b` is optional chaining unless a digit follows, as in `a?.5:b`.
+            if following == "?" or (following == "." and not source[index + 2 : index + 3].isdigit()):
+                index += 2
+                continue
+            if question is None:
+                question = index
+            else:
+                # A nested conditional in the first result needs its own `:`.
+                nested += 1
+        elif not stack and char == ":" and question is not None:
+            if nested:
+                nested -= 1
+            elif colon is None:
+                colon = index
+        index += 1
+    if stack or question is None or colon is None:
+        return None
+    test, consequent, alternate = source[:question], source[question + 1 : colon], source[colon + 1 :]
+    # In `x => x ? 1 : 2` the conditional is an arrow function's body, so
+    # the value is the function, not either result.
+    if not test.strip() or not consequent.strip() or not alternate.strip() or "=>" in test:
+        return None
+    return consequent.strip(), alternate.strip()
 
 
 def _javascript_number(source: str) -> bool:

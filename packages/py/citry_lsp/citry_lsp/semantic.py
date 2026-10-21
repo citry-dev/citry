@@ -598,6 +598,35 @@ _UNPROVEN_TY_DISPLAY = re.compile(r"\bUnknown\b|@Todo|\.\.\. omitted \d+")
 _TY_DISPLAY_STRING = re.compile(r'"(?:[^"\\]|\\.)*"' + r"|'(?:[^'\\]|\\.)*'")
 
 
+# Standard library types that never cross Citry's strict JSON wire, each
+# with the reason the js-data warning gives. ty's answer naming one of these
+# is kept, so the editor and `citry check --types` can report the value.
+# Any other class is dropped instead: it may be a TypedDict, which is sent
+# as an object, or a type Citry cannot judge.
+_STANDARD_NON_JSON_TYPES = {
+    **dict.fromkeys(
+        (
+            "date",
+            "datetime",
+            "time",
+            "timedelta",
+            "Decimal",
+            "UUID",
+            "Path",
+            "PosixPath",
+            "WindowsPath",
+            "PurePath",
+            "PurePosixPath",
+            "PureWindowsPath",
+        ),
+        "values are not serialized by Citry's JSON wire format",
+    ),
+    **dict.fromkeys(("bytes", "bytearray", "memoryview", "complex"), "values are not JSON-serializable"),
+    "set": "sets are not JSON-serializable",
+    "frozenset": "sets are not JSON-serializable",
+}
+
+
 def _json_type_from_ty_display(display: str) -> JsonWireType | None:
     """
     Turn ty's display of a type into a JSON type, or `None` when it does not describe a JSON value.
@@ -605,14 +634,44 @@ def _json_type_from_ty_display(display: str) -> JsonWireType | None:
     ty writes types the way Python annotations are written, such as
     `list[str]` or `Literal["a", "b"]`, so the annotation rules read them.
     A literal is widened to its kind, as Citry's own rules do for a
-    `js_data()` constant.
+    `js_data()` constant. A standard library type that JSON cannot carry,
+    such as `PurePosixPath` or `set[int]`, gives an unknown type with the
+    reason, alone or as one member of a union.
     """
     if _UNPROVEN_TY_DISPLAY.search(_TY_DISPLAY_STRING.sub('""', display)):
         return None
+    reasons = _standard_non_json_reasons(display)
+    if reasons:
+        return JsonWireType("unknown", unsupported=reasons)
     wire_type = json_wire_type_from_annotation(re.sub(r"\bLiteralString\b", "str", display))
     if wire_type.unsupported or _has_unknown_part(wire_type):
         return None
     return _widened_json_type(wire_type)
+
+
+def _standard_non_json_reasons(display: str) -> tuple[str, ...]:
+    """Return why each top-level union member of ty's display that is a standard non-JSON type cannot be sent."""
+    try:
+        node = ast.parse(display, mode="eval").body
+    except SyntaxError:
+        return ()
+    members: list[ast.expr] = []
+    pending = [node]
+    while pending:
+        current = pending.pop()
+        if isinstance(current, ast.BinOp) and isinstance(current.op, ast.BitOr):
+            pending.extend((current.right, current.left))
+        else:
+            members.append(current)
+    reasons: list[str] = []
+    for member in members:
+        # `set[int]` and `pathlib.PurePosixPath` are named by their last part.
+        base = member.value if isinstance(member, ast.Subscript) else member
+        name = base.attr if isinstance(base, ast.Attribute) else base.id if isinstance(base, ast.Name) else None
+        reason = _STANDARD_NON_JSON_TYPES.get(name or "")
+        if reason is not None:
+            reasons.append(reason if reason.startswith("sets") else f"{name} {reason}")
+    return tuple(dict.fromkeys(reasons))
 
 
 def _has_unknown_part(value: JsonWireType) -> bool:

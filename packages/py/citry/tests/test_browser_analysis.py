@@ -1046,6 +1046,30 @@ def test_component_prop_types_compare_only_proven_broad_json_shapes():
     assert browser_literal_wire_type("calculate() ").kind == "unknown"
 
 
+@pytest.mark.parametrize(
+    ("source", "rendered"),
+    [
+        # A string keeps its text, which a Boolean prop reads.
+        ("'closed'", '"closed"'),
+        ("`closed`", '"closed"'),
+        # An escape or `${}` would need JavaScript to read, so the text is left out.
+        ("'it\\'s'", "string"),
+        ("`a${b}`", "string"),
+        # A condition with two literal results is either result.
+        ("open ? 'open' : 'closed'", '"open" | "closed"'),
+        ("a?.b ? 1 : null", "number | null"),
+        ("a ? x ? 1 : 2 : 'n'", 'number | "n"'),
+        # Anything else stays unknown.
+        ("open ? label : 'closed'", "unknown"),
+        ("a ?? 'x'", "unknown"),
+        ("(x) => x ? 1 : 2", "unknown"),
+        ("a ? 'x' :", "unknown"),
+    ],
+)
+def test_literal_wire_types_read_string_text_and_conditions(source, rendered):
+    assert browser_literal_wire_type(source).javascript == rendered
+
+
 def test_native_component_prop_sites_preserve_nested_utf8_ranges_and_dynamic_uncertainty():
     source = (
         'é<template><c-card v-bind="{ title: name }" :display-name.camel="name" '

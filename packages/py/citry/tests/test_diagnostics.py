@@ -46,6 +46,12 @@ _LINT_RULE_CODES = {
     "rule_misspelled_event": "citry.vue.misspelled-event",
     "rule_invalid_vue_expression": "citry.vue.invalid-expression",
     "rule_undeclared_component_event": "citry.browser.undeclared-component-event",
+    "rule_missing_component_key": "citry.browser.missing-component-key",
+    "rule_prop_assignment": "citry.browser.prop-assignment",
+    "rule_unknown_server_event_field": "citry.browser.unknown-server-event-field",
+    "rule_missing_server_event_field": "citry.browser.missing-server-event-field",
+    "rule_incompatible_server_event_field": "citry.browser.incompatible-server-event-field",
+    "rule_misspelled_css_variable": "citry.css.misspelled-variable",
     "rule_i18n_cross_language_fallback": "citry.i18n.cross-language-fallback",
 }
 
