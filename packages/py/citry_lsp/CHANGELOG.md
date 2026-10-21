@@ -24,6 +24,13 @@ All notable changes to `citry-lsp` are documented here.
 - Once your application loads, the editor reports a component that
   assigns to its own prop, such as `@click="open = false"`, at the
   severity `rule_prop_assignment` sets.
+- Once your application loads, the editor reports `@c-*` arguments the
+  server would reject, such as `save({amont: 1})` or `save({amount: '1'})`
+  for an `int` field, and a control in a submitted form whose `name` the
+  handler does not accept, such as `<input name="qeury">`, as
+  `citry check` does. It skips a handler while the handler or its data
+  class has unsaved changes, and every handler of an application on an
+  older Citry, which does not say how the server checks the arguments.
 - The editor and `citry check --types` warn about a `js_data()` value that
   ty types as a standard type JSON cannot carry, such as a
   `PurePosixPath`, a `datetime`, or a set.

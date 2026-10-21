@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import tokenize
+from collections.abc import Mapping
 from functools import cache, lru_cache
 from pathlib import Path
 from types import FunctionType, ModuleType
@@ -127,7 +128,24 @@ def _extension_analysis(engine: Citry) -> dict[str, object]:
         inspector = getattr(extension, "_tooling_index", None)
         if callable(inspector):
             indexes[name] = inspector()
+    indexes["events"] = {"csrf_field_names": _csrf_field_names(engine)}
     return indexes
+
+
+def _csrf_field_names(engine: Citry) -> list[str]:
+    """
+    Copy the host CSRF field names the app's Events server removes from a form's arguments.
+
+    The setting is read from the engine's settings rather than through
+    ``citry.ext.events.csrf``, so an app on an older Citry, which has neither
+    the setting nor the removal, still loads. The editor then stays silent
+    about a ``csrfmiddlewaretoken`` control there, as it always has.
+    """
+    defaults = engine.settings.extensions_defaults.get("events", {})
+    value = defaults.get("_csrf_field_names") if isinstance(defaults, Mapping) else None
+    if isinstance(value, (list, tuple, set, frozenset)) and all(type(name) is str for name in value):
+        return sorted(value)
+    return ["csrfmiddlewaretoken"]
 
 
 def _source_analysis(

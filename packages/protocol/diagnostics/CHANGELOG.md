@@ -51,7 +51,13 @@
   `citry.browser.unknown-server-event-field` (variants `suggestion` and
   `no-data`), `citry.browser.missing-server-event-field`, and
   `citry.browser.incompatible-server-event-field`, all errors by default,
-  and `citry.css.misspelled-variable`, a warning by default.
+  and `citry.css.misspelled-variable`, a warning by default. The language
+  server reports the three server-event field diagnostics too.
+- Added `citry.browser.unknown-form-field` (variants `suggestion` and
+  `no-data`) and `citry.browser.missing-form-field`, configurable errors
+  that `citry check` and the language server report with the application
+  loaded, for the control names of a form whose `@c-submit` sends its
+  fields to a server event.
 - Added `citry.check.template-not-checked`, an information diagnostic for a
   class whose template `citry check --static` and the language server skip
   because its base class comes from another module and Citry has not

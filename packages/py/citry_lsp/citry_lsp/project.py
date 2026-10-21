@@ -564,6 +564,14 @@ def _source_component(
     )
 
 
+def _events_csrf_field_names(value: object) -> frozenset[str]:
+    """Read the CSRF field names the worker copied from the app's Events settings."""
+    names = value.get("csrf_field_names") if type(value) is dict else None
+    if type(names) is not list or any(type(name) is not str for name in names):
+        raise ValueError("events analysis csrf_field_names must be a list of strings")
+    return frozenset(names)
+
+
 def _source_native_template(value: object, definition_id: str) -> bool | None:
     """Read the worker's answer to whether a component's template is Citry's own template language."""
     # A worker that does not send the key leaves the answer unknown, so the
@@ -754,6 +762,9 @@ class ProjectState:
     catalog: CatalogIndex | None = None
     source_analysis: SourceAnalysisIndex | None = None
     i18n: I18nProjectIndex | None = None
+    # The host CSRF field names the app's server removes from a form's event
+    # arguments, so the form-field rule leaves those controls alone.
+    csrf_field_names: frozenset[str] = frozenset({"csrfmiddlewaretoken"})
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
     # ty's types for `js_data()` value parts, per file, source text, and class.
     _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
@@ -1057,9 +1068,10 @@ def _project_from_worker_output(
     try:
         source_analysis = SourceAnalysisIndex(payload.get("source_analysis"), catalog)
         raw_extensions = payload.get("extensions")
-        if type(raw_extensions) is not dict or set(raw_extensions) != {"i18n"}:
+        if type(raw_extensions) is not dict or set(raw_extensions) != {"i18n", "events"}:
             raise ValueError("extension analysis envelope is invalid")
         i18n = I18nProjectIndex(raw_extensions.get("i18n"))
+        csrf_field_names = _events_csrf_field_names(raw_extensions.get("events"))
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     project_output = payload.get("project_output")
@@ -1085,6 +1097,7 @@ def _project_from_worker_output(
         catalog=catalog,
         source_analysis=source_analysis,
         i18n=i18n,
+        csrf_field_names=csrf_field_names,
     )
 
 

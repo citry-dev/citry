@@ -40,7 +40,12 @@
     required field, or a literal of the wrong type, such as
     `save({amount: '1'})` for an `int` field
     (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
-    `rule_incompatible_server_event_field`);
+    `rule_incompatible_server_event_field`), which the editor reports too;
+  - a control in a form whose `@c-submit` sends the form's fields, when
+    the handler's data class does not declare its `name`, such as
+    `<input name="qeury">`, or no control is named after a required field
+    (`rule_unknown_form_field`, `rule_missing_form_field`), which the
+    editor reports too;
   - a `var(--name)` that misspells a `css_data()` key, such as
     `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
 
@@ -49,6 +54,10 @@
 - With your application loaded, `citry check` now warns when `js_data()`
   sends a module constant that JSON cannot carry, such as a
   `PurePosixPath`.
+- `Citry.inspect_components()` now says, for each Events handler, whether
+  an argument key the data class does not declare fails the call
+  (`extra_fields`) and whether Citry or Pydantic checks the values
+  (`validated_by`).
 - `citry check --static` now lists, as a note, each template it skips
   because the component's base class comes from another module of your
   project.

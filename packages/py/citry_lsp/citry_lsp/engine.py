@@ -8,6 +8,7 @@ import json
 import re
 import tokenize
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
@@ -19,9 +20,14 @@ from citry import LspPosition, LspRange
 from citry._browser_expressions import _normalized_dynamic_slot_source
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
+    BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
     BROWSER_INVALID_STATE_BINDING_TARGET,
     BROWSER_MISSING_COMPONENT_PROP,
+    BROWSER_MISSING_FORM_FIELD,
+    BROWSER_MISSING_SERVER_EVENT_FIELD,
+    BROWSER_UNKNOWN_FORM_FIELD,
     BROWSER_UNKNOWN_SERVER_EVENT,
+    BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
     BROWSER_UNKNOWN_STATE_FIELD,
     CHECK_TEMPLATE_NOT_CHECKED,
     I18N_ARGUMENT_INVALID,
@@ -39,6 +45,14 @@ from citry._html_attribute_values import HTML_ELEMENTS as HTML_ELEMENT_NAMES
 from citry._i18n_directives import looks_like_i18n_binding
 from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._markup_lint import MARKUP_LINT_RULES
+from citry._registry_lint import (
+    ServerEventPayload,
+    server_event_calls,
+    server_event_form_findings,
+    server_event_forms,
+    server_event_payload_findings,
+    server_event_payload_from_description,
+)
 from citry._source_lines import source_lines
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
@@ -168,11 +182,12 @@ from citry_lsp.type_analysis import is_project_source_file
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Sequence
 
     from citry._linting import TemplateLintInfo, TemplateVariableInfo
     from citry._template_data_source import TemplateDataSourceShape
     from citry.settings import LintSeverity
+    from citry_core.template_parser import Template
     from citry_lsp.catalog import CatalogIndex, ComponentRecord, FieldRecord, SchemaRecord
     from citry_lsp.project import (
         I18nOutputRecord,
@@ -1544,6 +1559,13 @@ def browser_diagnostics(
                         event.end_index,
                     )
                 )
+            # The handler names are current, so their arguments and the forms
+            # that submit to them can be checked against what each accepts.
+            diagnostics.extend(
+                _server_event_payload_diagnostics(
+                    region, parsed.template, consumers, document, project, open_documents, parse_nested=parser
+                )
+            )
     for js_region in document.js_regions:
         js_consumers = _js_consumers(document, js_region, project, open_documents)
         data_names = _closed_js_asset_data_names(document, js_region, project, open_documents)
@@ -10893,6 +10915,237 @@ def _event_handler_location(
     if source_range is None:
         return None
     return types.Location(handler.source_file.resolve().as_uri(), _range(source_range))
+
+
+# The setting that controls each server-event payload and form-field finding.
+_SERVER_EVENT_PAYLOAD_RULES = {
+    BROWSER_UNKNOWN_SERVER_EVENT_FIELD: "rule_unknown_server_event_field",
+    BROWSER_MISSING_SERVER_EVENT_FIELD: "rule_missing_server_event_field",
+    BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD: "rule_incompatible_server_event_field",
+    BROWSER_UNKNOWN_FORM_FIELD: "rule_unknown_form_field",
+    BROWSER_MISSING_FORM_FIELD: "rule_missing_form_field",
+}
+
+
+def _server_event_payload_diagnostics(
+    region: TemplateRegion,
+    template: Template,
+    consumers: tuple[ComponentRecord, ...],
+    document: DocumentState,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+    *,
+    parse_nested: Callable[[str], Template],
+) -> list[types.Diagnostic]:
+    """
+    Report `@c-*` arguments and form fields the server would reject, as `citry check` does.
+
+    The editor cannot import the app, so it reads what each handler accepts
+    from the handler descriptions the app worker copied, and only while the
+    handler and its data class are unchanged since the app loaded.
+    """
+    payloads = _shared_server_event_payloads(consumers, document, project, open_documents)
+    if not payloads:
+        return []
+    found = [
+        finding
+        for call in server_event_calls(template, frozenset(payloads), parse_nested=parse_nested)
+        for finding in server_event_payload_findings(call, payloads[call.handler])
+    ]
+    for form in server_event_forms(template, frozenset(payloads), parse_nested=parse_nested):
+        found.extend(
+            server_event_form_findings(form, payloads[form.call.handler], dropped_names=project.csrf_field_names)
+        )
+    diagnostics: list[types.Diagnostic] = []
+    for finding in found:
+        severities = _owner_rule_severities(consumers, project, _SERVER_EVENT_PAYLOAD_RULES[finding.code])
+        active = [severity for severity in severities if severity != "ignore"]
+        if not active:
+            continue
+        diagnostics.append(
+            types.Diagnostic(
+                range=_range(region.source_map.map_range(finding.start_index, finding.end_index)),
+                message=finding.message,
+                severity=types.DiagnosticSeverity.Error if "error" in active else types.DiagnosticSeverity.Warning,
+                code=finding.code,
+                code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
+                source="citry",
+            )
+        )
+    return diagnostics
+
+
+def _shared_server_event_payloads(
+    consumers: tuple[ComponentRecord, ...],
+    document: DocumentState,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> dict[str, ServerEventPayload]:
+    """
+    Return what each handler accepts, for the handlers every owner of the template shares.
+
+    A template shared by several components sends each binding to the one
+    that renders it, so a handler is kept only when every owner describes it
+    the same way. A handler whose method or data class was edited since the
+    app loaded is left out until the app reloads.
+    """
+    if not consumers or project.source_analysis is None:
+        return {}
+    shared: dict[str, tuple[Mapping[str, object], bool]] | None = None
+    for component in consumers:
+        records = project.source_analysis.event_handlers(component)
+        if records is None:
+            return {}
+        current: dict[str, tuple[Mapping[str, object], bool]] = {}
+        for description in _handler_descriptions(component):
+            name = description.get("name")
+            record = next((item for item in records if item.name == name), None)
+            if not isinstance(name, str) or record is None:
+                continue
+            if not _handler_description_is_current(record, description, project, document, open_documents):
+                continue
+            methods = description.get("methods")
+            current[name] = (description, isinstance(methods, tuple) and "GET" in methods)
+        if shared is None:
+            shared = current
+            continue
+        shared = {
+            name: (description, query_string or current[name][1])
+            for name, (description, query_string) in shared.items()
+            if name in current and _same_payload_description(description, current[name][0])
+        }
+    payloads: dict[str, ServerEventPayload] = {}
+    for name, (description, query_string) in (shared or {}).items():
+        payload = server_event_payload_from_description(description)
+        if payload is not None:
+            # A GET from any owner may send the arguments as a query string.
+            payloads[name] = replace(payload, query_string=payload.query_string or query_string)
+    return payloads
+
+
+def _handler_descriptions(component: ComponentRecord) -> tuple[Mapping[str, object], ...]:
+    """Return the handler descriptions in one component's Events introspection entry."""
+    publication = component.extensions.get("events")
+    data = publication.get("data") if isinstance(publication, Mapping) else None
+    handlers = data.get("handlers") if isinstance(data, Mapping) else None
+    if not isinstance(handlers, tuple):
+        return ()
+    return tuple(handler for handler in handlers if isinstance(handler, Mapping))
+
+
+def _same_payload_description(left: Mapping[str, object], right: Mapping[str, object]) -> bool:
+    """Return whether two handler descriptions accept the same arguments."""
+    return all(left.get(key) == right.get(key) for key in ("request_schema", "extra_fields", "validated_by"))
+
+
+def _handler_description_is_current(
+    record: SourceEventRecord,
+    description: Mapping[str, object],
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> bool:
+    """
+    Return whether the handler and its data class read the same now as when the app loaded.
+
+    The description describes the app as it was imported, from the files on
+    disk, so an unsaved edit to the handler's method or to its data class
+    makes it stale. The editor reloads the app when a Python file is saved.
+    """
+    if not _definition_unchanged(record.source_file, record.qualname, document, open_documents):
+        return False
+    schema = description.get("request_schema")
+    import_path = schema.get("import_path") if isinstance(schema, Mapping) else None
+    if not isinstance(import_path, str):
+        # No data class, or one the description cannot name: nothing else to compare.
+        return schema is None or open_documents is None or not _any_unsaved_python(open_documents)
+    located = _data_class_file(import_path, record, project)
+    if located is None:
+        # The class lives in a module the editor cannot place, so any
+        # unsaved Python file may hold it.
+        return open_documents is None or not _any_unsaved_python(open_documents)
+    data_file, qualname = located
+    return _definition_unchanged(data_file, qualname, document, open_documents)
+
+
+def _data_class_file(
+    import_path: str,
+    record: SourceEventRecord,
+    project: ProjectState,
+) -> tuple[Path, str] | None:
+    """Return the file that defines a data class and its qualified name there, when a known module holds it."""
+    modules = {record.module: record.source_file}
+    if project.catalog is not None:
+        for component in project.catalog.components:
+            if component.module is not None and component.python_file is not None:
+                modules.setdefault(component.module, component.python_file)
+    # The longest module that prefixes the path owns it: `app.forms.SaveIn`
+    # belongs to `app.forms`, not `app`.
+    for module in sorted(modules, key=len, reverse=True):
+        if import_path.startswith(f"{module}."):
+            return modules[module], import_path[len(module) + 1 :]
+    return None
+
+
+def _definition_unchanged(
+    source_file: Path,
+    qualname: str,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> bool:
+    """Return whether a class or function reads the same in the editor as in the file on disk."""
+    current = _python_source(source_file, document, open_documents)
+    try:
+        with tokenize.open(source_file.resolve()) as source_stream:
+            saved = source_stream.read()
+    except (OSError, SyntaxError, UnicodeError):
+        return False
+    if current is None:
+        return False
+    if current == saved:
+        return True
+    found = _python_definition_source(current, qualname)
+    return found is not None and found == _python_definition_source(saved, qualname)
+
+
+def _python_definition_source(source: str, qualname: str) -> str | None:
+    """Return the text of the class or function at a dotted qualified name, or None when it is not there."""
+    try:
+        scope: list[ast.stmt] = ast.parse(source).body
+    except (SyntaxError, ValueError):
+        return None
+    node: ast.stmt | None = None
+    for part in qualname.split("."):
+        node = next(
+            (
+                statement
+                for statement in scope
+                if isinstance(statement, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+                and statement.name == part
+            ),
+            None,
+        )
+        if node is None:
+            return None
+        scope = node.body
+    return None if node is None else ast.get_source_segment(source, node)
+
+
+def _any_unsaved_python(open_documents: Mapping[str, DocumentState]) -> bool:
+    """Return whether any open Python document differs from its file on disk."""
+    for open_document in open_documents.values():
+        if open_document.language_id != "python":
+            continue
+        path = file_uri_path(open_document.uri)
+        if path is None:
+            return True
+        try:
+            with tokenize.open(path.resolve()) as source_stream:
+                if source_stream.read() != open_document.source:
+                    return True
+        except (OSError, SyntaxError, UnicodeError):
+            return True
+    return False
 
 
 def _js_data_type_diagnostics(

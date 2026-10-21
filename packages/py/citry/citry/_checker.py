@@ -27,7 +27,9 @@ from citry._diagnostic_catalog import (
     BROWSER_INVALID_STATE_BINDING_TARGET,
     BROWSER_MISSING_COMPONENT_KEY,
     BROWSER_MISSING_COMPONENT_PROP,
+    BROWSER_MISSING_FORM_FIELD,
     BROWSER_MISSING_SERVER_EVENT_FIELD,
+    BROWSER_UNKNOWN_FORM_FIELD,
     BROWSER_UNKNOWN_SERVER_EVENT,
     BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
     BROWSER_UNKNOWN_STATE_FIELD,
@@ -56,7 +58,12 @@ from citry._inline_assets import normalize_inline_asset
 from citry._linting import _component_lint_info
 from citry._markup_lint import MARKUP_LINT_RULES
 from citry._registry_lint import (
+    ServerEventPayload,
+    ServerEventPayloadFinding,
     server_event_calls,
+    server_event_form_findings,
+    server_event_forms,
+    server_event_payload,
     server_event_payload_findings,
     template_has_vue_attributes,
     unkeyed_repeated_component_calls,
@@ -131,6 +138,7 @@ from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
 from citry.autodiscovery import _iter_py_files
 from citry.component import Component
 from citry.component_registry import NotRegistered
+from citry.ext.events.csrf import csrf_field_names
 from citry.ext.events.extension import _component_events_info
 from citry.settings import LintSettings
 from citry.tag_rules import build_tag_rules
@@ -1950,38 +1958,51 @@ def _server_event_payload_findings(
     *,
     parse_nested: Callable[[str], Template],
 ) -> list[CheckFinding]:
-    """Check the literal arguments of `@c-*` bindings against each handler's data class."""
+    """Check the literal arguments of `@c-*` bindings, and the fields of forms they submit, against each data class."""
     handlers = _shared_event_handlers(source.consumers)
     if not handlers:
         return []
+    payloads: dict[str, ServerEventPayload] = {}
+    for name, (data_class, query_string) in handlers.items():
+        payload = server_event_payload(data_class, query_string=query_string)
+        # A Pydantic model, or a class whose annotations do not resolve, is
+        # checked by rules the template cannot see.
+        if payload is not None:
+            payloads[name] = payload
+    found: list[ServerEventPayloadFinding] = []
+    for call in server_event_calls(template, frozenset(payloads), parse_nested=parse_nested):
+        found.extend(server_event_payload_findings(call, payloads[call.handler]))
+    # The server removes the host's CSRF fields before it checks a form's
+    # fields, so a form may hold that hidden input.
+    dropped = csrf_field_names(engine)
+    for form in server_event_forms(template, frozenset(payloads), parse_nested=parse_nested):
+        found.extend(server_event_form_findings(form, payloads[form.call.handler], dropped_names=dropped))
     findings: list[CheckFinding] = []
-    for call in server_event_calls(template, frozenset(handlers), parse_nested=parse_nested):
-        data_class, query_string = handlers[call.handler]
-        for finding in server_event_payload_findings(call, data_class, query_string=query_string):
-            setting = _PAYLOAD_RULES[finding.code]
-            active = [
-                rule_severity
-                for component in source.consumers
-                if (rule_severity := getattr(_component_lint_info(engine, component), setting)) != "ignore"
-            ]
-            if not active:
-                continue
-            start = _byte_offset_coordinates(source.content, finding.start_index)
-            end = _byte_offset_coordinates(source.content, finding.end_index)
-            findings.append(
-                CheckFinding(
-                    source.origin,
-                    finding.message,
-                    finding.code,
-                    severity="error" if "error" in active else "warning",
-                    start_index=finding.start_index,
-                    end_index=finding.end_index,
-                    line=start[0],
-                    column=start[1],
-                    end_line=end[0],
-                    end_column=end[1],
-                )
+    for finding in found:
+        setting = _PAYLOAD_RULES[finding.code]
+        active = [
+            rule_severity
+            for component in source.consumers
+            if (rule_severity := getattr(_component_lint_info(engine, component), setting)) != "ignore"
+        ]
+        if not active:
+            continue
+        start = _byte_offset_coordinates(source.content, finding.start_index)
+        end = _byte_offset_coordinates(source.content, finding.end_index)
+        findings.append(
+            CheckFinding(
+                source.origin,
+                finding.message,
+                finding.code,
+                severity="error" if "error" in active else "warning",
+                start_index=finding.start_index,
+                end_index=finding.end_index,
+                line=start[0],
+                column=start[1],
+                end_line=end[0],
+                end_column=end[1],
             )
+        )
     return findings
 
 
@@ -1990,6 +2011,8 @@ _PAYLOAD_RULES = {
     BROWSER_UNKNOWN_SERVER_EVENT_FIELD: "rule_unknown_server_event_field",
     BROWSER_MISSING_SERVER_EVENT_FIELD: "rule_missing_server_event_field",
     BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD: "rule_incompatible_server_event_field",
+    BROWSER_UNKNOWN_FORM_FIELD: "rule_unknown_form_field",
+    BROWSER_MISSING_FORM_FIELD: "rule_missing_form_field",
 }
 
 

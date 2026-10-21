@@ -209,6 +209,8 @@ class TemplateLintInfo:
     rule_unknown_server_event_field: LintSeverity = "error"
     rule_missing_server_event_field: LintSeverity = "error"
     rule_incompatible_server_event_field: LintSeverity = "error"
+    rule_unknown_form_field: LintSeverity = "error"
+    rule_missing_form_field: LintSeverity = "error"
     rule_misspelled_css_variable: LintSeverity = "warning"
 
     def __post_init__(self) -> None:

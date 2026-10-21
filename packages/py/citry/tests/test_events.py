@@ -1893,6 +1893,8 @@ class TestEventsIntrospection:
                         "name": "alpha",
                         "methods": ["POST"],
                         "request_schema": None,
+                        "extra_fields": "reject",
+                        "validated_by": "citry",
                         "return_type_display": None,
                         "return_type_fidelity": "unavailable",
                         "description": None,
@@ -1907,6 +1909,8 @@ class TestEventsIntrospection:
                             "import_path": f"{__name__}.IntrospectionEmptyIn",
                             "fields": [],
                         },
+                        "extra_fields": "reject",
+                        "validated_by": "citry",
                         "return_type_display": None,
                         "return_type_fidelity": "unavailable",
                         "description": None,
@@ -1921,6 +1925,8 @@ class TestEventsIntrospection:
                             "import_path": f"{__name__}.IntrospectionOpaqueIn",
                             "fields": [],
                         },
+                        "extra_fields": "reject",
+                        "validated_by": "citry",
                         "return_type_display": None,
                         "return_type_fidelity": "unavailable",
                         "description": None,
@@ -1952,6 +1958,8 @@ class TestEventsIntrospection:
                                 },
                             ],
                         },
+                        "extra_fields": "reject",
+                        "validated_by": "citry",
                         "return_type_display": "dict[str, int]",
                         "return_type_fidelity": "normalized",
                         "description": "Save one card.\n\nKeeps the public description clean.",
@@ -2198,6 +2206,53 @@ class TestEventsIntrospection:
         assert handler["return_type_display"] == "explode_annotation()"
         assert handler["return_type_fidelity"] == "normalized"
 
+    def test_extra_fields_and_validated_by_follow_the_data_class(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        class LooseIn(pydantic.BaseModel):
+            q: str
+
+        class ClosedIn(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(extra="forbid")
+            q: str
+
+        class OpenIn(pydantic.BaseModel):
+            model_config = pydantic.ConfigDict(extra="allow")
+            q: str
+
+        app = _Citry(autodiscover=False)
+
+        class Card(Component):
+            citry = app
+
+            class Events:
+                def loose(self, data: LooseIn):
+                    return None
+
+                def closed(self, data: ClosedIn):
+                    return None
+
+                def open(self, data: OpenIn):
+                    return None
+
+                def plain(self, data: IntrospectionEventIn):
+                    return None
+
+                def bare(self):
+                    return None
+
+        _catalog, components = _events_introspection_catalog(app)
+        handlers = components["card"]["extensions"]["events"]["data"]["handlers"]
+        # Citry rejects an undeclared key itself; Pydantic rejects it only
+        # with extra="forbid", and checks values by its own rules.
+        assert {handler["name"]: (handler["extra_fields"], handler["validated_by"]) for handler in handlers} == {
+            "bare": ("reject", "citry"),
+            "closed": ("reject", "pydantic"),
+            "loose": ("ignore", "pydantic"),
+            "open": ("ignore", "pydantic"),
+            "plain": ("reject", "citry"),
+        }
+
     def test_publication_excludes_private_events_state_and_queue_configuration(self):
         private_value = "PRIVATE_STATE_VALUE_MUST_NOT_BE_PUBLISHED"
         private_topic = "private-topic:{token}"
@@ -2238,6 +2293,8 @@ class TestEventsIntrospection:
             "name",
             "methods",
             "request_schema",
+            "extra_fields",
+            "validated_by",
             "return_type_display",
             "return_type_fidelity",
             "description",
@@ -2353,6 +2410,8 @@ class TestEventsIntrospection:
                     "name": "ping",
                     "methods": ["POST"],
                     "request_schema": None,
+                    "extra_fields": "reject",
+                    "validated_by": "citry",
                     "return_type_display": None,
                     "return_type_fidelity": "unavailable",
                     "description": None,

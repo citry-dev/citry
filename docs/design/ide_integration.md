@@ -71,9 +71,31 @@ These rules need facts that only the loaded application gives, so
   and `rule_incompatible_server_event_field`
   (`citry.browser.*-server-event-field`): the literal arguments of an
   `@c-*` call against the handler's `data` class, read as a GET query
-  string too for a handler that accepts GET. The editor does not
-  report them yet, because the handler description it receives does not
-  say whether a data class is a Pydantic model.
+  string too for a handler that accepts GET.
+- `rule_unknown_form_field` and `rule_missing_form_field`
+  (`citry.browser.*-form-field`): the static control names of a `<form>`
+  whose `@c-submit` writes no arguments, against the same class. A missing
+  required field is reported only when the form shows every name it can
+  send. The host CSRF field names that the server removes
+  (`extensions_defaults["events"]["_csrf_field_names"]`) are skipped.
+
+The editor runs the five argument and form-field rules too once the app
+worker has loaded the app. `citry check` builds what each handler accepts
+from the real data class; the editor builds the same record from the
+handler description in the Events introspection entry
+([`events.md`](events.md) section 9.1), whose `extra_fields` and
+`validated_by` keys say whether an undeclared key fails the call and
+whether Citry's own rules check the values. A Pydantic model, a
+description without those keys from an older Citry, or a value the editor
+does not know turns the rules off for that handler; a field whose
+`type_display` names a class rather than a plain JSON type, `Literal`,
+union, or container of those has its values left unchecked. The
+description reflects the files the app was imported from, so the editor
+compares the handler's method and its data class in each open buffer with
+the file on disk and skips the handler while either has unsaved changes;
+when the data class lives in a module it cannot place, any unsaved Python
+buffer turns the rules off. The worker also copies the configured CSRF
+field names, so both tools skip the same controls.
 - `rule_misspelled_css_variable` (`citry.css.misspelled-variable`): a
   `var(--name)` one typing slip from a `css_data()` key.
 

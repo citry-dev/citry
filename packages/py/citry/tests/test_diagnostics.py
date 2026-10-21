@@ -49,6 +49,8 @@ _LINT_RULE_CODES = {
     "rule_missing_component_key": "citry.browser.missing-component-key",
     "rule_prop_assignment": "citry.browser.prop-assignment",
     "rule_unknown_server_event_field": "citry.browser.unknown-server-event-field",
+    "rule_unknown_form_field": "citry.browser.unknown-form-field",
+    "rule_missing_form_field": "citry.browser.missing-form-field",
     "rule_missing_server_event_field": "citry.browser.missing-server-event-field",
     "rule_incompatible_server_event_field": "citry.browser.incompatible-server-event-field",
     "rule_misspelled_css_variable": "citry.css.misspelled-variable",

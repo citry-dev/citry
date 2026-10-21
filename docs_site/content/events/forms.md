@@ -81,6 +81,11 @@ The form's fields are sent only when the binding names the handler alone,
 as in `submit` or `submit()`. Arguments you write, as in
 `submit({draft: true})`, are sent instead of the fields.
 
+A misspelled `name` fails every submit. With your application loaded,
+`citry check` and the editor report a control whose `name` the data class
+does not declare, and a required field that no control in the form sends
+([form fields](/ide/template-linting/#check-form-fields)).
+
 ### Form field types
 
 Every control sends its text, and Citry converts the text to the field's

@@ -4665,6 +4665,8 @@ shape:
           }
         ]
       },
+      "extra_fields": "reject",
+      "validated_by": "citry",
       "return_type_display": "dict[str, int]",
       "return_type_fidelity": "normalized",
       "description": "Save one item.",
@@ -4695,6 +4697,21 @@ Every handler object always contains exactly these keys:
   display text is present and `"unavailable"` when it is not. Request field
   defaults and default factories are never included, even when the caller
   requests component default values.
+- `extra_fields` says what the server does with an argument key the data
+  class does not declare. It is `"reject"` when the call then fails with
+  `invalid_args`: for a handler with no `data` parameter, a plain annotated
+  class, a dataclass, and a Pydantic model whose config sets
+  `extra="forbid"`. It is `"ignore"` for any other Pydantic model, because
+  Pydantic drops or keeps such a key without failing the call.
+- `validated_by` says whose rules check the argument values: `"citry"` for
+  Citry's own strict rules (section 3.3), or `"pydantic"` when the data class
+  is a Pydantic model, which converts values by its own rules, such as `"1"`
+  to `1`, and may read a field under an alias.
+- The editor reads these two keys to report `@c-*` arguments the server
+  rejects before the page runs. A consumer that receives a handler without
+  them, from an older Citry, or with a value it does not know, must not
+  assume either answer; citry-lsp then skips its argument checks for that
+  handler.
 - `return_type_display` and `return_type_fidelity` follow the same normalized
   or unavailable pair. The inspector reads the stored return annotation
   without resolving it: string annotations are copied, and unsupported values

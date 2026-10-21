@@ -49,6 +49,8 @@ them. There is no separate editor setting.
 | [`citry.browser.unknown-server-event-field`](/ide/diagnostics/#citry.browser.unknown-server-event-field) | A key in `@c-*` arguments that the handler does not accept | error |
 | [`citry.browser.missing-server-event-field`](/ide/diagnostics/#citry.browser.missing-server-event-field) | `@c-*` arguments without a field the handler requires | error |
 | [`citry.browser.incompatible-server-event-field`](/ide/diagnostics/#citry.browser.incompatible-server-event-field) | A literal in `@c-*` arguments of a type the handler rejects | error |
+| [`citry.browser.unknown-form-field`](/ide/diagnostics/#citry.browser.unknown-form-field) | A control in a submitted form whose `name` the handler does not accept | error |
+| [`citry.browser.missing-form-field`](/ide/diagnostics/#citry.browser.missing-form-field) | A submitted form without a control for a field the handler requires | error |
 | [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A `var(--name)` that misspells a `css_data()` key | warning |
 
 ## Fix unknown names
@@ -900,13 +902,69 @@ Citry checks what it can read from the template:
 A call with no arguments is reported only on an element that cannot
 contain a form, such as `<button>`. On a `<form>`, on an element that may
 hold one, or for the `submit` event, the browser may send the form's
-fields instead. A Pydantic `data` class is not checked, because Pydantic
-ignores extra keys and converts values.
+fields instead, which [the form field rules](#check-form-fields) check. A
+Pydantic `data` class is not checked, because Pydantic converts values
+and may read a field under another name.
 
 Each mistake has its own setting: `rule_unknown_server_event_field`,
 `rule_missing_server_event_field`, and
 `rule_incompatible_server_event_field`. These rules need your
-application, so only `citry --app ... check` reports them.
+application: `citry --app ... check` reports them, and so does the editor
+once it has loaded your application. While a handler or its `data` class
+has unsaved changes, the editor stops checking calls to that handler
+until you save the file.
+
+### Form fields { #check-form-fields }
+
+A form whose `@c-submit` names only the handler, as in `search` or
+`search()`, sends its named controls as the handler's arguments, with or
+without JavaScript. Citry compares each control's `name` with the
+handler's `data` class:
+
+```citry
+class SearchIn:
+    q: str
+
+
+class Search(Component):
+    class Events:
+        def search(self, data: SearchIn):
+            ...
+
+    template = """
+      {# Error: Server event 'search' requires field
+         'q', but no control in this form has that
+         name. #}
+      <form @c-submit.prevent="search">
+        {# Error: The form sends field 'qeury', which
+           server event 'search' does not declare. #}
+        <input name="qeury" />
+      </form>
+
+      {# Right #}
+      <form @c-submit.prevent="search">
+        <input name="q" />
+      </form>
+    """
+```
+
+Citry checks each `<input>`, `<select>`, and `<textarea>` with a `name`
+written in the template. It leaves out a control that the browser does
+not send with this form: one that is disabled, one tied to another form
+by its `form` attribute, a button, and a file input. It also leaves out
+the host's CSRF field, such as Django's `csrfmiddlewaretoken`, because the
+server removes it before it checks the `data` class
+([CSRF in forms](/security/#csrf-tokens-in-forms)).
+
+A required field without a control is reported only when the template
+shows every control the form can send. A component, a slot, a loop, an
+attribute spread such as `v-bind="attrs"`, a `name` written as an
+expression, or an `id` on the form, which a control elsewhere could name
+in its `form` attribute, turns that check off for the form.
+
+Each mistake has its own setting: `rule_unknown_form_field` and
+`rule_missing_form_field`. Like the argument rules, they need your
+application.
 
 ## Misspelled CSS variables { #find-misspelled-css-variables }
 
