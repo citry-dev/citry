@@ -889,7 +889,11 @@ def browser_client_prop_accepts(expected: str, actual: JsonWireType) -> bool:
     if actual.kind in {"string", "number", "boolean", "null"}:
         return actual.kind in alternatives
     if actual.kind == "array":
-        return any(item.startswith("Array<") or item.endswith("[]") for item in alternatives)
+        # Vue's `Object` prop type accepts any non-null object, arrays included.
+        return any(
+            item.startswith("Array<") or item.endswith("[]") or item == "Record<string, unknown>"
+            for item in alternatives
+        )
     if actual.kind == "object":
         return any(item == "Record<string, unknown>" or item.startswith("{") for item in alternatives)
     return True

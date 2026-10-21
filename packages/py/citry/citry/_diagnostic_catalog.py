@@ -26,12 +26,14 @@ TEMPLATE_UNKNOWN_ARIA_ATTRIBUTE = 'citry.template.unknown-aria-attribute'
 TEMPLATE_INVALID_NESTING = 'citry.template.invalid-nesting'
 TEMPLATE_DUPLICATE_ID = 'citry.template.duplicate-id'
 TEMPLATE_MISSING_IMAGE_ALT = 'citry.template.missing-image-alt'
+TEMPLATE_UNKNOWN_URL = 'citry.template.unknown-url'
 JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 JS_DATA_PUBLIC_NAME_COLLISION = 'citry.js-data.public-name-collision'
 CSS_MISSPELLED_VARIABLE = 'citry.css.misspelled-variable'
 VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
 VUE_PYTHON_VARIABLE = 'citry.vue.python-variable'
 VUE_INVALID_EXPRESSION = 'citry.vue.invalid-expression'
+VUE_COMPILE_ERROR = 'citry.vue.compile-error'
 VUE_MISSPELLED_EVENT = 'citry.vue.misspelled-event'
 COMPONENT_JS_UNKNOWN_VARIABLE = 'citry.component-js.unknown-variable'
 COMPONENT_JS_UNKNOWN_MEMBER = 'citry.component-js.unknown-member'
@@ -57,6 +59,8 @@ CHECK_TEMPLATE_FILE_NOT_FOUND = 'citry.check.template-file-not-found'
 CHECK_TEMPLATE_FILE_UNREADABLE = 'citry.check.template-file-unreadable'
 CHECK_TEMPLATE_NAMESPACE_UNAVAILABLE = 'citry.check.template-namespace-unavailable'
 CHECK_TEMPLATE_NOT_CHECKED = 'citry.check.template-not-checked'
+CHECK_URL_CHECKER_MISSING = 'citry.check.url-checker-missing'
+CHECK_URL_CHECKER_FAILED = 'citry.check.url-checker-failed'
 CHECK_PYTHON_SOURCE_UNREADABLE = 'citry.check.python-source-unreadable'
 I18N_CATALOG_INVALID = 'citry.i18n.catalog-invalid'
 I18N_UNKNOWN_MESSAGE = 'citry.i18n.unknown-message'
@@ -700,6 +704,60 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                         'title': 'Invalid template declaration value',
                                         'when': 'Component.template is not a string, or Component.template_file is '
                                                 'neither a string nor a pathlib.Path.'},
+ 'citry.check.url-checker-failed': {'code': 'citry.check.url-checker-failed',
+                                    'constant': 'CHECK_URL_CHECKER_FAILED',
+                                    'defaultSeverity': 'information',
+                                    'documentationPath': '/ide/diagnostics/#citry.check.url-checker-failed',
+                                    'fix': "Fix the error the message shows. It comes from your framework's routing "
+                                           'code, such as a URL pattern module that fails to import. Until it is '
+                                           'fixed, citry check skips those links.',
+                                    'messages': {'default': "Citry skipped the link path '{path}', because asking your "
+                                                            'web framework whether your app serves it raised an error: '
+                                                            '{detail}',
+                                                 'several': "Citry skipped {count} link paths, such as '{path}', "
+                                                            'because asking your web framework whether your app serves '
+                                                            'them raised an error: {detail}'},
+                                    'parameters': {'count': 'How many paths were skipped.',
+                                                   'detail': 'The error the framework raised.',
+                                                   'path': 'The skipped path that sorts first.'},
+                                    'summary': 'Your web framework raised an error while citry check asked whether '
+                                               'your app serves a link path, so citry check skipped that link.',
+                                    'surfaces': ['check'],
+                                    'title': 'Link check failed',
+                                    'when': 'The path checker that citry.contrib.flask.mount(), '
+                                            'citry.contrib.fastapi.mount(), or citry.contrib.django.urlpatterns() '
+                                            'registered raises an error for one or more link paths. Each of those '
+                                            'paths is skipped, and citry check lists one note with the error for the '
+                                            'skipped path that sorts first. The note never fails the check.'},
+ 'citry.check.url-checker-missing': {'code': 'citry.check.url-checker-missing',
+                                     'constant': 'CHECK_URL_CHECKER_MISSING',
+                                     'defaultSeverity': 'information',
+                                     'documentationPath': '/ide/diagnostics/#citry.check.url-checker-missing',
+                                     'fix': 'Point --app at a module that mounts Citry when it is imported, such as '
+                                            'app.main:citry_app when app/main.py calls mount(app, citry_app), or '
+                                            'config.urls:citry_app for a Django project whose urls.py calls '
+                                            'urlpatterns(). To stop checking links, set rule_unknown_url to "ignore".',
+                                     'messages': {'default': "Links such as '{path}' were not checked, because no web "
+                                                             'framework integration told Citry which paths your app '
+                                                             'serves. Point --app at the module that calls '
+                                                             'citry.contrib.flask.mount(), '
+                                                             'citry.contrib.fastapi.mount(), or '
+                                                             'citry.contrib.django.urlpatterns(), or set '
+                                                             'rule_unknown_url to "ignore".'},
+                                     'parameters': {'path': 'One of the paths that were not checked.'},
+                                     'summary': 'citry check did not check the link paths in your templates, because '
+                                                'no web framework integration told Citry which paths your app serves.',
+                                     'surfaces': ['check'],
+                                     'title': 'Links not checked',
+                                     'when': 'A template has an href, src, or action path that starts with a single /, '
+                                             'rule_unknown_url is not "ignore" for it, and no '
+                                             'citry.contrib.flask.mount(), citry.contrib.fastapi.mount(), or '
+                                             'citry.contrib.django.urlpatterns() call ran while citry check loaded '
+                                             'your application. This happens when the module the --app option names '
+                                             'only creates the Citry instance and nothing imports the module that '
+                                             'mounts it, or when you serve Citry with citry.contrib.asgi or '
+                                             "citry.contrib.wsgi, which do not know your app's routes. citry check "
+                                             'lists it once, as a note, and it never fails the check.'},
  'citry.component-js.unknown-member': {'code': 'citry.component-js.unknown-member',
                                        'configurableSeverity': True,
                                        'constant': 'COMPONENT_JS_UNKNOWN_MEMBER',
@@ -1584,6 +1642,50 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                       'title': 'Unknown component',
                                       'when': 'A <c-*> tag names no component in the selected application or library, '
                                               'counting built-in names and aliases.'},
+ 'citry.template.unknown-url': {'code': 'citry.template.unknown-url',
+                                'configurableSeverity': True,
+                                'constant': 'TEMPLATE_UNKNOWN_URL',
+                                'defaultSeverity': 'warning',
+                                'documentationPath': '/ide/diagnostics/#citry.template.unknown-url',
+                                'examples': [{'language': 'citry-html',
+                                              'source': '<a href="/abuot">About</a>',
+                                              'title': 'A misspelled page path'}],
+                                'fix': 'Correct the path, or add the route or file. If another server answers the '
+                                       'path, set rule_unknown_url to "ignore" in the component\'s Lint class, or for '
+                                       'the whole app in LintSettings.',
+                                'messages': {'default': "Your app has no route or static file for '{path}', so the "
+                                                        'browser gets a 404 Not Found.',
+                                             'suggestion': "Your app has no route or static file for '{path}', so the "
+                                                           'browser gets a 404 Not Found. Did you mean '
+                                                           "'{suggestion}'?"},
+                                'parameters': {'path': 'The path the browser requests, without its query string and '
+                                                       'fragment.',
+                                               'suggestion': 'A path your app serves that is one typing slip from it.'},
+                                'summary': 'A link, image, script, or form points at a path on your site that none of '
+                                           "your app's routes or static files serves, so the browser gets a 404 Not "
+                                           'Found.',
+                                'surfaces': ['check', 'lsp'],
+                                'title': 'Link to a missing page or file',
+                                'when': "An HTML element's href, src, or action is a path that starts with a single /, "
+                                        'such as /about or /static/logo.svg, and your web framework answers that it '
+                                        "serves no such path. Citry asks the framework that mounts it: Flask's URL "
+                                        'rules and static folders when you call citry.contrib.flask.mount(), the '
+                                        'routes and StaticFiles mounts of a FastAPI or Starlette app when you call '
+                                        "citry.contrib.fastapi.mount(), and Django's URL patterns and static file "
+                                        'finders when you call citry.contrib.django.urlpatterns(). The query string '
+                                        'and fragment are ignored. These are not checked: a URL with a scheme, such as '
+                                        'https: or mailto:; a //host/... URL; a relative path; a value written as an '
+                                        'expression, such as :href or c-href; a <base href> or a <link '
+                                        'rel="preconnect"> or rel="dns-prefetch"; a path under the prefix Citry\'s own '
+                                        'routes are mounted at; a parameter type that only the view checks, such as a '
+                                        'FastAPI project_id: int argument; and, with Django, a path under MEDIA_URL. '
+                                        'The rule runs in citry check with your application loaded, and in an editor '
+                                        'that has loaded your application, and only when one of those calls runs while '
+                                        "Citry imports the module that --app, or the editor's citry.app setting, "
+                                        'names. The editor checks the paths your templates hold when it loads your '
+                                        'application, so a path you add later is checked after the next load. A path '
+                                        'that another server answers for your site, such as a reverse proxy, is '
+                                        'reported too, which is why the rule is a warning.'},
  'citry.template.unknown-variable': {'code': 'citry.template.unknown-variable',
                                      'configurableSeverity': True,
                                      'constant': 'TEMPLATE_UNKNOWN_VARIABLE',
@@ -1613,6 +1715,44 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                              'template data, a c-for or c-fill binding around it, template_globals, or '
                                              'the declared template_variables. In a template that several components '
                                              'share, every one of them must provide the name.'},
+ 'citry.vue.compile-error': {'code': 'citry.vue.compile-error',
+                             'configurableSeverity': True,
+                             'constant': 'VUE_COMPILE_ERROR',
+                             'defaultSeverity': 'error',
+                             'documentationPath': '/ide/diagnostics/#citry.vue.compile-error',
+                             'examples': [{'language': 'citry-html',
+                                           'source': '<table>\n  <div>Row</div>\n</table>',
+                                           'title': 'A div directly inside a table'}],
+                             'fix': "Follow the compiler's message. For a table, put rows in <tr> and cells in <td> or "
+                                    '<th>; for nested buttons, forms or links, close the outer one first or use '
+                                    'another element; for v-else, put it on the element right after the one with v-if '
+                                    'or v-else-if.',
+                             'messages': {'default': 'Vue cannot compile this template: {detail}'},
+                             'parameters': {'detail': 'What the compiler found, as one sentence.'},
+                             'summary': "Vue's compiler rejects the template, so a component that uses Vue fails to "
+                                        'render. Most often the browser would build a different element tree from the '
+                                        'one the template describes: a <div> directly inside a <table>, a <button> '
+                                        'inside a <button>, a <form> inside a <form>, or an <a> inside an <a>. A '
+                                        'v-else with no v-if right before it, and a component inside a Vue v-for, are '
+                                        'reported too.',
+                             'surfaces': ['check', 'lsp'],
+                             'title': "Template that Vue's compiler rejects",
+                             'when': 'Citry writes the Vue template that a render compiles, runs the same compiler on '
+                                     'it, and reports each error at the text you wrote. Every c-if, c-elif and c-else '
+                                     'branch, and the body of every c-for, is checked, but usually on its own, so a '
+                                     'mistake that spans the c-if or c-for tag, such as a <div> in a c-for directly '
+                                     'inside a <table>, may not be reported. A Vue expression with a syntax error is '
+                                     'reported as citry.vue.invalid-expression, and a block element inside a <p> as '
+                                     'citry.template.invalid-nesting, so this rule does not report them again, even '
+                                     'when those rules are turned off. A component inside a Vue v-for is reported only '
+                                     'by citry check with the application loaded, which can tell whether the component '
+                                     "is transparent or simple; such a component renders into its caller's HTML and "
+                                     'may sit inside a v-for. Content inside #c-ignore or <c-raw>, whether a '
+                                     "<c-element>'s content fits the tag Python chooses, where a component tag sits, "
+                                     'and attributes an extension handles, such as @c-click, are not checked, and a '
+                                     "template that uses an extension's own template syntax is skipped. citry check "
+                                     '--static and an editor that has not loaded your application report it too, with '
+                                     "the severity the component's own Lint class sets as a plain string."},
  'citry.vue.invalid-expression': {'code': 'citry.vue.invalid-expression',
                                   'configurableSeverity': True,
                                   'constant': 'VUE_INVALID_EXPRESSION',

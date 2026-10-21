@@ -10,6 +10,7 @@ from citry.analysis import (
     TemplatePythonControl,
     TemplatePythonQuery,
     TemplatePythonRoot,
+    TemplatePythonSlotDataType,
     TemplatePythonValueType,
     build_inferred_template_shadow,
     build_schema_template_shadow,
@@ -132,6 +133,139 @@ def test_fill_binding_is_unknown_only_inside_its_body() -> None:
     inner = _query(source, "row.na")
 
     assert inner.controls == (TemplatePythonControl("unknown", "", ("row",)),)
+
+
+def test_fill_data_name_records_the_component_and_slot_it_reads() -> None:
+    # A fill inside the component's `<c-if>` still belongs to the component,
+    # and the fallback name is not the slot's data.
+    source = (
+        '<c-Card><c-if cond="ok"><c-fill name="footer" data="card" fallback="fb">'
+        "{{ card.title }}</c-fill></c-if></c-Card>"
+    )
+
+    query = _query(source, "card.ti")
+
+    assert query.controls[-2:] == (
+        TemplatePythonControl("unknown", "", ("card",), slot_target=("c-Card", "footer")),
+        TemplatePythonControl("unknown", "", ("fb",)),
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "target"),
+    [
+        # A fill belongs to the nearest component call around it.
+        (
+            '<c-Outer><c-fill name="body"><c-Card><c-fill name="footer" data="card">{{ card.x }}'
+            "</c-fill></c-Card></c-fill></c-Outer>",
+            ("c-Card", "footer"),
+        ),
+        (
+            '<c-Card><c-for each="i in items"><c-fill name="footer" data="card">'
+            "{{ card.x }}</c-fill></c-for></c-Card>",
+            ("c-Card", "footer"),
+        ),
+        # The rightmost of `name`, `c-name`, and `c-bind` names the slot.
+        (
+            '<c-Card><c-fill c-bind="opts" name="footer" data="card">{{ card.x }}</c-fill></c-Card>',
+            ("c-Card", "footer"),
+        ),
+        # Recorded as written; the editor leaves the built-in tag untyped.
+        (
+            '<c-component is="c-Card"><c-fill name="footer" data="card">{{ card.x }}</c-fill></c-component>',
+            ("c-component", "footer"),
+        ),
+    ],
+)
+def test_fill_data_name_records_the_nearest_component_call(source: str, target: tuple[str, str]) -> None:
+    query = _query(source, "card.")
+
+    assert [control.slot_target for control in query.controls if control.names == ("card",)] == [target]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # The slot name is computed, or a later `c-bind` may replace it.
+        '<c-Card><c-fill c-name="slot" data="card">{{ card.x }}</c-fill></c-Card>',
+        '<c-Card><c-fill name="footer" c-bind="opts" data="card">{{ card.x }}</c-fill></c-Card>',
+    ],
+)
+def test_fill_data_name_without_a_known_slot_records_none(source: str) -> None:
+    query = _query(source, "card.")
+
+    assert [control.slot_target for control in query.controls] == [None]
+
+
+_SLOT_DATA = {
+    ("c-Card", "footer"): TemplatePythonSlotDataType(
+        "FooterData",
+        (("title", "str"), ("count", "int"), ("owner", "app.models.Owner"), ("items", "list[str]"), ("lost", None)),
+    )
+}
+
+
+def test_fill_data_name_is_declared_as_a_mapping_with_the_slot_fields() -> None:
+    source = '<c-Card><c-fill name="footer" data="card">{{ card.titel }}</c-fill></c-Card>'
+    query = _query(source, "card.ti")
+    module = "class TemplateData:\n    pass\n"
+
+    shadow = build_schema_template_shadow(module, "TemplateData", (), query, slot_data_types=_SLOT_DATA)
+
+    assert shadow is not None
+    generated = shadow.source[shadow.source.index("def __citry_analyze_template") :]
+    # `items` is a mapping method on the runtime value, so it is not a field;
+    # a field whose annotation did not resolve stays untyped.
+    assert (
+        "    class FooterData(_citry_slot_Mapping[str, _citry_slot_Any]):\n"
+        "        title: str\n"
+        "        count: int\n"
+        "        owner: _citry_slot_0_2_0.Owner\n"
+        "        lost: _citry_slot_Any\n"
+        "    card = _citry_slot_cast(FooterData, None)\n"
+    ) in generated
+    assert "    import app.models as _citry_slot_0_2_0\n" in generated
+    ast.parse(shadow.source)
+
+
+def test_fill_data_class_takes_another_name_when_the_query_reads_its_own() -> None:
+    source = '<c-Card><c-fill name="footer" data="card">{{ FooterData }}</c-fill></c-Card>'
+    query = _query(source, "Footer")
+
+    shadow = build_schema_template_shadow("", "object", (), query, slot_data_types=_SLOT_DATA)
+
+    assert shadow is not None
+    assert "class FooterDataSlotData(" in shadow.source
+    assert "class FooterData(" not in shadow.source
+
+
+def test_fill_data_class_does_not_hide_a_class_of_the_module_it_is_copied_from() -> None:
+    # A data class in the template's own module may name itself in a field,
+    # and the copied module may read it, so the generated class takes
+    # another name.
+    source = '<c-Card><c-fill name="footer" data="card">{{ card.parent.title }}</c-fill></c-Card>'
+    query = _query(source, "card.pa")
+    module = "class FooterData:\n    parent: FooterData\nclass TemplateData:\n    pass\n"
+    slot_data = {("c-Card", "footer"): TemplatePythonSlotDataType("FooterData", (("parent", "app.FooterData"),))}
+
+    shadow = build_schema_template_shadow(
+        module, "TemplateData", (), query, source_module="app", slot_data_types=slot_data
+    )
+
+    assert shadow is not None
+    assert "class FooterDataSlotData(_citry_slot_Mapping[str, _citry_slot_Any]):\n        parent: FooterData\n" in (
+        shadow.source
+    )
+
+
+def test_fill_data_name_stays_unknown_when_user_text_uses_the_generated_prefix() -> None:
+    source = '<c-Card><c-fill name="footer" data="card">{{ card.x }}</c-fill></c-Card>'
+    query = _query(source, "card.")
+
+    shadow = build_schema_template_shadow("_citry_slot = 1\n", "object", (), query, slot_data_types=_SLOT_DATA)
+
+    assert shadow is not None
+    assert "card: __citry_Any = None" in shadow.source
 
 
 def test_static_and_browser_values_are_not_python_queries() -> None:

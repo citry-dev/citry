@@ -203,6 +203,7 @@ class TemplateLintInfo:
     rule_invalid_model_target: LintSeverity = "error"
     rule_misspelled_event: LintSeverity = "warning"
     rule_invalid_vue_expression: LintSeverity = "error"
+    rule_vue_compile_error: LintSeverity = "error"
     rule_undeclared_component_event: LintSeverity = "warning"
     rule_missing_component_key: LintSeverity = "error"
     rule_prop_assignment: LintSeverity = "error"
@@ -212,6 +213,7 @@ class TemplateLintInfo:
     rule_unknown_form_field: LintSeverity = "error"
     rule_missing_form_field: LintSeverity = "error"
     rule_misspelled_css_variable: LintSeverity = "warning"
+    rule_unknown_url: LintSeverity = "warning"
 
     def __post_init__(self) -> None:
         if (

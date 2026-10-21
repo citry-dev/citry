@@ -51,6 +51,12 @@ The `prefix` is the URL path where Citry's routes live. It must start with
 `ValueError` otherwise, before they change your app. A
 trailing slash is ignored, so `"/citry/"` works like `"/citry"`.
 
+`mount()` and `urlpatterns()` also let `citry check` and the editor ask
+your framework whether it serves each link in your templates, so a link
+to a missing page is reported before anyone opens it. For that, point
+`citry --app` at the module that mounts Citry. See
+[Links to missing pages](/ide/template-linting/#find-links-to-missing-pages).
+
 For complete, runnable apps, see the
 [starter projects]({{ repo_url }}/tree/{{ repo_edit_branch }}/examples){: target="_blank" rel="noopener"}
 for FastAPI, Django, Flask, bare ASGI, and bare WSGI.
@@ -208,7 +214,9 @@ citry.initialize()
 ```
 
 Both sub-apps answer `404 Not Found` for a path they do not serve and
-`405 Method Not Allowed` for a method the route does not accept.
+`405 Method Not Allowed` for a method the route does not accept. Neither
+sub-app knows your app's routes, so with only these mounted, `citry check`
+checks no links and prints one note saying so.
 
 ## Share the cache { #share-the-cache-between-worker-processes }
 

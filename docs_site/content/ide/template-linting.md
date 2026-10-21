@@ -39,6 +39,7 @@ them. There is no separate editor setting.
 | [`citry.template.unknown-aria-attribute`](/ide/diagnostics/#citry.template.unknown-aria-attribute) | An `aria-*` name that ARIA does not define | error |
 | [`citry.vue.misspelled-event`](/ide/diagnostics/#citry.vue.misspelled-event) | A typo in a DOM event name, such as `@clik` | warning |
 | [`citry.vue.invalid-expression`](/ide/diagnostics/#citry.vue.invalid-expression) | A Vue expression that is not valid JavaScript | error |
+| [`citry.vue.compile-error`](/ide/diagnostics/#citry.vue.compile-error) | Anything else Vue's compiler rejects, such as a `<div>` directly inside a `<table>` | error |
 | [`citry.browser.invalid-model-target`](/ide/diagnostics/#citry.browser.invalid-model-target) | `v-model` on an element that holds no value | error |
 | [`citry.browser.undeclared-component-event`](/ide/diagnostics/#citry.browser.undeclared-component-event) | A listener for an event the child component does not declare | warning |
 | [`citry.template.invalid-nesting`](/ide/diagnostics/#citry.template.invalid-nesting) | A block such as `<div>` inside a `<p>` | error |
@@ -52,6 +53,7 @@ them. There is no separate editor setting.
 | [`citry.browser.unknown-form-field`](/ide/diagnostics/#citry.browser.unknown-form-field) | A control in a submitted form whose `name` the handler does not accept | error |
 | [`citry.browser.missing-form-field`](/ide/diagnostics/#citry.browser.missing-form-field) | A submitted form without a control for a field the handler requires | error |
 | [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A `var(--name)` that misspells a `css_data()` key | warning |
+| [`citry.template.unknown-url`](/ide/diagnostics/#citry.template.unknown-url) | A link to a path your app has no page or file for | warning |
 
 ## Fix unknown names
 
@@ -222,6 +224,7 @@ app = Citry(
         rule_unknown_aria_attribute="error",
         rule_misspelled_event="warning",
         rule_invalid_vue_expression="error",
+        rule_vue_compile_error="error",
         rule_invalid_model_target="error",
         rule_undeclared_component_event="warning",
         rule_invalid_nesting="error",
@@ -601,14 +604,17 @@ If the page really dispatches a custom event with such a name, set
 ## Vue compile errors { #find-vue-compile-errors }
 
 Citry compiles a component's Vue code on the server when the component
-renders. A broken expression or a misplaced `v-model` stops that
+renders. A broken expression, a misplaced `v-model`, or HTML the browser
+would rearrange, such as a `<div>` directly inside a `<table>`, stops that
 compiler, so the component fails to render with a `ValueError` that may
 not point at the line in your template. The lint rules report these
 mistakes at their place in the template, before anything renders.
 
 The Vue rules (invalid expressions, `v-model` targets, Vue directive
 typos, and DOM event names) skip everything inside an element with
-`v-pre`, because Vue does not compile it.
+`v-pre`, because Vue does not compile it. The rule for
+[other compile errors](#templates-vue-cannot-compile) still checks how
+elements nest there.
 
 ### Invalid expressions { #invalid-vue-expressions }
 
@@ -657,6 +663,70 @@ A custom element such as `<my-picker>` is reported too. Bind its value
 property and listen for its change event instead. Component tags,
 PascalCase Vue components, and `<c-element>` are not reported, because
 they decide for themselves what `v-model` binds.
+
+### Other compile errors { #templates-vue-cannot-compile }
+
+A component that uses Vue fails to render when Vue's compiler rejects its
+template. Citry runs the same compiler over every template and reports
+what it rejects at the place you wrote it. Most often the browser would
+build a different element tree from the one your template describes, so
+in a component without Vue the page still renders, but not as written:
+
+```citry-html
+{# Error: Vue cannot compile this template: a <div> inside
+   a table must sit in a <td> or <th>, so the browser moves
+   it out of the table. Put rows in <tr> and cells in <td>
+   or <th>. #}
+<table>
+  <div>Row</div>
+</table>
+
+{# Right #}
+<table>
+  <tr><td>Row</td></tr>
+</table>
+```
+
+The rule also reports:
+
+- a `<button>` inside a `<button>`, a `<form>` inside a `<form>`, or an
+  `<a>` inside an `<a>`, and the end tag that is then left with nothing
+  to close, such as the second `</form>`;
+- a `v-else` or `v-else-if` with no `v-if` on the element right before
+  it. Keep a `v-if` and its `v-else` on the same side of a `<c-if>` tag;
+- a component inside a Vue `v-for`, which only `<c-for>` can repeat.
+  Only `citry --app ... check` reports this. It needs your application to
+  tell this component from one with `transparent = True` or
+  `simple = True`, which renders into its caller's HTML and so may sit
+  inside a `v-for`.
+
+Every `<c-if>`, `<c-elif>`, and `<c-else>` branch, and the body of every
+`<c-for>`, is checked.
+
+A broken expression is reported as an
+[invalid expression](#invalid-vue-expressions), and a block inside a `<p>`
+as a [block inside a paragraph](#find-invalid-nesting). This rule does not
+report those again, even when you turn their rules off, so each mistake has
+one message and one setting.
+
+It does not check:
+
+- anything inside an element with `#c-ignore`, or inside `<c-raw>`;
+- in most templates, how the content of a `<c-if>` branch or `<c-for>`
+  body fits the element around it, such as a `<div>` in a `<c-for>`
+  directly inside a `<table>`, because Vue compiles that content on its
+  own;
+- whether what a `<c-element>` holds fits the tag Python chooses for it;
+- where a component tag sits, such as a row component inside a
+  `<table>`;
+- with your application loaded, what you pass to a component with
+  `transparent = True` or `simple = True`, which renders into its
+  caller's HTML;
+- attributes an extension handles, such as `@c-click`;
+- a template that uses an extension's own template syntax.
+
+To turn the rule off for a component, set
+`rule_vue_compile_error = "ignore"` in its `Lint` class.
 
 ## Component event names { #find-misspelled-component-events }
 
@@ -1012,6 +1082,87 @@ sets itself are not reported, and neither is a component whose
 `css_data()` keys Citry cannot all read. The rule is a warning by default
 and needs your application, so only `citry --app ... check` reports it.
 
+## Links to missing pages { #find-links-to-missing-pages }
+
+A misspelled link, a wrong route parameter, or a misspelled file name
+shows up only as a 404 page when someone opens it:
+
+```citry-html
+{# Warning: Your app has no route or static file
+   for '/abuot', so the browser gets a 404 Not
+   Found. Did you mean '/about'? #}
+<a href="/abuot">About</a>
+
+{# Warning when the route is /projects/<int:id> #}
+<a href="/projects/alpha">Project</a>
+
+{# Warning: Did you mean '/static/avatar.svg'? #}
+<img src="/static/avtar.svg" alt="" />
+```
+
+Citry does not know your app's routes, so it asks your web framework
+whether it serves each path. The function you mount Citry with answers:
+
+| Function | What it checks |
+| --- | --- |
+| `citry.contrib.flask.mount()` | Flask's URL rules, and the files in the app's and blueprints' static folders |
+| `citry.contrib.fastapi.mount()` | The routes of a FastAPI or Starlette app, and the files in its `StaticFiles` mounts |
+| `citry.contrib.django.urlpatterns()` | Django's URL patterns, and the files Django's static file finders find under `STATIC_URL` |
+
+That function must run while the check loads your app. Point `--app` at
+the module that mounts Citry, not only at the module that creates the
+`Citry` instance:
+
+```console
+# app/main.py calls mount(app, citry_app)
+citry --app app.main:citry_app check
+```
+
+For Django, point `--app` at the URL configuration that calls
+`urlpatterns()`, such as `config.urls:citry_app`. That module must import
+your Citry instance under the name you give. A Flask app built by a
+factory function mounts Citry only when the factory runs, so add a small
+module that calls it, such as `app/wsgi.py` holding
+`web_app = create_app()` and `from app.citry_app import citry_app`, and
+point `--app` at `app.wsgi:citry_app`. Give the editor the same path in its `citry.app` setting. If none of these
+functions ran, `citry check` prints one note and checks no links, and the
+editor checks no links either. Serving Citry with the plain ASGI or WSGI
+app from `citry.contrib.asgi` or `citry.contrib.wsgi` leaves links
+unchecked, because those apps do not know your routes.
+
+The rule checks a literal `href`, `src`, or `action` on an HTML element
+when the value starts with a single `/`. The query string and fragment
+are ignored, so `/about?tab=team#people` is checked as `/about`. These
+are not checked:
+
+- a URL with a scheme, such as `https:` or `mailto:`, and a
+  `//cdn.example.com/...` URL;
+- a relative path, such as `page.html`;
+- a value written as an expression, such as `:href` or `c-href`;
+- an attribute on a component tag, which is a component input;
+- a path under the prefix Citry's own routes are mounted at, such as
+  `/citry/citry.js`;
+- a parameter type that only the view checks, such as a FastAPI
+  `project_id: int` argument on `/projects/{project_id}`;
+- with Django, a path under `MEDIA_URL`, because uploaded files are not
+  listed anywhere Citry can read.
+
+An app served below a sub-path, such as FastAPI's `root_path="/api"` or
+Flask's `APPLICATION_ROOT`, has its links compared with its routes as if
+it were served at the site root, so turn the rule off for such an app.
+
+The editor asks your framework when it loads your application, so a link
+you add later is checked after the next load, which VS Code starts when
+you save a Python file. If your framework raises an error while it
+answers, `citry check` skips that link and prints one note with the error.
+
+Citry also reports a path that another server answers, such as a
+reverse proxy in front of your app. That is why the rule is only a
+warning. To turn it off, set `rule_unknown_url` to `"ignore"` in the
+`Lint` class of the component that holds the link
+([Override one component](#override-one-component)), or in
+`LintSettings` for the whole app.
+
 ## Check rules in CI
 
 Run the check against your application, so it knows every component and
@@ -1035,8 +1186,9 @@ rules, the [component event](#find-misspelled-component-events) rule,
 which reads each child's `emits`, and the rules for
 [repeated components](#find-repeated-components-without-keys),
 [prop assignments](#find-prop-assignments),
-[server event arguments](#check-server-event-arguments), and
-[CSS variables](#find-misspelled-css-variables).
+[server event arguments](#check-server-event-arguments),
+[CSS variables](#find-misspelled-css-variables), and
+[links](#find-links-to-missing-pages).
 
 They still run every rule that reads only the template: the Alpine,
 attribute-value, and misspelled-directive rules, and the rules for

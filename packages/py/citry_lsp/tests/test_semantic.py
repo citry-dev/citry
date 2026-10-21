@@ -2465,6 +2465,113 @@ async def test_static_component_inputs_are_checked_against_their_target_types(tm
 
 
 @pytest.mark.asyncio
+async def test_fill_data_name_is_typed_from_the_slots_declared_data(tmp_path: Path) -> None:
+    # The child lives in another module, as in a real project, and its slot
+    # data class names a class from a third module.
+    (tmp_path / "models.py").write_text("class Owner:\n    name: str\n", encoding="utf-8")
+    (tmp_path / "card.py").write_text(
+        "from __future__ import annotations\n"
+        "from typing import Any\n"
+        "from citry import Component, SlotInput\n"
+        "from engine_module import engine\n"
+        "from models import Owner\n"
+        "class FooterData:\n"
+        "    title: str\n"
+        "    count: int\n"
+        "    owner: Owner\n"
+        "    items: list[str]\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        '    template = \'<c-slot name="footer" /><c-slot name="open" />\'\n'
+        "    class Slots:\n"
+        "        footer: SlotInput[FooterData] | None = None\n"
+        "        open: SlotInput[dict[str, Any]] | None = None\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "engine_module.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n",
+        encoding="utf-8",
+    )
+    module_source = (
+        "from engine_module import engine\n"
+        "from citry import Component\n"
+        "import card\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {}\n"
+    )
+    # Each line holds one use; the first three are the mistakes. A field named
+    # like a mapping method, such as `items`, is read with brackets, as the
+    # runtime value answers `card.items` with its own method.
+    template_source = (
+        '<c-Card><c-fill name="footer" data="card">{{ card.titel }}</c-fill></c-Card>\n'
+        '<c-Card><c-if cond="True"><c-fill name="footer" data="card">'
+        '{{ card.count + " tasks" }}</c-fill></c-if></c-Card>\n'
+        '<c-Card><c-fill name="footer" data="card">{{ card.owner.nmae }}</c-fill></c-Card>\n'
+        '<c-Card><c-fill name="footer" data="card">{{ card.title.upper() }} {{ card.owner.name }}</c-fill></c-Card>\n'
+        '<c-Card><c-fill name="footer" data="card">'
+        '{{ card["aria-label"] }} {{ len(card) }} {{ card.items() }}</c-fill></c-Card>\n'
+        '<c-Card><c-fill name="open" data="row">{{ row.anything }}</c-fill></c-Card>\n'
+        '<c-Card><c-fill c-name="\'footer\'" data="card">{{ card.titel }}</c-fill></c-Card>\n'
+        '<c-Card><c-fill name="footer" data="{ title }">{{ title.upper() }}</c-fill></c-Card>\n'
+    )
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    # A slot with an open data class, a fill whose slot name is computed,
+    # and an unpacked field stay untyped, so they report nothing.
+    assert findings == [
+        ("citry.python.unresolved-attribute", "card.titel", "Object of type `FooterData` has no attribute `titel`"),
+        (
+            "citry.python.unsupported-operator",
+            'card.count + " tasks"',
+            'Operator `+` is not supported between objects of type `int` and `Literal[" tasks"]`',
+        ),
+        ("citry.python.unresolved-attribute", "card.owner.nmae", "Object of type `Owner` has no attribute `nmae`"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_fill_data_class_in_the_same_module_keeps_its_own_methods(tmp_path: Path) -> None:
+    # The slot's data class lives in the template's own module and names
+    # itself, so the generated class must not hide it.
+    module_source = (
+        "from __future__ import annotations\n"
+        "from pathlib import Path\n"
+        "from citry import Citry, Component, SlotInput\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Node:\n"
+        "    title: str\n"
+        "    parent: Node\n"
+        "    def label(self) -> str:\n"
+        "        return self.title\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template = '<c-slot name=\"footer\" />'\n"
+        "    class Slots:\n"
+        "        footer: SlotInput[Node] | None = None\n"
+        "class Board(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'board.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {}\n"
+    )
+    template_source = (
+        '<c-Card><c-fill name="footer" data="node">{{ node.parent.label() }} {{ node.titel }}</c-fill></c-Card>\n'
+    )
+
+    findings = await _python_findings_in(tmp_path, template_source, module_source)
+
+    assert findings == [
+        ("citry.python.unresolved-attribute", "node.titel", "Object of type `NodeSlotData` has no attribute `titel`"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_c_value_check_reads_a_class_nested_in_another_class(tmp_path: Path) -> None:
     # `models.Board.Row` does not say where the module ends, so the check
     # must learn from the app that `models` is the module.

@@ -25,6 +25,12 @@
   on an element that holds no value, such as `<form>`
   (`rule_invalid_model_target`). A misspelled DOM event in a listener,
   such as `@clik`, is a warning (`rule_misspelled_event`).
+- `citry check` and the editor now run Vue's compiler over every template,
+  every `<c-if>` branch included, and report what it rejects at the line you
+  wrote, such as a `<div>` directly inside a `<table>`, a `<button>` inside a
+  `<button>`, or a `v-else` with no `v-if` before it, before a component that
+  uses Vue fails to render (`rule_vue_compile_error`, an error by default)
+  ([details](https://citry.dev/ide/template-linting/#templates-vue-cannot-compile)).
 - The misspelled-directive check now also reports a typo in a Vue
   directive, such as `v-iff` or `v-elif`, which otherwise stops the page
   with an error in the browser.
@@ -50,6 +56,19 @@
 
   These are errors by default except the CSS check, so `citry check` may
   now fail on an existing project.
+- With your application loaded, `citry check` now warns about a link to a
+  page or file your app does not serve, such as `<a href="/abuot">` or
+  `<img src="/static/avtar.svg">`, and suggests the path you likely meant
+  (`rule_unknown_url`). It asks the web framework you mount Citry with
+  through `citry.contrib.flask.mount()`, `citry.contrib.fastapi.mount()`,
+  or `citry.contrib.django.urlpatterns()`, so point `--app` at the module
+  that mounts Citry
+  ([details](https://citry.dev/ide/template-linting/#find-links-to-missing-pages)).
+- If you build editor tooling on `citry.analysis`, you can now check a
+  fill's `data` name against the slot's `SlotInput[T]`: pass
+  `slot_data_types` to `build_schema_template_shadow()` or
+  `build_inferred_template_shadow()`, keyed by the `slot_target` that
+  `TemplatePythonControl` now records.
 - With your application loaded, `citry check` now warns when `js_data()`
   sends a module constant that JSON cannot carry, such as a
   `PurePosixPath`.

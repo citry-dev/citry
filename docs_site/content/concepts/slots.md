@@ -205,9 +205,11 @@ A fill can also unpack just the fields it needs, and rename them:
 
 Typing the slot as `SlotInput[RowData]` documents which fields the
 component passes, and lets Citry reject an unpacked field name that
-`RowData` does not have. Add `**rest` at the end to collect the fields you
-did not name. [`<c-fill>`](/reference/builtins/#c-fill) lists the full
-unpacking syntax.
+`RowData` does not have. With your app loaded, the editor and
+`citry check --types` also check each use of `row` against `RowData`, so
+`row.idnex` or `row.index + "."` is an error. Add `**rest` at the end to
+collect the fields you did not name.
+[`<c-fill>`](/reference/builtins/#c-fill) lists the full unpacking syntax.
 
 ## `slots=` from Python { #fill-slots-from-python }
 

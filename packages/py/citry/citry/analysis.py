@@ -170,6 +170,7 @@ from citry._template_python import ShadowRevealDocument as _ShadowRevealDocument
 from citry._template_python import TemplatePythonControl as _TemplatePythonControl
 from citry._template_python import TemplatePythonQuery as _TemplatePythonQuery
 from citry._template_python import TemplatePythonRoot as _TemplatePythonRoot
+from citry._template_python import TemplatePythonSlotDataType as _TemplatePythonSlotDataType
 from citry._template_python import TemplatePythonValueType as _TemplatePythonValueType
 from citry._template_python import build_inferred_template_shadow as _build_inferred_template_shadow
 from citry._template_python import build_reveal_shadow as _build_reveal_shadow
@@ -217,6 +218,7 @@ UNKNOWN_TEMPLATE_VARIABLE_CODE = TEMPLATE_UNKNOWN_VARIABLE
 TemplatePythonControl = _TemplatePythonControl
 TemplatePythonQuery = _TemplatePythonQuery
 TemplatePythonRoot = _TemplatePythonRoot
+TemplatePythonSlotDataType = _TemplatePythonSlotDataType
 TemplatePythonValueType = _TemplatePythonValueType
 ShadowPythonCopy = _ShadowPythonCopy
 ShadowPythonDocument = _ShadowPythonDocument
@@ -489,6 +491,8 @@ class ComponentSourceLint:
         rule_misspelled_event: ``Lint.rule_misspelled_event``, when readable.
         rule_invalid_vue_expression: ``Lint.rule_invalid_vue_expression``,
             when readable.
+        rule_vue_compile_error: ``Lint.rule_vue_compile_error``, when
+            readable.
 
     """
 
@@ -505,6 +509,7 @@ class ComponentSourceLint:
     rule_invalid_model_target: Literal["ignore", "warning", "error"] | None = None
     rule_misspelled_event: Literal["ignore", "warning", "error"] | None = None
     rule_invalid_vue_expression: Literal["ignore", "warning", "error"] | None = None
+    rule_vue_compile_error: Literal["ignore", "warning", "error"] | None = None
 
     def __post_init__(self) -> None:
         for rule_name in _SOURCE_LINT_RULES:
@@ -2578,6 +2583,7 @@ def build_inferred_template_shadow(
     source_is_package: bool = False,
     kwargs_type: tuple[str, str] | None = None,
     value_type: TemplatePythonValueType | None = None,
+    slot_data_types: Mapping[tuple[str, str], TemplatePythonSlotDataType] | None = None,
 ) -> ShadowPythonDocument | None:
     """
     Build analyzer input from one statically accepted ``template_data`` method.
@@ -2592,6 +2598,9 @@ def build_inferred_template_shadow(
         kwargs_type: Optional module and qualified name for typed ``Kwargs``.
         value_type: Optional type the query's value must have, such as the
             child component input a ``c-*`` value sets.
+        slot_data_types: Optional data each slot passes to its fill, keyed by
+            the component tag as written and the slot name, so a fill's
+            ``data`` name gets the slot's fields.
 
     Returns:
         Generated Python plus exact source mappings, or ``None`` when the
@@ -2607,6 +2616,7 @@ def build_inferred_template_shadow(
         source_is_package=source_is_package,
         kwargs_type=kwargs_type,
         value_type=value_type,
+        slot_data_types=slot_data_types,
     )
 
 
@@ -2619,6 +2629,7 @@ def build_schema_template_shadow(
     source_module: str | None = None,
     source_is_package: bool = False,
     value_type: TemplatePythonValueType | None = None,
+    slot_data_types: Mapping[tuple[str, str], TemplatePythonSlotDataType] | None = None,
 ) -> ShadowPythonDocument | None:
     """
     Build analyzer input from one statically resolved ``TemplateData`` schema.
@@ -2632,6 +2643,9 @@ def build_schema_template_shadow(
         source_is_package: Whether that module is implemented by ``__init__.py``.
         value_type: Optional type the query's value must have, such as the
             child component input a ``c-*`` value sets.
+        slot_data_types: Optional data each slot passes to its fill, keyed by
+            the component tag as written and the slot name, so a fill's
+            ``data`` name gets the slot's fields.
 
     Returns:
         Generated Python plus exact source mappings, or ``None`` when the
@@ -2646,6 +2660,7 @@ def build_schema_template_shadow(
         source_module=source_module,
         source_is_package=source_is_package,
         value_type=value_type,
+        slot_data_types=slot_data_types,
     )
 
 
@@ -6234,6 +6249,7 @@ __all__ = [
     "TemplatePythonControl",
     "TemplatePythonQuery",
     "TemplatePythonRoot",
+    "TemplatePythonSlotDataType",
     "TemplatePythonValueType",
     "TemplateTagUse",
     "UnknownComponentUse",

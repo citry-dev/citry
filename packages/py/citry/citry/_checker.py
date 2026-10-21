@@ -41,6 +41,8 @@ from citry._diagnostic_catalog import (
     CHECK_TEMPLATE_NAMESPACE_UNAVAILABLE,
     CHECK_TEMPLATE_NOT_CHECKED,
     CHECK_TEMPLATE_VALUE_INVALID,
+    CHECK_URL_CHECKER_FAILED,
+    CHECK_URL_CHECKER_MISSING,
     I18N_ARGUMENT_INVALID,
     I18N_CATALOG_INVALID,
     I18N_CLIENT_MESSAGE_INVALID,
@@ -57,6 +59,7 @@ from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._inline_assets import normalize_inline_asset
 from citry._linting import _component_lint_info
 from citry._markup_lint import MARKUP_LINT_RULES
+from citry._path_checks import PathVerdict, check_paths, has_path_checkers, is_citry_path
 from citry._registry_lint import (
     ServerEventPayload,
     ServerEventPayloadFinding,
@@ -66,7 +69,9 @@ from citry._registry_lint import (
     server_event_payload,
     server_event_payload_findings,
     template_has_vue_attributes,
+    template_urls,
     unkeyed_repeated_component_calls,
+    unknown_url_findings,
 )
 from citry._template_data_source import (
     TemplateDataSourceShape,
@@ -74,6 +79,7 @@ from citry._template_data_source import (
     analyze_template_data_source,
 )
 from citry._vue.json_data import _json_plain
+from citry._vue_compile_lint import lint_vue_compile
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
@@ -246,18 +252,21 @@ def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
         findings, notes = _check_static(cwd)
         return CheckReport(findings=tuple(findings), app_failure=app_failure_message(exc), notes=tuple(notes))
 
-    return CheckReport(
-        findings=tuple(_check_registry(engine, registrations, rules)),
-        notes=(TRANSFORM_NOTE,),
-    )
+    findings, notes = _check_registry(engine, registrations, rules)
+    return CheckReport(findings=tuple(findings), notes=(TRANSFORM_NOTE, *notes))
 
 
 def _check_registry(
     engine: Citry,
     registrations: Mapping[str, type[Component]],
     rules: Mapping[str, TagRules],
-) -> list[CheckFinding]:
-    """Read each authored registry template directly and continue after failures."""
+) -> tuple[list[CheckFinding], list[str]]:
+    """
+    Read each authored registry template directly and continue after failures.
+
+    Returns the findings, and the notes about checks that could not run,
+    such as link paths no web framework integration could answer for.
+    """
     known_names = {name.lower() for name in registrations}
     unique_classes = {id(comp_cls): comp_cls for comp_cls in registrations.values()}
     components = sorted(unique_classes.values(), key=_class_label)
@@ -267,6 +276,7 @@ def _check_registry(
     css_sources: dict[tuple[object, ...], _BrowserSource] = {}
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None
+    links = _LinkCheck(verdicts={}, failures={})
 
     i18n = engine.extensions._extensions_by_name.get("i18n")
     # Component messages make i18n available without configuring it; only a
@@ -499,6 +509,7 @@ def _check_registry(
                 nested_foreign_options=nested_foreign_options,
                 component_props=component_props,
                 component_templates=component_templates,
+                links=links,
             )
         )
     for browser_source in browser_sources.values():
@@ -507,7 +518,7 @@ def _check_registry(
         )
     for css_source in css_sources.values():
         findings.extend(_check_css_source(engine, css_source))
-    return findings
+    return findings, links.notes()
 
 
 def _checker_foreign_options(
@@ -641,6 +652,7 @@ def _check_template(
     nested_foreign_options: Callable[[str], ParseOptions | None] | None = None,
     component_props: Mapping[type[Component], tuple[BrowserProp, ...] | None] | None = None,
     component_templates: Mapping[type[Component], str] | None = None,
+    links: _LinkCheck | None = None,
 ) -> list[CheckFinding]:
     """Parse one source and, in registry mode, inspect component tag names."""
     try:
@@ -739,6 +751,12 @@ def _check_template(
         *lint_misspelled_directives(template, directive_lint_consumers, parse_nested=nested_parser),
         *lint_markup(template, markup_lint_consumers, parse_nested=nested_parser),
         *lint_invalid_vue_expressions(template, browser_hosts, markup_lint_consumers, parse_nested=nested_parser),
+        *lint_vue_compile(
+            source.content,
+            template,
+            markup_lint_consumers,
+            renders_in_place=_component_renders_in_place(engine) if engine is not None else None,
+        ),
     ]
     for attribute_finding in attribute_findings:
         line, column = _byte_offset_coordinates(source.content, attribute_finding.start_index)
@@ -847,6 +865,8 @@ def _check_template(
             )
         )
         findings.extend(_server_event_payload_findings(engine, source, template, parse_nested=nested_parser))
+        if links is not None:
+            findings.extend(_unknown_url_findings(engine, source, template, links, parse_nested=nested_parser))
     for target_error in browser_state_binding_target_errors(template, parse_nested=nested_parser):
         findings.append(
             _browser_template_finding(
@@ -2006,6 +2026,93 @@ def _server_event_payload_findings(
     return findings
 
 
+@dataclass(slots=True)
+class _LinkCheck:
+    """
+    What one `citry check` run learned about link paths, shared by every template.
+
+    Each path is asked about once, however many templates link to it, and
+    the notes about paths that could not be checked are written once per run.
+    """
+
+    verdicts: dict[str, PathVerdict]
+    # Paths whose path checker raised, with the error.
+    failures: dict[str, str]
+    # The first path seen when no integration registered a path checker.
+    unchecked: str | None = None
+
+    def notes(self) -> list[str]:
+        """Write one note for unchecked links and one for links a checker failed on."""
+        notes: list[str] = []
+        if self.unchecked is not None:
+            message = render_diagnostic(CHECK_URL_CHECKER_MISSING, path=self.unchecked)
+            notes.append(f"{message} [{CHECK_URL_CHECKER_MISSING}]")
+        if self.failures:
+            path = min(self.failures)
+            detail = self.failures[path]
+            message = (
+                render_diagnostic(CHECK_URL_CHECKER_FAILED, path=path, detail=detail)
+                if len(self.failures) == 1
+                else render_diagnostic(
+                    CHECK_URL_CHECKER_FAILED, variant="several", path=path, count=len(self.failures), detail=detail
+                )
+            )
+            notes.append(f"{message} [{CHECK_URL_CHECKER_FAILED}]")
+        return notes
+
+
+def _unknown_url_findings(
+    engine: Citry,
+    source: _TemplateSource,
+    template: Template,
+    links: _LinkCheck,
+    *,
+    parse_nested: Callable[[str], Template],
+) -> list[CheckFinding]:
+    """Report literal link paths the host app does not serve, as its framework integration answers."""
+    active = [
+        rule_severity
+        for component in source.consumers
+        if (rule_severity := _component_lint_info(engine, component).rule_unknown_url) != "ignore"
+    ]
+    if not active:
+        return []
+    urls = template_urls(template, parse_nested=parse_nested)
+    if not urls:
+        return []
+    if not has_path_checkers(engine):
+        # Nothing can answer, so the run notes it once instead of guessing.
+        if links.unchecked is None:
+            # Citry's own routes are always served, so the note names a link
+            # to the app's pages instead.
+            links.unchecked = next((url.path for url in urls if not is_citry_path(engine, url.path)), None)
+        return []
+    asked = {url.path for url in urls} - links.verdicts.keys() - links.failures.keys()
+    results = check_paths(engine, asked)
+    links.verdicts.update(results.verdicts)
+    links.failures.update(results.failures)
+    verdicts = {path: (verdict.found, verdict.suggestion) for path, verdict in links.verdicts.items()}
+    findings: list[CheckFinding] = []
+    for finding in unknown_url_findings(urls, verdicts):
+        start = _byte_offset_coordinates(source.content, finding.start_index)
+        end = _byte_offset_coordinates(source.content, finding.end_index)
+        findings.append(
+            CheckFinding(
+                source.origin,
+                finding.message,
+                finding.code,
+                severity="error" if "error" in active else "warning",
+                start_index=finding.start_index,
+                end_index=finding.end_index,
+                line=start[0],
+                column=start[1],
+                end_line=end[0],
+                end_column=end[1],
+            )
+        )
+    return findings
+
+
 # The setting that controls each server-event payload finding.
 _PAYLOAD_RULES = {
     BROWSER_UNKNOWN_SERVER_EVENT_FIELD: "rule_unknown_server_event_field",
@@ -2114,6 +2221,25 @@ def _checker_markup_lint_consumer(engine: Citry, component: type[Component]) -> 
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
         root_may_receive_attributes=_may_have_browser_code(component),
     )
+
+
+def _component_renders_in_place(engine: Citry) -> Callable[[str], bool | None]:
+    """
+    Say whether a component tag renders in place in its caller's Vue template.
+
+    A `transparent` or `simple` component is copied into the caller's template
+    rather than called, so it may sit inside a Vue `v-for`. A tag the
+    application does not register returns `None`.
+    """
+
+    def renders_in_place(name: str) -> bool | None:
+        try:
+            component = engine.get(name.lower())
+        except NotRegistered:
+            return None
+        return bool(component.transparent or component.simple)
+
+    return renders_in_place
 
 
 def _may_have_browser_code(component: type[Component]) -> bool:

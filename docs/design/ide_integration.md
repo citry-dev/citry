@@ -52,6 +52,14 @@ application:
   event in a listener.
 - `rule_invalid_vue_expression` (`citry.vue.invalid-expression`): a Vue
   expression that is not valid JavaScript.
+- `rule_vue_compile_error` (`citry.vue.compile-error`): anything else
+  Vue's compiler rejects. Citry writes the Vue template a render would
+  compile (`citry/_vue/static_template.py`, using the same functions a
+  render uses to write each kind of node), compiles it, and maps each error
+  back to the authored text. Errors that point only at text Citry generated
+  are dropped, except a component inside a Vue `v-for`, which is reported on
+  the component's tag when the loaded application shows that the component
+  is neither `transparent` nor `simple`.
 
 `rule_undeclared_component_event` sets the severity of
 `citry.browser.undeclared-component-event`, which reads each child's
@@ -81,6 +89,22 @@ These rules need facts that only the loaded application gives, so
 
 - `rule_misspelled_css_variable` (`citry.css.misspelled-variable`): a
   `var(--name)` one typing slip from a `css_data()` key.
+- `rule_unknown_url` (`citry.template.unknown-url`, a warning by default):
+  a literal root-relative `href`, `src`, or `action` path on an HTML
+  element that the host app does not serve. Citry does not know the host's
+  routes, so `citry.contrib.flask.mount()`, `citry.contrib.fastapi.mount()`,
+  and `citry.contrib.django.urlpatterns()` each register a path checker on
+  the `Citry` instance (`Citry._path_checkers`, through
+  `citry/_path_checks.py`). A path checker answers, for one path with its
+  query string and fragment removed, whether a route or static file serves
+  it, and lists served paths a reader may have meant, from which the rule
+  suggests one a typing slip away. `citry check` asks the checkers only
+  about paths a template links to, once per distinct path, and treats a path under Citry's own mounted
+  prefix as served. When no integration registered a checker, it checks no
+  links and adds one note (`citry.check.url-checker-missing`); a checker
+  that raises skips that path and adds one note for the run
+  (`citry.check.url-checker-failed`). A path that a proxy serves is
+  reported even though it works, which is why the rule is a warning.
 
 Each of these rules reports nothing when it cannot read its input:
 component JavaScript that does not parse, `css_data()` keys that are not
@@ -107,6 +131,34 @@ compares the handler's method and its data class in the open buffers with
 the files on disk, and skips the handler while either has unsaved changes.
 When the worker cannot place the data class, any unsaved Python buffer
 turns the rules off for that handler until the files are saved.
+
+The app worker runs once and exits, so the editor cannot call the host's
+path checkers later. The worker reads every registered component's
+template, asks the checkers about each literal link path while the app is
+loaded, and sends the answers as `paths: {"checked", "verdicts"}`. The
+editor reports `rule_unknown_url` only for a path the worker answered, so a
+link added after the app loaded is checked at the next load. When the
+worker sends `checked: false`, or runs an older Citry without path checks,
+the editor checks no links.
+
+Two type checks need the loaded app too, and run in the editor and in
+`citry check --types`. The worker sends, for each component, the fields
+each typed slot passes to its fill (`slot_data_classes`, built by
+`citry._wire_classes.slot_data_wire_classes` from the slot's
+`SlotInput[T]`). A whole-data fill name, such as `card` in
+`<c-fill name="footer" data="card">`, carries the component tag and slot
+name on its `TemplatePythonControl.slot_target`, and the ty check file
+(the Python file Citry generates from a template so ty can type-check its
+expressions) declares it as a generated `Mapping[str, Any]` subclass with `T`'s fields,
+not as `T` itself, because the fill receives a `SlotData` mapping. A
+computed slot name, a slot without a finite data class, or a worker on an
+older Citry leaves the name untyped. In the TypeScript check file (the
+JavaScript file citry-lsp generates from a template so tsc can type-check
+its Vue expressions), a `:prop` value on a child component tag is passed to a helper typed from the
+prop's `type` in the child's `$component` source, with `''` and the
+hyphenated prop name added for a Boolean prop, as Vue converts them. A
+prop without a convertible type, or a value a later object `v-bind` can
+replace, stays untyped.
 
 Some classes set a literal template but extend a class imported from
 another module of the project, so reading one file cannot prove they are

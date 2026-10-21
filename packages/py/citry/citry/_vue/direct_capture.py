@@ -911,7 +911,7 @@ def assemble_typed_render(
             if len({fill.site_id for fill in fills}) != len(fills):
                 raise UnsupportedPreparedView("prepared component call has duplicate supplied fill sites")
             for fill in fills:
-                output.append(f"<template v-slot:['{fill.site_id}']{context_binding_pattern}>")
+                output.append(_fill_opening(fill.site_id, context_binding_pattern))
                 if fill.lexical_owner == definition_owner_id:
                     output.extend(fill.body)
                 else:
@@ -1084,11 +1084,7 @@ def assemble_typed_render(
                 record = opaque_html_record(html, pinned=True)
                 if opaque_values.setdefault(key, record) != record:
                     raise UnsupportedPreparedView("one prepared opaque HTML site produced conflicting bytes")
-                start = output.byte_length
-                output.append(f'<citry-opaque-html :record="$citryPrepared.opaqueHtml.{key}">')
-                end = output.byte_length
-                output.append("</citry-opaque-html>")
-                output.opaque_html_sites.append({"key": key, "sourceStart": start, "sourceEnd": end, "origin": "raw"})
+                _append_opaque_html(output, key, "raw")
                 return close_index
 
             # Parts before this index are a `#c-ignore` element's contents,
@@ -1611,10 +1607,7 @@ def assemble_typed_render(
                             local_id = f"citryCall{_digest('run-member', member_placement_key)[:16]}"
                             calls[local_id] = {"id": member_id, "key": member_id, "parentId": occurrence_id}
                             start = output.byte_length
-                            output.append(
-                                f'<{tag} :citry-id="$citryPrepared.calls.{local_id}.id" '
-                                f':key="$citryPrepared.calls.{local_id}.key">'
-                            )
+                            output.append(f"<{tag}{_component_call_identity(local_id)}>")
                             opening_end = output.byte_length
                             append_child_fills(
                                 output,
@@ -1873,11 +1866,7 @@ def assemble_typed_render(
                         try:
                             # `v-else` and a valueless custom directive keep
                             # their bare authored form.
-                            source_attr = (
-                                component_binding.key
-                                if component_binding.value == ""
-                                else _authored_vue_attr(component_binding.key, component_binding.value)
-                            )
+                            source_attr = _component_call_binding_attr(component_binding.key, component_binding.value)
                         except ValueError as error:
                             raise UnsupportedPreparedView(str(error)) from error
                         output.append(source_attr)
@@ -1890,8 +1879,7 @@ def assemble_typed_render(
                                 "sourceEnd": output.byte_length,
                             }
                         )
-                    output.append(f' :citry-id="$citryPrepared.calls.{local_id}.id"')
-                    output.append(f' :key="$citryPrepared.calls.{local_id}.key"')
+                    output.append(_component_call_identity(local_id))
                     output.append(">")
                     opening_end = output.byte_length
                     fills = tuple(supplied_fills.pop(child_id, ()))
@@ -1948,13 +1936,7 @@ def assemble_typed_render(
                     prior = opaque_values.setdefault(key, record)
                     if prior != record:
                         raise UnsupportedPreparedView("one prepared opaque HTML site produced conflicting bytes")
-                    start = output.byte_length
-                    output.append(f'<citry-opaque-html :record="$citryPrepared.opaqueHtml.{key}">')
-                    end = output.byte_length
-                    output.append("</citry-opaque-html>")
-                    output.opaque_html_sites.append(
-                        {"key": key, "sourceStart": start, "sourceEnd": end, "origin": "raw"}
-                    )
+                    _append_opaque_html(output, key, "raw")
                     continue
                 if isinstance(part, PreparedStaticRun):
                     structure = part.root_structure
@@ -2015,7 +1997,7 @@ def assemble_typed_render(
                     ):
                         note_browser_read(data_owner_id, f"the values of {text_browser_binding.helper}() in text")
                     if text_browser_binding is None:
-                        output.append(f"{{{{ $citryPrepared.{key} }}}}")
+                        _append_text_binding(output, key)
                     else:
                         if (
                             not is_authenticated_browser_binding(text_browser_binding)
@@ -2056,7 +2038,7 @@ def assemble_typed_render(
                             value = value[1:]
                         key = data_key("Text", serialized, (0, len(serialized.encode())), data_owner_id)
                         data_values[key] = value
-                        output.append(f"{{{{ $citryPrepared.{key} }}}}")
+                        _append_text_binding(output, key)
                         continue
                     reject_cross_boundary_html(serialized, origin="A Markup value (trusted HTML from Python)")
                     html = mark_opaque_html(
@@ -2072,13 +2054,7 @@ def assemble_typed_render(
                     prior = opaque_values.setdefault(key, record)
                     if prior != record:
                         raise UnsupportedPreparedView("one prepared opaque HTML site produced conflicting bytes")
-                    start = output.byte_length
-                    output.append(f'<citry-opaque-html :record="$citryPrepared.opaqueHtml.{key}">')
-                    end = output.byte_length
-                    output.append("</citry-opaque-html>")
-                    output.opaque_html_sites.append(
-                        {"key": key, "sourceStart": start, "sourceEnd": end, "origin": "markup"}
-                    )
+                    _append_opaque_html(output, key, "markup")
                     continue
                 if isinstance(part, PreparedLeafProgram):
                     if browser_read_trackers and part.fragment.browser_requirements:
@@ -2710,32 +2686,65 @@ def assemble_typed_render(
 
 def _logical_typed_body(parts: list[RenderPart]) -> list[RenderPart]:
     """Select logical body UI before assembling document-shell components."""
+    bounds = document_body_bounds(
+        parts,
+        text=lambda part: part.text if isinstance(part, PreparedSourceText) else None,
+        opening_tag=lambda part: part.tag if isinstance(part, PreparedElementOpen) else None,
+        closing_tag=lambda part: part.tag if isinstance(part, PreparedElementClose) else None,
+    )
+    return parts if bounds is None else parts[bounds[0] : bounds[1]]
+
+
+_ItemT = TypeVar("_ItemT")
+
+
+def document_body_bounds(
+    items: Sequence[_ItemT],
+    *,
+    text: Callable[[_ItemT], str | None],
+    opening_tag: Callable[[_ItemT], str | None],
+    closing_tag: Callable[[_ItemT], str | None],
+) -> tuple[int, int] | None:
+    """
+    Return where the contents of a whole-document template's `<body>` start and end in `items`.
+
+    A template that writes the document shell (a doctype, or an `<html>`,
+    `<head>` or `<body>` element) gets only its body contents compiled for
+    Vue. Returns `None` for a template without a shell. Rendering passes
+    rendered parts and `citry check` passes template nodes, so the callables
+    read the text, opening tag, or closing tag of one item, or return `None`.
+
+    Raises:
+        UnsupportedPreparedView: The shell has no `<body>`, or the `<body>` is
+            never closed.
+
+    """
     has_shell = any(
-        (isinstance(part, PreparedSourceText) and part.text.lstrip().lower().startswith("<!doctype"))
-        or (isinstance(part, PreparedElementOpen) and part.tag.lower() in {"html", "head", "body"})
-        for part in parts
+        ((value := text(item)) is not None and value.lstrip().lower().startswith("<!doctype"))
+        or ((tag := opening_tag(item)) is not None and tag.lower() in {"html", "head", "body"})
+        for item in items
     )
     if not has_shell:
-        return parts
+        return None
     body_start = next(
         (
             index
-            for index, part in enumerate(parts)
-            if isinstance(part, PreparedElementOpen) and part.tag.lower() == "body"
+            for index, item in enumerate(items)
+            if (tag := opening_tag(item)) is not None and tag.lower() == "body"
         ),
         None,
     )
     if body_start is None:
         raise UnsupportedPreparedView("interactive document component requires one authored body element")
     depth = 1
-    for index in range(body_start + 1, len(parts)):
-        part = parts[index]
-        if isinstance(part, PreparedElementOpen) and part.tag.lower() == "body":
+    for index in range(body_start + 1, len(items)):
+        item = items[index]
+        if (tag := opening_tag(item)) is not None and tag.lower() == "body":
             depth += 1
-        elif isinstance(part, PreparedElementClose) and part.tag.lower() == "body":
+        elif (tag := closing_tag(item)) is not None and tag.lower() == "body":
             depth -= 1
             if depth == 0:
-                return parts[body_start + 1 : index]
+                return body_start + 1, index
     raise UnsupportedPreparedView("interactive document component has an unclosed body element")
 
 
@@ -3052,6 +3061,50 @@ def _append_static_root_projection(
             }
         )
     output.append(html[cursor:])
+
+
+# The writers below produce the Vue source for one kind of template content.
+# The render-time assembler above and `citry check` (`static_template.py`)
+# both call them, so the template the check compiles has the same shape as the
+# one a render compiles.
+
+
+def _append_text_binding(output: _DefinitionFragment, key: str) -> None:
+    """Write a Python text value as a Vue interpolation of its prepared data key."""
+    output.append(f"{{{{ $citryPrepared.{key} }}}}")
+
+
+def _append_opaque_html(output: _DefinitionFragment, key: str, origin: str) -> None:
+    """Write a block of HTML that Vue mounts without compiling, and record its site."""
+    start = output.byte_length
+    output.append(f'<citry-opaque-html :record="$citryPrepared.opaqueHtml.{key}">')
+    end = output.byte_length
+    output.append("</citry-opaque-html>")
+    output.opaque_html_sites.append({"key": key, "sourceStart": start, "sourceEnd": end, "origin": origin})
+
+
+def _component_call_identity(local_id: str) -> str:
+    """Return the attributes that tie a component call's tag to its prepared occurrence."""
+    return f' :citry-id="$citryPrepared.calls.{local_id}.id" :key="$citryPrepared.calls.{local_id}.key"'
+
+
+def _component_call_binding_attr(key: str, value: str) -> str:
+    """
+    Write one authored Vue binding from a component tag, such as `:title="t"`.
+
+    An empty value is a valueless binding (`v-else`, or a custom directive
+    with no value), which keeps its bare name.
+
+    Raises:
+        ValueError: The value holds both quote characters (see `_authored_vue_attr`).
+
+    """
+    return key if value == "" else _authored_vue_attr(key, value)
+
+
+def _fill_opening(site_id: str, context_binding_pattern: str = "") -> str:
+    """Return the `<template>` that passes one fill to the child's slot outlet."""
+    return f"<template v-slot:['{site_id}']{context_binding_pattern}>"
 
 
 def _append_slot_outlet(

@@ -480,6 +480,18 @@ capability version because their expression-host contract changes. Unsupported
 Options forms receive a specific contract diagnostic, not a misleading
 unknown-variable error. i18n analysis must use its actual Vue integration path.
 
+`citry check` and the editor also compile each template before it renders
+(`citry.vue.compile-error`). `_vue/static_template.py` writes the Vue template
+from the template's nodes, without rendering, and calls the functions a
+render uses to write each kind of node: the writers after
+`assemble_typed_render` in `_vue/direct_capture.py`, `static_element_opening`
+in `_vue/capture.py`, and the `<c-if>`/`<c-for>` wrappers in
+`_vue/leaf_program.py`. It asks `compile_leaf_program` whether a render would
+compile the body as a leaf program, and wraps branches only then. A change to
+the Vue source a render writes for one kind of node goes in those functions,
+so the check follows it; `tests/test_vue_static_template.py` renders
+components and fails when the two templates differ.
+
 ## Historical V7-V8 integration findings
 
 **Status before the Vue-only cutover, 2026-09-12:** first integrated canonical
