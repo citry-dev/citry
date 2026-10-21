@@ -283,6 +283,31 @@ The check follows the annotation, not runtime validation. A Pydantic `Kwargs`
 field that converts `"1"` to `1` at runtime still reports a string passed to
 an `int`.
 
+### Slot data in fills
+
+Once your app is loaded, Citry checks each use of a fill's `data` name
+against the fields of the slot's data class. When the child declares
+`footer: SlotInput[FooterData]` in its `Slots`, a misspelled field or a
+wrong use of one is an error:
+
+```citry-html
+{# FooterData declares `title: str` and `count: int` #}
+<c-Card>
+  <c-fill name="footer" data="card">
+    {# Error: citry.python.unresolved-attribute #}
+    {{ card.titel }}
+    {# Error: citry.python.unsupported-operator #}
+    {{ card.count + " tasks" }}
+  </c-fill>
+</c-Card>
+```
+
+`card` stays a read-only mapping, as it is at runtime, so `card["aria-label"]`
+and `len(card)` are not errors. A field named like a mapping method, such as
+`items`, is read with brackets, as at runtime. A fill for a slot whose name
+is computed with `c-name`, or whose data class is an open type such as
+`dict[str, Any]`, is not checked.
+
 ## Vue and component JS { #complete-vue-expressions-and-component-javascript }
 
 In a component's template, Vue expressions know the data the component sends
@@ -498,6 +523,14 @@ to definition on a prop open its declaration. With a `v-bind` spread on the
 tag, Citry does not report missing props. A component chosen at runtime is
 not checked.
 
+[TypeScript](#typescript-errors-in-component-javascript-and-templates) also
+checks each bound prop value against the prop's `type`, so `:open="count"`
+is an error when `open` is a Boolean prop and `count` is a number. As in
+Vue, a Boolean prop also accepts `''` and its own name, such as
+`'is-open'` for `isOpen`. A prop whose type is a class, such as `Date`, a
+prop declared as `props: ['open']`, and a value that a later
+`v-bind="..."` on the same tag can replace take any value.
+
 ## TypeScript errors { #typescript-errors-in-component-javascript-and-templates }
 
 The editor reports TypeScript's errors in component JavaScript and in Vue
@@ -544,6 +577,7 @@ TypeScript's own.
 | The wrong number of arguments | `this.startDrag(1, 2)` | 2554, 2555, 2556, 2575 |
 | A syntax error in JavaScript inside a Python string | `const = 1` | 1000 to 1999 |
 | A bound HTML attribute value of the wrong type | `:style="1"` | 2345 |
+| A child component prop value of the wrong type | `:open="String(shown)"` for a Boolean prop | 2345 |
 
 A bound attribute on an HTML element is checked against Vue's types for that
 attribute, so `:style="1"` is an error while `:style="{ color: 'red' }"`

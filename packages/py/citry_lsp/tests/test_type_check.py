@@ -173,6 +173,76 @@ def test_native_bindings_are_checked_against_vue_attribute_types(tmp_path):
     ]
 
 
+_PROPS_APP = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Status(Component):
+    citry = engine
+    template = '<p v-text="open"></p>'
+    js_file = 'status.js'
+class Details(Component):
+    citry = engine
+    template_file = 'details.html'
+    js_file = 'details.js'
+"""
+_STATUS_JS = """$component({
+  props: {
+    open: { type: Boolean, required: true },
+    isWide: Boolean,
+    count: Number,
+    label: [String, Boolean],
+    when: Date,
+    'big-title': String,
+    config: Object,
+  },
+});
+"""
+_DETAILS_JS = """$component({
+  data() { return { shown: false, total: 3, title: 'x', list: [1], when: new Date() }; },
+});
+"""
+# One `<c-Status>` per line, so each finding names its line. The first line
+# holds the mistakes; the others are values the child accepts or that stay
+# unchecked.
+_DETAILS_HTML = (
+    '<c-Status :open="String(shown)" :count="title" :is-wide="total" :big-title="total" />\n'
+    '<c-Status :open="shown" :is-wide="\'is-wide\'" :isWide="\'\'" :count="total" :label="title" />\n'
+    '<c-Status :open="shown ? \'open\' : \'\'" :when="title" :other="total" />\n'
+    '<c-Status :open="title" v-bind="{ open: true }" :count.prop="title" />\n'
+    '<c-component is="c-Status" :open="title" />\n'
+    # Vue's Object type accepts any non-null object, an array included.
+    '<c-Status :open="shown" :config="list" />\n'
+    '<c-Status :open="shown" :config="when" />'
+)
+
+
+def test_child_prop_values_are_checked_against_the_declared_prop_types(tmp_path):
+    project, documents = _documents(
+        tmp_path,
+        {
+            "status.js": ("javascript", _STATUS_JS),
+            "details.js": ("javascript", _DETAILS_JS),
+            "details.html": ("citry-html", _DETAILS_HTML),
+        },
+        app=_PROPS_APP,
+    )
+
+    # A Boolean prop takes a boolean, `''`, or its own hyphenated name, so a
+    # string from an expression is reported, as is a string for a Number
+    # prop and a number for a Boolean or String prop. A prop with a type
+    # Citry cannot convert (`Date`), a prop the child does not declare, a
+    # value a later object `v-bind` replaces, a `.prop` binding, and a
+    # dynamic component stay unchecked.
+    assert [
+        (code, text, found[0]) for code, text, found in _findings(tmp_path, "details.html", project, documents)
+    ] == [
+        ("citry.typescript.ts2345", "String", 0),
+        ("citry.typescript.ts2345", "title", 0),
+        ("citry.typescript.ts2345", "total", 0),
+        ("citry.typescript.ts2345", "total", 0),
+    ]
+
+
 def test_bound_attribute_helper_is_never_offered_as_a_completion(tmp_path):
     project, documents = _documents(tmp_path, {"bound.html": ("citry-html", _BOUND_HTML)}, app=_BOUND_APP)
     document = documents[(tmp_path / "bound.html").as_uri()]

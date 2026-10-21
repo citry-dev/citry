@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from packaging.version import InvalidVersion, Version
 
 from citry import TemplateAnalysis
-from citry._wire_classes import KwargsWireClasses
+from citry._wire_classes import KwargsWireClasses, SlotDataWireClass
 from citry_lsp.catalog import CatalogIndex
 from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
@@ -388,6 +388,7 @@ class SourceAnalysisIndex:
         "_js_schema",
         "_kwargs_classes",
         "_native_template",
+        "_slot_data_classes",
         "_state",
         "_state_resolution",
         "_template_asset",
@@ -416,6 +417,7 @@ class SourceAnalysisIndex:
         template_lint: dict[str, dict[str, SourceLintRecord]] = {}
         kwargs_classes: dict[str, KwargsWireClasses] = {}
         native_template: dict[str, bool | None] = {}
+        slot_data_classes: dict[str, dict[str, SlotDataWireClass]] = {}
         for raw_component in raw_components:
             (
                 definition_id,
@@ -447,6 +449,7 @@ class SourceAnalysisIndex:
             template_lint[definition_id] = lint_variables
             kwargs_classes[definition_id] = wire_classes
             native_template[definition_id] = _source_native_template(raw_component, definition_id)
+            slot_data_classes[definition_id] = _source_slot_data_classes(raw_component)
         expected = {component.definition_id for component in catalog.components}
         if set(template_data) != expected:
             raise ValueError("source analysis definition ids do not match the component catalog")
@@ -463,6 +466,7 @@ class SourceAnalysisIndex:
         self._template_lint = template_lint
         self._kwargs_classes = kwargs_classes
         self._native_template = native_template
+        self._slot_data_classes = slot_data_classes
 
     def template_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return copied provenance for one exact catalog component."""
@@ -487,6 +491,10 @@ class SourceAnalysisIndex:
     def kwargs_wire_classes(self, component: ComponentRecord) -> KwargsWireClasses:
         """Return the classes ``js_data()`` can read through from the component's Kwargs fields."""
         return self._kwargs_classes.get(component.definition_id, KwargsWireClasses())
+
+    def slot_data_wire_classes(self, component: ComponentRecord) -> Mapping[str, SlotDataWireClass]:
+        """Return the fields each typed slot of the component passes to its fill, by slot name."""
+        return self._slot_data_classes.get(component.definition_id, {})
 
     def js_asset_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return concrete-to-owner provenance for the effective JS asset."""
@@ -538,7 +546,12 @@ def _source_component(
     dict[str, SourceLintRecord],
     KwargsWireClasses,
 ]:
-    if type(value) is not dict or set(value) - {"js_schema", "kwargs_classes", "native_template"} != {
+    if type(value) is not dict or set(value) - {
+        "js_schema",
+        "kwargs_classes",
+        "native_template",
+        "slot_data_classes",
+    } != {
         "definition_id",
         "css_data",
         "css_asset",
@@ -566,6 +579,14 @@ def _source_component(
         _source_lint_variables(value.get("template_lint"), definition_id),
         KwargsWireClasses.from_dict(value["kwargs_classes"]) if "kwargs_classes" in value else KwargsWireClasses(),
     )
+
+
+def _source_slot_data_classes(value: object) -> dict[str, SlotDataWireClass]:
+    """Read the fields each typed slot passes to its fill; a worker on an older citry sends none."""
+    raw = value.get("slot_data_classes", {}) if type(value) is dict else {}
+    if type(raw) is not dict or any(type(name) is not str for name in raw):
+        raise ValueError("source analysis slot_data_classes must map slot names to records")
+    return {name: SlotDataWireClass.from_dict(record) for name, record in raw.items()}
 
 
 def _events_csrf_field_names(value: object) -> frozenset[str]:

@@ -16,9 +16,12 @@ from citry._class_introspection import _safe_class_text, _static_class_mro
 from citry._json_wire import WireClass, WireClassKind
 from citry._schema_introspection import _effective_schema_binding, _format_annotation
 from citry.introspection import _is_utf8_string
+from citry.tag_rules import _data_shape_field_names, _resolved_schema_annotations, _slot_input_data_shape
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from citry.component import Component
 
 # A project's model graph can be large; this many classes covers ordinary
 # attribute chains without letting one component copy a whole domain model.
@@ -99,6 +102,103 @@ class KwargsWireClasses:
             classes={name: WireClass.from_dict(item) for name, item in classes.items()},
             class_modules=dict(class_modules),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SlotDataWireClass:
+    """
+    The fields one typed slot passes to its fill, for tooling that types the fill's data name.
+
+    Attributes:
+        class_name: The name of the slot's data class, such as ``FooterData``.
+        members: Each field's annotation, resolved and written the way Citry
+            formats schema types, or ``None`` when it could not be resolved.
+            The fields are those the parser accepts in an unpacked
+            ``data="{ title }"``.
+        class_modules: The module of each class named in ``members``, by
+            import path, as in ``KwargsWireClasses``.
+
+    """
+
+    class_name: str
+    members: Mapping[str, str | None] = field(default_factory=dict)
+    class_modules: Mapping[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-ready copy for the language server's worker payload."""
+        return {
+            "class_name": self.class_name,
+            "members": dict(self.members),
+            "class_modules": dict(self.class_modules),
+        }
+
+    @classmethod
+    def from_dict(cls, value: object) -> SlotDataWireClass:
+        """Validate and restore one copied record."""
+        if type(value) is not dict or set(value) != {"class_name", "members", "class_modules"}:
+            msg = "slot data class records must contain the exact supported fields"
+            raise ValueError(msg)
+        class_name = value["class_name"]
+        members = value["members"]
+        class_modules = value["class_modules"]
+        if type(class_name) is not str:
+            msg = "slot data class names must be strings"
+            raise ValueError(msg)
+        if type(members) is not dict or any(
+            type(name) is not str or (annotation is not None and type(annotation) is not str)
+            for name, annotation in members.items()
+        ):
+            msg = "slot data class members must map names to annotations"
+            raise ValueError(msg)
+        if type(class_modules) is not dict or any(
+            type(path) is not str or type(module) is not str for path, module in class_modules.items()
+        ):
+            msg = "slot data class modules must map import paths to module names"
+            raise ValueError(msg)
+        return cls(class_name=class_name, members=dict(members), class_modules=dict(class_modules))
+
+
+def slot_data_wire_classes(component_class: type) -> dict[str, SlotDataWireClass]:
+    """
+    Describe the data each typed slot of one component passes to its fill.
+
+    A slot declared as ``footer: SlotInput[FooterData]`` in the component's
+    ``Slots`` gets ``FooterData``'s fields, read the same way the template
+    parser reads them to check an unpacked ``data="{ title }"``. Each
+    annotation is resolved in its own module, as for ``Kwargs``. A slot
+    without a finite data class, such as ``SlotInput[dict[str, Any]]``, is
+    left out, and so is a slot whose metadata raises, so this function never
+    raises.
+    """
+    slots_class = getattr(component_class, "Slots", None)
+    if not isinstance(slots_class, type):
+        return {}
+    try:
+        annotations = _resolved_schema_annotations(typing.cast("type[Component]", component_class), slots_class)
+    except Exception:  # noqa: BLE001 - project classes may raise anywhere; their slots then stay untyped
+        return {}
+    described: dict[str, SlotDataWireClass] = {}
+    for slot_name, annotation in annotations.items():
+        try:
+            data_class = _slot_input_data_shape(annotation)
+            field_names = _data_shape_field_names(data_class)
+            if field_names is None or not isinstance(data_class, type):
+                continue
+            hints = _attribute_hints(data_class) or {}
+            members: dict[str, str | None] = {}
+            class_modules: dict[str, str] = {}
+            for name in field_names:
+                hint = _alias_value(hints[name]) if name in hints else _UNRESOLVED
+                members[name] = _hint_display(hint)
+                _collect_class_modules(hint, class_modules, depth=0)
+            described[slot_name] = SlotDataWireClass(
+                class_name=_safe_class_text(data_class, "__name__") or "SlotData",
+                members=members,
+                class_modules=class_modules,
+            )
+        except Exception:  # noqa: BLE001, S112 - one slot with raising metadata stays untyped
+            continue
+    return described
 
 
 def kwargs_wire_classes(component_class: type) -> KwargsWireClasses:

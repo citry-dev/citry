@@ -50,6 +50,11 @@
 
   These are errors by default except the CSS check, so `citry check` may
   now fail on an existing project.
+- If you build editor tooling on `citry.analysis`, you can now check a
+  fill's `data` name against the slot's `SlotInput[T]`: pass
+  `slot_data_types` to `build_schema_template_shadow()` or
+  `build_inferred_template_shadow()`, keyed by the `slot_target` that
+  `TemplatePythonControl` now records.
 - With your application loaded, `citry check` now warns when `js_data()`
   sends a module constant that JSON cannot carry, such as a
   `PurePosixPath`.

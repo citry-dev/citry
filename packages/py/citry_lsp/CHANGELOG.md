@@ -31,6 +31,15 @@ All notable changes to `citry-lsp` are documented here.
   `citry check` does. It skips a handler while the handler or its data
   class has unsaved changes, and every handler of an application on an
   older Citry, which does not say how the server checks the arguments.
+- Once your application loads, the editor and `citry check --types`
+  check a fill's `data` name, such as `card` in `<c-fill data="card">`,
+  against the slot's `SlotInput[T]`, so
+  `card.titel` or `card.count + " tasks"` is reported when `T` declares
+  `title: str` and `count: int`.
+- Once your application loads, the editor and `citry check --types` check
+  a bound prop value on a child component tag against the prop's `type` in
+  the child's `$component` call, so `:open="count"` is an error for a
+  Boolean prop when `count` is a number.
 - The editor and `citry check --types` warn about a `js_data()` value that
   ty types as a standard type JSON cannot carry, such as a
   `PurePosixPath`, a `datetime`, or a set.

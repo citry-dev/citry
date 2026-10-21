@@ -34,6 +34,13 @@ from citry.analysis import (
 from citry.assets import _find_pair_declaration
 from citry.ext.events.extension import _component_events_info
 
+try:
+    from citry._wire_classes import slot_data_wire_classes
+except ImportError:  # pragma: no cover - an older citry in the app's environment
+    # Without it the worker sends no slot data, and the editor leaves each
+    # fill's data name untyped.
+    slot_data_wire_classes = None  # type: ignore[assignment]
+
 if TYPE_CHECKING:
     from citry import TemplateAnalysis
     from citry.introspection import ComponentCatalog
@@ -198,6 +205,7 @@ def _source_analysis(
                     else {"handlers": None, "state": None, "state_resolution": {"resolution_chain": None}}
                 ),
                 "kwargs_classes": _kwargs_classes(selected_class, with_classes=bool(js_data_chain)),
+                "slot_data_classes": _slot_data_classes(selected_class),
                 "template_lint": {
                     "variables": _component_lint_sources(
                         selected_class,
@@ -246,6 +254,19 @@ def _kwargs_classes(component_class: type | None, *, with_classes: bool) -> dict
     if not with_classes:
         resolved = KwargsWireClasses(members=resolved.members, class_modules=resolved.class_modules)
     return resolved.to_dict()
+
+
+def _slot_data_classes(component_class: type | None) -> dict[str, object]:
+    """
+    Copy the fields each typed slot passes to its fill, by slot name.
+
+    A parent template's `<c-fill data="card">` types `card` from these, so
+    `card.titel` is reported. An older citry that cannot describe slot data
+    sends none, and the fill's name stays untyped.
+    """
+    if component_class is None or slot_data_wire_classes is None:
+        return {}
+    return {name: described.to_dict() for name, described in slot_data_wire_classes(component_class).items()}
 
 
 def _schema_resolution_chain(

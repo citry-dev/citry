@@ -108,6 +108,25 @@ the files on disk, and skips the handler while either has unsaved changes.
 When the worker cannot place the data class, any unsaved Python buffer
 turns the rules off for that handler until the files are saved.
 
+Two type checks need the loaded app too, and run in the editor and in
+`citry check --types`. The worker sends, for each component, the fields
+each typed slot passes to its fill (`slot_data_classes`, built by
+`citry._wire_classes.slot_data_wire_classes` from the slot's
+`SlotInput[T]`). A whole-data fill name, such as `card` in
+`<c-fill name="footer" data="card">`, carries the component tag and slot
+name on its `TemplatePythonControl.slot_target`, and the ty check file
+(the Python file Citry generates from a template so ty can type-check its
+expressions) declares it as a generated `Mapping[str, Any]` subclass with `T`'s fields,
+not as `T` itself, because the fill receives a `SlotData` mapping. A
+computed slot name, a slot without a finite data class, or a worker on an
+older Citry leaves the name untyped. In the TypeScript check file (the
+JavaScript file citry-lsp generates from a template so tsc can type-check
+its Vue expressions), a `:prop` value on a child component tag is passed to a helper typed from the
+prop's `type` in the child's `$component` source, with `''` and the
+hyphenated prop name added for a Boolean prop, as Vue converts them. A
+prop without a convertible type, or a value a later object `v-bind` can
+replace, stays untyped.
+
 Some classes set a literal template but extend a class imported from
 another module of the project, so reading one file cannot prove they are
 components. Once the app worker has loaded the app, the editor reads the
