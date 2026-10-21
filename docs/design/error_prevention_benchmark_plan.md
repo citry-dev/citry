@@ -11,14 +11,14 @@ experimental Rust version of Django's template engine). PR 6 has added
 django-components, with PR 3's reference-page parts and a case for each
 of the 44 mistakes in the catalogue after PR 3. PRs 9 and 6 landed
 before PR 4, so PR 4 added its page changes and cases to both apps, and
-PR 5 will too. PR 8 has added ReactPy, with a case for each of those 44
+PR 5 did too. PR 8 has added ReactPy, with a case for each of those 44
 mistakes, and then PR 4's page changes and cases. PR 10 has added
 django-unicorn the same way, with PR 4's page changes and a case for
 each of the 49 mistakes in the catalogue after PR 4. A later PR (the
 stricter-settings PR) applied the decision on stricter settings to the frameworks measured before PR 6
 (section 8). PR 5 then added part 3's 13 mistakes (m51 to m63) to all
-ten frameworks, with Ref H. PR 11 has added Tetra, with the page parts
-and a case for each of the 62 mistakes in the catalogue after PR 5. The
+ten frameworks, with Ref H. PR 11 has added Tetra, with the
+reference-page parts of PRs 3 to 5 and a case for each of the 62 mistakes in the catalogue after PR 5. The
 other PRs in section 8 are planned. The published results include 1b,
 PR 2, PR 3, PR 9, PR 6, PR 4, PR 8, PR 10, the stricter settings, PR 5
 and PR 11. The benchmark itself is described in

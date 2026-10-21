@@ -41,8 +41,8 @@ components:
 - ApiLine has the public attribute `api_base`, which load() sets from the \
 settings, and shows it with Alpine's `x-text`.
 - ProjectList builds the cards in load(), shows `Projects: {{ cards|length \
-}}` above them, as the django-unicorn app's card list does (so the line \
-sits below the API line, not the owner line), and keeps the titles of the \
+}}` above them, as the django-unicorn app's card list does (so \
+`Projects: 3` sits below the API line, not the owner line), and keeps the titles of the \
 hidden cards in the public attribute `hidden`. It gives each card its title \
 as its key (`key=card.title`), as Tetra's tutorial keys components in a \
 loop. Its `hide(title)` method is \
@@ -148,10 +148,11 @@ Settings considered and left off, with the reason. Tetra's own settings \
 choose the path to esbuild (`TETRA_ESBUILD_PATH`, set as described above), \
 esbuild's arguments, and the names of its cache folder, its component \
 modules and its upload folder; none adds a check. Nor do esbuild's \
-arguments add a kind of check the other frameworks make: `--log-level` and \
-`--log-override` can show messages esbuild hides by default, which concern \
-how it bundles `require()` and `import()` calls, or raise a warning to an \
-error, which the rule does not count as a stricter check. Pydantic's \
+arguments add a kind of check the other frameworks make: `--log-level` can \
+show messages esbuild hides by default, such as notes on how it bundles \
+`require()` and `import()` calls, which are not checks of the code. \
+`--log-override` can raise a warning to an error, and the rule does not \
+count a raised level as a stricter check. Pydantic's \
 strict types (`StrictInt`, or `Annotated[..., Strict()]`) would also \
 reject numeric text; Tetra builds its model with fixed settings, so they \
 could only be written into each annotation. They are left off because \
@@ -224,8 +225,10 @@ JavaScript support does not read JavaScript written in a Python string.
 check: `python manage.py check`, plus ruff with its default rules for the \
 Python files and djLint with its Django profile for the page templates. A \
 linter finding fails its command, so it counts as an error. Tetra's own \
-system checks concern only components that use WebSockets; m01 fails \
-`manage.py check` because Tetra compiles the templates when Django starts. \
+system checks concern only components that use WebSockets; m01 and m59 \
+fail `manage.py check` because Tetra compiles the templates when Django \
+starts, and m60 because `@public.listen` checks the method when the class \
+is defined. \
 djLint does not read the component templates, which are Python strings.
 
 build: `python manage.py tetrabuild`, the build command Tetra's install \

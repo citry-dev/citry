@@ -92,8 +92,8 @@ search form rewritten as components of
 the server, which sends back the component's new HTML.
 Tetra is the Django app with its interactive parts rewritten as
 components of [Tetra](https://www.tetraframework.com/): the server
-renders each component, and its Alpine code in the browser calls the
-component's Python methods on the server.
+renders each component, and the component's Alpine code in the browser
+calls its Python methods on the server.
 
 <c-error-benchmark-chart
   title="How the 62 mistakes ended in each framework"
@@ -207,9 +207,10 @@ component's Python methods on the server.
 - **Django, Rusty, Jinja, Tetra, django-unicorn and django-components**:
   djLint with the Django or Jinja profile, `manage.py check` for every
   app except Jinja's, and VS Code's JavaScript syntax check for the
-  script files in every app except Jinja's and Tetra's. Tetra writes
-  its components' templates and scripts inside Python classes, where
-  djLint and the JavaScript check don't look; its build command,
+  script files in every app except Jinja's and Tetra's. The Tetra app
+  writes its components' templates and scripts inside Python classes, as
+  Tetra's tutorial does, where djLint and the JavaScript check don't
+  look; its build command,
   `manage.py tetrabuild`, reports a script's syntax error but still
   succeeds, so that counts as a warning.
 - **Next.js and Nuxt**: the editor's TypeScript checks (tsc for

@@ -81,8 +81,8 @@ uv run --no-sync citry-errors report \
 ```
 
 `prepare` installs every framework's locked dependencies, and builds once
-what a framework's setup needs, such as Tetra's own component library. Django Rusty
-Templates, an experimental Rust version of Django's template engine, has
+what a framework's setup needs, such as Tetra's own component library.
+Django Rusty Templates, an experimental Rust version of Django's template engine, has
 no release on PyPI, so its app's lockfile pins it to a git
 commit, and `prepare` builds its Rust extension. That needs a Rust
 compiler (https://rustup.rs/) unless uv has already built it.
@@ -131,9 +131,9 @@ run. A full run of the eleven frameworks' 682 cases with nothing stored
 (`--no-cache`) took about 35 minutes on the same machine; most of it is
 the Nuxt cases, which run one at a time, and the Next.js builds.
 Before m51 to m63 were added, ReactPy's 49 cases, run on their own,
-took about 2 minutes, and django-unicorn's about 3; Tetra's 62 cases
-took about 4. Each journey loads the page again in every
-browser check, and the `search`, `about` and `project` journeys bring
+took about 2 minutes, and django-unicorn's about 3. Tetra's 62 cases,
+run on their own after m51 to m63 were added, took about 4. Each journey
+loads the page again in every browser check, and the `search`, `about` and `project` journeys bring
 each framework to five (FastHTML to four). It is not part of routine CI.
 Run it at each Citry release, and when a framework's pinned versions
 change.
@@ -244,11 +244,11 @@ writes a part of the page, not from its tools:
   router changes the page in the browser, so the link shows the app's
   catch-all `Page not found` route, and nothing reports an error.
 - **m46:** Citry checks a message's arguments in the editor. In Django,
-  Tetra, django-unicorn and django-components, `{% blocktranslate %}` leaves
-  the owner's name out, so the subtitle reads `Owned by ` with no error,
-  while Rusty's view fills the gettext placeholder from a dictionary and
-  raises a `KeyError`. The other frameworks have no translations built
-  in, as for m15.
+  Tetra, django-unicorn and django-components, `{% blocktranslate %}`
+  leaves the owner's name out, so the subtitle reads `Owned by ` with no
+  error, while Rusty's view fills the gettext placeholder from a
+  dictionary and raises a `KeyError`. The other frameworks have no
+  translations built in, as for m15.
 - **m48:** the misspelled image is a 404 when the page loads, except in
   Nuxt, whose build turns an image path in a template into an import and
   fails on the missing file.
@@ -261,7 +261,7 @@ writes a part of the page, not from its tools:
   django-unicorn reports nothing, and clicking Hide on the first card
   leaves Alpha on the page. Tetra reports nothing either: without a key,
   every card resumes from the same saved state when the list renders
-  again, so after Hide the cards left show the wrong titles.
+  again, so after Hide both cards left show the title Gamma.
 - **m52:** nothing reports a `<div>` inside a `<p>` before the app runs,
   except Nuxt, whose ESLint fails to parse the template. Next.js reports
   it in the browser as a hydration error, and Citry fails to render the
@@ -273,15 +273,17 @@ writes a part of the page, not from its tools:
   django-unicorn templates (in Tetra, the page template; its components'
   templates are Python strings). It checks ARIA names only on plain
   attributes, so it misses the `:aria-expandd` binding of the Alpine
-  apps (Django, Rusty, django-components and Jinja) and of Tetra's
-  details component, and reports django-unicorn's plain `aria-expandd`. Next.js's next/image requires
+  apps (Django, Rusty, django-components and Jinja), never reads Tetra's
+  details component, which is a Python string, and reports
+  django-unicorn's plain `aria-expandd`. Next.js's next/image requires
   `alt` in its types, and its ESLint warns about a misspelled ARIA name,
   which React also reports in the browser. Nuxt's `strictTemplates`
   reports the unknown ARIA name. Nothing reports a repeated id in Citry,
   Next.js, Nuxt, FastHTML or ReactPy.
 - **m55:** a bound `aria-expanded` is typed as `true` or `false` in
   TypeScript, so Citry, Next.js and Nuxt report `yes` and `no` in the
-  editor. The Alpine apps (Tetra's included), django-unicorn's `yesno` filter, FastHTML's
+  editor. The Alpine apps, Tetra's included, django-unicorn's `yesno`
+  filter, FastHTML's
   script and ReactPy's attribute dictionary accept any text.
 - **m58 and m59:** a loop over a number and a misspelled length filter
   or helper are type errors where the template is checked as code
@@ -296,14 +298,15 @@ writes a part of the page, not from its tools:
   django-unicorn report it where the handler is called or returned, so
   those three cells are marked `°`. Citry's and FastHTML's handlers are
   browser JavaScript, which nothing checks, and the missing reason only
-  prints as `undefined`. The Alpine apps hide a card with an inline
-  statement, so the cell is n/a. Tetra's handler is a Python method that
-  `@public.listen` subscribes to the event, and Tetra requires such a
-  method to take exactly one argument when the class is defined, so the
-  second argument fails `manage.py check`.
+  prints as `undefined`. The Django, Rusty, django-components and Jinja
+  apps hide a card with an inline statement, so the cell is n/a. Tetra's
+  handler is a Python method that `@public.listen` subscribes to the
+  event; when the class is defined, Tetra checks that such a method
+  takes exactly one argument, so the second argument fails
+  `manage.py check`.
 - **m61:** the project route takes a numeric id. Django, Rusty,
-  django-components, django-unicorn, Tetra and Jinja build the link from the
-  route's name, and building it with `alpha` fails when the page
+  django-components, django-unicorn, Tetra and Jinja build the link from
+  the route's name, and building it with `alpha` fails when the page
   renders. Citry and FastHTML check the number only when the link is
   followed, with a 404. ReactPy's router shows the app's `Page not
   found` route and Nuxt's route check shows Nuxt's 404 page, both in the
@@ -566,13 +569,13 @@ page shows `Saved: 0`. Its cells differ from Django's in these places:
   the session, which nothing checks.
 - **m51:** the card list renders each card as a component and renders
   the list again on the server after Hide, so a key matters. Without
-  one, every card resumes from the same saved state, and the cards left
-  after Hide show the wrong titles, with no message. The Django app's
+  one, every card resumes from the same saved state, and after Hide
+  both cards left show the title Gamma, with no message. The Django app's
   cell is n/a.
 - **m60:** the card list's `hide` handler is a method that
-  `@public.listen` subscribes to the card's event. Tetra requires such
-  a method to take exactly one argument, and checks it when the class is
-  defined, so a second argument fails `manage.py check`. The Django app
+  `@public.listen` subscribes to the card's event. When the class is
+  defined, Tetra checks that such a method takes exactly one argument,
+  so a second argument fails `manage.py check`. The Django app
   hides a card with an inline statement, so its cell is n/a.
 
 m30 and m41 are runtime errors (m41 is one in the Django app too), but in
@@ -775,8 +778,8 @@ commonly make: FastHTML's main.py turns off ruff's star-import rules
 one pyright check on the two lines where a component declares its `View`
 class the way the django-components docs write it, and the Tetra app
 silences one pyright check on each line that declares a typed public
-attribute, because pyright sees `public(...)` return a `Public` object
-rather than a value of the declared type.
+attribute, because pyright reads `public(...)` as returning a `Public`
+object rather than a value of the declared type.
 
 When a framework has a setting that turns on a stricter check, and other
 frameworks here have the same kind of check, the benchmark turns it on in
@@ -788,7 +791,7 @@ settings considered and left off, with the reason. These are on:
 | --- | --- | --- |
 | Jinja | `undefined=StrictUndefined` | Printing a name the template was not given, using it in `{% if %}` or looping over it raises an error, as Citry reports an unknown template name |
 | django-components | Pydantic models for `Kwargs`, `Slots` and the data classes, with djc-ext-pydantic and `extra='forbid'` | Input and data types are checked when a component renders (Citry, Next.js, Nuxt and FastHTML check them before the app runs); unknown input names are rejected, as with django-components' default classes |
-| Tetra | A type annotation on every public attribute (Tetra has no setting for this; it checks only annotated attributes) | Tetra checks each public attribute's value against its type when it writes the component's state into the page, as Citry checks component inputs when a component renders |
+| Tetra | A type annotation on every public attribute (Tetra has no setting for this; it checks only annotated attributes) | Tetra checks each public attribute's value against its type when it writes the component's state into the page, as django-components' Pydantic models check its data when a component renders |
 | Nuxt | `vueCompilerOptions.strictTemplates` | vue-tsc reports an unknown component, element, attribute, directive or component event, the same kinds of names Next.js's tsc checks (Citry checks component names before the app runs) |
 | Nuxt | `experimental.typedPages` | vue-tsc checks a `<NuxtLink>` or router call that names a route against the app's routes |
 | Next.js | `typedRoutes` | tsc checks a link's path against the app's routes, as the Django, Rusty, Jinja, Tetra, django-unicorn and django-components apps check a link's route when the page renders |
