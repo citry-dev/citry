@@ -348,8 +348,9 @@ the attribute's own name:
 `disabled="true"` is reported too, because the value does nothing: write
 `disabled` on its own. A bound JavaScript boolean, such as
 `:disabled="false"`, is fine, but the string `:disabled="'false'"` is
-reported, and the message suggests binding the boolean instead. `draggable`, `spellcheck`, and `contenteditable` take `"true"`
-and `"false"` as keywords, so they are not boolean attributes.
+reported, and the message suggests binding the boolean instead.
+`draggable`, `spellcheck`, and `contenteditable` take `"true"` and
+`"false"` as keywords, so they are not boolean attributes.
 
 The keywords come from the HTML Standard. The check covers:
 
@@ -472,8 +473,8 @@ checks every tag, component tags included, except elements inside
 not compile.
 
 A name that is itself a word, such as `v-tex`, `v-mode`, or `v-one`, is
-not reported. A typo of `v-once` or `v-memo` gets no suggestion, because
-Citry does not support those two directives.
+not reported. Neither is a typo of `v-once` or `v-memo`, because Citry
+does not support those two directives.
 
 If you register your own directive whose name is one typing slip from a
 Vue directive, set `rule_misspelled_directive = "ignore"` in the `Lint` class
@@ -616,6 +617,7 @@ It does not check:
 
 - a `:title` with no value, which Vue reads as `:title="title"`;
 - anything inside an element with `v-pre`;
+- a dynamic slot name, such as `#[name]`;
 - the value of a custom directive. A value there that is not valid
   JavaScript still stops the render; the lint does not report it.
 
@@ -822,9 +824,10 @@ value cannot be read from the source: a name imported from
 another module, a value computed at run time, a `Lint` class with its own
 base class, or a `Lint` assigned inside an `if`. In the editor, a
 template file, and a template whose closing quotes are not typed yet, use
-the defaults too, because no `Lint` class can be read for them. The one exception to the defaults: an invalid
-attribute value is a warning there, so a value that a page script reads
-cannot fail the check when only `LintSettings` turns the rule off.
+the defaults too, because no `Lint` class can be read for them. The one
+exception to the defaults: an invalid attribute value is a warning there,
+so a value that a page script reads cannot fail the check when only
+`LintSettings` turns the rule off.
 
 To keep a name that is really meant for the browser out of the check, pass
 it through `c-bind`. These tools also cannot tell which values an

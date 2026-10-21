@@ -116,10 +116,11 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                         'when': 'v-model, with or without modifiers such as .lazy, is on an HTML '
                                                 'element other than <input>, <textarea>, or <select>, or on a custom '
                                                 'element such as <my-picker>. Component tags, PascalCase Vue '
-                                                'components, <c-element>, and v-pre content are not reported, because '
-                                                'they decide what v-model binds. citry check --static and an editor '
-                                                'that has not loaded your application report it too, with the severity '
-                                                "the component's own Lint class sets as a plain string."},
+                                                'components, and <c-element> are not reported, because they decide '
+                                                'what v-model binds; neither is v-pre content, which Vue does not '
+                                                'compile. citry check --static and an editor that has not loaded your '
+                                                "application report it too, with the severity the component's own Lint "
+                                                'class sets as a plain string.'},
  'citry.browser.invalid-state-binding-target': {'code': 'citry.browser.invalid-state-binding-target',
                                                 'constant': 'BROWSER_INVALID_STATE_BINDING_TARGET',
                                                 'defaultSeverity': 'error',

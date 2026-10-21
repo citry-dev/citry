@@ -295,6 +295,11 @@ def test_missing_image_alt_skips_a_single_root_that_may_receive_a_parents_attrib
         "missing-image-alt",
     ]
     assert _codes('<c-if cond="a"><div><img :src="s"></div></c-if>') == ["missing-image-alt"]
+    # Two separate conditions can both render, so neither image is the root.
+    assert _codes('<c-if cond="a"><img :src="s"></c-if><c-if cond="b"><img :src="t"></c-if>') == [
+        "missing-image-alt",
+        "missing-image-alt",
+    ]
 
 
 # --- citry.browser.invalid-model-target ---------------------------------------

@@ -744,7 +744,7 @@
       "constant": "BROWSER_INVALID_MODEL_TARGET",
       "title": "v-model on an element that holds no value",
       "summary": "v-model is on an element that has no value to bind, such as a <form> or a <div>. The component fails to render when Citry compiles it for Vue.",
-      "when": "v-model, with or without modifiers such as .lazy, is on an HTML element other than <input>, <textarea>, or <select>, or on a custom element such as <my-picker>. Component tags, PascalCase Vue components, <c-element>, and v-pre content are not reported, because they decide what v-model binds. citry check --static and an editor that has not loaded your application report it too, with the severity the component's own Lint class sets as a plain string.",
+      "when": "v-model, with or without modifiers such as .lazy, is on an HTML element other than <input>, <textarea>, or <select>, or on a custom element such as <my-picker>. Component tags, PascalCase Vue components, and <c-element> are not reported, because they decide what v-model binds; neither is v-pre content, which Vue does not compile. citry check --static and an editor that has not loaded your application report it too, with the severity the component's own Lint class sets as a plain string.",
       "fix": "Move v-model to the <input>, <textarea>, or <select> that holds the value. For a custom element, bind its value property and listen for its change event instead.",
       "defaultSeverity": "error",
       "configurableSeverity": true,

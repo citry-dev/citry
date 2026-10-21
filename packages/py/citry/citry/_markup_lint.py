@@ -802,9 +802,6 @@ class _MarkupWalker:
         )
 
 
-_CONDITION_TAGS = frozenset({"c-if", "c-elif", "c-else"})
-
-
 def _single_root_starts(template: Template) -> frozenset[int]:
     """
     Return where the start tag of each element that may be the template's only root begins.
@@ -816,7 +813,10 @@ def _single_root_starts(template: Template) -> frozenset[int]:
     is identified by where its start tag begins.
     """
     nodes = [element._0 for element in template.elements if isinstance(element, TemplateElement.Node)]
-    if nodes and all(_ascii_lower(node.start_tag.name.content) in _CONDITION_TAGS for node in nodes):
+    tags = [_ascii_lower(node.start_tag.name.content) for node in nodes]
+    # One chain starts with the only `c-if`; a second `c-if` starts another
+    # chain that can render at the same time.
+    if tags and tags[0] == "c-if" and all(tag in {"c-elif", "c-else"} for tag in tags[1:]):
         starts: set[int] = set()
         for node in nodes:
             body = getattr(node, "body", None)

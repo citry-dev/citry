@@ -149,8 +149,8 @@ _CITRY_OWNED_CODES = frozenset(
         # A bound string such as `:dir="'rlt'"` is checked against the HTML
         # Standard's keywords, which also names the closest one.
         TEMPLATE_INVALID_ATTRIBUTE_VALUE,
-        # A syntax error in a Vue expression is reported once, by Citry,
-        # rather than also through TypeScript's recovery errors around it.
+        # A Vue expression with a syntax error is reported by Citry, so a
+        # TypeScript error on the same text, if any, is not shown twice.
         VUE_INVALID_EXPRESSION,
     }
 )
