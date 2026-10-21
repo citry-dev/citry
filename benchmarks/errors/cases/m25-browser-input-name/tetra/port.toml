@@ -1,0 +1,13 @@
+# The status line is an Alpine component nested inside the details', and
+# its markup reads `open` through the scope Alpine shares with it, as in
+# the Django and django-components apps. Tetra hands a component its
+# inputs only when the server renders it, and `open` changes in the
+# browser. So the name the markup reads plays the role of the input's
+# name, and the case misspells it.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'opne ?' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = "x-text=\"open ? 'Status: open'"
+new = "x-text=\"opne ? 'Status: open'"

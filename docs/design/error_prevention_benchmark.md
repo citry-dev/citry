@@ -64,7 +64,10 @@ publish separate tables
   `w`. Counting only errors, or warnings like errors, would favor whichever
   framework reports at the chosen level: Citry's invalid-attribute rule is a
   warning by default, and many Vue and React problems are only
-  development-mode console warnings.
+  development-mode console warnings. A build command that prints a tool's
+  error but still succeeds counts as a static warning for the same reason:
+  the developer sees the error, but a CI build passes. Tetra's
+  `tetrabuild` does this with esbuild's errors.
 - **Tool versions.** Each baseline pins exact versions in its own lockfile.
   They are bumped together, as one recorded change, at a Citry release run.
   A version bump changes what a framework catches, so the result belongs to
@@ -104,7 +107,10 @@ uvicorn, as in the performance benchmark in `benchmarks/web`.
 django-unicorn, whose components the server renders again after every
 click, is measured as the Django app with the cards, the counter, the
 details and the search form turned into its components
-(`frameworks/unicorn`). Tetra and Reflex are not measured yet.
+(`frameworks/unicorn`). Tetra, whose components the server renders and
+whose Alpine code in the browser calls their Python methods on the
+server, is measured as the Django app with the interactive parts turned
+into its components (`frameworks/tetra`). Reflex is not measured yet.
 
 ### Fairness rules
 
@@ -122,8 +128,9 @@ details and the search form turned into its components
   `citry-errors validate` enforces the half.
 - Each framework's tools are its official starter's tools plus the linters
   and type checker most of its projects add: pyright in standard mode and
-  ruff for every Python stack, djLint for the Django, Django Rusty
-  Templates, django-components, django-unicorn and Jinja templates, and
+  ruff for every Python stack, djLint for the templates of Django,
+  Django Rusty Templates, django-components, django-unicorn and Jinja and
+  for Tetra's page templates, and
   ESLint for Nuxt and Next.js. A framework that relies on the language's
   own checks, such as FastHTML's typed Python functions, gets credit for
   what those checks catch. Each tool keeps its default rules, apart from
@@ -299,7 +306,7 @@ with `--jobs 5` on a 10-core machine. Running every browser check as well,
 one case at a time, took about 280 seconds. A rerun with nothing changed
 took 8 seconds, because the browser checks of the 4 cases whose journey
 stops on an error page are never stored and run again. A full run of the
-ten frameworks (620 cases) with nothing stored took about 31 minutes
+eleven frameworks (682 cases) with nothing stored took about 35 minutes
 with the default `--jobs 5`, most of it the Nuxt cases, which run one at
 a time. It is not part of routine CI. Its result changes only when a
 case, a pinned version or Citry changes, so it is run at each Citry

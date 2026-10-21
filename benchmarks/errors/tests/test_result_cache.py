@@ -9,8 +9,8 @@ import threading
 from typing import TYPE_CHECKING
 
 import pytest
-from citry_errors import cache, cli, parallel
-from citry_errors.config import ConfigError, load_framework, load_frameworks
+from citry_errors import cache, cli, parallel, work
+from citry_errors.config import ConfigError, Framework, load_framework, load_frameworks
 from citry_errors.execute import StageOutput, run_stages
 from citry_errors.runtime import JourneyRecord, Observation
 from conftest import MISTAKES
@@ -267,3 +267,20 @@ def test_the_framework_digest_follows_what_the_environment_installed(toy: Toy) -
     (env / ".venv").mkdir(parents=True)
     (env / ".venv" / "pyvenv.cfg").write_text("version_info = 3.12.9\n")
     assert cache.framework_digest(framework, env) != before
+
+
+def test_setup_runs_again_when_its_command_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A setup step can build something besides installing the lockfiles, as
+    # Tetra's builds its own component library, so a changed step must run.
+    monkeypatch.setattr(work, "CACHE", tmp_path / "cache")
+    (tmp_path / "baseline").mkdir()
+    (tmp_path / "baseline" / "uv.lock").write_text("locked")
+
+    def framework(command: str) -> Framework:
+        return Framework("toy", "Toy", ("uv.lock",), ("sh", "-c", command), (), None, "", tmp_path)
+
+    log = tmp_path / "setup.log"
+    work.prepare(framework(f"echo first >> {log}"))
+    work.prepare(framework(f"echo first >> {log}"))
+    work.prepare(framework(f"echo second >> {log}"))
+    assert log.read_text().split() == ["first", "second"]

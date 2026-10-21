@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = '{% Card count=card.count' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '{% Card title=card.title count='
+new = '{% Card count='

@@ -36,7 +36,7 @@ public/, the first form the Next.js image docs show. So a misspelled file
 Settings changed from the default. The benchmark turns on a framework's
 stricter check when other frameworks here have the same kind of check:
 - `typedRoutes: true` in next.config.ts. The Django, Django Rusty
-  Templates, Jinja, django-unicorn and django-components apps check each
+  Templates, Jinja, Tetra, django-unicorn and django-components apps check each
   link's route when the page renders. With it on, `next typegen` writes the app's
   routes as types, and tsc reports a literal path that matches no route
   in a next/link `href`, a next/form `action`, a router call or

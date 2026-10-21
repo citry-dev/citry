@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'x-text="api_bsae"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = 'x-text="api_base"'
+new = 'x-text="api_bsae"'

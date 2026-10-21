@@ -1,0 +1,10 @@
+# Tetra renders a slot's content with the card's own variables, so the
+# fill reads the card's title and count. Tetra's docs do not describe
+# this; the framework notes say why the app relies on it.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'Open {{ titel }}' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = 'Open {{ title }} ({{ count }})'
+new = 'Open {{ titel }} ({{ count }})'

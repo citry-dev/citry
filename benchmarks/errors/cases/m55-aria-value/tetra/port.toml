@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = "'yes' : 'no'" }
+
+[[edits]]
+file = 'board/components/default.py'
+old = ':aria-expanded="open"'
+new = ":aria-expanded=\"open ? 'yes' : 'no'\""

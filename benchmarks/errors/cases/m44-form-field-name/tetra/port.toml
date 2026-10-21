@@ -1,0 +1,9 @@
+# The Search component binds the field with x-model, but the form still
+# submits it to the page by its `name`, which the view reads.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'name="qeury"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '<input type="search" name="q"'
+new = '<input type="search" name="qeury"'

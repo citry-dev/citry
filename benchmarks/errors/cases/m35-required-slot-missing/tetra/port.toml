@@ -1,0 +1,11 @@
+# Tetra's component tag ends with `/` when it has no content.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'tone=card.featured|yesno:"accent,plain" key=card.title / %}' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '''
+{% Card title=card.title count=card.count tone=card.featured|yesno:"accent,plain" key=card.title %}
+            {% slot footer %}<a href="#{{ title|lower }}">Open {{ title }} ({{ count }})</a>{% endslot %}
+          {% /Card %}'''
+new = '{% Card title=card.title count=card.count tone=card.featured|yesno:"accent,plain" key=card.title / %}'

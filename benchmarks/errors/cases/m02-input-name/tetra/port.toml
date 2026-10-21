@@ -1,0 +1,10 @@
+# The card's load(), which receives the {% Card %} tag's arguments, also
+# takes `*args, **kwargs`, as most load() methods in Tetra's docs do, so the
+# misspelled argument is dropped and the error names the missing `title`.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'titel=card.title' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '{% Card title=card.title'
+new = '{% Card titel=card.title'

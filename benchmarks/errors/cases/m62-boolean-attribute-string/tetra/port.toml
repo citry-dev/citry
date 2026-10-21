@@ -1,0 +1,8 @@
+# The search button is in the Search component's template.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'disabled="false"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '<button type="submit">Search</button>'
+new = '<button type="submit" disabled="false">Search</button>'

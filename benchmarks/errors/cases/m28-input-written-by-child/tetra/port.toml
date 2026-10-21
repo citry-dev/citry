@@ -1,0 +1,2 @@
+status = "prevented"
+reason = """The status line is an Alpine component nested inside the details' one, and a nested Alpine component shares its parent's scope instead of receiving a copy of the parent's values. Assigning `open = false` in the status line's Close button therefore changes the details' own `open` and closes them, so the code this mistake describes works as intended. Checked on the pinned version: with `@click="open = false"` on the Close button, every journey records the same page as the clean app."""

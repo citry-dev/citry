@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and nine others report the same 62 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and ten others report the same 62 developer mistakes.
 ---
 
 # Benchmarks
@@ -72,7 +72,7 @@ noise.
 
 The earlier a mistake is reported, the less time it costs you.
 
-We wrote the same small app in Citry and nine other frameworks, made
+We wrote the same small app in Citry and ten other frameworks, made
 the same 62 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**. Rusty is the Django app with its
@@ -90,6 +90,10 @@ django-unicorn is the Django app with its cards, counter, details and
 search form rewritten as components of
 [django-unicorn](https://www.django-unicorn.com/). Each click goes to
 the server, which sends back the component's new HTML.
+Tetra is the Django app with its interactive parts rewritten as
+components of [Tetra](https://www.tetraframework.com/): the server
+renders each component, and the component's Alpine code in the browser
+calls its Python methods on the server.
 
 <c-error-benchmark-chart
   title="How the 62 mistakes ended in each framework"
@@ -115,7 +119,7 @@ the server, which sends back the component's new HTML.
 - **Before the app runs: 29 of 60** (28 errors, 1 warning). Two of
   the 62 mistakes don't apply to Citry. Next.js 44 of 56, Nuxt 39 of
   57, ReactPy 23 of 55, FastHTML 20 of 48, django-unicorn 12 of 54,
-  Django + HTMX + Alpine 6 of 51, Rusty + HTMX + Alpine 6 of 49,
+  Tetra 9 of 56, Django + HTMX + Alpine 6 of 51, Rusty + HTMX + Alpine 6 of 49,
   django-components + HTMX + Alpine 6 of 53, Jinja + HTMX + Alpine 5
   of 50.
 - **Missed: 20**, nothing tells you:
@@ -196,14 +200,19 @@ the server, which sends back the component's new HTML.
   Every framework's versions are pinned in its app's lockfile.
 - **Citry**: the editor extension's language server (measured with
   `citry check --types`) and `citry check`.
-- **Every Python stack** (Citry, Django, Rusty, Jinja,
+- **Every Python stack** (Citry, Django, Rusty, Jinja, Tetra,
   django-unicorn, django-components, FastHTML, ReactPy):
   Pylance with type checking on (measured with pyright in standard mode), and
   ruff with its default rules.
-- **Django, Rusty, Jinja, django-unicorn and django-components**:
+- **Django, Rusty, Jinja, Tetra, django-unicorn and django-components**:
   djLint with the Django or Jinja profile, `manage.py check` for every
   app except Jinja's, and VS Code's JavaScript syntax check for the
-  script files in every app except Jinja's.
+  script files in every app except Jinja's and Tetra's. The Tetra app
+  writes its components' templates and scripts inside Python classes, as
+  Tetra's tutorial does, where djLint and the JavaScript check don't
+  look; its build command,
+  `manage.py tetrabuild`, reports a script's syntax error but still
+  succeeds, so that counts as a warning.
 - **Next.js and Nuxt**: the editor's TypeScript checks (tsc for
   Next.js; vue-tsc and the Vue compiler's errors for Nuxt), ESLint, and
   the production build.
@@ -229,6 +238,9 @@ the server, which sends back the component's new HTML.
     - **ReactPy**: debug mode, which checks each element it sends and
       warns about a list item without a key, like the checks React
       makes in development.
+    - **Tetra**: a type on every public attribute (the values it sends
+      to the browser). Tetra has no setting for this; it checks a
+      value's type only where the attribute declares one.
     - **Citry, Django, Rusty, FastHTML and django-unicorn**: none of
       their settings adds a kind of check the others make, so they keep
       their defaults.

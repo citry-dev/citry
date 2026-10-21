@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'class="card-footer"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '<div class="card-footer">{% slot footer %}{% endslot %}</div>'
+new = '<div class="card-footer">{% slot footer %}{% endslot %}'

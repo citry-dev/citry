@@ -1,0 +1,17 @@
+# The card list's handler for the card's `hide` event is its `hide`
+# method, which `@public.listen` subscribes to the event. The case gives it
+# a second argument, a reason, and uses it.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'def hide(self, title: str, reason: str)' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '''
+    def hide(self, title: str) -> None:
+        self.hidden = [*self.hidden, title]
+'''
+new = '''
+    def hide(self, title: str, reason: str) -> None:
+        print(f'Hid {title}: {reason}')
+        self.hidden = [*self.hidden, title]
+'''

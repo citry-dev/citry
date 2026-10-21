@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = '{% slot fotter %}' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '{% slot footer %}<a href='
+new = '{% slot fotter %}<a href='

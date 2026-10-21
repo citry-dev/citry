@@ -1,0 +1,10 @@
+# Quoting the value, as an HTML attribute is quoted, passes the text
+# "card.count" instead of the number, as the django-components and
+# django-unicorn cases do.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'count="card.count"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = 'count=card.count tone='
+new = 'count="card.count" tone='

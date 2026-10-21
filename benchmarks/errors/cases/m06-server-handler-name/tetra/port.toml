@@ -1,0 +1,9 @@
+# Alpine calls the counter's public method `save` by name; Tetra makes it
+# a function of the component's Alpine data.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = '@click="sav(1)"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '@click="save(1)"'
+new = '@click="sav(1)"'

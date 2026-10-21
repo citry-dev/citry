@@ -27,7 +27,7 @@ CACHE = Path(os.environ.get("CITRY_ERRORS_CACHE") or REPO_ROOT / ".benchmarks" /
 # the two "not reported" outcomes follow, so a lower index means earlier.
 STATIC_STAGES = ("editor", "check", "build")
 OUTCOMES = ("editor", "check", "build", "runtime-error", "runtime-warning", "silent", "never")
-PARSERS = ("citry-json", "pyright-json", "tsc", "eslint-json", "ruff-json", "djlint", "exit")
+PARSERS = ("citry-json", "pyright-json", "tsc", "eslint-json", "ruff-json", "djlint", "esbuild", "exit")
 PORT_STATUSES = ("ported", "not-applicable", "prevented")
 # Each browser step's own keys: the ones it needs, then the ones it may take.
 # A key outside these is rejected, so a typo such as `ms` on a click cannot

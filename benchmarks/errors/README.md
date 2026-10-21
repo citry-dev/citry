@@ -62,7 +62,9 @@ table shows every mistake.
 Many tools show warnings in the editor but let a build pass, so a warning
 is kept apart from an error. A linter that has no severity of its own, such
 as ruff or djLint, fails its command on any finding, so its findings count
-as errors.
+as errors. A build command that prints a tool's error but still succeeds,
+such as Tetra's `tetrabuild`, has that error counted as a warning, because
+a CI build passes.
 
 ## Run it
 
@@ -78,8 +80,9 @@ uv run --no-sync citry-errors report \
   --output ../results/<date>
 ```
 
-`prepare` installs every framework's locked dependencies. Django Rusty
-Templates, an experimental Rust version of Django's template engine, has
+`prepare` installs every framework's locked dependencies, and builds once
+what a framework's setup needs, such as Tetra's own component library.
+Django Rusty Templates, an experimental Rust version of Django's template engine, has
 no release on PyPI, so its app's lockfile pins it to a git
 commit, and `prepare` builds its Rust extension. That needs a Rust
 compiler (https://rustup.rs/) unless uv has already built it.
@@ -124,12 +127,13 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 results. Rerunning them with nothing changed took 8 seconds: it repeated
 only the browser checks of the 4 cases whose journey stops on an error
 page, which are never stored. Every framework repeats such cases on each
-run. A full run of the ten frameworks' 620 cases with nothing stored
-(`--no-cache`) took about 31 minutes on the same machine; most of it is
+run. A full run of the eleven frameworks' 682 cases with nothing stored
+(`--no-cache`) took about 35 minutes on the same machine; most of it is
 the Nuxt cases, which run one at a time, and the Next.js builds.
 Before m51 to m63 were added, ReactPy's 49 cases, run on their own,
-took about 2 minutes, and django-unicorn's about 3. Each journey loads the page again in every
-browser check, and the `search`, `about` and `project` journeys bring
+took about 2 minutes, and django-unicorn's about 3. Tetra's 62 cases,
+run on their own after m51 to m63 were added, took about 4. Each journey
+loads the page again in every browser check, and the `search`, `about` and `project` journeys bring
 each framework to five (FastHTML to four). It is not part of routine CI.
 Run it at each Citry release, and when a framework's pinned versions
 change.
@@ -155,7 +159,10 @@ browser the page to show over a WebSocket. "django-unicorn" is the
 Django app with its interactive parts rewritten as components of
 [django-unicorn](https://www.django-unicorn.com/), which sends each click
 to the server and replaces the component's HTML with the HTML the server
-sends back.
+sends back. "Tetra" is the Django app with its interactive parts
+rewritten as components of [Tetra](https://www.tetraframework.com/),
+whose components the server renders and whose Alpine code in the browser
+calls their Python methods on the server.
 
 Some differences between cells come from how each framework naturally
 writes a part of the page, not from its tools:
@@ -187,15 +194,16 @@ writes a part of the page, not from its tools:
   only when the value is written as a literal; nothing checks a child that
   assigns to its own prop (m28).
 - **m30 and m34:** most pages need no value in the hide event, and most
-  never read the server's reply as data, so m30 applies to two
-  frameworks and m34 to one: Citry's and django-unicorn's cards send
-  their title when they ask to be hidden (m30), and Nuxt's page reads
+  never read the server's reply as data, so m30 applies to three
+  frameworks and m34 to one: Citry's, Tetra's and django-unicorn's cards
+  send their title when they ask to be hidden (m30), and Nuxt's page reads
   `count` from the reply (m34). The other cells are n/a.
 - **m32:** Django, Rusty, Jinja, django-components and FastHTML are
   "prevented": HTMX sends form fields, which are always text, so `"1"`
   and `1` send the same request. django-unicorn is "prevented" too: it
   converts an action's argument to the type the method declares, so
-  `save(amount='1')` calls `save(amount=1)`.
+  `save(amount='1')` calls `save(amount=1)`. Tetra passes the text to the
+  method unchanged, so adding it to the total fails with a server error.
 - **m35:** Citry, FastHTML and Next.js declare the card's footer as
   required, so leaving it out is reported before the app runs;
   django-components declares it required too, and reports it when the
@@ -226,8 +234,8 @@ writes a part of the page, not from its tools:
   reads, so the search shows no `Searched:` line. Citry's form calls a
   server event, which rejects the call because `q` is missing, but the
   error stays in `$error('search')`, which the page does not show.
-- **m45:** Django, Rusty, Jinja, django-unicorn and django-components
-  build the link from the route's name, so the page fails to render.
+- **m45:** Django, Rusty, Jinja, Tetra, django-unicorn and
+  django-components build the link from the route's name, so the page fails to render.
   Next.js's `typedRoutes` checks a link's path against the app's routes,
   so the editor reports it. Citry and FastHTML link by path and get a 404
   when the link is clicked. Nuxt's `typedPages` checks a link given by
@@ -236,11 +244,11 @@ writes a part of the page, not from its tools:
   router changes the page in the browser, so the link shows the app's
   catch-all `Page not found` route, and nothing reports an error.
 - **m46:** Citry checks a message's arguments in the editor. In Django,
-  django-unicorn and django-components, `{% blocktranslate %}` leaves
-  the owner's name out, so the subtitle reads `Owned by ` with no error,
-  while Rusty's view fills the gettext placeholder from a dictionary and
-  raises a `KeyError`. The other frameworks have no translations built
-  in, as for m15.
+  Tetra, django-unicorn and django-components, `{% blocktranslate %}`
+  leaves the owner's name out, so the subtitle reads `Owned by ` with no
+  error, while Rusty's view fills the gettext placeholder from a
+  dictionary and raises a `KeyError`. The other frameworks have no
+  translations built in, as for m15.
 - **m48:** the misspelled image is a 404 when the page loads, except in
   Nuxt, whose build turns an image path in a template into an import and
   fails on the missing file.
@@ -251,7 +259,9 @@ writes a part of the page, not from its tools:
   key, and ReactPy's debug mode prints a warning. Citry refuses to
   render the page, with a message that names the missing `#c-key`.
   django-unicorn reports nothing, and clicking Hide on the first card
-  leaves Alpha on the page.
+  leaves Alpha on the page. Tetra reports nothing either: without a key,
+  every card resumes from the same saved state when the list renders
+  again, so after Hide both cards left show the title Gamma.
 - **m52:** nothing reports a `<div>` inside a `<p>` before the app runs,
   except Nuxt, whose ESLint fails to parse the template. Next.js reports
   it in the browser as a hydration error, and Citry fails to render the
@@ -259,10 +269,12 @@ writes a part of the page, not from its tools:
   the paragraph without a message.
 - **m53, m54, m56 and m57:** djLint checks alt text (H013), ARIA
   attribute names (H048), repeated attributes (H037) and repeated ids
-  (H053) in the Django, Rusty, django-components, Jinja and
-  django-unicorn templates. It checks ARIA names only on plain
+  (H053) in the Django, Rusty, django-components, Jinja, Tetra and
+  django-unicorn templates (in Tetra, the page template; its components'
+  templates are Python strings). It checks ARIA names only on plain
   attributes, so it misses the `:aria-expandd` binding of the Alpine
-  apps (Django, Rusty, django-components and Jinja) and reports
+  apps (Django, Rusty, django-components and Jinja), never reads Tetra's
+  details component, which is a Python string, and reports
   django-unicorn's plain `aria-expandd`. Next.js's next/image requires
   `alt` in its types, and its ESLint warns about a misspelled ARIA name,
   which React also reports in the browser. Nuxt's `strictTemplates`
@@ -270,24 +282,31 @@ writes a part of the page, not from its tools:
   Next.js, Nuxt, FastHTML or ReactPy.
 - **m55:** a bound `aria-expanded` is typed as `true` or `false` in
   TypeScript, so Citry, Next.js and Nuxt report `yes` and `no` in the
-  editor. The Alpine apps, django-unicorn's `yesno` filter, FastHTML's
+  editor. The Alpine apps, Tetra's included, django-unicorn's `yesno`
+  filter, FastHTML's
   script and ReactPy's attribute dictionary accept any text.
 - **m58 and m59:** a loop over a number and a misspelled length filter
   or helper are type errors where the template is checked as code
   (Citry, Next.js, Nuxt, FastHTML and ReactPy). In the Django, Rusty,
   django-components, Jinja and django-unicorn templates they fail when
-  the page renders.
+  the page renders. So does Tetra's loop, but Tetra compiles every
+  component's template when Django starts, so the misspelled filter in
+  its card list's template fails `manage.py check`.
 - **m60:** a handler that takes one more argument than the card's event
   sends is a type error in Next.js, Nuxt, ReactPy and django-unicorn.
   Next.js reports it on the handler itself. Nuxt, ReactPy and
   django-unicorn report it where the handler is called or returned, so
   those three cells are marked `°`. Citry's and FastHTML's handlers are
   browser JavaScript, which nothing checks, and the missing reason only
-  prints as `undefined`. The Alpine apps hide a card with an inline
-  statement, so the cell is n/a.
+  prints as `undefined`. The Django, Rusty, django-components and Jinja
+  apps hide a card with an inline statement, so the cell is n/a. Tetra's
+  handler is a Python method that `@public.listen` subscribes to the
+  event; when the class is defined, Tetra checks that such a method
+  takes exactly one argument, so the second argument fails
+  `manage.py check`.
 - **m61:** the project route takes a numeric id. Django, Rusty,
-  django-components, django-unicorn and Jinja build the link from the
-  route's name, and building it with `alpha` fails when the page
+  django-components, django-unicorn, Tetra and Jinja build the link from
+  the route's name, and building it with `alpha` fails when the page
   renders. Citry and FastHTML check the number only when the link is
   followed, with a 404. ReactPy's router shows the app's `Page not
   found` route and Nuxt's route check shows Nuxt's 404 page, both in the
@@ -493,7 +512,78 @@ keeps the token as an ordinary class attribute, and django-unicorn writes
 every public attribute of a component into the page for its browser
 script.
 
-Tetra and Reflex are not measured yet.
+The Tetra app ([`frameworks/tetra/`](frameworks/tetra/) holds it and its
+notes) is the Django app with the API line, the
+card list, the cards, the counter, the details with their status line and
+the search form turned into [Tetra](https://www.tetraframework.com/)
+components. Each component is a Python class whose template and script
+are strings in the class. The server renders it, and in the browser it
+becomes an Alpine component. Its Alpine code can call the class's public
+methods on the server. The attributes it declares with `public(...)`, its
+public attributes, are Alpine data in the browser, and they travel back
+to the server with each such call. A page passes a component its
+values in the component's tag, such as `{% Card title=... %}`, and Tetra
+hands them to the component's `load()` method when it renders it. The
+saved count lives in the page, as in django-unicorn, so after a reload the
+page shows `Saved: 0`. Its cells differ from Django's in these places:
+
+- **m01 and m59:** the card list uses the card as a template tag,
+  `{% Card %}`, and counts the cards with `|length` in its own template,
+  because only the card list holds the cards. Tetra compiles every
+  component's template when Django starts, so the misspelled tag and the
+  misspelled filter fail `manage.py check`. The Django app's misspelled
+  `{% include %}` and filter fail only when the page renders.
+- **m02 and m04:** a misspelled or missing `title` in the card's tag
+  leaves `load()` without its `title` argument, so it raises a
+  `TypeError` when the page renders, where the Django app's page shows no
+  title and no error.
+- **m18:** n/a. Tetra sends a public method's arguments in order, with
+  no names, so the request has no field to misspell.
+- **m20 and m22:** the details' script and the card's template are
+  strings in the component's Python class, as Tetra's tutorial writes
+  them, so neither VS Code's JavaScript check nor djLint reads them. Tetra
+  builds the scripts with esbuild, a JavaScript bundler, when its build
+  command, `manage.py tetrabuild`, runs. The script's syntax error makes
+  the command print esbuild's error, but the command still exits
+  successfully, so the build stage counts it as a warning (m20). The
+  error points at a copy of the script Tetra makes for esbuild, so the
+  cell is marked `°`. The unclosed element is missed (m22). The Django
+  app's script and template are files, which those tools check.
+- **m30 and m32:** the card sends its title with the `hide` event, so
+  m30 applies. The case sends the card's count instead, and the card
+  list stores that number in `hidden`, which is declared as a list of
+  strings. Tetra checks public attributes against their declared types
+  when it writes a component's state into the page, so the call fails
+  with a server error. In the m32 case the Add button calls `save('1')`,
+  and Tetra passes the text on unchanged, so adding it to the total fails
+  with a server error. In the Django app, HTMX sends the amount as form
+  text and the view converts it with `int()`, so its m32 is prevented.
+- **m36 and m37:** Tetra renders a slot's content with the card's own
+  variables, so the fill reads the card's `title` and `count`, and both
+  mistakes apply. Tetra's docs do not describe this; passing the list's
+  `card` to the fill instead, which they do describe, would make both
+  n/a, as in the Django app. Nothing checks what a fill reads, so both
+  are missed.
+- **m39:** the saved total is a typed public attribute of the counter, so
+  pyright reports text stored in it. The Django app keeps the total in
+  the session, which nothing checks.
+- **m51:** the card list renders each card as a component and renders
+  the list again on the server after Hide, so a key matters. Without
+  one, every card resumes from the same saved state, and after Hide
+  both cards left show the title Gamma, with no message. The Django app's
+  cell is n/a.
+- **m60:** the card list's `hide` handler is a method that
+  `@public.listen` subscribes to the card's event. When the class is
+  defined, Tetra checks that such a method takes exactly one argument,
+  so a second argument fails `manage.py check`. The Django app
+  hides a card with an inline statement, so its cell is n/a.
+
+m30 and m41 are runtime errors (m41 is one in the Django app too), but in
+Tetra only because the app gives its public attributes types, following
+the rule on stricter settings below. In a trial run without the types on
+`api_base` and `hidden`, both were missed.
+
+Reflex is not measured yet.
 
 ## The reference page
 
@@ -538,8 +628,8 @@ two records means the mistake changed the page.
 **The default journey** clicks `Add`, `Details`, and the first `Hide`, in
 that order. The page is recorded three times around it: right after it
 loads, after the clicks, and after a reload. The reload shows whether the
-saved count survives a new page load. Citry and django-unicorn keep the
-count in the page, and ReactPy keeps it in component state on the server,
+saved count survives a new page load. Citry, django-unicorn and Tetra
+keep the count in the page, and ReactPy keeps it in component state on the server,
 which lasts only while that page is open. So their clean pages show
 `Saved: 0` again after the reload, while the other frameworks keep the
 count on the server and show `Saved: 1`.
@@ -675,17 +765,21 @@ linters and type checker most of its projects add. Earlier is better, so a
 mistake these tools report counts as caught before running, however the
 framework itself would have reported it. For every Python stack that means
 pyright in standard mode (Pylance with type checking turned on) and ruff
-with its default rules; for Django, Rusty, django-components,
-django-unicorn and Jinja templates, djLint; for Nuxt, the official
+with its default rules; for the templates of Django, Rusty,
+django-components, django-unicorn and Jinja, and Tetra's page templates,
+djLint; for Nuxt, the official
 `@nuxt/eslint` module; for Next.js, the ESLint its starter installs.
 Each tool keeps its default rules (for a linter, the rules its framework's
 preset turns on), except for the stricter settings below
-and three changes that the clean app needs and that such projects
+and four changes that the clean app needs and that such projects
 commonly make: FastHTML's main.py turns off ruff's star-import rules
 (F403, F405), Nuxt's ESLint config turns off
-`vue/multi-word-component-names`, and the django-components app silences
+`vue/multi-word-component-names`, the django-components app silences
 one pyright check on the two lines where a component declares its `View`
-class the way the django-components docs write it.
+class the way the django-components docs write it, and the Tetra app
+silences one pyright check on each line that declares a typed public
+attribute, because pyright reads `public(...)` as returning a `Public`
+object rather than a value of the declared type.
 
 When a framework has a setting that turns on a stricter check, and other
 frameworks here have the same kind of check, the benchmark turns it on in
@@ -697,9 +791,10 @@ settings considered and left off, with the reason. These are on:
 | --- | --- | --- |
 | Jinja | `undefined=StrictUndefined` | Printing a name the template was not given, using it in `{% if %}` or looping over it raises an error, as Citry reports an unknown template name |
 | django-components | Pydantic models for `Kwargs`, `Slots` and the data classes, with djc-ext-pydantic and `extra='forbid'` | Input and data types are checked when a component renders (Citry, Next.js, Nuxt and FastHTML check them before the app runs); unknown input names are rejected, as with django-components' default classes |
+| Tetra | A type annotation on every public attribute (Tetra has no setting for this; it checks only annotated attributes) | Tetra checks each public attribute's value against its type when it writes the component's state into the page, as django-components' Pydantic models check its data when a component renders |
 | Nuxt | `vueCompilerOptions.strictTemplates` | vue-tsc reports an unknown component, element, attribute, directive or component event, the same kinds of names Next.js's tsc checks (Citry checks component names before the app runs) |
 | Nuxt | `experimental.typedPages` | vue-tsc checks a `<NuxtLink>` or router call that names a route against the app's routes |
-| Next.js | `typedRoutes` | tsc checks a link's path against the app's routes, as the Django, Rusty, Jinja, django-unicorn and django-components apps check a link's route when the page renders |
+| Next.js | `typedRoutes` | tsc checks a link's path against the app's routes, as the Django, Rusty, Jinja, Tetra, django-unicorn and django-components apps check a link's route when the page renders |
 | Next.js | `noUncheckedIndexedAccess`, `noImplicitOverride` and `verbatimModuleSyntax` in tsconfig.json | tsc treats a value read by index as possibly missing, requires `override` on a method that replaces its parent's, and requires `import type` for an import used only as a type; the tsconfig Nuxt generates turns all three on |
 | ReactPy | `REACTPY_DEBUG_MODE=1` | ReactPy checks each element and attribute it sends and warns about a list item without a key, like React's development checks in Next.js |
 

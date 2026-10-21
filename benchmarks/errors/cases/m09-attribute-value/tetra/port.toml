@@ -1,0 +1,9 @@
+# The search form is the Search component's template, so the button is
+# there.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'type="sumbit"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '<button type="submit">Search</button>'
+new = '<button type="sumbit">Search</button>'

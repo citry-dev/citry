@@ -1,0 +1,8 @@
+# The card list's template loops over the cards its load() builds.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'cards.0.count' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '{% for card in cards %}'
+new = '{% for card in cards.0.count %}'

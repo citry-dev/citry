@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/board/page.html', contains = 'owner.nmae' }
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = '<p>Owner: {{ owner.name }}</p>'
+new = '<p>Owner: {{ owner.nmae }}</p>'
