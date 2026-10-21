@@ -1999,10 +1999,23 @@ degradation contract in section 3.4.1.
     `this` as the full instance, including `$emit` from the `emits` option.
     `$el` is typed from the template's top-level node (`Node` for several
     nodes or an unreadable template), and a listener on a child component tag
-    types `$event` from the child's `emits`. The analyzer reports `emits`
-    separately from the instance names, so an `emits` it cannot read leaves
-    the other names typed. When it can read `emits`, Citry reports a literal
-    event name that `emits` does not declare as
+    types `$event` from the child's `emits`. A listener whose value is only
+    the name of a method the parent's `methods` declares, such as
+    `@hide="hideCard"`, is passed in the TypeScript check file to a
+    generated function whose parameter is a callback taking the child's
+    payload. TypeScript then compares the method's parameters with the
+    payload and reports a mismatch on the method name (`ts2345`). A name the
+    parent does not declare in `methods`, a `v-for` or slot alias, a
+    `js_data()` key, a member, a call, and an `@c-` server event binding are
+    typed as other listener statements are. Nothing is reported for an
+    untyped method, a `null` validator, the array form of `emits`, a child
+    whose `emits` cannot be read, or a template several components share.
+    Because the check runs with `strict` off, TypeScript compares parameter
+    types in both directions, so a parameter narrower than the payload
+    (`'a' | 'b'` for `string`) is not reported. The analyzer
+    reports `emits` separately from the instance names, so an `emits` it
+    cannot read leaves the other names typed. When it can read `emits`,
+    Citry reports a literal event name that `emits` does not declare as
     `citry.browser.undeclared-emit` (an `$emit` call) or
     `citry.browser.undeclared-component-event` (a listener on a child tag).
     An `emits` built from a variable, a spread, a computed key, or a mixin
