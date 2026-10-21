@@ -157,21 +157,22 @@ into `.benchmarks/errors/envs/`.
 On a 10-core machine with 24 GB of memory, a full run of the twelve
 frameworks' 756 cases with nothing stored (`--no-cache`) takes about 14
 minutes with the default limits (10 browser checks and 5 cases' static
-stages at once). The clean apps take the first 2.5 minutes, one at a time.
-In the cases, each of the 417 browser checks took about 13 seconds, and
-the processor was at least 95% busy in every sample taken while the cases
-ran (other work on the machine took part of it), so more cases at once
-would not make the run faster. Each journey loads the page again, and
-every framework has five journeys (FastHTML four). When those journeys ran
-one after another and five cases ran at once, a browser check took about
-20 seconds, the browser checks were about 85% of the run's work (8,500 of
-10,000 seconds, the rest the static stages), and the same full run took
-about 38 minutes, with the same cells. A rerun with nothing changed
-repeats only the browser checks whose journey stops on an error page,
-which are never stored: 4 cases in Jinja and FastHTML, and a few in every
-other framework. It is not part of routine CI. Run it before each Citry
-release, so the release ships with its results, and when a framework's
-pinned versions change.
+stages at once); a fresh run on 2026-10-21, with 398 browser checks, took
+13.7 minutes. The clean apps take the first 2.5 minutes, one at a time. In
+the cases, each browser check took about 13 seconds (measured on a run
+with 417 of them), and the processor was at least 95% busy in every sample
+taken while the cases ran (other work on the machine took part of it), so
+more cases at once would not make the run faster. Each journey loads the
+page again, and every framework has five journeys (FastHTML four). When
+those journeys ran one after another and five cases ran at once, a browser
+check took about 20 seconds, the browser checks were about 85% of the
+run's work (8,500 of 10,000 seconds, the rest the static stages), and the
+same full run took about 38 minutes, with the same cells. A rerun with
+nothing changed repeats only the browser checks whose journey stops on an
+error page, which are never stored: 4 cases in Jinja and FastHTML, and a
+few in every other framework. It is not part of routine CI. Run it before
+each Citry release, so the release ships with its results, and when a
+framework's pinned versions change.
 
 ## Latest result
 
@@ -180,6 +181,10 @@ pinned versions change.
 `report.html` there in a browser for the chart and the full table;
 `results.json` has the first few findings behind each cell, and the
 findings that pointed away from the change without an `indirect` note.
+In this run, Citry was built from this repository's sources at the
+commit the report names, not from a release. Before the app runs, it
+reports 54 of the 61 mistakes that apply to it; Citry 0.6.0, the release
+before that commit, reported 29.
 
 Each report starts by naming what the run scored: the commit it started
 from and the git tree of the benchmark's inputs, which are `cases/`,
@@ -433,8 +438,8 @@ writes a part of the page, not from its tools:
   typing, these cells read "never" and count as missed.
 
 [#207](https://github.com/citry-dev/citry/issues/207) tracks the gaps
-the first 24 mistakes found in Citry; the later gaps m30, m50, m60 and
-m61 are not in it yet.
+the first 24 mistakes found in Citry; the later gaps m30, m42, m50,
+m60 and m61 are not in it yet.
 
 Rusty's cells match Django's except four:
 

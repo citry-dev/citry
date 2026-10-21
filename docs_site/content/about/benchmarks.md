@@ -118,37 +118,46 @@ a React app, which sends each click to a Python backend.
 
 ### Where Citry stands { #errors-where-citry-stands }
 
-- **Before the app runs: 29 of 61** (28 errors, 1 warning). Two of
-  the 63 mistakes don't apply to Citry. Next.js 45 of 57, Nuxt 39 of
+- **Before the app runs: 54 of 61** (47 errors, 7 warnings),
+  measured with Citry's code from after the 0.6.0 release. The 0.6.0
+  release itself catches 29 of 61 (see
+  [How we measured](#errors-how-we-measured)). Two of the 63 mistakes
+  don't apply to Citry. Next.js 45 of 57, Nuxt 39 of
   58, Reflex 38 of 54, ReactPy 24 of 56, FastHTML 20 of 48, django-unicorn 12 of 55,
   Tetra 9 of 57, Django + HTMX + Alpine 6 of 52, Rusty + HTMX + Alpine 6 of 50,
   django-components + HTMX + Alpine 6 of 54, Jinja + HTMX + Alpine 5
   of 51.
-- **Missed: 20**, nothing tells you:
-    - a misspelled HTML element, HTML attribute name, CSS class, or CSS
-      variable the server sets: the page looks wrong
-    - a form field named differently from what the server reads:
-      submitting the search shows no result. The server rejects the
-      call, but the page shows no error
-    - the data a button sends to the server has a misspelled field, a
-      field of the wrong type, or a missing field: the server rejects
-      it, but the page shows no error
-    - the parent listens for a misspelled event, or the child's event
-      sends a number where the parent expects text: clicking the
-      child's button changes nothing
-    - a misspelled browser event such as `@clik`: the button does
-      nothing
+- **What Citry checks**: when you point `citry check` at your app
+  (`citry --app app.main:citry_app check`) and set the editor
+  extension's `citry.app` setting to the same app, they check each
+  template against your components, their slots and
+  events, your server events and forms, the CSS variables the server
+  sets, and the pages and files your app serves. They also run Vue's
+  compiler and HTML checks over every template.
+- **Warning only: 7**, reported before the app runs, but easy to miss:
+    - a listener with a misspelled event name: a component event such
+      as `@hdie`, or a browser event such as `@clik`
+    - a CSS variable whose name differs from the one the server sets
+    - a link to a page that doesn't exist, or an image with a
+      misspelled path: if you ship it, the browser gets a 404
+    - an image without alt text
+    - the server passes browser code a value it can't receive, such as
+      a path object. The warning points at the `js_data()` line that
+      sends the value rather than the line that creates it
+- **Only at runtime: 2**:
+    - a link that passes a word, such as `/projects/alpha`, where the
+      route takes a number: FastAPI answers with a 422 validation
+      error. The check knows which pages the app serves, but not the
+      type of a page's parameters
+    - a component reads a value the page shares with `<c-provide>`
+      under a misspelled key, such as `self.inject("bord")` where the
+      page provides `board`: the server fails to render the page
+- **Missed: 5**, nothing tells you:
+    - a misspelled CSS class: the page looks wrong
+    - the child's event sends a number where the parent expects text:
+      clicking the child's button changes nothing
     - a handler that takes more arguments than the event sends: the
       extra argument is `undefined`
-    - an image without alt text, a misspelled ARIA attribute such as
-      `aria-expandd`, or an id used twice on the page: the page looks
-      right, but screen readers get missing or wrong information, and
-      code that looks up the id can find the wrong element
-    - `disabled="false"` on a button: the button is disabled
-    - a browser-side component gets text where it declares a boolean,
-      or changes an input it received instead of telling its parent:
-      the status shows the wrong value, or `Close` leaves the details
-      open
     - the server and browser render different content in a part that
       passes values to a child component: the page shows the browser's
       version with no error
@@ -157,41 +166,7 @@ a React app, which sends each click to a Python backend.
       framework here reports this one, and in Next.js and Nuxt even
       reading a server-only value in browser code puts it in the page
       before an error appears.
-- **Warning only: 1**, an invalid attribute value such as
-  `type="sumbit"`.
-- **Only at runtime: 12**:
-    - a misspelled template directive: fails in the browser
-    - a link to a route that doesn't exist, a link that passes a word,
-      such as `/projects/alpha`, where the route takes a number, or an
-      image with a misspelled path: the browser gets a 404, or a 422
-      validation error for the word where a number belongs
-    - a component rendered in a loop without `#c-key`, or a `<div>`
-      inside a `<p>`: the server fails to render the page
-    - `v-model` on the `<form>` instead of its `<input>`: the server
-      fails to render the page, and the error message doesn't point at
-      the form
-    - a syntax error in a browser expression: the server fails to render
-      the page
-    - browser code is passed a value it can't receive, such as a path
-      object: the server fails to render the page
-    - a slot fill reads a misspelled field of the data the component
-      hands it, or uses a number as text: the server fails to render
-      the page. Unpacking the data, as in `data="{ title, count }"`,
-      reports a misspelled field before the app runs
-    - a component reads a value the page shares with `<c-provide>`
-      under a misspelled key, such as `self.inject("bord")` where the
-      page provides `board`: the server fails to render the page
-- **Needs `template_data()`**: 3 of these reports (a wrong-typed
-  input in markup, a misspelled attribute on a template object, a
-  wrong-typed operation in a template expression) appear only when the
-  component defines it. Without it they go unreported; this is a Citry
-  bug ([#202](https://github.com/citry-dev/citry/issues/202)). The
-  starter's components define it; components written from
-  [Getting Started](/getting-started/installation/) often don't.
-- **A similar mistake can go unreported.** The misspelled template
-  directive above is a Vue one, `v-iff`, which fails in the browser. A
-  misspelled server-side `c-if` isn't reported at all.
-- **Why Next.js and Nuxt lead**: TypeScript checks Next.js's HTML
+- **Why Next.js and Nuxt come next**: TypeScript checks Next.js's HTML
   elements, attribute names and values, and event names. Its server
   actions take typed arguments, so a wrong or missing field in the data
   a button sends is caught too. Nuxt's template check, with its
@@ -199,15 +174,22 @@ a React app, which sends each click to a Python backend.
   directives and component events. Both linters report a missing list
   key, and Next.js's also warns about accessibility mistakes such as a
   misspelled ARIA attribute.
-- **Why Reflex comes close**: its components are typed Python functions
+- **Why Reflex is close behind Nuxt**: its components are typed Python functions
   and its state fields have types, so Pylance checks component inputs,
   reads of state fields and event arguments, and `reflex compile` checks
   prop values, event names and loops before the app runs.
 
 ### How we measured { #errors-how-we-measured }
 
-- **When**: 2026-10-21, Citry 0.6.0 and citry-core 1.8.0 from PyPI.
-  Every framework's versions are pinned in its app's lockfile.
+- **When**: 2026-10-21. Every framework's versions are pinned in its
+  app's lockfile; Citry's exception is below.
+- **Which Citry**: Citry and its language server, citry-lsp, built from
+  the repository at commit
+  [bf935bc](https://github.com/citry-dev/citry/tree/bf935bc77fc3e868cb7c3915035c32f0ab7147ff),
+  a commit made after the 0.6.0 release, with citry-core 1.8.0 from
+  PyPI. The run's report names a later commit that changed only the
+  benchmark, so the Citry code is the same. Citry 0.6.0, the release
+  before that commit, reports 29 of the 61.
 - **Citry**: a FastAPI app that adds Citry's routes with
   `citry.contrib.fastapi.mount()`, as Citry's FastAPI starter does. The
   editor extension's language server (measured with
