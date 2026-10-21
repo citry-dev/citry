@@ -632,6 +632,25 @@ class ImportedApiPage(Component):
         return {"apiBase": API_BASE}
 
 
+class CaughtApiPage(Component):
+    citry = _JS_DATA_ENGINE
+    template = "<p></p>"
+
+    def js_data(self, kwargs, slots):
+        # Names bound by `except ... as` and by a `match` capture hide the
+        # module constant too.
+        try:
+            raise ValueError
+        except ValueError as API_BASE:
+            caught = str(API_BASE)
+        match kwargs:
+            case {"base": API_BASE}:
+                pass
+            case _:
+                API_BASE = caught
+        return {"apiBase": API_BASE}
+
+
 class ShadowedApiPage(Component):
     citry = _JS_DATA_ENGINE
     template = "<p></p>"

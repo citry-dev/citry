@@ -715,7 +715,7 @@ class Board(Component):
     citry = engine
     template = "<p></p>"
     def js_data(self, kwargs, slots):
-        return {"apiBase": API_BASE}
+        return {"apiBase": API_BASE, "ids": {1, 2}}
 """
 
 
@@ -728,7 +728,8 @@ def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_path(t
 
     found = check_project_python_types(project, tmp_path)
 
-    # The editor's js-data warning, at the key, once ty names the type.
+    # The editor's js-data warning, at the key, once ty names the type. The
+    # set literal needs no ty, so the registry check reports it instead.
     assert [
         (item.path.name, item.diagnostic.code, item.diagnostic.range.start.line, item.diagnostic.message)
         for item in found
