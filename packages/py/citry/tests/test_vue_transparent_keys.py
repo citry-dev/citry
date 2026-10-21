@@ -128,7 +128,7 @@ def test_duplicate_transparent_sibling_keys_are_rejected() -> None:
             return {"values": kwargs["values"]}
 
     rendered = render_prepared_direct(Page(values=["same", "same"]))
-    with pytest.raises(UnsupportedPreparedView, match="duplicate explicit #c-key"):
+    with pytest.raises(UnsupportedPreparedView, match="has a duplicate #c-key"):
         assemble_typed_render(
             rendered,
             revision=0,

@@ -68,7 +68,7 @@ def test_empty_string_key_reaches_group_duplicate_detection() -> None:
         def template_data(self, kwargs, slots):
             return {"items": [1, 2]}
 
-    with pytest.raises(UnsupportedPreparedView, match="duplicate explicit #c-key"):
+    with pytest.raises(UnsupportedPreparedView, match="has a duplicate #c-key"):
         _assemble(Page())
 
 

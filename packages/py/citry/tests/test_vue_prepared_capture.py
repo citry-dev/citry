@@ -1554,7 +1554,9 @@ def test_repeated_unkeyed_local_call_is_rejected() -> None:
             return {"items": [1, 2]}
 
     rendered = render_prepared(Page())
-    with pytest.raises(UnsupportedPreparedView, match="requires an explicit #c-key"):
+    # The message names the tag, its template, and the line.
+    message = r"<c-child> in .*Page, line 1 repeats inside a loop but has no #c-key"
+    with pytest.raises(UnsupportedPreparedView, match=message):
         _assembled_view(
             rendered,
             revision=0,
