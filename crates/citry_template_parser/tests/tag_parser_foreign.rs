@@ -121,6 +121,27 @@ fn compiler_emits_fail_closed_foreign_runtime_node() {
 }
 
 #[test]
+fn compiler_escapes_a_provider_name_the_host_did_not_check() {
+    // The parser accepts any non-empty provider name, so the compiler must
+    // keep a quote, a newline, or a NUL in it from breaking the literal.
+    let source = "A{% value %}B";
+    let provider = "a\"b\nc\0d\\";
+    let spans = vec![ForeignSpan::from_parts(
+        1,
+        source.len() - 1,
+        provider,
+        0,
+        false,
+    )];
+    let template = parse_template_with_options(source, None, None, &options(spans)).unwrap();
+    let generated = compile_template(template, None).unwrap();
+    assert!(
+        generated.contains(r#"ForeignNode(source, (1, 12,), "a\"b\nc\x00d\\", 0,"#),
+        "{generated}"
+    );
+}
+
+#[test]
 fn ordinary_attribute_value_is_an_ordered_raw_start_tag_program() {
     let source = r#"<div class="{% if active %}on{% endif %}">x</div>"#;
     let open_start = source.find("{% if").unwrap();

@@ -140,8 +140,9 @@ FOR, so IF wraps FOR), then walks elements into a `Vec<LangSpecArgument>`, then
 hands that to `LangImpl::compile`. Consecutive static strings are coalesced.
 
 `LangSpecArgument` (in `lang/lang.rs`) is the language-agnostic codegen IR:
-`Variable`, `UnsafeString` (escaped), `SafeString`, `Int`, `Bool`, `Tuple`,
-`List`, `Struct { name, arguments }`.
+`Variable`, `UnsafeString` (any text, written as an escaped multiline literal),
+`SafeString` (a short name, written as a one-line literal that is escaped
+too), `Int`, `Bool`, `Tuple`, `List`, `Struct { name, arguments }`.
 
 Non-obvious facts to keep in mind (the module doc carries the full output
 contract):
