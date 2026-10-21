@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/board/page.html', contains = 'cards.0.count' }
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = '{% for card in cards %}'
+new = '{% for card in cards.0.count %}'

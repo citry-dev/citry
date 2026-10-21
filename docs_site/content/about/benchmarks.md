@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and nine others report the same 49 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and nine others report the same 62 developer mistakes.
 ---
 
 # Benchmarks
@@ -8,7 +8,7 @@ description: How fast Citry and eleven other frameworks make a 1,400-entry page 
 - [Performance](#performance): how long a page with 1,400 entries
   takes to become usable.
 - [Catching errors](#catching-errors): how early each framework
-  reports the same 49 developer mistakes.
+  reports the same 62 developer mistakes.
 
 ## Performance
 
@@ -73,7 +73,7 @@ noise.
 The earlier a mistake is reported, the less time it costs you.
 
 We wrote the same small app in Citry and nine other frameworks, made
-the same 49 mistakes in each (a misspelled component name, a
+the same 62 mistakes in each (a misspelled component name, a
 wrong-typed input, an unclosed tag, and so on), and recorded **where
 each mistake was first reported**. Rusty is the Django app with its
 templates rendered by
@@ -92,7 +92,7 @@ search form rewritten as components of
 the server, which sends back the component's new HTML.
 
 <c-error-benchmark-chart
-  title="How the 49 mistakes ended in each framework"
+  title="How the 62 mistakes ended in each framework"
 />
 
 ### Read the error chart { #errors-what-the-chart-shows }
@@ -112,13 +112,13 @@ the server, which sends back the component's new HTML.
 
 ### Where Citry stands { #errors-where-citry-stands }
 
-- **Before the app runs: 25 of 47** (24 errors, 1 warning). Two of
-  the 49 mistakes don't apply to Citry. Next.js 35 of 43, Nuxt 30 of
-  44, ReactPy 19 of 42, FastHTML 17 of 36, django-unicorn 7 of 41,
-  Django + HTMX + Alpine 3 of 40, Rusty + HTMX + Alpine 3 of 38,
-  django-components + HTMX + Alpine 3 of 42, Jinja + HTMX + Alpine 2
-  of 39.
-- **Missed: 15**, nothing tells you:
+- **Before the app runs: 29 of 60** (28 errors, 1 warning). Two of
+  the 62 mistakes don't apply to Citry. Next.js 44 of 56, Nuxt 39 of
+  57, ReactPy 23 of 55, FastHTML 20 of 48, django-unicorn 12 of 54,
+  Django + HTMX + Alpine 6 of 51, Rusty + HTMX + Alpine 6 of 49,
+  django-components + HTMX + Alpine 6 of 53, Jinja + HTMX + Alpine 5
+  of 50.
+- **Missed: 20**, nothing tells you:
     - a misspelled HTML element, HTML attribute name, CSS class, or CSS
       variable the server sets: the page looks wrong
     - a form field named differently from what the server reads:
@@ -132,6 +132,13 @@ the server, which sends back the component's new HTML.
       child's button changes nothing
     - a misspelled browser event such as `@clik`: the button does
       nothing
+    - a handler that takes more arguments than the event sends: the
+      extra argument is `undefined`
+    - an image without alt text, a misspelled ARIA attribute such as
+      `aria-expandd`, or an id used twice on the page: the page looks
+      right, but screen readers get missing or wrong information, and
+      code that looks up the id can find the wrong element
+    - `disabled="false"` on a button: the button is disabled
     - a browser-side component gets text where it declares a boolean,
       or changes an input it received instead of telling its parent:
       the status shows the wrong value, or `Close` leaves the details
@@ -146,10 +153,16 @@ the server, which sends back the component's new HTML.
       before an error appears.
 - **Warning only: 1**, an invalid attribute value such as
   `type="sumbit"`.
-- **Only at runtime: 7**:
+- **Only at runtime: 11**:
     - a misspelled template directive: fails in the browser
-    - a link to a route that doesn't exist, or an image with a
-      misspelled path: the browser gets a 404
+    - a link to a route that doesn't exist, a link that passes a word,
+      such as `/projects/alpha`, where the route takes a number, or an
+      image with a misspelled path: the browser gets a 404
+    - a component rendered in a loop without `#c-key`, or a `<div>`
+      inside a `<p>`: the server fails to render the page
+    - `v-model` on the `<form>` instead of its `<input>`: the server
+      fails to render the page, and the error message doesn't point at
+      the form
     - a syntax error in a browser expression: the server fails to render
       the page
     - browser code is passed a value it can't receive, such as a path
@@ -173,7 +186,9 @@ the server, which sends back the component's new HTML.
   actions take typed arguments, so a wrong or missing field in the data
   a button sends is caught too. Nuxt's template check, with its
   `strictTemplates` setting on, reports unknown components, elements, attributes,
-  directives and component events.
+  directives and component events. Both linters report a missing list
+  key, and Next.js's also warns about accessibility mistakes such as a
+  misspelled ARIA attribute.
 
 ### How we measured { #errors-how-we-measured }
 

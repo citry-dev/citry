@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = 'visibleCards[0]?.count' }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = 'v-for="card in visibleCards"'
+new = 'v-for="card in visibleCards[0]?.count"'

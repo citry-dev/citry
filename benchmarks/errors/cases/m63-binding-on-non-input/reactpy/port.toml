@@ -1,0 +1,24 @@
+status = "ported"
+mistake = { file = 'main.py', contains = '"on_change": lambda event: set_query' }
+
+[[edits]]
+file = 'main.py'
+old = '''
+        {"role": "search"},
+        html.input(
+            {
+                "type": "search",
+                "name": "q",
+                "value": query,
+                "on_change": lambda event: set_query(event["target"]["value"]),
+            }
+        ),
+'''
+new = '''
+        {
+            "role": "search",
+            "value": query,
+            "on_change": lambda event: set_query(event["target"]["value"]),
+        },
+        html.input({"type": "search", "name": "q"}),
+'''

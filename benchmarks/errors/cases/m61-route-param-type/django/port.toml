@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/board/page.html', contains = "'project' 'alpha'" }
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = "{% url 'project' 1 %}"
+new = "{% url 'project' 'alpha' %}"

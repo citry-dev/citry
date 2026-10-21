@@ -1,0 +1,2 @@
+status = "not-applicable"
+reason = "The server builds the cards in a Python list comprehension, and the browser never updates the list in place: Hide sets `hidden` on the card's own element, and HTMX swaps in only the saved count. FastHTML's components have no key to leave out."

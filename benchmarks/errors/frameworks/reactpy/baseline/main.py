@@ -118,10 +118,11 @@ def Page() -> VdomDict:
         {"style": {"--accent": ACCENT}},
         html.h1("Projects"),
         html.div(
-            {"class_name": "board", "title": "Board"},
+            {"class_name": "board", "id": "board", "title": "Board"},
             html.p(f"Owned by {owner.name}"),
             html.img({"src": "/static/avatar.svg", "alt": owner.name, "width": 32, "height": 32}),
             html.p(f"Owner: {owner.name}"),
+            html.p(f"Projects: {len(projects)}"),
             html.p(ApiLine({"api_base": API_BASE})),
             # ReactPy matches unkeyed children by position, so the cards get a
             # wrapper of their own: hiding one then cannot shift the counter and

@@ -3,5 +3,5 @@ mistake = { file = "app/pages/index.vue", contains = "titel=\"Board\"" }
 
 [[edits]]
 file = "app/pages/index.vue"
-old = '<div class="board" title="Board">'
-new = '<div class="board" titel="Board">'
+old = '<div id="board" class="board" title="Board">'
+new = '<div id="board" class="board" titel="Board">'

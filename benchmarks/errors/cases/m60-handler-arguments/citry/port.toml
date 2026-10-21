@@ -1,0 +1,14 @@
+status = "ported"
+mistake = { file = 'app/components/board_page.py', contains = 'hideCard(title, reason)' }
+
+[[edits]]
+file = 'app/components/board_page.py'
+old = '''
+          hideCard(title) {
+            this.hiddenTitles.push(title);
+'''
+new = '''
+          hideCard(title, reason) {
+            console.info(`Hid ${title}: ${reason}`);
+            this.hiddenTitles.push(title);
+'''

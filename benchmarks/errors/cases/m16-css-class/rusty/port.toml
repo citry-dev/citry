@@ -3,5 +3,5 @@ mistake = { file = "board/templates/board/page.html", contains = 'class="bord"' 
 
 [[edits]]
 file = "board/templates/board/page.html"
-old = '<div class="board" title="Board" x-data="board"'
-new = '<div class="bord" title="Board" x-data="board"'
+old = '<div class="board" id="board" title="Board" x-data="board"'
+new = '<div class="bord" id="board" title="Board" x-data="board"'

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/components/board_page.py', contains = '<h1 id="board">' }
+
+[[edits]]
+file = 'app/components/board_page.py'
+old = '<h1>{{ tr("board-title") }}</h1>'
+new = '<h1 id="board">{{ tr("board-title") }}</h1>'

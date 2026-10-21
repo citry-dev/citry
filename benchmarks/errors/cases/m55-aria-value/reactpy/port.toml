@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = '"aria-expanded": "yes" if open else "no"' }
+
+[[edits]]
+file = 'main.py'
+old = '"aria-expanded": open'
+new = '"aria-expanded": "yes" if open else "no"'

@@ -1,0 +1,13 @@
+status = "ported"
+mistake = { file = 'components/board_page/board_page.html', contains = 'x-model="query"' }
+
+[[edits]]
+file = 'components/board_page/board_page.html'
+old = '''
+<form role="search" x-data="{ query: '' }">
+      <input type="search" name="q" x-model="query">
+'''
+new = '''
+<form role="search" x-data="{ query: '' }" x-model="query">
+      <input type="search" name="q">
+'''

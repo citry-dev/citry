@@ -1,0 +1,12 @@
+status = "ported"
+mistake = { file = 'app/components/board_page.py', contains = 'src="/static/avatar.svg"' }
+
+[[edits]]
+file = 'app/components/board_page.py'
+old = '''
+              src="/static/avatar.svg"
+              c-alt="owner.name"
+'''
+new = '''
+              src="/static/avatar.svg"
+'''

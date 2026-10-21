@@ -1,0 +1,18 @@
+status = "ported"
+mistake = { file = 'board/components/project_list.py', contains = 'def hide(self, title: str, reason: str)' }
+
+[indirect]
+reason = "The card calls `self.parent.hide(self.title)` after narrowing its parent to the card list's class, so pyright reports the missing `reason` argument at that call in card.py, not at the changed signature."
+codes = ["reportCallIssue"]
+
+[[edits]]
+file = 'board/components/project_list.py'
+old = '''
+    def hide(self, title: str):
+        self.hidden = [*self.hidden, title]
+'''
+new = '''
+    def hide(self, title: str, reason: str):
+        print(f'Hid {title}: {reason}')
+        self.hidden = [*self.hidden, title]
+'''

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/board/page.html', contains = '<h1 id="board">' }
+
+[[edits]]
+file = 'board/templates/board/page.html'
+old = '<h1>{{ heading }}</h1>'
+new = '<h1 id="board">{{ heading }}</h1>'

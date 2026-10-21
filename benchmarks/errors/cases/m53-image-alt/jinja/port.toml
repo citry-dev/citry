@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'templates/index.html', contains = 'avatar.svg' }
+
+[[edits]]
+file = 'templates/index.html'
+old = ' alt="{{ owner.name }}"'
+new = ''

@@ -1,0 +1,13 @@
+status = "ported"
+mistake = { file = 'app/search.tsx', contains = '<Form action="/" role="search" value=' }
+
+[[edits]]
+file = 'app/search.tsx'
+old = '''
+    <Form action="/" role="search">
+      <input type="search" name="q" value={query} onChange={(event) => setQuery(event.target.value)} />
+'''
+new = '''
+    <Form action="/" role="search" value={query} onChange={(event) => setQuery(event.target.value)}>
+      <input type="search" name="q" />
+'''

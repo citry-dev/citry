@@ -1,0 +1,11 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'projects[0].count' }
+
+[[edits]]
+file = 'main.py'
+old = '''
+for p in projects
+'''
+new = '''
+for p in projects[0].count
+'''

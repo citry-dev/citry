@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = 'class="cards" class="board"' }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = '<div id="board" class="board"'
+new = '<div id="board" class="cards" class="board"'

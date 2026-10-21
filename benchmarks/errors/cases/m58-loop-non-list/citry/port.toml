@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/components/board_page.py', contains = 'projects[0].count' }
+
+[[edits]]
+file = 'app/components/board_page.py'
+old = '<c-for each="project in projects">'
+new = '<c-for each="project in projects[0].count">'

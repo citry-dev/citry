@@ -20,7 +20,10 @@ links to the other pages with `<NuxtLink>`. Node is the system Node, v26.5.0 wit
 
 The board data carries the heading's color, and the page's `<style>` reads it with Vue's
 `v-bind()`, the way Vue's docs link CSS to component state. The search form submits back to the
-page with GET, and the page reads `route.query.q`.
+page with GET, and the page reads `route.query.q`. The project page takes a numeric id, which a
+file-based route cannot declare, so it checks the id with `definePageMeta({ validate })`, as
+Nuxt's routing docs show; a link to `/projects/alpha` (m61) shows Nuxt's 404 page, with no
+error in the browser's console or the server's log.
 
 The benchmark adds typescript 6.0.3 and vue-tsc 3.3.13 as dev dependencies, only to run the
 editor stage. The starter installs neither. Nuxt does not type-check during `nuxt dev` or

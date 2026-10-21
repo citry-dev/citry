@@ -3,8 +3,8 @@ mistake = { file = "components/board_page/board_page.html", contains = '<dvi cla
 
 [[edits]]
 file = "components/board_page/board_page.html"
-old = '<div class="board" title="Board" x-data="board"'
-new = '<dvi class="board" title="Board" x-data="board"'
+old = '<div class="board" id="board" title="Board" x-data="board"'
+new = '<dvi class="board" id="board" title="Board" x-data="board"'
 
 [[edits]]
 file = "components/board_page/board_page.html"

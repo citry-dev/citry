@@ -408,3 +408,107 @@ category = "types"
 origin = "neutral"
 description = "The card's `tone` input accepts only `plain` or `accent`, and the page passes a misspelled choice, for example `acent`."
 correct = "The first card has the accent border."
+
+[[mistake]]
+id = "m51-list-key-missing"
+title = "Repeated browser element without a key"
+category = "templates"
+origin = "neutral"
+description = "The loop that renders the cards gives each card no stable key (`key`, `:key`, `#c-key`), where the framework uses keys to match list items when it updates the list in place. Where the list is rendered only on the server and never updated in place, this mistake does not apply."
+correct = "Each card has a key made from its project, and hiding the first card hides only that card."
+
+[[mistake]]
+id = "m52-invalid-nesting"
+title = "Block element inside a paragraph"
+category = "html"
+origin = "neutral"
+description = "The owner line is written as a `<p>` that contains a `<div>`, for example `<p>Owner: <div>Ada</div></p>` with the name in a `<div>`, which the browser silently splits into separate elements."
+correct = "The owner line is one block that reads `Owner: Ada`."
+
+[[mistake]]
+id = "m53-image-alt"
+title = "Image without alt text"
+category = "html"
+origin = "neutral"
+description = "The owner's avatar image has no `alt` attribute."
+correct = "The avatar image has the alt text `Ada`."
+
+[[mistake]]
+id = "m54-aria-name"
+title = "Misspelled ARIA attribute"
+category = "html"
+origin = "neutral"
+description = "The Details button's `aria-expanded` attribute is written as `aria-expandd`."
+correct = "The Details button reports whether the details are open through `aria-expanded`."
+
+[[mistake]]
+id = "m55-aria-value"
+title = "Invalid ARIA attribute value"
+category = "html"
+origin = "neutral"
+description = "The Details button's `aria-expanded` is set to a value ARIA does not allow, for example `yes` or `open`, instead of `true` or `false`."
+correct = "The Details button reports whether the details are open through `aria-expanded`."
+
+[[mistake]]
+id = "m56-duplicate-attribute"
+title = "Same attribute written twice on one element"
+category = "html"
+origin = "neutral"
+description = "The board wrapper gets a second `class` attribute in front of the one it has, for example `class=\"cards\" ... class=\"board\"`. HTML keeps the first and drops the second, so the board loses its styled class; where the last one wins, as in JSX, the page keeps it."
+correct = "The board text is green."
+
+[[mistake]]
+id = "m57-duplicate-id"
+title = "Two elements share an id"
+category = "html"
+origin = "neutral"
+description = "The heading is given `id=\"board\"`, the id the board wrapper already has."
+correct = "Only the board wrapper has the id `board`."
+
+[[mistake]]
+id = "m58-loop-non-list"
+title = "Loop over a value that is not a list"
+category = "types"
+origin = "neutral"
+description = "The cards loop iterates over one project's `count` (a number), for example the first project's, instead of the list of projects."
+correct = "The page renders three project cards."
+
+[[mistake]]
+id = "m59-unknown-helper"
+title = "Unknown template filter or helper function"
+category = "naming"
+origin = "neutral"
+description = "The line that counts the projects uses a misspelled or wrong name for the length filter or helper, for example `projects|lenght` for `projects|length`, or `length(projects)` for Python's `len(projects)`. Where the count is a property of the list (`projects.length` in JavaScript), the misspelled property is the natural form."
+correct = "The page shows `Projects: 3`."
+
+[[mistake]]
+id = "m60-handler-arguments"
+title = "Handler declares arguments the event does not send"
+category = "events"
+origin = "neutral"
+description = "The page's hide handler is changed to take one more argument than the card's hide event sends, a reason for hiding the card, which the handler then uses. Where the page's listener is an inline statement rather than a function with parameters, this mistake does not apply."
+correct = "Clicking Hide on the first card hides that card."
+
+[[mistake]]
+id = "m61-route-param-type"
+title = "Link passes a route parameter of the wrong type"
+category = "types"
+origin = "neutral"
+description = "The project link points to `/projects/alpha`, the project's slug, instead of `/projects/1`, where the project route takes a numeric id. Where the router can declare the parameter's type, the route declares it as a number, for example `/projects/{id:int}`."
+correct = "Clicking the project link opens the page for project 1."
+
+[[mistake]]
+id = "m62-boolean-attribute-string"
+title = "Boolean attribute given the text \"false\""
+category = "html"
+origin = "neutral"
+description = "The search button is written with `disabled=\"false\"`, which HTML treats as disabled."
+correct = "The search button is enabled."
+
+[[mistake]]
+id = "m63-binding-on-non-input"
+title = "Two-way binding on an element with no value"
+category = "templates"
+origin = "neutral"
+description = "The search field's two-way binding (`v-model`, `x-model`, `unicorn:model`, or `value` with a change handler) is put on the `<form>` around it instead of the `<input>`."
+correct = "Typing in the search field updates the text `Searching for: ...`."

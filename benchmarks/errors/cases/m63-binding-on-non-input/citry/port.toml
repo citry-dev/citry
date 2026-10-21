@@ -1,0 +1,24 @@
+status = "ported"
+mistake = { file = 'app/components/search.py', contains = 'v-model="query"' }
+
+[[edits]]
+file = 'app/components/search.py'
+old = '''
+        <form role="search" @c-submit.prevent="search">
+          <input
+            type="search"
+            name="q"
+            v-model="query"
+          />
+'''
+new = '''
+        <form
+          role="search"
+          v-model="query"
+          @c-submit.prevent="search"
+        >
+          <input
+            type="search"
+            name="q"
+          />
+'''

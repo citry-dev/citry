@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = 'disabled="false"' }
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = '<button type="submit">Search</button>'
+new = '<button type="submit" disabled="false">Search</button>'

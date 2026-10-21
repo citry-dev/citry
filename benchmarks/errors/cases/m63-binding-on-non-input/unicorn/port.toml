@@ -1,0 +1,13 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/search.html', contains = 'unicorn:model="query"' }
+
+[[edits]]
+file = 'board/templates/unicorn/search.html'
+old = '''
+<form role="search">
+  <input type="search" name="q" unicorn:model="query">
+'''
+new = '''
+<form role="search" unicorn:model="query">
+  <input type="search" name="q">
+'''

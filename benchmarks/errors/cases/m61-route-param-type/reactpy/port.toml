@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = '/projects/alpha' }
+
+[[edits]]
+file = 'main.py'
+old = '{"to": "/projects/1"}'
+new = '{"to": "/projects/alpha"}'

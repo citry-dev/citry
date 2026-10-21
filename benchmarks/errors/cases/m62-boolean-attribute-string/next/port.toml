@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/search.tsx', contains = 'disabled="false"' }
+
+[[edits]]
+file = 'app/search.tsx'
+old = '<button type="submit">Search</button>'
+new = '<button type="submit" disabled="false">Search</button>'

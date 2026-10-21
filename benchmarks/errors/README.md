@@ -124,11 +124,11 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 results. Rerunning them with nothing changed took 8 seconds: it repeated
 only the browser checks of the 4 cases whose journey stops on an error
 page, which are never stored. Every framework repeats such cases on each
-run. A full run of the ten frameworks' 490 cases with nothing stored
-(`--no-cache`) took about 25 minutes on the same machine; most of it is
+run. A full run of the ten frameworks' 620 cases with nothing stored
+(`--no-cache`) took about 31 minutes on the same machine; most of it is
 the Nuxt cases, which run one at a time, and the Next.js builds.
-ReactPy's 49 cases, run on their own, took about 2 minutes, and
-django-unicorn's about 3. Each journey loads the page again in every
+Before m51 to m63 were added, ReactPy's 49 cases, run on their own,
+took about 2 minutes, and django-unicorn's about 3. Each journey loads the page again in every
 browser check, and the `search`, `about` and `project` journeys bring
 each framework to five (FastHTML to four). It is not part of routine CI.
 Run it at each Citry release, and when a framework's pinned versions
@@ -244,10 +244,77 @@ writes a part of the page, not from its tools:
 - **m48:** the misspelled image is a 404 when the page loads, except in
   Nuxt, whose build turns an image path in a template into an import and
   fails on the missing file.
+- **m51:** a list key matters only where the browser updates the list in
+  place. The Django, Rusty, django-components, Jinja and FastHTML pages
+  render the cards on the server and only hide one in the browser, so
+  the cell is n/a. Next.js's and Nuxt's ESLint rules report the missing
+  key, and ReactPy's debug mode prints a warning. Citry refuses to
+  render the page, with a message that names the missing `#c-key`.
+  django-unicorn reports nothing, and clicking Hide on the first card
+  leaves Alpha on the page.
+- **m52:** nothing reports a `<div>` inside a `<p>` before the app runs,
+  except Nuxt, whose ESLint fails to parse the template. Next.js reports
+  it in the browser as a hydration error, and Citry fails to render the
+  page because Vue rejects the template. Elsewhere the browser splits
+  the paragraph without a message.
+- **m53, m54, m56 and m57:** djLint checks alt text (H013), ARIA
+  attribute names (H048), repeated attributes (H037) and repeated ids
+  (H053) in the Django, Rusty, django-components, Jinja and
+  django-unicorn templates. It checks ARIA names only on plain
+  attributes, so it misses the `:aria-expandd` binding of the Alpine
+  apps (Django, Rusty, django-components and Jinja) and reports
+  django-unicorn's plain `aria-expandd`. Next.js's next/image requires
+  `alt` in its types, and its ESLint warns about a misspelled ARIA name,
+  which React also reports in the browser. Nuxt's `strictTemplates`
+  reports the unknown ARIA name. Nothing reports a repeated id in Citry,
+  Next.js, Nuxt, FastHTML or ReactPy.
+- **m55:** a bound `aria-expanded` is typed as `true` or `false` in
+  TypeScript, so Citry, Next.js and Nuxt report `yes` and `no` in the
+  editor. The Alpine apps, django-unicorn's `yesno` filter, FastHTML's
+  script and ReactPy's attribute dictionary accept any text.
+- **m58 and m59:** a loop over a number and a misspelled length filter
+  or helper are type errors where the template is checked as code
+  (Citry, Next.js, Nuxt, FastHTML and ReactPy). In the Django, Rusty,
+  django-components, Jinja and django-unicorn templates they fail when
+  the page renders.
+- **m60:** a handler that takes one more argument than the card's event
+  sends is a type error in Next.js, Nuxt, ReactPy and django-unicorn.
+  Next.js reports it on the handler itself. Nuxt, ReactPy and
+  django-unicorn report it where the handler is called or returned, so
+  those three cells are marked `°`. Citry's and FastHTML's handlers are
+  browser JavaScript, which nothing checks, and the missing reason only
+  prints as `undefined`. The Alpine apps hide a card with an inline
+  statement, so the cell is n/a.
+- **m61:** the project route takes a numeric id. Django, Rusty,
+  django-components, django-unicorn and Jinja build the link from the
+  route's name, and building it with `alpha` fails when the page
+  renders. Citry and FastHTML check the number only when the link is
+  followed, with a 404. ReactPy's router shows the app's `Page not
+  found` route and Nuxt's route check shows Nuxt's 404 page, both in the
+  browser and with no error, and Next.js's route segments take any text,
+  so its page reads `Project alpha`.
+- **m62:** only TypeScript in Next.js reports `disabled="false"`;
+  Nuxt's types accept the text. Everywhere else the search button is
+  silently disabled.
+- **m63:** Nuxt's vue-tsc and ESLint report a `v-model` on the form, and
+  Citry fails to render the page, with an internal message about
+  `v-model` helpers rather than one that names the form. In the other
+  apps nothing reports the binding. Alpine's `x-model` and React's
+  `onChange` in Next.js read the value from the field's `input` event,
+  which bubbles up to the form, so typing still updates the line; only
+  the state no longer flows back into the field, which the page never
+  needs. django-unicorn and FastHTML read a value from the form itself,
+  which a form does not have, so the line stops following the typing.
+  The browser check cannot show the difference: the `search` journey
+  records the page only after the form is submitted, which loads the
+  page again or, in Citry, renders the search form again, so only
+  Next.js's record still shows the typed text; ReactPy's record, like
+  the others, shows no difference. Whether or not the line follows the
+  typing, these cells read "never" and count as missed.
 
 The gaps the earlier 24-mistake run found in Citry are tracked in
 [#207](https://github.com/citry-dev/citry/issues/207); the gaps found by
-the mistakes added since (m25 to m49) are not in it yet.
+the mistakes added since (m25 to m63) are not in it yet.
 
 Rusty's cells match Django's except four:
 
@@ -347,6 +414,19 @@ other framework here that writes its page as Python functions:
   reads the API base from its props. Reading a prop the server did not
   pass shows `API: undefined` with no error. (A second prop that carries
   the secret, m42, reaches the browser unnoticed, as in every framework.)
+- **m51:** ReactPy updates the card list in the browser, so leaving out
+  the key applies here, and debug mode prints a warning for it.
+  FastHTML's server-rendered list has no keys, so its cell is n/a.
+- **m56:** the repeated `class_name` is a repeated key in a Python
+  dictionary, which ruff reports and Python accepts, keeping the last
+  value. FastHTML's repeated `cls=` keyword is a syntax error, which
+  pyright reports in the editor.
+- **m60:** the card's `on_hide` callback is typed, so pyright reports
+  a hide handler that takes a reason where `make_hide` returns it.
+  FastHTML's hide listener is browser JavaScript, which nothing checks.
+- **m61:** the router checks the project id in the browser and shows the
+  app's `Page not found` route with no error, while FastHTML's route
+  answers `/projects/alpha` with a 404.
 
 m14 and m34 are n/a, as in FastHTML and the Django and Jinja apps:
 ReactPy 1.1.0 renders nothing on the server, and no browser code reads a
@@ -394,6 +474,19 @@ differ from Django's in these places:
   writes its own footer link and the page fills nothing in it. No
   JavaScript defines the toggle: the Details button uses django-unicorn's
   built-in `$toggle('open')` action.
+- **m51:** the card list renders each card as a child component, with
+  the `key` django-unicorn's docs give a child in a loop, so the
+  mistake applies. Nothing reports it, and clicking Hide on the first
+  card leaves Alpha on the page. The Django app's cards are plain
+  server-rendered markup, so its cell is n/a.
+- **m54:** the Details button writes `aria-expanded` as a plain
+  attribute, so djLint's H048 reports the misspelled name. The Django
+  app binds it with Alpine's `:aria-expanded`, which djLint does not
+  read as an ARIA attribute.
+- **m60:** the card list's `hide` method is called from Python, so
+  pyright reports the missing reason at the card's `self.parent.hide(...)`
+  call (marked `°`). The Django app's Alpine wrapper hides itself with
+  an inline statement, so its cell is n/a.
 
 m42 is missed as everywhere, but in django-unicorn's own form: the counter
 keeps the token as an ordinary class attribute, and django-unicorn writes
@@ -411,21 +504,22 @@ every framework.
 
 | Part | What the page does | Used by |
 | --- | --- | --- |
-| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title`. The server sets its color, blue, as the CSS variable `--accent`, which the stylesheet reads (Nuxt's stylesheet reads the server's value with Vue's `v-bind()` instead). This is unrelated to the card's `accent` tone | m15, m43 |
+| Heading | An `<h1>` reading `Projects`. Where the framework has translations built in, with nothing extra to install, the text comes from the message `board.title`. The server sets its color, blue, as the CSS variable `--accent`, which the stylesheet reads (Nuxt's stylesheet reads the server's value with Vue's `v-bind()` instead). This is unrelated to the card's `accent` tone | m15, m43, m57 |
 | Subtitle | `Owned by Ada` under the heading. Where translations are built in, it comes from a message that takes the owner's name as an argument | m46 |
-| Board wrapper | A `<div class="board" title="Board">` around everything below. The stylesheet makes `.board` text `rgb(0, 128, 0)` | m10, m11, m16 |
-| Avatar | An `<img>` of the owner from the app's static files, `avatar.svg`, with the alt text `Ada` | m48 |
-| Owner | `Owner: Ada`, read in the template from a server object `owner` with a `name` attribute | m07, m08 |
+| Board wrapper | A `<div class="board" id="board" title="Board">` around everything below. The stylesheet makes `.board` text `rgb(0, 128, 0)` | m10, m11, m16, m56, m57 |
+| Avatar | An `<img>` of the owner from the app's static files, `avatar.svg`, with the alt text `Ada` | m48, m53 |
+| Owner | `Owner: Ada`, read in the template from a server object `owner` with a `name` attribute | m07, m08, m52 |
+| Project count | `Projects: 3`, counted in the template with the template language's length filter or helper (`projects.length` in JavaScript) | m59 |
 | Public setting | `API: /api`. The server passes the public value `/api` to browser-side code, which renders it. The server also holds `SECRET_TOKEN = "s3cr3t"`, which never reaches the browser | m12, m40, m41, m42 |
-| Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks` | m01 to m04, m17, m22, m23, m47 |
+| Cards | Three cards from server data: Alpha 3, Beta 5, Gamma 8. Each is rendered by a reusable `Card` with a required string input `title` and a required number input `count`, and shows `Alpha: 3 tasks`. Where the framework matches list items by key when it updates the list in place, each card has a key made from its project | m01 to m04, m17, m22, m23, m47, m51, m58 |
 | Card tone | The card takes an input `tone` with the choices `plain` and `accent`. The server data marks Alpha as featured, the page passes `accent` for a featured project and `plain` for the others, and the stylesheet gives an accent card a blue border | m49 |
 | Card footer | The page fills the card's `footer` slot (or block, or child region) with a link `Open Alpha (3)` to `#alpha`. The card hands its `title` and `count` back to the fill, which builds the link text from them | m05, m35, m36, m37 |
-| Card hide | Each card has a `Hide` button. It tells the page through an event or callback named `hide`, and the page then hides that card | m24, m29, m30 |
+| Card hide | Each card has a `Hide` button. It tells the page through an event or callback named `hide`, and the page then hides that card | m24, m29, m30, m60 |
 | Counter | `Saved: 0` and an `Add` button. Add sends `{amount: 1}` to a server handler, route or action named `save`. The server adds `amount` to a value kept in a state field named `count`, and the page then shows `Saved: 1` | m06, m13, m18, m32, m33, m34, m38, m39 |
-| Details | A `Details` button toggles browser-side state named `open` and reports it through `aria-expanded`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31 |
+| Details | A `Details` button toggles browser-side state named `open` and reports it through `aria-expanded`. While open, the text `Details are visible` shows | m14, m19, m20, m21, m31, m54, m55 |
 | Status | Inside Details, a browser-side `Status` component with a required boolean input `open` shows `Status: open` or `Status: closed`. Its `Close` button tells Details to close through an event or callback named `close` | m25 to m28 |
-| Search form | `<form role="search">` with a search field named `q` and `<button type="submit">Search</button>`. A line `Searching for: ...` repeats what is typed, and submitting `alpha` shows `Searched: alpha` | m09, m44 |
-| Links | An `About` link to the route `about` at `/about`, whose page reads `About this board`, and a `Project 1` link to `/projects/1`, whose page reads `Project 1` | m45 |
+| Search form | `<form role="search">` with a search field named `q` and `<button type="submit">Search</button>`. A line `Searching for: ...` repeats what is typed, and submitting `alpha` shows `Searched: alpha` | m09, m44, m62, m63 |
+| Links | An `About` link to the route `about` at `/about`, whose page reads `About this board`, and a `Project 1` link to `/projects/1`, whose page reads `Project 1`. The project route takes a numeric id, declared as a number where the router can | m45, m61 |
 
 Each card's footer link names its own project.
 

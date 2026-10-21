@@ -1,0 +1,14 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'cls="cards",' }
+
+[[edits]]
+file = 'main.py'
+old = '''
+        cls="board",
+        id="board",
+'''
+new = '''
+        cls="cards",
+        cls="board",
+        id="board",
+'''

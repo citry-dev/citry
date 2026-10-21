@@ -16,11 +16,12 @@ export default async function Home({ searchParams }: PageProps<"/">) {
   // The search form submits back to this page with its text in `q`.
   const { q } = await searchParams;
   return (
-    <div className="board" title="Board" style={{ "--accent": ACCENT } as CSSProperties}>
+    <div className="board" id="board" title="Board" style={{ "--accent": ACCENT } as CSSProperties}>
       <h1>Projects</h1>
       <p>Owned by {owner.name}</p>
       <Image src="/avatar.svg" alt={owner.name} width={32} height={32} />
       <p>Owner: {owner.name}</p>
+      <p>Projects: {projects.length}</p>
       <Board apiBase={API_BASE} projects={projects} initialSaved={state.count} />
       <Search />
       {q && <p>Searched: {q}</p>}

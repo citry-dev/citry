@@ -3,5 +3,5 @@ mistake = { file = "templates/index.html", contains = "titel=\"Board\"" }
 
 [[edits]]
 file = "templates/index.html"
-old = '<div class="board" title="Board">'
-new = '<div class="board" titel="Board">'
+old = '<div class="board" id="board" title="Board">'
+new = '<div class="board" id="board" titel="Board">'

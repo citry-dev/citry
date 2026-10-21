@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'html.h1({"id": "board"}, "Projects")' }
+
+[[edits]]
+file = 'main.py'
+old = 'html.h1("Projects"),'
+new = 'html.h1({"id": "board"}, "Projects"),'

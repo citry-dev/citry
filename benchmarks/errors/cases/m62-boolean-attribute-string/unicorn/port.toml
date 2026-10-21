@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/templates/unicorn/search.html', contains = 'disabled="false"' }
+
+[[edits]]
+file = 'board/templates/unicorn/search.html'
+old = '<button type="submit">Search</button>'
+new = '<button type="submit" disabled="false">Search</button>'

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'main.py', contains = 'P("Owner: ", Div(' }
+
+[[edits]]
+file = 'main.py'
+old = 'P(f"Owner: {owner.name}")'
+new = 'P("Owner: ", Div(owner.name))'

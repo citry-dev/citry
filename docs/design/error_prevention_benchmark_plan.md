@@ -16,9 +16,10 @@ mistakes, and then PR 4's page changes and cases. PR 10 has added
 django-unicorn the same way, with PR 4's page changes and a case for
 each of the 49 mistakes in the catalogue after PR 4. A later PR (the
 stricter-settings PR) applied the decision on stricter settings to the frameworks measured before PR 6
-(section 8). The other PRs in section 8 are planned. The published
-results include 1b, PR 2, PR 3, PR 9, PR 6, PR 4, PR 8, PR 10 and the
-stricter settings. The benchmark itself is described in
+(section 8). PR 5 then added part 3's 13 mistakes (m51 to m63) to all
+ten frameworks, with Ref H. The other PRs in section 8 are planned.
+The published results include 1b, PR 2, PR 3, PR 9, PR 6, PR 4, PR 8,
+PR 10, the stricter settings and PR 5. The benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
 
@@ -693,6 +694,20 @@ misspelled links (typed routes are off by default everywhere; the
 benchmark turns them on in Next.js and Nuxt), secrets sent to the browser
 on purpose, and CSS class and variable names.
 
+**Measured in PR 5.** Citry reports a duplicate attribute (m56), a loop
+over a number (m58), an unknown helper (m59) and an invalid
+`aria-expanded` value (m55, through TypeScript's types for a bound
+attribute) before the app runs. It does not catch the two-way binding:
+the page uses Vue's `v-model` for the search text, and
+`browser.invalid-state-binding-target` checks only `:c-*` bindings, so
+m63 shows only as a page that fails to render, with an internal message.
+A missing list key (m51) and a `<div>` inside a `<p>` (m52) also show
+only when the page renders. Nothing in Citry reports a missing alt text
+(m53), a misspelled ARIA name (m54), a repeated id (m57), a handler that
+takes more arguments than the event sends (m60) or `disabled="false"`
+(m62), and a link with a non-numeric project id (m61) shows only as a
+404.
+
 ---
 
 ## 5. Part 3: new mistakes from that survey
@@ -718,7 +733,7 @@ value).
 | m60-handler-arguments | Handler declares arguments the event does not send | H6 | Reflex `EventFnArgMismatchError`, TypeScript | none |
 | m61-route-param-type | Link passes a route parameter of the wrong type | H13 | FastHTML 404, typed routers | Ref E |
 | m62-boolean-attribute-string | Boolean attribute given the text "false" | H11 | TypeScript in JSX, Reflex prop types | none |
-| m63-binding-on-non-input | Two-way binding on an element with no value | H16 | Vue `X_V_MODEL_ON_INVALID_ELEMENT`, `vue/valid-v-model`; Citry `browser.invalid-state-binding-target` | Ref D |
+| m63-binding-on-non-input | Two-way binding on an element with no value | H16 | Vue `X_V_MODEL_ON_INVALID_ELEMENT`, `vue/valid-v-model`; Citry `browser.invalid-state-binding-target` for `:c-*` bindings only (PR 5 found that it does not check `v-model`) | Ref D |
 
 ```toml
 [[mistake]]
@@ -828,7 +843,10 @@ correct = "Typing in the search field updates the text `Searching for: ...`."
 
 m59 needs a small new line on every baseline (Ref H), made in PR 5. m63
 needs the search input from Ref D; m62 uses the search button that already
-exists.
+exists. m57 gives the heading the id the board wrapper has, so PR 5 also
+gave the wrapper `id="board"` in every baseline. The catalogue entries
+differ from these drafts in wording only; commit ab3aa54ae, which added
+them, lists each change.
 
 ### Origin balance after both parts
 
@@ -1054,7 +1072,7 @@ change per baseline, plus re-checking the clean page.
 | 2. Hand-offs on the current page (done) | m29-m35, m38-m42, m47 (13 mistakes; part 2 mistakes that need no page change) | 78 (13 x 6), minus the cells that do not apply | ~12 min | ~34 min |
 | 3. Browser components and slot data (done; the run changed one existing cell, Citry m14, from runtime error to missed, because the details panel now passes `open` to `Status`) | Ref A and B in all six baselines, then m25-m28, m36, m37, m49 (7 mistakes) | 42 + 12 baseline changes | ~7 min | ~41 min |
 | 4. Forms, links, assets, CSS variables, i18n arguments (done, after PRs 9 and 6, so it covers eight frameworks; the run changed no existing cell) | Ref C, D, E, F, then m43, m44, m45, m46, m48 (5 mistakes) | 40 written + 8 baseline changes | ~10 min measured: the three new journeys add page loads to every case | ~20 min for eight frameworks, measured |
-| 5. Other frameworks' checks (part 3) | Ref H, then m51-m63 (13 mistakes); m53-m55, m61 and m63 depend on PRs 3 and 4 | 130 + 10 baseline changes, now that there are ten frameworks | ~12 min, estimated for six frameworks before the journeys PR 4 added | ~58 min, estimated before PR 4; PR 10 measured ~25 min for ten frameworks |
+| 5. Other frameworks' checks (part 3) (done, after PR 10 and the stricter settings, so it covers ten frameworks) | Ref H and the board wrapper's id, then m51-m63 (13 mistakes); m53-m55, m61 and m63 use parts from PRs 3 and 4 | 130 written (9 of them n/a) + 10 baseline changes | ~6 min: the full run grew from about 25 to about 31 minutes (estimate ~12 min for six frameworks, before the journeys PR 4 added) | ~31 min for ten frameworks, measured; the run changed no existing cell |
 | 6. django-components (done, after PR 9 and before PRs 4 and 5) | framework, baseline, one case per mistake. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); they ran on their own in about 95 seconds with `--jobs 5` | 44 written (estimate ~62) | ~1.5 min measured (estimate ~8 min) | ~10 min for eight frameworks, measured |
 | 7. Reflex | framework, baseline, `reflex compile --dry` check stage; measure one case's runtime first | ~62 | unknown: 30-95 min if every case builds the frontend | see open question 4 |
 | 8. ReactPy (done, after PR 4 and before PR 5; the run changed no existing cell) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 2 minutes with `--jobs 5` | 49 written (estimate ~62) | ~2 min measured (estimate ~6 min) | ~22 min for nine frameworks, measured |

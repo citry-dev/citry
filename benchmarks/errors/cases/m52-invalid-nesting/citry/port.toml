@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/components/board_page.py', contains = 'Owner: <div>' }
+
+[[edits]]
+file = 'app/components/board_page.py'
+old = '<p>Owner: {{ owner.name }}</p>'
+new = '<p>Owner: <div>{{ owner.name }}</div></p>'

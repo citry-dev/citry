@@ -17,7 +17,9 @@ class BoardPage(Component):
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots):
-        return {"owner": kwargs.owner, "projects": kwargs.projects}
+        # Python's builtins are not available in a template, so the page
+        # passes `len` for the line that counts the projects, as Citry's docs show.
+        return {"owner": kwargs.owner, "projects": kwargs.projects, "len": len}
 
     def js_data(self, kwargs: Kwargs, slots: Slots):
         # Only the public API base goes to the browser.
@@ -38,7 +40,7 @@ class BoardPage(Component):
         <body>
           <h1>{{ tr("board-title") }}</h1>
           <p>{{ tr("board-subtitle", name=owner.name) }}</p>
-          <div class="board" title="Board">
+          <div class="board" id="board" title="Board">
             <img
               src="/static/avatar.svg"
               c-alt="owner.name"
@@ -46,6 +48,7 @@ class BoardPage(Component):
               height="32"
             />
             <p>Owner: {{ owner.name }}</p>
+            <p>Projects: {{ len(projects) }}</p>
             <p>API: <span v-text="apiBase"></span></p>
             <div class="cards">
               <c-for each="project in projects">

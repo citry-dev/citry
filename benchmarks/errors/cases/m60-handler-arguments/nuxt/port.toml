@@ -1,0 +1,18 @@
+status = "ported"
+mistake = { file = 'app/pages/index.vue', contains = 'function hide(title: string, reason: string)' }
+
+[indirect]
+reason = "The page's listener calls `hide(card.title)` in the template, so vue-tsc reports the missing `reason` argument at that call, not at the changed function signature in the script."
+codes = ["TS2554"]
+
+[[edits]]
+file = 'app/pages/index.vue'
+old = '''
+function hide(title: string) {
+  hidden.value.push(title)
+'''
+new = '''
+function hide(title: string, reason: string) {
+  console.info(`Hid ${title}: ${reason}`)
+  hidden.value.push(title)
+'''

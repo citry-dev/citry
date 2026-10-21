@@ -3,5 +3,5 @@ mistake = { file = "main.py", contains = '"titel": "Board"' }
 
 [[edits]]
 file = "main.py"
-old = '{"class_name": "board", "title": "Board"}'
-new = '{"class_name": "board", "titel": "Board"}'
+old = '{"class_name": "board", "id": "board", "title": "Board"}'
+new = '{"class_name": "board", "id": "board", "titel": "Board"}'

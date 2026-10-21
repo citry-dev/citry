@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'app/components/search.py', contains = 'disabled="false"' }
+
+[[edits]]
+file = 'app/components/search.py'
+old = '<button type="submit">Search</button>'
+new = '<button type="submit" disabled="false">Search</button>'
