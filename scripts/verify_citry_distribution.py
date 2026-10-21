@@ -42,11 +42,13 @@ SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
 # are relative to the `citry` package directory.
 SDIST_ONLY_SOURCES: Final = frozenset({"_vue/client.js", "_vue/events.js", "_vue/fragments.js", "_vue/vue.js"})
 # The package carries the bundled browser runtime, the i18n Vue plugin, and the
-# reusable browser programs in `_vue/leaf_program.py`, and the template
-# checks with their generated HTML and ARIA tables. The wheel measured
-# 1,251,430 bytes when this cap was raised for the #207 checks, leaving
-# about 100 KB of headroom for the rest of that work.
-MAX_WHEEL_BYTES: Final = 1_320 * 1024
+# reusable browser programs in `_vue/leaf_program.py`, the template checks
+# with their generated HTML and ARIA tables, the CSS checks, and the
+# development-mode browser check (`_vue/dev_checks.js`). The wheel measured
+# 1,360,663 bytes when the last #207 batch raised this cap, which leaves
+# about 15 KB of headroom, so the next sizeable addition raises it again
+# on purpose.
+MAX_WHEEL_BYTES: Final = 1_344 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
     'playwright>=1.62.0; extra == "ext-preview"',
