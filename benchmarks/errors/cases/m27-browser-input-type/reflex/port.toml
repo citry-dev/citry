@@ -1,0 +1,9 @@
+# Reflex converts a var to text with `.to(str)`, its counterpart of
+# `String(open)`.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'DetailsState.open.to(str)' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'status(open=DetailsState.open,'
+new = 'status(open=DetailsState.open.to(str),'

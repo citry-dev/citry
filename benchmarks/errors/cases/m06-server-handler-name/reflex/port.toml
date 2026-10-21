@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'CounterState.sav(1)' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'on_click=CounterState.save(1)'
+new = 'on_click=CounterState.sav(1)'

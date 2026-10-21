@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = '"acent"' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.cond(project.featured, "accent", "plain")'
+new = 'rx.cond(project.featured, "acent", "plain")'

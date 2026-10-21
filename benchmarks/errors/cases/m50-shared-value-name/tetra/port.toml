@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/components/default.py", contains = "{{ bord_name }}" }
+
+[[edits]]
+file = "board/components/default.py"
+old = "<p>Board: {{ board_name }}</p>"
+new = "<p>Board: {{ bord_name }}</p>"

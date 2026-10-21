@@ -1,0 +1,14 @@
+# Reflex writes an element's attributes as keyword arguments, so the class
+# written twice is a keyword given twice.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'class_name="cards",' }
+
+[[edits]]
+file = 'board/board.py'
+old = '''
+            class_name="board",
+'''
+new = '''
+            class_name="cards",
+            class_name="board",
+'''

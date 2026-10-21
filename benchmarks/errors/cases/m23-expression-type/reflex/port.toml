@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/card.py', contains = 'title + 1' }
+
+[[edits]]
+file = 'board/card.py'
+old = 'rx.text(title, ": ", count, " tasks"),'
+new = 'rx.text(title + 1, ": ", count, " tasks"),'

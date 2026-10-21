@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'href="/abuot"' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.link("About", href="/about")'
+new = 'rx.link("About", href="/abuot")'

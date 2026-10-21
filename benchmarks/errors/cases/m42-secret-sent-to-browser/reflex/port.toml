@@ -1,0 +1,9 @@
+# The secret becomes an ordinary state field, which Reflex sends to the
+# browser with the rest of the state, although no component reads it.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'secret_token: rx.Field[str] = rx.field("s3cr3t")' }
+
+[[edits]]
+file = 'board/board.py'
+old = '_secret_token: str = "s3cr3t"'
+new = 'secret_token: rx.Field[str] = rx.field("s3cr3t")'

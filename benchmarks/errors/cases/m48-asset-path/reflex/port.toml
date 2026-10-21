@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'src="/avtar.svg"' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'src="/avatar.svg"'
+new = 'src="/avtar.svg"'

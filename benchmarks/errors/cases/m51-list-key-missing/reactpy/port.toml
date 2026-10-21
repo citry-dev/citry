@@ -1,13 +1,13 @@
 status = "ported"
-mistake = { file = 'main.py', contains = '                    Card(' }
+mistake = { file = 'main.py', contains = '                        Card(' }
 
 [[edits]]
 file = 'main.py'
 old = '''
-                        on_hide=make_hide(project.title),
-                        # A key keeps each card matched to its project when an earlier one is hidden.
-                        key=project.title,
+                            on_hide=make_hide(project.title),
+                            # A key keeps each card matched to its project when an earlier one is hidden.
+                            key=project.title,
 '''
 new = '''
-                        on_hide=make_hide(project.title),
+                            on_hide=make_hide(project.title),
 '''

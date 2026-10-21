@@ -1,0 +1,11 @@
+h1 {
+  color: var(--accent);
+}
+
+.board {
+  color: rgb(0, 128, 0);
+}
+
+.card--accent {
+  border: 2px solid rgb(0, 0, 255);
+}

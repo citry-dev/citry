@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from typing import TYPE_CHECKING, Any
 
 import pytest
-import tomllib
 from citry_errors import runtime
 from citry_errors.compare import comparable, compare, problems
 from citry_errors.config import (
@@ -123,7 +123,8 @@ def test_every_framework_in_the_benchmark_has_a_default_journey() -> None:
 
 
 # One element as the page record stores it: tag, title, button type, color,
-# display, visibility, border color, alt, id, aria-* pairs, disabled.
+# display, visibility, border color, alt, id, aria-* pairs, disabled, and
+# for an image whether it loaded.
 BUTTON: list[Any] = [
     "BUTTON",
     None,
@@ -136,6 +137,7 @@ BUTTON: list[Any] = [
     "details",
     [["aria-expanded", "false"]],
     False,
+    None,
 ]
 
 
@@ -158,6 +160,44 @@ def test_a_page_that_differs_only_in_one_recorded_attribute_is_silently_wrong(in
     case = Observation(snapshot={"text": "Details", "elements": [changed]})
     assert compare(clean, case).output_differs
     assert compare(clean, Observation(snapshot={"text": "Details", "elements": [list(BUTTON)]})) == RuntimeResult()
+
+
+def test_an_image_that_did_not_load_makes_the_page_differ() -> None:
+    # The avatar of the clean page loaded; the case's page answered its path with a page instead.
+    image: list[Any] = [
+        "IMG",
+        None,
+        None,
+        "rgb(0, 0, 0)",
+        "inline",
+        "visible",
+        "rgb(0, 0, 0)",
+        "Ada",
+        None,
+        [],
+        False,
+        True,
+    ]
+    broken = [*image[:11], False]
+    clean = Observation(snapshot={"text": "", "elements": [image]})
+    assert compare(clean, Observation(snapshot={"text": "", "elements": [broken]})).output_differs
+
+
+def test_an_image_the_browser_never_requests_ends_the_wait_at_its_limit() -> None:
+    """A lazy image out of view never loads; the record still returns, with the image not loaded."""
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    gif = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+    html = f'<img alt="Ada" loading="lazy" style="display: none" src="{gif}">'
+    with playwright_api.sync_playwright() as playwright:
+        try:
+            browser = playwright.chromium.launch()
+        except playwright_api.Error as error:
+            pytest.skip(f"Chromium is not installed: {error}")
+        page = browser.new_page()
+        page.set_content(html)
+        [image] = page.evaluate(runtime._SNAPSHOT, 50)["elements"]
+        browser.close()
+    assert image[runtime._LOADED] is False
 
 
 def _with(index: int, value: Any) -> dict:
@@ -251,7 +291,7 @@ class _FakePage:
     def wait_for_load_state(self, state: str, **_options: object) -> None:
         self._log(state)
 
-    def evaluate(self, _script: str) -> dict:
+    def evaluate(self, _script: str, _argument: object = None) -> dict:
         self._log("record")
         return {"text": str(len(self.calls)), "elements": []}
 
@@ -333,7 +373,8 @@ def test_the_page_record_holds_the_columns_the_comparison_reads() -> None:
     playwright_api = pytest.importorskip("playwright.sync_api")
     html = """
       <div id="board" style="border: 1px solid rgb(0, 0, 255)">Board</div>
-      <img alt="Ada" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
+      <img alt="Ada" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+      <img alt="Missing" src="data:image/gif;base64,bm90IGFuIGltYWdl">
       <button aria-expanded="false" aria-controls="details" disabled="false">Search</button>
     """
     with playwright_api.sync_playwright() as playwright:
@@ -343,7 +384,7 @@ def test_the_page_record_holds_the_columns_the_comparison_reads() -> None:
             pytest.skip(f"Chromium is not installed: {error}")
         page = browser.new_page()
         page.set_content(html)
-        board, image, button = page.evaluate(runtime._SNAPSHOT)["elements"]
+        board, image, broken, button = page.evaluate(runtime._SNAPSHOT, runtime._IMAGE_WAIT_MS)["elements"]
         browser.close()
     assert board[0] == "DIV"
     assert board[6] == "rgb(0, 0, 255)"
@@ -353,3 +394,31 @@ def test_the_page_record_holds_the_columns_the_comparison_reads() -> None:
     assert button[runtime._ARIA] == [["aria-controls", "details"], ["aria-expanded", "false"]]
     # `disabled="false"` disables the button, as it does for the user.
     assert button[10] is True
+    # An image records whether it loaded; a file the browser cannot decode
+    # loads as a broken image, as a misspelled path that the server answers
+    # with a page does. Other elements record nothing there.
+    assert (image[runtime._LOADED], broken[runtime._LOADED], button[runtime._LOADED]) == (True, False, None)
+
+
+def test_an_image_still_loading_is_waited_for_before_the_page_is_recorded(tmp_path: Path) -> None:
+    """An image whose file arrives after the page went quiet still records as loaded, not as broken."""
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    gif = bytes.fromhex("47494638396101000100800000000000ffffff21f90401000000002c000000000100010000020144003b")
+    with playwright_api.sync_playwright() as playwright:
+        try:
+            browser = playwright.chromium.launch()
+        except playwright_api.Error as error:
+            pytest.skip(f"Chromium is not installed: {error}")
+        page = browser.new_page()
+        # The image's response is held back for half a second, well inside the wait.
+        page.route(
+            "**/slow.gif",
+            lambda route: (page.wait_for_timeout(500), route.fulfill(body=gif, content_type="image/gif")),
+        )
+        page.route(
+            "**/page", lambda route: route.fulfill(body='<img alt="Ada" src="/slow.gif">', content_type="text/html")
+        )
+        page.goto("http://example.test/page", wait_until="domcontentloaded")
+        [image] = page.evaluate(runtime._SNAPSHOT, runtime._IMAGE_WAIT_MS)["elements"]
+        browser.close()
+    assert image[runtime._LOADED] is True

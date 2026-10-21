@@ -1,5 +1,6 @@
 <div class="card card--{{ tone }}">
   <h2>{{ title }}: {{ count }} tasks</h2>
+  <p>Board: {{ board_name }}</p>
   <button type="button" @click="$dispatch('hide')">Hide</button>
   <div class="card-footer"><a href="#{{ title|lower }}">Open {{ title }} ({{ count }})</a></div>
 </div>

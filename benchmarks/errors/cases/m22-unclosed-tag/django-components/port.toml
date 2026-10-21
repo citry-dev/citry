@@ -1,6 +1,10 @@
 status = "ported"
 mistake = { file = "components/card/card.html", contains = 'class="card-footer"' }
 
+[indirect]
+reason = "The unclosed footer div takes the card's closing `</div>`, so djLint reports the card's outer `<div>` as the tag left without a match, four lines above the footer."
+codes = ["H025"]
+
 [[edits]]
 file = "components/card/card.html"
 old = '<div class="card-footer">{% slot "footer" required title=title count=count %}{% endslot %}</div>'

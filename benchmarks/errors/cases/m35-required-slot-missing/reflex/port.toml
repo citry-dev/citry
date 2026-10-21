@@ -1,0 +1,10 @@
+# The page leaves out the card's `footer` argument.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'return card(' }
+
+[[edits]]
+file = 'board/board.py'
+old = '''
+        footer=lambda title, count: rx.link(f"Open {title} ({count})", href="#" + title.to(str).lower()),
+'''
+new = ''

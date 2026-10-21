@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'aria_expandd=' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'aria_expanded=DetailsState.open'
+new = 'aria_expandd=DetailsState.open'

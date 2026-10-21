@@ -1,0 +1,10 @@
+# Reflex writes the page's markup as Python, so the condition that shows the
+# details text is a Python expression; here it ends with a dangling `&`, the
+# operator Reflex uses for `and` on vars.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'DetailsState.open &,' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.cond(DetailsState.open, rx.text("Details are visible")),'
+new = 'rx.cond(DetailsState.open &, rx.text("Details are visible")),'
