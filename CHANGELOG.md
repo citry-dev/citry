@@ -99,6 +99,12 @@
 - The render error for a component that `<c-for>` repeats without
   `#c-key`, or with a duplicate one, now names the tag, its template, and
   the line.
+- A form submitted through `@c-submit` now gives the handler the same
+  values as the same form posted without JavaScript: text such as `"3"`
+  fills an `int` or `float` field, and a checked checkbox fills a `bool`
+  field. Number and range inputs now send their text, so a handler that
+  reads `event.args` directly gets `"3"` instead of `3`. An unchecked
+  checkbox sends nothing, so give a `bool` field a default of `False`.
 
 ### Fixes
 

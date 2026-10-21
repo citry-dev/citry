@@ -77,13 +77,29 @@ the fields of `ContactIn`. Citry checks each value against its type before
 the handler runs. A value of the wrong type fails the call with an error for
 that field, and `submit` does not run.
 
-Number and range inputs send numbers. Every other input sends text, so
-declare its field as `str` and convert it in the handler. A checked checkbox
-sends `"on"`, which a `bool` field rejects.
-
 The form's fields are sent only when the binding names the handler alone,
 as in `submit` or `submit()`. Arguments you write, as in
 `submit({draft: true})`, are sent instead of the fields.
+
+### Form field types
+
+Every control sends its text, and Citry converts the text to the field's
+type the same way whether or not JavaScript has loaded:
+
+| Control | Text sent | Declare the field as |
+|---|---|---|
+| `<input type="number">`, `<input type="range">` | `"3"` or `"2.5"` | `int` or `float` |
+| A checked checkbox without a `value` | `"on"` | `bool = False` |
+| An unchecked checkbox | nothing | `bool = False` |
+| Other inputs, `<select>`, `<textarea>` | the text | `str` |
+
+An unchecked checkbox sends nothing at all, so give a `bool` field a default
+of `False`, or a form with the box unchecked fails because the field is
+missing.
+
+An empty input sends empty text, which an `int`, `float`, or `bool` field
+rejects. Add `required` to the input, or declare the field as `str` and
+convert it in the handler.
 
 ## `EventError` field errors
 

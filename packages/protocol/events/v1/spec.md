@@ -160,6 +160,7 @@ interface EventCall {
   handlerName: string;
   callerRenderId?: string;
   args: JsonObject;
+  argsSource?: "form";
   stateToken?: string;
   stateUpdates?: JsonObject;
   sendSequence?: number;
@@ -405,6 +406,7 @@ Each call contains:
 | `handlerName` | Required non-empty string. | Names the public event handler. |
 | `callerRenderId` | Optional string matching `^[a-z0-9_-]+$`. | Identifies the rendered component occurrence that sent the call. |
 | `args` | Required object. | Open application data passed to the handler. An empty call uses `{}`. |
+| `argsSource` | Optional; exactly `form`. | Says the browser collected `args` from a form, so the values are text. See [Arguments collected from a form](#arguments-collected-from-a-form). |
 | `stateToken` | Optional non-empty string. | The caller's opaque signed State token. |
 | `stateUpdates` | Optional object. | Open application data containing browser-writable State changes to apply before the handler. |
 | `sendSequence` | Optional integer at least 0. | The increasing send counter for the browser's stable record of this caller. |
@@ -418,6 +420,51 @@ The server verifies `stateToken`, applies `stateUpdates` only to fields the
 State contract makes browser-writable, validates `args`, and then invokes the
 handler. Authentication, cookies, CSRF headers, and transport credentials do
 not ride inside the envelope.
+
+### Arguments collected from a form
+
+A form can reach the same handler two ways. Without JavaScript, the browser
+posts the form's fields itself, and every value arrives as text. With
+JavaScript, the browser reads the same fields and sends them in a call. If
+the server read that call's `"3"` as a string while it read the no-JavaScript
+post's `"3"` as a number, an `int` field would work in one case and fail in
+the other.
+
+So when the browser builds `args` from a form's named controls, it sends
+every value as text, exactly as the form holds it, and marks the call:
+
+```json
+{
+  "componentClassId": "Search_a1b2c3",
+  "handlerName": "search",
+  "args": {"q": "shoes", "page": "3"},
+  "argsSource": "form"
+}
+```
+
+The server then binds the text by the rules it uses for a form posted
+without JavaScript: `"3"` fills an `int` field, `"2.5"` a `float` field, and
+`"on"`, `"true"`, `"1"`, `"false"`, or `"0"` a `bool` field. Both paths then
+give the handler the same values. A name that appears more than once stays a
+list of strings, and the browser leaves out file inputs, because a call
+carries only JSON.
+
+A call without `argsSource` carries JSON values, and the server checks them
+strictly: a string where the handler declares `int` is an `invalid_args`
+error. This is what page code, API clients, and older browser code send.
+
+The mark changes only how `args` bind. It does not change which fields the
+handler accepts or loosen any other check. Its error cases are:
+
+- An `argsSource` that is any other string, such as `"json"`, or that is not
+  a string at all, rejects the call as `protocol_mismatch` before any handler
+  runs, like any other malformed call field.
+- A marked value the handler's field cannot read, such as `"x"` for an `int`
+  field or `"yes"` for a `bool` field, is an `invalid_args` error for that
+  field.
+- A mark on a call whose `args` hold non-text JSON values is still a valid
+  call. The numbers, booleans, and nested values bind by the ordinary JSON
+  rules; only text values gain the conversion.
 
 ### Send order
 
@@ -1037,7 +1084,8 @@ class Counter(Component):
 
 The examples use `increment` for rendering and capability downgrade,
 `rename` for event and data actions plus a State refresh, `crash` for an
-unexpected handler failure, `square` for stateless data over GET, `history`
+unexpected handler failure, `square` for stateless data over GET and for
+form text that binds to an `int` field, `history`
 for the two URL modes, and `fail` for deliberate application errors.
 
 ## Conformance

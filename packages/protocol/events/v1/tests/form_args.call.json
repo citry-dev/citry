@@ -1,0 +1,14 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_form_args",
+  "calls": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": "7"
+      },
+      "argsSource": "form"
+    }
+  ]
+}

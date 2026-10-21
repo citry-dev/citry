@@ -30,11 +30,15 @@ export interface EventsCapabilities {
 	renderers?: EventRenderer[];
 }
 
+/** Where a call's `args` came from; absent means JSON values checked strictly. */
+export type EventArgsSource = "form";
+
 export interface EventCall {
 	componentClassId: string;
 	handlerName: string;
 	callerRenderId?: string;
 	args: JsonObject;
+	argsSource?: EventArgsSource;
 	stateToken?: string;
 	stateUpdates?: JsonObject;
 	sendSequence?: number;

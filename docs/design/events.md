@@ -1081,7 +1081,10 @@ query strings carry only strings, so for those codecs (6.2) the binding
 is source-aware, and strings additionally bind to declared `int` /
 `float` / `bool` fields (`"5"` binds to `int`; boolean spellings accept
 the HTML form vocabulary: `"true"` / `"false"` / `"1"` / `"0"` / `"on"`;
-anything else is the per-field 422). File fields are declared
+anything else is the per-field 422). A form the runtime submits gets the
+same rule: the browser sends the form's text in a JSON call marked
+`argsSource: "form"` (4.2, 5.1), and the dispatcher binds it like a
+no-JS form post. File fields are declared
 as `UploadedFile` (or `list[UploadedFile]`) on the schema and arrive via
 the multipart codec (6.2).
 
@@ -1611,6 +1614,14 @@ is opaque, minted and verified by the same binding.
   no-JS HTTP path is the one exception: a targetless render becomes the
   whole HTML response body, so it needs no client-side target.
 - `args`: a required JSON object, named keys only. Validated server-side.
+- `argsSource`: present, with the only value `"form"`, when the runtime
+  read `args` from a form's named controls (5.1). The values are then the
+  form's text, and the server binds them by the string-transport rule of
+  3.3, exactly as for a no-JS form post, so a form gives the handler the
+  same values with or without JavaScript. Absent means the args are JSON
+  values checked strictly; this is what `$sendEvent`, API clients, and
+  arguments written in a binding send. Any other value or type rejects
+  the call as `protocol_mismatch`.
 - `stateToken`: the opaque state token, echoed verbatim. Absent for stateless
   handlers.
 - `stateUpdates`: two-way binding updates (`_model` State fields, 7.2)
@@ -2375,14 +2386,17 @@ handler, as `@c-submit.prevent="submit"` and `submit()` do, and the event
 comes from a `<form>`, the runtime sends the form's named controls as the
 wire args payload. Arguments written in the binding replace the form's
 fields instead of joining them: `@c-submit.prevent="submit({draft: true})"`
-sends only `{draft: true}`. The browser sends each control's value as a
-string, except that a `number` or `range` input holding a number sends
-that number, and a name with several values, such as several checked
-checkboxes, sends a list of strings. An unchecked checkbox sends nothing,
-and file inputs are left out. The payload is JSON, so it
-is checked strictly; only the urlencoded no-JS codec (6.2) binds strings
-to `int`, `float`, and `bool` fields, so the two paths can deliver
-different values for the same form. Control `name` attributes map to
+sends only `{draft: true}`. The browser sends each control's value as the
+text the form holds, `number` and `range` inputs included, and a name with
+several values, such as several checked checkboxes, sends a list of
+strings. An unchecked checkbox sends nothing, and file inputs are left
+out. Because the browser read the args from a form, it marks the call with
+`argsSource: "form"` (4.2), and the server binds the text by the same
+source-aware rule (3.3) as the urlencoded no-JS codec (6.2): `"3"` fills an
+`int` field and a checked checkbox's `"on"` fills a `bool` field. The JS
+path and the no-JS path therefore deliver the same values for the same
+form. Arguments written in the binding are JSON values, so they carry no
+mark and are checked strictly. Control `name` attributes map to
 schema fields, schema validation produces the 422 `fieldErrors` map for
 the error display, and a failed submit re-renders nothing, so the DOM
 keeps the user's input:
@@ -3955,8 +3969,9 @@ it.
 **The envelope** is the one JSON object a transport hands the dispatcher
 per request: the call envelope of 4.2 (`protocol`, `requestId`, optional
 `capabilities`, and `calls`, where each call carries `componentClassId`,
-`handlerName`, optional `callerRenderId`, `args`, optional `stateToken`,
-optional `stateUpdates`, and optional `sendSequence`). The
+`handlerName`, optional `callerRenderId`, `args`, optional `argsSource`,
+optional `stateToken`, optional `stateUpdates`, and optional
+`sendSequence`). The
 dispatcher returns the matching result envelope of 4.3 (`results[i]`
 answers `calls[i]`). Transports never look inside either; they carry
 bytes.

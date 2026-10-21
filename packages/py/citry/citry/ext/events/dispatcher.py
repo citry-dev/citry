@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from citry._input_types import _restore_json_tuples
 from citry._protocol.events import (
+    ARGS_SOURCE_FORM,
     CAPABILITIES_BASELINE_V1,
     PROTOCOL,
     RENDERERS,
@@ -77,7 +78,7 @@ from citry.ext.events.results import (
     track_constructed_actions,
     warn_unreturned_actions,
 )
-from citry.ext.events.schemas import declared_field_names, validate_args
+from citry.ext.events.schemas import StringArgs, declared_field_names, validate_args
 from citry.ext.events.state import public_state_values
 from citry.ext.events.tokens import (
     InvalidStateError,
@@ -340,7 +341,7 @@ class _CallPlan:
     answered: Any
 
 
-def _without_csrf_fields(args: Mapping[str, Any], data_schema: type | None, names: frozenset[str]) -> Any:
+def _without_csrf_fields(args: dict[str, Any], data_schema: type | None, names: frozenset[str]) -> Any:
     """
     Return the call's args without the host CSRF fields that the data class does not declare.
 
@@ -787,10 +788,17 @@ class EventsDispatcher:
                 _restore_json_tuples(state, info.state_cls)
 
         # Args validation against the handler's data schema (design 3.3, WP9).
+        args = call.get("args") or {}
+        # The browser marks args it collected from a form: their values are
+        # the form's text, so they bind to numbers and booleans exactly as a
+        # no-JS form post does. Without the mark, JSON values stay strict.
+        if call.get("argsSource") == ARGS_SOURCE_FORM:
+            args = StringArgs(args)
         # A form may hold the host's CSRF hidden field, which the browser and
         # a no-JS post both send as one more field; drop it first so the call
-        # is not rejected for a field the data class never asked for.
-        args = _without_csrf_fields(call.get("args") or {}, handler.data_schema, csrf_field_names(ctx.citry))
+        # is not rejected for a field the data class never asked for. The
+        # drop keeps the args' class, so the form conversion above survives.
+        args = _without_csrf_fields(args, handler.data_schema, csrf_field_names(ctx.citry))
         data_value: Any = None
         if handler.data_schema is not None:
             validation = validate_args(handler.data_schema, args)

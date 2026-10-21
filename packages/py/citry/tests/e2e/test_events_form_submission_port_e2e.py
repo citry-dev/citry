@@ -108,6 +108,8 @@ def test_form_submission_port_targets_the_thank_you_fragment_without_htmx(
     assert call["componentClassId"] == contact_form.class_id
     assert call["handlerName"] == "post"
     assert call["args"] == {"name": "John Doe"}
+    # The runtime read these args from the form, so it marks them as form text.
+    assert call["argsSource"] == "form"
 
 
 def test_view_events_native_form_reaches_the_verb_compatibility_route(

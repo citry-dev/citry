@@ -33,10 +33,14 @@ _CALL_FIELDS = (
     "handlerName",
     "callerRenderId",
     "args",
+    "argsSource",
     "stateToken",
     "stateUpdates",
     "sendSequence",
 )
+# The one value of a call's optional `argsSource`: the browser collected the
+# args from a form, so the server binds their text like a no-JS form post.
+ARGS_SOURCE_FORM = "form"
 _RENDER_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789_-")
 
 
@@ -148,6 +152,16 @@ def _validate_call_shape(call: Any, path: str) -> ValidationIssue | None:
             )
     if not isinstance(call["args"], dict):
         return ValidationIssue(pointer(path, "args"), "type", "The call's 'args' must be an object.")
+    if "argsSource" in call:
+        value = call["argsSource"]
+        # An unknown source is a structural error, not strict JSON: guessing
+        # would bind the args by the wrong rules.
+        if value != ARGS_SOURCE_FORM:
+            return ValidationIssue(
+                pointer(path, "argsSource"),
+                "enum" if isinstance(value, str) else "type",
+                f"The call's 'argsSource' must be {ARGS_SOURCE_FORM!r} or omitted.",
+            )
     if "stateToken" in call:
         value = call["stateToken"]
         if not isinstance(value, str) or not value:
@@ -344,6 +358,7 @@ def build_call(
     args: Mapping[str, Any],
     *,
     caller_render_id: str | None = None,
+    args_source: str | None = None,
     state_token: str | None = None,
     state_updates: Mapping[str, Any] | None = None,
     send_sequence: int | None = None,
@@ -354,6 +369,8 @@ def build_call(
         "handlerName": handler_name,
         "args": copy_json(dict(args)),
     }
+    if args_source is not None:
+        call["argsSource"] = args_source
     if caller_render_id is not None:
         call["callerRenderId"] = caller_render_id
     if state_token is not None:

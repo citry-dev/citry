@@ -1738,7 +1738,9 @@ class TestFormAndQueryTypedFields:
     declared ``int`` / ``float`` / ``bool`` fields. A JSON payload stays
     strict (a string where the schema declares ``int`` is a 422 there): JSON
     expresses those types natively, so a mistyped field is a client bug
-    worth surfacing. The full binding matrix lives in
+    worth surfacing. A JSON call the browser collected from a form carries
+    ``argsSource: "form"`` and binds like a form post. The full binding
+    matrix lives in
     test_events_schemas.py; these tests prove the rule end to end over
     the HTTP routes.
     """
@@ -1798,6 +1800,76 @@ class TestFormAndQueryTypedFields:
         error = response.json()["results"][0]["error"]
         assert error["code"] == "invalid_args"
         assert error["fieldErrors"] == {"count": "Expected int, got str."}
+
+    def _signup(self, c):
+        class SignupIn:
+            count: int
+            notify: bool
+
+        class Signup(Component):
+            citry = c
+            template = "<div>s</div>"
+
+            class Events:
+                def join(self, data: SignupIn):
+                    return {"total": data.count + 1, "notify": data.notify}
+
+        return Signup
+
+    def test_a_browser_form_call_binds_text_like_a_no_js_post(self):
+        c = _citry()
+        signup = self._signup(c)
+        client = _mounted(c)
+        fields = {"count": "3", "notify": "on"}
+
+        # The browser sends a form's text with the form mark, and the server
+        # binds "3" to int and a checked checkbox's "on" to bool.
+        response = _post_call(client, signup, "join", {"args": fields, "argsSource": "form"})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"total": 4, "notify": True}}]
+
+        # The same fields posted without JavaScript bind to the same values.
+        response = client.post(_event_url(signup, "join"), data=fields)
+        assert response.status_code == 200
+        assert response.json() == {"total": 4, "notify": True}
+
+        # Text the field cannot read is still that field's 422.
+        response = _post_call(client, signup, "join", {"args": {"count": "x", "notify": "on"}, "argsSource": "form"})
+        assert response.status_code == 422
+        assert response.json()["results"][0]["error"]["fieldErrors"] == {"count": "Not a valid int: 'x'."}
+
+    def test_a_call_without_the_form_mark_stays_strict(self):
+        c = _citry()
+        signup = self._signup(c)
+        client = _mounted(c)
+        response = _post_call(client, signup, "join", {"args": {"count": "3", "notify": "on"}})
+        assert response.status_code == 422
+        error = response.json()["results"][0]["error"]
+        assert error["code"] == "invalid_args"
+        assert error["fieldErrors"] == {"count": "Expected int, got str.", "notify": "Expected bool, got str."}
+
+    @pytest.mark.parametrize("value", ["json", True])
+    def test_an_unknown_args_source_is_a_protocol_mismatch(self, value):
+        c = _citry()
+        signup = self._signup(c)
+        client = _mounted(c)
+        response = _post_call(client, signup, "join", {"args": {"count": "3", "notify": "on"}, "argsSource": value})
+        assert response.status_code == 400
+        error = response.json()["results"][0]["error"]
+        assert error == {
+            "status": 400,
+            "code": "protocol_mismatch",
+            "message": "The call's 'argsSource' must be 'form' or omitted.",
+        }
+
+    def test_the_form_mark_survives_the_csrf_field_drop(self):
+        c = _citry()
+        signup = self._signup(c)
+        client = _mounted(c)
+        args = {"count": "3", "notify": "on", "csrfmiddlewaretoken": "t0k"}
+        response = _post_call(client, signup, "join", {"args": args, "argsSource": "form"})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"total": 4, "notify": True}}]
 
     def test_pasted_get_url_binds_an_int_field(self):
         c = _citry()

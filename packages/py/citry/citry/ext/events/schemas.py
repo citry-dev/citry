@@ -31,7 +31,9 @@ strings cannot express them (every value arrives as a string), so for
 payloads from those codecs strings additionally bind to declared ``int`` /
 ``float`` / ``bool`` fields (``"5"`` binds to ``int``; ``bool`` accepts the
 HTML form vocabulary ``"true"`` / ``"false"`` / ``"1"`` / ``"0"`` / ``"on"``).
-The codecs mark such payloads by building them as
+A form submitted through the browser runtime gets the same rule: the browser
+sends the form's text and marks the call with ``argsSource: "form"``. The
+codecs and the dispatcher mark such payloads by building them as
 [`StringArgs`][citry.ext.events.schemas.StringArgs]; see ``validate_args``.
 
 Deliberately absent: ORM-model-by-primary-key coercion (an argument must
@@ -113,16 +115,18 @@ class ValidationResult:
 
 class StringArgs(dict[str, Any]):
     """
-    An args payload whose values arrived as strings (a form post or a GET
-    query string).
+    An args payload whose values arrived as strings (a form post, a GET
+    query string, or a form the browser runtime collected).
 
     The string transports cannot express numbers or booleans natively, so
     the form and query codecs (``codecs.py``) build the args they decode as
     this class, and [`validate_args`][citry.ext.events.schemas.validate_args]
     then additionally binds strings to declared ``int`` / ``float`` /
-    ``bool`` fields (the source-aware rule of design 3.3). A JSON payload is
-    decoded into plain dicts, so nothing on the wire can produce this class
-    and JSON validation stays strict.
+    ``bool`` fields (the source-aware rule of design 3.3). The dispatcher
+    also builds it for a JSON call marked ``argsSource: "form"``, which the
+    browser sends when it collected the args from a form, so both ways of
+    submitting a form bind the same. Any other JSON payload is decoded into
+    plain dicts, so its validation stays strict.
     """
 
 
@@ -182,7 +186,7 @@ def validate_args(
             design 3.3 (``"5"`` binds to ``int``; ``bool`` accepts exactly
             ``"true"`` / ``"false"`` / ``"1"`` / ``"0"`` / ``"on"``).
             ``None`` (the default) reads the answer off the payload itself:
-            ``True`` when a codec built it as
+            ``True`` when a codec or the dispatcher built it as
             [`StringArgs`][citry.ext.events.schemas.StringArgs], else the
             strict JSON behavior. A Pydantic-model schema is unaffected
             either way: Pydantic applies its own coercion rules.

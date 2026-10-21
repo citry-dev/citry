@@ -10,6 +10,7 @@ import {
   validateDescriptor,
   validateStrictJson,
   type EventAction,
+  type EventArgsSource,
   type EventComponentClass,
   type EventResult,
   type JsonObject,
@@ -132,6 +133,11 @@ export interface VueEventSend {
   source: VueEventSource;
   handler: string;
   args?: JsonObject;
+  /**
+   * `"form"` when the runtime read `args` from a form's controls, so the server binds their text
+   * like a form posted without JavaScript. Page code that writes its own JSON args leaves it out.
+   */
+  argsSource?: EventArgsSource;
   stateUpdates?: JsonObject;
   /** The caller's `opts` as given; `send` checks it and keeps its own copy. */
   options?: unknown;
@@ -656,6 +662,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       handlerName: input.handler,
       callerRenderId: context.serverRenderId,
       args: input.args ?? {},
+      // A GET query leaves the mark out: the server already reads every
+      // query value as text, so only the JSON call needs to say so.
+      argsSource: input.argsSource,
       stateToken: context.stateToken ?? undefined,
       stateUpdates: job.stateUpdates,
       sendSequence: state.sendSequence,

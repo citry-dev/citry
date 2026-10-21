@@ -132,6 +132,40 @@ test("builders preserve __proto__ as data without changing prototypes", () => {
 	assert.equal({}.polluted, undefined);
 });
 
+test("buildCall carries the form mark only when the caller gives it", () => {
+	const marked = protocol.buildCall({
+		componentClassId: "Search",
+		handlerName: "search",
+		args: { page: "3" },
+		argsSource: protocol.ARGS_SOURCE_FORM,
+	});
+	assert.equal(marked.argsSource, "form");
+	assert.equal(protocol.validateCall(marked), null);
+
+	// A call built without the mark has no argsSource key at all, so the
+	// server keeps its strict JSON binding.
+	const plain = protocol.buildCall({
+		componentClassId: "Search",
+		handlerName: "search",
+		args: { page: 3 },
+	});
+	assert.equal(Object.hasOwn(plain, "argsSource"), false);
+
+	assert.throws(
+		() =>
+			protocol.buildCall({
+				componentClassId: "Search",
+				handlerName: "search",
+				args: {},
+				argsSource: "json",
+			}),
+		(error) =>
+			error instanceof protocol.ProtocolValueError &&
+			error.issue.path === "/argsSource" &&
+			error.issue.category === "enum",
+	);
+});
+
 test("exports the transport carrier field names", () => {
 	assert.deepEqual(protocol.CARRIER_FIELDS, {
 		callerRenderId: "_citry_caller_render_id",
