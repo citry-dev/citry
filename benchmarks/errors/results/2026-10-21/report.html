@@ -35,7 +35,7 @@ footer{font-size:12px;color:#526275;margin-top:20px}
 </style></head><body>
 <h1>Error-prevention benchmark</h1>
 <p class="muted">The same 63 developer mistakes, written in each framework where they apply. Each one is counted where it was first reported: an error or a warning before the app runs (editor, check or build), an error or a warning at runtime, or not at all. Earlier is better. Hover or focus a bar part, or a table cell, for its details.</p>
-<p class="notice">Run 20261021T094626Z: cases and tools from commit dd410877ffda, benchmark inputs tree 2a28b0cfbbe7.</p>
+<p class="notice">Run 20261021T155859Z: cases and tools from commit ea5c741ec798, benchmark inputs tree cb3c11d4c206.</p>
 <section class="group"><details open><summary><h2>Outcomes</h2></summary><div class="group-body">
 <article class="chart"><details open><summary><h3>How each mistake ended</h3></summary>
 <p class="description">One bar per framework, covering every mistake. Green: reported before running; orange: at runtime; gray: N/A or prevented; red: missed. The lighter shade of each pair is a warning.</p>
@@ -663,53 +663,44 @@ ruff 0.15.5 (default rules): F821 Undefined name `BordContext`">E</td>
   Attribute &quot;bord_name&quot; is unknown
 reflex compile --dry (Reflex 0.9.10.post2): AttributeError AttributeError: type object &#x27;BoardInfoState&#x27; has no attribute &#x27;bord_name&#x27;. Did you mean: &#x27;board_name&#x27;?
 Happened while evaluating page &#x27;index&#x27;">E</td>
-<td class="cell" style="background: color-mix(in srgb, #f6c177 30%, white)" title="warning: %cssr:warn%c [Vue warn]: injection &quot;bordName&quot; not found. 
-      background: #f39c12;
-      border-radius: 0.5em;
-      color: white;
-      font-weight: bold;
-      padding: 2px 0.5em;
-      at &lt;Card&gt;
-at &lt;Index&gt;
-at &lt;RouteProvider&gt;
-at &lt;RouterView&gt;
-at &lt;NuxtPage&gt;
-at &lt;App&gt;
-at &lt;NuxtRoot&gt;
-warning: %cssr:warn%c [Vue warn]: injection &quot;bordName&quot; not found. 
-      background: #f39c12;
-      border-radius: 0.5em;
-      color: white;
-      font-weight: bold;
-      padding: 2px 0.5em;
-      at &lt;Card&gt;
-at &lt;Index&gt;
-at &lt;RouteProvider&gt;
-at &lt;RouterView&gt;
-at &lt;NuxtPage&gt;
-at &lt;App&gt;
-at &lt;NuxtRoot&gt;
-warning: %cssr:warn%c [Vue warn]: injection &quot;bordName&quot; not found. 
-      background: #f39c12;
-      border-radius: 0.5em;
-      color: white;
-      font-weight: bold;
-      padding: 2px 0.5em;
-      at &lt;Card&gt;
-at &lt;Index&gt;
-at &lt;RouteProvider&gt;
-at &lt;RouterView&gt;
-at &lt;NuxtPage&gt;
-at &lt;App&gt;
-at &lt;NuxtRoot&gt;
-warning: [Vue warn]: injection &quot;bordName&quot; not found. 
+<td class="cell" style="background: color-mix(in srgb, #f6c177 30%, white)" title="warning: [Vue warn]: injection &quot;bordName&quot; not found. 
   at &lt;Card key=&quot;Alpha&quot; title=&quot;Alpha&quot; count=3  ... &gt; 
   at &lt;Index onVnodeUnmounted=fn&lt;onVnodeUnmounted&gt; ref=Ref&lt; undefined &gt; &gt; 
   at &lt;RouteProvider key=&quot;/&quot; vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route...
 warning: [Vue warn]: injection &quot;bordName&quot; not found. 
   at &lt;Card key=&quot;Beta&quot; title=&quot;Beta&quot; count=5  ... &gt; 
   at &lt;Index onVnodeUnmounted=fn&lt;onVnodeUnmounted&gt; ref=Ref&lt; undefined &gt; &gt; 
-  at &lt;RouteProvider key=&quot;/&quot; vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route= ...">Rw</td>
+  at &lt;RouteProvider key=&quot;/&quot; vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route= ...
+warning: [Vue warn]: injection &quot;bordName&quot; not found. 
+  at &lt;Card key=&quot;Gamma&quot; title=&quot;Gamma&quot; count=8  ... &gt; 
+  at &lt;Index onVnodeUnmounted=fn&lt;onVnodeUnmounted&gt; ref=Ref&lt; undefined &gt; &gt; 
+  at &lt;RouteProvider key=&quot;/&quot; vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route...
+warning: %cssr:warn%c [Vue warn]: injection &quot;bordName&quot; not found. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;Index&gt;
+at &lt;RouteProvider&gt;
+at &lt;RouterView&gt;
+at &lt;NuxtPage&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;
+warning: %cssr:warn%c [Vue warn]: injection &quot;bordName&quot; not found. 
+      background: #f39c12;
+      border-radius: 0.5em;
+      color: white;
+      font-weight: bold;
+      padding: 2px 0.5em;
+      at &lt;Card&gt;
+at &lt;Index&gt;
+at &lt;RouteProvider&gt;
+at &lt;RouterView&gt;
+at &lt;NuxtPage&gt;
+at &lt;App&gt;
+at &lt;NuxtRoot&gt;">Rw</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name &#x27;BordContext&#x27;. Did you mean &#x27;BoardContext&#x27;?
 next build: TS2552 Cannot find name &#x27;BordContext&#x27;. Did you mean &#x27;BoardContext&#x27;?">E</td>
 </tr>
@@ -980,8 +971,8 @@ next build: TS2339 Property &#x27;filter&#x27; does not exist on type &#x27;numb
 next build: TS7006 Parameter &#x27;project&#x27; implicitly has an &#x27;any&#x27; type.">E</td>
 </tr>
 <tr><th scope="row">Link passes a route parameter of the wrong type</th>
-<td class="cell" style="background: color-mix(in srgb, #dd6b20 30%, white)" title="error: Failed to load resource: the server responded with a status of 404 (Not Found)
-error: 404 http://127.0.0.1:&lt;port&gt;/projects/alpha">R</td>
+<td class="cell" style="background: color-mix(in srgb, #dd6b20 30%, white)" title="error: Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)
+error: 422 http://127.0.0.1:&lt;port&gt;/projects/alpha">R</td>
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 30%, white)" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.
 interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.
@@ -1196,7 +1187,7 @@ interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded.">R<
 <td class="cell" style="background: color-mix(in srgb, #dd6b20 30%, white)" title="interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.
 error: Internal Server Error: /
 error: Traceback (most recent call last):
-error: [21/Oct/2026 10:13:43] &quot;GET / HTTP/1.1&quot; 500 320726">R</td>
+error: [21/Oct/2026 16:09:04] &quot;GET / HTTP/1.1&quot; 500 320907">R</td>
 <td class="cell" title="FastHTML builds the page from Python functions in main.py, as its docs do. The page has no template files, and the card is a function in the same file, so the page names no template or component file to misspell. Misspelling the card function&#x27;s name is m01.">n/a</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="Pylance, type checking on (pyright 1.1.414, standard): reportMissingImports Import &quot;crad&quot; could not be resolved">E</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="Pylance, type checking on (pyright 1.1.414, standard): reportMissingImports Import &quot;board.crad&quot; could not be resolved
@@ -1218,11 +1209,11 @@ interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded.">R<
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
 <td class="cell" title="The server renders the cards in a template loop, and the browser never updates the list in place: Hide only hides the card&#x27;s own Alpine wrapper (`x-show`), and HTMX swaps in only the counter. A Django template loop has no key to leave out.">n/a</td>
 <td class="cell" title="The server builds the cards in a Python list comprehension, and the browser never updates the list in place: Hide sets `hidden` on the card&#x27;s own element, and HTMX swaps in only the saved count. FastHTML&#x27;s components have no key to leave out.">n/a</td>
-<td class="cell" style="background: color-mix(in srgb, #f6c177 30%, white)" title="warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b897470, title=&#x27;Alpha&#x27;, count=3, tone=&#x27;accent&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x10b83bec0&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide ...
-warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b8974d0, title=&#x27;Beta&#x27;, count=5, tone=&#x27;plain&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x10b9c4040&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide at...
-warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b897530, title=&#x27;Gamma&#x27;, count=8, tone=&#x27;plain&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x10b9c4180&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide a...
-warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b9c8890, title=&#x27;Beta&#x27;, count=5, tone=&#x27;plain&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x10b9c6160&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide at...
-warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b9c85f0, title=&#x27;Gamma&#x27;, count=8, tone=&#x27;plain&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x10b9c65c0&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide a...">Rw</td>
+<td class="cell" style="background: color-mix(in srgb, #f6c177 30%, white)" title="warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c34d0, title=&#x27;Alpha&#x27;, count=3, tone=&#x27;accent&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x107667f60&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide ...
+warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c3530, title=&#x27;Beta&#x27;, count=5, tone=&#x27;plain&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x1077f40e0&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide at...
+warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c3590, title=&#x27;Gamma&#x27;, count=8, tone=&#x27;plain&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x1077f4220&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide a...
+warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1077f88f0, title=&#x27;Beta&#x27;, count=5, tone=&#x27;plain&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x1077f5da0&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide at...
+warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1077f8650, title=&#x27;Gamma&#x27;, count=8, tone=&#x27;plain&#x27;, footer=&lt;function Page.&lt;locals&gt;.&lt;lambda&gt; at 0x1077f62a0&gt;, on_hide=&lt;function Page.&lt;locals&gt;.make_hide.&lt;locals&gt;.hide a...">Rw</td>
 <td class="cell" style="background: color-mix(in srgb, #c53030 30%, white)">M</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/valid-v-for Custom elements in iteration require &#x27;v-bind:key&#x27; directives.">C</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="eslint (npm run lint): react/jsx-key Missing &quot;key&quot; prop for element in iterator">C</td>
@@ -1748,7 +1739,7 @@ next build: TS2552 Cannot find name &#x27;onHdie&#x27;. Did you mean &#x27;onHid
 <td class="cell" title="This FastHTML baseline writes its browser code as plain scripts, without Alpine, and FastHTML has no browser-side component model of its own: its components are Python functions that run on the server. The page therefore has no browser-side `Status` component with an `open` input, and this baseline leaves the status line out.">n/a</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="ruff 0.15.5 (default rules): F841 Local variable `open` is assigned to but never used">C</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="ruff 0.15.5 (default rules): F841 Local variable `open` is assigned to but never used
-reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: &lt;function status.&lt;locals&gt;.close at 0x107bb6020&gt; -&gt; None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ...">C</td>
+reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: &lt;function status.&lt;locals&gt;.close at 0x109db6020&gt; -&gt; None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ...">C</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-mutating-props Unexpected mutation of &quot;open&quot; prop.">C</td>
 <td class="cell" style="background: color-mix(in srgb, #2f855a 30%, white)" title="eslint (npm run lint): react-hooks/immutability Error: This value cannot be modified
 

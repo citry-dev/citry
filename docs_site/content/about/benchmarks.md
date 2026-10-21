@@ -163,7 +163,8 @@ a React app, which sends each click to a Python backend.
     - a misspelled template directive: fails in the browser
     - a link to a route that doesn't exist, a link that passes a word,
       such as `/projects/alpha`, where the route takes a number, or an
-      image with a misspelled path: the browser gets a 404
+      image with a misspelled path: the browser gets a 404, or a 422
+      validation error for the word where a number belongs
     - a component rendered in a loop without `#c-key`, or a `<div>`
       inside a `<p>`: the server fails to render the page
     - `v-model` on the `<form>` instead of its `<input>`: the server
@@ -207,8 +208,10 @@ a React app, which sends each click to a Python backend.
 
 - **When**: 2026-10-21, Citry 0.6.0 and citry-core 1.8.0 from PyPI.
   Every framework's versions are pinned in its app's lockfile.
-- **Citry**: the editor extension's language server (measured with
-  `citry check --types`) and `citry check`.
+- **Citry**: a FastAPI app that adds Citry's routes with
+  `citry.contrib.fastapi.mount()`, as Citry's FastAPI starter does. The
+  editor extension's language server (measured with
+  `citry check --types`) and `citry check` check it.
 - **Every Python stack** (Citry, Django, Rusty, Jinja, Tetra,
   django-unicorn, django-components, FastHTML, ReactPy, Reflex):
   Pylance with type checking on (measured with pyright in standard mode), and

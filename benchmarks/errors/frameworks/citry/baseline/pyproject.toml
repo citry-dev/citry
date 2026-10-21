@@ -5,11 +5,12 @@ description = "The error-prevention benchmark's reference page, written in Citry
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "citry==0.6.0",
+  "fastapi==0.141.1",
   "uvicorn==0.52.4",
 ]
 
 [dependency-groups]
-# The ASGI starter installs citry-lsp for the editor; it also brings ty,
+# The FastAPI starter installs citry-lsp for the editor; it also brings ty,
 # which `citry check --types` runs. ruff is the Python linter most
 # projects add; the starter does not install it.
 dev = [

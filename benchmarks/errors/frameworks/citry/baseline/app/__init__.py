@@ -1,1 +1,1 @@
-"""Serve the benchmark's project board directly on ASGI with Citry."""
+"""Serve the benchmark's project board with FastAPI and Citry."""
