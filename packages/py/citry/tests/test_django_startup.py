@@ -134,16 +134,25 @@ def test_a_missing_settings_module_reports_djangos_error(tmp_path):
     assert completed.returncode == 2
 
 
-def test_the_variable_without_django_installed_is_a_clear_app_error(monkeypatch):
+def test_the_variable_without_django_installed_is_ignored(tmp_path, monkeypatch):
+    # A variable left over from another shell must not break a project that
+    # does not use Django.
+    monkeypatch.syspath_prepend(str(tmp_path))
+    (tmp_path / "plain_app_3.py").write_text("from citry import Citry\nengine = Citry()\n", encoding="utf-8")
     monkeypatch.setenv("DJANGO_SETTINGS_MODULE", "myproject.settings")
     # find_spec() returning None is what an environment without Django looks like.
     monkeypatch.setattr(_django_startup, "find_spec", lambda _name: None)
 
-    # The check comes before the import, so the target module need not exist.
-    with pytest.raises(AppSelectionError, match="Django is not installed") as raised:
-        load_app("plain_app:engine")
-    assert "'myproject.settings'" in str(raised.value)
-    assert "unset DJANGO_SETTINGS_MODULE" in str(raised.value)
+    def forbidden() -> None:
+        pytest.fail("Citry must not start Django when Django is not installed")
+
+    monkeypatch.setattr(_django_startup, "start_django", forbidden)
+
+    try:
+        assert load_app("plain_app_3:engine") is not None
+    finally:
+        # Drop the module so no later test finds this one by name.
+        sys.modules.pop("plain_app_3", None)
 
 
 def test_a_settings_module_that_exits_is_reported_as_an_app_error(monkeypatch):

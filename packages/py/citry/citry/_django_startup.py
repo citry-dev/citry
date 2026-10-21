@@ -18,8 +18,8 @@ from __future__ import annotations
 import os
 from importlib.util import find_spec
 
-# Every message that blames the variable ends with the same way out, for a
-# shell that still has it set from another project.
+# The startup error ends with this way out, for a shell that still has the
+# variable set from another project whose environment had Django installed.
 _UNSET_HINT = "or unset DJANGO_SETTINGS_MODULE if this is not a Django project"
 
 
@@ -56,31 +56,28 @@ def start_django_from_environment() -> None:
     project, or it configures Django in its own code with
     ``settings.configure()``. Such a project must leave the variable unset,
     because starting Django here reads the settings before its own code runs.
+    With the variable set but Django not installed, this also does nothing.
 
     Raises:
-        DjangoStartupError: When the variable is set but Django is not
-            installed, or when Django fails to start, for example because the
-            settings module cannot be imported. When Django fails to start,
-            the message carries Django's own error.
+        DjangoStartupError: When Django is installed but fails to start, for
+            example because the settings module cannot be imported. The
+            message carries Django's own error.
 
     """
     settings_module = os.environ.get("DJANGO_SETTINGS_MODULE")
     if not settings_module:
         return
-    # Without Django, start_django() would fail on `import django` and the
-    # message below would blame the settings, so name the real cause here.
     try:
         django_installed = find_spec("django") is not None
     except ValueError:
         # A `django` entry in sys.modules without a spec, such as a test stub,
         # is still something to try to start.
         django_installed = True
+    # Without Django the project cannot be a Django one, so the variable is
+    # left over from another shell; failing here would break a project that
+    # never needed Django.
     if not django_installed:
-        msg = (
-            f"DJANGO_SETTINGS_MODULE is set to {settings_module!r}, but Django is not installed in "
-            f"this Python environment. Install Django, {_UNSET_HINT}."
-        )
-        raise DjangoStartupError(msg)
+        return
     try:
         start_django()
     except (Exception, SystemExit) as exc:

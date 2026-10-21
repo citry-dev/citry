@@ -144,8 +144,8 @@
   `citry --app` commands now start Django before they import the `--app`
   module, as `manage.py` does, so a module such as `config.urls` whose
   views import models no longer fails with `AppRegistryNotReady`. If
-  Django cannot start, the command shows why. Unset the variable when
-  you run Citry in a project that does not use Django.
+  Django is installed but cannot start, the command shows why. Without
+  Django installed, Citry ignores the variable.
 - A form that calls a server event can now keep Django's hidden
   `csrfmiddlewaretoken` input inside it. The server removes that field
   before it checks the event's data class, with or without JavaScript,

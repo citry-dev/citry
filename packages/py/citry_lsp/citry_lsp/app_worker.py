@@ -50,8 +50,12 @@ except ImportError:  # pragma: no cover - an older citry in the app's environmen
         # loaded its apps first, whichever Citry the app runs on.
         if not os.environ.get("DJANGO_SETTINGS_MODULE"):
             return
-        import django  # noqa: PLC0415
-        from django.apps import apps  # noqa: PLC0415
+        try:
+            import django  # noqa: PLC0415
+            from django.apps import apps  # noqa: PLC0415
+        except ImportError:
+            # Without Django the variable is left over from another shell.
+            return
 
         if not (apps.ready or apps.loading):
             django.setup()

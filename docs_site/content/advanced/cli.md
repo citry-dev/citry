@@ -85,10 +85,11 @@ DJANGO_SETTINGS_MODULE=config.settings \
 ```
 
 Citry then starts Django with those settings before it imports the
-module, as `manage.py` does. If Django is not installed, Citry says so
-and names the variable. If Django cannot start, for example because the
-settings module cannot be imported, Citry shows Django's error and treats
-it as a failed import. A project that sets up Django in its own code with
+module, as `manage.py` does. If Django is not installed, Citry skips
+this step, so a variable left over from another project does no harm. If
+Django is installed but cannot start, for example because the settings
+module cannot be imported, Citry shows Django's error and treats it as a
+failed import. A project that sets up Django in its own code with
 `settings.configure()` must leave the variable unset.
 
 ## `citry check` templates { #check-component-templates }
