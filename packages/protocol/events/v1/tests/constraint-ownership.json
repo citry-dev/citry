@@ -20,8 +20,8 @@
       "pythonValidators": ["python/citry_events/calls.py:validate_call"],
       "javascriptValidators": ["js/src/calls.ts:validateCall"],
       "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
-      "constraintCount": 18,
-      "constraintSha256": "c38c668bb1fa114f81d015407192c8d744a53036456d9c5eb7a2dd75302dbffc"
+      "constraintCount": 20,
+      "constraintSha256": "52b1b31d433c5fff917f8297b6be77c38df329125af3ef73cfdf9c03e601de06"
     },
     {
       "id": "events-call-capabilities",

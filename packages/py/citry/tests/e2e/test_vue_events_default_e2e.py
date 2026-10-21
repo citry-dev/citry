@@ -3954,20 +3954,35 @@ def test_native_runtime_event_arguments_include_form_fields(page: Any, serve_liv
 
     class Contact(Component):
         citry = engine
-        template = (
-            '<form id="runtime-form" c-bind="attrs">'
-            '<input name="email" type="text"><button type="submit">send</button></form>'
-        )
 
         class Input:
             email: str
+            count: int
+            notify: bool
 
         class Events:
             def submit(self, data: Input):  # noqa: F821
-                return None
+                return {"count": data.count, "notify": data.notify}
 
         def template_data(self, kwargs, slots):
             return {"attrs": {"@c-submit.prevent": "submit"}}
+
+        template = """
+          <form id="runtime-form" c-bind="attrs">
+            <input name="email" type="text">
+            <input
+              name="count"
+              type="number"
+              value="3"
+            >
+            <input
+              name="notify"
+              type="checkbox"
+              checked
+            >
+            <button type="submit">send</button>
+          </form>
+        """
 
     dispatcher_for(engine)
     faults: list[str] = []
@@ -3978,8 +3993,15 @@ def test_native_runtime_event_arguments_include_form_fields(page: Any, serve_liv
     with page.expect_request("**/ext/events/call") as submitted:
         page.locator('#runtime-form button[type="submit"]').click()
 
-    assert submitted.value.post_data_json["calls"][0]["handlerName"] == "submit"
-    assert submitted.value.post_data_json["calls"][0]["args"] == {"email": "person@example.test"}
+    call = submitted.value.post_data_json["calls"][0]
+    assert call["handlerName"] == "submit"
+    # The browser sends the form's text, number and checkbox included, and
+    # marks the call so the server binds it like a no-JavaScript form post.
+    assert call["args"] == {"email": "person@example.test", "count": "3", "notify": "on"}
+    assert call["argsSource"] == "form"
+    response = submitted.value.response()
+    assert response is not None
+    assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"count": 3, "notify": True}}]
     assert faults == []
 
 

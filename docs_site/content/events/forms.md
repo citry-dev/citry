@@ -77,9 +77,42 @@ the fields of `ContactIn`. Citry checks each value against its type before
 the handler runs. A value of the wrong type fails the call with an error for
 that field, and `submit` does not run.
 
-Number and range inputs send numbers. Every other input sends text, so
-declare its field as `str` and convert it in the handler. A checked checkbox
-sends `"on"`, which a `bool` field rejects.
+The form's fields are sent only when the binding names the handler alone,
+as in `submit` or `submit()`. Arguments you write, as in
+`submit({draft: true})`, are sent instead of the fields.
+
+A `name` that the data class does not declare fails each submit that
+sends the control. With your application loaded, `citry check` and the
+editor report such a `name`, and a required field that no control in the
+form sends ([form fields](/ide/template-linting/#check-form-fields)).
+
+### Form field types
+
+Every control sends its text, and Citry converts the text to the field's
+type the same way as for a form posted without JavaScript:
+
+| Control | Text sent | Declare the field as |
+|---|---|---|
+| `<input type="number">`, `<input type="range">` | `"3"` or `"2.5"` | `int` or `float` |
+| A checked checkbox without a `value` | `"on"` | `bool = False` |
+| An unchecked checkbox | nothing | `bool = False` |
+| A `<select>` whose options are numbers | `"2"` | `int` |
+| Other inputs, `<select>`, `<textarea>` | the text | `str` |
+
+An unchecked checkbox sends nothing at all, so give a `bool` field a default
+of `False`, or a form with the box unchecked fails because the field is
+missing. A checkbox with its own `value` sends that text, so for a `bool`
+field leave `value` out or use `"true"` or `"1"`.
+
+An empty input sends empty text, which an `int`, `float`, or `bool` field
+rejects, even one declared as `int | None`. Add `required` to the input, or
+declare the field as `str` and convert it in the handler.
+
+The submit button that sent the form adds its own `name` and `value`, if
+it has a `name`, so `<button name="action" value="save">` sends
+`action="save"`. An image button, `<input type="image">`, sends where it
+was clicked as `x` and `y` instead, which a data class does not declare,
+so use a `<button>` with an image inside it.
 
 The form's fields are sent only when the binding names the handler alone,
 as in `submit` or `submit()`. Arguments you write, as in

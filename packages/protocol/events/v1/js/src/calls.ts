@@ -10,6 +10,7 @@ import {
 } from "./issue";
 import type {
 	EventActionKind,
+	EventArgsSource,
 	EventCall,
 	EventRenderer,
 	EventSwap,
@@ -46,6 +47,9 @@ export const CAPABILITIES_BASELINE_V1 = {
 	actions: ACTION_KINDS,
 	renderers: ["html-fragment/1"],
 } as const;
+// The one value of a call's optional `argsSource`: the browser collected the
+// args from a form, so the server binds their text like a no-JS form post.
+export const ARGS_SOURCE_FORM = "form" as const satisfies EventArgsSource;
 export const CARRIER_FIELDS = {
 	callerRenderId: "_citry_caller_render_id",
 	stateToken: "_citry_state_token",
@@ -66,6 +70,7 @@ const CALL_FIELDS = new Set([
 	"handlerName",
 	"callerRenderId",
 	"args",
+	"argsSource",
 	"stateToken",
 	"stateUpdates",
 	"sendSequence",
@@ -167,6 +172,15 @@ export const validateCall = (
 			category: "strict_json",
 			message:
 				"The call's 'args' must contain only strict JSON values under string keys.",
+		};
+	}
+	// An unknown source is a structural error: guessing would bind the args
+	// by the wrong rules on the server.
+	if (hasOwn(value, "argsSource") && value.argsSource !== ARGS_SOURCE_FORM) {
+		return {
+			path: pointer(path, "argsSource"),
+			category: typeof value.argsSource === "string" ? "enum" : "type",
+			message: `The call's 'argsSource' must be '${ARGS_SOURCE_FORM}' or omitted.`,
 		};
 	}
 	if (hasOwn(value, "stateToken")) {
@@ -318,6 +332,7 @@ export interface BuildCallInput {
 	handlerName: string;
 	callerRenderId?: string;
 	args: Record<string, unknown>;
+	argsSource?: EventArgsSource;
 	stateToken?: string;
 	stateUpdates?: Record<string, unknown>;
 	sendSequence?: number;
@@ -330,6 +345,7 @@ export const buildCall = (input: BuildCallInput): EventCall => {
 		args: copyJson(input.args),
 	};
 	for (const field of [
+		"argsSource",
 		"callerRenderId",
 		"stateToken",
 		"sendSequence",

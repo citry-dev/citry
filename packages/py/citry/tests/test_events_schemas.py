@@ -12,6 +12,7 @@ import sys
 import textwrap
 from collections.abc import Mapping
 from dataclasses import dataclass, is_dataclass
+from dataclasses import field as dataclass_field
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum, IntEnum
@@ -24,7 +25,13 @@ import pytest
 
 from citry.ext.events import schemas as schemas_module
 from citry.ext.events.files import UploadedFile
-from citry.ext.events.schemas import StringArgs, ValidationResult, convert_schema_class, validate_args
+from citry.ext.events.schemas import (
+    StringArgs,
+    ValidationResult,
+    convert_schema_class,
+    declared_field_names,
+    validate_args,
+)
 
 try:
     import pydantic
@@ -1122,3 +1129,41 @@ class TestWithoutPydantic:
         )
         assert completed.returncode == 0, completed.stderr
         assert "OK-WITHOUT-PYDANTIC" in completed.stdout
+
+
+def test_declared_field_names_reads_init_fields_without_resolving_annotations():
+    @dataclass
+    class WithInitFalse:
+        q: str
+        computed: int = dataclass_field(default=0, init=False)
+
+    class Plain:
+        q: "NotDefinedAnywhere"  # noqa: F821 - never resolved
+        page: int = 1
+
+    assert declared_field_names(WithInitFalse) == frozenset({"q"})
+    assert declared_field_names(Plain) == frozenset({"q", "page"})
+
+
+@requires_pydantic
+def test_declared_field_names_counts_a_pydantic_alias():
+    class Model(pydantic.BaseModel):
+        token: str = pydantic.Field(alias="csrfmiddlewaretoken")
+
+    assert declared_field_names(Model) == frozenset({"token", "csrfmiddlewaretoken"})
+
+
+@requires_pydantic
+def test_declared_field_names_counts_pydantic_validation_aliases():
+    class Single(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias="csrfmiddlewaretoken")
+
+    class Choices(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias=pydantic.AliasChoices("csrfmiddlewaretoken", "tok"))
+
+    class Nested(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias=pydantic.AliasPath("csrf", 0))
+
+    assert "csrfmiddlewaretoken" in declared_field_names(Single)
+    assert {"csrfmiddlewaretoken", "tok"} <= declared_field_names(Choices)
+    assert "csrf" in declared_field_names(Nested)

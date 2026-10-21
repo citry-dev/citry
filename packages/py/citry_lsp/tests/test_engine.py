@@ -7162,3 +7162,91 @@ def test_a_template_whose_base_comes_from_the_project_is_marked_as_unchecked(tmp
     assert notice.severity == types.DiagnosticSeverity.Information
     assert notice.range == types.Range(_position(source, "Card(Base"), _position(source, "Card(Base", len("Card")))
     assert "it extends BaseCard, which comes from another module" in notice.message
+
+
+# A project whose component base classes live in their own module. The
+# second base sets another template language, whose template Citry's
+# parser would reject.
+_IMPORTED_BASE = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class AppComponent(Component):
+    citry = engine
+class OtherLanguage(Component):
+    citry = engine
+    template_lang = "jinja"
+"""
+_IMPORTED_BASE_CARD = '''from base import AppComponent, OtherLanguage
+class Card(AppComponent):
+    template = """<p>{{ titel }}</p>"""
+    js = """$component(() => { missingName; });"""
+class Legacy(OtherLanguage):
+    template = """<p>{{ </p>"""
+'''
+
+
+def _imported_base_project(tmp_path: Path) -> tuple[Path, str]:
+    (tmp_path / "base.py").write_text(_IMPORTED_BASE, encoding="utf-8")
+    (tmp_path / "card.py").write_text(_IMPORTED_BASE_CARD, encoding="utf-8")
+    (tmp_path / "app.py").write_text("from base import engine\nimport card\n", encoding="utf-8")
+    (tmp_path / "broken.py").write_text("raise RuntimeError('cannot import')\n", encoding="utf-8")
+    return tmp_path / "card.py", _IMPORTED_BASE_CARD
+
+
+def _not_checked_names(document: DocumentState) -> list[str]:
+    return [
+        document.source.splitlines()[item.range.start.line][item.range.start.character : item.range.end.character]
+        for item in document.diagnostics
+        if item.code == "citry.check.template-not-checked"
+    ]
+
+
+def test_a_loaded_app_checks_a_template_whose_base_comes_from_another_module(tmp_path):
+    card, source = _imported_base_project(tmp_path)
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+    document = DocumentState(card.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    documents = {document.uri: document}
+
+    # The app lists Card, so its template and JavaScript get the usual checks.
+    assert [region.component_name for region in document.regions] == ["Card"]
+    assert [region.component_name for region in document.js_regions] == ["Card"]
+    assert [(item.code, item.range.start) for item in template_lint_diagnostics(document, project, documents)] == [
+        ("citry.template.unknown-variable", _position(source, "titel"))
+    ]
+    assert [item.message for item in browser_diagnostics(document, project, documents)] == [
+        "Component JavaScript variable 'missingName' is not defined."
+    ]
+    # Legacy's template is in another language, so it is neither parsed as
+    # Citry, which would report a syntax error, nor marked as unchecked.
+    assert document.diagnostics == ()
+
+
+def test_a_class_added_or_renamed_after_the_app_loaded_keeps_the_notice(tmp_path):
+    card, source = _imported_base_project(tmp_path)
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+    edited = (
+        source.replace("class Card(", "class Renamed(")
+        + 'class Added(AppComponent):\n    template = """<p>{{ other }}</p>"""\n'
+    )
+    document = DocumentState(card.as_uri(), "python", edited, 2)
+    document.update(edited, 2, project)
+
+    # The app knows neither name until it reloads, so neither template is
+    # read, and both classes say why.
+    assert document.regions == ()
+    assert template_lint_diagnostics(document, project, {document.uri: document}) == ()
+    assert _not_checked_names(document) == ["Renamed", "Added"]
+
+
+def test_a_template_whose_base_comes_from_another_module_keeps_the_notice_when_the_app_fails(tmp_path):
+    card, source = _imported_base_project(tmp_path)
+    project = load_project(tmp_path, "broken:engine")
+    assert not project.status.registry_ready
+    document = DocumentState(card.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    assert document.regions == ()
+    assert _not_checked_names(document) == ["Card", "Legacy"]
