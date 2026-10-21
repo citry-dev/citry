@@ -118,11 +118,11 @@ assignment to an attribute of `self` inside an event handler, such as \
 trigger such as `on_clik` when it compiles the page, and passes any other \
 unknown keyword, such as `titel`, on as a CSS property.
 
-What the page comparison cannot see: in development, React Router's \
-handler in the Vite server answers a file path that does not exist, such \
-as a misspelled image, with the app's page and status 200. The image \
-shows broken, but nothing reports an error, and the comparison does not \
-record whether an image loaded, so m48 reads as "never". The page names \
+A misspelled file path reports no error: in development, React Router's handler \
+in the Vite server answers a file path that does not exist, such as a \
+misspelled image, with the app's page and status 200. The image shows \
+broken, but nothing reports an error, so m48 is silently wrong; only the \
+page comparison sees it, because it records whether each image loaded. The page names \
 the avatar by its URL, as Reflex's docs show for a file in assets/; \
 naming it with `rx.asset("avatar.svg")` instead would make `reflex \
 compile` report a misspelled file, because `rx.asset` checks that the \

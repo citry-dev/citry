@@ -218,8 +218,12 @@ one, where it would change the page that every existing case is compared on.
   what the case's mistake itself saved.
 - **What a record holds.** For each element: tag, `title`, the button type
   the browser settled on, computed text color, border color, display and
-  visibility, `alt`, `id`, every `aria-*` attribute, and the disabled state.
-  The disabled state is what the browser applies, so `disabled="false"`
+  visibility, `alt`, `id`, every `aria-*` attribute, the disabled state,
+  and, for an `<img>`, whether it loaded (`complete && naturalWidth > 0`).
+  An image the server answers with something other than an image, such as
+  a development server that sends the app's page for any unknown path,
+  breaks without an error status, so only this value shows it. The
+  disabled state is what the browser applies, so `disabled="false"`
   counts as disabled, as it does for the user. A border color that neither
   the page nor the browser's defaults set follows the text color, so it
   adds a difference only where one of them sets it. It is read with the
@@ -232,8 +236,8 @@ one, where it would change the page that every existing case is compared on.
   comparison: Citry mounts each interactive page into an element whose
   `citry-vue-` id ends in 32 random hex digits, new on every render, so
   without the blanking no two Citry records would match. A mistake that
-  changes only `alt`, `id`, an `aria-*` attribute, the disabled state or a
-  border color reads as "silently wrong". Like "never", that counts as
+  changes only `alt`, `id`, an `aria-*` attribute, the disabled state,
+  whether an image loaded or a border color reads as "silently wrong". Like "never", that counts as
   missed.
 
 ## How it behaves when something goes wrong
@@ -252,6 +256,8 @@ one, where it would change the page that every existing case is compared on.
 | A step is not a table, has an unknown action, a missing key, a key its action does not use (such as `ms` on a click), an empty or non-text selector or key, text that is not a string, or an `ms` that is not a whole number above 0 | Loading fails as above, with the file, the journey and the step named. A key another action uses would otherwise be ignored without a word |
 | In a case, a journey step cannot find or use its element within five seconds, or the page does not load within 60 seconds or go quiet within 15 seconds after the last step | The journey stops, the page is recorded where it stopped, and the case counts as "silently wrong" unless something reported it. The evidence holds the error, plus the journey's name for a journey other than the default. When the default journey stops, the reload record is skipped as well |
 | A journey step fails in the clean app | Every cell of that framework is marked `!`, as for any other clean-app problem, because the case's journey could not be compared with a working one |
+| An image is still loading when the page is recorded | The runner first waits until every image that has not finished loads or fails, for at most two seconds, then records whether each one loaded. An image that takes longer records as not loaded; if that happens in the clean app's run and not in a case's, or the other way round, the case reads as "silently wrong", the same risk as any page still changing under load |
+| A page has a lazy-loaded image the browser never requests, such as one far below the fold | It uses up the two-second wait at every record and records as not loaded in every run, so a misspelled path for that image reads as "never". The record is then taken up to two seconds after the page settled, so a navigation in that time fails the record, as for any step that leaves the page mid-navigation. No baseline has one: Next.js's `<Image>` is lazy by default, but its avatar sits in view near the top and loads |
 | A step leaves the page mid-navigation, so it cannot be recorded | The journey counts as failed, as above, with the reason in the record |
 | A developer-written `id` or `aria-*` value contains 16 or more hex digits in a row, such as a content hash or a long number | That part is blanked like a generated id, so a mistake that changes only it reads as "never" |
 | A `press` step with no selector runs when nothing has focus | The key goes to the page and may do nothing, in the clean app and the case alike, so nothing reports that the journey did less than intended |
@@ -294,8 +300,9 @@ one, where it would change the page that every existing case is compared on.
   corrections from each framework's users are invited
   ([#151](https://github.com/citry-dev/citry/issues/151)).
 - **The page comparison sees text, element types, button types, tooltips,
-  text and border colors, display, visibility, `alt`, `id`, `aria-*` and
-  the disabled state, at the points the journeys record.** A mistake whose
+  text and border colors, display, visibility, `alt`, `id`, `aria-*`, the
+  disabled state and whether each image loaded, at the points the journeys
+  record.** A mistake whose
   only effect is outside these, or in a part of the page no journey
   reaches, such as a keyboard shortcut no journey presses, reads as
   "never".

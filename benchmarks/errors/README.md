@@ -629,9 +629,8 @@ cells, or the reason behind them, differ from ReactPy's:
   browser, with no error.
 - **m48:** in development, React Router's handler in the Vite server
   answers a misspelled file path with the app's page and status 200, so
-  the image shows broken but nothing reports an error; the page
-  comparison does not look at whether an image loaded, so the cell is
-  "never" rather than "silently wrong".
+  the image shows broken, nothing reports an error, and the case reads
+  as "silently wrong".
 - **m18, m32 and m41:** prevented. Reflex builds an event's payload from
   the handler's own parameter names, so the page never writes the field
   name `amount`; it converts the text `"1"` to the number the handler
@@ -753,15 +752,18 @@ clean app's run it marks every cell of that framework `!`.
 Each record keeps the page's visible text and, for every element, its tag,
 `title`, the button type the browser settled on, its computed text color,
 border color, display and visibility, its `alt` and `id`, every `aria-*`
-attribute, and whether it is disabled. Before the two records are compared,
-any sequence of 16 or more hex digits in an `id` or `aria-*` value is
-blanked, because a framework makes such an id up on every render: Citry
-mounts each interactive page into an element with a random `citry-vue-...`
-id. The border color is read where the journey leaves the mouse and the
-focus, so a button under the pointer after the last click shows its hover
-color, the same in both runs when the page is the same. A mistake whose only
-effect is outside these, such as a value typed into a field that no text on
-the page repeats, reads as "never".
+attribute, whether it is disabled, and, for an image, whether it loaded.
+Before it records the page, the runner waits up to two seconds for any
+image that is still loading, so a slow image is not taken for a broken
+one. Before the two records are compared, any sequence of 16 or more hex
+digits in an `id` or `aria-*` value is blanked, because a framework makes
+such an id up on every render: Citry mounts each interactive page into an
+element with a random `citry-vue-...` id. The border color is read where
+the journey leaves the mouse and the focus, so a button under the pointer
+after the last click shows its hover color, the same in both runs when the
+page is the same. A mistake whose only effect is outside these, such as a
+value typed into a field that no text on the page repeats, reads as
+"never".
 
 ## Writing a case
 

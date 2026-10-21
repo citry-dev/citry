@@ -40,8 +40,23 @@ if TYPE_CHECKING:
 # `id` that links and labels point to, and whether a control is disabled, so
 # a mistake in one of those reads as a different page rather than the same one. `:disabled` is
 # the state the browser applies, so `disabled="false"` counts as disabled, as
-# it does for the user.
-_SNAPSHOT = """() => {
+# it does for the user. For an image it records whether the image loaded, so
+# a broken image reads as a different page even when the server answered
+# its URL without an error status.
+#
+# Before it records anything it waits, at most `waitMs` (`_IMAGE_WAIT_MS` in a
+# run), for every
+# image that has not finished, so an image still loading when the page went
+# quiet is not read as broken in one run and loaded in the other. An image
+# the browser never requests, such as a lazy one far below the fold, uses up
+# that wait and records as not loaded in every run.
+_IMAGE_WAIT_MS = 2_000
+_SNAPSHOT = """async (waitMs) => {
+  const pending = [...document.images].filter((img) => !img.complete).map((img) => new Promise((done) => {
+    img.addEventListener('load', done, {once: true});
+    img.addEventListener('error', done, {once: true});
+  }));
+  await Promise.race([Promise.all(pending), new Promise((done) => setTimeout(done, waitMs))]);
   const skip = new Set(['SCRIPT', 'STYLE', 'LINK', 'META', 'TEMPLATE', 'NOSCRIPT']);
   const elements = [];
   for (const el of document.querySelectorAll('body *')) {
@@ -52,14 +67,15 @@ _SNAPSHOT = """() => {
     elements.push([
       el.tagName, el.getAttribute('title'), el.type ?? null, style.color, style.display, style.visibility,
       style.borderColor, el.getAttribute('alt'), el.getAttribute('id'), aria, el.matches(':disabled'),
+      el.tagName === 'IMG' ? el.complete && el.naturalWidth > 0 : null,
     ]);
   }
   return {text: document.body ? document.body.innerText : '', elements};
 }"""
 
-# Where each element's id and its aria-* pairs sit in a page record, in the
-# order `_SNAPSHOT` writes them.
-_ID, _ARIA = 8, 9
+# Where each element's id, its aria-* pairs and, for an image, whether it
+# loaded sit in a page record, in the order `_SNAPSHOT` writes them.
+_ID, _ARIA, _LOADED = 8, 9, 11
 # How long one step waits for its element before the journey counts as failed.
 _STEP_TIMEOUT_MS = 5_000
 # Dev servers listen on ports from this range. It sits below the range the
@@ -273,19 +289,19 @@ def _default_journey(browser: Browser, url: str, runtime: Runtime, observation: 
     try:
         page.goto(url, wait_until="networkidle", timeout=60_000)
         page.wait_for_timeout(runtime.settle_ms)
-        observation.snapshot_loaded = page.evaluate(_SNAPSHOT)
+        observation.snapshot_loaded = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
         _play(page, runtime.journeys[DEFAULT_JOURNEY], runtime.settle_ms)
     except Exception as error:  # noqa: BLE001 - a broken page is an observation, not a runner failure
         observation.failure = _describe(error)
     try:
-        observation.snapshot = page.evaluate(_SNAPSHOT)
+        observation.snapshot = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
     except Exception as error:  # noqa: BLE001 - a page left mid-navigation is recorded, not raised
         observation.failure = observation.failure or f"record: {_describe(error)}"
     if not observation.failure:
         try:
             page.reload(wait_until="networkidle", timeout=60_000)
             page.wait_for_timeout(runtime.settle_ms)
-            observation.snapshot_reloaded = page.evaluate(_SNAPSHOT)
+            observation.snapshot_reloaded = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
         except Exception as error:  # noqa: BLE001 - same as above
             observation.failure = f"reload: {_describe(error)}"
     # Closed before the next journey starts, so this page's timers and
@@ -306,7 +322,7 @@ def _journey(
     except Exception as error:  # noqa: BLE001 - a broken page is an observation, not a runner failure
         record.failure = _describe(error)
     try:
-        record.snapshot = page.evaluate(_SNAPSHOT)
+        record.snapshot = page.evaluate(_SNAPSHOT, _IMAGE_WAIT_MS)
     except Exception as error:  # noqa: BLE001 - a page left mid-navigation is recorded, not raised
         record.failure = record.failure or f"record: {_describe(error)}"
     page.context.close()

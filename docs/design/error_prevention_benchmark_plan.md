@@ -1093,7 +1093,9 @@ Each addition needs a matching change in two places:
   color (B), and `alt`, `id`, `aria-*` and the disabled state (m53-m57,
   m62). Without them, those cases could be caught only by tools, and no run
   could show that they express their mistake. Image load failures (F)
-  already reach the browser log as errors.
+  already reach the browser log as errors, except where a development
+  server answers a missing file with a page, as Reflex's does; the record
+  of whether each image loaded, added in PR 7, covers that case.
 
   Which existing cells this can change: only a mistake that is "never"
   today can move, to "silently wrong", and both count as missed. In the
