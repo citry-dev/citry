@@ -9,6 +9,9 @@ const hidden = ref<string[]>([])
 // The text typed into the search field so far.
 const query = ref('')
 
+// Every card inside reads the board's name with inject(), so none takes it as a prop.
+provide('boardName', 'Projects')
+
 const visibleCards = computed(() =>
   (board.value?.cards ?? []).filter((card) => !hidden.value.includes(card.title)),
 )

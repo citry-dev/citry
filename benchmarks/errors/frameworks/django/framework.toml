@@ -23,6 +23,11 @@ fill reads `title` and `count` directly. A Django block takes no arguments, \
 so the card hands the fill nothing of its own, and m36 and m37 do not apply. The page picks each \
 card's `tone` with `card.featured|yesno:"accent,plain"`.
 
+The view puts the board's name in the page's context as `board_name`. An \
+`{% include %}` passes the including template's whole context to the \
+included one, so each card prints `{{ board_name }}` without the page \
+passing it in the include's `with`.
+
 The status line inside Details is an Alpine component \
 (`Alpine.data('status')` in board.js) nested inside the board's. Alpine has \
 no required or typed component inputs, so the status line's markup reads the \

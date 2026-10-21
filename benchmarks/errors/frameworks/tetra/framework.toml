@@ -58,6 +58,14 @@ public, so the Hide button can send it with `$dispatch('hide', title)`; \
 them. The card's template has a `{% slot footer %}`, which the card list \
 fills inside the card's tag. The accent border is in the card's `style`, \
 which Tetra builds into the library's CSS.
+The card prints the board's name, `{{ board_name }}`, from a context \
+processor, board/context_processors.py, listed in the settings: Tetra \
+renders each component's template with a RequestContext of its own, \
+which runs the context processors, so the value reaches every card, also \
+when the card list renders again after Hide. The page's own context does \
+not reach a component unless the component lists the name in \
+`_extra_context`, as Tetra's docs describe, and here the card list would \
+have to list it too, because the cards render inside its template.
 - Counter keeps the saved total in the public attribute `count`. Add runs \
 `save(1)`: Tetra calls the public method on the server with the arguments \
 in order, then renders the counter again.

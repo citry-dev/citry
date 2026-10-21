@@ -33,6 +33,12 @@ public/, the first form the Next.js image docs show. So a misspelled file
 (m48) is a 404 at runtime; a static import of the file would fail
 `next build` instead.
 
+The board's name reaches every card through a React context, BoardContext
+in app/board-context.tsx. The page is a server component, which cannot
+provide a context, so it wraps the board in a client component that does,
+as the Next.js docs on context providers show, and each card reads it with
+`useContext(BoardContext)`.
+
 Settings changed from the default. The benchmark turns on a framework's
 stricter check when other frameworks here have the same kind of check:
 - `typedRoutes: true` in next.config.ts. The Django, Django Rusty

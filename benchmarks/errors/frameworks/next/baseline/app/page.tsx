@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import Board from "./board";
+import BoardProvider from "./board-context";
 import { owner, projects, state } from "./data";
 import Search from "./search";
 
@@ -22,7 +23,9 @@ export default async function Home({ searchParams }: PageProps<"/">) {
       <Image src="/avatar.svg" alt={owner.name} width={32} height={32} />
       <p>Owner: {owner.name}</p>
       <p>Projects: {projects.length}</p>
-      <Board apiBase={API_BASE} projects={projects} initialSaved={state.count} />
+      <BoardProvider>
+        <Board apiBase={API_BASE} projects={projects} initialSaved={state.count} />
+      </BoardProvider>
       <Search />
       {q && <p>Searched: {q}</p>}
       <nav>

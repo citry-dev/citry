@@ -11,6 +11,8 @@ class CardView(UnicornView):
     title: str = ''
     count: int = 0
     tone: Literal['plain', 'accent'] = 'plain'
+    # The template's `board_name` is not an attribute: it comes from the
+    # context processor in board/context_processors.py.
 
     # The Hide button runs this. The child-components docs reach the parent
     # through self.parent, which pyright types as any component, so the card

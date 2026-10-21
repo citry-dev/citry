@@ -37,6 +37,11 @@ django-components nor djc-ext-pydantic, which checks only that each slot is \
 a slot, checks a template fill or the `{% slot %}` tag's data against it. \
 The Hide button sends Alpine's `hide` \
 event, as in the Django app.
+The page wraps the cards in `{% provide "board" title="Projects" %}`, and \
+each card reads the board's name in `get_template_data()` with \
+`self.inject('board')`, as django-components' provide/inject docs show. \
+The field is `title`, because `name` is the tag's own argument for the \
+key.
 - Status is the status line inside Details. django-components renders a \
 component's markup on the server, so the page can give the status line \
 only the value `open` has at that moment, and `open` changes later in the \

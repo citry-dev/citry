@@ -66,6 +66,12 @@ Reflex calls them while it compiles, and pyright checks every call against \
 their parameters. Reflex's other form, a function marked `@rx.memo`, makes \
 a React component of its own; pyright accepts any arguments in a call to \
 one, and `reflex compile` reports a missing prop instead.
+- SharedState (board/shared.py) holds the board's name in the var \
+`board_name`, which every card reads as `SharedState.board_name`. Reflex \
+has no context that a component provides to the ones inside it; a value \
+that many components share lives in a state, which any component reads \
+directly. It sits in its own module because the card cannot import \
+board/board.py, which imports the card.
 - Counter: Add sends `CounterState.save(1)` to the handler \
 `save(self, amount: int)`, which adds the amount to `count`. The event's \
 argument is written by position: Reflex's types name an event's arguments \

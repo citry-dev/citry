@@ -43,6 +43,10 @@ builds each card's handler with `make_hide(project.title)`, a function \
 that returns a handler for one title, the way ReactPy's docs build one \
 handler per list item. (A lambda written in the loop would see only the \
 last project, because a Python closure reads a loop variable when it runs.)
+- BoardContext (card.py) carries the board's name. The page wraps the \
+cards' wrapper in `BoardContext(..., value="Projects")`, and each card \
+reads it with `use_context(BoardContext)`, ReactPy's version of React's \
+context.
 - Counter (main.py) keeps `count` with `use_state`. Add calls \
 `save(amount=1)`, a plain Python function in the component. The browser \
 sends only the click, and the amount is a Python argument that never \

@@ -1,4 +1,5 @@
-{% from "card.html" import card %}
+{# Imported with the page's context, so the card can read the board's name. #}
+{% from "card.html" import card with context %}
 <!doctype html>
 <html lang="en">
 <head>

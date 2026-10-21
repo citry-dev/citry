@@ -45,6 +45,12 @@ line's markup reads `open` through the scope Alpine shares with it. Its
 Close button dispatches a `close` event, and a listener on the Details
 component sets `open` to false.
 
+The route puts the board's name in the page's context as `board_name`, and
+the page imports the card macro `with context`, the form Jinja's docs give
+for a macro that reads the importing template's variables, so each card
+prints `{{ board_name }}` without taking it as an argument. An imported
+macro sees no context by default.
+
 Setting changed from the default: `undefined=StrictUndefined`. The
 benchmark turns on a framework's stricter check when other frameworks
 here have the same kind of check, and Citry reports a template name it

@@ -1,7 +1,7 @@
 status = "ported"
-mistake = { file = "main.py", contains = 'from crad import Card' }
+mistake = { file = "main.py", contains = 'from crad import BoardContext, Card' }
 
 [[edits]]
 file = "main.py"
-old = 'from card import Card'
-new = 'from crad import Card'
+old = 'from card import BoardContext, Card'
+new = 'from crad import BoardContext, Card'
