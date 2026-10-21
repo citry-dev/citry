@@ -196,7 +196,8 @@ class CatalogIndex:
                     continue
                 asset_owners.setdefault((kind, asset.resolved_path.resolve()), []).append(component)
         # Index inline declarations by the file that holds them once, so the
-        # editor can list a file's declaring classes on every keystroke.
+        # editor can list the classes in a file that declare inline assets on
+        # every keystroke.
         inline_owners: dict[Path, list[tuple[str, str, ComponentRecord]]] = {}
         for component in components:
             for kind in ("template", "js", "css"):

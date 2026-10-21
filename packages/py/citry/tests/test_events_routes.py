@@ -2008,6 +2008,42 @@ class TestCsrfFieldNames:
         assert response.status_code == 200
         assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"args": {}}}]
 
+    def test_a_get_query_and_a_batch_call_drop_the_field_too(self):
+        c = _citry()
+
+        class PeekIn:
+            q: str
+
+        class Peeker(Component):
+            citry = c
+            template = "<div>p</div>"
+
+            class Events:
+                @event(methods=("GET",))
+                def peek(self, data: PeekIn):
+                    return {"q": data.q}
+
+        search = self._search(c)
+        client = _mounted(c)
+        response = client.get(_event_url(Peeker, "peek"), params={"q": "a", "csrfmiddlewaretoken": "t0k"})
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"q": "a"}}]
+
+        envelope = {
+            "protocol": "citry-events/1",
+            "requestId": "r1",
+            "calls": [
+                {
+                    "componentClassId": search.class_id,
+                    "handlerName": "search",
+                    "args": {"q": "b", "csrfmiddlewaretoken": "t0k"},
+                }
+            ],
+        }
+        response = _post_envelope(client, "/citry/ext/events/call", envelope)
+        assert response.status_code == 200
+        assert response.json()["results"][0]["actions"] == [{"action": "data", "value": {"q": "b"}}]
+
     def test_a_data_class_that_declares_the_field_still_receives_it(self):
         c = _citry()
         search = self._search(c)
@@ -2059,7 +2095,7 @@ class TestCsrfFieldNames:
         [
             (
                 "csrfmiddlewaretoken",
-                "'_csrf_field_names' must be a list or tuple of field names, such as"
+                "'_csrf_field_names' must be a list, tuple, or set of field names, such as"
                 " ['csrfmiddlewaretoken']; got 'csrfmiddlewaretoken'.",
             ),
             (["csrfmiddlewaretoken", ""], "'_csrf_field_names' must hold non-empty strings; got ''."),

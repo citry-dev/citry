@@ -35,7 +35,7 @@ A host token can also arrive as a form field: Django's hidden
 ``csrfmiddlewaretoken`` input sits inside the forms it protects, so a form
 that calls a server event sends it with the other fields. The dispatcher
 drops the field names ``csrf_field_names`` returns before it checks the
-event's data class (design 3.3).
+event's data class (design 3.5, ``security_csrf.md`` 4.4).
 """
 
 from __future__ import annotations
@@ -143,7 +143,7 @@ def build_csrf_check(request: RouteRequest) -> Callable[[EventHandler], None]:
 
 def csrf_field_names(citry: Citry) -> frozenset[str]:
     """
-    Return the host CSRF field names the server drops from an event's form arguments.
+    Return the host CSRF field names the server drops from an event call's arguments.
 
     The value is the engine-wide
     ``extensions_defaults["events"]["_csrf_field_names"]`` setting, which the

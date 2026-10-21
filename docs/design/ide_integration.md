@@ -79,23 +79,6 @@ These rules need facts that only the loaded application gives, so
   send. The host CSRF field names that the server removes
   (`extensions_defaults["events"]["_csrf_field_names"]`) are skipped.
 
-The editor runs the five argument and form-field rules too once the app
-worker has loaded the app. `citry check` builds what each handler accepts
-from the real data class; the editor builds the same record from the
-handler description in the Events introspection entry
-([`events.md`](events.md) section 9.1), whose `extra_fields` and
-`validated_by` keys say whether an undeclared key fails the call and
-whether Citry's own rules check the values. A Pydantic model, a
-description without those keys from an older Citry, or a value the editor
-does not know turns the rules off for that handler; a field whose
-`type_display` names a class rather than a plain JSON type, `Literal`,
-union, or container of those has its values left unchecked. The
-description reflects the files the app was imported from, so the editor
-compares the handler's method and its data class in each open buffer with
-the file on disk and skips the handler while either has unsaved changes;
-when the data class lives in a module it cannot place, any unsaved Python
-buffer turns the rules off. The worker also copies the configured CSRF
-field names, so both tools skip the same controls.
 - `rule_misspelled_css_variable` (`citry.css.misspelled-variable`): a
   `var(--name)` one typing slip from a `css_data()` key.
 
@@ -103,13 +86,35 @@ Each of these rules reports nothing when it cannot read its input:
 component JavaScript that does not parse, `css_data()` keys that are not
 all known, a Pydantic data class, or arguments that are not literals.
 
+The editor runs the five argument and form-field rules too, once the app
+worker has loaded the app. `citry check` builds what each handler accepts
+from the real data class. The editor builds the same record from the
+handler description in the Events introspection entry
+([`events.md`](events.md) section 9.1): `extra_fields` says whether an
+undeclared key fails the call, and `validated_by` says whether Citry's own
+rules check the values. The worker also copies the configured CSRF field
+names, so both tools skip the same controls.
+
+The editor skips a handler when the description cannot prove what the
+server accepts: a Pydantic model, a description without those keys from an
+older Citry, or a value the editor does not know. A field whose
+`type_display` names a class, rather than a plain JSON type, a `Literal`,
+a union, or a container of those, has its values left unchecked.
+
+The description reflects the files the app was imported from. The worker
+also sends where each handler's data class is defined, so the editor
+compares the handler's method and its data class in the open buffers with
+the files on disk, and skips the handler while either has unsaved changes.
+When the worker cannot place the data class, any unsaved Python buffer
+turns the rules off for that handler until the files are saved.
+
 Some classes set a literal template but extend a class imported from
 another module of the project, so reading one file cannot prove they are
 components. Once the app worker has loaded the app, the editor reads the
 component records' `owner_file` and `owner_qualname` for each inline
 template, JavaScript, and CSS, and passes the module-level class names in
 the open file to discovery as `app_components`. Discovery then accepts
-those classes even though their base is not traceable, so their templates
+those classes even though the file does not show their base class, so their templates
 get the same checks as any other, and `citry check --types` gets them too
 through `project_check.py`. The worker also says, for each component,
 whether its effective `template_lang` is `None`; a template is read as

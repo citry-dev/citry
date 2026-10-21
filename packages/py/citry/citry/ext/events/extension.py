@@ -83,24 +83,28 @@ def _config_name_hint(name: str) -> str:
 
 
 def _validate_engine_config_value(name: str, value: Any) -> None:
-    """Reject an engine-wide Events setting whose value the transport could not use."""
+    """Reject an engine-wide Events setting whose value Citry could not use."""
     if name == "_max_envelope_bytes":
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             msg = f"'_max_envelope_bytes' must be a positive int (a byte count); got {value!r}."
             raise ValueError(msg)
-        return
-    # A single string would be read one character at a time, so it is
-    # rejected rather than guessed at; an empty sequence turns dropping off.
-    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple, set, frozenset)):
-        msg = (
-            "'_csrf_field_names' must be a list or tuple of field names, such as"
-            f" ['csrfmiddlewaretoken']; got {value!r}."
-        )
-        raise ValueError(msg)  # noqa: TRY004 - one exception type for the whole config error matrix
-    for item in value:
-        if not isinstance(item, str) or not item:
-            msg = f"'_csrf_field_names' must hold non-empty strings; got {item!r}."
+    elif name == "_csrf_field_names":
+        # A single string would be read one character at a time, so it is
+        # rejected rather than guessed at; an empty sequence turns dropping off.
+        if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple, set, frozenset)):
+            msg = (
+                "'_csrf_field_names' must be a list, tuple, or set of field names, such as"
+                f" ['csrfmiddlewaretoken']; got {value!r}."
+            )
             raise ValueError(msg)
+        for item in value:
+            if not isinstance(item, str) or not item:
+                msg = f"'_csrf_field_names' must hold non-empty strings; got {item!r}."
+                raise ValueError(msg)
+    else:
+        # Each engine-wide name needs its own rule here.
+        msg = f"No value check is defined for the engine-wide Events setting {name!r}."
+        raise AssertionError(msg)
 
 
 # The built-in defaults, the lowest of the three config levels (component

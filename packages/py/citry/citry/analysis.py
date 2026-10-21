@@ -5487,7 +5487,10 @@ def _ast_component_declarations(
                 component_classes,
                 component_languages,
             )
-            if (component_bases or accepted_by_app) and not statement.decorator_list:
+            # A decorator may replace a class this file proves, so it is not
+            # read as a component; the app's record already names the class
+            # that declares the template, decorated or not.
+            if (component_bases and not statement.decorator_list) or accepted_by_app:
                 class_nodes[statement.name] = statement
                 if parents is not None:
                     parents[statement] = parent

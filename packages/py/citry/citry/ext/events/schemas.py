@@ -298,10 +298,30 @@ def declared_field_names(schema_cls: type) -> frozenset[str]:
     if _is_pydantic_model(schema_cls):
         # ``model_fields`` is Pydantic v2; ``__fields__`` the v1 spelling.
         model_fields = getattr(schema_cls, "model_fields", None) or getattr(schema_cls, "__fields__", {})
-        aliases = {alias for info in model_fields.values() if isinstance(alias := getattr(info, "alias", None), str)}
-        return frozenset(model_fields) | aliases
+        names = set(model_fields)
+        for info in model_fields.values():
+            names.update(_pydantic_input_names(info))
+        return frozenset(names)
     converted = convert_schema_class(schema_cls)
     return frozenset(field.name for field in fields(converted) if field.init)
+
+
+def _pydantic_input_names(info: Any) -> set[str]:
+    """Return every top-level payload key a Pydantic field reads: its alias and its validation aliases."""
+    names: set[str] = set()
+    alias = getattr(info, "alias", None)
+    if isinstance(alias, str):
+        names.add(alias)
+    # Pydantic v2's `validation_alias` is a string, an `AliasChoices` of
+    # several, or an `AliasPath` whose first step is the top-level key.
+    validation_alias = getattr(info, "validation_alias", None)
+    choices = getattr(validation_alias, "choices", None)
+    for choice in choices if isinstance(choices, list) else [validation_alias]:
+        path = getattr(choice, "path", None)
+        first = path[0] if isinstance(path, list) and path else choice
+        if isinstance(first, str):
+            names.add(first)
+    return names
 
 
 def json_value_error(annotation: Any, value: Any, *, bind_strings: bool = False) -> str | None:

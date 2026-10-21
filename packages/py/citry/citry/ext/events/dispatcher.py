@@ -216,9 +216,10 @@ class CallEvent:
         instance_id: The calling instance's render id, or ``None`` for an
             instance-less call (an API client, a hand-written form).
         transport: The transport that carried the call (``"http"``, ...).
-        args: The raw, unvalidated wire args payload. Guards read this when
-            they need payload values, because one guard covers handlers with
-            different schemas.
+        args: The call's args before validation, with the host CSRF field
+            names removed (``extensions_defaults["events"]["_csrf_field_names"]``).
+            Guards read this when they need payload values, because one guard
+            covers handlers with different schemas.
 
     """
 

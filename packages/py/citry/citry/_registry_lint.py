@@ -642,16 +642,18 @@ class ServerEventForm:
     Attributes:
         call: The ``@c-submit`` binding on the form, which writes no
             arguments, so the browser collects the form's named controls.
-        sent: The controls whose name is sent on every submit: an
-            ``<input>``, ``<select>``, or ``<textarea>`` with a static
-            ``name`` that is not disabled, does not belong to another form,
-            and is not a file input or a button.
+        sent: The controls a submit includes under their written name when
+            they hold a value: an ``<input>``, ``<select>``, ``<textarea>``,
+            or submit ``<button>`` with a static ``name`` that is not
+            disabled, does not belong to another form, has no attribute
+            spread, and is not a file or image input.
         names: Every static control name in the form, including controls
             that are sent only sometimes, such as a disabled one.
         complete: Whether ``names`` lists every name the form can send:
             the form has no ``id`` that a control outside it could name,
-            and it holds no component, custom element, slot, loop, spread,
-            or name written as an expression.
+            and it holds no component, custom element, slot, ``<template>``,
+            loop, ``v-html``, ``#c-ignore`` content, spread, or name written
+            as an expression.
 
     """
 
@@ -740,13 +742,16 @@ def _form_submit_call(node: Any, handler_names: frozenset[str], base_index: int)
     return None
 
 
-# The controls whose value `FormData` collects. A `<button>` is left out,
-# because the browser's code builds the form data without the button that
-# submitted it.
-_FORM_CONTROLS = frozenset({"input", "select", "textarea"})
-# Input types the browser's form data leaves out, or sends as a file the
-# browser code skips.
-_UNSENT_INPUT_TYPES = frozenset({"submit", "image", "reset", "button", "file"})
+# The controls a submit sends. A submit button sends its name only when it
+# is the one that submitted the form, which both Citry's browser runtime and
+# a post without JavaScript include.
+_FORM_CONTROLS = frozenset({"input", "select", "textarea", "button"})
+# Input types a submit never sends as text: buttons that cannot submit, an
+# image button, which sends `name.x` and `name.y` instead, and a file, which
+# the browser runtime leaves out.
+_UNSENT_INPUT_TYPES = frozenset({"image", "reset", "button", "file"})
+# Button types that never submit the form.
+_UNSENT_BUTTON_TYPES = frozenset({"reset", "button"})
 # Citry tags that render their content in place, at most once.
 _IN_PLACE_CONDITIONS = frozenset({"c-if", "c-elif", "c-else"})
 
@@ -756,7 +761,8 @@ def _set_attribute(attr: Any) -> str | None:
     key = _ascii_lower(attr.key.content)
     for prefix in (":", "v-bind:", "c-"):
         if key.startswith(prefix):
-            return key[len(prefix) :]
+            # A modifier such as `.prop` still sets the same name.
+            return key[len(prefix) :].split(".", 1)[0]
     return key
 
 
@@ -785,7 +791,8 @@ class _FormControls:
                 or tag != lower
                 or "-" in lower
                 or lower in {"slot", "template", "component"}
-                or keys & {"v-for", "c-for", "v-bind", "c-bind", "v-html", "v-slot"}
+                # A library may add controls inside `#c-ignore` content.
+                or keys & {"v-for", "c-for", "v-bind", "c-bind", "v-html", "v-slot", "#c-ignore"}
                 or any(key.startswith("v-slot:") for key in keys)
                 # Markup written inside an attribute renders elsewhere.
                 or any(attr.kind == HtmlAttrKind.Template for attr in attrs)
@@ -818,9 +825,10 @@ class _FormControls:
                 # `form` is sent with that form, and a spread may set
                 # another name.
                 sometimes = True
-            elif sets == "type" and lower == "input":
+            elif sets == "type" and lower in {"input", "button"}:
                 inner = attr.inner_value
-                if key != "type" or inner is None or _ascii_lower(inner.content.strip()) in _UNSENT_INPUT_TYPES:
+                unsent = _UNSENT_INPUT_TYPES if lower == "input" else _UNSENT_BUTTON_TYPES
+                if key != "type" or inner is None or _ascii_lower(inner.content.strip()) in unsent:
                     sometimes = True
         inner = None if name_attr is None else name_attr.inner_value
         if inner is None or not inner.content:
@@ -841,10 +849,10 @@ def server_event_form_findings(
     """
     Compare the control names a form sends with what its ``@c-submit`` handler accepts.
 
-    The browser sends every named control of the form, and so does a post
-    without JavaScript, so a name the data class does not declare fails
-    every submit. A required field is reported missing only when the form
-    proves it lists every name it can send.
+    The browser sends the form's named controls, and so does a post without
+    JavaScript, so a name the data class does not declare fails each submit
+    that sends that control. A required field is reported missing only when
+    the form proves it lists every name it can send.
 
     Args:
         form: One form, from ``server_event_forms``.

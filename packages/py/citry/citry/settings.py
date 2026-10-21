@@ -282,11 +282,12 @@ class LintSettings:
             ``@c-submit`` sends the form's fields to a server event, when
             the handler's data class does not declare the control's
             ``name``, such as ``<input name="qeury">`` for a field ``q``.
-            The server rejects every submit. ``citry check`` and the editor
-            report it only with your application loaded. The default is
-            ``"error"``.
-        rule_missing_form_field: Severity for such a form when no control
-            in it is named after a field the handler's data class requires.
+            The server rejects each submit that sends the control. ``citry
+            check`` and the editor report it only with your application
+            loaded. The default is ``"error"``.
+        rule_missing_form_field: Severity for a form whose ``@c-submit``
+            sends its fields to a server event, when no control in it is
+            named after a field the handler's data class requires.
             It is reported only when the template shows every control the
             form can send. ``citry check`` and the editor report it only
             with your application loaded. The default is ``"error"``.

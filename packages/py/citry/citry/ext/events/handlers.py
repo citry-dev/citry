@@ -36,8 +36,8 @@ INJECTABLE_PARAMS = ("data", "state", "context", "request", "event")
 # not a ``def`` fails at declaration time (``EventsExtension.
 # validate_config_fields``), which is what makes config typos loud.
 # ``_max_envelope_bytes`` (the transport byte cap, design 3.5) and
-# ``_csrf_field_names`` (the host CSRF fields the server drops from a form's
-# arguments, design 3.3) are the engine-wide names: both apply before any
+# ``_csrf_field_names`` (the host CSRF fields the server drops from an event
+# call's arguments, design 3.5 and security_csrf.md 4.4) are the engine-wide names: both apply before any
 # component's config is read, so they are settings-only and a component
 # declaring one fails at class definition.
 CONFIG_NAMES = (
@@ -58,7 +58,7 @@ ENGINE_CONFIG_NAMES = frozenset({"_max_envelope_bytes", "_csrf_field_names"})
 
 # The hidden field Django's ``{% csrf_token %}`` and its own forms write. A
 # page that keeps it inside a form sending a server event would otherwise
-# fail every call with an unknown field (design 3.3).
+# fail every call with an unknown field (design 3.5, security_csrf.md 4.4).
 DEFAULT_CSRF_FIELD_NAMES = ("csrfmiddlewaretoken",)
 
 _HTTP_METHOD_RE = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")

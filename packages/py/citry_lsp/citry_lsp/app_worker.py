@@ -134,12 +134,12 @@ def _extension_analysis(engine: Citry) -> dict[str, object]:
 
 def _csrf_field_names(engine: Citry) -> list[str]:
     """
-    Copy the host CSRF field names the app's Events server removes from a form's arguments.
+    Copy the host CSRF field names the app's Events server removes from an event call's arguments.
 
     The setting is read from the engine's settings rather than through
     ``citry.ext.events.csrf``, so an app on an older Citry, which has neither
     the setting nor the removal, still loads. The editor then stays silent
-    about a ``csrfmiddlewaretoken`` control there, as it always has.
+    about a ``csrfmiddlewaretoken`` control there.
     """
     defaults = engine.settings.extensions_defaults.get("events", {})
     value = defaults.get("_csrf_field_names") if isinstance(defaults, Mapping) else None
@@ -297,12 +297,28 @@ def _schema_resolution_chain(
     return list(records.values()) or None
 
 
+def _class_source(cls: type | None) -> dict[str, str] | None:
+    """Return the file and qualified name that define a class, or None when they cannot be read."""
+    if cls is None:
+        return None
+    qualname = getattr(cls, "__qualname__", None)
+    try:
+        source_name = inspect.getsourcefile(cls)
+    except (TypeError, OSError):
+        return None
+    # A class defined inside a function cannot be found again by name.
+    if type(qualname) is not str or not qualname or "<locals>" in qualname or type(source_name) is not str:
+        return None
+    source_file = Path(source_name).resolve()
+    return {"file": source_file.as_posix(), "qualname": qualname} if source_file.is_file() else None
+
+
 def _event_sources(component_class: type) -> dict[str, object]:
     """Copy exact handler and public State origins without retaining project objects."""
     info = _component_events_info(component_class)
     if info is None:
         return {"handlers": [], "state": []}
-    handlers: list[dict[str, str]] = []
+    handlers: list[dict[str, object]] = []
     for wire_name, handler in info.handlers.items():
         func = handler.func
         module_name = getattr(func, "__module__", None)
@@ -326,6 +342,7 @@ def _event_sources(component_class: type) -> dict[str, object]:
                 "module": module_name,
                 "qualname": qualname,
                 "file": source_file.as_posix(),
+                "data_class": _class_source(handler.data_schema),
             }
         )
     if info.state_cls is None or info.state_meta is None:

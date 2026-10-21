@@ -695,7 +695,7 @@ def _untraced_template_diagnostics(
     The editor finds templates by reading one file at a time, so it cannot
     tell that such a class is a component. Once the app is loaded, the
     classes in ``app_components`` are found and not reported; a class added
-    or renamed since the app loaded is still reported until it reloads.
+    or renamed since the app loaded is still reported until the app reloads.
     Nothing is wrong with the code, so this is information, not a warning.
     """
     path = file_uri_path(uri)
@@ -11002,7 +11002,7 @@ def _shared_server_event_payloads(
             record = next((item for item in records if item.name == name), None)
             if not isinstance(name, str) or record is None:
                 continue
-            if not _handler_description_is_current(record, description, project, document, open_documents):
+            if not _handler_description_is_current(record, description, document, open_documents):
                 continue
             methods = description.get("methods")
             current[name] = (description, isinstance(methods, tuple) and "GET" in methods)
@@ -11041,7 +11041,6 @@ def _same_payload_description(left: Mapping[str, object], right: Mapping[str, ob
 def _handler_description_is_current(
     record: SourceEventRecord,
     description: Mapping[str, object],
-    project: ProjectState,
     document: DocumentState,
     open_documents: Mapping[str, DocumentState] | None,
 ) -> bool:
@@ -11054,37 +11053,13 @@ def _handler_description_is_current(
     """
     if not _definition_unchanged(record.source_file, record.qualname, document, open_documents):
         return False
-    schema = description.get("request_schema")
-    import_path = schema.get("import_path") if isinstance(schema, Mapping) else None
-    if not isinstance(import_path, str):
-        # No data class, or one the description cannot name: nothing else to compare.
-        return schema is None or open_documents is None or not _any_unsaved_python(open_documents)
-    located = _data_class_file(import_path, record, project)
-    if located is None:
-        # The class lives in a module the editor cannot place, so any
-        # unsaved Python file may hold it.
-        return open_documents is None or not _any_unsaved_python(open_documents)
-    data_file, qualname = located
-    return _definition_unchanged(data_file, qualname, document, open_documents)
-
-
-def _data_class_file(
-    import_path: str,
-    record: SourceEventRecord,
-    project: ProjectState,
-) -> tuple[Path, str] | None:
-    """Return the file that defines a data class and its qualified name there, when a known module holds it."""
-    modules = {record.module: record.source_file}
-    if project.catalog is not None:
-        for component in project.catalog.components:
-            if component.module is not None and component.python_file is not None:
-                modules.setdefault(component.module, component.python_file)
-    # The longest module that prefixes the path owns it: `app.forms.SaveIn`
-    # belongs to `app.forms`, not `app`.
-    for module in sorted(modules, key=len, reverse=True):
-        if import_path.startswith(f"{module}."):
-            return modules[module], import_path[len(module) + 1 :]
-    return None
+    if description.get("request_schema") is None:
+        return True
+    if record.data_file is not None and record.data_qualname is not None:
+        return _definition_unchanged(record.data_file, record.data_qualname, document, open_documents)
+    # The worker could not say where the class is defined, so any unsaved
+    # Python file may hold it.
+    return open_documents is None or not _any_unsaved_python(open_documents)
 
 
 def _definition_unchanged(
@@ -11095,12 +11070,8 @@ def _definition_unchanged(
 ) -> bool:
     """Return whether a class or function reads the same in the editor as in the file on disk."""
     current = _python_source(source_file, document, open_documents)
-    try:
-        with tokenize.open(source_file.resolve()) as source_stream:
-            saved = source_stream.read()
-    except (OSError, SyntaxError, UnicodeError):
-        return False
-    if current is None:
+    saved = _saved_python_source(source_file)
+    if current is None or saved is None:
         return False
     if current == saved:
         return True
@@ -11108,6 +11079,32 @@ def _definition_unchanged(
     return found is not None and found == _python_definition_source(saved, qualname)
 
 
+def _saved_python_source(source_file: Path) -> str | None:
+    """Return a Python file's text on disk, or None when it cannot be read."""
+    try:
+        resolved = source_file.resolve()
+        stat = resolved.stat()
+    except (OSError, ValueError):
+        return None
+    return _saved_python_text(resolved, stat.st_mtime_ns, stat.st_size)
+
+
+# Every diagnostics pass compares the same few files with their saved text,
+# so each saved version is read once; a write changes the key.
+@lru_cache(maxsize=64)
+def _saved_python_text(resolved: Path, _mtime_ns: int, _size: int) -> str | None:
+    try:
+        raw = resolved.read_bytes()
+        encoding, _lines = tokenize.detect_encoding(io.BytesIO(raw).readline)
+        # Decode without newline translation: an editor buffer keeps the
+        # file's `\r\n` line endings, and the two texts must compare equal.
+        return raw.decode(encoding)
+    except (OSError, SyntaxError, UnicodeError):
+        return None
+
+
+# A file with many handlers asks for several definitions of the same text.
+@lru_cache(maxsize=256)
 def _python_definition_source(source: str, qualname: str) -> str | None:
     """Return the text of the class or function at a dotted qualified name, or None when it is not there."""
     try:
@@ -11137,13 +11134,7 @@ def _any_unsaved_python(open_documents: Mapping[str, DocumentState]) -> bool:
         if open_document.language_id != "python":
             continue
         path = file_uri_path(open_document.uri)
-        if path is None:
-            return True
-        try:
-            with tokenize.open(path.resolve()) as source_stream:
-                if source_stream.read() != open_document.source:
-                    return True
-        except (OSError, SyntaxError, UnicodeError):
+        if path is None or _saved_python_source(path) != open_document.source:
             return True
     return False
 

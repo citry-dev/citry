@@ -1018,6 +1018,38 @@ test("collectFormArgs sends every value as the form's text", () => {
   }
 });
 
+test("collectFormArgs sends the button that submitted the form, as a post without JavaScript does", () => {
+  const form = {};
+  const previous = { FormData: globalThis.FormData, HTMLButtonElement: globalThis.HTMLButtonElement };
+  globalThis.HTMLButtonElement = class {};
+  const button = new globalThis.HTMLButtonElement();
+  button.form = form;
+  const otherButton = new globalThis.HTMLButtonElement();
+  otherButton.form = {};
+  const given = [];
+  // The stand-in FormData adds the submitter's entry the way a browser does
+  // when it is passed one.
+  globalThis.FormData = class {
+    constructor(formGiven, submitter) {
+      given.push(submitter);
+      this.entries = [["q", "alpha"], ...(submitter ? [["action", "save"]] : [])];
+    }
+    forEach(callback) {
+      for (const [name, value] of this.entries) callback(value, name);
+    }
+  };
+  try {
+    assert.deepEqual(bridgeModule.collectFormArgs(form, new Set(), button), { q: "alpha", action: "save" });
+    // A button of another form, or no button, is not passed to FormData.
+    assert.deepEqual(bridgeModule.collectFormArgs(form, new Set(), otherButton), { q: "alpha" });
+    assert.deepEqual(bridgeModule.collectFormArgs(form, new Set()), { q: "alpha" });
+    assert.deepEqual(given, [button, undefined, undefined]);
+  } finally {
+    globalThis.FormData = previous.FormData;
+    globalThis.HTMLButtonElement = previous.HTMLButtonElement;
+  }
+});
+
 test("custom transports receive the request context the fetch transport sends", async () => {
   const sent = [];
   const fetched = [];

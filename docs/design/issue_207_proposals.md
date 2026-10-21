@@ -601,11 +601,11 @@ The maintainer's answers, as of 2026-10-21:
 
 | # | Proposal | Decision |
 |---|---|---|
-| 1 | Components whose base class lives in another module | Options 1 and 2; Option 3 deferred |
+| 1 | Components whose base class lives in another module | Options 1 and 2; Option 3 deferred. **Done:** Option 1 (the `citry.check.template-not-checked` notice) and Option 2 (the editor and `citry check --types` accept the classes the loaded app registers) |
 | 2 | Run Vue's compiler over every template in `citry check` | Option 1, one converter shared with the runtime |
-| 3 | Server event payload checks in the editor | Option 1, an `extra_fields` key in the handler description |
+| 3 | Server event payload checks in the editor | Option 1, an `extra_fields` key in the handler description. **Done**, with a second key, `validated_by: "citry" \| "pydantic"`: `extra_fields` alone cannot tell the editor that a Pydantic model with `extra="forbid"` converts values and reads fields under aliases, so the editor skips a handler unless `validated_by` is `"citry"` |
 | 4a | CSRF hidden input in a form | Option 2: the server drops known CSRF field names (default `csrfmiddlewaretoken`) before checking the data class, so the token can stay inside the form and both the JavaScript and the no-JavaScript paths work. **Done:** `extensions_defaults["events"]["_csrf_field_names"]`, engine-wide like `_max_envelope_bytes` |
-| 4b | Text values for number fields | Option 1: the browser marks payloads it collected from a form, and the server converts them by the same rules as a form posted without JavaScript |
+| 4b | Text values for number fields | Option 1: the browser marks payloads it collected from a form, and the server converts them by the same rules as a form posted without JavaScript. **Done:** the call field `argsSource: "form"`; the browser now sends number and range inputs as text too, so both paths deliver the same values. The form-field rule (section 4) is done as `citry.browser.unknown-form-field` and `citry.browser.missing-form-field` |
 | 5 | Typed slot data in the editor and `--types` | Option 1 |
 | 6 | Links to routes and static files | Ask each framework integration through `mount()` / `urlpatterns()`. No `static=` setting. The rule is `rule_unknown_url` in `LintSettings`, a warning by default. It runs only when an integration has registered a checker, and a project or a component can turn it off |
 | 7 | Prop values written as expressions | Option 1, for props only; payload expressions deferred |

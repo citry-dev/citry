@@ -1,5 +1,11 @@
 /** Renderer-independent helpers shared by Citry Events browser hosts. */
 
+/** Whether a value is a button or input that belongs to this form, so it may have submitted it. */
+const isFormSubmitter = (value: unknown, form: HTMLFormElement): value is HTMLButtonElement | HTMLInputElement =>
+  ((typeof HTMLButtonElement === "function" && value instanceof HTMLButtonElement) ||
+    (typeof HTMLInputElement === "function" && value instanceof HTMLInputElement)) &&
+  value.form === form;
+
 /**
  * Read a form's named controls as call args.
  *
@@ -11,9 +17,21 @@
 export const collectFormArgs = (
   form: HTMLFormElement,
   reservedFields: ReadonlySet<string>,
+  submitter?: unknown,
 ): Record<string, string | string[]> => {
   const entries = new Map<string, string[]>();
-  new FormData(form).forEach((value, name) => {
+  // A post without JavaScript also sends the name and value of the button
+  // that submitted the form. FormData adds it only when it is given that
+  // button, and throws for any element that is not one of the form's own
+  // submit buttons, so anything else is left out.
+  const button = isFormSubmitter(submitter, form) ? submitter : undefined;
+  let data: FormData;
+  try {
+    data = new FormData(form, button);
+  } catch {
+    data = new FormData(form);
+  }
+  data.forEach((value, name) => {
     // A file cannot ride in a JSON call, so file inputs are left out.
     if (reservedFields.has(name) || typeof value !== "string") return;
     const bucket = entries.get(name) ?? [];

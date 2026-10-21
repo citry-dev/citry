@@ -178,3 +178,50 @@ def test_a_pydantic_data_class_is_not_checked_in_the_editor(tmp_path):
     app_file.write_text(source, encoding="utf8")
 
     assert _findings(tmp_path, app_file, source) == []
+
+
+def test_a_file_with_windows_line_endings_is_checked_like_any_other(tmp_path):
+    app_file, source = _app(tmp_path, '<button @c-click="save({amont: 1})">a</button>')
+    source = source.replace("\n", "\r\n")
+    app_file.write_bytes(source.encode())
+
+    assert [code for code, _covered, _message in _findings(tmp_path, app_file, source)] == [
+        "citry.browser.missing-server-event-field",
+        "citry.browser.unknown-server-event-field",
+    ]
+
+
+def _app_with_forms_module(tmp_path: Path, markup: str) -> tuple[Path, str]:
+    # The data class lives in its own module, which holds no component.
+    (tmp_path / "forms.py").write_text("class SaveIn:\n    amount: int\n", encoding="utf8")
+    source = _APP.format(markup=markup, engine_options="").replace(
+        "class SaveIn:\n    amount: int\n", "from forms import SaveIn\n"
+    )
+    app_file = tmp_path / "app.py"
+    app_file.write_text(source, encoding="utf8")
+    return app_file, source
+
+
+def test_typing_in_the_template_keeps_the_rules_on_when_the_data_class_is_in_another_module(tmp_path):
+    app_file, source = _app_with_forms_module(tmp_path, '<button @c-click="save({amount: 1})">a</button>')
+    edited = source.replace("save({amount: 1})", "save({amont: 1})")
+
+    assert [code for code, _covered, _message in _findings(tmp_path, app_file, source, edited=edited)] == [
+        "citry.browser.missing-server-event-field",
+        "citry.browser.unknown-server-event-field",
+    ]
+
+
+def test_an_unsaved_edit_to_a_data_class_in_another_module_turns_the_rules_off(tmp_path):
+    app_file, source = _app_with_forms_module(tmp_path, '<button @c-click="save({amont: 1})">a</button>')
+    project = load_project(tmp_path, "app:engine")
+    forms_file = tmp_path / "forms.py"
+    forms_text = "class SaveIn:\n    amount: int\n    amont: int = 0\n"
+    forms = DocumentState(forms_file.as_uri(), "python", forms_text, 1)
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    open_documents = {document.uri: document, forms.uri: forms}
+
+    codes = {diagnostic.code for diagnostic in browser_diagnostics(document, project, open_documents)}
+
+    assert not codes & _PAYLOAD_CODES

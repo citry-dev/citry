@@ -680,7 +680,7 @@ def test_the_benchmark_form_field_mistake_is_reported(tmp_path):
         (
             _UNKNOWN_FORM,
             "error",
-            "The form sends field 'qeury', which server event 'save' does not declare, so the server rejects every"
+            "The form sends field 'qeury', which server event 'save' does not declare, so the server rejects the"
             " submit.",
         ),
     ]
@@ -697,7 +697,7 @@ def test_the_benchmark_form_field_mistake_is_reported(tmp_path):
                 (
                     _UNKNOWN_FORM,
                     "The form sends field 'paeg', which server event 'save' does not declare, so the server rejects"
-                    " every submit. Did you mean 'page'?",
+                    " the submit. Did you mean 'page'?",
                 )
             ],
         ),
@@ -708,7 +708,7 @@ def test_the_benchmark_form_field_mistake_is_reported(tmp_path):
             [
                 (
                     _UNKNOWN_FORM,
-                    "The form sends field 'q', but server event 'save' takes no data, so the server rejects every"
+                    "The form sends field 'q', but server event 'save' takes no data, so the server rejects the"
                     " submit.",
                 )
             ],
@@ -722,7 +722,19 @@ def test_the_benchmark_form_field_mistake_is_reported(tmp_path):
                 (
                     _UNKNOWN_FORM,
                     "The form sends field 'nots', which server event 'save' does not declare, so the server rejects"
-                    " every submit.",
+                    " the submit.",
+                )
+            ],
+        ),
+        # The button that submits the form sends its name too.
+        (
+            '<form @c-submit.prevent="save"><input name="q"><button name="action" value="go">Go</button></form>',
+            QueryIn,
+            [
+                (
+                    _UNKNOWN_FORM,
+                    "The form sends field 'action', which server event 'save' does not declare, so the server"
+                    " rejects the submit.",
                 )
             ],
         ),
@@ -757,13 +769,17 @@ def test_form_fields_the_server_rejects_are_reported(tmp_path, form, data_class,
         '<form @c-submit.prevent="save"><input name="q"><input name="extra" :disabled="busy"></form>',
         '<form @c-submit.prevent="save"><input name="q"><input name="other" form="elsewhere"></form>',
         '<form @c-submit.prevent="save"><input name="q"><input type="file" name="upload"></form>',
-        '<form @c-submit.prevent="save"><input name="q"><button name="go">Go</button></form>',
+        '<form @c-submit.prevent="save"><input name="q"><button type="button" name="go">Go</button></form>',
+        '<form @c-submit.prevent="save"><input name="q"><input type="image" name="go" src="go.svg" alt="Go"></form>',
         '<form @c-submit.prevent="save"><fieldset disabled><input name="x"></fieldset><input name="q"></form>',
         '<form @c-submit.prevent="save"><input name="x" v-bind="attrs"><input name="q"></form>',
         # A required field may come from a control the template cannot see.
         '<form id="search" @c-submit.prevent="save"><button>Go</button></form>',
         '<form @c-submit.prevent="save"><c-SearchField /></form>',
         '<form @c-submit.prevent="save"><input :name="field"></form>',
+        '<form @c-submit.prevent="save"><input :name.prop="field"></form>',
+        # A library may add controls inside content Citry leaves alone.
+        '<form @c-submit.prevent="save"><div #c-ignore></div><button>Go</button></form>',
         '<form @c-submit.prevent="save"><search-box></search-box></form>',
         '<form @c-submit.prevent="save"><input v-for="name in names" :name="name"></form>',
         '<form @c-submit.prevent="save"><slot></slot></form>',

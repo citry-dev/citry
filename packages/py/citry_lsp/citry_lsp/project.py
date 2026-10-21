@@ -357,6 +357,10 @@ class SourceEventRecord:
     module: str
     qualname: str
     source_file: Path
+    # Where the handler's `data` class is defined, when the worker can tell,
+    # so the editor can see whether that class has unsaved edits.
+    data_file: Path | None = None
+    data_qualname: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -582,6 +586,22 @@ def _source_native_template(value: object, definition_id: str) -> bool | None:
     return native
 
 
+def _source_data_class(value: object, definition_id: str) -> tuple[Path | None, str | None]:
+    """Read where a handler's data class is defined, or nothing when the worker could not tell."""
+    # A handler without data, or a class the worker cannot place, sends null.
+    if value is None:
+        return None, None
+    if type(value) is not dict or set(value) != {"file", "qualname"}:
+        raise ValueError(f"source analysis for {definition_id!r} has an invalid event data class")
+    source_file, qualname = value.get("file"), value.get("qualname")
+    if type(source_file) is not str or type(qualname) is not str or not qualname:
+        raise ValueError(f"source analysis for {definition_id!r} has an invalid event data class")
+    path = Path(source_file)
+    if not path.is_absolute():
+        raise ValueError(f"source analysis for {definition_id!r} has a relative event data class source")
+    return path.resolve(), qualname
+
+
 def _source_event_info(
     value: object,
     definition_id: str,
@@ -602,7 +622,7 @@ def _source_event_info(
     handlers: list[SourceEventRecord] = []
     names: set[str] = set()
     for raw_handler in raw_handlers or []:
-        if type(raw_handler) is not dict or set(raw_handler) != {
+        if type(raw_handler) is not dict or set(raw_handler) - {"data_class"} != {
             "name",
             "method_name",
             "module",
@@ -628,7 +648,10 @@ def _source_event_info(
         if not path.is_absolute():
             raise ValueError(f"source analysis for {definition_id!r} has a relative event source")
         names.add(name)
-        handlers.append(SourceEventRecord(name, method_name, module, qualname, path.resolve()))
+        data_file, data_qualname = _source_data_class(raw_handler.get("data_class"), definition_id)
+        handlers.append(
+            SourceEventRecord(name, method_name, module, qualname, path.resolve(), data_file, data_qualname)
+        )
     if raw_state is not None and type(raw_state) is not list:
         raise ValueError(f"source analysis for {definition_id!r} has invalid State fields")
     state_fields: list[SourceStateFieldRecord] = []
@@ -762,7 +785,7 @@ class ProjectState:
     catalog: CatalogIndex | None = None
     source_analysis: SourceAnalysisIndex | None = None
     i18n: I18nProjectIndex | None = None
-    # The host CSRF field names the app's server removes from a form's event
+    # The host CSRF field names the app's server removes from an event call's
     # arguments, so the form-field rule leaves those controls alone.
     csrf_field_names: frozenset[str] = frozenset({"csrfmiddlewaretoken"})
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)

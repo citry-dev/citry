@@ -184,8 +184,10 @@ citry = Citry(
 )
 ```
 
-A data class that declares a field with one of these names still receives
-it.
+The list replaces the default, so keep `"csrfmiddlewaretoken"` in it if
+you still use Django's input. A single string instead of a list fails when
+`Citry(...)` is created. A data class that declares a field with one of
+these names still receives it.
 
 ### Use your own token { #other-frameworks }
 

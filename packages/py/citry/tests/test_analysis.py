@@ -758,10 +758,12 @@ def test_app_components_find_templates_whose_base_comes_from_another_module():
 
     # A listed class is a component, and a same-file subclass traces
     # through it. A template the app does not call Citry's own is skipped,
-    # though its CSS is still found. A decorator may return another class.
+    # though its CSS is still found. The app's record names the class that
+    # declares the template, so a decorated one is read too.
     assert [(region.component_name, region.source_map.template_source) for region in templates.regions] == [
         ("Card", "<article>{{ title }}</article>"),
         ("Wide", "<section></section>"),
+        ("Decorated", "<p></p>"),
     ]
     assert [(region.component_name, region.kind.value) for region in assets.regions] == [
         ("Card", "template"),
@@ -769,9 +771,10 @@ def test_app_components_find_templates_whose_base_comes_from_another_module():
         ("Card", "css"),
         ("Wide", "template"),
         ("Legacy", "css"),
+        ("Decorated", "template"),
     ]
     # Only the classes still skipped keep their notice.
-    assert [(item.component_name, item.base) for item in untraced] == [("Decorated", "AppBase"), ("Added", "AppBase")]
+    assert [(item.component_name, item.base) for item in untraced] == [("Added", "AppBase")]
     # Without the app, and for the formatter, which never loads it, reading
     # the file alone finds none of them.
     assert discover_python_templates(source).regions == ()

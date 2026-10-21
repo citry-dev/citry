@@ -444,27 +444,33 @@ every value as text, exactly as the form holds it, and marks the call:
 
 The server then binds the text by the rules it uses for a form posted
 without JavaScript: `"3"` fills an `int` field, `"2.5"` a `float` field, and
-`"on"`, `"true"`, `"1"`, `"false"`, or `"0"` a `bool` field. Both paths then
-give the handler the same values. A name that appears more than once stays a
-list of strings, and the browser leaves out file inputs, because a call
-carries only JSON.
+`"on"`, `"true"`, `"1"`, `"false"`, or `"0"` a `bool` field. The browser
+also adds the name and value of the submit button that sent the form, as a
+form posted without JavaScript does. Both paths then give the handler the
+same values. A name that appears more than once stays a list of strings, and
+the browser leaves out file inputs, because a call carries only JSON.
 
-A call without `argsSource` carries JSON values, and the server checks them
-strictly: a string where the handler declares `int` is an `invalid_args`
-error. This is what page code, API clients, and older browser code send.
+A JSON call without `argsSource` carries JSON values, and the server checks
+them strictly: a string where the handler declares `int` is an
+`invalid_args` error. This is what page code, API clients, and older browser
+code send. The form and query adapters of the per-handler route
+([HTTP adapters](#http-adapters)) always bind their values as text, because a
+form post or a query string carries nothing else, so they need no mark; a
+GET query never carries `argsSource`.
 
 The mark changes only how `args` bind. It does not change which fields the
 handler accepts or loosen any other check. Its error cases are:
 
 - An `argsSource` that is any other string, such as `"json"`, or that is not
-  a string at all, rejects the call as `protocol_mismatch` before any handler
-  runs, like any other malformed call field.
+  a string at all, rejects the envelope as `protocol_mismatch` before any
+  handler runs, like any other malformed call field, so every call in it
+  answers with that error.
 - A marked value the handler's field cannot read, such as `"x"` for an `int`
   field or `"yes"` for a `bool` field, is an `invalid_args` error for that
   field.
 - A mark on a call whose `args` hold non-text JSON values is still a valid
-  call. The numbers, booleans, and nested values bind by the ordinary JSON
-  rules; only text values gain the conversion.
+  call. Text values at any depth, inside lists and objects too, gain the
+  conversion; numbers, booleans, and `null` bind by the ordinary JSON rules.
 
 ### Send order
 
@@ -948,7 +954,9 @@ A standard JSON envelope uses
 `Content-Type: application/citry-events+json`. The batch route may also accept
 it under `application/json`. On the per-handler route, plain JSON, form data,
 and query strings are convenience adapters: they build a standard one-call
-envelope, then enter the same strict dispatcher. The URL supplies
+envelope, then enter the same dispatcher. Form data and query strings carry
+only text, so their values bind as described in
+[Arguments collected from a form](#arguments-collected-from-a-form). The URL supplies
 `componentClassId` and `handlerName`; an explicit protocol body must agree
 with it.
 

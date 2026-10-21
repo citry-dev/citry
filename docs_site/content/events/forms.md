@@ -81,30 +81,36 @@ The form's fields are sent only when the binding names the handler alone,
 as in `submit` or `submit()`. Arguments you write, as in
 `submit({draft: true})`, are sent instead of the fields.
 
-A misspelled `name` fails every submit. With your application loaded,
-`citry check` and the editor report a control whose `name` the data class
-does not declare, and a required field that no control in the form sends
-([form fields](/ide/template-linting/#check-form-fields)).
+A `name` that the data class does not declare fails each submit that
+sends the control. With your application loaded, `citry check` and the
+editor report such a `name`, and a required field that no control in the
+form sends ([form fields](/ide/template-linting/#check-form-fields)).
 
 ### Form field types
 
 Every control sends its text, and Citry converts the text to the field's
-type the same way whether or not JavaScript has loaded:
+type the same way as for a form posted without JavaScript:
 
 | Control | Text sent | Declare the field as |
 |---|---|---|
 | `<input type="number">`, `<input type="range">` | `"3"` or `"2.5"` | `int` or `float` |
 | A checked checkbox without a `value` | `"on"` | `bool = False` |
 | An unchecked checkbox | nothing | `bool = False` |
+| A `<select>` whose options are numbers | `"2"` | `int` |
 | Other inputs, `<select>`, `<textarea>` | the text | `str` |
 
 An unchecked checkbox sends nothing at all, so give a `bool` field a default
 of `False`, or a form with the box unchecked fails because the field is
-missing.
+missing. A checkbox with its own `value` sends that text, so for a `bool`
+field leave `value` out or use `"true"` or `"1"`.
 
 An empty input sends empty text, which an `int`, `float`, or `bool` field
-rejects. Add `required` to the input, or declare the field as `str` and
-convert it in the handler.
+rejects, even one declared as `int | None`. Add `required` to the input, or
+declare the field as `str` and convert it in the handler.
+
+The submit button that sent the form adds its own `name` and `value`, if
+it has a `name`, so `<button name="action" value="save">` sends
+`action="save"`.
 
 ## `EventError` field errors
 

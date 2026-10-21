@@ -3698,7 +3698,9 @@
           ? value.target
           : isEvent && value.currentTarget instanceof HTMLFormElement ? value.currentTarget : null;
         if (form) {
-          args = global.CitryVueEvents.collectFormArgs(form, new Set());
+          // `submitter` is the button that submitted the form, which a post
+          // without JavaScript sends too.
+          args = global.CitryVueEvents.collectFormArgs(form, new Set(), value.submitter);
           argsSource = "form";
         } else args = {};
       }

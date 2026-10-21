@@ -1151,3 +1151,19 @@ def test_declared_field_names_counts_a_pydantic_alias():
         token: str = pydantic.Field(alias="csrfmiddlewaretoken")
 
     assert declared_field_names(Model) == frozenset({"token", "csrfmiddlewaretoken"})
+
+
+@requires_pydantic
+def test_declared_field_names_counts_pydantic_validation_aliases():
+    class Single(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias="csrfmiddlewaretoken")
+
+    class Choices(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias=pydantic.AliasChoices("csrfmiddlewaretoken", "tok"))
+
+    class Nested(pydantic.BaseModel):
+        token: str = pydantic.Field(validation_alias=pydantic.AliasPath("csrf", 0))
+
+    assert "csrfmiddlewaretoken" in declared_field_names(Single)
+    assert {"csrfmiddlewaretoken", "tok"} <= declared_field_names(Choices)
+    assert "csrf" in declared_field_names(Nested)

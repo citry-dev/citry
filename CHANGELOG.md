@@ -40,12 +40,11 @@
     required field, or a literal of the wrong type, such as
     `save({amount: '1'})` for an `int` field
     (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
-    `rule_incompatible_server_event_field`), which the editor reports too;
+    `rule_incompatible_server_event_field`);
   - a control in a form whose `@c-submit` sends the form's fields, when
     the handler's data class does not declare its `name`, such as
     `<input name="qeury">`, or no control is named after a required field
-    (`rule_unknown_form_field`, `rule_missing_form_field`), which the
-    editor reports too;
+    (`rule_unknown_form_field`, `rule_missing_form_field`);
   - a `var(--name)` that misspells a `css_data()` key, such as
     `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
 
@@ -114,10 +113,11 @@
   the line.
 - A form submitted through `@c-submit` now gives the handler the same
   values as the same form posted without JavaScript: text such as `"3"`
-  fills an `int` or `float` field, and a checked checkbox fills a `bool`
-  field. Number and range inputs now send their text, so a handler that
-  reads `event.args` directly gets `"3"` instead of `3`. An unchecked
-  checkbox sends nothing, so give a `bool` field a default of `False`.
+  fills an `int` or `float` field, a checked checkbox fills a `bool`
+  field, and the submit button that sent the form adds its `name`. Number
+  and range inputs now send their text, so a handler that reads
+  `event.args` directly, or a Pydantic model in strict mode, gets `"3"`
+  instead of `3`, as it already did without JavaScript.
 
 ### Fixes
 

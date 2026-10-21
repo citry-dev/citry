@@ -902,7 +902,8 @@ Citry checks what it can read from the template:
 A call with no arguments is reported only on an element that cannot
 contain a form, such as `<button>`. On a `<form>`, on an element that may
 hold one, or for the `submit` event, the browser may send the form's
-fields instead, which [the form field rules](#check-form-fields) check. A
+fields instead. When that binding is an `@c-submit` on the `<form>`
+itself, [the form field rules](#check-form-fields) check the fields. A
 Pydantic `data` class is not checked, because Pydantic converts values
 and may read a field under another name.
 
@@ -948,19 +949,31 @@ class Search(Component):
     """
 ```
 
-Citry checks each `<input>`, `<select>`, and `<textarea>` with a `name`
-written in the template. It leaves out a control that the browser does
-not send with this form: one that is disabled, one tied to another form
-by its `form` attribute, a button, and a file input. It also leaves out
-the host's CSRF field, such as Django's `csrfmiddlewaretoken`, because the
-server removes it before it checks the `data` class
-([CSRF in forms](/security/#csrf-tokens-in-forms)).
+Citry checks each `<input>`, `<select>`, `<textarea>`, and submit
+`<button>` with a `name` written in the template. A submit button sends
+its name only when it submits the form, and a checkbox only when it is
+checked, so such a mistake fails only those submits.
+
+Citry leaves out a control that the browser may not send with this form,
+or may send under another name:
+
+- a disabled control, including one inside a disabled `<fieldset>` or
+  with a bound `:disabled`;
+- a control tied to another form by its `form` attribute;
+- a file input, an image input, and a button that cannot submit;
+- a control whose `type` or `name` is written as an expression, or that
+  has an attribute spread such as `v-bind="attrs"`.
+
+It also leaves out the host's CSRF field, such as Django's
+`csrfmiddlewaretoken`, because the server removes it before it checks the
+`data` class ([CSRF in forms](/security/#csrf-tokens-in-forms)).
 
 A required field without a control is reported only when the template
-shows every control the form can send. A component, a slot, a loop, an
-attribute spread such as `v-bind="attrs"`, a `name` written as an
-expression, or an `id` on the form, which a control elsewhere could name
-in its `form` attribute, turns that check off for the form.
+shows every control the form can send. The check is off for a form that
+holds a component, custom element, slot, `<template>`, loop, `v-html`,
+`#c-ignore` content, attribute spread, or a `name` written as an
+expression. It is also off when the form has an `id`, because a control
+elsewhere could join the form with its `form` attribute.
 
 Each mistake has its own setting: `rule_unknown_form_field` and
 `rule_missing_form_field`. Like the argument rules, they need your
