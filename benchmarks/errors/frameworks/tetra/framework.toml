@@ -40,8 +40,12 @@ with the component tag's values when it renders the component. The \
 components:
 - ApiLine has the public attribute `api_base`, which load() sets from the \
 settings, and shows it with Alpine's `x-text`.
-- ProjectList builds the cards in load() and keeps the titles of the hidden \
-cards in the public attribute `hidden`. Its `hide(title)` method is \
+- ProjectList builds the cards in load(), shows `Projects: {{ cards|length \
+}}` above them, as the django-unicorn app's card list does (so the line \
+sits below the API line, not the owner line), and keeps the titles of the \
+hidden cards in the public attribute `hidden`. It gives each card its title \
+as its key (`key=card.title`), as Tetra's tutorial keys components in a \
+loop. Its `hide(title)` method is \
 subscribed with `@public.listen('hide')` to the browser event `hide`, the \
 shortcut the components docs give for an event that bubbles up from a \
 child: Tetra calls the method on the server with the event's value, then \
@@ -118,35 +122,46 @@ library docs show.
 Stricter settings: type annotations on public attributes. Tetra has no \
 setting that turns on a check, but it checks a public attribute's value \
 only when the attribute has a type annotation, so annotating every public \
-attribute is how this app turns that check on. Left off, with the reason: \
-Tetra's settings choose esbuild's arguments, the names of its cache folder, \
-its component modules and its upload folder, and none adds a check. Nor \
-can esbuild's arguments add one: its `--log-override` option can only raise \
-a warning to an error, which the rule does not count as a stricter check. Django's own options, djLint's rules that are \
-off by default and the other tools the plan names are left off for the \
-reasons the Django app's notes give; the JavaScript type check (`checkJs`) \
-has no .js file to read here. Tetra builds a Pydantic model from each component's public \
-attributes and their annotations, and checks the values against it each \
-time it writes the component's state into the page. The docs write public \
-attributes both with an annotation (`visible: bool = public(False)`) and \
-without (`title = public("")`); without one, the model accepts any value. \
-Citry, and django-components with its type-checking extension, check \
-component values' types too. Two cells depend on it, measured in a trial \
-run without the annotations on `api_base` and `hidden`: \
-m30 and m41 end as runtime errors with them, and were missed without them \
-(m30's list stored the number and no title matched it; m41 showed the same \
-page, because Tetra's JSON encoder writes the Path as its text). The trial \
-left out only the annotations of `api_base` and `hidden`, and pyright \
-reported an error in its clean app, where the card list unpacks the \
-unannotated `hidden`; the browser check, which decides both cells, is not \
-affected by that. Without the annotation on `count`, pyright also rejects \
-the counter's addition, so a developer using pyright is pushed to write \
-the annotations anyway. Pydantic's default mode accepts \
-numeric text such as "3" for a number, and Tetra keeps the text, but it \
-rejects text such as "card.count". Were the card's `count` and `tone` \
-public, Tetra would check them too, and m03 and m49 would likely end as \
-runtime errors (reasoned from the source, not measured); they are not \
-public because no browser code reads them.
+attribute is how this app turns that check on. Tetra builds a Pydantic \
+model from each component's public attributes and their annotations, and \
+checks the values against it each time it writes the component's state \
+into the page. The docs write public attributes both with an annotation \
+(`visible: bool = public(False)`) and without (`title = public("")`); \
+without one, the model accepts any value. Citry, and django-components \
+with its type-checking extension, check component values' types too. Two \
+cells depend on it, measured in a trial run without the annotations on \
+`api_base` and `hidden`: m30 and m41 end as runtime errors with them, and \
+were missed without them (m30's list stored the number and no title \
+matched it; m41 showed the same page, because Tetra's JSON encoder writes \
+the Path as its text). pyright reported an error in that trial's clean \
+app, where the card list unpacks the unannotated `hidden`; the browser \
+check, which decides both cells, is not affected by that. Without the \
+annotation on `count`, pyright also rejects the counter's addition, so a \
+developer using pyright is pushed to write the annotations anyway. \
+Pydantic's default mode accepts numeric text such as "3" for a number, \
+and Tetra keeps the text, but it rejects text such as "card.count". Were \
+the card's `count` and `tone` public, Tetra would check them too, and m03 \
+and m49 would likely end as runtime errors (reasoned from the source, not \
+measured); they are not public because no browser code reads them.
+
+Settings considered and left off, with the reason. Tetra's own settings \
+choose the path to esbuild (`TETRA_ESBUILD_PATH`, set as described above), \
+esbuild's arguments, and the names of its cache folder, its component \
+modules and its upload folder; none adds a check. Nor do esbuild's \
+arguments add a kind of check the other frameworks make: `--log-level` and \
+`--log-override` can show messages esbuild hides by default, which concern \
+how it bundles `require()` and `import()` calls, or raise a warning to an \
+error, which the rule does not count as a stricter check. Pydantic's \
+strict types (`StrictInt`, or `Annotated[..., Strict()]`) would also \
+reject numeric text; Tetra builds its model with fixed settings, so they \
+could only be written into each annotation. They are left off because \
+Tetra's docs never write them, and they would change no cell: the one case \
+that stores numeric text in a public attribute (m39) is already reported \
+by pyright in the editor. Django's own options, djLint's rules that are \
+off by default, and the three tools the benchmark plan names (the Django \
+Language Server, django-extensions' `validate_templates` and django-stubs) \
+are left off for the reasons the Django app's notes give. VS Code's \
+JavaScript type check (`checkJs`) has no .js file to read here.
 
 pyright sees `public(...)` as a \
 `Public` object, not as a value of the annotated type, so each annotated \
@@ -163,14 +178,18 @@ checked.
 What Tetra itself checks, read from the installed source and seen in the \
 cases:
 - Tetra compiles every component's template when Django starts, so an \
-unknown tag, such as a misspelled component tag (m01), fails `manage.py \
-check` and the build. This is not a system check, and it depends on how \
-Tetra 0.8.5 compiles templates: in DEBUG, Tetra catches the template's syntax error, logs it and \
-puts off compiling until the first render, but its own check that the \
-template has exactly one top-level tag then reads the template's source, \
-which compiles it at once and raises the error. A later version could keep \
-the error until the page renders. The same misspelled tag in page.html, \
-which is not a component template, fails only when the page renders.
+unknown tag, such as a misspelled component tag (m01), or an unknown \
+filter (m59), fails `manage.py check` and the build. This is not a system \
+check, and it depends on how Tetra 0.8.5 compiles templates: in DEBUG, \
+Tetra catches the template's syntax error, logs it and puts off compiling \
+until the first render, but its own check that the template has exactly \
+one top-level tag then reads the template's source, which compiles it at \
+once and raises the error. A later version could keep the error until the \
+page renders. The same mistake in page.html, which is not a component \
+template, fails only when the page renders.
+- `@public.listen` requires a method that takes exactly one argument, the \
+event's value, and checks it when the class is defined, so a listener \
+given a second argument (m60) fails `manage.py check` too.
 - The component tag's values are Python arguments of load(), so a missing \
 argument raises a TypeError when the page renders. No type or allowed \
 value is checked.

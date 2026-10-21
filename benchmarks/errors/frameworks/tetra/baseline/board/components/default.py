@@ -97,8 +97,9 @@ class ProjectList(Component):
     def hide(self, title: str) -> None:
         self.hidden = [*self.hidden, title]
 
-    # Each card is keyed by its title, so Tetra matches it with its saved
-    # state when the list renders again.
+    # Each card is keyed by its title, as Tetra's tutorial keys components in
+    # a loop: Tetra finds each card's saved state by its key when the list
+    # renders again.
     template: django_html = """
     <div>
       <p>Projects: {{ cards|length }}</p>
