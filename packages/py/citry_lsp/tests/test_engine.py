@@ -3004,6 +3004,81 @@ def test_template_lint_diagnostics_report_misspelled_directives_without_a_projec
     ]
 
 
+def test_template_lint_diagnostics_report_the_html_rules_without_a_project():
+    source = (
+        '<div titel="x"><dvi></dvi><p>a<div>b</div></p><img src="a.png">'
+        '<button :aria-expandd="o" @clik="t()"></button><form v-model="q"></form>'
+        '<p v-iff="o"></p><p v-if="o &&"></p><i id="d"></i><b id="d"></b></div>'
+    )
+    project = _syntax_state()
+    document = _document(source, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    # Each rule uses its default severity when no owner is known.
+    warning, error = types.DiagnosticSeverity.Warning, types.DiagnosticSeverity.Error
+    assert sorted((item.code, item.severity) for item in diagnostics) == [
+        ("citry.browser.invalid-model-target", error),
+        ("citry.template.duplicate-id", error),
+        ("citry.template.invalid-nesting", error),
+        ("citry.template.missing-image-alt", warning),
+        ("citry.template.misspelled-attribute", error),
+        ("citry.template.misspelled-directive", error),
+        ("citry.template.misspelled-element", error),
+        ("citry.template.unknown-aria-attribute", error),
+        ("citry.vue.invalid-expression", error),
+        ("citry.vue.misspelled-event", warning),
+    ]
+    expression = next(item for item in diagnostics if item.code == "citry.vue.invalid-expression")
+    assert expression.range == types.Range(_position(source, "o &&"), _position(source, "o &&", len("o &&")))
+
+
+def test_template_lint_diagnostics_apply_owner_policy_to_the_html_rules(tmp_path):
+    (tmp_path / "avatar.html").write_text('<img src="a.png">', encoding="utf-8")
+    (tmp_path / "badge.html").write_text('<img src="a.png">', encoding="utf-8")
+    (tmp_path / "logo.html").write_text('<img src="a.png">', encoding="utf-8")
+    (tmp_path / "counter.html").write_text('<img src="a.png">', encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component, LintSettings\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, "
+        "lint=LintSettings(rule_missing_image_alt='error'))\n"
+        "class Avatar(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'avatar.html'\n"
+        "class Badge(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'badge.html'\n"
+        "    js = '$component({})'\n"
+        "class Logo(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'logo.html'\n"
+        "    def js_data(self, kwargs, slots):\n"
+        "        return {}\n"
+        "class Counter(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'counter.html'\n"
+        "    class State:\n"
+        "        count: int = 0\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+
+    def codes(name: str) -> list[tuple[str, types.DiagnosticSeverity]]:
+        path = tmp_path / name
+        document = DocumentState(path.as_uri(), "citry-html", path.read_text(encoding="utf-8"), 1)
+        document.update(document.source, 1, project)
+        return [(item.code, item.severity) for item in template_lint_diagnostics(document, project, {})]
+
+    # A server-only component's root image gets no alt from a parent; Vue
+    # passes a parent's alt to the root of a component with browser code,
+    # browser data, or State.
+    assert codes("avatar.html") == [("citry.template.missing-image-alt", types.DiagnosticSeverity.Error)]
+    assert codes("badge.html") == []
+    assert codes("logo.html") == []
+    assert codes("counter.html") == []
+
+
 def test_template_lint_diagnostics_read_the_component_lint_class_without_a_project():
     # Before the application loads, the component's own Lint class, read
     # from the current text, sets each rule's severity.

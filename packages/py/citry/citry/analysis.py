@@ -103,10 +103,16 @@ from citry._diagnostic_catalog import (
 )
 from citry._diagnostics import render_diagnostic
 from citry._html_attribute_values import (
+    BOOLEAN_ATTRIBUTES as _BOOLEAN_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
     CASE_SENSITIVE_KEYWORDS as _CASE_SENSITIVE_KEYWORDS,
 )
 from citry._html_attribute_values import (
     CUSTOM_ELEMENT_ATTRIBUTES as _CUSTOM_ELEMENT_ATTRIBUTES,
+)
+from citry._html_attribute_values import (
+    DOM_EVENT_NAMES as _DOM_EVENT_NAMES,
 )
 from citry._html_attribute_values import (
     ELEMENT_ATTRIBUTES as _ELEMENT_ATTRIBUTES,
@@ -134,6 +140,18 @@ from citry._json_wire import JsonWireField, JsonWireKind, JsonWireType, WireClas
 from citry._json_wire import json_wire_type_from_annotation as _json_wire_type_from_annotation
 from citry._json_wire import json_wire_type_from_expression as _json_wire_type_from_expression
 from citry._linting import TemplateLintInfo
+from citry._markup_lint import ELEMENT_DIRECTIVES as _ELEMENT_DIRECTIVES
+from citry._markup_lint import FOREIGN_DIRECTIVES as _FOREIGN_DIRECTIVES
+from citry._markup_lint import (
+    MARKUP_LINT_RULES,
+    MarkupLintConsumer,
+    MarkupLintFinding,
+    _is_directive_typo,
+    lint_invalid_vue_expressions,
+    lint_markup,
+    one_slip_from,
+)
+from citry._markup_lint import SPELLED_OUT_ELIF as _SPELLED_OUT_ELIF
 from citry._portable_ide import (
     ComponentNameMatch,
     TemplateTagUse,
@@ -423,6 +441,7 @@ _SOURCE_LINT_RULES = (
     "rule_alpine_cloak",
     "rule_invalid_attribute_value",
     "rule_misspelled_directive",
+    *MARKUP_LINT_RULES,
 )
 
 
@@ -451,6 +470,21 @@ class ComponentSourceLint:
             when readable.
         rule_misspelled_directive: ``Lint.rule_misspelled_directive``, when
             readable.
+        rule_misspelled_attribute: ``Lint.rule_misspelled_attribute``, when
+            readable.
+        rule_misspelled_element: ``Lint.rule_misspelled_element``, when
+            readable.
+        rule_unknown_aria_attribute: ``Lint.rule_unknown_aria_attribute``,
+            when readable.
+        rule_invalid_nesting: ``Lint.rule_invalid_nesting``, when readable.
+        rule_duplicate_id: ``Lint.rule_duplicate_id``, when readable.
+        rule_missing_image_alt: ``Lint.rule_missing_image_alt``, when
+            readable.
+        rule_invalid_model_target: ``Lint.rule_invalid_model_target``, when
+            readable.
+        rule_misspelled_event: ``Lint.rule_misspelled_event``, when readable.
+        rule_invalid_vue_expression: ``Lint.rule_invalid_vue_expression``,
+            when readable.
 
     """
 
@@ -458,6 +492,15 @@ class ComponentSourceLint:
     rule_alpine_cloak: Literal["ignore", "warning", "error"] | None = None
     rule_invalid_attribute_value: Literal["ignore", "warning", "error"] | None = None
     rule_misspelled_directive: Literal["ignore", "warning", "error"] | None = None
+    rule_misspelled_attribute: Literal["ignore", "warning", "error"] | None = None
+    rule_misspelled_element: Literal["ignore", "warning", "error"] | None = None
+    rule_unknown_aria_attribute: Literal["ignore", "warning", "error"] | None = None
+    rule_invalid_nesting: Literal["ignore", "warning", "error"] | None = None
+    rule_duplicate_id: Literal["ignore", "warning", "error"] | None = None
+    rule_missing_image_alt: Literal["ignore", "warning", "error"] | None = None
+    rule_invalid_model_target: Literal["ignore", "warning", "error"] | None = None
+    rule_misspelled_event: Literal["ignore", "warning", "error"] | None = None
+    rule_invalid_vue_expression: Literal["ignore", "warning", "error"] | None = None
 
     def __post_init__(self) -> None:
         for rule_name in _SOURCE_LINT_RULES:
@@ -485,6 +528,15 @@ class ComponentSourceLint:
         if self.rule_misspelled_directive is None:
             return MisspelledDirectiveLintConsumer()
         return MisspelledDirectiveLintConsumer(self.rule_misspelled_directive)
+
+    def markup_consumer(self) -> MarkupLintConsumer:
+        """Return this component's severities for the rules that read a template's HTML, the defaults when unset."""
+        # The source does not show whether the component has browser code,
+        # so a root `<img>` may get its `alt` from a parent, as the
+        # consumer's default assumes.
+        return MarkupLintConsumer(
+            **{rule: getattr(self, rule) for rule in MARKUP_LINT_RULES if getattr(self, rule) is not None},
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1244,7 +1296,21 @@ def _attribute_value_finding(
     # The value span sits inside the quotes; an empty or missing value marks the name.
     span = (inner.start_index, inner.end_index) if inner is not None and inner.content else None
     start, end = span if span is not None else (attr.key.start_index, attr.key.end_index)
-    if attribute == "name" and element in _FRAME_NAME_ELEMENTS:
+    boolean_elements = _BOOLEAN_ATTRIBUTES.get(attribute, ())
+    if element in boolean_elements or "*" in boolean_elements:
+        # A boolean attribute is on whenever it is present. The standard
+        # allows only the empty string or the attribute's own name, and any
+        # other value, such as "false", still turns it on.
+        if not decoded or _ascii_lower(decoded) == attribute:
+            return None
+        message = render_diagnostic(
+            TEMPLATE_INVALID_ATTRIBUTE_VALUE,
+            variant="boolean",
+            value=value,
+            attribute=name,
+            element=element,
+        )
+    elif attribute == "name" and element in _FRAME_NAME_ELEMENTS:
         # A frame name may be anything that does not start with "_".
         if not decoded.startswith("_"):
             return None
@@ -1448,22 +1514,6 @@ def lint_misspelled_directives(
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
-# The directives an author writes as `c-<name>` on an element. A name one
-# typing mistake from one of these is the likely typo.
-_ELEMENT_DIRECTIVES = ("if", "elif", "else", "for", "empty", "bind")
-# Spellings an author brings from other languages for `c-elif`.
-_SPELLED_OUT_ELIF = frozenset({"else-if", "elseif", "elsif", "else_if"})
-# Names that are a directive elsewhere but not in Citry, with what to write
-# instead. `c-show` keeps its Python condition with `c-if`; `v-model` has no
-# Python form, so the message names Vue's directive.
-_FOREIGN_DIRECTIVES: dict[str, tuple[str, Literal["default", "vue"]]] = {
-    "show": ("c-if", "default"),
-    "model": ("v-model", "vue"),
-    "key": ("#c-key", "default"),
-    "ignore": ("#c-ignore", "default"),
-}
-
-
 def _collect_misspelled_directives(
     template: Template,
     found: list[MisspelledDirectiveFinding],
@@ -1487,6 +1537,11 @@ def _collect_misspelled_directives(
         # disclosure widget, so `show`, `model`, `key`, and `ignore` pass there.
         custom_element = tag not in _HTML_ELEMENTS and tag != "c-element"
         for attr in node.start_tag.attrs:
+            # Vue reads a `v-*` name as a directive on any tag, components
+            # included, so its typos are checked everywhere.
+            vue_finding = _misspelled_vue_directive_finding(attr, severity, base_index)
+            if vue_finding is not None:
+                found.append(vue_finding)
             if accepted is not None:
                 finding = _misspelled_directive_finding(
                     attr,
@@ -1607,44 +1662,72 @@ def _directive_suggestion(
     return None
 
 
-# Words one letter short of a directive that are ordinary names an author
-# may give an attribute, such as `bid` on an auction item, so they are not
-# read as a missing letter in `bind` or `for`.
-_WORDS_ONE_LETTER_SHORT = frozenset({"or", "bid", "bin"})
+# Vue's built-in directives, as written after `v-`, in the order a tie
+# between two suggestions is broken. `v-is` is left out: the parser rejects it.
+_VUE_DIRECTIVES = (
+    "if",
+    "else-if",
+    "else",
+    "for",
+    "show",
+    "model",
+    "bind",
+    "on",
+    "slot",
+    "html",
+    "text",
+    "once",
+    "memo",
+    "cloak",
+    "pre",
+)
+# Spellings an author brings from other languages for `v-else-if`.
+_SPELLED_OUT_VUE_ELSE_IF = frozenset({"elif", "elseif", "elsif", "else_if"})
 
 
-def _is_directive_typo(written: str, expected: str) -> bool:
+def _misspelled_vue_directive_finding(
+    attr: HtmlAttr,
+    severity: Literal["warning", "error"],
+    base_index: int,
+) -> MisspelledDirectiveFinding | None:
     """
-    Return whether ``written`` is ``expected`` with one common typing slip.
+    Return a finding for a ``v-*`` name that looks like a misspelled Vue directive.
 
-    The slips are two neighboring letters swapped (``fro``), one letter
-    typed twice (``iff``), and one letter left out (``ele``). A replaced or
-    an added letter that is not a double is not a slip here, because it
-    mostly gives a real word, such as ``kind`` for ``bind`` or ``form`` for
-    ``for``.
+    Vue reads any other ``v-*`` name as a custom directive, so ``v-iff``
+    makes Vue look up a directive named ``iff``, and the page fails when it
+    runs. A built-in name in other letter case, such as ``v-If``, is a parse
+    error already; ``v-IFF`` is not, because ``iff`` is not built in.
     """
-    if len(written) == len(expected):
-        differences = [
-            index for index, (left, right) in enumerate(zip(written, expected, strict=True)) if left != right
-        ]
-        return (
-            len(differences) == 2
-            and differences[1] == differences[0] + 1
-            and written[differences[0]] == expected[differences[1]]
-            and written[differences[1]] == expected[differences[0]]
-        )
-    if len(written) == len(expected) + 1:
-        # Dropping one letter of a doubled pair gives the directive back.
-        return any(
-            written[index] == written[index + 1] and written[:index] + written[index + 1 :] == expected
-            for index in range(len(written) - 1)
-        )
-    if len(written) + 1 == len(expected):
-        # A single letter, such as `c-f`, is too short to read as a typo.
-        if len(written) < 2 or written in _WORDS_ONE_LETTER_SHORT:
-            return False
-        return any(expected[:index] + expected[index + 1 :] == written for index in range(len(expected)))
-    return False
+    name = attr.key.content
+    if not name.startswith("v-"):
+        return None
+    # The argument and modifiers, as in `v-on:click.stop`, do not change
+    # which directive the name selects.
+    directive = name[2:].split(":", 1)[0].split(".", 1)[0]
+    lowered = _ascii_lower(directive)
+    if not lowered or lowered in _VUE_DIRECTIVES:
+        return None
+    if lowered in _SPELLED_OUT_VUE_ELSE_IF:
+        suggestion = "else-if"
+    else:
+        suggestion = next((item for item in _VUE_DIRECTIVES if _is_directive_typo(lowered, item)), "")
+        if not suggestion:
+            return None
+    target = f"v-{suggestion}"
+    return MisspelledDirectiveFinding(
+        name=name,
+        suggestion=target,
+        message=render_diagnostic(
+            TEMPLATE_MISSPELLED_DIRECTIVE,
+            variant="vue-directive",
+            name=name,
+            suggestion=target,
+        ),
+        code=TEMPLATE_MISSPELLED_DIRECTIVE,
+        severity=severity,
+        start_index=base_index + attr.key.start_index,
+        end_index=base_index + attr.key.end_index,
+    )
 
 
 def lint_unknown_component_js_variables(
@@ -1865,6 +1948,8 @@ def lint_undeclared_template_emits(
 def lint_undeclared_component_listeners(
     expressions: Sequence[BrowserExpression],
     child_source: Callable[[str], str | None],
+    *,
+    severities: Sequence[Literal["ignore", "warning", "error"]] = (),
 ) -> tuple[VueLintFinding, ...]:
     """
     Report listeners on child component tags for events the child does not declare.
@@ -1874,20 +1959,29 @@ def lint_undeclared_component_listeners(
     against an `on<Event>` prop. A listener the child does not declare is
     passed to the child's root element as a DOM listener instead, where it
     fires only if that element dispatches a DOM event with this name, so a
-    misspelled event name goes unnoticed. Only a name with a hyphen, a colon,
-    or an uppercase letter is reported: a plain lowercase name such as
-    `click` is usually a native DOM event.
+    misspelled event name goes unnoticed. A plain lowercase name, such as
+    `hdie`, is reported only when it is not a DOM event such as `click`,
+    which the child's root element may fire. When the name is one typing
+    slip from a declared event, the message suggests that event.
 
     Args:
         expressions: The Vue expressions of one template.
         child_source: Return the JavaScript of the component a `c-*` tag
             renders, or None when the tag resolves to no component with
             readable JavaScript.
+        severities: ``rule_undeclared_component_event`` of every component
+            that renders the template. A finding is reported unless all of
+            them ignore the rule, and it is an error when any says
+            ``"error"``. With none, findings are warnings.
 
     Returns:
-        Warning findings spanning each listener's attribute name.
+        Findings spanning each listener's attribute name.
 
     """
+    active = [severity for severity in (severities or ("warning",)) if severity != "ignore"]
+    if not active:
+        return ()
+    severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
     sources: dict[str, BrowserComponentSourceAnalysis | None] = {}
     findings: list[VueLintFinding] = []
     for expression in expressions:
@@ -1901,21 +1995,47 @@ def lint_undeclared_component_listeners(
         analysis = sources[element]
         if analysis is None or analysis.declared_events is None:
             continue
-        if event == event.lower() and "-" not in event and ":" not in event:
+        # The child's root element may fire a DOM event such as `click`, and
+        # Vue passes the listener there, so a DOM event name is not a typo.
+        if event in _DOM_EVENT_NAMES:
             continue
         if _listener_is_declared(event, analysis):
             continue
+        suggestion = _declared_event_suggestion(event, analysis)
         findings.append(
             VueLintFinding(
                 name=event,
-                message=render_diagnostic(BROWSER_UNDECLARED_COMPONENT_EVENT, name=event, component=element),
+                message=(
+                    render_diagnostic(BROWSER_UNDECLARED_COMPONENT_EVENT, name=event, component=element)
+                    if suggestion is None
+                    else render_diagnostic(
+                        BROWSER_UNDECLARED_COMPONENT_EVENT,
+                        variant="suggestion",
+                        name=event,
+                        component=element,
+                        suggestion=suggestion,
+                    )
+                ),
                 code=BROWSER_UNDECLARED_COMPONENT_EVENT,
-                severity="warning",
+                severity=severity,
                 start_index=expression.attribute_start_index,
                 end_index=expression.attribute_end_index or expression.attribute_start_index,
             )
         )
     return tuple(findings)
+
+
+def _declared_event_suggestion(event: str, analysis: BrowserComponentSourceAnalysis) -> str | None:
+    """Return the declared event one typing slip from a listener's name, written the way the listener writes it."""
+    declared = analysis.declared_events or ()
+    # A listener in kebab-case is compared with each event's kebab-case form,
+    # so `@drop-tsak` finds `dropTask` and suggests `drop-task`.
+    hyphenated = "-" in event or event == event.lower()
+    for item in declared:
+        candidate = _vue_hyphenate(item.name) if hyphenated else item.name
+        if one_slip_from(event, candidate):
+            return candidate
+    return None
 
 
 def component_listener_event(expression: BrowserExpression) -> str | None:
@@ -5576,6 +5696,8 @@ __all__ = [
     "LspPosition",
     "LspRange",
     "MarkLiteralFinding",
+    "MarkupLintConsumer",
+    "MarkupLintFinding",
     "MisspelledDirectiveFinding",
     "MisspelledDirectiveLintConsumer",
     "PythonComponentAssetDiscovery",
@@ -5652,6 +5774,8 @@ __all__ = [
     "json_wire_type_from_expression",
     "lint_alpine_attributes",
     "lint_attribute_values",
+    "lint_invalid_vue_expressions",
+    "lint_markup",
     "lint_misspelled_directives",
     "lint_undeclared_component_js_emits",
     "lint_undeclared_component_listeners",

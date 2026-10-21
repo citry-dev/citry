@@ -5,14 +5,20 @@ from __future__ import annotations
 import ast
 import types
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, cast, get_args, get_origin
 
 from citry._class_introspection import _safe_class_import_path, _static_class_dict, _static_class_mro
 from citry._nested_declarations import _active_nested_class_declarations
 from citry._schema_introspection import _format_annotation
 from citry.introspection import _is_utf8_string
-from citry.settings import LintSettings, LintSeverity, _is_vue_variable_name, _replaced_lint_settings_hint
+from citry.settings import (
+    _TEMPLATE_RULE_FIELDS,
+    LintSettings,
+    LintSeverity,
+    _is_vue_variable_name,
+    _replaced_lint_settings_hint,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -166,7 +172,7 @@ class VueVariableInfo:
 # the record's first release, and the app worker can import a different
 # citry than the language server, for example when the project's environment
 # file puts another copy on PYTHONPATH.
-_OPTIONAL_LINT_INFO_FIELDS = frozenset({"rule_misspelled_directive"})
+_OPTIONAL_LINT_INFO_FIELDS = frozenset({"rule_misspelled_directive", *_TEMPLATE_RULE_FIELDS})
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +194,16 @@ class TemplateLintInfo:
     rule_invalid_attribute_value: LintSeverity = "error"
     rule_i18n_cross_language_fallback: LintSeverity = "warning"
     rule_misspelled_directive: LintSeverity = "error"
+    rule_misspelled_attribute: LintSeverity = "error"
+    rule_misspelled_element: LintSeverity = "error"
+    rule_unknown_aria_attribute: LintSeverity = "error"
+    rule_invalid_nesting: LintSeverity = "error"
+    rule_duplicate_id: LintSeverity = "error"
+    rule_missing_image_alt: LintSeverity = "warning"
+    rule_invalid_model_target: LintSeverity = "error"
+    rule_misspelled_event: LintSeverity = "warning"
+    rule_invalid_vue_expression: LintSeverity = "error"
+    rule_undeclared_component_event: LintSeverity = "warning"
 
     def __post_init__(self) -> None:
         if (
@@ -253,6 +269,11 @@ class TemplateLintInfo:
         if type(self.rule_misspelled_directive) is not str or self.rule_misspelled_directive not in _RULE_SEVERITIES:
             msg = f"Unknown misspelled-directive lint severity: {self.rule_misspelled_directive!r}"
             raise ValueError(msg)
+        for rule_name in _TEMPLATE_RULE_FIELDS:
+            severity = getattr(self, rule_name)
+            if type(severity) is not str or severity not in _RULE_SEVERITIES:
+                msg = f"Unknown {rule_name} lint severity: {severity!r}"
+                raise ValueError(msg)
         if (
             type(self.rule_i18n_cross_language_fallback) is not str
             or self.rule_i18n_cross_language_fallback not in _RULE_SEVERITIES
@@ -290,6 +311,7 @@ class TemplateLintInfo:
             "rule_invalid_attribute_value": self.rule_invalid_attribute_value,
             "rule_i18n_cross_language_fallback": self.rule_i18n_cross_language_fallback,
             "rule_misspelled_directive": self.rule_misspelled_directive,
+            **{rule_name: getattr(self, rule_name) for rule_name in _TEMPLATE_RULE_FIELDS},
         }
 
     @classmethod
@@ -372,6 +394,9 @@ class _ComponentLintOverrides:
     # Read by the render-time input type check, not by template analysis,
     # so it never reaches TemplateLintInfo.
     check_input_types: bool | None = None
+    # The component's own value for each rule in _TEMPLATE_RULE_FIELDS that
+    # it sets; a rule it leaves out follows the application.
+    template_rules: Mapping[str, LintSeverity] = field(default_factory=dict)
 
 
 def _application_lint_info(citry: Citry) -> TemplateLintInfo:
@@ -406,6 +431,7 @@ def _application_lint_info(citry: Citry) -> TemplateLintInfo:
         rule_invalid_attribute_value=citry.settings.lint.rule_invalid_attribute_value,
         rule_i18n_cross_language_fallback=citry.settings.lint.rule_i18n_cross_language_fallback,
         rule_misspelled_directive=citry.settings.lint.rule_misspelled_directive,
+        **{rule_name: getattr(citry.settings.lint, rule_name) for rule_name in _TEMPLATE_RULE_FIELDS},
     )
 
 
@@ -493,6 +519,10 @@ def _component_lint_info(citry: Citry, component_class: type) -> TemplateLintInf
             if overrides.rule_misspelled_directive is not None
             else application.rule_misspelled_directive
         ),
+        **{
+            rule_name: overrides.template_rules.get(rule_name, getattr(application, rule_name))
+            for rule_name in _TEMPLATE_RULE_FIELDS
+        },
     )
 
 
@@ -524,6 +554,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
     attribute_value_rule: LintSeverity | None = None
     cross_language_fallback_rule: LintSeverity | None = None
     misspelled_directive_rule: LintSeverity | None = None
+    template_rules: dict[str, LintSeverity] = {}
     check_input_types: bool | None = None
     component_js_globals: dict[str, object] = {}
     component_js_global_owners: dict[str, type] = {}
@@ -554,6 +585,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
             "rule_misspelled_directive",
             "rule_i18n_cross_language_fallback",
             "check_input_types",
+            *_TEMPLATE_RULE_FIELDS,
         }
         if unknown:
             rendered = ", ".join(sorted(unknown))
@@ -663,6 +695,15 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
                 )
                 raise ValueError(msg)
             misspelled_directive_rule = cast("LintSeverity", candidate_rule)
+        for rule_name in _TEMPLATE_RULE_FIELDS:
+            if rule_name not in public_values:
+                continue
+            candidate_rule = public_values[rule_name]
+            if type(candidate_rule) is not str or candidate_rule not in _RULE_SEVERITIES:
+                msg = f"Component {component_class.__name__}.Lint.{rule_name} must be 'ignore', 'warning', or 'error'"
+                raise ValueError(msg)
+            # A nearer Lint class is read later, so its value replaces a base's.
+            template_rules[rule_name] = cast("LintSeverity", candidate_rule)
         if "check_input_types" in public_values:
             candidate_check = public_values["check_input_types"]
             # Every render reads this flag, so a truthy string such as "no"
@@ -725,6 +766,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         cross_language_fallback_rule,
         misspelled_directive_rule,
         check_input_types,
+        template_rules,
     )
 
 

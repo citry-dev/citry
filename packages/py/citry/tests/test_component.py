@@ -53,6 +53,8 @@ class TestComponentFields:
                 rule_invalid_attribute_value = "ignore"
                 rule_misspelled_directive = "warning"
                 rule_i18n_cross_language_fallback = "error"
+                rule_missing_image_alt = "error"
+                rule_undeclared_component_event = "ignore"
 
         class Grandchild(Child):
             class Lint:
@@ -76,6 +78,7 @@ class TestComponentFields:
         assert middle_lint.rule_invalid_attribute_value == "ignore"
         assert middle_lint.rule_misspelled_directive == "warning"
         assert middle_lint.rule_i18n_cross_language_fallback == "error"
+        assert (middle_lint.rule_missing_image_alt, middle_lint.rule_undeclared_component_event) == ("error", "ignore")
         child_lint = analysis.component_lint[Grandchild.definition_id]
         reset_lint = analysis.component_lint[Reset.definition_id]
 
@@ -111,7 +114,22 @@ class TestComponentFields:
         assert reset_lint.rule_invalid_attribute_value == "error"
         assert reset_lint.rule_misspelled_directive == "error"
         assert reset_lint.rule_i18n_cross_language_fallback == "warning"
+        assert (reset_lint.rule_missing_image_alt, reset_lint.rule_undeclared_component_event) == (
+            "warning",
+            "warning",
+        )
         assert reset_lint.component_js_globals == ()
+
+    def test_lint_declaration_rejects_an_invalid_template_rule_severity(self):
+        c = Citry(autodiscover=False)
+
+        with pytest.raises(ValueError, match=r"Bad\.Lint\.rule_duplicate_id must be 'ignore', 'warning', or 'error'"):
+
+            class Bad(Component):
+                citry = c
+
+                class Lint:
+                    rule_duplicate_id = "fatal"
 
     def test_lint_declaration_names_the_vue_replacement_for_alpine_settings(self):
         c = Citry(autodiscover=False)

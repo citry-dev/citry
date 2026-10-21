@@ -119,6 +119,23 @@ def _is_vue_variable_name(name: object) -> bool:
     return valid and references == [(name, 0, encoded_length)]
 
 
+# Severity settings that a component's Lint class and the record the app
+# worker sends the editor carry with no further data, so one list serves
+# every place that copies, checks, or combines them.
+_TEMPLATE_RULE_FIELDS = (
+    "rule_misspelled_attribute",
+    "rule_misspelled_element",
+    "rule_unknown_aria_attribute",
+    "rule_invalid_nesting",
+    "rule_duplicate_id",
+    "rule_missing_image_alt",
+    "rule_invalid_model_target",
+    "rule_misspelled_event",
+    "rule_invalid_vue_expression",
+    "rule_undeclared_component_event",
+)
+
+
 @dataclass(frozen=True, slots=True)
 class LintSettings:
     """
@@ -166,8 +183,10 @@ class LintSettings:
             rule keeps the element hidden. The default is ``"error"``.
         rule_invalid_attribute_value: Severity for a static HTML attribute
             value outside the keywords that attribute accepts, such as
-            ``draggable="treu"`` or ``<input type="datetime">``. The browser
-            ignores such a value or falls back to a default. The default is
+            ``draggable="treu"`` or ``<input type="datetime">``, or for a
+            boolean attribute with a value other than its own name, such as
+            ``disabled="false"``, which still disables the element. The
+            browser ignores such a value or falls back to a default. The default is
             ``"error"``. ``citry check --static`` and an editor that has not
             loaded the application report it as a warning, because they
             cannot read your settings.
@@ -185,7 +204,44 @@ class LintSettings:
             which Citry writes as ``c-if``. Citry renders it as an ordinary attribute,
             so the directive never runs; with ``c-iff`` the element always
             shows up. An attribute of the element, such as ``c-id``, is not
-            reported. The default is ``"error"``.
+            reported. It also covers a ``v-*`` name that looks like a
+            misspelled Vue directive, such as ``v-iff``, which Vue looks up
+            as a custom directive, so the page fails. The default is
+            ``"error"``.
+        rule_misspelled_attribute: Severity for an attribute on an HTML
+            element that is one typing slip from an attribute the element
+            accepts, such as ``titel`` for ``title``. The browser ignores
+            it. The default is ``"error"``.
+        rule_misspelled_element: Severity for a lowercase tag that is one
+            typing slip from an HTML element, such as ``<dvi>``. The
+            default is ``"error"``.
+        rule_unknown_aria_attribute: Severity for an ``aria-*`` attribute
+            that WAI-ARIA does not define, such as ``aria-expandd``.
+            Browsers and screen readers ignore it. The default is
+            ``"error"``.
+        rule_invalid_nesting: Severity for an element that the browser
+            moves out of an open ``<p>``, such as ``<div>`` inside
+            ``<p>``. The default is ``"error"``.
+        rule_duplicate_id: Severity for a literal ``id`` that two elements
+            of one template always render. The default is ``"error"``.
+        rule_missing_image_alt: Severity for an ``<img>`` with no ``alt``
+            text. The default is ``"warning"``.
+        rule_invalid_model_target: Severity for ``v-model`` on an element
+            that holds no value, such as ``<form>``, which fails when Vue
+            compiles the page. The default is ``"error"``.
+        rule_misspelled_event: Severity for a listener on an HTML element
+            whose event name is one typing slip from a DOM event, such as
+            ``@clik``. The listener never runs. The default is
+            ``"warning"``.
+        rule_invalid_vue_expression: Severity for a Vue expression, such as
+            the value of ``v-if`` or ``@click``, that is not valid
+            JavaScript, which fails when Vue compiles the page. The default
+            is ``"error"``.
+        rule_undeclared_component_event: Severity for a listener on a
+            component tag for an event the child component does not declare
+            in ``emits``, such as ``@hdie`` for ``hide``. The listener
+            usually never runs. ``citry check`` reports it only with your
+            application loaded. The default is ``"warning"``.
         check_input_types: Check that each value a component receives has
             the type its annotation names. On by default, in development and
             in production. Unlike the ``rule_*`` settings, this check runs
@@ -227,6 +283,16 @@ class LintSettings:
     rule_invalid_attribute_value: LintSeverity = "error"
     rule_i18n_cross_language_fallback: LintSeverity = "warning"
     rule_misspelled_directive: LintSeverity = "error"
+    rule_misspelled_attribute: LintSeverity = "error"
+    rule_misspelled_element: LintSeverity = "error"
+    rule_unknown_aria_attribute: LintSeverity = "error"
+    rule_invalid_nesting: LintSeverity = "error"
+    rule_duplicate_id: LintSeverity = "error"
+    rule_missing_image_alt: LintSeverity = "warning"
+    rule_invalid_model_target: LintSeverity = "error"
+    rule_misspelled_event: LintSeverity = "warning"
+    rule_invalid_vue_expression: LintSeverity = "error"
+    rule_undeclared_component_event: LintSeverity = "warning"
     check_input_types: bool = True
 
     # Hidden from type checkers so they keep checking calls against the
@@ -347,6 +413,7 @@ class LintSettings:
             "rule_invalid_attribute_value",
             "rule_misspelled_directive",
             "rule_i18n_cross_language_fallback",
+            *_TEMPLATE_RULE_FIELDS,
         ):
             severity = getattr(self, rule_name)
             if type(severity) is not str or severity not in _ALLOWED_LINT_SEVERITIES:
