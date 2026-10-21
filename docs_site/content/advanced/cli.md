@@ -73,6 +73,25 @@ it from the current directory, as web servers such as uvicorn do.
 If importing the application fails, the command stops with an error.
 `check` is the exception, described below.
 
+### Django projects { #run-commands-in-a-django-project }
+
+A Django module that imports a model, such as a URL configuration whose
+views use models, fails with `AppRegistryNotReady` unless Django has
+started first. Set `DJANGO_SETTINGS_MODULE` when you run the command:
+
+```bash
+DJANGO_SETTINGS_MODULE=config.settings \
+  citry --app config.urls:citry_app check
+```
+
+Citry then starts Django with those settings before it imports the
+module, as `manage.py` does. If Django is not installed, Citry skips
+this step, so a variable left over from another project does no harm. If
+Django is installed but cannot start, for example because the settings
+module cannot be imported, Citry shows Django's error and treats it as a
+failed import. A project that sets up Django in its own code with
+`settings.configure()` must leave the variable unset.
+
 ## `citry check` templates { #check-component-templates }
 
 `citry check` finds template mistakes without rendering anything. Run it

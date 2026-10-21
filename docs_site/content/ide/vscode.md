@@ -78,6 +78,10 @@ it, Citry can complete your components, check their inputs and slots, and
 take you to their definitions. Without it, Citry only checks template syntax
 and explains built-in tags such as `<c-if>`.
 
+If FastAPI, Flask, or Django serves your app, point `citry.app` at the
+module that mounts Citry, so the editor also reports links to pages your app does not serve.
+See [Links to missing pages](/ide/template-linting/#find-links-to-missing-pages).
+
 To work on a component library without a host application, point `citry.app`
 at the library's [`ComponentLibrary`][citry.ComponentLibrary] instead:
 
@@ -103,8 +107,10 @@ If importing your application needs environment variables, point
 }
 ```
 
-For Django, include the settings the import needs. Citry imports the module
-directly and does not run `manage.py`:
+For Django, set `DJANGO_SETTINGS_MODULE` in this file, with any other
+settings the import needs. Citry then starts Django with those settings
+before it imports your app, as `manage.py` does, so your URL configuration
+can import models:
 
 ```ini
 DJANGO_SETTINGS_MODULE=myproject.settings
@@ -114,8 +120,9 @@ DJANGO_SECRET_KEY=editor-development-secret
 Citry uses these variables only while it imports your application. Values in
 the file win over variables VS Code was started with. They do not change your
 terminal, tests, or application server. Saving, creating, or
-deleting the file reloads your components. If the file is missing or invalid,
-Citry checks syntax only, and **Citry: Show Language Server Status** says
+deleting the file reloads your components. If the file is missing or invalid, or
+Django cannot start, Citry checks syntax only, and
+**Citry: Show Language Server Status** says
 why.
 
 ### Pick the interpreter

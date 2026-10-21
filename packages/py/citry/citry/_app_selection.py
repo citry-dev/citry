@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from importlib import import_module
 
+from citry._django_startup import DjangoStartupError, start_django_from_environment
 from citry.citry import Citry
 
 
@@ -22,11 +23,22 @@ class CheckAppSelection:
 
 
 def load_app(spec: str) -> Citry:
-    """Resolve ``module:attribute`` without deciding whether failure is fatal."""
+    """
+    Resolve ``module:attribute`` without deciding whether failure is fatal.
+
+    When ``DJANGO_SETTINGS_MODULE`` is set, Django starts before the import,
+    so a Django module that imports models loads as it would under a server.
+    """
     module_path, separator, attribute = spec.partition(":")
     if not separator or not module_path or not attribute:
         msg = "--app must be 'module:attribute', e.g. 'myproject.app:engine'"
         raise AppSelectionError(msg)
+    # A Django project's --app module may import models, which needs Django's
+    # apps loaded first, as manage.py would load them.
+    try:
+        start_django_from_environment()
+    except DjangoStartupError as exc:
+        raise AppSelectionError(str(exc)) from exc
     try:
         engine = getattr(import_module(module_path), attribute)
     except (ImportError, AttributeError) as exc:

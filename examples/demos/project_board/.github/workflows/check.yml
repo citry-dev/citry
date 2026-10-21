@@ -19,6 +19,6 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --frozen --dev
       - name: Check Citry templates
-        run: uv run citry --app app.citry_app:citry_app check
+        run: uv run citry --app app.main:citry_app check
       - name: Run project tests
         run: uv run pytest

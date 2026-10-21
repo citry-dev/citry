@@ -1,6 +1,9 @@
 import pytest
 from app import create_app
+from app.citry_app import citry_app
 from app.data import Project
+from app.wsgi import citry_app as checked_citry_app
+from app.wsgi import web_app
 
 
 def test_page_and_citry_runtime_are_served() -> None:
@@ -30,6 +33,13 @@ def test_page_escapes_project_data(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert r"\u003cscript>alert(1)\u003c/script>" in page.text
     assert "<script>alert(1)</script>" not in page.text
+
+
+def test_wsgi_module_serves_the_app_with_the_shared_citry_instance() -> None:
+    # `citry check` imports app.wsgi, so the module must build a working app
+    # and expose the same Citry instance the components use.
+    assert checked_citry_app is citry_app
+    assert web_app.test_client().get("/").status_code == 200
 
 
 def test_citry_mount_does_not_claim_prefix_lookalike() -> None:

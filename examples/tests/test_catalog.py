@@ -9,12 +9,12 @@ from examples._internal.catalog import EXAMPLES_ROOT, load_catalog
 from examples._internal.qualify import interpolate, project_environment
 
 EXPECTED_CITRY_APPS = {
-    "demo-htmx": "app.citry_app:citry_app",
-    "demo-project-board": "app.citry_app:citry_app",
+    "demo-htmx": "app.main:citry_app",
+    "demo-project-board": "app.main:citry_app",
     "starter-asgi": "app.citry_app:citry_app",
-    "starter-django": "project_explorer.citry_app:citry_app",
-    "starter-fastapi": "app.citry_app:citry_app",
-    "starter-flask": "app.citry_app:citry_app",
+    "starter-django": "config.urls:citry_app",
+    "starter-fastapi": "app.main:citry_app",
+    "starter-flask": "app.wsgi:citry_app",
     "starter-standalone": "app.citry_app:citry_app",
     "starter-wsgi": "app.citry_app:citry_app",
 }

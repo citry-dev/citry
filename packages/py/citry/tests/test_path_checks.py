@@ -545,8 +545,8 @@ class TestDjangoPathChecker:
         assert engine._path_checkers == []
 
 
-def test_the_django_checker_starts_django_like_citry_check_does(tmp_path):
-    # `citry check` imports the URL configuration without calling
+def test_the_django_checker_starts_django_when_nothing_else_did(tmp_path):
+    # A script that imports the URL configuration directly never calls
     # django.setup(), so the checker must load the apps itself, or static
     # files and FORCE_SCRIPT_NAME are never read. A fresh process shows that.
     pytest.importorskip("django", reason="the Django path checker tests need django")

@@ -75,6 +75,12 @@ uv run citry --app app.citry_app:citry_app check
 uv run pytest
 ```
 
+The check prints a note that it did not check links. This is expected, and
+the check still passes: this starter routes requests in its own code, so
+Citry cannot ask it which pages exist.
+[Links to missing pages](https://citry.dev/ide/template-linting/#find-links-to-missing-pages)
+explains which setups check links and how to turn the rule off.
+
 [The included GitHub Actions workflow](.github/workflows/check.yml) runs
 these checks on pushes and pull requests when you copy this project, including
 its hidden directories, to the root of your own repository. It installs the

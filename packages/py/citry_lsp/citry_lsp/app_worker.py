@@ -41,6 +41,27 @@ except ImportError:  # pragma: no cover - an older citry in the app's environmen
     # fill's data name untyped.
     slot_data_wire_classes = None  # type: ignore[assignment]
 try:
+    from citry._django_startup import start_django_from_environment
+except ImportError:  # pragma: no cover - an older citry in the app's environment
+
+    def start_django_from_environment() -> None:
+        """Start Django as citry._django_startup does, for a Citry without that module."""
+        # A Django module that imports a model fails to load unless Django has
+        # loaded its apps first, whichever Citry the app runs on.
+        if not os.environ.get("DJANGO_SETTINGS_MODULE"):
+            return
+        try:
+            import django  # noqa: PLC0415
+            from django.apps import apps  # noqa: PLC0415
+        except ImportError:
+            # Without Django the variable is left over from another shell.
+            return
+
+        if not (apps.ready or apps.loading):
+            django.setup()
+
+
+try:
     from citry._path_checks import engine_path_verdicts
 except ImportError:  # pragma: no cover - an older citry in the app's environment
     # Without it the worker sends no link verdicts, and the editor checks no links.
@@ -58,6 +79,9 @@ def _load_target(spec: str) -> Any:
     if not separator or not module_name or not attribute:
         msg = "app must be 'module:attribute', e.g. 'myproject.app:engine'"
         raise ValueError(msg)
+    # A Django project's app module may import models, which needs Django's
+    # apps loaded first, as manage.py and `citry check` load them.
+    start_django_from_environment()
     module = importlib.import_module(module_name)
     return getattr(module, attribute)
 

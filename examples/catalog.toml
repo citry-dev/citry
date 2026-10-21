@@ -16,7 +16,7 @@ docs = ["/getting-started/installation/", "/syntax/vue/"]
 id = "starter-fastapi"
 kind = "starter"
 path = "starters/fastapi"
-check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
+check = ["uv", "run", "citry", "--app", "app.main:citry_app", "check"]
 host = "fastapi"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -30,7 +30,7 @@ docs = ["/getting-started/fastapi/", "/advanced/web-frameworks/#fastapi-and-star
 id = "starter-django"
 kind = "starter"
 path = "starters/django"
-check = ["uv", "run", "citry", "--app", "project_explorer.citry_app:citry_app", "check"]
+check = ["uv", "run", "citry", "--app", "config.urls:citry_app", "check"]
 host = "django"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -44,7 +44,7 @@ docs = ["/advanced/web-frameworks/#django", "/security/#protect-event-posts-from
 id = "starter-flask"
 kind = "starter"
 path = "starters/flask"
-check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
+check = ["uv", "run", "citry", "--app", "app.wsgi:citry_app", "check"]
 host = "flask"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -86,7 +86,7 @@ docs = ["/advanced/web-frameworks/#bare-asgi-and-wsgi", "/events/"]
 id = "demo-project-board"
 kind = "demo"
 path = "demos/project_board"
-check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
+check = ["uv", "run", "citry", "--app", "app.main:citry_app", "check"]
 host = "fastapi"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]
@@ -100,7 +100,7 @@ docs = ["/examples/", "/events/"]
 id = "demo-htmx"
 kind = "demo"
 path = "demos/htmx"
-check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
+check = ["uv", "run", "citry", "--app", "app.main:citry_app", "check"]
 host = "fastapi"
 python = ">=3.10,<4"
 test = ["uv", "run", "pytest"]

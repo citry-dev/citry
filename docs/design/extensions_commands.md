@@ -445,7 +445,9 @@ Each phase is independently shippable and lands with tests.
      for no capability the standalone binary lacks. The one scenario it would
      serve (an engine whose import needs `django.setup()` first) contradicts the
      framework-neutral premise, and a user who has it can write a three-line
-     management command themselves.
+     management command themselves. (That scenario is covered since
+     2026-10-21: `--app` starts Django itself when `DJANGO_SETTINGS_MODULE`
+     is set; see `citry/_django_startup.py`.)
    - **MCP server.** A capable model with shell access can read the docs and
      `--help` and call the installed `citry` CLI directly, so wrapping it as MCP
      tools buys little here; MCP's durable value (permissioning, remote

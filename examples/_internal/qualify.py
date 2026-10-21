@@ -31,6 +31,14 @@ COPY_IGNORES = shutil.ignore_patterns(
 )
 TEST_SECRET = "qualification-only-citry-secret"  # noqa: S105 - fixed, test-only value
 AXE_PATH = Path(__file__).resolve().parents[2] / "node_modules" / "axe-core" / "axe.min.js"
+# Hosts whose Citry integration tells `citry check` which paths the app serves.
+# A project on one of them must point its check command at the module that
+# mounts Citry; otherwise every link goes unchecked and only a note says so.
+LINK_CHECKING_HOSTS = frozenset({"django", "fastapi", "flask"})
+# The notes `citry check` prints when it skipped links: no integration
+# registered a path checker, so it checked none, or the registered checker
+# raised an error for some paths.
+LINKS_NOT_CHECKED_CODES = ("citry.check.url-checker-missing", "citry.check.url-checker-failed")
 
 PAGE_SENTINELS = {
     "starter-web-v1": b"Project Explorer",
@@ -96,7 +104,7 @@ def copy_project(project: ExampleProject, root: Path) -> Path:
     return destination
 
 
-def run_checked(command: tuple[str, ...] | list[str], cwd: Path, environment: dict[str, str]) -> None:
+def run_checked(command: tuple[str, ...] | list[str], cwd: Path, environment: dict[str, str]) -> str:
     result = subprocess.run(
         command,
         cwd=cwd,
@@ -109,6 +117,8 @@ def run_checked(command: tuple[str, ...] | list[str], cwd: Path, environment: di
     if result.returncode:
         rendered = " ".join(command)
         raise RuntimeError(f"Command failed in {cwd} ({result.returncode}): {rendered}\n{result.stdout}")
+    # Return the output so a caller can look for notes in a check that passed.
+    return result.stdout
 
 
 def install_project(
@@ -836,7 +846,13 @@ def qualify_project(
     environment = environment.copy()
     if project.host == "django":
         environment["DJANGO_SETTINGS_MODULE"] = "config.settings"
-    run_checked(project.check, project_dir, environment)
+    check_output = run_checked(project.check, project_dir, environment)
+    # A note is not a failure, so the check passes even when it loaded a
+    # module that never mounts Citry. Fail here, so a project whose check
+    # command skips links cannot pass qualification.
+    if project.host in LINK_CHECKING_HOSTS and any(code in check_output for code in LINKS_NOT_CHECKED_CODES):
+        rendered = " ".join(project.check)
+        raise RuntimeError(f"{project.id}: {rendered} did not check links\n{check_output}")
     run_checked(project.test, project_dir, environment)
     if project.build is not None:
         run_checked(project.build, project_dir, environment)

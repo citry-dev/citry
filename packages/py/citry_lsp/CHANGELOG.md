@@ -66,6 +66,11 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Fixed
 
+- The editor now loads a Django project whose app module imports a
+  model, such as `config.urls:citry_app`. When `DJANGO_SETTINGS_MODULE` is
+  set, for example in your env file, the editor starts Django first, as
+  `manage.py` does. If Django cannot start, the editor checks syntax only,
+  and in VS Code the language server status shows Django's error.
 - `citry check --types` and the editor now report type errors in a
   component that has no `template_data()` of its own, or whose
   `template_data()` or `js_data()` comes from a class in an installed
