@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "board/board.py", contains = '"qeury"' }
+
+[[edits]]
+file = "board/board.py"
+old = 'rx.input(name="q",'
+new = 'rx.input(name="qeury",'

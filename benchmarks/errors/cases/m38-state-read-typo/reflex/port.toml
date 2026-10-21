@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'CounterState.cuont' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.text("Saved: ", CounterState.count),'
+new = 'rx.text("Saved: ", CounterState.cuont),'

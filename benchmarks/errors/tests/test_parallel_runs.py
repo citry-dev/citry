@@ -160,7 +160,7 @@ def test_a_server_whose_port_was_taken_is_started_again_on_another_port(
 ) -> None:
     ports: list[int] = []
 
-    def observe_on(framework, settings, env, work, log_path, port):
+    def observe_on(framework, settings, env, work, log_path, port, backend_port):
         ports.append(port)
         if len(ports) == 1:
             log_path.write_text("OSError: [Errno 48] Address already in use\n")
@@ -175,12 +175,39 @@ def test_a_server_whose_port_was_taken_is_started_again_on_another_port(
     assert len(ports) == 2
 
 
+@pytest.mark.parametrize(("argv", "named"), [(("x", "{port}", "{backend_port}"), True), (("x", "{port}"), False)])
+def test_a_server_that_names_a_backend_port_gets_a_second_reserved_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: tuple[str, ...], named: bool
+) -> None:
+    seen: list[tuple[int, int, set[int]]] = []
+
+    def observe_on(framework, settings, env, work, log_path, port, backend_port):
+        # Both ports must stay reserved while the server runs, so no other worker gets either.
+        seen.append((port, backend_port, set(runtime._reserved_ports)))
+        log_path.write_text("serving\n")
+        return runtime.Observation(server_log=["serving"])
+
+    monkeypatch.setattr(runtime, "_observe_on", observe_on)
+    framework = Framework("toy", "Toy", (), (), (), Runtime(argv, "/", 5, {"default": ()}), "", tmp_path)
+    runtime.observe(framework, tmp_path, tmp_path, tmp_path / "server.log")
+    [(port, backend_port, reserved)] = seen
+    if named:
+        assert backend_port in runtime._PORTS
+        assert backend_port != port
+        assert reserved == {port, backend_port}
+    else:
+        assert backend_port == 0
+        assert reserved == {port}
+    assert not runtime._reserved_ports
+
+
 @pytest.mark.parametrize(
     "line",
     [
         "OSError: [Errno 48] Address already in use",
         "Error: listen EADDRINUSE: address already in use 127.0.0.1:20001",
         "Error: That port is already in use.",
+        "Error: Frontend port: 20001 is already in use.",
     ],
 )
 def test_each_servers_port_clash_message_is_recognised(line: str) -> None:
@@ -192,7 +219,7 @@ def test_a_server_that_fails_for_another_reason_is_not_started_again(
 ) -> None:
     calls: list[int] = []
 
-    def observe_on(framework, settings, env, work, log_path, port):
+    def observe_on(framework, settings, env, work, log_path, port, backend_port):
         calls.append(port)
         log_path.write_text("SyntaxError: invalid syntax\n")
         return runtime.Observation(started=False, failure="the development server did not answer")
@@ -272,6 +299,41 @@ def test_observe_runs_on_several_threads_at_once_with_a_real_browser(tmp_path: P
         assert "done" in page
 
 
+def test_what_a_server_prints_after_it_is_stopped_is_left_out_of_the_record(tmp_path: Path) -> None:
+    playwright_api = pytest.importorskip("playwright.sync_api")
+    with playwright_api.sync_playwright() as playwright:
+        try:
+            playwright.chromium.launch().close()
+        except playwright_api.Error as error:
+            pytest.skip(f"Chromium is not installed: {error}")
+    (tmp_path / "index.html").write_text("<button>go</button>")
+    # A server that, like `reflex run`, reports an error when the stop signal reaches it.
+    (tmp_path / "server.py").write_text(
+        "import http.server, signal, sys\n"
+        "def stop(*_):\n"
+        "    print('[ERROR] Unexpected exit from worker-1', flush=True)\n"
+        "    sys.exit(0)\n"
+        "signal.signal(signal.SIGTERM, stop)\n"
+        "print('serving', flush=True)\n"
+        "handler = http.server.SimpleHTTPRequestHandler\n"
+        "http.server.test(HandlerClass=handler, port=int(sys.argv[1]), bind='127.0.0.1')\n"
+    )
+    settings = Runtime(
+        argv=(sys.executable, "-u", str(tmp_path / "server.py"), "{port}"),
+        page_path="/",
+        ready_timeout=30,
+        journeys={"default": (Step("click", selector="button"),)},
+        settle_ms=50,
+    )
+    framework = Framework("toy", "Toy", (), (), (), settings, "", tmp_path)
+    log = tmp_path / "server.log"
+    observation = runtime.observe(framework, tmp_path, tmp_path, log)
+    assert "serving" in observation.server_log
+    assert not any("ERROR" in line for line in observation.server_log)
+    # The log file itself keeps the whole output.
+    assert "[ERROR] Unexpected exit from worker-1" in log.read_text()
+
+
 def test_a_static_error_skips_the_browser_check_and_a_warning_does_not(toy: Toy) -> None:
     records = {record["mistake"]: record for record in toy.records(toy.run(jobs=3))}
     caught = {"m01-bad", "m03-bad-again", "m06-bad-third"}
@@ -295,6 +357,11 @@ def test_a_case_whose_browser_check_was_skipped_is_scored_as_a_static_error(toy:
     assert (by_mistake["m01-bad"]["bucket"], by_mistake["m01-bad"]["cell"]) == ("static-error", "C")
     assert by_mistake["m01-bad"]["runtime_skipped"] == "caught by toy check"
     matrix = (tmp_path / "report" / "matrix.md").read_text()
+    # The run names its commit and the tree of the benchmark's inputs, in each report.
+    source = json.loads((run_dir / "run.json").read_text())
+    assert f"benchmark inputs tree `{source['inputs_tree']}`" in matrix
+    assert summary["source"]["inputs_tree"] == source["inputs_tree"]
+    assert f"benchmark inputs tree {source['inputs_tree'][:12]}" in (tmp_path / "report" / "report.html").read_text()
     # Only a run with the browser check turned off has unscored cases.
     assert "Not scored" not in matrix
     assert "Not scored" not in (tmp_path / "report" / "report.html").read_text()

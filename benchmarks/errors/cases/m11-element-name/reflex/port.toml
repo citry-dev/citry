@@ -1,0 +1,13 @@
+# The board wrapper is a Reflex box, which renders a div; its name is
+# misspelled.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'rx.bxo(' }
+
+[[edits]]
+file = 'board/board.py'
+old = '''
+        rx.box(
+            rx.text("Owned by "'''
+new = '''
+        rx.bxo(
+            rx.text("Owned by "'''

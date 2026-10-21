@@ -1,0 +1,9 @@
+# `rx.text` renders a paragraph and `rx.box` a div, so the owner's name sits
+# in a div inside the paragraph.
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'rx.text("Owner: ", rx.box(' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'rx.text("Owner: ", BoardState.owner.name),'
+new = 'rx.text("Owner: ", rx.box(BoardState.owner.name)),'

@@ -1,0 +1,11 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'on_hdie=BoardState.hide' }
+
+[indirect]
+reason = "Python points an error in a call that spans several lines at the call's first line, so `reflex compile`'s TypeError for the unknown `on_hdie` keyword names the line of `return card(`, a few lines above the misspelled keyword."
+codes = ["TypeError"]
+
+[[edits]]
+file = 'board/board.py'
+old = 'on_hide=BoardState.hide(project.title),'
+new = 'on_hdie=BoardState.hide(project.title),'

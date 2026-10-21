@@ -1,0 +1,9 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'return card(' }
+
+[[edits]]
+file = 'board/board.py'
+old = '''
+        title=project.title,
+        count=project.count,'''
+new = '        count=project.count,'

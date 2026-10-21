@@ -1,0 +1,13 @@
+# Reflex elements are Python calls, so an element left open is a call whose
+# closing parenthesis is missing.
+status = "ported"
+mistake = { file = 'board/card.py', contains = 'rx.box(footer(title, count),' }
+
+[indirect]
+reason = "In Reflex an unclosed element is an unclosed call. pyright and ruff also report the end of the file, where the parser runs out of input looking for the closing parenthesis."
+codes = ["pyright", "invalid-syntax"]
+
+[[edits]]
+file = 'board/card.py'
+old = 'rx.box(footer(title, count)),'
+new = 'rx.box(footer(title, count),'
