@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import tomllib
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import tomllib
 from citry_errors import runtime
 from citry_errors.compare import comparable, compare, problems
 from citry_errors.config import (
