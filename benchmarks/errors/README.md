@@ -127,8 +127,8 @@ page, which are never stored. Every framework repeats such cases on each
 run. A full run of the ten frameworks' 620 cases with nothing stored
 (`--no-cache`) took about 31 minutes on the same machine; most of it is
 the Nuxt cases, which run one at a time, and the Next.js builds.
-ReactPy's 49 cases, run on their own, took about 2 minutes, and
-django-unicorn's about 3. Each journey loads the page again in every
+Before m51 to m63 were added, ReactPy's 49 cases, run on their own,
+took about 2 minutes, and django-unicorn's about 3. Each journey loads the page again in every
 browser check, and the `search`, `about` and `project` journeys bring
 each framework to five (FastHTML to four). It is not part of routine CI.
 Run it at each Citry release, and when a framework's pinned versions
@@ -250,22 +250,24 @@ writes a part of the page, not from its tools:
   the cell is n/a. Next.js's and Nuxt's ESLint rules report the missing
   key, and ReactPy's debug mode prints a warning. Citry refuses to
   render the page, with a message that names the missing `#c-key`.
-  django-unicorn reports nothing, and hiding a card changes which
-  cards stay on the page.
+  django-unicorn reports nothing, and clicking Hide on the first card
+  leaves Alpha on the page.
 - **m52:** nothing reports a `<div>` inside a `<p>` before the app runs,
   except Nuxt, whose ESLint fails to parse the template. Next.js reports
   it in the browser as a hydration error, and Citry fails to render the
   page because Vue rejects the template. Elsewhere the browser splits
   the paragraph without a message.
-- **m53, m54 and m57:** djLint checks alt text (H013), ARIA attribute
-  names (H048) and repeated ids (H053) in the Django, Rusty,
-  django-components, Jinja and django-unicorn templates. It reads
-  `aria-expandd` only as a plain attribute, so it misses the Alpine
-  apps' `:aria-expandd` binding and reports django-unicorn's. Next.js's
-  next/image requires `alt` in its types, and its ESLint warns about a
-  misspelled ARIA name, which React also reports in the browser. Nuxt's
-  `strictTemplates` reports the unknown ARIA name. Nothing reports a
-  repeated id in Citry, Next.js, Nuxt, FastHTML or ReactPy.
+- **m53, m54, m56 and m57:** djLint checks alt text (H013), ARIA
+  attribute names (H048), repeated attributes (H037) and repeated ids
+  (H053) in the Django, Rusty, django-components, Jinja and
+  django-unicorn templates. It checks ARIA names only on plain
+  attributes, so it misses the `:aria-expandd` binding of the Alpine
+  apps (Django, Rusty, django-components and Jinja) and reports
+  django-unicorn's plain `aria-expandd`. Next.js's next/image requires
+  `alt` in its types, and its ESLint warns about a misspelled ARIA name,
+  which React also reports in the browser. Nuxt's `strictTemplates`
+  reports the unknown ARIA name. Nothing reports a repeated id in Citry,
+  Next.js, Nuxt, FastHTML or ReactPy.
 - **m55:** a bound `aria-expanded` is typed as `true` or `false` in
   TypeScript, so Citry, Next.js and Nuxt report `yes` and `no` in the
   editor. The Alpine apps, django-unicorn's `yesno` filter, FastHTML's
@@ -275,20 +277,22 @@ writes a part of the page, not from its tools:
   (Citry, Next.js, Nuxt, FastHTML and ReactPy). In the Django, Rusty,
   django-components, Jinja and django-unicorn templates they fail when
   the page renders.
-- **m60:** a handler that takes one more argument than the card's
-  event sends is a type error in Next.js, Nuxt, ReactPy and
-  django-unicorn, reported where the handler is passed or called, so
-  three of those cells are marked `°`. Citry's and FastHTML's handlers
-  are browser JavaScript, which nothing checks, and the missing reason
-  only prints as `undefined`. The Alpine apps hide a card with an inline
+- **m60:** a handler that takes one more argument than the card's event
+  sends is a type error in Next.js, Nuxt, ReactPy and django-unicorn.
+  Next.js reports it on the handler itself. Nuxt, ReactPy and
+  django-unicorn report it where the handler is called or returned, so
+  those three cells are marked `°`. Citry's and FastHTML's handlers are
+  browser JavaScript, which nothing checks, and the missing reason only
+  prints as `undefined`. The Alpine apps hide a card with an inline
   statement, so the cell is n/a.
 - **m61:** the project route takes a numeric id. Django, Rusty,
   django-components, django-unicorn and Jinja build the link from the
   route's name, and building it with `alpha` fails when the page
   renders. Citry and FastHTML check the number only when the link is
-  followed, with a 404. ReactPy's and Nuxt's routes check it in the
-  browser and show a `Page not found` page with no error, and Next.js's
-  route segments take any text, so its page reads `Project alpha`.
+  followed, with a 404. ReactPy's router shows the app's `Page not
+  found` route and Nuxt's route check shows Nuxt's 404 page, both in the
+  browser and with no error, and Next.js's route segments take any text,
+  so its page reads `Project alpha`.
 - **m62:** only TypeScript in Next.js reports `disabled="false"`;
   Nuxt's types accept the text. Everywhere else the search button is
   silently disabled.
@@ -304,8 +308,9 @@ writes a part of the page, not from its tools:
   The browser check cannot show the difference: the `search` journey
   records the page only after the form is submitted, which loads the
   page again or, in Citry, renders the search form again, so only
-  Next.js's record still shows the typed text. These cells read "never"
-  either way, and both count as missed.
+  Next.js's record still shows the typed text; ReactPy's record, like
+  the others, shows no difference. Whether or not the line follows the
+  typing, these cells read "never" and count as missed.
 
 The gaps the earlier 24-mistake run found in Citry are tracked in
 [#207](https://github.com/citry-dev/citry/issues/207); the gaps found by
@@ -409,8 +414,8 @@ other framework here that writes its page as Python functions:
   reads the API base from its props. Reading a prop the server did not
   pass shows `API: undefined` with no error. (A second prop that carries
   the secret, m42, reaches the browser unnoticed, as in every framework.)
-- **m51:** ReactPy updates the card list in the browser, so a card
-  without a key applies, and debug mode prints a warning for it.
+- **m51:** ReactPy updates the card list in the browser, so leaving out
+  the key applies here, and debug mode prints a warning for it.
   FastHTML's server-rendered list has no keys, so its cell is n/a.
 - **m56:** the repeated `class_name` is a repeated key in a Python
   dictionary, which ruff reports and Python accepts, keeping the last
@@ -420,7 +425,7 @@ other framework here that writes its page as Python functions:
   a hide handler that takes a reason where `make_hide` returns it.
   FastHTML's hide listener is browser JavaScript, which nothing checks.
 - **m61:** the router checks the project id in the browser and shows the
-  app's `Page not found` route with no error, where FastHTML's route
+  app's `Page not found` route with no error, while FastHTML's route
   answers `/projects/alpha` with a 404.
 
 m14 and m34 are n/a, as in FastHTML and the Django and Jinja apps:
@@ -470,9 +475,9 @@ differ from Django's in these places:
   JavaScript defines the toggle: the Details button uses django-unicorn's
   built-in `$toggle('open')` action.
 - **m51:** the card list renders each card as a child component, with
-  the `key` django-unicorn's docs give a child in a loop, so a card
-  without a key applies. Nothing reports it, and hiding a card changes
-  which cards stay on the page. The Django app's cards are plain
+  the `key` django-unicorn's docs give a child in a loop, so the
+  mistake applies. Nothing reports it, and clicking Hide on the first
+  card leaves Alpha on the page. The Django app's cards are plain
   server-rendered markup, so its cell is n/a.
 - **m54:** the Details button writes `aria-expanded` as a plain
   attribute, so djLint's H048 reports the misspelled name. The Django

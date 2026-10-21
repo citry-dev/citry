@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and nine others report the same 49 developer mistakes.
+description: How fast Citry and eleven other frameworks make a 1,400-entry page usable, and how early Citry and nine others report the same 62 developer mistakes.
 ---
 
 # Benchmarks
@@ -135,7 +135,9 @@ the server, which sends back the component's new HTML.
     - a handler that takes more arguments than the event sends: the
       extra argument is `undefined`
     - an image without alt text, a misspelled ARIA attribute such as
-      `aria-expandd`, or an id used twice on the page
+      `aria-expandd`, or an id used twice on the page: the page looks
+      right, but screen readers get missing or wrong information, and
+      code that looks up the id can find the wrong element
     - `disabled="false"` on a button: the button is disabled
     - a browser-side component gets text where it declares a boolean,
       or changes an input it received instead of telling its parent:
@@ -153,11 +155,11 @@ the server, which sends back the component's new HTML.
   `type="sumbit"`.
 - **Only at runtime: 11**:
     - a misspelled template directive: fails in the browser
-    - a link to a route that doesn't exist, a link with text where the
-      route takes a number, or an image with a misspelled path: the
-      browser gets a 404
-    - a repeated component without `#c-key`, or a `<div>` inside a
-      `<p>`: the server fails to render the page
+    - a link to a route that doesn't exist, a link that passes a word,
+      such as `/projects/alpha`, where the route takes a number, or an
+      image with a misspelled path: the browser gets a 404
+    - a component rendered in a loop without `#c-key`, or a `<div>`
+      inside a `<p>`: the server fails to render the page
     - `v-model` on the `<form>` instead of its `<input>`: the server
       fails to render the page, and the error message doesn't point at
       the form
@@ -184,8 +186,8 @@ the server, which sends back the component's new HTML.
   actions take typed arguments, so a wrong or missing field in the data
   a button sends is caught too. Nuxt's template check, with its
   `strictTemplates` setting on, reports unknown components, elements, attributes,
-  directives and component events. Both lint a missing list key, and
-  Next.js's linter warns about accessibility mistakes such as a
+  directives and component events. Both linters report a missing list
+  key, and Next.js's also warns about accessibility mistakes such as a
   misspelled ARIA attribute.
 
 ### How we measured { #errors-how-we-measured }
