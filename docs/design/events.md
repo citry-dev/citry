@@ -1352,7 +1352,14 @@ for configuring extensions without touching them. The envelope size cap
 is engine-wide only, with no per-component override: it guards the
 transport before any component resolves, and one batch envelope spans
 components, so declaring it on a component's `Events` class fails at
-class definition. Engine-wide registries
+class definition. The host's CSRF field names (`_csrf_field_names`,
+default `("csrfmiddlewaretoken",)`) are engine-wide in the same way: the
+dispatcher removes those keys from a call's args before it validates them
+against the handler's data class, unless the class declares the name, so a
+form may keep the host's hidden token input
+([`security_csrf.md`](security_csrf.md) section 4.4). A single string, an
+empty name, or a value that is not a list, tuple, or set fails at engine
+construction; an empty sequence turns the removal off. Engine-wide registries
 and secrets are `CitrySettings` fields: `secret` (7.1),
 `event_result_resolvers` (result resolvers, 6.2), and
 `event_payload_codecs` (payload codecs, 6.2).

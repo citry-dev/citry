@@ -64,7 +64,7 @@ from citry._protocol.events import (
 # the floor that raises it (csrf.py) and is shared here for the fallback path
 # of a broken user policy.
 from citry.ext.events.actions import Render, _download_content_disposition
-from citry.ext.events.csrf import _MSG_CSRF_FAILED
+from citry.ext.events.csrf import _MSG_CSRF_FAILED, csrf_field_names
 from citry.ext.events.errors import EventError, wire_error
 from citry.ext.events.handlers import event_options
 from citry.ext.events.results import (
@@ -77,7 +77,7 @@ from citry.ext.events.results import (
     track_constructed_actions,
     warn_unreturned_actions,
 )
-from citry.ext.events.schemas import validate_args
+from citry.ext.events.schemas import declared_field_names, validate_args
 from citry.ext.events.state import public_state_values
 from citry.ext.events.tokens import (
     InvalidStateError,
@@ -338,6 +338,25 @@ class _CallPlan:
     # The on_event hook's answer, when an extension answered the call in the
     # handler's place; _NOT_ANSWERED means the handler runs.
     answered: Any
+
+
+def _without_csrf_fields(args: Mapping[str, Any], data_schema: type | None, names: frozenset[str]) -> Any:
+    """
+    Return the call's args without the host CSRF fields that the data class does not declare.
+
+    The result keeps the args' own class, so a form post's
+    [`StringArgs`][citry.ext.events.schemas.StringArgs] still binds text to
+    numbers and booleans. A data class that declares one of these names
+    receives it like any other field.
+    """
+    present = names.intersection(args)
+    if not present:
+        return args
+    if data_schema is not None:
+        present -= declared_field_names(data_schema)
+        if not present:
+            return args
+    return type(args)({key: value for key, value in args.items() if key not in present})
 
 
 def _state_fingerprint(state: Any) -> str | None:
@@ -768,7 +787,10 @@ class EventsDispatcher:
                 _restore_json_tuples(state, info.state_cls)
 
         # Args validation against the handler's data schema (design 3.3, WP9).
-        args = call.get("args") or {}
+        # A form may hold the host's CSRF hidden field, which the browser and
+        # a no-JS post both send as one more field; drop it first so the call
+        # is not rejected for a field the data class never asked for.
+        args = _without_csrf_fields(call.get("args") or {}, handler.data_schema, csrf_field_names(ctx.citry))
         data_value: Any = None
         if handler.data_schema is not None:
             validation = validate_args(handler.data_schema, args)

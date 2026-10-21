@@ -282,6 +282,24 @@ def payload_fields(schema_cls: type) -> tuple[_FieldSpec, ...] | None:
         return None
 
 
+def declared_field_names(schema_cls: type) -> frozenset[str]:
+    """
+    Return the field names a ``data`` class takes from the wire, without resolving its annotations.
+
+    The dispatcher reads this before it drops the host's CSRF fields from a
+    call, so a class that declares such a field still receives it. A
+    Pydantic model's field aliases count too, because Pydantic reads a
+    payload key by its alias.
+    """
+    if _is_pydantic_model(schema_cls):
+        # ``model_fields`` is Pydantic v2; ``__fields__`` the v1 spelling.
+        model_fields = getattr(schema_cls, "model_fields", None) or getattr(schema_cls, "__fields__", {})
+        aliases = {alias for info in model_fields.values() if isinstance(alias := getattr(info, "alias", None), str)}
+        return frozenset(model_fields) | aliases
+    converted = convert_schema_class(schema_cls)
+    return frozenset(field.name for field in fields(converted) if field.init)
+
+
 def json_value_error(annotation: Any, value: Any, *, bind_strings: bool = False) -> str | None:
     """
     Return the message the server gives for ``value`` in a field annotated ``annotation``, or None when it fits.

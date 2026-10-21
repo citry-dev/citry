@@ -30,6 +30,12 @@ already enforces.
 
 The dispatcher runs the check per call (so a batch can mix outcomes) and
 answers any rejection as the wire error ``csrf_failed`` (403).
+
+A host token can also arrive as a form field: Django's hidden
+``csrfmiddlewaretoken`` input sits inside the forms it protects, so a form
+that calls a server event sends it with the other fields. The dispatcher
+drops the field names ``csrf_field_names`` returns before it checks the
+event's data class (design 3.3).
 """
 
 from __future__ import annotations
@@ -38,15 +44,17 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from citry.ext.events.errors import EventError
+from citry.ext.events.handlers import DEFAULT_CSRF_FIELD_NAMES
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from citry.citry import Citry
     from citry.ext.events.extension import EventHandler
     from citry.util.routing import RouteRequest
 
-__all__ = ["X_CITRY_EVENTS_HEADER", "build_csrf_check", "enforce_floor"]
+__all__ = ["X_CITRY_EVENTS_HEADER", "build_csrf_check", "csrf_field_names", "enforce_floor"]
 
 # The custom header the client runtime sends on every call. Its presence is
 # the floor's proof that the request came from same-origin JS (or a caller
@@ -131,3 +139,16 @@ def build_csrf_check(request: RouteRequest) -> Callable[[EventHandler], None]:
             policy(request)
 
     return check
+
+
+def csrf_field_names(citry: Citry) -> frozenset[str]:
+    """
+    Return the host CSRF field names the server drops from an event's form arguments.
+
+    The value is the engine-wide
+    ``extensions_defaults["events"]["_csrf_field_names"]`` setting, which the
+    extension validates when the engine is built, or Django's
+    ``csrfmiddlewaretoken`` when it is not set.
+    """
+    value = citry.settings.extensions_defaults.get("events", {}).get("_csrf_field_names")
+    return frozenset(DEFAULT_CSRF_FIELD_NAMES if value is None else value)

@@ -165,7 +165,23 @@ Citry.events.configure({
 });
 ```
 
-The same hidden input also works for a normal HTML form post.
+The same hidden input also works for a normal HTML form post, and inside a
+form that calls a server event with `@c-submit`. Citry removes the
+`csrfmiddlewaretoken` field before it checks the event's data class, so the
+handler never sees it and the call is not rejected for an unknown field. If
+your framework names its token field differently, list the names Citry
+should remove:
+
+```python
+citry = Citry(
+    extensions_defaults={
+        "events": {"_csrf_field_names": ["authenticity_token"]},
+    },
+)
+```
+
+A data class that declares a field with one of these names still receives
+it.
 
 ### Use your own token { #other-frameworks }
 

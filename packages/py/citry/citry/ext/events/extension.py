@@ -30,6 +30,7 @@ from citry.ext.events.config import Events
 from citry.ext.events.emission import capture_instance, merge_instance_entries
 from citry.ext.events.handlers import (
     CONFIG_NAMES,
+    ENGINE_CONFIG_NAMES,
     collect_event_handlers,
     event_options,
     is_def_like,
@@ -79,6 +80,27 @@ def _config_name_hint(name: str) -> str:
     """A " Did you mean ...?" suffix pointing at the closest recognized config name, or empty."""
     close = get_close_matches(name, CONFIG_NAMES, n=1, cutoff=0.7)
     return f" Did you mean {close[0]!r}?" if close else ""
+
+
+def _validate_engine_config_value(name: str, value: Any) -> None:
+    """Reject an engine-wide Events setting whose value the transport could not use."""
+    if name == "_max_envelope_bytes":
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            msg = f"'_max_envelope_bytes' must be a positive int (a byte count); got {value!r}."
+            raise ValueError(msg)
+        return
+    # A single string would be read one character at a time, so it is
+    # rejected rather than guessed at; an empty sequence turns dropping off.
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple, set, frozenset)):
+        msg = (
+            "'_csrf_field_names' must be a list or tuple of field names, such as"
+            f" ['csrfmiddlewaretoken']; got {value!r}."
+        )
+        raise ValueError(msg)  # noqa: TRY004 - one exception type for the whole config error matrix
+    for item in value:
+        if not isinstance(item, str) or not item:
+            msg = f"'_csrf_field_names' must hold non-empty strings; got {item!r}."
+            raise ValueError(msg)
 
 
 # The built-in defaults, the lowest of the three config levels (component
@@ -243,7 +265,8 @@ class EventsExtension(Extension):
         Underscore names are configuration and must be one of the recognized
         config attributes (``_guard``, ``_context``, ``_csrf``, ``_methods``,
         ``_debounce``, ``_throttle``, ``_topics``, plus the engine-wide
-        ``_max_envelope_bytes``, which only ``extensions_defaults`` may set);
+        ``_max_envelope_bytes`` and ``_csrf_field_names``, which only
+        ``extensions_defaults`` may set);
         on a component's ``Events`` class an underscore ``def`` is a private
         helper and is exempt.
         Unprefixed names are event handlers: they belong on a component's
@@ -276,19 +299,18 @@ class EventsExtension(Extension):
                 # helpers (and _guard / _context may be written as defs).
                 if component is not None and is_def_like(value):
                     continue
-                if name == "_max_envelope_bytes":
+                if name in ENGINE_CONFIG_NAMES:
                     # The envelope byte cap guards the transport before any
-                    # component resolves (and a batch spans components), so
-                    # it is engine-wide, never per component.
+                    # component resolves (and a batch spans components), and
+                    # the host's CSRF field names are one site-wide fact, so
+                    # both are engine-wide, never per component.
                     if component is not None:
                         msg = (
                             f"{name!r} is engine-wide configuration; set it in"
                             f" extensions_defaults['events'], not on a component's Events class."
                         )
                         raise ValueError(msg)
-                    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-                        msg = f"'_max_envelope_bytes' must be a positive int (a byte count); got {value!r}."
-                        raise ValueError(msg)
+                    _validate_engine_config_value(name, value)
                     continue
                 if name in CONFIG_NAMES:
                     continue
