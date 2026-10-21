@@ -1,9 +1,15 @@
 """
-HTML attribute names and the valid values of enumerated HTML attributes. Generated; do not edit.
+HTML, ARIA, SVG, and DOM event names and HTML attribute values. Generated; do not edit.
 
 Run python scripts/generate_html_attribute_values.py to refresh it.
-Source: https://html.spec.whatwg.org/multipage/indices.html
-WHATWG HTML Standard, Last Updated 20 October 2026; retrieved 2026-10-20.
+WHATWG HTML Standard, Last Updated 20 October 2026. Generated 2026-10-21 from these sources:
+- WHATWG HTML Standard, index: https://html.spec.whatwg.org/multipage/indices.html
+- WHATWG HTML Standard, obsolete features: https://html.spec.whatwg.org/multipage/obsolete.html
+- WAI-ARIA 1.2, W3C Recommendation: https://www.w3.org/TR/wai-aria-1.2/
+- WAI-ARIA 1.3, editor's draft: https://w3c.github.io/aria/
+- SVG 2, element index: https://www.w3.org/TR/SVG2/eltindex.html
+- SVG 1.1, element index: https://www.w3.org/TR/SVG11/eltindex.html
+- @vue/runtime-dom 3.5.44 types, packages/py/citry_lsp/citry_lsp/types/node_modules/@vue/runtime-dom/dist/runtime-dom.d.ts
 """
 
 # ruff: noqa: E501, Q000
@@ -250,3 +256,85 @@ ELEMENT_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'a': ('download', 'href
 
 # Attribute names a form-associated custom element accepts.
 CUSTOM_ELEMENT_ATTRIBUTES: Final[tuple[str, ...]] = ('disabled', 'form', 'name', 'readonly')
+
+# Boolean attribute -> the elements that have it ("*" for every HTML element).
+# Any value turns a boolean attribute on, even "false".
+BOOLEAN_ATTRIBUTES: Final[dict[str, tuple[str, ...]]] = {'allowfullscreen': ('iframe',),
+ 'alpha': ('input',),
+ 'async': ('script',),
+ 'autofocus': ('*',),
+ 'autoplay': ('audio', 'video'),
+ 'checked': ('input',),
+ 'controls': ('audio', 'img', 'video'),
+ 'default': ('track',),
+ 'defer': ('script',),
+ 'disabled': ('button', 'fieldset', 'input', 'link', 'optgroup', 'option', 'select', 'textarea'),
+ 'formnovalidate': ('button', 'input'),
+ 'headingreset': ('*',),
+ 'inert': ('*',),
+ 'ismap': ('img',),
+ 'itemscope': ('*',),
+ 'loop': ('audio', 'video'),
+ 'multiple': ('input', 'select'),
+ 'muted': ('audio', 'video'),
+ 'nomodule': ('script',),
+ 'novalidate': ('form',),
+ 'open': ('details', 'dialog'),
+ 'playsinline': ('video',),
+ 'readonly': ('input', 'textarea'),
+ 'required': ('input', 'select', 'textarea'),
+ 'reversed': ('ol',),
+ 'selected': ('option',),
+ 'shadowrootclonable': ('template',),
+ 'shadowrootcustomelementregistry': ('template',),
+ 'shadowrootdelegatesfocus': ('template',),
+ 'shadowrootserializable': ('template',)}
+
+# Every aria-* state and property of WAI-ARIA 1.2 and the 1.3 draft, deprecated ones included.
+ARIA_ATTRIBUTES: Final[frozenset[str]] = frozenset(('aria-activedescendant', 'aria-atomic', 'aria-autocomplete', 'aria-braillelabel',
+ 'aria-brailleroledescription', 'aria-busy', 'aria-checked', 'aria-colcount', 'aria-colindex',
+ 'aria-colindextext', 'aria-colspan', 'aria-controls', 'aria-current', 'aria-describedby', 'aria-description',
+ 'aria-details', 'aria-disabled', 'aria-dropeffect', 'aria-errormessage', 'aria-expanded', 'aria-flowto',
+ 'aria-grabbed', 'aria-haspopup', 'aria-hidden', 'aria-invalid', 'aria-keyshortcuts', 'aria-label',
+ 'aria-labelledby', 'aria-level', 'aria-live', 'aria-modal', 'aria-multiline', 'aria-multiselectable',
+ 'aria-orientation', 'aria-owns', 'aria-placeholder', 'aria-posinset', 'aria-pressed', 'aria-readonly',
+ 'aria-relevant', 'aria-required', 'aria-roledescription', 'aria-rowcount', 'aria-rowindex',
+ 'aria-rowindextext', 'aria-rowspan', 'aria-selected', 'aria-setsize', 'aria-sort', 'aria-valuemax',
+ 'aria-valuemin', 'aria-valuenow', 'aria-valuetext'))
+
+# SVG 2 and SVG 1.1 element names, in their original case, such as foreignObject.
+SVG_ELEMENTS: Final[frozenset[str]] = frozenset(('a', 'altGlyph', 'altGlyphDef', 'altGlyphItem', 'animate', 'animateColor', 'animateMotion',
+ 'animateTransform', 'circle', 'clipPath', 'color-profile', 'cursor', 'defs', 'desc', 'ellipse', 'feBlend',
+ 'feColorMatrix', 'feComponentTransfer', 'feComposite', 'feConvolveMatrix', 'feDiffuseLighting',
+ 'feDisplacementMap', 'feDistantLight', 'feDropShadow', 'feFlood', 'feFuncA', 'feFuncB', 'feFuncG', 'feFuncR',
+ 'feGaussianBlur', 'feImage', 'feMerge', 'feMergeNode', 'feMorphology', 'feOffset', 'fePointLight',
+ 'feSpecularLighting', 'feSpotLight', 'feTile', 'feTurbulence', 'filter', 'font', 'font-face',
+ 'font-face-format', 'font-face-name', 'font-face-src', 'font-face-uri', 'foreignObject', 'g', 'glyph',
+ 'glyphRef', 'hkern', 'image', 'line', 'linearGradient', 'marker', 'mask', 'metadata', 'missing-glyph',
+ 'mpath', 'path', 'pattern', 'polygon', 'polyline', 'radialGradient', 'rect', 'script', 'set', 'stop',
+ 'style', 'svg', 'switch', 'symbol', 'text', 'textPath', 'title', 'tref', 'tspan', 'use', 'view', 'vkern'))
+
+# Elements the HTML Standard tells authors not to use (16.2 Non-conforming features).
+OBSOLETE_ELEMENTS: Final[frozenset[str]] = frozenset(('acronym', 'applet', 'basefont', 'bgsound', 'big', 'blink', 'center', 'dir', 'font', 'frame', 'frameset',
+ 'isindex', 'keygen', 'listing', 'marquee', 'menuitem', 'multicol', 'nextid', 'nobr', 'noembed', 'noframes',
+ 'param', 'plaintext', 'rb', 'rtc', 'spacer', 'strike', 'tt', 'xmp'))
+
+# Lowercase DOM event names a listener such as @click may name, without the on prefix.
+DOM_EVENT_NAMES: Final[frozenset[str]] = frozenset(('abort', 'afterprint', 'animationcancel', 'animationend', 'animationiteration', 'animationstart', 'auxclick',
+ 'beforeinput', 'beforematch', 'beforeprint', 'beforetoggle', 'beforeunload', 'blur', 'cancel', 'canplay',
+ 'canplaythrough', 'change', 'click', 'close', 'command', 'compositionend', 'compositionstart',
+ 'compositionupdate', 'contentvisibilityautostatechange', 'contextlost', 'contextmenu', 'contextrestored',
+ 'copy', 'cuechange', 'cut', 'dblclick', 'drag', 'dragend', 'dragenter', 'dragexit', 'dragleave', 'dragover',
+ 'dragstart', 'drop', 'durationchange', 'emptied', 'encrypted', 'ended', 'error', 'focus', 'focusin',
+ 'focusout', 'formdata', 'fullscreenchange', 'fullscreenerror', 'gotpointercapture', 'hashchange', 'input',
+ 'invalid', 'keydown', 'keypress', 'keyup', 'languagechange', 'load', 'loadeddata', 'loadedmetadata',
+ 'loadstart', 'lostpointercapture', 'message', 'messageerror', 'mousedown', 'mouseenter', 'mouseleave',
+ 'mousemove', 'mouseout', 'mouseover', 'mouseup', 'offline', 'online', 'pagehide', 'pagereveal', 'pageshow',
+ 'pageswap', 'paste', 'pause', 'play', 'playing', 'pointercancel', 'pointerdown', 'pointerenter',
+ 'pointerleave', 'pointermove', 'pointerout', 'pointerover', 'pointerrawupdate', 'pointerup', 'popstate',
+ 'progress', 'ratechange', 'rejectionhandled', 'reset', 'resize', 'scroll', 'scrollend', 'scrollsnapchange',
+ 'scrollsnapchanging', 'securitypolicyviolation', 'seeked', 'seeking', 'select', 'selectionchange',
+ 'selectstart', 'slotchange', 'stalled', 'storage', 'submit', 'suspend', 'timeupdate', 'toggle',
+ 'touchcancel', 'touchend', 'touchmove', 'touchstart', 'transitioncancel', 'transitionend', 'transitionrun',
+ 'transitionstart', 'unhandledrejection', 'unload', 'visibilitychange', 'volumechange', 'waiting',
+ 'webglcontextcreationerror', 'webglcontextlost', 'webglcontextrestored', 'wheel'))

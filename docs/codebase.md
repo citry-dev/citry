@@ -244,30 +244,51 @@ The schema, review policy, disclosure rules, publication lifecycle, and future
 weekly discovery process are defined in
 [`docs_community_packages.md`](design/docs_community_packages.md).
 
-### Refreshing the HTML attribute value table
+### Refreshing the markup name and value tables
 
-The `citry.template.invalid-attribute-value` rule checks static attribute
-values against
-[`citry/_html_attribute_values.py`](../packages/py/citry/citry/_html_attribute_values.py),
-and the `citry.template.misspelled-directive` rule reads the HTML attribute
-names in the same module, so that an attribute of the element, such as
-`c-id`, or `c-form` on `<input>`, is not reported.
-That module is generated from the HTML Standard's attribute index, and its
-docstring records the standard's update date. To pick up keywords and
-attribute names the standard has added or removed, run:
+Several lint rules check templates against tables in
+[`citry/_html_attribute_values.py`](../packages/py/citry/citry/_html_attribute_values.py):
+
+- `citry.template.invalid-attribute-value` checks the value of an attribute
+  that accepts only certain keywords, such as `draggable="treu"`, and a value
+  on a boolean attribute, such as `disabled="false"`, which still turns the
+  attribute on.
+- `citry.template.misspelled-directive` and
+  `citry.template.misspelled-attribute` read the attribute names each
+  element accepts.
+- `citry.template.unknown-aria-attribute` reads the `aria-*` names.
+- `citry.template.misspelled-element` reads the HTML, SVG, and obsolete
+  HTML element names.
+- `citry.vue.misspelled-event` and
+  `citry.browser.undeclared-component-event` read the DOM event names.
+
+A script generates that module from published standards and Vue's type
+declarations, plus a few names and keywords the script lists by hand, such
+as the `<input type>` keywords and `wrap="off"`, which browsers accept
+outside the standard. To pick up names and keywords the sources have added
+or removed, run:
 
 ```sh
 python scripts/generate_html_attribute_values.py
 ```
 
-The script downloads https://html.spec.whatwg.org/multipage/indices.html; pass
-`--source FILE` to read a saved copy instead. It keeps only rows whose values
-are a closed list of keywords, and adds a few closed sets that the index
-describes in words, such as `<input type>`, plus a few values browsers accept
-outside the standard, such as `wrap="off"`. Review the diff before
-committing: a new keyword or attribute name becomes valid, and a removed one
-starts being reported. No CI job refreshes the table, because that would
-need network access.
+The script downloads the HTML Standard's
+[index](https://html.spec.whatwg.org/multipage/indices.html) and
+[obsolete features](https://html.spec.whatwg.org/multipage/obsolete.html)
+pages, [WAI-ARIA 1.2](https://www.w3.org/TR/wai-aria-1.2/) and the
+[WAI-ARIA 1.3 draft](https://w3c.github.io/aria/), and the
+[SVG 2](https://www.w3.org/TR/SVG2/eltindex.html) and
+[SVG 1.1](https://www.w3.org/TR/SVG11/eltindex.html) element indexes. It
+also reads the event names in Vue's `runtime-dom.d.ts`, which the language
+server's bundled types include. Pass `--saved NAME=FILE` to read a saved copy
+of one page instead of downloading it (`--source FILE` does this for the
+index), and `--vue-types FILE` to read another `runtime-dom.d.ts`;
+`--help` lists the page names. The generated module's docstring records
+every source and the date it was generated.
+
+Review the diff before committing: a new name or keyword becomes valid, and
+a removed one starts being reported. No CI job refreshes the tables, because
+that would need network access.
 
 ### Running tests
 
