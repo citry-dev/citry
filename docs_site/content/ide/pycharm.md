@@ -85,7 +85,10 @@ These keys go in the same initialization options:
 | `protocolVersion` | The settings format version | Required. Keep it at `1` |
 
 Use `envFile` when importing your application needs environment variables,
-such as Django settings:
+such as Django settings. When `DJANGO_SETTINGS_MODULE` is set, in the file
+or in the environment PyCharm was started with, Citry starts Django with
+those settings before it imports the module that `app` points to, so that
+module can import your models:
 
 ```json
 {

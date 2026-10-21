@@ -8,7 +8,10 @@ framework does not serve, as ``citry check`` does. Without a registered checker 
 
 from __future__ import annotations
 
+import textwrap
 from typing import TYPE_CHECKING
+
+import pytest
 
 from citry_lsp.engine import DocumentState, browser_diagnostics
 from citry_lsp.project import load_project
@@ -104,3 +107,84 @@ def test_the_editor_follows_the_link_rule_setting(tmp_path):
     assert [
         item[3] for item in _findings(tmp_path, markup, engine_options=', lint=LintSettings(rule_unknown_url="error")')
     ] == [1]
+
+
+# A Django URL configuration that imports a model through its views, as most do.
+_DJANGO_URLS = textwrap.dedent(
+    '''
+    from django.urls import include, path
+    from notes.views import home
+
+    from citry import Citry, Component
+    from citry.contrib.django import urlpatterns as citry_urlpatterns
+
+    engine = Citry(autodiscover=False)
+
+
+    class Page(Component):
+        citry = engine
+        template = """
+          <a href="/">Home</a>
+          <a href="/nope">Missing</a>
+        """
+
+
+    urlpatterns = [
+        path("", home),
+        path("citry/", include(citry_urlpatterns(engine, prefix="/citry"))),
+    ]
+    '''
+)
+
+
+def test_the_editor_starts_django_before_loading_a_urlconf_that_imports_models(tmp_path):
+    # The app worker is a fresh process, as for a real editor, and the env file
+    # names the settings the way the VS Code docs show.
+    pytest.importorskip("django", reason="the Django startup test needs django")
+    (tmp_path / "proj_settings.py").write_text(
+        "SECRET_KEY = 'test-only'\nROOT_URLCONF = 'proj_urls'\nINSTALLED_APPS = ['notes']\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "notes" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "notes" / "models.py").write_text(
+        "from django.db import models\n\n\nclass Note(models.Model):\n    text = models.TextField()\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "notes" / "views.py").write_text(
+        "from django.http import HttpResponse\nfrom notes.models import Note\n\n\n"
+        "def home(request):\n    return HttpResponse(Note._meta.label)\n",
+        encoding="utf-8",
+    )
+    urls_file = tmp_path / "proj_urls.py"
+    urls_file.write_text(_DJANGO_URLS, encoding="utf-8")
+    env_file = tmp_path / ".env"
+    env_file.write_text("DJANGO_SETTINGS_MODULE=proj_settings\n", encoding="utf-8")
+
+    project = load_project(tmp_path, "proj_urls:engine", environment_file=env_file)
+
+    assert project.status.registry_ready, project.status.message
+    document = DocumentState(urls_file.as_uri(), "python", _DJANGO_URLS, 1)
+    document.update(_DJANGO_URLS, 1, project)
+    reported = [
+        diagnostic.message
+        for diagnostic in browser_diagnostics(document, project, {document.uri: document})
+        if diagnostic.code == _URL
+    ]
+    # Django answered for both links: it serves "/" and not "/nope".
+    assert reported == ["Your app has no route or static file for '/nope', so the browser gets a 404 Not Found."]
+
+
+def test_the_editor_shows_djangos_error_when_the_settings_cannot_load(tmp_path):
+    pytest.importorskip("django", reason="the Django startup test needs django")
+    (tmp_path / "plain_app.py").write_text("from citry import Citry\nengine = Citry()\n", encoding="utf-8")
+    env_file = tmp_path / ".env"
+    env_file.write_text("DJANGO_SETTINGS_MODULE=no_such_settings\n", encoding="utf-8")
+
+    project = load_project(tmp_path, "plain_app:engine", environment_file=env_file)
+
+    assert not project.status.registry_ready
+    assert (
+        "Django could not start with DJANGO_SETTINGS_MODULE='no_such_settings': "
+        "ModuleNotFoundError: No module named 'no_such_settings'"
+    ) in project.status.message

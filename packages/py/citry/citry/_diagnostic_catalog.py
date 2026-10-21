@@ -735,8 +735,9 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                      'documentationPath': '/ide/diagnostics/#citry.check.url-checker-missing',
                                      'fix': 'Point --app at a module that mounts Citry when it is imported, such as '
                                             'app.main:citry_app when app/main.py calls mount(app, citry_app), or '
-                                            'config.urls:citry_app for a Django project whose urls.py calls '
-                                            'urlpatterns(). To stop checking links, set rule_unknown_url to "ignore".',
+                                            'config.urls:citry_app, with DJANGO_SETTINGS_MODULE set, for a Django '
+                                            'project whose urls.py calls urlpatterns(). To stop checking links, set '
+                                            'rule_unknown_url to "ignore".',
                                      'messages': {'default': "Links such as '{path}' were not checked, because no web "
                                                              'framework integration told Citry which paths your app '
                                                              'serves. Point --app at the module that calls '

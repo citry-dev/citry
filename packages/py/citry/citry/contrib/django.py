@@ -58,6 +58,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._django_startup import start_django
 from citry._path_checks import PathLookup, register_path_checker
 from citry.contrib._path_lookup import files_beside
 from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes, normalize_mount_prefix
@@ -231,14 +232,13 @@ def _django_path_checker() -> PathChecker:
         from django.conf import settings as django_settings  # noqa: PLC0415
         from django.urls import get_script_prefix  # noqa: PLC0415
 
-        if not apps.ready:
-            # `citry check` and the editor import the URL configuration
-            # without starting Django, so its apps and FORCE_SCRIPT_NAME are
-            # not loaded yet. The static file finders and resolve() need both,
-            # as a running server has them.
-            import django  # noqa: PLC0415
-
-            django.setup()
+        # `citry check` and the editor start Django before they import the app
+        # when DJANGO_SETTINGS_MODULE is set. A script that imports the URL
+        # configuration directly, or a project that calls settings.configure(),
+        # has not loaded its apps or set the URL prefix from FORCE_SCRIPT_NAME
+        # yet. The static file finders and resolve() need both, as a running
+        # server has them. start_django() does nothing once the apps are loaded.
+        start_django()
         script_prefix = get_script_prefix()
         media_url = _site_prefix(django_settings.MEDIA_URL, script_prefix)
         if media_url is not None and path.startswith(media_url):
