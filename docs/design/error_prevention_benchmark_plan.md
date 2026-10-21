@@ -21,9 +21,13 @@ stricter-settings PR) applied the decision on stricter settings to the framework
 ten frameworks, with Ref H. PR 11 has added Tetra, with the
 reference-page parts of PRs 3 to 5 and a case for each of the 62 mistakes in the catalogue after PR 5.
 After PR 11, PR 7 also added part 3's page parts and cases to Reflex. The
-other PRs in section 8 are planned. The published results include 1b,
+Ref G PR added the shared board name to eleven baselines (FastHTML has no
+way to share a value except as an argument) and an m50 case to all twelve
+frameworks, so every PR in section 8 is done.
+
+The published results include 1b,
 PR 2, PR 3, PR 9, PR 6, PR 4, PR 8, PR 10, the stricter settings, PR 5,
-PR 11 and PR 7. The benchmark itself is described in
+PR 11, PR 7, and Ref G with m50. The benchmark itself is described in
 [error_prevention_benchmark.md](error_prevention_benchmark.md) and
 [`benchmarks/errors/README.md`](../../benchmarks/errors/README.md).
 
@@ -207,7 +211,7 @@ mistake needs (section 7); `none` means the current page is enough.
 | m47-template-path | Misspelled path to a template or component file | H15 name | neutral | none |
 | m48-asset-path | Misspelled path to a stylesheet, script or image | H15 name | neutral | Ref F |
 | m49-input-choice | Component input given a value outside its allowed choices | H2 value | neutral | Ref B |
-| m50-shared-value-name | Descendant reads a shared value that no ancestor provides | H17 name | neutral | Ref G (later) |
+| m50-shared-value-name | Descendant reads a shared value that no ancestor provides | H17 name | neutral | Ref G |
 
 26 mistakes: 22 neutral and 4 from Citry's inventory. Neutral means the
 mistake comes from #158's list, from the maintainer's hand-off list in the
@@ -954,8 +958,8 @@ Recommended order:
    reports the loop over a number (m58), the handler that takes a reason
    (m60, with `EventHandlerArgTypeMismatchError`) and the boolean
    attribute given text (m62). pyright reports m60 and m62 first, in the
-   editor, and does not report m58. The published
-   run of twelve frameworks (744 cases, run 20261021T075938Z) took about
+   editor, and does not report m58. The run of twelve frameworks
+   published with PR 7 (744 cases, run 20261021T075938Z) took about
    37 minutes with nothing stored and changed no cell of the other
    eleven frameworks.
 3. **ReactPy.** Cheap: pure Python and uvicorn, a few seconds per case, with
@@ -1076,7 +1080,7 @@ style, and must not change the visible page outside its own part.
 | D | The search form gets an `<input name="q">`, with a line `Searching for: ...` that follows what is typed, and submitting `alpha` shows `Searched: alpha` | m44, m63 |
 | E | An `About` link to a named route `/about` that reads `About this board`, and a project link to `/projects/1` | m45, m61 |
 | F | An owner avatar `<img src="/static/avatar.svg" alt="Ada">` | m48, m53 |
-| G | (later) The page provides the board name to descendants, and each card shows `Board: Projects` | m50 |
+| G | The page provides the board name to descendants, and each card shows `Board: Projects`; FastHTML has no such way, so its cards leave the line out | m50 |
 | H | A line `Projects: 3`, computed in the template with the language's length filter or helper | m59 |
 
 Each addition needs a matching change in two places:
@@ -1171,7 +1175,7 @@ change per baseline, plus re-checking the clean page.
 | 9. Django Rusty Templates (done, after PR 3 and before PRs 4 and 5) | starts from the Django baseline. 44 cases, one per mistake the catalogue had then (PRs 4 and 5 add the rest); its first 37 cases ran on their own in about 1 minute with `--jobs 5` | 44 written (estimate ~62) | ~1 min measured (estimate ~7 min) | ~8.5 min for seven frameworks, measured |
 | 10. django-unicorn (done, after PRs 6 and 4 and before PR 5) | framework, baseline with PR 4's page parts, one case per mistake. 49 cases, one per mistake the catalogue has after PR 4 (PR 5 adds the rest); they ran on their own in about 3 minutes with `--jobs 5` | 49 written (estimate ~62) | ~3 min measured (estimate ~7 min) | ~25 min for ten frameworks, measured; the run changed no existing cell |
 | 11. Tetra (done, after PRs 6, 4, 10 and 5; the run changed no existing cell) | framework, baseline with the page parts of PRs 4 and 5, one case per mistake. 62 cases, one per mistake the catalogue has after PR 5; they ran on their own in about 4 minutes with `--jobs 5` | 62 written (estimate ~62) | ~4 min measured (estimate ~10 min) | ~35 min for eleven frameworks, measured |
-| (later) Ref G and m50 | provide/inject in every baseline | 1 case + 1 baseline change per framework | | |
+| Ref G and m50 (done, after PR 7; the run changed no existing cell's outcome. Five m22 cells, in Django, Rusty, django-unicorn, django-components and ReactPy, gained the `°` mark, which the report puts on a cell whose tool reported the mistake more than three lines away and an `indirect` note says why. The new `Board:` line in each card moved the unclosed footer further from the line the tools report) | The page shares the board's name with the cards in every baseline except FastHTML's, which has no way to share a value except as an argument, then m50 | 12 written (1 of them n/a) + 11 baseline changes | ~1 min measured: the full run grew from about 37 to about 38 minutes | ~38 min for twelve frameworks, measured |
 
 The estimated "Full run after" times assume one case at a time; the
 measured ones use `--jobs 5`, such as the eight-framework run after PR 6,
@@ -1210,8 +1214,7 @@ run then cites that first commit, which shows the wording was fixed before
 any result was seen, as the catalogue header requires. Each new-framework PR
 (6 to 11) adds no catalogue entries.
 
-**Case count per new framework.** 62: the 63 mistakes minus m50, which
-waits for Ref G.
+**Case count per new framework.** 63, one per mistake in the catalogue.
 
 **Full run time.** At the per-case times measured above, one case at a time
 with every browser check run, the full 63-mistake catalogue in 11
@@ -1240,12 +1243,13 @@ The run times in the PR table above are for one case at a time with every
 browser check run. With cases side by side and the skipped browser checks, a
 full run with nothing stored should take about 15 to 25 minutes for 11
 frameworks: skipping about 38% of the 1.6 hours leaves about 1 hour of work,
-and 5 workers make that about 12 minutes; Nuxt's 62 cases, run one at a
+and 5 workers make that about 12 minutes; Nuxt's 63 cases, run one at a
 time, and the clean apps, run alone, keep the total above that. This is an
 estimate from the 2026-10-20 per-case times and the Jinja and FastHTML
-measurement. Measured since: about 35 minutes for eleven frameworks and
-37 for twelve, with Reflex's 62 cases taking about 2 minutes, with no
-frontend build per case and no `max_jobs` limit.
+measurement. Measured since: about 35 minutes for eleven frameworks, 37
+for twelve, and 38 for twelve once m50 was added. Before m50, Reflex's 62
+cases took about 2 minutes, with no frontend build per case and no
+`max_jobs` limit.
 
 ---
 

@@ -129,12 +129,12 @@ On a 10-core machine, Jinja and FastHTML together took 3.5 minutes with
 results. Rerunning them with nothing changed took 8 seconds: it repeated
 only the browser checks of the 4 cases whose journey stops on an error
 page, which are never stored. Every framework repeats such cases on each
-run. A full run of the twelve frameworks' 744 cases with nothing stored
-(`--no-cache`) took about 37 minutes on the same machine; most of it is
+run. A full run of the twelve frameworks' 756 cases with nothing stored
+(`--no-cache`) took about 38 minutes on the same machine; most of it is
 the Nuxt cases, which run one at a time, and the Next.js builds. Before
 m51 to m63 were added, ReactPy's 49 cases, run on their own, took about 2
-minutes, and django-unicorn's about 3. Tetra's 62 cases, run on their own
-after m51 to m63 were added, took about 4. Reflex's 62 cases took about 2,
+minutes, and django-unicorn's about 3. Before m50 was added, Tetra's 62
+cases, run on their own, took about 4, and Reflex's 62 cases about 2,
 because its tools reported 37 of its 53 ported mistakes and only the other
 16 started its development server. Each journey loads the page again in
 every browser check, and the `search`, `about` and `project` journeys
@@ -278,6 +278,20 @@ writes a part of the page, not from its tools:
   Nuxt, whose build turns an image path in a template into an import and
   fails on the missing file, and in Reflex, whose development server
   answers with the app's page and status 200.
+- **m50:** each card reads the board's name that the page shares with
+  it, and the case misspells the key or name the card reads. Citry's and
+  django-components' `inject()` raise an error for a key that no
+  component above provides, and Jinja's app turns on `StrictUndefined`,
+  so the page fails to render. Django, Rusty, Tetra and django-unicorn
+  print a misspelled template variable as empty text, so the cards show
+  `Board:` with no error. Nuxt's page provides the name under a string
+  key, which vue-tsc does not check, so the cards show `Board:` and Vue
+  prints only a warning that the injection was not found. In Next.js
+  and ReactPy the context is a variable in the code, so a misspelled one
+  is an undefined name, which the editor reports. In Reflex the name is
+  a field of a state class, and pyright reports the misspelled field.
+  FastHTML has no way to share the value except as an argument, so its
+  cell is n/a.
 - **m51:** a list key matters only where the browser updates the list in
   place. The Django, Rusty, django-components, Jinja and FastHTML pages
   render the cards on the server and only hide one in the browser, so
@@ -423,6 +437,10 @@ its app and notes):
   checks what a template fill reads from that data, so a misspelled field
   prints as empty text and a count joined with text through `add` prints
   an empty value in place of the count; both are missed.
+- **m50:** the page provides the board's name with `{% provide %}`, and
+  the card's `inject()` raises an error for the misspelled key, so the
+  page fails to render. The Django app's card reads a template variable
+  that the include passes on, which prints as empty text when misspelled.
 
 m25 to m28 end as in the Django app. django-components hands a component
 its inputs once, when the server renders it, and `open` changes in the
@@ -473,6 +491,10 @@ other framework here that writes its page as Python functions:
   reads the API base from its props. Reading a prop the server did not
   pass shows `API: undefined` with no error. (A second prop that carries
   the secret, m42, reaches the browser unnoticed, as in every framework.)
+- **m50:** the page shares the board's name through a ReactPy context,
+  and pyright and ruff report the misspelled name of the context in the
+  editor.
+  FastHTML has no way to share it, so its cell is n/a.
 - **m51:** ReactPy updates the card list in the browser, so leaving out
   the key applies here, and debug mode prints a warning for it.
   FastHTML's server-rendered list has no keys, so its cell is n/a.
@@ -628,7 +650,7 @@ In Reflex ([`frameworks/reflex/`](frameworks/reflex/) holds its app and
 notes) the page is written as Python functions, as in ReactPy, but Reflex
 compiles them into a React app. Its development server serves that app
 with Vite, and the browser sends each click to a Python backend over a
-WebSocket. pyright, ruff and `reflex compile` report 37 of its 53 ported
+WebSocket. pyright, ruff and `reflex compile` report 38 of its 54 ported
 mistakes before the app runs, so only 16 cases needed the browser check.
 Where its cells, or the reason behind them, differ from ReactPy's:
 

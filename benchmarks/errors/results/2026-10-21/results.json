@@ -1,9 +1,9 @@
 {
-  "run": "20261021T075938Z",
+  "run": "20261021T094626Z",
   "source": {
-    "commit": "dd8e202ff0f8b43c8c4966e1526af10eb9b3297d",
+    "commit": "dd410877ffdad24cb0e7db0b07078e8239242418",
     "benchmark_files_changed": false,
-    "inputs_tree": "9277cffd092ba6c9945070fdb0c39572e95912bb",
+    "inputs_tree": "2a28b0cfbbe7b2e27d2e6274bcabd8fdbe7aaae1",
     "inputs_changed": false,
     "jobs": 5,
     "reused": []
@@ -407,6 +407,11 @@
       "category": "types"
     },
     {
+      "id": "m50-shared-value-name",
+      "title": "Descendant reads a shared value that no ancestor provides",
+      "category": "naming"
+    },
+    {
       "id": "m51-list-key-missing",
       "title": "Repeated browser element without a key",
       "category": "templates"
@@ -511,8 +516,8 @@
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n31 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'tone', 'c-tone', 'c-if', 'c-el...",
-        "citry check: citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n31 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'tone', 'c-tone', 'c-if', 'c-elif', 'c-else', 'c-for', 'c-empty..."
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 25:13\n   |\n25 |             <c-Card\n   | ...\n32 |             >\u240a\n   |             ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'tone', 'c-tone', 'c-if',...",
+        "citry check: citry.parse.syntax Parse error:   --> 25:13\n   |\n25 |             <c-Card\n   | ...\n32 |             >\u240a\n   |             ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'tone', 'c-tone', 'c-if', 'c-elif', 'c-else', 'c-for', 'c..."
       ]
     },
     {
@@ -552,8 +557,8 @@
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n30 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'.",
-        "citry check: citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n30 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'."
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 25:13\n   |\n25 |             <c-Card\n   | ...\n31 |             >\u240a\n   |             ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'.",
+        "citry check: citry.parse.syntax Parse error:   --> 25:13\n   |\n25 |             <c-Card\n   | ...\n31 |             >\u240a\n   |             ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'."
       ]
     },
     {
@@ -573,8 +578,8 @@
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 32:13\n   |\n32 |             <c-fill name=\"fotter\" data=\"card\">\n   |             ^--------------------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'.",
-        "citry check: citry.parse.syntax Parse error:   --> 32:13\n   |\n32 |             <c-fill name=\"fotter\" data=\"card\">\n   |             ^--------------------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'."
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 33:15\n   |\n33 |               <c-fill name=\"fotter\" data=\"card\">\n   |               ^--------------------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'.",
+        "citry check: citry.parse.syntax Parse error:   --> 33:15\n   |\n33 |               <c-fill name=\"fotter\" data=\"card\">\n   |               ^--------------------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'."
       ]
     },
     {
@@ -913,16 +918,16 @@
       "indirect": "The unclosed footer takes the card's closing `</article>`, so the parser reports a mismatched tag there, seven lines below the footer, past the five-line slot tag and the Hide button.",
       "runtime_skipped": "caught by Citry language server (citry check --types)",
       "accepted_indirect": [
-        "Citry language server (citry check --types): app/components/card.py:44 citry.parse.syntax Parse error:   --> 14:1\n   |\n14 | </article>\n   | ^--------^\n   |\n   = Mismatched tags: expected closing tag '</footer>', found '</article>'",
-        "citry check: app/components/card.py:44 citry.parse.syntax Parse error:   --> 14:1\n   |\n14 | </article>\n   | ^--------^\n   |\n   = Mismatched tags: expected closing tag '</footer>', found '</article>'"
+        "Citry language server (citry check --types): app/components/card.py:47 citry.parse.syntax Parse error:   --> 15:1\n   |\n15 | </article>\n   | ^--------^\n   |\n   = Mismatched tags: expected closing tag '</footer>', found '</article>'",
+        "citry check: app/components/card.py:47 citry.parse.syntax Parse error:   --> 15:1\n   |\n15 | </article>\n   | ^--------^\n   |\n   = Mismatched tags: expected closing tag '</footer>', found '</article>'"
       ],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
       "cell": "E\u00b0",
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 14:1\n   |\n14 | </article>\n   | ^--------^\n   |\n   = Mismatched tags: expected closing tag '</footer>', found '</article>'",
-        "citry check: citry.parse.syntax Parse error:   --> 14:1\n   |\n14 | </article>\n   | ^--------^\n   |\n   = Mismatched tags: expected closing tag '</footer>', found '</article>'"
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 15:1\n   |\n15 | </article>\n   | ^--------^\n   |\n   = Mismatched tags: expected closing tag '</footer>', found '</article>'",
+        "citry check: citry.parse.syntax Parse error:   --> 15:1\n   |\n15 | </article>\n   | ^--------^\n   |\n   = Mismatched tags: expected closing tag '</footer>', found '</article>'"
       ]
     },
     {
@@ -1169,8 +1174,8 @@
       "bucket": "static-error",
       "cell": "E",
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n31 |           />\u240a\n   |           ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided.",
-        "citry check: citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n31 |           />\u240a\n   |           ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided."
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 25:13\n   |\n25 |             <c-Card\n   | ...\n32 |             />\u240a\n   |             ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided.",
+        "citry check: citry.parse.syntax Parse error:   --> 25:13\n   |\n25 |             <c-Card\n   | ...\n32 |             />\u240a\n   |             ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided."
       ]
     },
     {
@@ -1462,6 +1467,30 @@
       "cell": "E",
       "evidence": [
         "Citry language server (citry check --types): citry.python.invalid-assignment Object of type `Literal[\"acent\", \"plain\"]` is not assignable to `Literal[\"plain\", \"accent\"]`\n\ninfo: element `Literal[\"acent\"]` of union `Literal[\"acent\", \"plain\"]` is not assignable to `Literal[\"plain\", \"accent\"]`"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "runtime-error",
+      "lenient": "runtime-error",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
       ]
     },
     {
@@ -2150,13 +2179,15 @@
       "lenient": "check",
       "baseline_clean": true,
       "timed_out": [],
-      "indirect": "",
+      "indirect": "The unclosed footer div takes the card's closing `</div>`, so djLint reports the card's outer `<div>` as the tag left without a match, four lines above the footer.",
       "runtime_skipped": "caught by djLint 1.46.6 (--lint, django profile)",
-      "accepted_indirect": [],
+      "accepted_indirect": [
+        "djLint 1.46.6 (--lint, django profile): board/templates/board/card.html:1 H025 Tag seems to be an orphan. <div class=\"card car"
+      ],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
-      "cell": "C",
+      "cell": "C\u00b0",
       "evidence": [
         "djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. <div class=\"card car"
       ]
@@ -2685,6 +2716,24 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
+      "bucket": "missed",
+      "cell": "M",
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "silent",
+      "lenient": "silent",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
       "bucket": "missed",
       "cell": "M",
       "evidence": []
@@ -3386,13 +3435,15 @@
       "lenient": "check",
       "baseline_clean": true,
       "timed_out": [],
-      "indirect": "",
+      "indirect": "The unclosed footer div takes the card's closing `</div>`, so djLint reports the card's outer `<div>` as the tag left without a match, four lines above the footer.",
       "runtime_skipped": "caught by djLint 1.46.6 (--lint, django profile)",
-      "accepted_indirect": [],
+      "accepted_indirect": [
+        "djLint 1.46.6 (--lint, django profile): components/card/card.html:2 H025 Tag seems to be an orphan. <div class=\"card car"
+      ],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
-      "cell": "C",
+      "cell": "C\u00b0",
       "evidence": [
         "djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. <div class=\"card car"
       ]
@@ -3885,7 +3936,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):",
-        "error: [21/Oct/2026 08:26:41] \"GET / HTTP/1.1\" 500 296108"
+        "error: [21/Oct/2026 10:13:43] \"GET / HTTP/1.1\" 500 320726"
       ]
     },
     {
@@ -3926,6 +3977,30 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "runtime-error",
+      "lenient": "runtime-error",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
       "bucket": "runtime-error",
       "cell": "R",
       "evidence": [
@@ -5159,6 +5234,24 @@
       "evidence": [
         "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"Literal['acent', 'plain']\" cannot be assigned to parameter \"tone\" of type \"Literal['plain', 'accent']\" in function \"Card\"\n\u00a0\u00a0Type \"Literal['acent', 'plain']\" is not assignable to type \"Literal['plain', 'acc..."
       ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m50-shared-value-name",
+      "status": "not-applicable",
+      "reason": "FastHTML's components are plain Python functions, which receive values only as arguments; FastHTML has no way for the page to provide a value to the functions it calls, and no shared state of its own. A module-level constant would be an ordinary Python name that the card reads for itself, not a value the page provides. So the page leaves the `Board:` line out, and there is no shared value to misspell.",
+      "strict": null,
+      "lenient": null,
+      "baseline_clean": null,
+      "timed_out": null,
+      "indirect": null,
+      "runtime_skipped": null,
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
+      "bucket": null,
+      "cell": "n/a",
+      "evidence": []
     },
     {
       "framework": "fasthtml",
@@ -6428,6 +6521,30 @@
     },
     {
       "framework": "jinja",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "runtime-error",
+      "lenient": "runtime-error",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "jinja",
       "mistake": "m51-list-key-missing",
       "status": "not-applicable",
       "reason": "The server renders the cards in a template loop, and the browser never updates the list in place: Hide only hides the card's own Alpine wrapper (`x-show`), and HTMX swaps in only the counter. A Jinja loop has no key to leave out.",
@@ -6916,8 +7033,8 @@
       "runtime_skipped": "caught by tsc --noEmit (VS Code TypeScript)",
       "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "tsc --noEmit (VS Code TypeScript): app/page.tsx:31 TS2339 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'.",
-        "next build: app/page.tsx:31 TS2339 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'."
+        "tsc --noEmit (VS Code TypeScript): app/page.tsx:34 TS2339 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'.",
+        "next build: app/page.tsx:34 TS2339 Property 'dvi' does not exist on type 'JSX.IntrinsicElements'."
       ],
       "category": "html",
       "bucket": "static-error",
@@ -7150,11 +7267,11 @@
       "indirect": "The unclosed footer div takes the card's closing `</div>`, so TypeScript reports the outer element that is left without a closing tag, and the parsers report the end of the component that no longer parses.",
       "runtime_skipped": "caught by tsc --noEmit (VS Code TypeScript)",
       "accepted_indirect": [
-        "tsc --noEmit (VS Code TypeScript): app/card.tsx:14 TS17008 JSX element 'div' has no corresponding closing tag.",
-        "tsc --noEmit (VS Code TypeScript): app/card.tsx:24 TS1381 Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
-        "tsc --noEmit (VS Code TypeScript): app/card.tsx:25 TS1005 '</' expected.",
-        "eslint (npm run lint): app/card.tsx:24 eslint Parsing error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
-        "next build: app/card.tsx:24 build Error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?"
+        "tsc --noEmit (VS Code TypeScript): app/card.tsx:17 TS17008 JSX element 'div' has no corresponding closing tag.",
+        "tsc --noEmit (VS Code TypeScript): app/card.tsx:28 TS1381 Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "tsc --noEmit (VS Code TypeScript): app/card.tsx:29 TS1005 '</' expected.",
+        "eslint (npm run lint): app/card.tsx:28 eslint Parsing error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?",
+        "next build: app/card.tsx:28 build Error: Unexpected token. Did you mean `{'}'}` or `&rbrace;`?"
       ],
       "unconfirmed_indirect": [],
       "category": "templates",
@@ -7199,7 +7316,7 @@
       "runtime_skipped": "caught by tsc --noEmit (VS Code TypeScript)",
       "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "eslint (npm run lint): app/card.tsx:12 @typescript-eslint/no-unused-vars 'onHide' is defined but never used."
+        "eslint (npm run lint): app/card.tsx:13 @typescript-eslint/no-unused-vars 'onHide' is defined but never used."
       ],
       "category": "events",
       "bucket": "static-error",
@@ -7723,6 +7840,31 @@
     },
     {
       "framework": "next",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "editor",
+      "lenient": "editor",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "caught by tsc --noEmit (VS Code TypeScript)",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [
+        "tsc --noEmit (VS Code TypeScript): app/card.tsx:21 TS2322 Type 'unknown' is not assignable to type 'ReactNode'.",
+        "eslint (npm run lint): app/card.tsx:2 @typescript-eslint/no-unused-vars 'BoardContext' is defined but never used.",
+        "next build: app/card.tsx:21 TS2322 Type 'unknown' is not assignable to type 'ReactNode'."
+      ],
+      "category": "naming",
+      "bucket": "static-error",
+      "cell": "E",
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2552 Cannot find name 'BordContext'. Did you mean 'BoardContext'?",
+        "next build: TS2552 Cannot find name 'BordContext'. Did you mean 'BoardContext'?"
+      ]
+    },
+    {
+      "framework": "next",
       "mistake": "m51-list-key-missing",
       "status": "ported",
       "reason": null,
@@ -8106,7 +8248,7 @@
       "indirect": "$fetch of a route Nuxt does not know returns `unknown`, so TypeScript reports TS18046 where the result is read (`result.count`), four lines below the misspelled route.",
       "runtime_skipped": "caught by vue-tsc (Vue - Official)",
       "accepted_indirect": [
-        "vue-tsc (Vue - Official): app/pages/index.vue:21 TS18046 'result' is of type 'unknown'."
+        "vue-tsc (Vue - Official): app/pages/index.vue:24 TS18046 'result' is of type 'unknown'."
       ],
       "unconfirmed_indirect": [],
       "category": "events",
@@ -8333,7 +8475,7 @@
       "indirect": "The route's return type flows to the page through $fetch, so vue-tsc reports the string where it is bound to Card's number input (`:count` in app/pages/index.vue), not in the route.",
       "runtime_skipped": "caught by vue-tsc (Vue - Official)",
       "accepted_indirect": [
-        "vue-tsc (Vue - Official): app/pages/index.vue:52 TS2322 Type 'string' is not assignable to type 'number'."
+        "vue-tsc (Vue - Official): app/pages/index.vue:55 TS2322 Type 'string' is not assignable to type 'number'."
       ],
       "unconfirmed_indirect": [],
       "category": "types",
@@ -8401,7 +8543,7 @@
       "evidence": [
         "vue-tsc (Vue - Official): TS1005 ';' expected.",
         "ESLint 10.13.0 (@nuxt/eslint 1.17.0): eslint Parsing error: ';' expected.",
-        "nuxt build: exit-1 \u2502  27 |  \n\u2502      at constructor (.benchmarks/errors/envs/nuxt/node_modules/@babel/parser/lib/index.js:369:19)\n\u2502      at TypeScriptParserMixin.raise (.benchmarks/errors/envs/nuxt/node_modules/@babel/parser/lib/index.js:6622:19)\n\u2502      at TypeScriptParserMixin.semicolon (.benchma..."
+        "nuxt build: exit-1 \u2502  30 |  \n\u2502      at constructor (.benchmarks/errors/envs/nuxt/node_modules/@babel/parser/lib/index.js:369:19)\n\u2502      at TypeScriptParserMixin.raise (.benchmarks/errors/envs/nuxt/node_modules/@babel/parser/lib/index.js:6622:19)\n\u2502      at TypeScriptParserMixin.semicolon (.benchma..."
       ]
     },
     {
@@ -8754,7 +8896,7 @@
       "runtime_skipped": "caught by vue-tsc (Vue - Official)",
       "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "vue-tsc (Vue - Official): app/pages/index.vue:13 TS7006 Parameter 'card' implicitly has an 'any' type."
+        "vue-tsc (Vue - Official): app/pages/index.vue:16 TS7006 Parameter 'card' implicitly has an 'any' type."
       ],
       "category": "naming",
       "bucket": "static-error",
@@ -8979,6 +9121,30 @@
     },
     {
       "framework": "nuxt",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "silent",
+      "lenient": "runtime-warning",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
+      "bucket": "runtime-warning",
+      "cell": "Rw",
+      "evidence": [
+        "warning: %cssr:warn%c [Vue warn]: injection \"bordName\" not found. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <Index>\nat <RouteProvider>\nat <RouterView>\nat <NuxtPage>\nat <App>\nat <NuxtRoot>",
+        "warning: %cssr:warn%c [Vue warn]: injection \"bordName\" not found. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <Index>\nat <RouteProvider>\nat <RouterView>\nat <NuxtPage>\nat <App>\nat <NuxtRoot>",
+        "warning: %cssr:warn%c [Vue warn]: injection \"bordName\" not found. \n      background: #f39c12;\n      border-radius: 0.5em;\n      color: white;\n      font-weight: bold;\n      padding: 2px 0.5em;\n      at <Card>\nat <Index>\nat <RouteProvider>\nat <RouterView>\nat <NuxtPage>\nat <App>\nat <NuxtRoot>",
+        "warning: [Vue warn]: injection \"bordName\" not found. \n  at <Card key=\"Alpha\" title=\"Alpha\" count=3  ... > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< undefined > > \n  at <RouteProvider key=\"/\" vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route...",
+        "warning: [Vue warn]: injection \"bordName\" not found. \n  at <Card key=\"Beta\" title=\"Beta\" count=5  ... > \n  at <Index onVnodeUnmounted=fn<onVnodeUnmounted> ref=Ref< undefined > > \n  at <RouteProvider key=\"/\" vnode= {__v_isVNode: true, __v_skip: true, type: Object, props: Object, key: null} route= ..."
+      ]
+    },
+    {
+      "framework": "nuxt",
       "mistake": "m51-list-key-missing",
       "status": "ported",
       "reason": null,
@@ -9130,9 +9296,9 @@
       "runtime_skipped": "caught by vue-tsc (Vue - Official)",
       "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "vue-tsc (Vue - Official): app/pages/index.vue:53 TS2339 Property 'featured' does not exist on type 'number'.",
-        "vue-tsc (Vue - Official): app/pages/index.vue:54 TS2339 Property 'title' does not exist on type 'number'.",
-        "vue-tsc (Vue - Official): app/pages/index.vue:57 TS2339 Property 'title' does not exist on type 'number'."
+        "vue-tsc (Vue - Official): app/pages/index.vue:56 TS2339 Property 'featured' does not exist on type 'number'.",
+        "vue-tsc (Vue - Official): app/pages/index.vue:57 TS2339 Property 'title' does not exist on type 'number'.",
+        "vue-tsc (Vue - Official): app/pages/index.vue:60 TS2339 Property 'title' does not exist on type 'number'."
       ],
       "category": "types",
       "bucket": "static-error",
@@ -9175,7 +9341,7 @@
       "indirect": "The page's listener calls `hide(card.title)` in the template, so vue-tsc reports the missing `reason` argument at that call, not at the changed function signature in the script.",
       "runtime_skipped": "caught by vue-tsc (Vue - Official)",
       "accepted_indirect": [
-        "vue-tsc (Vue - Official): app/pages/index.vue:55 TS2554 Expected 2 arguments, but got 1."
+        "vue-tsc (Vue - Official): app/pages/index.vue:58 TS2554 Expected 2 arguments, but got 1."
       ],
       "unconfirmed_indirect": [],
       "category": "events",
@@ -9234,7 +9400,7 @@
       "runtime_skipped": "caught by vue-tsc (Vue - Official)",
       "accepted_indirect": [],
       "unconfirmed_indirect": [
-        "nuxt build: None:None exit-1 \u2502  74 |        >\n\u2502      at Object.createCompilerError (.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules/@vue/compil"
+        "nuxt build: None:None exit-1 \u2502  77 |        >\n\u2502      at Object.createCompilerError (.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules/@vue/compil"
       ],
       "category": "templates",
       "bucket": "static-error",
@@ -9643,7 +9809,7 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [
         "Pylance, type checking on (pyright 1.1.414, standard): main.py:65 reportReturnType Function with declared return type \"VdomDict\" must return value on all code paths\n\u00a0\u00a0\"None\" is not assignable to \"VdomDict\"",
-        "Pylance, type checking on (pyright 1.1.414, standard): main.py:185 pyright Statements must be separated by newlines or semicolons"
+        "Pylance, type checking on (pyright 1.1.414, standard): main.py:189 pyright Statements must be separated by newlines or semicolons"
       ],
       "category": "templates",
       "bucket": "static-error",
@@ -9680,16 +9846,17 @@
       "lenient": "editor",
       "baseline_clean": true,
       "timed_out": [],
-      "indirect": "",
+      "indirect": "In ReactPy an unclosed element is an unclosed call. pyright reports the outer `html.article(` call as unclosed, and both pyright and ruff report the end of the file, where the parser runs out of input looking for the closing parenthesis.",
       "runtime_skipped": "caught by Pylance, type checking on (pyright 1.1.414, standard)",
       "accepted_indirect": [
-        "Pylance, type checking on (pyright 1.1.414, standard): card.py:25 pyright Statements must be separated by newlines or semicolons",
-        "ruff 0.15.5 (default rules): card.py:25 invalid-syntax unexpected EOF while parsing"
+        "Pylance, type checking on (pyright 1.1.414, standard): card.py:23 pyright \"(\" was not closed",
+        "Pylance, type checking on (pyright 1.1.414, standard): card.py:31 pyright Statements must be separated by newlines or semicolons",
+        "ruff 0.15.5 (default rules): card.py:31 invalid-syntax unexpected EOF while parsing"
       ],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
-      "cell": "E",
+      "cell": "E\u00b0",
       "evidence": [
         "Pylance, type checking on (pyright 1.1.414, standard): pyright \"(\" was not closed",
         "Pylance, type checking on (pyright 1.1.414, standard): pyright Statements must be separated by newlines or semicolons",
@@ -10247,6 +10414,27 @@
     },
     {
       "framework": "reactpy",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "editor",
+      "lenient": "editor",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "caught by Pylance, type checking on (pyright 1.1.414, standard)",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
+      "bucket": "static-error",
+      "cell": "E",
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"BordContext\" is not defined",
+        "ruff 0.15.5 (default rules): F821 Undefined name `BordContext`"
+      ]
+    },
+    {
+      "framework": "reactpy",
       "mistake": "m51-list-key-missing",
       "status": "ported",
       "reason": null,
@@ -10262,11 +10450,11 @@
       "bucket": "runtime-warning",
       "cell": "Rw",
       "evidence": [
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109b6f3b0, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x109b13e20>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109b6f410, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x109b13f60>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109b6f470, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x109ca40e0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109ca8770, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x109ca5e40>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(109ca84d0, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x109ca62a0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b897470, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x10b83bec0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b8974d0, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b9c4040>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b897530, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b9c4180>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b9c8890, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b9c6160>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b9c85f0, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b9c65c0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
       ]
     },
     {
@@ -10939,8 +11127,8 @@
       "indirect": "",
       "runtime_skipped": "caught by Pylance, type checking on (pyright 1.1.414, standard)",
       "accepted_indirect": [
-        "Pylance, type checking on (pyright 1.1.414, standard): board/card.py:27 pyright Statements must be separated by newlines or semicolons",
-        "ruff 0.15.5 (default rules): board/card.py:27 invalid-syntax unexpected EOF while parsing"
+        "Pylance, type checking on (pyright 1.1.414, standard): board/card.py:30 pyright Statements must be separated by newlines or semicolons",
+        "ruff 0.15.5 (default rules): board/card.py:30 invalid-syntax unexpected EOF while parsing"
       ],
       "unconfirmed_indirect": [],
       "category": "templates",
@@ -11071,7 +11259,7 @@
       "indirect": "",
       "runtime_skipped": "caught by ruff 0.15.5 (default rules)",
       "accepted_indirect": [
-        "reflex compile --dry (Reflex 0.9.10.post2): board/status.py:15 EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x10952a020> -> None: A lambda inside "
+        "reflex compile --dry (Reflex 0.9.10.post2): board/status.py:15 EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x107bb6020> -> None: A lambda inside "
       ],
       "unconfirmed_indirect": [],
       "category": "events",
@@ -11079,7 +11267,7 @@
       "cell": "C",
       "evidence": [
         "ruff 0.15.5 (default rules): F841 Local variable `open` is assigned to but never used",
-        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x10952a020> -> None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ..."
+        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x107bb6020> -> None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ..."
       ]
     },
     {
@@ -11501,6 +11689,27 @@
     },
     {
       "framework": "reflex",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "editor",
+      "lenient": "editor",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "caught by Pylance, type checking on (pyright 1.1.414, standard)",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
+      "bucket": "static-error",
+      "cell": "E",
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportAttributeAccessIssue Cannot access attribute \"bord_name\" for class \"type[BoardInfoState]\"\n\u00a0\u00a0Attribute \"bord_name\" is unknown",
+        "reflex compile --dry (Reflex 0.9.10.post2): AttributeError AttributeError: type object 'BoardInfoState' has no attribute 'bord_name'. Did you mean: 'board_name'?\nHappened while evaluating page 'index'"
+      ]
+    },
+    {
+      "framework": "reflex",
       "mistake": "m51-list-key-missing",
       "status": "ported",
       "reason": null,
@@ -11695,7 +11904,7 @@
       "runtime_skipped": "caught by Pylance, type checking on (pyright 1.1.414, standard)",
       "accepted_indirect": [
         "Pylance, type checking on (pyright 1.1.414, standard): board/board.py:97 reportArgumentType Argument of type \"EventCallback[str]\" cannot be assigned to parameter \"on_hide\" of type \"EventType[()]\" in function \"card\"\n\u00a0\u00a0Type \"EventCallback[str]\" is not as",
-        "reflex compile --dry (Reflex 0.9.10.post2): board/card.py:21 EventHandlerArgTypeMismatchError reflex_base.utils.exceptions.EventHandlerArgTypeMismatchError: Event handler on_click expects <class 'reflex_base.event.PointerEventInfo'> for argument reason b"
+        "reflex compile --dry (Reflex 0.9.10.post2): board/card.py:24 EventHandlerArgTypeMismatchError reflex_base.utils.exceptions.EventHandlerArgTypeMismatchError: Event handler on_click expects <class 'reflex_base.event.PointerEventInfo'> for argument reason b"
       ],
       "unconfirmed_indirect": [],
       "category": "events",
@@ -12194,13 +12403,15 @@
       "lenient": "check",
       "baseline_clean": true,
       "timed_out": [],
-      "indirect": "",
+      "indirect": "The unclosed footer div takes the card's closing `</div>`, so djLint reports the card's outer `<div>` as the tag left without a match, four lines above the footer.",
       "runtime_skipped": "caught by djLint 1.46.6 (--lint, django profile)",
-      "accepted_indirect": [],
+      "accepted_indirect": [
+        "djLint 1.46.6 (--lint, django profile): board/templates/board/card.html:1 H025 Tag seems to be an orphan. <div class=\"card car"
+      ],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
-      "cell": "C",
+      "cell": "C\u00b0",
       "evidence": [
         "djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. <div class=\"card car"
       ]
@@ -12735,6 +12946,24 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
+      "bucket": "missed",
+      "cell": "M",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "silent",
+      "lenient": "silent",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
       "bucket": "missed",
       "cell": "M",
       "evidence": []
@@ -13383,7 +13612,7 @@
       "indirect": "Tetra copies each inline script into a file under board/__tetracache__/, padded with spaces so that its lines match the component's Python file, and hands that copy to esbuild. esbuild reports the syntax error in the copy, at the line where the missing comma makes the next method unexpected.",
       "runtime_skipped": "",
       "accepted_indirect": [
-        "manage.py tetrabuild (esbuild 0.27.2): board/__tetracache__/default/default.py__details.tmp.js:155 esbuild Expected \"}\" but found \"close\""
+        "manage.py tetrabuild (esbuild 0.27.2): board/__tetracache__/default/default.py__details.tmp.js:158 esbuild Expected \"}\" but found \"close\""
       ],
       "unconfirmed_indirect": [],
       "category": "templates",
@@ -13972,6 +14201,24 @@
       "accepted_indirect": [],
       "unconfirmed_indirect": [],
       "category": "types",
+      "bucket": "missed",
+      "cell": "M",
+      "evidence": []
+    },
+    {
+      "framework": "tetra",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "silent",
+      "lenient": "silent",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
       "bucket": "missed",
       "cell": "M",
       "evidence": []
@@ -14649,13 +14896,15 @@
       "lenient": "check",
       "baseline_clean": true,
       "timed_out": [],
-      "indirect": "",
+      "indirect": "The unclosed footer div takes the card's closing `</div>`, so djLint reports the card's outer `<div>` as the tag left without a match, four lines above the footer.",
       "runtime_skipped": "caught by djLint 1.46.6 (--lint, django profile)",
-      "accepted_indirect": [],
+      "accepted_indirect": [
+        "djLint 1.46.6 (--lint, django profile): board/templates/unicorn/card.html:1 H025 Tag seems to be an orphan. <div class=\"card car"
+      ],
       "unconfirmed_indirect": [],
       "category": "templates",
       "bucket": "static-error",
-      "cell": "C",
+      "cell": "C\u00b0",
       "evidence": [
         "djLint 1.46.6 (--lint, django profile): H025 Tag seems to be an orphan. <div class=\"card car"
       ]
@@ -14782,7 +15031,7 @@
       "indirect": "The card calls `self.parent.hide(...)` after narrowing its parent to the card list's class, so pyright reports the missing `hide` method at that call in card.py, not at the misspelled definition.",
       "runtime_skipped": "caught by Pylance, type checking on (pyright 1.1.414, standard)",
       "accepted_indirect": [
-        "Pylance, type checking on (pyright 1.1.414, standard): board/components/card.py:20 reportAttributeAccessIssue Cannot access attribute \"hide\" for class \"ProjectListView\"\n\u00a0\u00a0Attribute \"hide\" is unknown"
+        "Pylance, type checking on (pyright 1.1.414, standard): board/components/card.py:22 reportAttributeAccessIssue Cannot access attribute \"hide\" for class \"ProjectListView\"\n\u00a0\u00a0Attribute \"hide\" is unknown"
       ],
       "unconfirmed_indirect": [],
       "category": "events",
@@ -15194,6 +15443,24 @@
     },
     {
       "framework": "unicorn",
+      "mistake": "m50-shared-value-name",
+      "status": "ported",
+      "reason": null,
+      "strict": "silent",
+      "lenient": "silent",
+      "baseline_clean": true,
+      "timed_out": [],
+      "indirect": "",
+      "runtime_skipped": "",
+      "accepted_indirect": [],
+      "unconfirmed_indirect": [],
+      "category": "naming",
+      "bucket": "missed",
+      "cell": "M",
+      "evidence": []
+    },
+    {
+      "framework": "unicorn",
       "mistake": "m51-list-key-missing",
       "status": "ported",
       "reason": null,
@@ -15386,7 +15653,7 @@
       "indirect": "The card calls `self.parent.hide(self.title)` after narrowing its parent to the card list's class, so pyright reports the missing `reason` argument at that call in card.py, not at the changed signature.",
       "runtime_skipped": "caught by Pylance, type checking on (pyright 1.1.414, standard)",
       "accepted_indirect": [
-        "Pylance, type checking on (pyright 1.1.414, standard): board/components/card.py:20 reportCallIssue Argument missing for parameter \"reason\""
+        "Pylance, type checking on (pyright 1.1.414, standard): board/components/card.py:22 reportCallIssue Argument missing for parameter \"reason\""
       ],
       "unconfirmed_indirect": [],
       "category": "events",
