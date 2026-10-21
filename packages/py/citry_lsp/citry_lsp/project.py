@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from packaging.version import InvalidVersion, Version
 
 from citry import TemplateAnalysis
-from citry._wire_classes import KwargsWireClasses
+from citry._wire_classes import KwargsWireClasses, SlotDataWireClass
 from citry_lsp.catalog import CatalogIndex
 from citry_lsp.environment import EnvironmentFileError, worker_environment
 from citry_lsp.protocol import (
@@ -388,6 +388,7 @@ class SourceAnalysisIndex:
         "_js_schema",
         "_kwargs_classes",
         "_native_template",
+        "_slot_data_classes",
         "_state",
         "_state_resolution",
         "_template_asset",
@@ -416,6 +417,7 @@ class SourceAnalysisIndex:
         template_lint: dict[str, dict[str, SourceLintRecord]] = {}
         kwargs_classes: dict[str, KwargsWireClasses] = {}
         native_template: dict[str, bool | None] = {}
+        slot_data_classes: dict[str, dict[str, SlotDataWireClass]] = {}
         for raw_component in raw_components:
             (
                 definition_id,
@@ -447,6 +449,7 @@ class SourceAnalysisIndex:
             template_lint[definition_id] = lint_variables
             kwargs_classes[definition_id] = wire_classes
             native_template[definition_id] = _source_native_template(raw_component, definition_id)
+            slot_data_classes[definition_id] = _source_slot_data_classes(raw_component)
         expected = {component.definition_id for component in catalog.components}
         if set(template_data) != expected:
             raise ValueError("source analysis definition ids do not match the component catalog")
@@ -463,6 +466,7 @@ class SourceAnalysisIndex:
         self._template_lint = template_lint
         self._kwargs_classes = kwargs_classes
         self._native_template = native_template
+        self._slot_data_classes = slot_data_classes
 
     def template_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return copied provenance for one exact catalog component."""
@@ -487,6 +491,10 @@ class SourceAnalysisIndex:
     def kwargs_wire_classes(self, component: ComponentRecord) -> KwargsWireClasses:
         """Return the classes ``js_data()`` can read through from the component's Kwargs fields."""
         return self._kwargs_classes.get(component.definition_id, KwargsWireClasses())
+
+    def slot_data_wire_classes(self, component: ComponentRecord) -> Mapping[str, SlotDataWireClass]:
+        """Return the fields each typed slot of the component passes to its fill, by slot name."""
+        return self._slot_data_classes.get(component.definition_id, {})
 
     def js_asset_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return concrete-to-owner provenance for the effective JS asset."""
@@ -538,7 +546,12 @@ def _source_component(
     dict[str, SourceLintRecord],
     KwargsWireClasses,
 ]:
-    if type(value) is not dict or set(value) - {"js_schema", "kwargs_classes", "native_template"} != {
+    if type(value) is not dict or set(value) - {
+        "js_schema",
+        "kwargs_classes",
+        "native_template",
+        "slot_data_classes",
+    } != {
         "definition_id",
         "css_data",
         "css_asset",
@@ -566,6 +579,41 @@ def _source_component(
         _source_lint_variables(value.get("template_lint"), definition_id),
         KwargsWireClasses.from_dict(value["kwargs_classes"]) if "kwargs_classes" in value else KwargsWireClasses(),
     )
+
+
+def _source_slot_data_classes(value: object) -> dict[str, SlotDataWireClass]:
+    """Read the fields each typed slot passes to its fill; a worker on an older citry sends none."""
+    raw = value.get("slot_data_classes", {}) if type(value) is dict else {}
+    if type(raw) is not dict or any(type(name) is not str for name in raw):
+        raise ValueError("source analysis slot_data_classes must map slot names to records")
+    return {name: SlotDataWireClass.from_dict(record) for name, record in raw.items()}
+
+
+def _path_verdicts(value: object) -> dict[str, tuple[bool, str | None]] | None:
+    """
+    Read the link verdicts the worker copied, or ``None`` when the app's web framework gave none.
+
+    A worker on an older citry sends no record, which reads as no verdicts.
+    """
+    if value is None:
+        return None
+    if type(value) is not dict or set(value) != {"checked", "verdicts"} or type(value["checked"]) is not bool:
+        raise ValueError("path verdict envelope is invalid")
+    raw = value["verdicts"]
+    if type(raw) is not dict:
+        raise ValueError("path verdicts must map paths to verdicts")
+    verdicts: dict[str, tuple[bool, str | None]] = {}
+    for path, verdict in raw.items():
+        if (
+            type(path) is not str
+            or type(verdict) is not dict
+            or set(verdict) != {"found", "suggestion"}
+            or type(verdict["found"]) is not bool
+            or (verdict["suggestion"] is not None and type(verdict["suggestion"]) is not str)
+        ):
+            raise ValueError("path verdicts must map paths to verdicts")
+        verdicts[path] = (verdict["found"], verdict["suggestion"])
+    return verdicts if value["checked"] else None
 
 
 def _events_csrf_field_names(value: object) -> frozenset[str]:
@@ -788,6 +836,11 @@ class ProjectState:
     # The host CSRF field names the app's server removes from an event call's
     # arguments, so the form-field rule leaves those controls alone.
     csrf_field_names: frozenset[str] = frozenset({"csrfmiddlewaretoken"})
+    # Whether the app's web framework serves each link path its templates
+    # held when the app loaded, with a served path one typing slip away for
+    # a missing one. `None` means no integration could answer, so the
+    # editor checks no links.
+    path_verdicts: Mapping[str, tuple[bool, str | None]] | None = None
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
     # ty's types for `js_data()` value parts, per file, source text, and class.
     _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
@@ -1095,6 +1148,7 @@ def _project_from_worker_output(
             raise ValueError("extension analysis envelope is invalid")
         i18n = I18nProjectIndex(raw_extensions.get("i18n"))
         csrf_field_names = _events_csrf_field_names(raw_extensions.get("events"))
+        path_verdicts = _path_verdicts(payload.get("paths"))
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     project_output = payload.get("project_output")
@@ -1121,6 +1175,7 @@ def _project_from_worker_output(
         source_analysis=source_analysis,
         i18n=i18n,
         csrf_field_names=csrf_field_names,
+        path_verdicts=path_verdicts,
     )
 
 

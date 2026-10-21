@@ -84,6 +84,7 @@ if TYPE_CHECKING:
     from types import FrameType
     from weakref import ReferenceType
 
+    from citry._path_checks import PathChecker
     from citry.citry_render import CitryRender
     from citry.citry_template import CitryTemplate
     from citry.component import Component
@@ -323,6 +324,11 @@ class Citry:
         # (docs/design/dependencies.md section 9.3); None means no
         # integration is mounted, and URL building raises with guidance.
         self._mounted_prefix: str | None = None
+        # Functions the web framework integrations register to answer whether
+        # the host app serves a path, so `citry check` and the editor can
+        # report a link to a missing page or file (citry/_path_checks.py).
+        # Each entry pairs the host app the checker asks with the checker.
+        self._path_checkers: list[tuple[object, PathChecker]] = []
 
         # The extension/hook system, scoped to this Citry instance (DJC #1413).
         # Extensions are present from construction, so hooks fire immediately.

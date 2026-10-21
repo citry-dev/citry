@@ -52,6 +52,7 @@ them. There is no separate editor setting.
 | [`citry.browser.unknown-form-field`](/ide/diagnostics/#citry.browser.unknown-form-field) | A control in a submitted form whose `name` the handler does not accept | error |
 | [`citry.browser.missing-form-field`](/ide/diagnostics/#citry.browser.missing-form-field) | A submitted form without a control for a field the handler requires | error |
 | [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A `var(--name)` that misspells a `css_data()` key | warning |
+| [`citry.template.unknown-url`](/ide/diagnostics/#citry.template.unknown-url) | A link to a path your app has no page or file for | warning |
 
 ## Fix unknown names
 
@@ -1012,6 +1013,87 @@ sets itself are not reported, and neither is a component whose
 `css_data()` keys Citry cannot all read. The rule is a warning by default
 and needs your application, so only `citry --app ... check` reports it.
 
+## Links to missing pages { #find-links-to-missing-pages }
+
+A misspelled link, a wrong route parameter, or a misspelled file name
+shows up only as a 404 page when someone opens it:
+
+```citry-html
+{# Warning: Your app has no route or static file
+   for '/abuot', so the browser gets a 404 Not
+   Found. Did you mean '/about'? #}
+<a href="/abuot">About</a>
+
+{# Warning when the route is /projects/<int:id> #}
+<a href="/projects/alpha">Project</a>
+
+{# Warning: Did you mean '/static/avatar.svg'? #}
+<img src="/static/avtar.svg" alt="" />
+```
+
+Citry does not know your app's routes, so it asks your web framework
+whether it serves each path. The function you mount Citry with answers:
+
+| Function | What it checks |
+| --- | --- |
+| `citry.contrib.flask.mount()` | Flask's URL rules, and the files in the app's and blueprints' static folders |
+| `citry.contrib.fastapi.mount()` | The routes of a FastAPI or Starlette app, and the files in its `StaticFiles` mounts |
+| `citry.contrib.django.urlpatterns()` | Django's URL patterns, and the files Django's static file finders find under `STATIC_URL` |
+
+That function must run while the check loads your app. Point `--app` at
+the module that mounts Citry, not only at the module that creates the
+`Citry` instance:
+
+```console
+# app/main.py calls mount(app, citry_app)
+citry --app app.main:citry_app check
+```
+
+For Django, point `--app` at the URL configuration that calls
+`urlpatterns()`, such as `config.urls:citry_app`. That module must import
+your Citry instance under the name you give. A Flask app built by a
+factory function mounts Citry only when the factory runs, so add a small
+module that calls it, such as `app/wsgi.py` holding
+`web_app = create_app()` and `from app.citry_app import citry_app`, and
+point `--app` at `app.wsgi:citry_app`. Give the editor the same path in its `citry.app` setting. If none of these
+functions ran, `citry check` prints one note and checks no links, and the
+editor checks no links either. Serving Citry with the plain ASGI or WSGI
+app from `citry.contrib.asgi` or `citry.contrib.wsgi` leaves links
+unchecked, because those apps do not know your routes.
+
+The rule checks a literal `href`, `src`, or `action` on an HTML element
+when the value starts with a single `/`. The query string and fragment
+are ignored, so `/about?tab=team#people` is checked as `/about`. These
+are not checked:
+
+- a URL with a scheme, such as `https:` or `mailto:`, and a
+  `//cdn.example.com/...` URL;
+- a relative path, such as `page.html`;
+- a value written as an expression, such as `:href` or `c-href`;
+- an attribute on a component tag, which is a component input;
+- a path under the prefix Citry's own routes are mounted at, such as
+  `/citry/citry.js`;
+- a parameter type that only the view checks, such as a FastAPI
+  `project_id: int` argument on `/projects/{project_id}`;
+- with Django, a path under `MEDIA_URL`, because uploaded files are not
+  listed anywhere Citry can read.
+
+An app served below a sub-path, such as FastAPI's `root_path="/api"` or
+Flask's `APPLICATION_ROOT`, has its links compared with its routes as if
+it were served at the site root, so turn the rule off for such an app.
+
+The editor asks your framework when it loads your application, so a link
+you add later is checked after the next load, which VS Code starts when
+you save a Python file. If your framework raises an error while it
+answers, `citry check` skips that link and prints one note with the error.
+
+Citry also reports a path that another server answers, such as a
+reverse proxy in front of your app. That is why the rule is only a
+warning. To turn it off, set `rule_unknown_url` to `"ignore"` in the
+`Lint` class of the component that holds the link
+([Override one component](#override-one-component)), or in
+`LintSettings` for the whole app.
+
 ## Check rules in CI
 
 Run the check against your application, so it knows every component and
@@ -1035,8 +1117,9 @@ rules, the [component event](#find-misspelled-component-events) rule,
 which reads each child's `emits`, and the rules for
 [repeated components](#find-repeated-components-without-keys),
 [prop assignments](#find-prop-assignments),
-[server event arguments](#check-server-event-arguments), and
-[CSS variables](#find-misspelled-css-variables).
+[server event arguments](#check-server-event-arguments),
+[CSS variables](#find-misspelled-css-variables), and
+[links](#find-links-to-missing-pages).
 
 They still run every rule that reads only the template: the Alpine,
 attribute-value, and misspelled-directive rules, and the rules for

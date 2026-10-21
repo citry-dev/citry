@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from lsprotocol import types
 
 from citry import LspPosition, LspRange
-from citry._browser_expressions import _normalized_dynamic_slot_source
+from citry._browser_expressions import _normalized_dynamic_slot_source, _vue_hyphenated_prop_name, _vue_prop_name
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
@@ -52,6 +52,8 @@ from citry._registry_lint import (
     server_event_forms,
     server_event_payload_findings,
     server_event_payload_from_description,
+    template_urls,
+    unknown_url_findings,
 )
 from citry._source_lines import source_lines
 from citry.analysis import (
@@ -78,6 +80,7 @@ from citry.analysis import (
     TemplatePythonControl,
     TemplatePythonQuery,
     TemplatePythonRoot,
+    TemplatePythonSlotDataType,
     TemplatePythonValueType,
     VueLintConsumer,
     analyze_browser_component_source,
@@ -1440,6 +1443,7 @@ def browser_diagnostics(
         consumers = _template_consumers(document, region, project, open_documents)
         if not consumers:
             continue
+        diagnostics.extend(_unknown_url_diagnostics(region, parsed.template, consumers, project, parse_nested=parser))
         expressions = browser_expressions(parsed.template, parse_nested=parser)
         roots = _template_js_data_roots(document, region, project, open_documents)
         diagnostics.extend(
@@ -2292,6 +2296,7 @@ def _template_expression_block(
     project: ProjectState,
     document: DocumentState,
     open_documents: Mapping[str, DocumentState] | None,
+    prop_types: Mapping[int, str] | None = None,
 ) -> tuple[str, str, str, bool] | None:
     """
     Wrap one Vue expression in its own function after the shared declarations.
@@ -2301,7 +2306,9 @@ def _template_expression_block(
     declared event. The function holds the expression's names, so a name such
     as `open` hides the browser global of that name, and it keeps each
     expression's `v-for` aliases and `$event` apart when a type check puts
-    several expressions in one file.
+    several expressions in one file. `prop_types` gives the type a child
+    component's prop value must have, keyed by the value's start offset, as
+    `_component_prop_value_types` returns it.
     """
     binding_types = {
         binding.name: _browser_binding_wire_type(binding, scope.roots) for binding in expression.binding_details
@@ -2350,6 +2357,15 @@ def _template_expression_block(
     elif expression.mode == "binding-pattern":
         prefix = f"{opening}\nvoid (("
         suffix = ") => {});\n"
+    elif (prop_type := _child_prop_type(expression, prop_types)) is not None:
+        # Passing the value to a function typed from the child's prop makes
+        # TypeScript report a wrong value, such as a string for a Boolean
+        # prop, on the value itself.
+        prefix = (
+            f"{opening}\n/** @type {{(value: {prop_type}) => void}} */ var {_CHILD_PROP_HELPER};\n"
+            f"{_CHILD_PROP_HELPER}((\n"
+        )
+        suffix = "\n));\n"
     elif (bound := _native_bound_attribute(expression)) is not None:
         # Passing the value as an argument typed from Vue's own attribute
         # types makes TypeScript report a wrong value, such as
@@ -2371,6 +2387,17 @@ def _template_expression_block(
 _VUE_TYPES_PATH = (Path(__file__).parent / "types" / "node_modules" / "vue").resolve().as_posix()
 # The generated helper that types one bound attribute value; completion hides it.
 _BIND_ATTRIBUTE_HELPER = "__citryBindAttribute"
+# The generated helper that types one child component's prop value.
+_CHILD_PROP_HELPER = "__citryChildProp"
+
+
+def _child_prop_type(expression: BrowserExpression, prop_types: Mapping[int, str] | None) -> str | None:
+    """Return the type a `:prop` value on a child component tag must have, or `None` to leave it untyped."""
+    if prop_types is None or expression.mode != "expression" or expression.host != "vue":
+        return None
+    if expression.transform != "identity":
+        return None
+    return prop_types.get(expression.start_index)
 
 
 def _bind_attribute_declaration(keywords: tuple[str, ...]) -> str:
@@ -2480,13 +2507,16 @@ def type_check_projections(
         )
         if scope is None:
             continue
+        prop_types = _component_prop_value_types(parsed.template, project, document, open_documents, parser=parser)
         pieces = [TYPE_CHECK_HEADER, scope.preamble, "\n"]
         # Track where the next piece starts, so each expression's mappings do
         # not rescan the growing file.
         end = _advance_position(types.Position(0, 0), "".join(pieces))
         mappings: list[ProjectionSourceMapping] = []
         for expression in expressions:
-            block = _template_expression_block(scope, expression, project, document, open_documents)
+            block = _template_expression_block(
+                scope, expression, project, document, open_documents, prop_types=prop_types
+            )
             if block is None:
                 continue
             prefix, projected_expression, suffix, _listener = block
@@ -4862,7 +4892,12 @@ def expression_shadows(
     consumers = _expression_shadow_consumers(document, region, project, open_documents)
     if consumers is None:
         return ()
-    return _build_expression_shadows(consumers, query, cursor_offset)
+    return _build_expression_shadows(
+        consumers,
+        query,
+        cursor_offset,
+        slot_data_types=_query_slot_data_types(query, project),
+    )
 
 
 def _expression_shadow_consumers(
@@ -5072,6 +5107,7 @@ def _build_expression_shadows(
     cursor_offset: int,
     *,
     value_type: TemplatePythonValueType | None = None,
+    slot_data_types: Mapping[tuple[str, str], TemplatePythonSlotDataType] | None = None,
 ) -> tuple[ExpressionShadow, ...]:
     """Build one query from source facts already proven for every consumer."""
     shadows: list[ExpressionShadow] = []
@@ -5085,6 +5121,7 @@ def _build_expression_shadows(
                 source_module=consumer.source_module,
                 source_is_package=consumer.source_file.name == "__init__.py",
                 value_type=value_type,
+                slot_data_types=slot_data_types,
             )
         else:
             shadow = build_inferred_template_shadow(
@@ -5096,6 +5133,7 @@ def _build_expression_shadows(
                 source_is_package=consumer.source_file.name == "__init__.py",
                 kwargs_type=consumer.kwargs_type,
                 value_type=value_type,
+                slot_data_types=slot_data_types,
             )
         if shadow is None:
             return ()
@@ -5158,6 +5196,41 @@ def _query_value_type(query: TemplatePythonQuery, project: ProjectState) -> Temp
         sorted((path, module) for path, module in wire_classes.class_modules.items() if path in annotation)
     )
     return TemplatePythonValueType(annotation, class_modules=class_modules)
+
+
+def _query_slot_data_types(
+    query: TemplatePythonQuery,
+    project: ProjectState,
+) -> dict[tuple[str, str], TemplatePythonSlotDataType]:
+    """
+    Return the data each fill around the query receives, by component tag and slot name.
+
+    A `<c-fill data="card">` inside `<c-Card>` reads the data `Card`'s slot
+    passes, as its `Slots` declares it with `SlotInput[T]`. A tag the app does
+    not register, a built-in tag such as `<c-component>`, and a slot without a
+    finite data class give nothing, so the fill's name stays untyped.
+    """
+    catalog = project.catalog
+    found: dict[tuple[str, str], TemplatePythonSlotDataType] = {}
+    if catalog is None or project.source_analysis is None:
+        return found
+    for control in query.controls:
+        target = control.slot_target
+        if target is None or target in found:
+            continue
+        tag, slot = target
+        component = catalog.get_tag(tag)
+        if component is None or component.builtin:
+            continue
+        described = project.source_analysis.slot_data_wire_classes(component).get(slot)
+        if described is None:
+            continue
+        found[target] = TemplatePythonSlotDataType(
+            described.class_name,
+            tuple(described.members.items()),
+            tuple(sorted(described.class_modules.items())),
+        )
+    return found
 
 
 def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:
@@ -5368,7 +5441,13 @@ def all_expression_shadows(
             mapped = parsed.region.source_map.map_range(query.start_index, query.start_index)
             position = types.Position(mapped.start.line, mapped.start.character)
             # Diagnostics also check a `c-*` value or a static input against the type its target takes.
-            shadows = _build_expression_shadows(consumers, query, 0, value_type=value_type)
+            shadows = _build_expression_shadows(
+                consumers,
+                query,
+                0,
+                value_type=value_type,
+                slot_data_types=_query_slot_data_types(query, project),
+            )
             if shadows:
                 groups.append(ExpressionShadowGroup(position, shadows))
             if has_walrus:
@@ -8438,25 +8517,13 @@ def _browser_component_prop_diagnostics(
     parser: Any,
 ) -> list[types.Diagnostic]:
     """Check only statically declared Vue props on resolved component calls."""
-    catalog = project.catalog
-    if catalog is None:
+    if project.catalog is None:
         return []
     sites = browser_component_prop_sites(template, parse_nested=parser)
     props_by_tag: dict[str, tuple[BrowserProp, ...] | None] = {}
 
     def declared_props(site: BrowserComponentPropSite) -> tuple[BrowserProp, ...] | None:
-        if site.tag in props_by_tag:
-            return props_by_tag[site.tag]
-        component = catalog.get_tag(site.tag)
-        if component is None or component.name == "component":
-            props_by_tag[site.tag] = None
-            return None
-        source = _component_js_asset_source(component, project, document, open_documents)
-        if not source:
-            props_by_tag[site.tag] = None
-            return None
-        props_by_tag[site.tag] = browser_component_props(source[0])
-        return props_by_tag[site.tag]
+        return _declared_component_props(site.tag, project, document, open_documents, props_by_tag)
 
     def value_type(contribution: BrowserComponentPropContribution) -> JsonWireType:
         return _browser_prop_value_type(
@@ -8482,6 +8549,90 @@ def _browser_component_prop_diagnostics(
         )
         diagnostics.append(_browser_diagnostic(region, finding.start_index, finding.end_index, code, **parameters))
     return diagnostics
+
+
+def _declared_component_props(
+    tag: str,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+    cache: dict[str, tuple[BrowserProp, ...] | None],
+) -> tuple[BrowserProp, ...] | None:
+    """
+    Return the Vue props that the tag's component declares in `$component`, or `None` when they are unknown.
+
+    `cache` holds the answer for each tag already looked up, because one
+    template usually calls the same child many times.
+    """
+    if tag in cache:
+        return cache[tag]
+    component = None if project.catalog is None else project.catalog.get_tag(tag)
+    # `<c-component is=...>` renders a component chosen at runtime, so no
+    # one child's props apply.
+    if component is None or component.name == "component":
+        cache[tag] = None
+        return None
+    source = _component_js_asset_source(component, project, document, open_documents)
+    cache[tag] = browser_component_props(source[0]) if source else None
+    return cache[tag]
+
+
+def _component_prop_value_types(
+    template: Any,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+    *,
+    parser: Any,
+) -> dict[int, str]:
+    """
+    Return the TypeScript type each `:prop` value on a child component tag must have, by the value's start.
+
+    The type comes from the prop's `type` in the child's `$component`
+    source, so `:open="count"` is reported when `open` is a Boolean prop. A
+    value that a later object or dynamic `v-bind` on the same tag may
+    replace, a prop the child does not declare, and a prop without a
+    readable type are left out, so they stay untyped.
+    """
+    if project.catalog is None:
+        return {}
+    props_by_tag: dict[str, tuple[BrowserProp, ...] | None] = {}
+    types_by_start: dict[int, str] = {}
+    for site in browser_component_prop_sites(template, parse_nested=parser):
+        props = _declared_component_props(site.tag, project, document, open_documents, props_by_tag)
+        if not props:
+            continue
+        accepted = {prop.name: prop.accepted_javascript for prop in props}
+        contributions = site.contributions
+        last_dynamic = max((index for index, item in enumerate(contributions) if item.dynamic), default=-1)
+        # Vue keeps the last value written for a prop, so only that one is typed.
+        effective: dict[str, int] = {}
+        for index, contribution in enumerate(contributions):
+            if contribution.name is not None and index > last_dynamic:
+                effective[_vue_prop_name(contribution.name)] = index
+        for name, index in effective.items():
+            javascript = accepted.get(name)
+            if javascript is None:
+                continue
+            parts = {part.strip() for part in javascript.split("|")}
+            # `unknown` covers a type Citry cannot convert, such as a class.
+            if "unknown" in parts:
+                continue
+            if "Record<string, unknown>" in parts:
+                # Vue's `Object` prop type accepts any non-null object, such as
+                # an array, a `Date`, or a class instance, which TypeScript's
+                # record type would reject for lacking an index signature.
+                javascript = " | ".join(
+                    "object" if part.strip() == "Record<string, unknown>" else part.strip()
+                    for part in javascript.split("|")
+                )
+            if "boolean" in parts and "string" not in parts:
+                # Vue turns `''` and the prop's own name, hyphenated, into
+                # `true` for a Boolean prop, so both strings are accepted.
+                hyphenated = _vue_hyphenated_prop_name(name)
+                javascript = f"{javascript} | '' | {_js_string_literal(hyphenated)}"
+            types_by_start[contributions[index].value_start_index] = javascript
+    return types_by_start
 
 
 def _browser_prop_value_type(
@@ -10975,6 +11126,42 @@ def _server_event_payload_diagnostics(
     return diagnostics
 
 
+def _unknown_url_diagnostics(
+    region: TemplateRegion,
+    template: Template,
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+    *,
+    parse_nested: Callable[[str], Template],
+) -> list[types.Diagnostic]:
+    """
+    Report literal link paths the app's web framework said it does not serve, as `citry check` does.
+
+    The app worker asked the framework about each path the templates held
+    when the app loaded. A path added since then has no answer, so it is not
+    reported until the app reloads.
+    """
+    verdicts = project.path_verdicts
+    if not verdicts:
+        return []
+    active = [
+        severity for severity in _owner_rule_severities(consumers, project, "rule_unknown_url") if severity != "ignore"
+    ]
+    if not active:
+        return []
+    return [
+        types.Diagnostic(
+            range=_range(region.source_map.map_range(finding.start_index, finding.end_index)),
+            message=finding.message,
+            severity=types.DiagnosticSeverity.Error if "error" in active else types.DiagnosticSeverity.Warning,
+            code=finding.code,
+            code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
+            source="citry",
+        )
+        for finding in unknown_url_findings(template_urls(template, parse_nested=parse_nested), verdicts)
+    ]
+
+
 def _shared_server_event_payloads(
     consumers: tuple[ComponentRecord, ...],
     document: DocumentState,
@@ -11077,10 +11264,20 @@ def _definition_unchanged(
     saved = _saved_python_source(source_file)
     if current is None or saved is None:
         return False
+    # Line endings say nothing about the code: Windows tools write a file
+    # with `\r\n` while an editor buffer may hold `\n`, and that alone must
+    # not make the handler look edited and switch its checks off.
+    current = _unify_line_endings(current)
+    saved = _unify_line_endings(saved)
     if current == saved:
         return True
     found = _python_definition_source(current, qualname)
     return found is not None and found == _python_definition_source(saved, qualname)
+
+
+def _unify_line_endings(text: str) -> str:
+    """Return the text with Windows (CR LF) and old Mac (CR) line endings written as LF."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _saved_python_source(source_file: Path) -> str | None:
@@ -11100,8 +11297,8 @@ def _saved_python_text(resolved: Path, _mtime_ns: int, _size: int) -> str | None
     try:
         raw = resolved.read_bytes()
         encoding, _lines = tokenize.detect_encoding(io.BytesIO(raw).readline)
-        # Decode without newline translation: an editor buffer keeps the
-        # file's `\r\n` line endings, and the two texts must compare equal.
+        # Decode without newline translation, so the text keeps the file's
+        # own line endings; callers compare it with _unify_line_endings.
         return raw.decode(encoding)
     except (OSError, SyntaxError, UnicodeError):
         return None
@@ -11138,7 +11335,12 @@ def _any_unsaved_python(open_documents: Mapping[str, DocumentState]) -> bool:
         if open_document.language_id != "python":
             continue
         path = file_uri_path(open_document.uri)
-        if path is None or _saved_python_source(path) != open_document.source:
+        if path is None:
+            return True
+        saved = _saved_python_source(path)
+        # As in _definition_unchanged, a file that differs only in its line
+        # endings is not an unsaved edit.
+        if saved is None or _unify_line_endings(saved) != _unify_line_endings(open_document.source):
             return True
     return False
 

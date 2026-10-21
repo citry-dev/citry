@@ -10,11 +10,11 @@ import pydantic
 import pytest
 from typing_extensions import NotRequired, ReadOnly, TypeAliasType, TypedDict
 
-from citry import Citry, Component
+from citry import Citry, Component, SlotInput
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
 from citry._json_wire import WireClass
-from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
+from citry._wire_classes import KwargsWireClasses, SlotDataWireClass, kwargs_wire_classes, slot_data_wire_classes
 from citry.analysis import json_wire_type_from_annotation, json_wire_type_from_expression
 
 if TYPE_CHECKING:
@@ -409,3 +409,79 @@ def test_unknown_part_offsets_count_only_real_line_breaks():
     json_wire_type_from_expression(source, unproven=unproven)
 
     assert [source[start:end] for start, end in unproven] == ["self.x()"]
+
+
+class _FooterData:
+    title: str
+    lane: Lane
+    count: int
+    missing: Nope  # noqa: F821 - an annotation that never resolves
+    secret: ClassVar[int] = 0
+
+
+@dataclass
+class _RowData:
+    index: int
+
+
+class _RaisingSlotsMeta(type):
+    def __getattribute__(cls, name):
+        if name == "__mro__":
+            raise RuntimeError("boom")
+        return super().__getattribute__(name)
+
+
+def test_slot_data_wire_classes_describes_each_typed_slot():
+    class Card(Component):
+        citry = Citry(autodiscover=False)
+        template = "<p></p>"
+
+        class Slots:
+            footer: SlotInput[_FooterData]
+            row: SlotInput[_RowData] | None = None
+            open: SlotInput[dict[str, int]] | None = None
+            plain: SlotInput | None = None
+
+    described = slot_data_wire_classes(Card)
+
+    # A slot without a finite data class is left out. A field whose
+    # annotation does not resolve stays untyped, and a ClassVar is no field.
+    assert set(described) == {"footer", "row"}
+    assert described["footer"] == SlotDataWireClass(
+        "_FooterData",
+        {"title": "str", "lane": f"{__name__}.Lane", "count": "int", "missing": None},
+        {f"{__name__}.Lane": __name__},
+    )
+    assert described["row"] == SlotDataWireClass("_RowData", {"index": "int"}, {})
+    assert SlotDataWireClass.from_dict(described["footer"].to_dict()) == described["footer"]
+
+
+def test_slot_data_wire_classes_is_empty_without_slots_and_never_raises():
+    class Plain(Component):
+        citry = Citry(autodiscover=False)
+        template = "<p></p>"
+
+    class Broken(Component):
+        citry = Citry(autodiscover=False)
+        template = "<p></p>"
+
+        class Slots(metaclass=_RaisingSlotsMeta):
+            footer: SlotInput[_RowData]
+
+    assert slot_data_wire_classes(Plain) == {}
+    assert slot_data_wire_classes(Broken) == {}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        {"class_name": "Row", "members": {}},
+        {"class_name": 1, "members": {}, "class_modules": {}},
+        {"class_name": "Row", "members": {"a": 1}, "class_modules": {}},
+        {"class_name": "Row", "members": {}, "class_modules": {"a": 1}},
+    ],
+)
+def test_slot_data_wire_class_rejects_a_malformed_copy(payload):
+    with pytest.raises(ValueError, match="slot data class"):
+        SlotDataWireClass.from_dict(payload)

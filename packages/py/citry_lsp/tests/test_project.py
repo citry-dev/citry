@@ -688,6 +688,22 @@ def test_private_source_analysis_requires_exact_catalog_coverage(tmp_path, monke
     with pytest.raises(ValueError, match="native_template"):
         SourceAnalysisIndex(answered, catalog)
 
+    # A worker on an older citry sends no slot data, so every fill's data
+    # name stays untyped; a malformed record is a protocol mismatch.
+    assert all(index.slot_data_wire_classes(component) == {} for component in catalog.components)
+    typed = json.loads(json.dumps(valid))
+    typed["components"][0]["slot_data_classes"] = {
+        "footer": {"class_name": "FooterData", "members": {"count": "int"}, "class_modules": {}}
+    }
+    footer = SourceAnalysisIndex(typed, catalog).slot_data_wire_classes(catalog.components[0])["footer"]
+    assert (footer.class_name, dict(footer.members)) == ("FooterData", {"count": "int"})
+    typed["components"][0]["slot_data_classes"] = {"footer": {"class_name": "FooterData", "members": {"count": 1}}}
+    with pytest.raises(ValueError, match="slot data class records"):
+        SourceAnalysisIndex(typed, catalog)
+    typed["components"][0]["slot_data_classes"] = []
+    with pytest.raises(ValueError, match="slot_data_classes"):
+        SourceAnalysisIndex(typed, catalog)
+
     # Older private worker payloads remain readable, but cannot prove a closed
     # State namespace without the optional source snapshots.
     older_payload = json.loads(json.dumps(valid))

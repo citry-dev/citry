@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import ast
 import builtins
+import collections.abc
 import copy
 import itertools
+import keyword
 import re
 import symtable
 from dataclasses import dataclass
@@ -13,10 +15,10 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._source_lines import source_lines
-from citry_core.template_parser import HtmlAttrKind, TemplateElement, parse_template
+from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement, parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
 # A type display may use these names without importing them.
 _BUILTIN_NAMES = frozenset(dir(builtins))
@@ -32,6 +34,10 @@ class TemplatePythonControl:
         source: Authored Python expression or loop clause.
         names: Names introduced by an unknown lexical binding.
         free_names: Parser-proven free root names used by this control.
+        slot_target: For the one name a ``<c-fill data="...">`` binds to the
+            whole slot data, the component tag as written and the static slot
+            name, such as ``("c-Card", "footer")``, so the slot's declared
+            data type can type the name; otherwise ``None``.
 
     """
 
@@ -39,6 +45,7 @@ class TemplatePythonControl:
     source: str
     names: tuple[str, ...] = ()
     free_names: tuple[str, ...] = ()
+    slot_target: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +147,34 @@ class TemplatePythonValueType:
 
     annotation: str
     module: str | None = None
+    class_modules: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class TemplatePythonSlotDataType:
+    """
+    The fields a slot passes to its fill, so the analyzer types the fill's data name.
+
+    A child that declares ``footer: SlotInput[FooterData]`` in ``Slots``
+    passes ``FooterData``'s fields to ``<c-fill name="footer" data="card">``.
+    At runtime ``card`` is a read-only mapping that also reads each field as
+    an attribute, so the generated Python declares ``card`` as a mapping
+    class with these fields, and ty reports ``card.titel`` or
+    ``card.count + " tasks"``.
+
+    Attributes:
+        class_name: The name the generated class takes in the analyzer's
+            messages, such as ``FooterData``.
+        fields: Each field name and its annotation, written the way Citry
+            formats schema types, such as ``("count", "int")``. ``None``
+            leaves that field untyped.
+        class_modules: The module of each dotted class path in the
+            annotations, as in ``TemplatePythonValueType``.
+
+    """
+
+    class_name: str
+    fields: tuple[tuple[str, str | None], ...] = ()
     class_modules: tuple[tuple[str, str], ...] = ()
 
 
@@ -320,13 +355,16 @@ def build_inferred_template_shadow(
     source_is_package: bool = False,
     kwargs_type: tuple[str, str] | None = None,
     value_type: TemplatePythonValueType | None = None,
+    slot_data_types: Mapping[tuple[str, str], TemplatePythonSlotDataType] | None = None,
 ) -> ShadowPythonDocument | None:
     """
     Copy one proven ``template_data`` method and evaluate the query at each return.
 
     With ``value_type``, such as a component input's type, the generated
     code also assigns the query's value to a variable annotated with that
-    type, so ty checks the value against it.
+    type, so ty checks the value against it. ``slot_data_types`` gives the
+    data each slot passes to its fill, by component tag and slot name, so a
+    fill's data name gets the slot's fields.
     """
     tree = _parsed_module(module_source)
     if tree is None:
@@ -359,9 +397,15 @@ def build_inferred_template_shadow(
         module_source,
         roots,
         query,
-        generated_inputs=(source_module or "", *(kwargs_type or ()), *_value_type_inputs(value_type)),
+        generated_inputs=(
+            source_module or "",
+            *(kwargs_type or ()),
+            *_value_type_inputs(value_type),
+            *_slot_data_type_inputs(slot_data_types),
+        ),
     )
     value_check = _value_check(value_type, module_source, roots, query, source_module=source_module)
+    slot_data = _slot_data_declarations(module_source, roots, query, slot_data_types, source_module=source_module)
     # The generated code binds template names inside this copied method, so a
     # method local with the same name, such as `resolved: list[Row]` next to a
     # template loop `c-for="resolved in items"`, would lend its declared type
@@ -404,6 +448,7 @@ def build_inferred_template_shadow(
         placeholder,
         direct_attribute_owner=kwargs_type,
         value_check=value_check,
+        slot_data=slot_data,
     )
     duplicate.body = transformer.transform_body(duplicate.body)
     if transformer.return_count == 0:
@@ -454,13 +499,16 @@ def build_schema_template_shadow(
     source_module: str | None = None,
     source_is_package: bool = False,
     value_type: TemplatePythonValueType | None = None,
+    slot_data_types: Mapping[tuple[str, str], TemplatePythonSlotDataType] | None = None,
 ) -> ShadowPythonDocument | None:
     """
     Evaluate a query against fields on one exact authored schema class.
 
     With ``value_type``, such as a component input's type, the generated
     code also assigns the query's value to a variable annotated with that
-    type, so ty checks the value against it.
+    type, so ty checks the value against it. ``slot_data_types`` gives the
+    data each slot passes to its fill, by component tag and slot name, so a
+    fill's data name gets the slot's fields.
     """
     if not _qualified_identifier(schema_qualname):
         return None
@@ -472,9 +520,15 @@ def build_schema_template_shadow(
         module_source,
         roots,
         query,
-        generated_inputs=(source_module or "", schema_qualname, *_value_type_inputs(value_type)),
+        generated_inputs=(
+            source_module or "",
+            schema_qualname,
+            *_value_type_inputs(value_type),
+            *_slot_data_type_inputs(slot_data_types),
+        ),
     )
     value_check = _value_check(value_type, module_source, roots, query, source_module=source_module)
+    slot_data = _slot_data_declarations(module_source, roots, query, slot_data_types, source_module=source_module)
     type_imports, type_references = _root_type_imports(roots, source_module=source_module)
     lines = [
         *type_imports,
@@ -489,7 +543,9 @@ def build_schema_template_shadow(
         )
     )
     lines.extend(_unknown_binding_lines(roots, query, indent="    "))
-    lines.extend(_query_lines(query, indent="    ", placeholder=placeholder, value_check=value_check))
+    lines.extend(
+        _query_lines(query, indent="    ", placeholder=placeholder, value_check=value_check, slot_data=slot_data)
+    )
     generated = "\n".join(lines)
     shadow = f"{shadow_module_source}\n\n{generated}\n"
     # The generated function follows its import lines and ends the source.
@@ -595,9 +651,11 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
         *,
         direct_attribute_owner: tuple[str, str] | None,
         value_check: tuple[list[str], str] | None = None,
+        slot_data: Mapping[int, list[str]] | None = None,
     ) -> None:
         self.roots = roots
         self.value_check = value_check
+        self.slot_data = slot_data
         self.query = query
         self.type_imports = type_imports
         self.type_references = type_references
@@ -662,6 +720,7 @@ class _ReturnQueryTransformer(ast.NodeTransformer):
                         indent="",
                         placeholder=self.placeholder,
                         value_check=self.value_check,
+                        slot_data=self.slot_data,
                     ),
                 ]
             )
@@ -1135,10 +1194,11 @@ def _query_lines(
     indent: str,
     placeholder: str,
     value_check: tuple[list[str], str] | None = None,
+    slot_data: Mapping[int, list[str]] | None = None,
 ) -> list[str]:
     lines: list[str] = []
     current = indent
-    for control in query.controls:
+    for control_index, control in enumerate(query.controls):
         if control.kind == "if":
             # Put generated punctuation after a newline so an authored Python
             # comment cannot consume the closing parenthesis and colon.
@@ -1160,6 +1220,10 @@ def _query_lines(
             lines.extend(f"{current}    {line}" for line in clause_lines[1:])
             lines.append(f"{current}]:")
             current += "    "
+        elif slot_data is not None and control_index in slot_data:
+            # A fill's data name, declared as a mapping class with the
+            # slot's fields; `_slot_data_declarations` wrote the lines.
+            lines.extend(f"{current}{line}" for line in slot_data[control_index])
         else:
             for name in control.names:
                 lines.append(f"{current}from typing import Any as __citry_Any")
@@ -1292,6 +1356,142 @@ def _value_type_inputs(value_type: TemplatePythonValueType | None) -> tuple[str,
     if value_type is None:
         return ()
     return (value_type.annotation, value_type.module or "", *(module for _path, module in value_type.class_modules))
+
+
+# Generated names for a fill's slot data. They have one leading underscore,
+# not two, because Python renames a `__name` used inside a class body, and
+# the field annotations are written inside the generated class.
+_SLOT_DATA_PREFIX = "_citry_slot"
+# Attribute names the runtime `SlotData` answers itself, as a mapping, so a
+# field with one of these names is read only with brackets.
+_MAPPING_MEMBER_NAMES = frozenset(dir(collections.abc.Mapping))
+
+
+def _slot_data_declarations(
+    module_source: str,
+    roots: tuple[TemplatePythonRoot, ...],
+    query: TemplatePythonQuery,
+    slot_data_types: Mapping[tuple[str, str], TemplatePythonSlotDataType] | None,
+    *,
+    source_module: str | None,
+) -> dict[int, list[str]]:
+    """
+    Return the lines that declare each fill data name with a known slot type, by the control's index.
+
+    At runtime the fill's name holds a ``SlotData``, a read-only mapping that
+    also reads each identifier-like key as an attribute. So the name is
+    declared as a ``Mapping[str, Any]`` subclass with the slot's fields, not
+    as the slot's data class itself: ``card["aria-label"]`` and ``**card``
+    stay valid, while ``card.titel`` is reported. A name without a known
+    type keeps the unknown type the caller gives it.
+    """
+    if not slot_data_types:
+        return {}
+    occupied = (
+        module_source,
+        query.source,
+        *(control.source for control in query.controls),
+        *(root.name for root in roots),
+        *_slot_data_type_inputs(slot_data_types),
+    )
+    # A user name containing the prefix could clash with the generated names.
+    if any(_SLOT_DATA_PREFIX in value for value in occupied):
+        return {}
+    # The class is defined where the query runs, so it must not hide a name
+    # the query or its controls read.
+    used = {
+        *query.free_names,
+        *(name for control in query.controls for name in (*control.names, *control.free_names)),
+        *(root.name for root in roots),
+    }
+    declarations: dict[int, list[str]] = {}
+    for index, control in enumerate(query.controls):
+        if control.kind != "unknown" or control.slot_target is None or len(control.names) != 1:
+            continue
+        data_type = slot_data_types.get(control.slot_target)
+        if data_type is None:
+            continue
+        prefix = f"{_SLOT_DATA_PREFIX}_{index}"
+        class_name = _slot_data_class_name(data_type.class_name, module_source, used, fallback=f"{prefix}_Data")
+        imports: list[str] = []
+        body: list[str] = []
+        for field_index, (field_name, annotation) in enumerate(data_type.fields):
+            # A private, keyword, or mapping-method name is not an attribute
+            # of the runtime value, so it is read only with brackets.
+            if not _plain_identifier(field_name) or field_name.startswith("_") or field_name in _MAPPING_MEMBER_NAMES:
+                continue
+            rewritten = (
+                None
+                if annotation is None
+                else _value_check_source(
+                    TemplatePythonValueType(annotation, class_modules=data_type.class_modules),
+                    alias_prefix=f"{prefix}_{field_index}",
+                    source_module=source_module,
+                )
+            )
+            if rewritten is None:
+                # An annotation that cannot be written here leaves the field untyped.
+                body.append(f"    {field_name}: {_SLOT_DATA_PREFIX}_Any")
+                continue
+            field_imports, field_annotation = rewritten
+            imports.extend(field_imports)
+            body.append(f"    {field_name}: {field_annotation}")
+        declarations[index] = [
+            f"from collections.abc import Mapping as {_SLOT_DATA_PREFIX}_Mapping",
+            f"from typing import Any as {_SLOT_DATA_PREFIX}_Any",
+            f"from typing import cast as {_SLOT_DATA_PREFIX}_cast",
+            *imports,
+            f"class {class_name}({_SLOT_DATA_PREFIX}_Mapping[str, {_SLOT_DATA_PREFIX}_Any]):",
+            *(body or ["    pass"]),
+            # A cast declares the type without building a value, so the
+            # abstract mapping class is never instantiated.
+            f"{control.names[0]} = {_SLOT_DATA_PREFIX}_cast({class_name}, None)",
+        ]
+    return declarations
+
+
+def _slot_data_class_name(name: str, module_source: str, used: set[str], *, fallback: str) -> str:
+    """
+    Name the generated class after the slot's data class, unless that name is taken.
+
+    The analyzer's messages name the class, so the data class's own name
+    reads best. The generated class is defined where the query runs, so it
+    must not hide a name the query reads, a name the copied ``template_data``
+    uses, or a class a field annotation names, such as a data class that
+    refers to itself. Any name the module's source spells is avoided, which
+    covers all three.
+    """
+    for candidate in (name, f"{name}SlotData"):
+        if (
+            _plain_identifier(candidate)
+            and candidate not in used
+            and candidate not in _BUILTIN_NAMES
+            and re.search(rf"\b{re.escape(candidate)}\b", module_source) is None
+        ):
+            return candidate
+    return fallback
+
+
+def _plain_identifier(value: str) -> bool:
+    """Return whether ``value`` can name a Python attribute or class."""
+    return value.isidentifier() and not keyword.iskeyword(value)
+
+
+def _slot_data_type_inputs(
+    slot_data_types: Mapping[tuple[str, str], TemplatePythonSlotDataType] | None,
+) -> tuple[str, ...]:
+    """Return the slot data types' text, so the generated names avoid it too."""
+    if not slot_data_types:
+        return ()
+    return tuple(
+        text
+        for data_type in slot_data_types.values()
+        for text in (
+            data_type.class_name,
+            *(annotation or "" for _name, annotation in data_type.fields),
+            *(module for _path, module in data_type.class_modules),
+        )
+    )
 
 
 def _query_placeholder(
@@ -1652,7 +1852,14 @@ def _query_in_template(
     *,
     base_index: int,
     parse_nested: Callable[[str], Any],
+    fill_owner: str | None = None,
 ) -> TemplatePythonQuery | None:
+    """
+    Return the query at ``index`` in one template, with the controls around it.
+
+    ``fill_owner`` is the component tag, as written, whose ``<c-fill>``
+    children this template may hold, or ``None`` outside a component call.
+    """
     branch_conditions: list[tuple[str, tuple[str, ...]]] = []
     for element in template.elements:
         value: Any = element._0
@@ -1689,6 +1896,7 @@ def _query_in_template(
             (*controls, *prior_branch_controls),
             base_index=base_index,
             parse_nested=parse_nested,
+            fill_owner=fill_owner,
         )
         if query is not None:
             return query
@@ -1747,6 +1955,7 @@ def _query_in_node(
     *,
     base_index: int,
     parse_nested: Callable[[str], Any],
+    fill_owner: str | None = None,
 ) -> TemplatePythonQuery | None:
     condition = _condition_control(node)
     loop = _loop_control(node)
@@ -1755,7 +1964,7 @@ def _query_in_node(
         *((condition,) if condition is not None else ()),
         *((loop,) if loop is not None else ()),
     )
-    unknown_controls = _unknown_binding_controls(node, loop)
+    unknown_controls = _unknown_binding_controls(node, loop, fill_owner)
     body_controls = (*body_controls, *unknown_controls)
 
     for attr in node.start_tag.attrs:
@@ -1814,7 +2023,31 @@ def _query_in_node(
 
     body = getattr(node, "body", None)
     if body is not None and _node_body_contains(node, index, base_index=base_index):
-        return _query_in_template(body, index, body_controls, base_index=base_index, parse_nested=parse_nested)
+        return _query_in_template(
+            body,
+            index,
+            body_controls,
+            base_index=base_index,
+            parse_nested=parse_nested,
+            fill_owner=_body_fill_owner(node, fill_owner),
+        )
+    return None
+
+
+# Citry tags that a component call's fills may sit inside, as the parser
+# collects fills: each renders its content in place of the tag.
+_FILL_CONTROL_FLOW_TAGS = frozenset({"c-if", "c-elif", "c-else", "c-for", "c-empty"})
+
+
+def _body_fill_owner(node: Any, fill_owner: str | None) -> str | None:
+    """Return the component tag whose fills the node's body may hold, or ``None``."""
+    tag = node.start_tag.name.content
+    lowered = tag.lower()
+    if lowered in _FILL_CONTROL_FLOW_TAGS:
+        return fill_owner
+    # Any other `c-*` tag that is not one of Citry's own calls a component.
+    if lowered.startswith("c-") and lowered not in RESERVED_TAG_NAMES:
+        return tag
     return None
 
 
@@ -1854,13 +2087,51 @@ def _loop_control(node: Any) -> TemplatePythonControl | None:
     return None
 
 
-def _unknown_binding_controls(node: Any, loop: TemplatePythonControl | None) -> tuple[TemplatePythonControl, ...]:
+def _unknown_binding_controls(
+    node: Any,
+    loop: TemplatePythonControl | None,
+    fill_owner: str | None = None,
+) -> tuple[TemplatePythonControl, ...]:
     loop_names = frozenset(loop.names if loop is not None else ())
+    slot_data = _fill_slot_data(node, fill_owner)
     return tuple(
-        TemplatePythonControl("unknown", "", (token.content,))
+        TemplatePythonControl(
+            "unknown",
+            "",
+            (token.content,),
+            slot_target=slot_data[1] if slot_data is not None and token.content == slot_data[0] else None,
+        )
         for token in node.introduced_variables
         if token.content not in loop_names
     )
+
+
+def _fill_slot_data(node: Any, fill_owner: str | None) -> tuple[str, tuple[str, str]] | None:
+    """
+    Return the name a ``<c-fill>`` binds to its whole slot data, with the component tag and slot name.
+
+    The slot name counts only when the rightmost of ``name``, ``c-name`` and
+    ``c-bind`` is a static ``name``, as the parser decides which slot a fill
+    targets. Unpacked fields (``data="{ title }"``) are not a whole-data name.
+    """
+    if fill_owner is None or node.start_tag.name.content != "c-fill":
+        return None
+    slot_name = None
+    for attr in reversed(node.start_tag.attrs):
+        key = attr.key.content
+        if key in {"c-name", "c-bind"}:
+            return None
+        if key == "name":
+            slot_name = attr.inner_value.content if attr.inner_value is not None else ""
+            break
+    if not slot_name:
+        return None
+    for attr in reversed(node.start_tag.attrs):
+        pattern = getattr(attr, "fill_data_pattern", None)
+        if attr.key.content == "data" and pattern is not None:
+            whole = pattern.whole
+            return None if whole is None else (whole.content, (fill_owner, slot_name))
+    return None
 
 
 def _used_names(value: Any) -> tuple[str, ...]:

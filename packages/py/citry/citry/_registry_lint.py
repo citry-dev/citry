@@ -14,6 +14,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, Union
+from urllib.parse import unquote
 
 from citry._browser_expressions import (
     _ascii_lower,
@@ -29,10 +30,13 @@ from citry._diagnostic_catalog import (
     BROWSER_MISSING_SERVER_EVENT_FIELD,
     BROWSER_UNKNOWN_FORM_FIELD,
     BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
+    TEMPLATE_UNKNOWN_URL,
 )
 from citry._diagnostics import render_diagnostic
+from citry._html_attribute_values import HTML_ELEMENTS
 from citry._markup_lint import one_slip_from
 from citry.ext.events.schemas import json_value_error, payload_fields
+from citry.util.html import decode_attribute_entities
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement
 
 if TYPE_CHECKING:
@@ -987,6 +991,193 @@ def _json_literal_value(source: str) -> object:
     return _NOT_A_LITERAL
 
 
+@dataclass(frozen=True, slots=True)
+class TemplateUrl:
+    """
+    One literal root-relative link path in a template.
+
+    Attributes:
+        path: The path the browser requests, with character references and
+            percent escapes decoded and the query string and fragment removed,
+            such as ``/static/avatar.svg``.
+        start_index: Inclusive UTF-8 byte offset of the attribute value.
+        end_index: Exclusive UTF-8 byte offset of the attribute value.
+
+    """
+
+    path: str
+    start_index: int
+    end_index: int
+
+
+# The attributes whose value the browser requests or navigates to. Others,
+# such as `srcset`, hold several URLs and are not read here.
+_URL_ATTRIBUTES = frozenset({"href", "src", "action"})
+
+
+def template_urls(template: Template, *, parse_nested: Callable[[str], Template]) -> tuple[TemplateUrl, ...]:
+    """
+    Return each literal ``href``, ``src`` and ``action`` path on an HTML element that starts at the site root.
+
+    Only a plain attribute written without an expression counts, on an HTML
+    element: a component or custom element may treat the value as anything.
+    A value with a scheme (``https:``, ``mailto:``), a protocol-relative
+    ``//host/...`` value, and a relative path such as ``page.html`` are left
+    out: a scheme or a ``//host`` names another site, and a relative path
+    depends on the page's own URL.
+    """
+    found: list[TemplateUrl] = []
+    _collect_template_urls(template, found, parse_nested=parse_nested, base_index=0)
+    return tuple(found)
+
+
+def _collect_template_urls(
+    template: Template,
+    found: list[TemplateUrl],
+    *,
+    parse_nested: Callable[[str], Template],
+    base_index: int,
+) -> None:
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        # Tag names are case-sensitive in the parser, so `<A>` is a component
+        # call and only a lowercase name is an HTML element.
+        html = node.start_tag.name.content in HTML_ELEMENTS
+        attrs = node.start_tag.attrs
+        for attr in attrs:
+            inner = attr.inner_value
+            if attr.kind == HtmlAttrKind.Template and inner is not None:
+                nested = _nested_template(inner.content, parse_nested)
+                if nested is not None:
+                    parsed, nested_start = nested
+                    _collect_template_urls(
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
+                continue
+            if (
+                not html
+                or not _requests_a_page(node.start_tag.name.content, attrs)
+                or attr.kind != HtmlAttrKind.Static
+                or attr.foreign_parts
+                or inner is None
+                or _ascii_lower(attr.key.content) not in _URL_ATTRIBUTES
+            ):
+                continue
+            path = root_relative_path(decode_attribute_entities(inner.content))
+            if path is not None:
+                found.append(TemplateUrl(path, base_index + inner.start_index, base_index + inner.end_index))
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_template_urls(body, found, parse_nested=parse_nested, base_index=base_index)
+
+
+# `<link>` types whose `href` names a server to connect to early, not a
+# page or file the browser requests.
+_CONNECTION_LINK_TYPES = frozenset({"preconnect", "dns-prefetch"})
+
+
+def _requests_a_page(tag: str, attrs: Any) -> bool:
+    """Return whether an element's link attribute names something the browser requests from that path."""
+    # `<base href>` sets the folder relative links start from; it need not be
+    # a page itself.
+    if tag == "base":
+        return False
+    if tag != "link":
+        return True
+    for attr in attrs:
+        inner = attr.inner_value
+        if _ascii_lower(attr.key.content) == "rel" and attr.kind == HtmlAttrKind.Static and inner is not None:
+            return not (set(_ascii_lower(inner.content).split()) & _CONNECTION_LINK_TYPES)
+    return True
+
+
+def root_relative_path(value: str) -> str | None:
+    """
+    Return the path a link value requests from the site root, or ``None`` when it is not root-relative.
+
+    The browser removes leading and trailing whitespace from a URL, reads a
+    backslash as a slash, and does not send the fragment. The query string
+    is sent, but routes and static files match on the path alone.
+    """
+    # The browser also drops every tab and line break inside a URL.
+    url = value.strip(" \t\n\f\r").translate(_URL_DROPPED_CHARACTERS).replace("\\", "/")
+    # `//host/path` names another host, and an empty or relative value
+    # depends on the page's own URL.
+    if not url.startswith("/") or url.startswith("//"):
+        return None
+    for separator in ("#", "?"):
+        url = url.split(separator, 1)[0]
+    # The browser resolves `.` and `..` before it decodes the path, so an
+    # escaped slash stays inside its segment. The server then matches on the
+    # decoded characters.
+    resolved = _without_dot_segments(url)
+    return unquote(resolved) if "%" in resolved else resolved
+
+
+# Characters the browser removes from anywhere in a URL before reading it.
+_URL_DROPPED_CHARACTERS = str.maketrans("", "", "\t\n\r")
+
+
+def _without_dot_segments(path: str) -> str:
+    """Resolve ``.`` and ``..`` segments the way the browser does before it requests a path."""
+    segments = path.split("/")[1:]
+    resolved: list[str] = []
+    for segment in segments:
+        # The browser reads an escaped dot, `%2e`, as a dot here too.
+        dots = segment.lower().replace("%2e", ".")
+        if dots == "..":
+            # `..` at the root stays at the root, as in the browser.
+            if resolved:
+                resolved.pop()
+        elif dots != ".":
+            resolved.append(segment)
+    # A last `.` or `..` segment leaves the path ending in a folder.
+    if segments and segments[-1].lower().replace("%2e", ".") in {".", ".."}:
+        resolved.append("")
+    return "/" + "/".join(resolved)
+
+
+@dataclass(frozen=True, slots=True)
+class UnknownUrlFinding:
+    """One link path the host app does not serve, at template byte offsets."""
+
+    code: str
+    message: str
+    start_index: int
+    end_index: int
+
+
+def unknown_url_findings(
+    urls: tuple[TemplateUrl, ...],
+    verdicts: Mapping[str, tuple[bool, str | None]],
+) -> list[UnknownUrlFinding]:
+    """
+    Report each path the host app answered it does not serve.
+
+    ``verdicts`` maps a path to whether it is served and, for a missing one,
+    a served path one typing slip away. A path without a verdict, because no
+    checker could answer for it, is not reported.
+    """
+    findings: list[UnknownUrlFinding] = []
+    for url in urls:
+        verdict = verdicts.get(url.path)
+        if verdict is None or verdict[0]:
+            continue
+        suggestion = verdict[1]
+        message = (
+            render_diagnostic(TEMPLATE_UNKNOWN_URL, path=url.path)
+            if suggestion is None
+            else render_diagnostic(TEMPLATE_UNKNOWN_URL, variant="suggestion", path=url.path, suggestion=suggestion)
+        )
+        findings.append(UnknownUrlFinding(TEMPLATE_UNKNOWN_URL, message, url.start_index, url.end_index))
+    return findings
+
+
 __all__ = [
     "FormControlName",
     "RepeatedComponentCall",
@@ -995,7 +1186,10 @@ __all__ = [
     "ServerEventForm",
     "ServerEventPayload",
     "ServerEventPayloadFinding",
+    "TemplateUrl",
+    "UnknownUrlFinding",
     "annotation_from_type_display",
+    "root_relative_path",
     "server_event_calls",
     "server_event_form_findings",
     "server_event_forms",
@@ -1003,5 +1197,7 @@ __all__ = [
     "server_event_payload_findings",
     "server_event_payload_from_description",
     "template_has_vue_attributes",
+    "template_urls",
     "unkeyed_repeated_component_calls",
+    "unknown_url_findings",
 ]
