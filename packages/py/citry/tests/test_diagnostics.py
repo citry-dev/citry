@@ -45,6 +45,7 @@ _LINT_RULE_CODES = {
     "rule_invalid_model_target": "citry.browser.invalid-model-target",
     "rule_misspelled_event": "citry.vue.misspelled-event",
     "rule_invalid_vue_expression": "citry.vue.invalid-expression",
+    "rule_vue_compile_error": "citry.vue.compile-error",
     "rule_undeclared_component_event": "citry.browser.undeclared-component-event",
     "rule_missing_component_key": "citry.browser.missing-component-key",
     "rule_prop_assignment": "citry.browser.prop-assignment",

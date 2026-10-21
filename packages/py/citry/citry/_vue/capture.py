@@ -1408,6 +1408,21 @@ def _ignored_element_close_indices(nodes: list[BodyItem]) -> set[int]:
     return closes
 
 
+def static_element_opening(prepared: PreparedElementOpen) -> str:
+    """
+    Write the opening tag of an element whose attributes are all authored text.
+
+    `coalesce_prepared_static_nodes` joins these tags into one block of
+    static markup, and `citry check` (`static_template.py`) writes the same
+    text, so both hand the Vue compiler the same tag.
+    """
+    attrs = "" if not prepared.authored_attrs else " " + " ".join(prepared.authored_attrs)
+    # A void element written as `<br/>` keeps its slash; any other element
+    # gets an explicit close tag from its close node.
+    ending = "/>" if prepared.is_void and prepared.is_self_closing else ">"
+    return f"<{prepared.tag}{attrs}{ending}"
+
+
 def coalesce_prepared_static_nodes(nodes: list[BodyItem]) -> list[BodyItem]:
     """Merge adjacent immutable authored nodes after template extension transforms."""
     # Physical document boundaries remain typed nodes so the serializer and
@@ -1514,10 +1529,8 @@ def coalesce_prepared_static_nodes(nodes: list[BodyItem]) -> list[BodyItem]:
             and not node._authored_vue_attrs
         ):
             prepared = node._static_prepared
-            attrs = "" if not prepared.authored_attrs else " " + " ".join(prepared.authored_attrs)
-            ending = "/>" if prepared.is_void and prepared.is_self_closing else ">"
-            opening = f"<{prepared.tag}{attrs}{ending}"
-            insert_at = pending_length + len(opening) - (2 if ending == "/>" else 1)
+            opening = static_element_opening(prepared)
+            insert_at = pending_length + len(opening) - (2 if prepared.is_void and prepared.is_self_closing else 1)
             pending_openings.append(
                 StaticRunOpening(
                     pending_length,

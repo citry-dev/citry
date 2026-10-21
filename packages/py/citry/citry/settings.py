@@ -132,6 +132,7 @@ _TEMPLATE_RULE_FIELDS = (
     "rule_invalid_model_target",
     "rule_misspelled_event",
     "rule_invalid_vue_expression",
+    "rule_vue_compile_error",
     "rule_undeclared_component_event",
     "rule_missing_component_key",
     "rule_prop_assignment",
@@ -247,6 +248,11 @@ class LintSettings:
             the value of ``v-if`` or ``@click``, that is not valid
             JavaScript, which fails when Vue compiles the page. The default
             is ``"error"``.
+        rule_vue_compile_error: Severity for anything else Vue's compiler
+            rejects in a template, such as a ``<div>`` directly inside a
+            ``<table>``, a ``<button>`` inside a ``<button>``, or a
+            ``v-else`` with no ``v-if`` before it. A component that uses Vue
+            fails to render. The default is ``"error"``.
         rule_undeclared_component_event: Severity for a listener on a
             component tag for an event the child component does not declare
             in ``emits``, such as ``@hdie`` for ``hide``. The listener
@@ -357,6 +363,7 @@ class LintSettings:
     rule_invalid_model_target: LintSeverity = "error"
     rule_misspelled_event: LintSeverity = "warning"
     rule_invalid_vue_expression: LintSeverity = "error"
+    rule_vue_compile_error: LintSeverity = "error"
     rule_undeclared_component_event: LintSeverity = "warning"
     rule_missing_component_key: LintSeverity = "error"
     rule_prop_assignment: LintSeverity = "error"

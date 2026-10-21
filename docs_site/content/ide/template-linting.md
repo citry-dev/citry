@@ -39,6 +39,7 @@ them. There is no separate editor setting.
 | [`citry.template.unknown-aria-attribute`](/ide/diagnostics/#citry.template.unknown-aria-attribute) | An `aria-*` name that ARIA does not define | error |
 | [`citry.vue.misspelled-event`](/ide/diagnostics/#citry.vue.misspelled-event) | A typo in a DOM event name, such as `@clik` | warning |
 | [`citry.vue.invalid-expression`](/ide/diagnostics/#citry.vue.invalid-expression) | A Vue expression that is not valid JavaScript | error |
+| [`citry.vue.compile-error`](/ide/diagnostics/#citry.vue.compile-error) | Anything else Vue's compiler rejects, such as a `<div>` directly inside a `<table>` | error |
 | [`citry.browser.invalid-model-target`](/ide/diagnostics/#citry.browser.invalid-model-target) | `v-model` on an element that holds no value | error |
 | [`citry.browser.undeclared-component-event`](/ide/diagnostics/#citry.browser.undeclared-component-event) | A listener for an event the child component does not declare | warning |
 | [`citry.template.invalid-nesting`](/ide/diagnostics/#citry.template.invalid-nesting) | A block such as `<div>` inside a `<p>` | error |
@@ -223,6 +224,7 @@ app = Citry(
         rule_unknown_aria_attribute="error",
         rule_misspelled_event="warning",
         rule_invalid_vue_expression="error",
+        rule_vue_compile_error="error",
         rule_invalid_model_target="error",
         rule_undeclared_component_event="warning",
         rule_invalid_nesting="error",
@@ -602,14 +604,17 @@ If the page really dispatches a custom event with such a name, set
 ## Vue compile errors { #find-vue-compile-errors }
 
 Citry compiles a component's Vue code on the server when the component
-renders. A broken expression or a misplaced `v-model` stops that
+renders. A broken expression, a misplaced `v-model`, or HTML the browser
+would rearrange, such as a `<div>` directly inside a `<table>`, stops that
 compiler, so the component fails to render with a `ValueError` that may
 not point at the line in your template. The lint rules report these
 mistakes at their place in the template, before anything renders.
 
 The Vue rules (invalid expressions, `v-model` targets, Vue directive
 typos, and DOM event names) skip everything inside an element with
-`v-pre`, because Vue does not compile it.
+`v-pre`, because Vue does not compile it. The rule for
+[other compile errors](#templates-vue-cannot-compile) still checks how
+elements nest there.
 
 ### Invalid expressions { #invalid-vue-expressions }
 
@@ -658,6 +663,70 @@ A custom element such as `<my-picker>` is reported too. Bind its value
 property and listen for its change event instead. Component tags,
 PascalCase Vue components, and `<c-element>` are not reported, because
 they decide for themselves what `v-model` binds.
+
+### Other compile errors { #templates-vue-cannot-compile }
+
+A component that uses Vue fails to render when Vue's compiler rejects its
+template. Citry runs the same compiler over every template and reports
+what it rejects at the place you wrote it. Most often the browser would
+build a different element tree from the one your template describes, so
+in a component without Vue the page still renders, but not as written:
+
+```citry-html
+{# Error: Vue cannot compile this template: a <div> inside
+   a table must sit in a <td> or <th>, so the browser moves
+   it out of the table. Put rows in <tr> and cells in <td>
+   or <th>. #}
+<table>
+  <div>Row</div>
+</table>
+
+{# Right #}
+<table>
+  <tr><td>Row</td></tr>
+</table>
+```
+
+The rule also reports:
+
+- a `<button>` inside a `<button>`, a `<form>` inside a `<form>`, or an
+  `<a>` inside an `<a>`, and the end tag that is then left with nothing
+  to close, such as the second `</form>`;
+- a `v-else` or `v-else-if` with no `v-if` on the element right before
+  it. Keep a `v-if` and its `v-else` on the same side of a `<c-if>` tag;
+- a component inside a Vue `v-for`, which only `<c-for>` can repeat.
+  Only `citry --app ... check` reports this. It needs your application to
+  tell this component from one with `transparent = True` or
+  `simple = True`, which renders into its caller's HTML and so may sit
+  inside a `v-for`.
+
+Every `<c-if>`, `<c-elif>`, and `<c-else>` branch, and the body of every
+`<c-for>`, is checked.
+
+A broken expression is reported as an
+[invalid expression](#invalid-vue-expressions), and a block inside a `<p>`
+as a [block inside a paragraph](#find-invalid-nesting). This rule does not
+report those again, even when you turn their rules off, so each mistake has
+one message and one setting.
+
+It does not check:
+
+- anything inside an element with `#c-ignore`, or inside `<c-raw>`;
+- in most templates, how the content of a `<c-if>` branch or `<c-for>`
+  body fits the element around it, such as a `<div>` in a `<c-for>`
+  directly inside a `<table>`, because Vue compiles that content on its
+  own;
+- whether what a `<c-element>` holds fits the tag Python chooses for it;
+- where a component tag sits, such as a row component inside a
+  `<table>`;
+- with your application loaded, what you pass to a component with
+  `transparent = True` or `simple = True`, which renders into its
+  caller's HTML;
+- attributes an extension handles, such as `@c-click`;
+- a template that uses an extension's own template syntax.
+
+To turn the rule off for a component, set
+`rule_vue_compile_error = "ignore"` in its `Lint` class.
 
 ## Component event names { #find-misspelled-component-events }
 

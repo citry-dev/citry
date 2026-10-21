@@ -2626,10 +2626,6 @@ def _compile_template(
     registered components' declarations (``Citry._tag_rules()``), so a
     template using a declared component fails here, at parse time, on unknown
     or missing kwargs/fills.
-
-    The compiled code creates node objects (ExprNode, ComponentNode, etc.) by
-    name. Those names are supplied through the ``ns`` namespace below, so the
-    generated code can find them.
     """
     options = (
         ParseOptions(
@@ -2648,27 +2644,33 @@ def _compile_template(
         DeclaredSlot(slot.token.content, slot.token.line_col[0], slot.token.line_col[1]) for slot in ast.slots
     )
     if prepared:
-        from citry._vue.capture import (  # noqa: PLC0415
-            PreparedElementCloseNode,
-            PreparedElementOpenNode,
-            PreparedExprNode,
-            PreparedSourceTextNode,
-            PreparedVerbatimHtmlNode,
-        )
         from citry_core.template_parser.compile import _compile_prepared_template  # noqa: PLC0415
 
         code = _compile_prepared_template(ast)
     else:
         code = compile_template(ast)
+    # Projected nested parses keep root-absolute node positions, so their
+    # runtime nodes must carry the matching root source as well.
+    return _exec_template_code(code, template.root_source or template.source, prepared=prepared)
 
-    # Build the namespace for exec. "source" is the original template string,
-    # passed to nodes for error reporting and diagnostics. This namespace
-    # becomes the returned function's globals, so the node classes and source
-    # stay bound to it.
+
+def _exec_template_code(code: str, source: str, *, prepared: bool) -> Callable[[], list[BodyItem]]:
+    """
+    Run compiled template code and return its ``generate_template`` function.
+
+    Rendering calls this, and so does `citry check`, which builds the prepared
+    nodes to write a Vue template without rendering. Both therefore get the
+    same node objects from the same compiled code.
+
+    The compiled code creates node objects (ExprNode, ComponentNode, etc.) by
+    name. Those names are supplied through the ``ns`` namespace below, so the
+    generated code can find them.
+    """
+    # "source" is the original template string, passed to nodes for error
+    # reporting and diagnostics. This namespace becomes the returned
+    # function's globals, so the node classes and source stay bound to it.
     ns: dict[str, Any] = {
-        # Projected nested parses keep root-absolute node positions, so their
-        # runtime nodes must carry the matching root source as well.
-        "source": template.root_source or template.source,
+        "source": source,
         "ExprNode": ExprNode,
         "ForeignNode": ForeignNode,
         "ComponentNode": ComponentNode,
@@ -2685,6 +2687,14 @@ def _compile_template(
         "ForeignHtmlAttr": ForeignHtmlAttr,
     }
     if prepared:
+        from citry._vue.capture import (  # noqa: PLC0415
+            PreparedElementCloseNode,
+            PreparedElementOpenNode,
+            PreparedExprNode,
+            PreparedSourceTextNode,
+            PreparedVerbatimHtmlNode,
+        )
+
         ns.update(
             PreparedSourceTextNode=PreparedSourceTextNode,
             PreparedVerbatimHtmlNode=PreparedVerbatimHtmlNode,

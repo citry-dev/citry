@@ -491,6 +491,8 @@ class ComponentSourceLint:
         rule_misspelled_event: ``Lint.rule_misspelled_event``, when readable.
         rule_invalid_vue_expression: ``Lint.rule_invalid_vue_expression``,
             when readable.
+        rule_vue_compile_error: ``Lint.rule_vue_compile_error``, when
+            readable.
 
     """
 
@@ -507,6 +509,7 @@ class ComponentSourceLint:
     rule_invalid_model_target: Literal["ignore", "warning", "error"] | None = None
     rule_misspelled_event: Literal["ignore", "warning", "error"] | None = None
     rule_invalid_vue_expression: Literal["ignore", "warning", "error"] | None = None
+    rule_vue_compile_error: Literal["ignore", "warning", "error"] | None = None
 
     def __post_init__(self) -> None:
         for rule_name in _SOURCE_LINT_RULES:

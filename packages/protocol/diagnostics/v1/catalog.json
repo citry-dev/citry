@@ -686,6 +686,34 @@
       "documentationPath": "/ide/diagnostics/#citry.vue.invalid-expression"
     },
     {
+      "code": "citry.vue.compile-error",
+      "constant": "VUE_COMPILE_ERROR",
+      "title": "Template that Vue's compiler rejects",
+      "summary": "Vue's compiler rejects the template, so a component that uses Vue fails to render. Most often the browser would build a different element tree from the one the template describes: a <div> directly inside a <table>, a <button> inside a <button>, a <form> inside a <form>, or an <a> inside an <a>. A v-else with no v-if right before it, and a component inside a Vue v-for, are reported too.",
+      "when": "Citry writes the Vue template that a render compiles, runs the same compiler on it, and reports each error at the text you wrote. Every c-if, c-elif and c-else branch, and the body of every c-for, is checked, but usually on its own, so a mistake that spans the c-if or c-for tag, such as a <div> in a c-for directly inside a <table>, may not be reported. A Vue expression with a syntax error is reported as citry.vue.invalid-expression, and a block element inside a <p> as citry.template.invalid-nesting, so this rule does not report them again, even when those rules are turned off. A component inside a Vue v-for is reported only by citry check with the application loaded, which can tell whether the component is transparent or simple; such a component renders into its caller's HTML and may sit inside a v-for. Content inside #c-ignore or <c-raw>, whether a <c-element>'s content fits the tag Python chooses, where a component tag sits, and attributes an extension handles, such as @c-click, are not checked, and a template that uses an extension's own template syntax is skipped. citry check --static and an editor that has not loaded your application report it too, with the severity the component's own Lint class sets as a plain string.",
+      "fix": "Follow the compiler's message. For a table, put rows in <tr> and cells in <td> or <th>; for nested buttons, forms or links, close the outer one first or use another element; for v-else, put it on the element right after the one with v-if or v-else-if.",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": [
+        "check",
+        "lsp"
+      ],
+      "parameters": {
+        "detail": "What the compiler found, as one sentence."
+      },
+      "messages": {
+        "default": "Vue cannot compile this template: {detail}"
+      },
+      "examples": [
+        {
+          "title": "A div directly inside a table",
+          "language": "citry-html",
+          "source": "<table>\n  <div>Row</div>\n</table>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.vue.compile-error"
+    },
+    {
       "code": "citry.vue.misspelled-event",
       "constant": "VUE_MISSPELLED_EVENT",
       "title": "Misspelled DOM event",

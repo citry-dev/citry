@@ -203,6 +203,7 @@ class TemplateLintInfo:
     rule_invalid_model_target: LintSeverity = "error"
     rule_misspelled_event: LintSeverity = "warning"
     rule_invalid_vue_expression: LintSeverity = "error"
+    rule_vue_compile_error: LintSeverity = "error"
     rule_undeclared_component_event: LintSeverity = "warning"
     rule_missing_component_key: LintSeverity = "error"
     rule_prop_assignment: LintSeverity = "error"

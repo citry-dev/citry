@@ -17,6 +17,10 @@ All notable changes to `citry-lsp` are documented here.
   Vue expression that is not valid JavaScript, and `v-model` on an
   element that holds no value. Each follows its `rule_*` setting, and
   each works before your application loads.
+- The editor runs Vue's compiler over each template and underlines what it
+  rejects, such as a `<div>` directly inside a `<table>` or a `v-else` with
+  no `v-if` before it, at the severity `rule_vue_compile_error` sets. It
+  works before your application loads.
 - The editor reports a typo in a Vue directive, such as `v-iff`, a
   boolean attribute with a value such as `disabled="false"`, and, once
   your application loads, a lowercase listener on a component for an

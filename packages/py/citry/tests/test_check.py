@@ -2380,6 +2380,7 @@ _MARKUP_MISTAKES = """
     <form v-model="query"><input name="q"></form>
     <p v-iff="open">Details</p>
     <p v-if="open &&">More</p>
+    <table><div>Row</div></table>
   </div>
 """
 _MARKUP_FINDINGS = [
@@ -2394,6 +2395,7 @@ _MARKUP_FINDINGS = [
     ("citry.browser.invalid-model-target", "error", 7),
     ("citry.template.misspelled-directive", "error", 8),
     ("citry.vue.invalid-expression", "error", 9),
+    ("citry.vue.compile-error", "error", 10),
 ]
 
 
@@ -2424,7 +2426,8 @@ def test_static_check_applies_the_component_lint_class_to_the_template_only_rule
         "    class Lint:\n"
         "        rule_missing_image_alt = 'error'\n"
         "        rule_duplicate_id = 'ignore'\n"
-        "        rule_invalid_vue_expression = 'warning'\n",
+        "        rule_invalid_vue_expression = 'warning'\n"
+        "        rule_vue_compile_error = 'warning'\n",
         encoding="utf-8",
     )
 
@@ -2434,6 +2437,7 @@ def test_static_check_applies_the_component_lint_class_to_the_template_only_rule
 
     assert ("citry.template.missing-image-alt", "error") in findings
     assert ("citry.vue.invalid-expression", "warning") in findings
+    assert ("citry.vue.compile-error", "warning") in findings
     assert not any(code == "citry.template.duplicate-id" for code, _severity in findings)
 
 
@@ -2470,6 +2474,31 @@ def test_registry_check_reports_the_template_only_rules_with_the_application_set
         if code != "citry.template.invalid-nesting"
     ]
     assert findings == sorted(expected, key=lambda item: (item[2], item[0]))
+
+
+def test_registry_check_reports_only_an_ordinary_component_inside_a_vue_v_for(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Row(Component):
+        citry = engine
+        template = "<li>row</li>"
+
+    class Label(Component):
+        citry = engine
+        transparent = True
+        template = "<b>label</b>"
+
+    class Table(Component):
+        citry = engine
+        template = '<ul><template v-for="item in items"><c-row /><c-label /></template></ul>'
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # A transparent component is copied into the caller's template, so a
+    # Vue `v-for` may repeat it.
+    findings = [item for item in report.findings if item.code == "citry.vue.compile-error"]
+    assert [(item.line, item.column) for item in findings] == [(0, 37)]
+    assert "Repeat it with '<c-for>'" in findings[0].message
 
 
 def test_registry_check_reports_a_root_image_only_without_browser_code(tmp_path):

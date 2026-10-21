@@ -3008,7 +3008,8 @@ def test_template_lint_diagnostics_report_the_html_rules_without_a_project():
     source = (
         '<div titel="x"><dvi></dvi><p>a<div>b</div></p><img src="a.png">'
         '<button :aria-expandd="o" @clik="t()"></button><form v-model="q"></form>'
-        '<p v-iff="o"></p><p v-if="o &&"></p><i id="d"></i><b id="d"></b></div>'
+        '<p v-iff="o"></p><p v-if="o &&"></p><i id="d"></i><b id="d"></b>'
+        "<table><div>Row</div></table></div>"
     )
     project = _syntax_state()
     document = _document(source, project)
@@ -3026,11 +3027,15 @@ def test_template_lint_diagnostics_report_the_html_rules_without_a_project():
         ("citry.template.misspelled-directive", error),
         ("citry.template.misspelled-element", error),
         ("citry.template.unknown-aria-attribute", error),
+        ("citry.vue.compile-error", error),
         ("citry.vue.invalid-expression", error),
         ("citry.vue.misspelled-event", warning),
     ]
     expression = next(item for item in diagnostics if item.code == "citry.vue.invalid-expression")
     assert expression.range == types.Range(_position(source, "o &&"), _position(source, "o &&", len("o &&")))
+    compile_error = next(item for item in diagnostics if item.code == "citry.vue.compile-error")
+    row = "<div>Row"
+    assert compile_error.range == types.Range(_position(source, row), _position(source, row, len("<div>")))
 
 
 def test_template_lint_diagnostics_apply_owner_policy_to_the_html_rules(tmp_path):
