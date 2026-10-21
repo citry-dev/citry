@@ -58,6 +58,13 @@
   that `citry check` and the language server report with the application
   loaded, for the control names of a form whose `@c-submit` sends its
   fields to a server event.
+- Added `citry.template.unknown-url` (variant `suggestion`), a configurable
+  warning that `citry check` and the language server report with the
+  application loaded, for a literal link path the host app does not serve.
+  Added `citry.check.url-checker-missing` and
+  `citry.check.url-checker-failed` (message variant `several`), information
+  diagnostics that `citry check` lists as notes when no web framework
+  integration can answer for the links, or when its answer raises an error.
 - Added `citry.check.template-not-checked`, an information diagnostic for a
   class whose template `citry check --static` and the language server skip
   because its base class comes from another module and Citry has not

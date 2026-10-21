@@ -40,6 +40,11 @@ except ImportError:  # pragma: no cover - an older citry in the app's environmen
     # Without it the worker sends no slot data, and the editor leaves each
     # fill's data name untyped.
     slot_data_wire_classes = None  # type: ignore[assignment]
+try:
+    from citry._path_checks import engine_path_verdicts
+except ImportError:  # pragma: no cover - an older citry in the app's environment
+    # Without it the worker sends no link verdicts, and the editor checks no links.
+    engine_path_verdicts = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from citry import TemplateAnalysis
@@ -124,7 +129,23 @@ def _run(app: str, workspace: Path) -> dict[str, object]:
         "catalog": catalog.to_dict(),
         "source_analysis": _source_analysis(engine, catalog, analysis, app),
         "extensions": _extension_analysis(engine),
+        "paths": _path_verdicts(engine),
     }
+
+
+def _path_verdicts(engine: Citry) -> dict[str, object]:
+    """
+    Ask the app's web framework about every link path in its templates, while the app is loaded.
+
+    The worker exits after this envelope, so the editor cannot ask the
+    framework later; it reports only the paths answered here.
+    """
+    if engine_path_verdicts is None:
+        return {"checked": False, "verdicts": {}}
+    try:
+        return engine_path_verdicts(engine)
+    except Exception:  # noqa: BLE001 - a failing link check must not stop the editor from loading the app
+        return {"checked": False, "verdicts": {}}
 
 
 def _extension_analysis(engine: Citry) -> dict[str, object]:

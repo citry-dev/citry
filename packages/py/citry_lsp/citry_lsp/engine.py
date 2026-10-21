@@ -52,6 +52,8 @@ from citry._registry_lint import (
     server_event_forms,
     server_event_payload_findings,
     server_event_payload_from_description,
+    template_urls,
+    unknown_url_findings,
 )
 from citry._source_lines import source_lines
 from citry.analysis import (
@@ -1441,6 +1443,7 @@ def browser_diagnostics(
         consumers = _template_consumers(document, region, project, open_documents)
         if not consumers:
             continue
+        diagnostics.extend(_unknown_url_diagnostics(region, parsed.template, consumers, project, parse_nested=parser))
         expressions = browser_expressions(parsed.template, parse_nested=parser)
         roots = _template_js_data_roots(document, region, project, open_documents)
         diagnostics.extend(
@@ -11121,6 +11124,42 @@ def _server_event_payload_diagnostics(
             )
         )
     return diagnostics
+
+
+def _unknown_url_diagnostics(
+    region: TemplateRegion,
+    template: Template,
+    consumers: tuple[ComponentRecord, ...],
+    project: ProjectState,
+    *,
+    parse_nested: Callable[[str], Template],
+) -> list[types.Diagnostic]:
+    """
+    Report literal link paths the app's web framework said it does not serve, as `citry check` does.
+
+    The app worker asked the framework about each path the templates held
+    when the app loaded. A path added since then has no answer, so it is not
+    reported until the app reloads.
+    """
+    verdicts = project.path_verdicts
+    if not verdicts:
+        return []
+    active = [
+        severity for severity in _owner_rule_severities(consumers, project, "rule_unknown_url") if severity != "ignore"
+    ]
+    if not active:
+        return []
+    return [
+        types.Diagnostic(
+            range=_range(region.source_map.map_range(finding.start_index, finding.end_index)),
+            message=finding.message,
+            severity=types.DiagnosticSeverity.Error if "error" in active else types.DiagnosticSeverity.Warning,
+            code=finding.code,
+            code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
+            source="citry",
+        )
+        for finding in unknown_url_findings(template_urls(template, parse_nested=parse_nested), verdicts)
+    ]
 
 
 def _shared_server_event_payloads(

@@ -8,6 +8,7 @@ mistakes (``benchmarks/errors/cases``) must be reported, and realistic
 neighbors must stay silent.
 """
 
+import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Literal
@@ -17,7 +18,12 @@ import pytest
 from citry import Citry, Component, LintSettings
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
-from citry._registry_lint import annotation_from_type_display, server_event_payload_from_description
+from citry._path_checks import PathLookup, register_path_checker
+from citry._registry_lint import (
+    annotation_from_type_display,
+    root_relative_path,
+    server_event_payload_from_description,
+)
 from citry.ext.events import event
 
 try:
@@ -1026,3 +1032,200 @@ def test_static_check_notes_a_template_whose_base_comes_from_the_project(tmp_pat
         " application and finds Card there. [citry.check.template-not-checked]",
     )
     assert report.exit_code == 0
+
+
+################################################
+# A LINK TO A PATH THE HOST APP DOES NOT SERVE
+################################################
+
+_URL = "citry.template.unknown-url"
+# The paths the fake host serves: its pages, one route with a number, and
+# its static files. The error benchmark's m45, m61 and m48 link to the
+# misspelled or wrong neighbor of each.
+_SERVED = frozenset({"/", "/about", "/static/avatar.svg"})
+
+
+def _host_checker(asked: list[str] | None = None):
+    def check(path: str) -> PathLookup:
+        if asked is not None:
+            asked.append(path)
+        found = path in _SERVED or bool(re.fullmatch(r"/projects/\d+", path))
+        return PathLookup(found, () if found else tuple(sorted(_SERVED)))
+
+    return check
+
+
+def _linked_engine(template: str, *, checker=None, lint: LintSettings | None = None, prefix: str | None = None):
+    engine = Citry(autodiscover=False, lint=lint or LintSettings())
+    if checker is not None:
+        register_path_checker(engine, checker)
+    if prefix is not None:
+        engine.set_mounted_prefix(prefix)
+    type("Page", (Component,), {"citry": engine, "template": template, "__module__": __name__})
+    return engine
+
+
+def test_links_to_paths_the_host_does_not_serve_are_reported(tmp_path):
+    engine = _linked_engine(
+        '<a href="/abuot">About</a>\n'
+        '<a href="/projects/alpha">Project</a>\n'
+        '<img src="/static/avtar.svg" alt="">\n'
+        '<form action="/nowhere"></form>',
+        checker=_host_checker(),
+    )
+
+    assert _findings(engine, tmp_path, _URL) == [
+        (
+            _URL,
+            "warning",
+            "Your app has no route or static file for '/abuot', so the browser gets a 404 Not Found. "
+            "Did you mean '/about'?",
+        ),
+        (
+            _URL,
+            "warning",
+            "Your app has no route or static file for '/projects/alpha', so the browser gets a 404 Not Found.",
+        ),
+        (
+            _URL,
+            "warning",
+            "Your app has no route or static file for '/static/avtar.svg', so the browser gets a 404 Not Found. "
+            "Did you mean '/static/avatar.svg'?",
+        ),
+        (_URL, "warning", "Your app has no route or static file for '/nowhere', so the browser gets a 404 Not Found."),
+    ]
+
+
+def test_links_the_host_does_not_decide_are_not_checked(tmp_path):
+    asked: list[str] = []
+    engine = _linked_engine(
+        # Served paths, also with a query string, a fragment, a character
+        # reference, or a percent escape; Citry's own routes under the
+        # mounted prefix; and links the host app does not decide: another
+        # site, a relative path, a fragment, a bound value, a component
+        # input, and an attribute that is not a link.
+        '<a href="/about?tab=1#team">About</a><a href=" /about ">About</a>'
+        '<a href="/ab&#111;ut">About</a><a href="/%61bout">About</a>'
+        '<script src="/citry/citry.js"></script>'
+        '<a href="https://example.com/abuot">x</a><a href="//cdn.example.com/x.js">x</a>'
+        '<a href="abuot">x</a><a href="#top">x</a><a href="mailto:a@b.c">x</a>'
+        '<a :href="\'/abuot\'">x</a><a c-href="\'/abuot\'">x</a><a data-href="/abuot">x</a>'
+        '<my-link href="/abuot"></my-link>'
+        # The base folder and a server to connect to early are not pages.
+        '<base href="/abuot/"><link rel="preconnect" href="/abuot">',
+        checker=_host_checker(asked),
+        prefix="/citry",
+    )
+
+    assert _findings(engine, tmp_path, _URL) == []
+    # Each path is asked about once, and Citry's own routes not at all.
+    assert asked == ["/about"]
+
+
+def test_a_link_in_a_component_input_is_not_checked(tmp_path):
+    engine = Citry(autodiscover=False)
+    register_path_checker(engine, _host_checker())
+    type(
+        "Link",
+        (Component,),
+        {
+            "citry": engine,
+            "template": "<a>x</a>",
+            "Kwargs": type("Kwargs", (), {"__annotations__": {"href": str}}),
+            "__module__": __name__,
+        },
+    )
+    type("Page", (Component,), {"citry": engine, "template": '<c-Link href="/abuot" />', "__module__": __name__})
+
+    assert _findings(engine, tmp_path, _URL) == []
+
+
+def test_links_are_noted_once_when_no_integration_registered_a_checker(tmp_path):
+    engine = _linked_engine('<a href="/abuot">About</a><a href="/other">Other</a>')
+
+    report = _report(engine, tmp_path)
+
+    assert [item for item in report.findings if item.code == _URL] == []
+    notes = [note for note in report.notes if "citry.check.url-checker-missing" in note]
+    assert len(notes) == 1
+    assert "Links such as '/abuot' were not checked" in notes[0]
+    assert report.exit_code == 0
+
+
+def test_no_note_when_the_rule_is_ignored(tmp_path):
+    engine = _linked_engine('<a href="/abuot">About</a>', lint=LintSettings(rule_unknown_url="ignore"))
+
+    assert not any("url-checker" in note for note in _report(engine, tmp_path).notes)
+
+
+def test_a_failing_checker_skips_its_paths_with_one_note(tmp_path):
+    def broken(path: str) -> PathLookup:
+        if path == "/about":
+            return PathLookup(found=True)
+        raise RuntimeError("routes are not loaded")
+
+    engine = _linked_engine('<a href="/abuot">x</a><a href="/zzz">x</a><a href="/about">x</a>', checker=broken)
+
+    report = _report(engine, tmp_path)
+
+    assert [item for item in report.findings if item.code == _URL] == []
+    notes = [note for note in report.notes if "citry.check.url-checker-failed" in note]
+    assert notes == [
+        "Citry skipped 2 link paths, such as '/abuot', because asking your web framework whether your app "
+        "serves them raised an error: RuntimeError: routes are not loaded [citry.check.url-checker-failed]"
+    ]
+
+
+def test_another_checker_can_serve_a_path_one_checker_misses(tmp_path):
+    engine = _linked_engine('<a href="/blog">Blog</a>', checker=_host_checker())
+    register_path_checker(engine, lambda path: PathLookup(path == "/blog"))
+
+    assert _findings(engine, tmp_path, _URL) == []
+
+
+def test_the_link_rule_follows_the_app_and_component_settings(tmp_path):
+    engine = _linked_engine(
+        '<a href="/abuot">About</a>', checker=_host_checker(), lint=LintSettings(rule_unknown_url="error")
+    )
+    type(
+        "ProxiedPage",
+        (Component,),
+        {
+            "citry": engine,
+            "template": '<a href="/grafana">Dashboards</a>',
+            # The proxy in front of the app serves this path.
+            "Lint": type("Lint", (), {"rule_unknown_url": "ignore"}),
+            "__module__": __name__,
+        },
+    )
+
+    report = _report(engine, tmp_path)
+
+    assert [(item.code, item.severity) for item in report.findings if item.code == _URL] == [(_URL, "error")]
+    assert report.exit_code == 1
+
+
+@pytest.mark.parametrize(
+    ("written", "requested"),
+    [
+        ("/about", "/about"),
+        (" /about?tab=1#team ", "/about"),
+        ("\\about", "/about"),
+        ("/static/../about", "/about"),
+        ("/static/%2e%2e/about", "/about"),
+        ("/a/./b/..", "/a/"),
+        ("/..", "/"),
+        # The browser resolves dots before it decodes an escaped slash, and
+        # drops tabs and line breaks anywhere.
+        ("/a%2Fb/..", "/"),
+        ("/ab\tout", "/about"),
+        ("/caf%C3%A9", "/café"),
+        ("//cdn.example.com/x.js", None),
+        ("\\\\cdn.example.com/x.js", None),
+        ("https://example.com/", None),
+        ("page.html", None),
+        ("", None),
+    ],
+)
+def test_a_link_is_checked_as_the_path_the_browser_requests(written, requested):
+    assert root_relative_path(written) == requested

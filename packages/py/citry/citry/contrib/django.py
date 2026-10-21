@@ -39,6 +39,11 @@ signs are covered by the key the project already manages)::
 
     app = Citry(secret=secret())
 
+``urlpatterns()`` also registers a path checker: a function ``citry check``
+and the editor call to ask whether the project's URL patterns or static
+files serve a link path written in a template, so a link to a page or file
+the project does not serve is reported before anyone clicks it.
+
 Citry owns this adapter (rather than leaving it to django-components) so
 plain citry works with Django regardless of how django-components ends up
 relating to citry. Django is imported lazily, only when these functions are
@@ -48,20 +53,28 @@ called.
 from __future__ import annotations
 
 import inspect
+import posixpath
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._path_checks import PathLookup, register_path_checker
+from citry.contrib._path_lookup import files_beside
 from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes, normalize_mount_prefix
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
     from typing import Literal
 
+    from citry._path_checks import PathChecker
     from citry.citry import Citry
     from citry.util.routing import RouteResponse, URLRoute
 
 __all__ = ["DjangoCache", "enable_hot_reload", "secret", "urlpatterns"]
+
+# Every call to urlpatterns() asks the same Django project, so a later call
+# replaces the checker an earlier one registered.
+_DJANGO_PROJECT = object()
 
 _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
@@ -141,6 +154,10 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
     The generated views are synchronous, so every route handler must be a
     plain function; an ``async def`` handler raises ``TypeError`` here,
     pointing at the ASGI adapter as the fix.
+
+    Calling it also lets ``citry check`` and the editor ask the project
+    whether its URL patterns or static files serve each link path written in
+    your templates.
     """
     from django.urls import path as django_path  # noqa: PLC0415
 
@@ -177,7 +194,180 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
     if prefix is not None:
         citry_instance.set_mounted_prefix(prefix)
+    # Registered with the patterns, after every route was accepted, so a
+    # rejected call leaves the instance without a checker too.
+    register_path_checker(citry_instance, _django_path_checker(), host=_DJANGO_PROJECT)
     return patterns
+
+
+def _django_path_checker() -> PathChecker:
+    """
+    Build a path checker that answers from the project's URL patterns and static files.
+
+    Django's URL lookups need no app object: the checker reads
+    ``ROOT_URLCONF`` and the static file settings each time it is called, so
+    it sees the patterns as the running project has them. It answers in this
+    order:
+
+    - A path under ``MEDIA_URL`` names a user upload, which no setting lists,
+      so it counts as served.
+    - A path under ``STATIC_URL``, with ``django.contrib.staticfiles``
+      installed, counts only when the static file finders find a file. The
+      finders decide even when a development pattern serves the prefix,
+      because such a pattern accepts every name under it.
+    - Any other path counts when ``resolve()`` finds a pattern for it, under
+      any of the project's languages when it uses ``i18n_patterns()``, or when
+      ``CommonMiddleware`` would redirect it to the same path with a trailing
+      slash that resolves.
+
+    A project served below a sub-path (``FORCE_SCRIPT_NAME``) writes that
+    sub-path in its links, so the checker removes it before ``resolve()``.
+    """
+
+    def check(path: str) -> PathLookup:
+        # Imported here, not at module load: this module must be importable
+        # without Django on the path (citry.contrib hosts several integrations).
+        from django.apps import apps  # noqa: PLC0415
+        from django.conf import settings as django_settings  # noqa: PLC0415
+        from django.urls import get_script_prefix  # noqa: PLC0415
+
+        if not apps.ready:
+            # `citry check` and the editor import the URL configuration
+            # without starting Django, so its apps and FORCE_SCRIPT_NAME are
+            # not loaded yet. The static file finders and resolve() need both,
+            # as a running server has them.
+            import django  # noqa: PLC0415
+
+            django.setup()
+        script_prefix = get_script_prefix()
+        media_url = _site_prefix(django_settings.MEDIA_URL, script_prefix)
+        if media_url is not None and path.startswith(media_url):
+            return PathLookup(found=True)
+        static_url = _site_prefix(django_settings.STATIC_URL, script_prefix)
+        if static_url is not None and path.startswith(static_url) and apps.is_installed("django.contrib.staticfiles"):
+            return _static_file_lookup(path, path[len(static_url) :])
+        # Suggestions are written the way a link writes them, with the sub-path.
+        nearby = tuple(sorted({script_prefix.rstrip("/") + route for route in _literal_routes()}))
+        if not path.startswith(script_prefix):
+            # A path outside the sub-path never reaches this project.
+            return PathLookup(found=False, nearby=nearby)
+        path_info = "/" + path[len(script_prefix) :]
+        if _resolve_match(path_info) is not None or _redirects_to_slash(path_info):
+            return PathLookup(found=True)
+        return PathLookup(found=False, nearby=nearby)
+
+    return check
+
+
+def _site_prefix(url: str | None, script_prefix: str) -> str | None:
+    """Return a ``STATIC_URL``-style setting as a path prefix ending in ``/``, or ``None`` if unset or remote."""
+    # Django adds the script prefix to a relative setting when it is read, so
+    # an unset (empty) setting reads as the script prefix itself, which would
+    # otherwise cover every path of the site.
+    if not url or url == script_prefix:
+        return None
+    # A full or protocol-relative URL points at another host (a CDN), whose
+    # files the project cannot list.
+    if not url.startswith("/") or url.startswith("//"):
+        return None
+    return url if url.endswith("/") else f"{url}/"
+
+
+def _resolve_match(path_info: str) -> Any:
+    """Return the ``resolve()`` match for ``path_info``, or ``None`` when no pattern accepts it."""
+    from django.conf import settings as django_settings  # noqa: PLC0415
+    from django.urls import LocalePrefixPattern, Resolver404, get_resolver, resolve  # noqa: PLC0415
+    from django.utils import translation  # noqa: PLC0415
+
+    try:
+        return resolve(path_info)
+    except Resolver404:
+        pass
+    # i18n_patterns() accept only the active language's prefix, and the
+    # checker runs outside any request, so a link to another language's page
+    # is tried under that language too. Django's own helper for this test
+    # caches its answer, so it would miss a URLconf changed after first use.
+    uses_language_prefix = any(isinstance(entry.pattern, LocalePrefixPattern) for entry in get_resolver().url_patterns)
+    if not django_settings.USE_I18N or not uses_language_prefix:
+        return None
+    for code, _name in django_settings.LANGUAGES:
+        with translation.override(code):
+            try:
+                return resolve(path_info)
+            except Resolver404:
+                continue
+    return None
+
+
+def _redirects_to_slash(path_info: str) -> bool:
+    """Return whether ``CommonMiddleware`` would send a request for ``path_info`` on to ``path_info + "/"``."""
+    from django.conf import settings as django_settings  # noqa: PLC0415
+    from django.middleware.common import CommonMiddleware  # noqa: PLC0415
+
+    # The redirect needs both the setting and the middleware that acts on it,
+    # and happens only when the slash-terminated path resolves. A view can
+    # opt out with the no_append_slash decorator, which the middleware honours.
+    if path_info.endswith("/") or not django_settings.APPEND_SLASH:
+        return False
+    if not any(_is_subclass(entry, CommonMiddleware) for entry in django_settings.MIDDLEWARE):
+        return False
+    match = _resolve_match(f"{path_info}/")
+    return match is not None and bool(getattr(match.func, "should_append_slash", True))
+
+
+def _is_subclass(dotted_path: str, base: type) -> bool:
+    """Return whether the middleware at ``dotted_path`` is ``base`` or a subclass of it."""
+    from django.utils.module_loading import import_string  # noqa: PLC0415
+
+    try:
+        middleware = import_string(dotted_path)
+    except ImportError:
+        # Django itself fails at startup on such an entry; here it just
+        # cannot be the middleware that redirects.
+        return False
+    return isinstance(middleware, type) and issubclass(middleware, base)
+
+
+def _static_file_lookup(path: str, relative: str) -> PathLookup:
+    """Answer for a path under ``STATIC_URL``: found only when the finders find a file for ``relative``."""
+    from django.contrib.staticfiles import finders  # noqa: PLC0415
+    from django.core.exceptions import SuspiciousFileOperation  # noqa: PLC0415
+
+    # Django's static file view normalizes the name the same way before it
+    # asks the finders, and serves only a file, never a folder.
+    name = posixpath.normpath(relative).lstrip("/")
+    try:
+        found = finders.find(name)
+    except SuspiciousFileOperation:
+        # A name that leaves the static folders through "..".
+        found = None
+    if isinstance(found, str) and Path(found).is_file():
+        return PathLookup(found=True)
+    try:
+        # Passed by position: Django 5.2 renamed this argument from `all` to `find_all`.
+        folders = finders.find(posixpath.dirname(name), True)  # noqa: FBT003
+    except SuspiciousFileOperation:
+        folders = []
+    return PathLookup(found=False, nearby=files_beside(path, [folder for folder in folders if Path(folder).is_dir()]))
+
+
+def _literal_routes(patterns: Iterable[Any] | None = None, prefix: str = "") -> Iterable[str]:
+    """Yield each URL pattern that takes no parameters, as the path a link writes for it."""
+    from django.urls import URLResolver, get_resolver  # noqa: PLC0415
+    from django.urls.resolvers import RoutePattern  # noqa: PLC0415
+
+    for entry in get_resolver().url_patterns if patterns is None else patterns:
+        pattern = entry.pattern
+        # A regular expression or a converter has no single spelling, and a
+        # language prefix depends on the request, so only plain path()
+        # strings name a path a link can write exactly.
+        if not isinstance(pattern, RoutePattern) or pattern.converters:
+            continue
+        route = prefix + str(pattern)
+        if isinstance(entry, URLResolver):
+            yield from _literal_routes(entry.url_patterns, route)
+        else:
+            yield f"/{route}"
 
 
 def enable_hot_reload(

@@ -589,6 +589,33 @@ def _source_slot_data_classes(value: object) -> dict[str, SlotDataWireClass]:
     return {name: SlotDataWireClass.from_dict(record) for name, record in raw.items()}
 
 
+def _path_verdicts(value: object) -> dict[str, tuple[bool, str | None]] | None:
+    """
+    Read the link verdicts the worker copied, or ``None`` when the app's web framework gave none.
+
+    A worker on an older citry sends no record, which reads as no verdicts.
+    """
+    if value is None:
+        return None
+    if type(value) is not dict or set(value) != {"checked", "verdicts"} or type(value["checked"]) is not bool:
+        raise ValueError("path verdict envelope is invalid")
+    raw = value["verdicts"]
+    if type(raw) is not dict:
+        raise ValueError("path verdicts must map paths to verdicts")
+    verdicts: dict[str, tuple[bool, str | None]] = {}
+    for path, verdict in raw.items():
+        if (
+            type(path) is not str
+            or type(verdict) is not dict
+            or set(verdict) != {"found", "suggestion"}
+            or type(verdict["found"]) is not bool
+            or (verdict["suggestion"] is not None and type(verdict["suggestion"]) is not str)
+        ):
+            raise ValueError("path verdicts must map paths to verdicts")
+        verdicts[path] = (verdict["found"], verdict["suggestion"])
+    return verdicts if value["checked"] else None
+
+
 def _events_csrf_field_names(value: object) -> frozenset[str]:
     """Read the CSRF field names the worker copied from the app's Events settings."""
     names = value.get("csrf_field_names") if type(value) is dict else None
@@ -809,6 +836,11 @@ class ProjectState:
     # The host CSRF field names the app's server removes from an event call's
     # arguments, so the form-field rule leaves those controls alone.
     csrf_field_names: frozenset[str] = frozenset({"csrfmiddlewaretoken"})
+    # Whether the app's web framework serves each link path its templates
+    # held when the app loaded, with a served path one typing slip away for
+    # a missing one. `None` means no integration could answer, so the
+    # editor checks no links.
+    path_verdicts: Mapping[str, tuple[bool, str | None]] | None = None
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
     # ty's types for `js_data()` value parts, per file, source text, and class.
     _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
@@ -1116,6 +1148,7 @@ def _project_from_worker_output(
             raise ValueError("extension analysis envelope is invalid")
         i18n = I18nProjectIndex(raw_extensions.get("i18n"))
         csrf_field_names = _events_csrf_field_names(raw_extensions.get("events"))
+        path_verdicts = _path_verdicts(payload.get("paths"))
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     project_output = payload.get("project_output")
@@ -1142,6 +1175,7 @@ def _project_from_worker_output(
         source_analysis=source_analysis,
         i18n=i18n,
         csrf_field_names=csrf_field_names,
+        path_verdicts=path_verdicts,
     )
 
 

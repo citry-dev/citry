@@ -40,6 +40,12 @@ All notable changes to `citry-lsp` are documented here.
   a bound prop value on a child component tag against the prop's `type` in
   the child's `$component` call, so `:open="count"` is an error for a
   Boolean prop when `count` is a number.
+- Once your application loads, the editor warns about a link to a page or
+  file your app does not serve, such as `<a href="/abuot">`, when your app
+  mounts Citry with `citry.contrib.flask.mount()`,
+  `citry.contrib.fastapi.mount()`, or `citry.contrib.django.urlpatterns()`
+  (`rule_unknown_url`). A link you add is checked at the next reload,
+  which saving a Python file starts.
 - The editor and `citry check --types` warn about a `js_data()` value that
   ty types as a standard type JSON cannot carry, such as a
   `PurePosixPath`, a `datetime`, or a set.

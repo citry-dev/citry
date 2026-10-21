@@ -141,6 +141,7 @@ _TEMPLATE_RULE_FIELDS = (
     "rule_unknown_form_field",
     "rule_missing_form_field",
     "rule_misspelled_css_variable",
+    "rule_unknown_url",
 )
 
 
@@ -297,6 +298,15 @@ class LintSettings:
             ``accent``. Nothing sets the property. ``citry check`` reports
             it only with your application loaded. The default is
             ``"warning"``.
+        rule_unknown_url: Severity for a literal ``href``, ``src``, or
+            ``action`` path, such as ``/abuot``, that none of your app's
+            routes or static files serves. ``citry check`` and the editor
+            report it only with your application loaded, and only when a
+            web framework integration (``citry.contrib.flask.mount()``,
+            ``citry.contrib.fastapi.mount()``, or
+            ``citry.contrib.django.urlpatterns()``) ran while the app loaded. A
+            path another server answers, such as a reverse proxy, is
+            reported too. The default is ``"warning"``.
         check_input_types: Check that each value a component receives has
             the type its annotation names. On by default, in development and
             in production. Unlike the ``rule_*`` settings, this check runs
@@ -356,6 +366,7 @@ class LintSettings:
     rule_unknown_form_field: LintSeverity = "error"
     rule_missing_form_field: LintSeverity = "error"
     rule_misspelled_css_variable: LintSeverity = "warning"
+    rule_unknown_url: LintSeverity = "warning"
     check_input_types: bool = True
 
     # Hidden from type checkers so they keep checking calls against the
