@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "templates/card.html", contains = "{{ bord_name }}" }
+
+[[edits]]
+file = "templates/card.html"
+old = "{{ board_name }}"
+new = "{{ bord_name }}"
