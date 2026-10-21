@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261020T230018Z",
+  "run": "20261021T000041Z",
   "frameworks": [
     {
       "key": "citry",
@@ -336,6 +336,71 @@
       "id": "m49-input-choice",
       "title": "Component input given a value outside its allowed choices",
       "category": "types"
+    },
+    {
+      "id": "m51-list-key-missing",
+      "title": "Repeated browser element without a key",
+      "category": "templates"
+    },
+    {
+      "id": "m52-invalid-nesting",
+      "title": "Block element inside a paragraph",
+      "category": "html"
+    },
+    {
+      "id": "m53-image-alt",
+      "title": "Image without alt text",
+      "category": "html"
+    },
+    {
+      "id": "m54-aria-name",
+      "title": "Misspelled ARIA attribute",
+      "category": "html"
+    },
+    {
+      "id": "m55-aria-value",
+      "title": "Invalid ARIA attribute value",
+      "category": "html"
+    },
+    {
+      "id": "m56-duplicate-attribute",
+      "title": "Same attribute written twice on one element",
+      "category": "html"
+    },
+    {
+      "id": "m57-duplicate-id",
+      "title": "Two elements share an id",
+      "category": "html"
+    },
+    {
+      "id": "m58-loop-non-list",
+      "title": "Loop over a value that is not a list",
+      "category": "types"
+    },
+    {
+      "id": "m59-unknown-helper",
+      "title": "Unknown template filter or helper function",
+      "category": "naming"
+    },
+    {
+      "id": "m60-handler-arguments",
+      "title": "Handler declares arguments the event does not send",
+      "category": "events"
+    },
+    {
+      "id": "m61-route-param-type",
+      "title": "Link passes a route parameter of the wrong type",
+      "category": "types"
+    },
+    {
+      "id": "m62-boolean-attribute-string",
+      "title": "Boolean attribute given the text \"false\"",
+      "category": "html"
+    },
+    {
+      "id": "m63-binding-on-non-input",
+      "title": "Two-way binding on an element with no value",
+      "category": "templates"
     }
   ],
   "codes": [
@@ -413,8 +478,8 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 23:11\n   |\n23 |           <c-Card\n   | ...\n30 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'tone', 'c-tone', 'c-if', 'c-el...",
-        "citry check: citry.parse.syntax Parse error:   --> 23:11\n   |\n23 |           <c-Card\n   | ...\n30 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'tone', 'c-tone', 'c-if', 'c-elif', 'c-else', 'c-for', 'c-empty..."
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n31 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'tone', 'c-tone', 'c-if', 'c-el...",
+        "citry check: citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n31 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' can only have the following attributes: 'title', 'c-title', 'count', 'c-count', 'tone', 'c-tone', 'c-if', 'c-elif', 'c-else', 'c-for', 'c-empty..."
       ]
     },
     {
@@ -436,8 +501,8 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 23:11\n   |\n23 |           <c-Card\n   | ...\n29 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'.",
-        "citry check: citry.parse.syntax Parse error:   --> 23:11\n   |\n23 |           <c-Card\n   | ...\n29 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'."
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n30 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'.",
+        "citry check: citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n30 |           >\u240a\n   |           ^\n   |\n   = Tag '<c-Card>' must have one of the following attributes: 'title', 'c-title'."
       ]
     },
     {
@@ -448,8 +513,8 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 31:13\n   |\n31 |             <c-fill name=\"fotter\" data=\"card\">\n   |             ^--------------------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'.",
-        "citry check: citry.parse.syntax Parse error:   --> 31:13\n   |\n31 |             <c-fill name=\"fotter\" data=\"card\">\n   |             ^--------------------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'."
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 32:13\n   |\n32 |             <c-fill name=\"fotter\" data=\"card\">\n   |             ^--------------------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'.",
+        "citry check: citry.parse.syntax Parse error:   --> 32:13\n   |\n32 |             <c-fill name=\"fotter\" data=\"card\">\n   |             ^--------------------------------^\n   |\n   = Tag '<c-Card>' does not allow a slot named 'fotter'."
       ]
     },
     {
@@ -771,8 +836,8 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 23:11\n   |\n23 |           <c-Card\n   | ...\n30 |           />\u240a\n   |           ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided.",
-        "citry check: citry.parse.syntax Parse error:   --> 23:11\n   |\n23 |           <c-Card\n   | ...\n30 |           />\u240a\n   |           ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided."
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n31 |           />\u240a\n   |           ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided.",
+        "citry check: citry.parse.syntax Parse error:   --> 24:11\n   |\n24 |           <c-Card\n   | ...\n31 |           />\u240a\n   |           ^^\n   |\n   = Tag '<c-Card>' requires 1 slot(s), but only 0 <c-fill> tag(s) were provided."
       ]
     },
     {
@@ -938,6 +1003,154 @@
       "reason": null,
       "evidence": [
         "Citry language server (citry check --types): citry.python.invalid-assignment Object of type `Literal[\"acent\", \"plain\"]` is not assignable to `Literal[\"plain\", \"accent\"]`\n\ninfo: element `Literal[\"acent\"]` of union `Literal[\"acent\", \"plain\"]` is not assignable to `Literal[\"plain\", \"accent\"]`"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m51-list-key-missing",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.typescript.ts2345 Argument of type '\"yes\" | \"no\"' is not assignable to parameter of type 'Booleanish'.\nType '\"yes\"' is not assignable to type 'Booleanish'."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.parse.syntax Parse error:   --> 12:24\n   |\n12 |     <div class=\"cards\" class=\"board\" id=\"board\" title=\"Board\">\n   |                        ^-----------^\n   |\n   = Duplicate attribute 'class' found. Each attribute name can only appear once (except...",
+        "citry check: citry.parse.syntax Parse error:   --> 12:24\n   |\n12 |     <div class=\"cards\" class=\"board\" id=\"board\" title=\"Board\">\n   |                        ^-----------^\n   |\n   = Duplicate attribute 'class' found. Each attribute name can only appear once (except 'c-bind')."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.python.not-iterable Object of type `int` is not iterable\n\ninfo: It doesn't have an `__iter__` method or a `__getitem__` method"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.unknown-variable Template variable 'length' is not available in this template.",
+        "citry check: citry.template.unknown-variable Template variable 'length' is not available in this template."
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m60-handler-arguments",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "error: 404 http://127.0.0.1:<port>/projects/alpha"
+      ]
+    },
+    {
+      "framework": "citry",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "citry",
+      "mistake": "m63-binding-on-non-input",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
       ]
     },
     {
@@ -1453,6 +1666,147 @@
     {
       "framework": "django",
       "mistake": "m49-input-choice",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m51-list-key-missing",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The server renders the cards in a template loop, and the browser never updates the list in place: Hide only hides the card's own Alpine wrapper (`x-show`), and HTMX swaps in only the counter. A Django template loop has no key to leave out.",
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H013 Img tag should have an alt attribute. <img src=\"{% static"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H037 Duplicate attribute found. class"
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H053 Id is used more than once in the file. id=\"board\""
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m60-handler-arguments",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Each card sits in its own Alpine wrapper, whose listener for the card's `hide` event is the inline statement `@hide=\"shown = false\"`, not a function with parameters, and the event carries no value. There is no handler that could take more arguments than the event sends.",
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "django",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django",
+      "mistake": "m63-binding-on-non-input",
       "status": "ported",
       "bucket": "missed",
       "cell": "M",
@@ -1984,6 +2338,147 @@
     {
       "framework": "rusty",
       "mistake": "m49-input-choice",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m51-list-key-missing",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The server renders the cards in a template loop, and the browser never updates the list in place: Hide only hides the card's own Alpine wrapper (`x-show`), and HTMX swaps in only the counter. A Django template loop has no key to leave out.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H013 Img tag should have an alt attribute. <img src=\"{{ STATIC_"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H037 Duplicate attribute found. class"
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H053 Id is used more than once in the file. id=\"board\""
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m60-handler-arguments",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Each card sits in its own Alpine wrapper, whose listener for the card's `hide` event is the inline statement `@hide=\"shown = false\"`, not a function with parameters, and the event carries no value. There is no handler that could take more arguments than the event sends.",
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "rusty",
+      "mistake": "m63-binding-on-non-input",
       "status": "ported",
       "bucket": "missed",
       "cell": "M",
@@ -2572,6 +3067,147 @@
       "evidence": []
     },
     {
+      "framework": "jinja",
+      "mistake": "m51-list-key-missing",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The server renders the cards in a template loop, and the browser never updates the list in place: Hide only hides the card's own Alpine wrapper (`x-show`), and HTMX swaps in only the counter. A Jinja loop has no key to leave out.",
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, jinja profile): H013 Img tag should have an alt attribute. <img src=\"{{ url_for"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, jinja profile): H037 Duplicate attribute found. class"
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, jinja profile): H053 Id is used more than once in the file. id=\"board\""
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m60-handler-arguments",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Each card sits in its own Alpine wrapper, whose listener for the card's `hide` event is the inline statement `@hide=\"shown = false\"`, not a function with parameters, and the event carries no value. There is no handler that could take more arguments than the event sends.",
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "jinja",
+      "mistake": "m63-binding-on-non-input",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
       "framework": "unicorn",
       "mistake": "m01-component-name",
       "status": "ported",
@@ -3080,6 +3716,151 @@
     {
       "framework": "unicorn",
       "mistake": "m49-input-choice",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m51-list-key-missing",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H013 Img tag should have an alt attribute. <img src=\"{% static"
+      ]
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H048 Aria attribute is not one the specification defines. aria-expandd"
+      ]
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H037 Duplicate attribute found. class"
+      ]
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H053 Id is used more than once in the file. id=\"board\""
+      ]
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m60-handler-arguments",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E\u00b0",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Argument missing for parameter \"reason\""
+      ]
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "unicorn",
+      "mistake": "m63-binding-on-non-input",
       "status": "ported",
       "bucket": "missed",
       "cell": "M",
@@ -3601,7 +4382,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):",
-        "error: [20/Oct/2026 23:22:46] \"GET / HTTP/1.1\" 500 295859"
+        "error: [21/Oct/2026 00:23:25] \"GET / HTTP/1.1\" 500 295927"
       ]
     },
     {
@@ -3633,6 +4414,147 @@
         "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
       ]
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m51-list-key-missing",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The server renders the cards in a template loop, and the browser never updates the list in place: Hide only hides the card's own Alpine wrapper (`x-show`), and HTMX swaps in only the counter. A Django template loop has no key to leave out.",
+      "evidence": []
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H013 Img tag should have an alt attribute. <img src=\"{% static"
+      ]
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H037 Duplicate attribute found. class"
+      ]
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "djLint 1.46.6 (--lint, django profile): H053 Id is used more than once in the file. id=\"board\""
+      ]
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m60-handler-arguments",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "Each card sits in its own Alpine wrapper, whose listener for the card's `hide` event is the inline statement `@hide=\"shown = false\"`, not a function with parameters, and the event carries no value. There is no handler that could take more arguments than the event sends.",
+      "evidence": []
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
+        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
+        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+      ]
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "django-components",
+      "mistake": "m63-binding-on-non-input",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
     },
     {
       "framework": "fasthtml",
@@ -4153,6 +5075,133 @@
       "evidence": [
         "Pylance, type checking on (pyright 1.1.414, standard): reportArgumentType Argument of type \"Literal['acent', 'plain']\" cannot be assigned to parameter \"tone\" of type \"Literal['plain', 'accent']\" in function \"Card\"\n\u00a0\u00a0Type \"Literal['acent', 'plain']\" is not assignable to type \"Literal['plain', 'acc..."
       ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m51-list-key-missing",
+      "status": "not-applicable",
+      "bucket": null,
+      "cell": "n/a",
+      "reason": "The server builds the cards in a Python list comprehension, and the browser never updates the list in place: Hide sets `hidden` on the card's own element, and HTMX swaps in only the saved count. FastHTML's components have no key to leave out.",
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportCallIssue Parameter \"cls\" is already assigned",
+        "ruff 0.15.5 (default rules): invalid-syntax Duplicate keyword argument \"cls\""
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportGeneralTypeIssues \"int\" is not iterable\n\u00a0\u00a0\"__iter__\" method not defined"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"length\" is not defined"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m60-handler-arguments",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "error: 404 http://127.0.0.1:<port>/projects/alpha"
+      ]
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "fasthtml",
+      "mistake": "m63-binding-on-non-input",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
     },
     {
       "framework": "reactpy",
@@ -4707,6 +5756,138 @@
       "evidence": []
     },
     {
+      "framework": "reactpy",
+      "mistake": "m51-list-key-missing",
+      "status": "ported",
+      "bucket": "runtime-warning",
+      "cell": "Rw",
+      "reason": null,
+      "evidence": [
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(107a9f350, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x107a47e20>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(107a9f3b0, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x107a47f60>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(107a9f410, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x107bd40e0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(107bd8710, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x107bd5e40>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:130: UserWarning: Key not specified for child in list Card(107bd8470, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x107bd62a0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
+      ]
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "ruff 0.15.5 (default rules): F601 Dictionary key literal `\"class_name\"` repeated"
+      ]
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportGeneralTypeIssues \"int\" is not iterable\n\u00a0\u00a0\"__iter__\" method not defined"
+      ]
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportUndefinedVariable \"length\" is not defined",
+        "ruff 0.15.5 (default rules): F821 Undefined name `length`"
+      ]
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m60-handler-arguments",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E\u00b0",
+      "reason": null,
+      "evidence": [
+        "Pylance, type checking on (pyright 1.1.414, standard): reportReturnType Type \"(reason: str) -> None\" is not assignable to return type \"() -> None\"\n\u00a0\u00a0Type \"(reason: str) -> None\" is not assignable to type \"() -> None\"\n\u00a0\u00a0\u00a0\u00a0Extra parameter \"reason\""
+      ]
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "reactpy",
+      "mistake": "m63-binding-on-non-input",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
       "framework": "nuxt",
       "mistake": "m01-component-name",
       "status": "ported",
@@ -5241,6 +6422,148 @@
       ]
     },
     {
+      "framework": "nuxt",
+      "mistake": "m51-list-key-missing",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/valid-v-for Custom elements in iteration require 'v-bind:key' directives."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/html-end-tags '<p>' should have end tag.",
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-parsing-error Parsing error: x-invalid-end-tag."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2353 Object literal may only specify known properties, and ''aria-expandd'' does not exist in type 'ButtonHTMLAttributes & ReservedProps'."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2322 Type '\"yes\" | \"no\"' is not assignable to type 'Booleanish | undefined'."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "Vue compiler diagnostics (Vue - Official): vue-compiler-dom-errors/2 Duplicate attribute.",
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-parsing-error Parsing error: duplicate-attribute.",
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/no-duplicate-attributes Duplicate attribute 'class'.",
+        "nuxt build: exit-1 \u2502  SyntaxError: Duplicate attribute.\n\u2502      at createCompilerError (.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules/@vue/compiler-core/dist/compiler-core.cjs.prod.js:1374:17)\n\u2502      at emitError (.benchmarks/errors/envs/nuxt/node_modules/vue/node_modules/@vue/compile..."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2339 Property 'title' does not exist on type 'number'.",
+        "vue-tsc (Vue - Official): TS2339 Property 'title' does not exist on type 'number'.",
+        "vue-tsc (Vue - Official): TS2339 Property 'count' does not exist on type 'number'."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2551 Property 'lenght' does not exist on type 'SerializeObject<{ title: string; count: number; featured: boolean; }>[]'. Did you mean 'length'?"
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m60-handler-arguments",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E\u00b0",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2554 Expected 2 arguments, but got 1."
+      ]
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "nuxt",
+      "mistake": "m63-binding-on-non-input",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "vue-tsc (Vue - Official): TS2353 Object literal may only specify known properties, and 'modelValue' does not exist in type 'FormHTMLAttributes & ReservedProps'.",
+        "ESLint 10.13.0 (@nuxt/eslint 1.17.0): vue/valid-v-model 'v-model' directives aren't supported on <form> elements."
+      ]
+    },
+    {
       "framework": "next",
       "mistake": "m01-component-name",
       "status": "ported",
@@ -5359,8 +6682,8 @@
       "cell": "E",
       "reason": null,
       "evidence": [
-        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ children: (\"\" | Element | undefined)[]; className: string; titel: string; style: CSSProperties; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.",
-        "next build: TS2322 Type '{ children: (\"\" | Element | undefined)[]; className: string; titel: string; style: CSSProperties; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'."
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ children: (\"\" | Element | undefined)[]; className: string; id: string; titel: string; style: CSSProperties; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.",
+        "next build: TS2322 Type '{ children: (\"\" | Element | undefined)[]; className: string; id: string; titel: string; style: CSSProperties; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'."
       ]
     },
     {
@@ -5810,6 +7133,164 @@
         "tsc --noEmit (VS Code TypeScript): TS2322 Type '\"plain\" | \"acent\"' is not assignable to type '\"plain\" | \"accent\"'.",
         "next build: TS2322 Type '\"plain\" | \"acent\"' is not assignable to type '\"plain\" | \"accent\"'."
       ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m51-list-key-missing",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "C",
+      "reason": null,
+      "evidence": [
+        "eslint (npm run lint): react/jsx-key Missing \"key\" prop for element in iterator"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m52-invalid-nesting",
+      "status": "ported",
+      "bucket": "runtime-error",
+      "cell": "R",
+      "reason": null,
+      "evidence": [
+        "error: In HTML, %s cannot be a descendant of <%s>.\nThis will cause a hydration error.%s <div> p \n\n  ...\n    <RenderFromTemplateContext>\n      <ScrollAndMaybeFocusHandler cacheNode={{rsc:{...}, ...}}>\n        <InnerScrollHandlerNew focusAndScrollRef={{scrollRef:null, ...}} cacheNode={{rsc:{...}, ....",
+        "error: pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
+        "error: In HTML, %s cannot be a descendant of <%s>.\nThis will cause a hydration error.%s <div> p \n\n  ...\n    <RenderFromTemplateContext>\n      <ScrollAndMaybeFocusHandler cacheNode={{rsc:{...}, ...}}>\n        <InnerScrollHandlerNew focusAndScrollRef={{scrollRef:null, ...}} cacheNode={{rsc:{...}, ....",
+        "error: pageerror: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.n...",
+        "error: In HTML, %s cannot be a descendant of <%s>.\nThis will cause a hydration error.%s <div> p \n\n  ...\n    <RenderFromTemplateContext>\n      <ScrollAndMaybeFocusHandler cacheNode={{rsc:{...}, ...}}>\n        <InnerScrollHandlerNew focusAndScrollRef={{scrollRef:null, ...}} cacheNode={{rsc:{...}, ...."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m53-image-alt",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2741 Property 'alt' is missing in type '{ src: string; width: number; height: number; }' but required in type '{ src: string | StaticImport; alt: string; width?: number | `${number}` | undefined; height?: number | `${number}` | undefined; fill?: boolean | unde...",
+        "eslint (npm run lint): jsx-a11y/alt-text Image elements must have an alt prop, either with meaningful text, or an empty string for decorative images.",
+        "next build: TS2741 Property 'alt' is missing in type '{ src: string; width: number; height: number; }' but required in type '{ src: string | StaticImport; alt: string; width?: number | `${number}` | undefined; height?: number | `${number}` | undefined; fill?: boolean | undefined; loader?: ImageLo..."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m54-aria-name",
+      "status": "ported",
+      "bucket": "static-warning",
+      "cell": "Cw",
+      "reason": null,
+      "evidence": [
+        "eslint (npm run lint): jsx-a11y/aria-props aria-expandd: This attribute is an invalid ARIA attribute. Did you mean to use aria-expanded?",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button",
+        "error: Invalid aria prop %s on <%s> tag. For details, see https://react.dev/link/invalid-aria-props `aria-expandd` button"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m55-aria-value",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '{ children: string; type: \"button\"; \"aria-expanded\": \"yes\" | \"no\"; onClick: () => void; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.",
+        "next build: TS2322 Type '{ children: string; type: \"button\"; \"aria-expanded\": \"yes\" | \"no\"; onClick: () => void; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m56-duplicate-attribute",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS17001 JSX elements cannot have multiple attributes with the same name.",
+        "eslint (npm run lint): react/jsx-no-duplicate-props No duplicate props allowed",
+        "next build: TS17001 JSX elements cannot have multiple attributes with the same name."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m57-duplicate-id",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m58-loop-non-list",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2339 Property 'filter' does not exist on type 'number'.",
+        "tsc --noEmit (VS Code TypeScript): TS7006 Parameter 'project' implicitly has an 'any' type.",
+        "tsc --noEmit (VS Code TypeScript): TS7006 Parameter 'project' implicitly has an 'any' type.",
+        "next build: TS2339 Property 'filter' does not exist on type 'number'.",
+        "next build: TS7006 Parameter 'project' implicitly has an 'any' type."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m59-unknown-helper",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2551 Property 'lenght' does not exist on type 'Project[]'. Did you mean 'length'?",
+        "next build: TS2551 Property 'lenght' does not exist on type 'Project[]'. Did you mean 'length'?"
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m60-handler-arguments",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type '(reason: string) => void' is not assignable to type '() => void'.",
+        "next build: TS2322 Type '(reason: string) => void' is not assignable to type '() => void'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m61-route-param-type",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
+    },
+    {
+      "framework": "next",
+      "mistake": "m62-boolean-attribute-string",
+      "status": "ported",
+      "bucket": "static-error",
+      "cell": "E",
+      "reason": null,
+      "evidence": [
+        "tsc --noEmit (VS Code TypeScript): TS2322 Type 'string' is not assignable to type 'boolean | undefined'.",
+        "next build: TS2322 Type 'string' is not assignable to type 'boolean | undefined'."
+      ]
+    },
+    {
+      "framework": "next",
+      "mistake": "m63-binding-on-non-input",
+      "status": "ported",
+      "bucket": "missed",
+      "cell": "M",
+      "reason": null,
+      "evidence": []
     }
   ]
 }
