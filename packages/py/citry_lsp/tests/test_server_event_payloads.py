@@ -236,3 +236,16 @@ def test_a_closed_data_class_file_with_windows_line_endings_keeps_the_rules_on(t
         "citry.browser.missing-server-event-field",
         "citry.browser.unknown-server-event-field",
     ]
+
+
+def test_a_file_saved_with_windows_line_endings_matches_a_buffer_with_unix_ones(tmp_path):
+    # Windows tools write `\r\n`; an editor buffer may hold `\n`. Only the
+    # line endings differ, so the handler is not edited and the rules stay on.
+    markup = """<button @c-click="save({amont: 1})">a</button>"""
+    app_file, source = _app(tmp_path, markup)
+    app_file.write_bytes(source.replace("\n", "\r\n").encode())
+
+    assert [code for code, _covered, _message in _findings(tmp_path, app_file, source)] == [
+        "citry.browser.missing-server-event-field",
+        "citry.browser.unknown-server-event-field",
+    ]

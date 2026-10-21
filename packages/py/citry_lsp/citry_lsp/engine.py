@@ -11077,10 +11077,20 @@ def _definition_unchanged(
     saved = _saved_python_source(source_file)
     if current is None or saved is None:
         return False
+    # Line endings say nothing about the code: Windows tools write a file
+    # with `\r\n` while an editor buffer may hold `\n`, and that alone must
+    # not make the handler look edited and switch its checks off.
+    current = _unify_line_endings(current)
+    saved = _unify_line_endings(saved)
     if current == saved:
         return True
     found = _python_definition_source(current, qualname)
     return found is not None and found == _python_definition_source(saved, qualname)
+
+
+def _unify_line_endings(text: str) -> str:
+    """Return the text with every `\r\n` and lone `\r` written as `\n`."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _saved_python_source(source_file: Path) -> str | None:
@@ -11100,8 +11110,8 @@ def _saved_python_text(resolved: Path, _mtime_ns: int, _size: int) -> str | None
     try:
         raw = resolved.read_bytes()
         encoding, _lines = tokenize.detect_encoding(io.BytesIO(raw).readline)
-        # Decode without newline translation: an editor buffer keeps the
-        # file's `\r\n` line endings, and the two texts must compare equal.
+        # Decode without newline translation, so the text keeps the file's
+        # own line endings; callers compare it with _unify_line_endings.
         return raw.decode(encoding)
     except (OSError, SyntaxError, UnicodeError):
         return None
@@ -11138,7 +11148,12 @@ def _any_unsaved_python(open_documents: Mapping[str, DocumentState]) -> bool:
         if open_document.language_id != "python":
             continue
         path = file_uri_path(open_document.uri)
-        if path is None or _saved_python_source(path) != open_document.source:
+        if path is None:
+            return True
+        saved = _saved_python_source(path)
+        # As in _definition_unchanged, a file that differs only in its line
+        # endings is not an unsaved edit.
+        if saved is None or _unify_line_endings(saved) != _unify_line_endings(open_document.source):
             return True
     return False
 
