@@ -11089,7 +11089,7 @@ def _definition_unchanged(
 
 
 def _unify_line_endings(text: str) -> str:
-    """Return the text with every `\r\n` and lone `\r` written as `\n`."""
+    """Return the text with Windows (CR LF) and old Mac (CR) line endings written as LF."""
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
