@@ -26,7 +26,7 @@
 //! nodes (named slots before the default slot, a chain's branches before its
 //! placeholder), not source order; consumers look records up by position.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use oxc_allocator::Allocator as OxcAllocator;
 use oxc_ast::ast::{
@@ -36,16 +36,12 @@ use oxc_ast::ast::{
 use oxc_parser::Parser;
 use oxc_span::SourceType;
 use serde::Serialize;
-use vize_atelier_core::{
-    DirectiveNode, ElementNode, ExpressionNode, PropNode, TemplateChildNode,
-    options::{ParserOptions, TemplateSyntaxMode},
-    parser::parse_with_options_and_template_syntax,
-};
+use vize_atelier_core::{DirectiveNode, ElementNode, ExpressionNode, PropNode, TemplateChildNode};
 use vize_atelier_dom::Allocator;
 
 use crate::{
     DynamicElement, Edit, ElementMetadata, UnchangedSourceSpan, hash, map_action_to_original,
-    unchanged_source_spans,
+    parse_generated_template, unchanged_source_spans,
 };
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -200,14 +196,16 @@ fn build(
 
     // Parse the exact source the render function was compiled from with the
     // same parser settings as the element walk, so spans line up with the
-    // transformed template bytes.
+    // transformed template bytes. The walk read each component call it
+    // matched as a Vue component, so this parse must read the same tags that
+    // way to build the same tree.
+    let component_call_tags = elements
+        .iter()
+        .filter(|element| element.local_call.is_some())
+        .map(|element| element.tag.clone())
+        .collect::<HashSet<_>>();
     let allocator = Allocator::new();
-    let (root, _) = parse_with_options_and_template_syntax(
-        &allocator,
-        transformed,
-        ParserOptions::default(),
-        TemplateSyntaxMode::Standard,
-    );
+    let (root, _) = parse_generated_template(&allocator, transformed, &component_call_tags);
     let aliases = dynamic_elements
         .iter()
         .map(|item| (item.alias.as_str(), item.tag.as_str()))
