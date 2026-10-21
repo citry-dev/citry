@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = 'board/board.py', contains = 'projects.lenght()' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'BoardState.projects.length()'
+new = 'BoardState.projects.lenght()'

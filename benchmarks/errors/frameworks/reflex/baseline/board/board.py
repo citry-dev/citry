@@ -132,6 +132,8 @@ def index() -> rx.Component:
             rx.text("Owned by ", BoardState.owner.name),
             rx.image(src="/avatar.svg", alt=BoardState.owner.name, width="32px", height="32px"),
             rx.text("Owner: ", BoardState.owner.name),
+            # Reflex's length helper on a list var, which the browser works out.
+            rx.text("Projects: ", BoardState.projects.length()),
             rx.text("API: ", BoardState.api_base),
             rx.box(rx.foreach(BoardState.visible_projects, project_card)),
             counter(),
@@ -139,6 +141,7 @@ def index() -> rx.Component:
             search(),
             rx.box(rx.link("About", href="/about"), " ", rx.link("Project 1", href="/projects/1")),
             class_name="board",
+            id="board",
             title="Board",
         ),
         # The server sets the heading's color, which app.css reads.

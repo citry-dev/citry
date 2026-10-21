@@ -1,0 +1,4 @@
+status = "not-applicable"
+reason = """
+Reflex gives every item `rx.foreach` renders a React key of its own, the item's position, when the page gives none, and Reflex's docs write `rx.foreach` without keys, as the clean app does. So the clean app already has the form this mistake describes, and there is no key to leave out. The cards keep no state in the browser either: each card's text comes from the state the backend sends, so hiding the first card shows the right cards whichever key React matches them by.
+"""

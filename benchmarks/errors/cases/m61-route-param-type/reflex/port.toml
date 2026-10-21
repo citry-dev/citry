@@ -1,0 +1,10 @@
+# Reflex's route parts are always text, so the project page's route cannot
+# declare a numeric id; the link passes a project's name where the page
+# expects its number.
+status = "ported"
+mistake = { file = 'board/board.py', contains = '"/projects/alpha"' }
+
+[[edits]]
+file = 'board/board.py'
+old = 'href="/projects/1"'
+new = 'href="/projects/alpha"'
