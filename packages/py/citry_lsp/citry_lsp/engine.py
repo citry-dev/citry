@@ -569,19 +569,22 @@ class DocumentState:
         self._analysis_revision += 1
         self.source = source
         self.version = version
+        # The loaded app also names this file's components whose base class
+        # comes from another module, which reading the file alone misses.
+        app_components = _app_components(project, self.uri) if self.language_id == "python" else None
         discovery: tuple[TemplateRegion, ...]
         if self.language_id == "citry-html" or (
             self.language_id == "html" and project.catalog is not None and project.catalog.owns_template_uri(self.uri)
         ):
             discovery = (standalone_region(source),)
         elif self.language_id == "python":
-            discovery = discover_python_regions(source).regions
+            discovery = discover_python_regions(source, app_components=app_components).regions
         else:
             discovery = ()
         if self.language_id == "css" and project.catalog is not None and project.catalog.asset_owners(self.uri, "css"):
             self.css_regions = (standalone_css_region(source),)
         elif self.language_id == "python":
-            self.css_regions = discover_python_css_regions(source)
+            self.css_regions = discover_python_css_regions(source, app_components=app_components)
         else:
             self.css_regions = ()
         if (
@@ -591,7 +594,7 @@ class DocumentState:
         ):
             self.js_regions = (standalone_js_region(source),)
         elif self.language_id == "python":
-            self.js_regions = discover_python_js_regions(source)
+            self.js_regions = discover_python_js_regions(source, app_components=app_components)
         else:
             self.js_regions = ()
         self.messages_regions = discover_python_messages_regions(source) if self.language_id == "python" else ()
@@ -605,7 +608,7 @@ class DocumentState:
                 parsed[region.key] = result
                 self.last_good[region.key] = result
         if self.language_id == "python":
-            diagnostics.extend(_untraced_template_diagnostics(self.uri, source, project))
+            diagnostics.extend(_untraced_template_diagnostics(self.uri, source, project, app_components))
         self.parsed = parsed
         self.diagnostics = tuple(diagnostics)
 
@@ -629,13 +632,56 @@ class DocumentState:
         return js_region_at_position(self.js_regions, _citry_position(position))
 
 
-def _untraced_template_diagnostics(uri: str, source: str, project: ProjectState) -> list[types.Diagnostic]:
+def _app_components(project: ProjectState, uri: str) -> dict[str, bool] | None:
+    """
+    Name the classes in one Python file that the loaded app registers as components.
+
+    Reading one file proves a class is a component only when its base is
+    Citry's own class or a component in the same file. The app records which
+    class body declares each inline template, JavaScript, and CSS, so a
+    component whose base class comes from another module is found through
+    those records. Each name maps to whether every component that renders
+    that class's template uses Citry's own template language, so a template
+    in another language is never parsed as Citry.
+
+    Returns ``None`` without a loaded app, so discovery reads the file alone.
+    """
+    catalog = project.catalog
+    if catalog is None:
+        return None
+    names: dict[str, None] = {}
+    native: dict[str, bool] = {}
+    for kind, qualname, component in catalog.inline_assets_in(uri):
+        # Discovery reads only module-level classes, so a nested class
+        # cannot be matched by name.
+        if "." in qualname:
+            continue
+        names[qualname] = None
+        if kind != "template":
+            continue
+        # A worker that cannot tell the template language gives no answer,
+        # which keeps the template unchecked rather than guessed.
+        answer = project.source_analysis.native_template(component) if project.source_analysis is not None else None
+        native[qualname] = native.get(qualname, True) and answer is True
+    # A class that the app shows only as the owner of JavaScript or CSS has no
+    # component that renders its template, so its template stays skipped.
+    return {name: native.get(name, False) for name in names}
+
+
+def _untraced_template_diagnostics(
+    uri: str,
+    source: str,
+    project: ProjectState,
+    app_components: Mapping[str, bool] | None = None,
+) -> list[types.Diagnostic]:
     """
     Point out each class whose template the editor does not check, because its base class comes from another module.
 
     The editor finds templates by reading one file at a time, so it cannot
-    tell that such a class is a component. Nothing is wrong with the code,
-    so this is information, not a warning.
+    tell that such a class is a component. Once the app is loaded, the
+    classes in ``app_components`` are found and not reported; a class added
+    or renamed since the app loaded is still reported until it reloads.
+    Nothing is wrong with the code, so this is information, not a warning.
     """
     path = file_uri_path(uri)
     workspace = project.status.workspace
@@ -650,6 +696,7 @@ def _untraced_template_diagnostics(uri: str, source: str, project: ProjectState)
     for untraced in discover_untraced_component_templates(
         source,
         is_project_module=lambda module, level: project_module_exists(module, level, file=file, root=root),
+        app_components=app_components,
     ):
         line = lines[untraced.line - 1] if untraced.line <= len(lines) else ""
         diagnostics.append(
@@ -2716,8 +2763,13 @@ def _component_template_ast(
         if python_source is None:
             return None
         owner_name = asset.owner_qualname.rsplit(".", 1)[-1]
+        # Find the owner the way the open file finds it, including a class
+        # whose base class comes from another module.
+        app_components = _app_components(project, asset.owner_file.resolve().as_uri())
         matches = [
-            region for region in discover_python_regions(python_source).regions if region.component_name == owner_name
+            region
+            for region in discover_python_regions(python_source, app_components=app_components).regions
+            if region.component_name == owner_name
         ]
         if len(matches) != 1:
             return None
@@ -8338,7 +8390,14 @@ def _component_js_asset_source(
     if source is None:
         return None
     owner_name = asset.owner_qualname.rsplit(".", 1)[-1]
-    matches = [region for region in discover_python_js_regions(source) if region.component_name == owner_name]
+    # Find the owner the way the open file finds it, including a class whose
+    # base class comes from another module.
+    app_components = _app_components(project, asset.owner_file.resolve().as_uri())
+    matches = [
+        region
+        for region in discover_python_js_regions(source, app_components=app_components)
+        if region.component_name == owner_name
+    ]
     if len(matches) != 1:
         return None
     source_map = matches[0].source_map

@@ -27,9 +27,11 @@ All notable changes to `citry-lsp` are documented here.
 - The editor and `citry check --types` warn about a `js_data()` value that
   ty types as a standard type JSON cannot carry, such as a
   `PurePosixPath`, a `datetime`, or a set.
-- The editor marks a class whose template it skips, because the
-  component's base class comes from another module of your project, with
-  an information message.
+- Once it has loaded your application, the editor checks the template,
+  JavaScript, and CSS of a component whose base class comes from another
+  module of your project, and `citry check --types` type-checks them.
+  Without the application, or for a class added or renamed since it
+  loaded, the editor marks the class with an information message.
 
 ### Changed
 

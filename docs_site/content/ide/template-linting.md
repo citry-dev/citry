@@ -1004,10 +1004,8 @@ extension's template syntax produces, so they may report a value that
 
 ### Imported base classes { #templates-the-check-cannot-find }
 
-`citry check --static` and the editor read one file at a time. When a
-component extends a class from another module of your project, they
-cannot tell from the file that the class is a component, so they skip its
-template:
+When a component extends a class from another module of your project,
+the file alone does not show that the class is a component:
 
 ```citry
 from app.base import BaseCard
@@ -1019,11 +1017,22 @@ class Card(BaseCard):
     """
 ```
 
+`citry --app ... check`, with or without `--types`, and an editor that has
+loaded your application find `Card` among your registered components and
+check its template.
+
+Without your application, Citry skips the template.
 `citry check --static` lists each skipped template as a note, and the
 editor marks the class name with an information message
 ([`citry.check.template-not-checked`](/ide/diagnostics/#citry.check.template-not-checked)).
-Nothing is wrong with the code. `citry --app ... check` loads your
-application and checks the template.
+Nothing is wrong with the code. To have the editor check the template, give
+it your application, for example with the `citry.app` setting in
+[VS Code](/ide/vscode/).
+
+The editor finds these classes by the names they had when it loaded your
+application. A class you add or rename keeps the message until the editor
+loads your application again, which VS Code does when you save a Python
+file.
 
 ### Shared templates
 

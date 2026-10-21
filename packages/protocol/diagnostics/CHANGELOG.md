@@ -54,7 +54,8 @@
   and `citry.css.misspelled-variable`, a warning by default.
 - Added `citry.check.template-not-checked`, an information diagnostic for a
   class whose template `citry check --static` and the language server skip
-  because its base class comes from another module.
+  because its base class comes from another module and Citry has not
+  loaded the application or does not find the class in it.
 - `citry.browser.incompatible-component-prop` also covers a string for a
   Boolean prop and both results of a condition whose results are literals.
 - `citry.js-data.unsupported-type` also covers a module constant that

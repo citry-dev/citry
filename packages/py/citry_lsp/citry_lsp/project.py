@@ -383,6 +383,7 @@ class SourceAnalysisIndex:
         "_js_data",
         "_js_schema",
         "_kwargs_classes",
+        "_native_template",
         "_state",
         "_state_resolution",
         "_template_asset",
@@ -410,6 +411,7 @@ class SourceAnalysisIndex:
         js_schema: dict[str, tuple[SourceClassRecord, ...] | None] = {}
         template_lint: dict[str, dict[str, SourceLintRecord]] = {}
         kwargs_classes: dict[str, KwargsWireClasses] = {}
+        native_template: dict[str, bool | None] = {}
         for raw_component in raw_components:
             (
                 definition_id,
@@ -440,6 +442,7 @@ class SourceAnalysisIndex:
             js_schema[definition_id] = js_schema_chain
             template_lint[definition_id] = lint_variables
             kwargs_classes[definition_id] = wire_classes
+            native_template[definition_id] = _source_native_template(raw_component, definition_id)
         expected = {component.definition_id for component in catalog.components}
         if set(template_data) != expected:
             raise ValueError("source analysis definition ids do not match the component catalog")
@@ -455,6 +458,7 @@ class SourceAnalysisIndex:
         self._js_schema = js_schema
         self._template_lint = template_lint
         self._kwargs_classes = kwargs_classes
+        self._native_template = native_template
 
     def template_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
         """Return copied provenance for one exact catalog component."""
@@ -504,6 +508,14 @@ class SourceAnalysisIndex:
         """Return a direct lint-variable mapping for one exact component."""
         return self._template_lint.get(component.definition_id, {}).get(name)
 
+    def native_template(self, component: ComponentRecord) -> bool | None:
+        """
+        Return whether the component renders its template as Citry's own template language.
+
+        ``None`` means the worker could not tell, or did not say.
+        """
+        return self._native_template.get(component.definition_id)
+
 
 def _source_component(
     value: object,
@@ -522,7 +534,7 @@ def _source_component(
     dict[str, SourceLintRecord],
     KwargsWireClasses,
 ]:
-    if type(value) is not dict or set(value) - {"js_schema", "kwargs_classes"} != {
+    if type(value) is not dict or set(value) - {"js_schema", "kwargs_classes", "native_template"} != {
         "definition_id",
         "css_data",
         "css_asset",
@@ -550,6 +562,16 @@ def _source_component(
         _source_lint_variables(value.get("template_lint"), definition_id),
         KwargsWireClasses.from_dict(value["kwargs_classes"]) if "kwargs_classes" in value else KwargsWireClasses(),
     )
+
+
+def _source_native_template(value: object, definition_id: str) -> bool | None:
+    """Read the worker's answer to whether a component's template is Citry's own template language."""
+    # A worker that does not send the key leaves the answer unknown, so the
+    # editor keeps skipping templates it cannot place.
+    native = value.get("native_template") if type(value) is dict else None
+    if native is not None and type(native) is not bool:
+        raise ValueError(f"source analysis native_template for {definition_id!r} must be a boolean or null")
+    return native
 
 
 def _source_event_info(

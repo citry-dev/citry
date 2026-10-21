@@ -3709,6 +3709,7 @@ def discover_untraced_component_templates(
     source: str,
     *,
     is_project_module: Callable[[str, int], bool],
+    app_components: Mapping[str, bool] | None = None,
 ) -> tuple[UntracedComponentTemplate, ...]:
     """
     Find classes that set a literal template but whose component base Citry cannot see from this file.
@@ -3726,6 +3727,10 @@ def discover_untraced_component_templates(
         is_project_module: Return whether ``from <module> import ...`` with
             the given module name and number of leading dots imports a
             module of the project.
+        app_components: The classes a loaded application registers as
+            components, as passed to
+            [`discover_python_templates`][citry.discover_python_templates].
+            Discovery finds their templates, so they are not reported.
 
     Returns:
         The classes in source order. Empty when the source does not parse.
@@ -3735,7 +3740,10 @@ def discover_untraced_component_templates(
         module = ast.parse(source)
     except (SyntaxError, ValueError):
         return ()
-    proven = {declaration.name for declaration, _language in _ast_component_declarations(module)}
+    proven = {
+        declaration.name
+        for declaration, _language in _ast_component_declarations(module, app_components=app_components)
+    }
     imported: dict[str, tuple[str, int]] = {}
     classes: dict[str, ast.ClassDef] = {}
     found: list[UntracedComponentTemplate] = []
@@ -3841,6 +3849,7 @@ def discover_python_templates(
     source: str,
     *,
     recover_incomplete: bool = False,
+    app_components: Mapping[str, bool] | None = None,
 ) -> PythonTemplateDiscovery:
     """
     Discover direct literal templates on provable Citry component classes.
@@ -3848,6 +3857,34 @@ def discover_python_templates(
     Normal batch tooling leaves ``recover_incomplete`` false and receives the
     original Python ``SyntaxError``. An interactive editor may opt into the
     narrow recovery of one unfinished direct triple-quoted template literal.
+
+    Reading one file proves a class is a component only when it extends
+    ``Component`` or ``LibraryComponent`` from ``citry``, or a component
+    class defined earlier in the same file. A tool that has loaded the
+    application can name more classes in ``app_components``.
+
+    Args:
+        source: Complete Python module source.
+        recover_incomplete: Return the template regions of a module that
+            does not parse yet instead of raising ``SyntaxError``.
+        app_components: Module-level classes in this file that the loaded
+            application registers as components, by class name. Each maps
+            to whether the application renders that class's template as
+            Citry's own template language (its ``template_lang`` is
+            ``None``). A listed class counts as a component even when its
+            base class comes from another module; its template is found
+            only when the value is ``True``. A class the file already
+            proves is read the same way with or without this. Leave it
+            out when no application is loaded.
+
+    Returns:
+        The template regions, the notices for templates that were skipped,
+        and whether the module parsed.
+
+    Raises:
+        SyntaxError: If ``source`` does not parse and ``recover_incomplete``
+            is false.
+
     """
     try:
         module = ast.parse(source)
@@ -3859,7 +3896,7 @@ def discover_python_templates(
             (),
             valid_python=False,
         )
-    regions, notices = _ast_template_regions(source, module)
+    regions, notices = _ast_template_regions(source, module, app_components=app_components)
     return PythonTemplateDiscovery(tuple(regions), tuple(notices), valid_python=True)
 
 
@@ -4044,7 +4081,11 @@ class PythonComponentAssetFormatResult:
     providers: tuple[str, ...]
 
 
-def discover_python_component_assets(source: str) -> PythonComponentAssetDiscovery:
+def discover_python_component_assets(
+    source: str,
+    *,
+    app_components: Mapping[str, bool] | None = None,
+) -> PythonComponentAssetDiscovery:
     """
     Discover direct literal and static file assets on proven components.
 
@@ -4054,6 +4095,11 @@ def discover_python_component_assets(source: str) -> PythonComponentAssetDiscove
 
     Args:
         source: Complete Python module source.
+        app_components: The classes a loaded application registers as
+            components, as passed to
+            [`discover_python_templates`][citry.discover_python_templates].
+            Their ``js`` and ``css`` are found whatever the value; their
+            template only when the value is ``True``.
 
     Returns:
         Definite inline regions, file declarations, and explicit notices.
@@ -4067,7 +4113,7 @@ def discover_python_component_assets(source: str) -> PythonComponentAssetDiscove
         msg = "source must be a str"
         raise TypeError(msg)
     module = ast.parse(source)
-    regions, files, notices = _ast_component_asset_discovery(source, module)
+    regions, files, notices = _ast_component_asset_discovery(source, module, app_components=app_components)
     return PythonComponentAssetDiscovery(
         tuple(regions),
         tuple(files),
@@ -4999,12 +5045,13 @@ def _ast_template_regions(
     module: ast.Module,
     *,
     rewrite_notices: bool = False,
+    app_components: Mapping[str, bool] | None = None,
 ) -> tuple[list[PythonTemplateRegion], list[PythonTemplateNotice]]:
     regions: list[PythonTemplateRegion] = []
     notices: list[PythonTemplateNotice] = []
 
     parents: dict[ast.ClassDef, object] = {}
-    declarations = _ast_component_declarations(module, parents)
+    declarations = _ast_component_declarations(module, parents, app_components=app_components)
     owner_lint = _template_owner_lint(declarations, parents)
     for statement, language in declarations:
         node, notice = _literal_template_node(
@@ -5189,6 +5236,7 @@ def _ast_component_asset_discovery(
     module: ast.Module,
     *,
     rewrite_notices: bool = False,
+    app_components: Mapping[str, bool] | None = None,
 ) -> tuple[
     list[PythonComponentAssetRegion],
     list[PythonComponentAssetFile],
@@ -5197,7 +5245,7 @@ def _ast_component_asset_discovery(
     regions: list[PythonComponentAssetRegion] = []
     files: list[PythonComponentAssetFile] = []
     notices: list[PythonComponentAssetNotice] = []
-    for statement, language in _ast_component_declarations(module):
+    for statement, language in _ast_component_declarations(module, app_components=app_components):
         direct, nested_bindings = _direct_component_asset_values(statement)
         for kind, inline_name, file_name in _COMPONENT_ASSET_ATTRIBUTES:
             inline_node, file_path, notice = _literal_component_asset_declaration(
@@ -5348,13 +5396,22 @@ def _discover_python_template_files(source: str) -> _PythonTemplateFileDiscovery
 def _ast_component_declarations(
     module: ast.Module,
     parents: dict[ast.ClassDef, object] | None = None,
+    *,
+    app_components: Mapping[str, bool] | None = None,
 ) -> list[tuple[ast.ClassDef, object]]:
     """
     Track definite Citry component classes and their statically known template language.
 
     When ``parents`` is given, it receives each class's one same-module
     component base, ``None`` for Citry's own base, or
-    ``_UNKNOWN_COMPONENT_BASE`` for a class with more than one base.
+    ``_UNKNOWN_COMPONENT_BASE`` for a class with more than one base or a
+    base the file does not show.
+
+    ``app_components`` names module-level classes that a loaded application
+    registers as components, each mapped to whether its template is
+    Citry's own template language. A listed class whose base this file
+    cannot trace is accepted too, so a component whose base class comes
+    from another module is still found.
     """
     class_nodes: dict[str, ast.ClassDef] = {}
     component_symbols: set[str] = set()
@@ -5396,16 +5453,31 @@ def _ast_component_declarations(
                 for base in statement.bases
                 if _is_template_component_base(base, component_symbols, citry_modules, component_classes)
             ]
-            inherited_language = (
-                _base_template_language(component_bases[0], component_symbols, component_languages)
-                if len(statement.bases) == 1 and len(component_bases) == 1
-                else _UNKNOWN_TEMPLATE_LANGUAGE
-            )
+            # A class this file cannot trace to a component base is still a
+            # component when the loaded application registers it, for
+            # example when its base class comes from another module. A
+            # traceable class keeps the rules below, so the app never
+            # changes how a class this file already proves is read.
+            accepted_by_app = False
+            inherited_language: object
+            if not component_bases and app_components is not None and statement.name in app_components:
+                accepted_by_app = True
+                # The app read the template language through the class's
+                # bases; anything it could not prove native skips the template.
+                inherited_language = None if app_components[statement.name] else _UNKNOWN_TEMPLATE_LANGUAGE
+            else:
+                inherited_language = (
+                    _base_template_language(component_bases[0], component_symbols, component_languages)
+                    if len(statement.bases) == 1 and len(component_bases) == 1
+                    else _UNKNOWN_TEMPLATE_LANGUAGE
+                )
             # Read the base before this statement rebinds its own name. A
             # name still in component_classes is bound to the class
             # statement recorded for it, because any rebinding drops it.
             parent: object = _UNKNOWN_COMPONENT_BASE
-            if len(statement.bases) == 1:
+            # A base from another module may set a `Lint` this file does not
+            # show, so an app-accepted class keeps the unknown parent.
+            if len(statement.bases) == 1 and not accepted_by_app:
                 base = statement.bases[0]
                 parent = class_nodes[base.id] if isinstance(base, ast.Name) and base.id in component_classes else None
             _discard_template_binding(
@@ -5415,7 +5487,7 @@ def _ast_component_declarations(
                 component_classes,
                 component_languages,
             )
-            if component_bases and not statement.decorator_list:
+            if (component_bases or accepted_by_app) and not statement.decorator_list:
                 class_nodes[statement.name] = statement
                 if parents is not None:
                     parents[statement] = parent

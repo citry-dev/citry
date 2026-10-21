@@ -698,7 +698,7 @@ def test_static_check_notes_a_template_whose_base_comes_from_the_project(tmp_pat
     assert report.findings == ()
     assert report.notes == (
         f"{package / 'card.py'}:5: Citry cannot tell from this file that Card is a component, because it extends"
-        " BaseCard, which comes from another module, so this template is checked only by citry check with your"
-        " application loaded. [citry.check.template-not-checked]",
+        " BaseCard, which comes from another module, so this template is checked only when Citry loads your"
+        " application and finds Card there. [citry.check.template-not-checked]",
     )
     assert report.exit_code == 0

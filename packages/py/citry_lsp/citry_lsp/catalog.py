@@ -132,6 +132,7 @@ class CatalogIndex:
     __slots__ = (
         "_asset_owners",
         "_by_name",
+        "_inline_owners",
         "citry_version",
         "components",
         "engine_id",
@@ -194,6 +195,17 @@ class CatalogIndex:
                 if asset.resolved_path is None:
                     continue
                 asset_owners.setdefault((kind, asset.resolved_path.resolve()), []).append(component)
+        # Index inline declarations by the file that holds them once, so the
+        # editor can list a file's declaring classes on every keystroke.
+        inline_owners: dict[Path, list[tuple[str, str, ComponentRecord]]] = {}
+        for component in components:
+            for kind in ("template", "js", "css"):
+                asset = getattr(component.assets, kind)
+                if asset.kind != "inline" or asset.owner_file is None or asset.owner_qualname is None:
+                    continue
+                inline_owners.setdefault(asset.owner_file.resolve(), []).append(
+                    (kind, asset.owner_qualname, component)
+                )
 
         self.schema_version = schema_version
         self.citry_version = citry_version
@@ -202,6 +214,7 @@ class CatalogIndex:
         self.components = components
         self._by_name = by_name
         self._asset_owners = {key: tuple(value) for key, value in asset_owners.items()}
+        self._inline_owners = {key: tuple(value) for key, value in inline_owners.items()}
 
     def get(self, tag_name: str) -> ComponentRecord | None:
         """Resolve a bare registered name, with tag spelling as a fallback."""
@@ -251,6 +264,20 @@ class CatalogIndex:
             and asset.owner_file is not None
             and asset.owner_file.resolve() == canonical
         )
+
+    def inline_assets_in(self, uri: str) -> tuple[tuple[str, str, ComponentRecord], ...]:
+        """
+        Return every inline asset the loaded app declares in the Python file at ``uri``.
+
+        Each entry is the asset kind (``"template"``, ``"js"``, or ``"css"``),
+        the qualified name of the class whose body declares it, and one
+        component that uses it. A class that declares an asset several
+        components use appears once per component.
+        """
+        path = _file_uri_path(uri)
+        if path is None:
+            return ()
+        return self._inline_owners.get(path.resolve(), ())
 
     def owns_template_uri(self, uri: str) -> bool:
         """Return whether a file URI is any resolved registered template asset."""

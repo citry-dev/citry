@@ -166,6 +166,7 @@ def _source_analysis(
                     else None
                 },
                 "template_asset": {"resolution_chain": template_asset_chain},
+                "native_template": _native_template(selected_class) if selected_class else None,
                 "css_asset": {"resolution_chain": css_asset_chain},
                 "js_asset": {"resolution_chain": js_asset_chain},
                 "events": (
@@ -190,6 +191,27 @@ def _source_analysis(
             }
         )
     return {"version": _SOURCE_ANALYSIS_VERSION, "components": components}
+
+
+def _native_template(component_class: type) -> bool | None:
+    """
+    Return whether the component renders its template as Citry's own template language.
+
+    The editor reads a template from source only when this is true, because
+    a base class in another module may set ``template_lang`` to another
+    template language, which Citry's parser would reject. The value is read
+    from the class namespaces along the MRO, so no project code runs.
+    ``None`` means the MRO cannot be read.
+    """
+    mro = _static_class_mro(component_class)
+    if not mro:
+        return None
+    for candidate in mro:
+        namespace = _static_class_dict(candidate)
+        if "template_lang" in namespace:
+            return namespace["template_lang"] is None
+    # Citry's own classes do not set it, so an unset value is Citry's language.
+    return True
 
 
 def _kwargs_classes(component_class: type | None, *, with_classes: bool) -> dict[str, object]:

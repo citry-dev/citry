@@ -83,9 +83,20 @@ all known, a Pydantic data class, or arguments that are not literals.
 
 Some classes set a literal template but extend a class imported from
 another module of the project, so reading one file cannot prove they are
-components. `citry check --static` lists each as a note, and the editor
-marks it with an information diagnostic
-(`citry.check.template-not-checked`).
+components. Once the app worker has loaded the app, the editor reads the
+component records' `owner_file` and `owner_qualname` for each inline
+template, JavaScript, and CSS, and passes the module-level class names in
+the open file to discovery as `app_components`. Discovery then accepts
+those classes even though their base is not traceable, so their templates
+get the same checks as any other, and `citry check --types` gets them too
+through `project_check.py`. The worker also says, for each component,
+whether its effective `template_lang` is `None`; a template is read as
+Citry only when every component that renders it says so, because a base
+class in another module may set another template language. When the app
+fails to import, or a class was added or renamed after the app loaded,
+discovery does not accept it: `citry check --static` lists each such class
+as a note, and the editor marks it with an information diagnostic
+(`citry.check.template-not-checked`) until the app loads again.
 
 Steps below that describe Alpine attributes,
 magics, and scope record the earlier Alpine design; where they conflict with

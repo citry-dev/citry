@@ -761,6 +761,55 @@ class Greeting(Component):
 """
 
 
+# A component whose base class lives in another module of the project, so
+# only the loaded app shows that it is a component.
+_IMPORTED_BASE = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class AppComponent(Component):
+    citry = engine
+"""
+_IMPORTED_BASE_TITLE = '''from base import AppComponent
+class Title(AppComponent):
+    class TemplateData:
+        title: str
+    def template_data(self, kwargs, slots):
+        return {"title": "Board"}
+    template = """<h3>{{ title + 1 }}</h3>"""
+    js = """$component(() => { const count = 1; count.nope(); });"""
+'''
+
+
+def _imported_base_project(tmp_path: Path) -> ProjectState:
+    (tmp_path / "base.py").write_text(_IMPORTED_BASE, encoding="utf-8")
+    (tmp_path / "title.py").write_text(_IMPORTED_BASE_TITLE, encoding="utf-8")
+    (tmp_path / "app.py").write_text("from base import engine\nimport title\n", encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+    return project
+
+
+def test_check_project_python_types_reads_a_template_whose_base_comes_from_another_module(tmp_path):
+    project = _imported_base_project(tmp_path)
+
+    found = check_project_python_types(project, tmp_path)
+
+    assert [(item.path.name, item.diagnostic.code, item.diagnostic.range.start) for item in found] == [
+        ("title.py", "citry.python.unsupported-operator", types.Position(6, 25))
+    ]
+
+
+def test_check_project_types_reads_javascript_whose_base_comes_from_another_module(tmp_path):
+    command = _command()
+    project = _imported_base_project(tmp_path)
+
+    found = check_project_types(project, tmp_path, command)
+
+    assert [(item.path.name, item.diagnostic.code, item.diagnostic.range.start) for item in found] == [
+        ("title.py", "citry.typescript.ts2339", types.Position(7, 54))
+    ]
+
+
 def test_check_project_python_types_reports_findings_without_template_data(tmp_path):
     (tmp_path / "app.py").write_text(_NO_TEMPLATE_DATA_APP, encoding="utf-8")
     project = load_project(tmp_path, "app:engine")

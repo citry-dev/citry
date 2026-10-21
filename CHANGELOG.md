@@ -52,6 +52,10 @@
 - `citry check --static` now lists, as a note, each template it skips
   because the component's base class comes from another module of your
   project.
+- `discover_python_templates()` and `discover_python_component_assets()`
+  accept `app_components`, the classes a loaded application registers in
+  the file, so a tool can find the templates of components whose base
+  class comes from another module.
 
 ### Changed
 

@@ -555,17 +555,23 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                               '      <article>{{ title }}</article>\n'
                                                               '    """',
                                                     'title': 'A base class from another module'}],
-                                      'fix': 'Nothing is wrong with the code. Run citry check with your application '
-                                             'loaded, as in citry --app module:engine check, to check the template.',
+                                      'fix': 'Nothing is wrong with the code. To check the template, load your '
+                                             'application: run citry check with it, as in citry --app module:engine '
+                                             'check, and give the editor the same module:engine path, in the citry.app '
+                                             'setting in VS Code. For a class you added or renamed, the message stays '
+                                             'until the editor loads the application again, which VS Code does when '
+                                             'you save a Python file.',
                                       'messages': {'default': 'Citry cannot tell from this file that {component} is a '
                                                               'component, because it extends {base}, which comes from '
-                                                              'another module, so this template is checked only by '
-                                                              'citry check with your application loaded.'},
+                                                              'another module, so this template is checked only when '
+                                                              'Citry loads your application and finds {component} '
+                                                              'there.'},
                                       'parameters': {'base': 'The imported class it extends, as written.',
                                                      'component': 'The class name.'},
                                       'summary': 'A class sets a template, but it extends a class from another module '
-                                                 'of your project, so the editor and citry check --static cannot tell '
-                                                 'that it is a component and do not check its template.',
+                                                 'of your project, so Citry cannot tell from the file alone that it is '
+                                                 'a component. Its template is checked only when Citry loads your '
+                                                 'application and finds the class there.',
                                       'surfaces': ['check', 'lsp'],
                                       'title': 'Template checked only with the application',
                                       'when': 'A class in a Python file sets template to a string literal that '
@@ -573,9 +579,12 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'component, and it extends a class imported from a module of your '
                                               'project, directly or through a class defined in the same file. A class '
                                               'from an installed package does not count. citry check --static lists it '
-                                              'as a note, and the editor shows it as information on the class name. '
-                                              'citry check with your application loaded reads the component registry '
-                                              'and checks the template, so it does not report this.'},
+                                              'as a note. The editor shows it as information on the class name while '
+                                              'it has not loaded your application, and for a class added or renamed '
+                                              'since it loaded the application. citry check with your application '
+                                              'loaded, citry check --types, and an editor that has loaded the '
+                                              'application find the class in the component registry and check its '
+                                              'template, so they do not report it.'},
  'citry.check.template-value-invalid': {'code': 'citry.check.template-value-invalid',
                                         'constant': 'CHECK_TEMPLATE_VALUE_INVALID',
                                         'defaultSeverity': 'error',
