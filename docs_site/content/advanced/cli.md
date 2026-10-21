@@ -115,7 +115,9 @@ finding has an `origin`, `code`, `severity`, `message`, and `range`.
 When you cannot import the project, for example in a CI job without its
 dependencies, check template syntax and the lint rules that need no
 component data, such as
-[misspelled directives](/ide/template-linting/#find-misspelled-directives):
+[misspelled directives](/ide/template-linting/#find-misspelled-directives),
+[misspelled HTML names](/ide/template-linting/#find-misspelled-html-names),
+and [Vue compile errors](/ide/template-linting/#find-vue-compile-errors):
 
 ```bash
 citry check --static

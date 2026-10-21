@@ -24,4 +24,23 @@
   warning where no setting chooses its severity, such as
   `citry check --static` for a component whose `Lint` class does not set it.
 - Added `citry.template.misspelled-directive`, the configurable error for a
-  `c-*` attribute that looks like a misspelled Citry directive.
+  `c-*` attribute that looks like a misspelled Citry directive, or a `v-*`
+  attribute that looks like a misspelled Vue directive (message variant
+  `vue-directive`).
+- Added configurable diagnostics for template HTML:
+  `citry.template.misspelled-attribute`,
+  `citry.template.misspelled-element`,
+  `citry.template.unknown-aria-attribute`,
+  `citry.template.invalid-nesting`, and `citry.template.duplicate-id`,
+  all errors by default, and `citry.template.missing-image-alt`, a warning
+  by default.
+- Added configurable diagnostics for Vue code: `citry.vue.invalid-expression`
+  and `citry.browser.invalid-model-target`, errors by default, and
+  `citry.vue.misspelled-event`, a warning by default.
+- `citry.template.invalid-attribute-value` also covers a boolean attribute
+  with a value other than empty or its own name, with the message variant
+  `boolean`.
+- `citry.browser.undeclared-component-event` is configurable
+  (`configurableSeverity: true`), also covers plain lowercase listener
+  names that are not DOM events, and has the message variant `suggestion`
+  that names a declared event one typing slip away.

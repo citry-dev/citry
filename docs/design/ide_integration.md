@@ -26,8 +26,38 @@ attributes (`citry.template.alpine-attribute`,
 static HTML attribute value outside the keywords the HTML Standard allows
 (`citry.template.invalid-attribute-value`), and `rule_misspelled_directive`
 reports a `c-*` name that is not an HTML attribute of its element but looks
-like a misspelled directive, such as `c-iff`
-(`citry.template.misspelled-directive`). Steps below that describe Alpine attributes,
+like a misspelled directive, such as `c-iff`, or a `v-*` name one typing
+slip from a Vue directive, such as `v-iff`
+(`citry.template.misspelled-directive`).
+
+These rules read only the template's HTML, so they also run in
+`citry check --static` and in an editor that has not loaded the
+application:
+
+- `rule_misspelled_attribute` (`citry.template.misspelled-attribute`): a
+  misspelled attribute name.
+- `rule_misspelled_element` (`citry.template.misspelled-element`): a
+  misspelled tag.
+- `rule_unknown_aria_attribute` (`citry.template.unknown-aria-attribute`):
+  an `aria-*` name WAI-ARIA does not define.
+- `rule_invalid_nesting` (`citry.template.invalid-nesting`): a block
+  element inside `<p>`.
+- `rule_duplicate_id` (`citry.template.duplicate-id`): a literal `id` two
+  elements always render.
+- `rule_missing_image_alt` (`citry.template.missing-image-alt`): an
+  `<img>` without alt text.
+- `rule_invalid_model_target` (`citry.browser.invalid-model-target`):
+  `v-model` on an element that holds no value.
+- `rule_misspelled_event` (`citry.vue.misspelled-event`): a misspelled DOM
+  event in a listener.
+- `rule_invalid_vue_expression` (`citry.vue.invalid-expression`): a Vue
+  expression that is not valid JavaScript.
+
+`rule_undeclared_component_event` sets the severity of
+`citry.browser.undeclared-component-event`, which reads each child's
+`emits` and so needs the loaded application.
+
+Steps below that describe Alpine attributes,
 magics, and scope record the earlier Alpine design; where they conflict with
 the Vue runtime, [`vue.md`](vue.md) and the code win.
 

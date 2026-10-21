@@ -244,7 +244,7 @@ The schema, review policy, disclosure rules, publication lifecycle, and future
 weekly discovery process are defined in
 [`docs_community_packages.md`](design/docs_community_packages.md).
 
-### Refreshing the markup name and value tables
+### Refreshing the HTML tables
 
 Several lint rules check templates against tables in
 [`citry/_html_attribute_values.py`](../packages/py/citry/citry/_html_attribute_values.py):
@@ -263,9 +263,10 @@ Several lint rules check templates against tables in
   `citry.browser.undeclared-component-event` read the DOM event names.
 
 A script generates that module from published standards and Vue's type
-declarations, plus a few names and keywords the script lists by hand, such
-as the `<input type>` keywords and `wrap="off"`, which browsers accept
-outside the standard. To pick up names and keywords the sources have added
+declarations. The script also lists a few names and keywords by hand:
+closed keyword sets the standard describes only in words, such as the
+`<input type>` keywords, and values browsers accept outside the standard,
+such as `wrap="off"`. To pick up names and keywords the sources have added
 or removed, run:
 
 ```sh
