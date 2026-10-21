@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
-import tomllib
 from typing import TYPE_CHECKING
 
 import pytest
+import tomllib
 from citry_errors import cache, cli, parallel, report, work
 from citry_errors.config import BENCH_ROOT, REPO_ROOT, ConfigError, Framework, load_framework, load_frameworks
 from citry_errors.execute import StageOutput, run_stages
@@ -314,7 +315,7 @@ def _package_from_disk(toy: Toy, tmp_path: Path) -> tuple[Framework, Path]:
     (package / "pyproject.toml").write_text('[project]\nname = "my-pkg"\nversion = "1.0.0"\n')
     (package / "module.py").write_text("VALUE = 1\n")
     (package.parent / ".gitignore").write_text("build/\n")
-    subprocess.run(["git", "init", "-q", str(package.parent)], check=True)
+    subprocess.run(["git", "init", "-q", str(package.parent)], check=True)  # noqa: S607 - git and uv come from PATH, as in the developer's shell
     (toy.root / "frameworks" / "toy" / "baseline" / "pyproject.toml").write_text(
         '[project]\nname = "app"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = ["my-pkg"]\n\n'
         f'[tool.uv]\npackage = false\n\n[tool.uv.sources]\nmy-pkg = {{ path = "{package.as_posix()}" }}\n'
@@ -369,7 +370,7 @@ def test_setup_stops_when_the_lock_no_longer_matches_a_package_installed_from_di
     monkeypatch.setenv("UV_OFFLINE", "1")
     monkeypatch.setenv("UV_NO_CONFIG", "1")
     monkeypatch.setenv("UV_CACHE_DIR", str(tmp_path / "uv-cache"))
-    subprocess.run(["uv", "lock", "-q", "--directory", str(framework.baseline)], check=True)
+    subprocess.run(["uv", "lock", "-q", "--directory", str(framework.baseline)], check=True)  # noqa: S607
     # UV_FROZEN in the developer's shell must not switch the check off.
     monkeypatch.setenv("UV_FROZEN", "1")
     installed = tmp_path / "installed"
@@ -414,7 +415,7 @@ def test_setup_stops_when_an_override_no_longer_matches_a_pin_of_a_package_insta
     (package / "pyproject.toml").write_text(
         '[project]\nname = "my-pkg"\nversion = "1.0.0"\ndependencies = ["core==1.1.0"]\n'
     )
-    with pytest.raises(ConfigError, match="overrides core to 1.0.0, but my-pkg pins core==1.1.0"):
+    with pytest.raises(ConfigError, match=re.escape("overrides core to 1.0.0, but my-pkg pins core==1.1.0")):
         work._check_overrides(framework)
 
 
