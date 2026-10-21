@@ -65,6 +65,16 @@ def test_class_selectors_are_read_from_every_part_of_a_selector(css, classes):
         # Thousands of unclosed blocks do not exhaust Python's call stack.
         ("@media x {" * 5000 + ".a {}", {"a"}),
     ],
+    # Short ids: pytest puts a test's id in the PYTEST_CURRENT_TEST variable,
+    # and Windows rejects an environment variable over 32,767 characters.
+    ids=[
+        "unclosed-block",
+        "stray-closing-brace",
+        "unclosed-string",
+        "unclosed-comment",
+        "top-level-custom-property",
+        "deeply-nested-blocks",
+    ],
 )
 def test_malformed_css_is_read_as_far_as_a_browser_reads_it(css, classes):
     assert scan_css(css).classes == classes
