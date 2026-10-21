@@ -72,7 +72,9 @@ class ContactForm(Component):
 ```
 
 `@c-submit.prevent` collects the form's named controls and calls `submit`
-instead of letting the browser submit the form. The `name` attributes match
+instead of letting the browser submit the form. It collects them only when
+the binding names the handler alone: arguments you write, as in
+`submit({draft: true})`, are sent instead of the form's fields. The `name` attributes match
 the fields of `ContactIn`. Citry checks each value against its type before
 the handler runs. A value of the wrong type fails the call with an error for
 that field, and `submit` does not run.

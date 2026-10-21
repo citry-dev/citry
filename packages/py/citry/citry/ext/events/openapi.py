@@ -31,7 +31,7 @@ from enum import Enum
 from inspect import getdoc
 from pathlib import Path
 from types import UnionType
-from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, cast, get_args, get_origin, get_type_hints
 from uuid import UUID
 
 from citry._protocol.events import PROTOCOL, openapi_error_envelope_schema, openapi_error_schema
@@ -209,10 +209,23 @@ def _object_schema(schema_cls: type, registry: _SchemaRegistry) -> dict[str, Any
 
 def _enum_schema(enum_cls: type[Enum]) -> dict[str, Any]:
     """An Enum as a JSON Schema: its values, typed when they are all strings or all ints."""
-    values = [member.value for member in enum_cls]
+    return _values_schema([member.value for member in enum_cls])
+
+
+def _literal_schema(members: tuple[Any, ...]) -> dict[str, Any]:
+    """A ``Literal[...]`` annotation as a JSON Schema: the listed values, an Enum member by its value."""
+    # The validator accepts an Enum member's value from the wire, so the
+    # schema lists that value, the same way an Enum field documents.
+    return _values_schema([member.value if isinstance(member, Enum) else member for member in members])
+
+
+def _values_schema(values: list[Any]) -> dict[str, Any]:
+    """A fixed set of values as a JSON Schema, typed when they are all strings, all booleans, or all ints."""
     schema: dict[str, Any] = {}
     if all(isinstance(value, str) for value in values):
         schema["type"] = "string"
+    elif all(isinstance(value, bool) for value in values):
+        schema["type"] = "boolean"
     elif all(isinstance(value, int) and not isinstance(value, bool) for value in values):
         schema["type"] = "integer"
     schema["enum"] = values
@@ -247,6 +260,8 @@ def _annotation_to_schema(annotation: Any, registry: _SchemaRegistry) -> dict[st
         return {"anyOf": [_annotation_to_schema(member, registry) for member in get_args(annotation)]}
     if origin in (list, set, tuple, dict, Mapping):
         return _container_schema(annotation, origin, registry)
+    if origin is Literal:
+        return _literal_schema(get_args(annotation))
     if origin is not None:
         return {}
 

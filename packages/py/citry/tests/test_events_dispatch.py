@@ -21,6 +21,7 @@ import re
 from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import pytest
 
@@ -816,6 +817,31 @@ class TestErrors:
             "message": "The args for event 'rename' on component 'Counter' did not validate.",
             "fieldErrors": {"name": "This field is required."},
         }
+
+    def test_a_literal_data_field_reaches_the_handler(self):
+        c = _citry()
+        seen: list[str] = []
+
+        class SortIn:
+            order: Literal["asc", "desc"]
+
+        class Table(Component):
+            citry = c
+
+            class Events:
+                def sort(self, data: SortIn):
+                    seen.append(data.order)
+
+            template = """
+              <button @c-click="sort({order: 'asc'})">Sort</button>
+            """
+
+        accepted = _dispatch(c, {"componentClassId": Table.class_id, "handlerName": "sort", "args": {"order": "desc"}})
+        rejected = _dispatch(c, {"componentClassId": Table.class_id, "handlerName": "sort", "args": {"order": "up"}})
+
+        assert "error" not in accepted["results"][0]
+        assert seen == ["desc"]
+        assert rejected["results"][0]["error"]["fieldErrors"] == {"order": "Expected one of 'asc', 'desc', got 'up'."}
 
     def test_args_on_a_handler_without_data_are_rejected(self):
         c = _citry()
