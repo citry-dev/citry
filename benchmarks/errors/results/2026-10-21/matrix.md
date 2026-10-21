@@ -1,17 +1,17 @@
-# Error-prevention results, run 20261021T075938Z
+# Error-prevention results, run 20261021T094626Z
 
-Cases and tools from commit `dd8e202ff0f8b43c8c4966e1526af10eb9b3297d`, benchmark inputs tree `9277cffd092ba6c9945070fdb0c39572e95912bb`.
+Cases and tools from commit `dd410877ffdad24cb0e7db0b07078e8239242418`, benchmark inputs tree `2a28b0cfbbe7b2e27d2e6274bcabd8fdbe7aaae1`.
 
 ## How each mistake ended
 
 | Outcome | Citry | Django + HTMX + Alpine | Rusty + HTMX + Alpine | Jinja + HTMX + Alpine | Tetra | django-unicorn | django-components + HTMX + Alpine | FastHTML | ReactPy | Reflex | Nuxt (TypeScript) | Next.js (TypeScript) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Static/IDE error | 28 | 6 | 6 | 5 | 8 | 12 | 6 | 20 | 23 | 37 | 39 | 43 |
+| Static/IDE error | 28 | 6 | 6 | 5 | 8 | 12 | 6 | 20 | 24 | 38 | 39 | 44 |
 | Static/IDE warning | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 1 |
-| Runtime error | 11 | 15 | 17 | 26 | 16 | 13 | 20 | 10 | 10 | 4 | 3 | 4 |
-| Runtime warning | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 1 | 0 |
-| N/A or prevented | 2 | 11 | 13 | 12 | 6 | 8 | 9 | 14 | 7 | 9 | 5 | 6 |
-| Missed | 20 | 30 | 26 | 19 | 31 | 29 | 27 | 18 | 21 | 12 | 14 | 8 |
+| Runtime error | 12 | 15 | 17 | 27 | 16 | 13 | 21 | 10 | 10 | 4 | 3 | 4 |
+| Runtime warning | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 0 | 2 | 0 |
+| N/A or prevented | 2 | 11 | 13 | 12 | 6 | 8 | 9 | 15 | 7 | 9 | 5 | 6 |
+| Missed | 20 | 31 | 27 | 19 | 32 | 30 | 27 | 18 | 21 | 12 | 14 | 8 |
 
 ## Every mistake
 
@@ -33,8 +33,8 @@ Cases and tools from commit `dd8e202ff0f8b43c8c4966e1526af10eb9b3297d`, benchmar
 
 | Mistake | Citry | Django + HTMX + Alpine | Rusty + HTMX + Alpine | Jinja + HTMX + Alpine | Tetra | django-unicorn | django-components + HTMX + Alpine | FastHTML | ReactPy | Reflex | Nuxt (TypeScript) | Next.js (TypeScript) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| (caught/total) | (40/60) | (21/51) | (23/49) | (31/50) | (25/56) | (25/54) | (26/53) | (30/48) | (34/55) | (41/53) | (43/57) | (48/56) |
-| **Names: components, inputs, slots, variables** | (17/17) | (5/15) | (7/13) | (12/13) | (7/16) | (5/14) | (9/16) | (11/12) | (12/14) | (14/15) | (12/15) | (14/14) |
+| (caught/total) | (41/61) | (21/52) | (23/50) | (32/51) | (25/57) | (25/55) | (27/54) | (30/48) | (35/56) | (42/54) | (44/58) | (49/57) |
+| **Names: components, inputs, slots, variables** | (18/18) | (5/16) | (7/14) | (13/14) | (7/17) | (5/15) | (10/17) | (11/12) | (13/15) | (15/16) | (13/16) | (15/15) |
 | Misspelled component name | E | R | R | R | C | R | R | E | E | E | E | E |
 | Misspelled input name | E | M | M | R | R | M | R | E | R | E | E | E |
 | Missing required input | E | M | M | R | R | M | R | E | R | E | E | E |
@@ -51,6 +51,7 @@ Cases and tools from commit `dd8e202ff0f8b43c8c4966e1526af10eb9b3297d`, benchmar
 | Browser code reads a misspelled server value | E | R | R | R | R | R | R | n/a | M | E | M | E |
 | Link to a route that does not exist | R | R | R | R | R | R | R | R | M | M | Rw | E |
 | Translation message given a missing or misnamed argument | E | M | R | n/a | M | M | M | n/a | n/a | n/a | n/a | n/a |
+| Descendant reads a shared value that no ancestor provides | R | M | M | R | M | M | R | n/a | E | E | Rw | E |
 | Unknown template filter or helper function | E | R | R | R | C | R | R | E | E | E | E | E |
 | **Types** | (8/9) | (3/7) | (3/7) | (5/8) | (4/8) | (4/8) | (5/8) | (7/7) | (4/8) | (7/8) | (7/9) | (7/9) |
 | Wrong-typed input written in markup | E | M | M | M | M | M | R | n/a | n/a | n/a | E | E |
@@ -65,7 +66,7 @@ Cases and tools from commit `dd8e202ff0f8b43c8c4966e1526af10eb9b3297d`, benchmar
 | **Template and script syntax** | (5/5) | (4/5) | (4/5) | (4/5) | (3/6) | (3/5) | (4/5) | (3/4) | (5/6) | (5/6) | (5/5) | (5/6) |
 | Syntax error in a browser expression | R | R | R | R | R | R | R | R | E | E | C | E |
 | Syntax error in component JavaScript | E | E | E | R | Bw° | n/a | E | R | E | E | E | E |
-| Unclosed element in a template | E° | C | C | C | M | C | C | E | E | E | E | E° |
+| Unclosed element in a template | E° | C° | C° | C | M | C° | C° | E | E° | E | E | E° |
 | Misspelled path to a template or component file | n/a | R | R | R | R | R | R | n/a | E | E | n/a | E |
 | Repeated browser element without a key | R | n/a | n/a | n/a | M | M | n/a | n/a | Rw | M | C | C |
 | Two-way binding on an element with no value | R | M | M | M | M | M | M | M | M | C° | E | M |

@@ -410,6 +410,14 @@ description = "The card's `tone` input accepts only `plain` or `accent`, and the
 correct = "The first card has the accent border."
 
 [[mistake]]
+id = "m50-shared-value-name"
+title = "Descendant reads a shared value that no ancestor provides"
+category = "naming"
+origin = "neutral"
+description = "The page makes the board's name, `Projects`, available to the components or templates inside it without passing it to each card as an input (provide/inject, React context, a template context that included templates and components can read, or shared state), and the card reads it under a misspelled key or name, for example `bord` instead of `board`. Where the framework has no way to share a value other than passing it as an input, this mistake does not apply."
+correct = "Each card shows `Board: Projects` under its title."
+
+[[mistake]]
 id = "m51-list-key-missing"
 title = "Repeated browser element without a key"
 category = "templates"

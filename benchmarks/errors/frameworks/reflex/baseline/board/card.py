@@ -4,6 +4,8 @@ from typing import Literal
 import reflex as rx
 from reflex.event import EventType
 
+from board.board_info import BoardInfoState
+
 
 def card(
     title: rx.Var[str],
@@ -16,6 +18,7 @@ def card(
 ) -> rx.Component:
     return rx.card(
         rx.text(title, ": ", count, " tasks"),
+        rx.text("Board: ", BoardInfoState.board_name),
         rx.box(footer(title, count)),
         # The card only announces the click; the page decides what hiding means.
         rx.button("Hide", type="button", on_click=on_hide),

@@ -1,0 +1,7 @@
+status = "ported"
+mistake = { file = "card.py", contains = "use_context(BordContext)" }
+
+[[edits]]
+file = "card.py"
+old = "use_context(BoardContext)"
+new = "use_context(BordContext)"

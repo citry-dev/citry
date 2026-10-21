@@ -35,6 +35,9 @@ class Card(Component):
         title: str
         count: int
         tone: Literal['plain', 'accent']
+        board_name: str
 
     def get_template_data(self, args, kwargs: Kwargs, slots: Slots, context):
-        return {'title': kwargs.title, 'count': kwargs.count, 'tone': kwargs.tone}
+        # The page provides the board's name to every card, so no card takes it as an input.
+        board = self.inject('board')
+        return {'title': kwargs.title, 'count': kwargs.count, 'tone': kwargs.tone, 'board_name': board.title}
