@@ -1,0 +1,13 @@
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'x-model="query"' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '''
+    <form role="search">
+      <input type="search" name="q" x-model="query">
+'''
+new = '''
+    <form role="search" x-model="query">
+      <input type="search" name="q">
+'''

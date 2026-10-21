@@ -115,10 +115,17 @@ reasoned from those apps' cells. Tetra 0.8.5 reads a directory-style \
 component's script from `<component name>.js`, not the `script.js` its \
 library docs show.
 
-The one stricter check: type annotations on public attributes. Tetra has \
-no setting for this; it checks a value only when its attribute has a type \
-annotation, so annotating every public attribute is how this app turns the \
-check on. Tetra builds a Pydantic model from each component's public \
+Stricter settings: type annotations on public attributes. Tetra has no \
+setting that turns on a check, but it checks a public attribute's value \
+only when the attribute has a type annotation, so annotating every public \
+attribute is how this app turns that check on. Left off, with the reason: \
+Tetra's settings choose esbuild's arguments, the names of its cache folder, \
+its component modules and its upload folder, and none adds a check. Nor \
+can esbuild's arguments add one: its `--log-override` option can only raise \
+a warning to an error, which the rule does not count as a stricter check. Django's own options, djLint's rules that are \
+off by default and the other tools the plan names are left off for the \
+reasons the Django app's notes give; the JavaScript type check (`checkJs`) \
+has no .js file to read here. Tetra builds a Pydantic model from each component's public \
 attributes and their annotations, and checks the values against it each \
 time it writes the component's state into the page. The docs write public \
 attributes both with an annotation (`visible: bool = public(False)`) and \

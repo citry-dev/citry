@@ -13,7 +13,7 @@
   {% tetra_scripts include_alpine=True %}
 </head>
 <body>
-  <div class="board" title="Board">
+  <div class="board" id="board" title="Board">
     <h1>{% translate "Projects" %}</h1>
     <p>{% blocktranslate with name=owner.name %}Owned by {{ name }}{% endblocktranslate %}</p>
     <img src="{% static 'board/avatar.svg' %}" alt="{{ owner.name }}" width="32" height="32">

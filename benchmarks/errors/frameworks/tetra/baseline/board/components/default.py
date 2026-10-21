@@ -101,6 +101,7 @@ class ProjectList(Component):
     # state when the list renders again.
     template: django_html = """
     <div>
+      <p>Projects: {{ cards|length }}</p>
       {% for card in cards %}
         {% if card.title not in hidden %}
           {% Card title=card.title count=card.count tone=card.featured|yesno:"accent,plain" key=card.title %}

@@ -1,0 +1,9 @@
+# The card list holds the cards, so its template counts them, as the
+# django-unicorn app's card list does.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'cards|lenght' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = '{{ cards|length }}'
+new = '{{ cards|lenght }}'

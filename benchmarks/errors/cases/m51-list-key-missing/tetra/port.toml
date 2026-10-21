@@ -1,0 +1,10 @@
+# Tetra's tutorial keys each component a loop renders, so that Tetra
+# matches it with its saved state when the list is rendered again. The case
+# leaves the card's key out.
+status = "ported"
+mistake = { file = 'board/components/default.py', contains = 'yesno:"accent,plain" %}' }
+
+[[edits]]
+file = 'board/components/default.py'
+old = 'yesno:"accent,plain" key=card.title %}'
+new = 'yesno:"accent,plain" %}'
