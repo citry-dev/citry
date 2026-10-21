@@ -2947,8 +2947,9 @@ def _conditional_branches(source: str) -> tuple[str, str] | None:
 
     This reads the text rather than a syntax tree, so it gives up on
     anything it cannot split with certainty: a string with an escape, a
-    template literal, a second top-level `?` before the `:`, or unbalanced
-    brackets. Optional chaining (`?.`) and `??` are not a conditional's `?`.
+    template literal with `${}`, or unbalanced brackets. A conditional
+    nested in the first result is skipped over to find the outer `:`.
+    Optional chaining (`?.`) and `??` are not a conditional's `?`.
     """
     question: int | None = None
     colon: int | None = None

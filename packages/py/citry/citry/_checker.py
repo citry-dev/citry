@@ -5,7 +5,9 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import symtable
 import sys
+import textwrap
 import tokenize
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -1903,11 +1905,7 @@ def _makes_page_use_vue(
     `State` class alone does not count.
     """
     events = _component_events_info(component)
-    if (
-        component.JsData is not None
-        or component.js_data is not Component.js_data
-        or (events is not None and events.events_cls is not None)
-    ):
+    if (events is not None and events.events_cls is not None) or _sends_browser_data(component):
         return True
     try:
         _owner, inline, filepath = _find_pair_declaration(component, "js", "js_file")
@@ -1927,6 +1925,24 @@ def _makes_page_use_vue(
     )
 
 
+def _sends_browser_data(component: type[Component]) -> bool:
+    """
+    Return whether a component is known to send at least one value to the browser.
+
+    The page uses Vue only when the data `js_data()` returns is not empty, so
+    a `JsData` class with no fields, or a `js_data()` the source shows
+    always returns `{}`, does not count. A `js_data()` whose source cannot be
+    read may return data, so it counts.
+    """
+    schema = component.citry.inspect_component(component).schemas.js_data
+    if schema.kind == "fields":
+        return bool(schema.fields)
+    if component.js_data is Component.js_data:
+        return False
+    analyzed = _disk_js_data_shape(component)
+    return analyzed is None or bool(analyzed[2].roots) or analyzed[2].completeness != "closed"
+
+
 def _server_event_payload_findings(
     engine: Citry,
     source: _TemplateSource,
@@ -1940,7 +1956,8 @@ def _server_event_payload_findings(
         return []
     findings: list[CheckFinding] = []
     for call in server_event_calls(template, frozenset(handlers), parse_nested=parse_nested):
-        for finding in server_event_payload_findings(call, handlers[call.handler]):
+        data_class, query_string = handlers[call.handler]
+        for finding in server_event_payload_findings(call, data_class, query_string=query_string):
             setting = _PAYLOAD_RULES[finding.code]
             active = [
                 rule_severity
@@ -1976,22 +1993,31 @@ _PAYLOAD_RULES = {
 }
 
 
-def _shared_event_handlers(consumers: list[type[Component]]) -> dict[str, type | None]:
+def _shared_event_handlers(consumers: list[type[Component]]) -> dict[str, tuple[type | None, bool]]:
     """
-    Return each handler name every owner declares, with the data class they all use for it.
+    Return each handler name every owner declares, with the data class they all use and whether GET may send it.
 
     A template shared by several components runs each binding against the
     component that renders it, so a handler is checked only when every owner
-    has it with the same data class. Any other handler is left out.
+    has it with the same data class. Any other handler is left out. A
+    handler that accepts GET may receive its arguments as a query string.
     """
-    shared: dict[str, type | None] | None = None
+    shared: dict[str, tuple[type | None, bool]] | None = None
     for component in consumers:
         info = _component_events_info(component)
-        current = {} if info is None else {name: handler.data_schema for name, handler in info.handlers.items()}
+        current = (
+            {}
+            if info is None
+            else {name: (handler.data_schema, "GET" in handler.methods) for name, handler in info.handlers.items()}
+        )
         if shared is None:
             shared = current
             continue
-        shared = {name: schema for name, schema in shared.items() if name in current and current[name] is schema}
+        shared = {
+            name: (schema, query_string or current[name][1])
+            for name, (schema, query_string) in shared.items()
+            if name in current and current[name][0] is schema
+        }
     return shared or {}
 
 
@@ -2268,11 +2294,9 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
     )
     if method is None:
         return lambda _name: None
-    # A parameter or a local variable hides the module's name inside the method.
-    local_names = {
-        node.id for node in ast.walk(method) if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load)
-    }
-    local_names.update(argument.arg for argument in ast.walk(method.args) if isinstance(argument, ast.arg))
+    local_names = _function_local_names(source, method)
+    if local_names is None:
+        return lambda _name: None
     namespace = vars(module)
 
     def issue(name: str) -> str | None:
@@ -2282,12 +2306,34 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         try:
             _json_plain(value)
         except TypeError:
-            return f"{name} is a {type(value).__name__}, which Citry's JSON wire format does not carry"
+            return f"{name} holds a value of type {type(value).__name__}, which cannot be sent to the browser as JSON"
         except ValueError as exc:
             return str(exc)
         return None
 
     return issue
+
+
+def _function_local_names(source: str, function: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str] | None:
+    """
+    Return every name a function binds for itself, which hides a module name of the same spelling.
+
+    Python's own symbol table decides, so a parameter, an assignment, an
+    import, an `except ... as` name, a `match` capture, and a nested `def`
+    all count, while a `global` name does not. None means the source could
+    not be read.
+    """
+    text = ast.get_source_segment(source, function)
+    if text is None:
+        return None
+    try:
+        table = symtable.symtable(textwrap.dedent(text), "<js_data>", "exec")
+    except (SyntaxError, ValueError):
+        return None
+    scope = next((child for child in table.get_children() if child.get_name() == function.name), None)
+    if scope is None:
+        return None
+    return frozenset(symbol.get_name() for symbol in scope.get_symbols() if symbol.is_local() or symbol.is_parameter())
 
 
 def _disk_js_data_shape(

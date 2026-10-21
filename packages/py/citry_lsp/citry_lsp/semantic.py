@@ -602,7 +602,9 @@ _TY_DISPLAY_STRING = re.compile(r'"(?:[^"\\]|\\.)*"' + r"|'(?:[^'\\]|\\.)*'")
 # with the reason the js-data warning gives. ty's answer naming one of these
 # is kept, so the editor and `citry check --types` can report the value.
 # Any other class is dropped instead: it may be a TypedDict, which is sent
-# as an object, or a type Citry cannot judge.
+# as an object, or a type Citry cannot judge. ty names a class without its
+# module, so a project class that shares one of these names, such as its
+# own `Path`, gets the same warning.
 _STANDARD_NON_JSON_TYPES = {
     **dict.fromkeys(
         (

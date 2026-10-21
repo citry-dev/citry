@@ -17,13 +17,15 @@ import pytest
 from citry import Citry, Component, LintSettings
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
+from citry.ext.events import event
 
 try:
     import pydantic
 except ImportError:
     pydantic = None  # type: ignore[assignment]
 
-# The value the m41 benchmark sends to the browser from a module constant.
+# The value the benchmark case m41-browser-value-not-json sends to the
+# browser from a module constant.
 API_BASE = PurePosixPath("/api")
 PLAIN_API_BASE = "/api"
 
@@ -67,7 +69,7 @@ def _key_engine(*, owner: dict[str, object], card: dict[str, object], template: 
 
 
 def test_a_repeated_component_without_a_key_is_reported_when_the_page_uses_vue(tmp_path):
-    # The benchmark's board page has js_data() and JavaScript.
+    # The board page of case m51-list-key-missing has js_data() and JavaScript.
     engine = _key_engine(
         owner={
             "js_data": _browser_data,
@@ -134,6 +136,52 @@ def test_a_repeated_component_that_renders_fine_is_not_reported(tmp_path, owner,
     assert _findings(_key_engine(owner=owner, card=card, template=template), tmp_path, _KEY) == []
 
 
+@pytest.mark.parametrize(
+    ("template", "expected"),
+    [
+        # A keyed component tells each repetition of its body apart, so the
+        # calls inside it need no key of their own.
+        ('<c-for each="p in projects"><c-Card #c-key="p.slug"><c-Card /></c-Card></c-for>', []),
+        ('<c-Card c-for="p in projects" #c-key="p.slug"><c-Card /></c-Card>', []),
+        # A key on a plain element does not do that.
+        ('<div c-for="p in projects" #c-key="p.slug"><c-Card /></div>', ["c-Card"]),
+        # The <c-empty> of an inner loop repeats with the outer loop.
+        (
+            '<c-for each="p in projects"><c-for each="t in p.tasks"><i>t</i></c-for>'
+            "<c-empty><c-Card /></c-empty></c-for>",
+            ["c-Card"],
+        ),
+    ],
+)
+def test_keys_on_wrappers_and_inner_empty_bodies_follow_the_runtime(tmp_path, template, expected):
+    engine = _key_engine(owner={"js": "$component({});"}, card={}, template=template)
+
+    assert [
+        message.split(">", 1)[0][1:] for _code, _severity, message in _findings(engine, tmp_path, _KEY)
+    ] == expected
+
+
+_EMPTY_DATA_ENGINE = Citry(autodiscover=False)
+
+
+class EmptyDataCard(Component):
+    citry = _EMPTY_DATA_ENGINE
+    template = "<i>card</i>"
+
+
+class EmptyDataBoard(Component):
+    citry = _EMPTY_DATA_ENGINE
+    template = '<c-for each="p in projects"><c-EmptyDataCard /></c-for>'
+
+    def js_data(self, kwargs, slots):
+        # The page uses Vue only when the data is not empty.
+        return {}
+
+
+def test_a_js_data_that_always_returns_nothing_does_not_make_the_page_use_vue(tmp_path):
+    assert _findings(_EMPTY_DATA_ENGINE, tmp_path, _KEY) == []
+
+
 def test_the_missing_key_rule_follows_the_component_lint_class(tmp_path):
     lint = type("Lint", (), {"rule_missing_component_key": "warning"})
     engine = _key_engine(owner={"js": "$component({});", "Lint": lint}, card={})
@@ -172,7 +220,8 @@ def _prop_engine(template: str, *, js: str = _STATUS_JS, lint: LintSettings | No
 
 
 def test_a_template_assignment_to_an_own_prop_is_reported(tmp_path):
-    # The m28 benchmark's status line closes itself instead of emitting.
+    # The status line of case m28-input-written-by-child closes itself
+    # instead of emitting an event.
     engine = _prop_engine('<p class="status"><button type="button" @click="open = false">Close</button></p>')
 
     assert _findings(engine, tmp_path, _PROP) == [
@@ -304,7 +353,8 @@ def _counter_engine(button: str, *, data_class: type | None = SaveIn) -> Citry:
 @pytest.mark.parametrize(
     ("button", "expected"),
     [
-        # The benchmark's m18, m32, and m33 buttons.
+        # The buttons of cases m18-payload-field, m32-payload-type, and
+        # m33-payload-missing-field.
         (
             '<button type="button" @c-click="save({amont: 1})">Add</button>',
             [
@@ -401,6 +451,44 @@ def test_defaults_literals_and_conditions_follow_the_data_class(tmp_path, button
     assert [code for code, _severity, _message in findings] == expected
 
 
+def _get_engine(button: str) -> Citry:
+    engine = Citry(autodiscover=False)
+
+    @event(methods=("GET",))
+    def save(self, data: SearchIn):
+        return None
+
+    type(
+        "Search",
+        (Component,),
+        {"citry": engine, "Events": type("Events", (), {"save": save}), "template": button, "__module__": __name__},
+    )
+    return engine
+
+
+@pytest.mark.parametrize(
+    ("button", "expected"),
+    [
+        # A GET query string carries text, which the server binds to an
+        # int field, so '2' and 1 for a str field both work there.
+        ("<button @c-click=\"save({query: 'x', page: '2'})\">x</button>", []),
+        ('<button @c-click="save({query: 1})">x</button>', []),
+        # Text that is no number fails both ways.
+        ("<button @c-click=\"save({query: 'x', page: 'two'})\">x</button>", [_INCOMPATIBLE]),
+    ],
+)
+def test_a_get_handler_accepts_what_its_query_string_binds(tmp_path, button, expected):
+    findings = _findings(_get_engine(button), tmp_path, *_PAYLOAD)
+
+    assert [code for code, _severity, _message in findings] == expected
+
+
+def test_only_the_last_of_two_equal_keys_is_sent(tmp_path):
+    engine = _counter_engine("<button @c-click=\"save({amount: 'x', amount: 1})\">x</button>")
+
+    assert _findings(engine, tmp_path, *_PAYLOAD) == []
+
+
 def test_a_dataclass_data_class_is_checked_too(tmp_path):
     findings = _findings(
         _counter_engine("<button @c-click=\"save({text: 'x', pinned: 'yes'})\">x</button>", data_class=NoteIn),
@@ -415,9 +503,9 @@ def test_a_dataclass_data_class_is_checked_too(tmp_path):
 def test_a_pydantic_data_class_is_not_checked(tmp_path):
     model = type("SaveModel", (pydantic.BaseModel,), {"__annotations__": {"amount": int}, "__module__": __name__})
 
-    assert (
-        _findings(_counter_engine('<button @c-click="save({amont: 1})">x</button>', data_class=model), tmp_path) == []
-    )
+    engine = _counter_engine('<button @c-click="save({amont: 1})">x</button>', data_class=model)
+
+    assert _findings(engine, tmp_path, *_PAYLOAD) == []
 
 
 def test_a_template_shared_with_another_data_class_is_not_checked(tmp_path):
@@ -482,11 +570,15 @@ def _css_engine(css: str, *, keys: dict[str, str] | None = None) -> Citry:
 
 
 def test_a_var_one_slip_from_a_css_data_key_is_reported(tmp_path):
-    # The m43 benchmark reads --acent for the accent key.
+    # Case m43-css-variable-name reads --acent for the accent key.
     engine = _css_engine("h1 {\n  color: var(--acent);\n}\n", keys={"accent": "blue"})
 
     assert _findings(engine, tmp_path, _CSS) == [
-        (_CSS, "warning", "Nothing sets --acent, so this var() has no value. Did you mean --accent, from css_data()?"),
+        (
+            _CSS,
+            "warning",
+            "Nothing sets --acent, so the browser ignores this declaration. Did you mean --accent, from css_data()?",
+        ),
     ]
 
 
@@ -529,6 +621,17 @@ class ApiPage(Component):
         return {"apiBase": API_BASE, "plain": PLAIN_API_BASE}
 
 
+class ImportedApiPage(Component):
+    citry = _JS_DATA_ENGINE
+    template = "<p></p>"
+
+    def js_data(self, kwargs, slots):
+        # A name the method imports hides the module constant too.
+        from string import ascii_letters as API_BASE  # noqa: N812
+
+        return {"apiBase": API_BASE}
+
+
 class ShadowedApiPage(Component):
     citry = _JS_DATA_ENGINE
     template = "<p></p>"
@@ -546,7 +649,7 @@ def test_a_module_constant_the_browser_cannot_receive_is_reported(tmp_path):
     assert [(item.code, item.severity, item.origin.rsplit(" ", 1)[-1]) for item in findings] == [
         (_JS_DATA, "warning", f"({__name__}.ApiPage.js_data)"),
     ]
-    assert "API_BASE is a PurePosixPath" in findings[0].message
+    assert "API_BASE holds a value of type PurePosixPath" in findings[0].message
 
 
 ################################################
@@ -575,8 +678,8 @@ def test_static_check_notes_a_template_whose_base_comes_from_the_project(tmp_pat
     # the note says so. A class from an installed package is not noted.
     assert report.findings == ()
     assert report.notes == (
-        f"{package / 'card.py'}:5: Citry cannot tell from this file that Card is a component, because its base class"
-        " BaseCard comes from another module, so this template is checked only by citry check with your application"
-        " loaded. [citry.check.template-not-checked]",
+        f"{package / 'card.py'}:5: Citry cannot tell from this file that Card is a component, because it extends"
+        " BaseCard, which comes from another module, so this template is checked only by citry check with your"
+        " application loaded. [citry.check.template-not-checked]",
     )
     assert report.exit_code == 0

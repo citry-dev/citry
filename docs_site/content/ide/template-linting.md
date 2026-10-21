@@ -1,6 +1,6 @@
 ---
 title: Template linting
-description: Catch template mistakes before the page renders, such as unknown names, typos in attributes, tags, events, and directives, invalid HTML, and Vue errors. Choose how strict each check is.
+description: Catch template mistakes before the page renders, such as unknown names, typos in attributes, tags, events, and directives, invalid HTML, Vue errors, and server event arguments the server would reject. Choose how strict each check is.
 ---
 
 # Template linting
@@ -49,7 +49,7 @@ them. There is no separate editor setting.
 | [`citry.browser.unknown-server-event-field`](/ide/diagnostics/#citry.browser.unknown-server-event-field) | A key in `@c-*` arguments that the handler does not accept | error |
 | [`citry.browser.missing-server-event-field`](/ide/diagnostics/#citry.browser.missing-server-event-field) | `@c-*` arguments without a field the handler requires | error |
 | [`citry.browser.incompatible-server-event-field`](/ide/diagnostics/#citry.browser.incompatible-server-event-field) | A literal in `@c-*` arguments of a type the handler rejects | error |
-| [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A typo in a `var(--name)` that reads a `css_data()` key | warning |
+| [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A `var(--name)` that misspells a `css_data()` key | warning |
 
 ## Fix unknown names
 
@@ -785,7 +785,7 @@ counts as that element too. Citry reports such an image only with your
 application loaded, and only for a component with no browser code (no
 `js`, `js_data()`, `State`, or event handlers).
 
-## Repeated components without `#c-key` { #find-repeated-components-without-keys }
+## Loops without `#c-key` { #find-repeated-components-without-keys }
 
 On a page that uses Vue, each component that `<c-for>` repeats needs a
 [`#c-key`](/syntax/attributes/#c-key). Without one, the page fails to
@@ -809,15 +809,20 @@ render as soon as the loop has two items:
 ```
 
 A page uses Vue when any component on it has component JavaScript,
-`js_data()`, an `Events` class, or a Vue attribute such as `v-if`,
-`@click`, or `:title` in its template. Citry reports a repeated component
-when the template's own component or the repeated component is one of
-those. It cannot see the rest of the page, so a loop on a page that uses
-Vue only because of another component is not reported.
+`js_data()` that returns data, an `Events` class, or a Vue attribute such
+as `v-if`, `@click`, or `:title` in its template. Citry reports a repeated
+component when the component whose template has the loop, or the
+repeated component, is one of those. It cannot see the rest of the page,
+so a loop on a page that uses Vue only because of another component is
+not reported.
 
-A component with `transparent = True` or `simple = True` is not reported,
-because it renders into its caller's HTML. This rule needs your
-application, so only `citry --app ... check` reports it.
+A component inside a keyed component, such as `<c-Card>` in the body of
+`<c-List #c-key="...">`, needs no key of its own. A component with
+`transparent = True` or `simple = True` is not reported, because it
+renders into its caller's HTML. A `<c-component>` that picks its
+component at render time needs a key too, but Citry does not check it.
+This rule needs your application, so only `citry --app ... check`
+reports it.
 
 ## Assignments to props { #find-prop-assignments }
 
@@ -867,11 +872,12 @@ class Counter(Component):
          'amont'. Did you mean 'amount'? #}
       <button @c-click="save({amont: 1})">Add</button>
 
-      {# Error: rejects this value for field
-         'amount': Expected int, got str. #}
+      {# Error: Server event 'save' rejects this value
+         for field 'amount': Expected int, got str. #}
       <button @c-click="save({amount: '1'})">Add</button>
 
-      {# Error: requires field 'amount' #}
+      {# Error: Server event 'save' requires field
+         'amount', which this call does not send. #}
       <button @c-click="save()">Add</button>
 
       {# Right #}
@@ -885,15 +891,18 @@ Citry checks what it can read from the template:
 - a literal value, such as `'1'`, `true`, or `null`, and both results of a
   condition such as `wide ? 2 : 'all'`, with the server's own rules. The
   browser sends the arguments as JSON, so a string is not turned into a
-  number;
+  number. A handler that accepts `GET` may get them as a query string,
+  where `'2'` fits an `int` field, so a value is reported there only when
+  both ways fail;
 - a required field, when the object has no `...` spread and no computed
-  key, or when the call has no arguments.
+  key, such as `{[name]: 1}`.
 
-A call with no arguments from a `<form>`, or for the `submit` event, sends
-the form's fields instead, so a missing field is not reported there. A
-Pydantic `data` class is not checked, because Pydantic ignores extra keys
-and converts values. When several components share the template, a call is
-checked only when they all use the same `data` class for that handler.
+A call with no arguments is reported only on an element that cannot
+contain a form, such as `<button>`. On a `<form>`, on an element that may
+hold one, or for the `submit` event, the browser may send the form's
+fields instead. A Pydantic `data` class is not checked, because Pydantic
+ignores extra keys and converts values.
+
 Each mistake has its own setting: `rule_unknown_server_event_field`,
 `rule_missing_server_event_field`, and
 `rule_incompatible_server_event_field`. These rules need your
@@ -902,8 +911,8 @@ application, so only `citry --app ... check` reports them.
 ## Misspelled CSS variables { #find-misspelled-css-variables }
 
 Each key that `css_data()` returns becomes a CSS custom property with the
-same name, such as `accent` for `--accent`. A typo in `var()` reads a
-property that nothing sets, so the declaration has no value:
+same name, such as `--accent` for the key `accent`. A typo in `var()` reads
+a property that nothing sets, so the browser ignores the declaration:
 
 ```citry
 class Board(Component):
@@ -912,7 +921,8 @@ class Board(Component):
 
     css = """
       h1 {
-        /* Warning: Nothing sets --acent. Did you mean
+        /* Warning: Nothing sets --acent, so the browser
+           ignores this declaration. Did you mean
            --accent, from css_data()? */
         color: var(--acent);
       }
@@ -992,10 +1002,10 @@ it through `c-bind`. These tools also cannot tell which values an
 extension's template syntax produces, so they may report a value that
 `citry --app ... check` does not.
 
-### Base classes from another module { #templates-the-check-cannot-find }
+### Imported base classes { #templates-the-check-cannot-find }
 
 `citry check --static` and the editor read one file at a time. When a
-component's base class comes from another module of your project, they
+component extends a class from another module of your project, they
 cannot tell from the file that the class is a component, so they skip its
 template:
 
@@ -1019,7 +1029,10 @@ application and checks the template.
 
 When several components use the same template or JavaScript file, Citry
 applies the strictest severity among them. To silence a rule for that file,
-every one of those components must set it to `"ignore"`.
+every one of those components must set it to `"ignore"`. The
+[server event argument](#check-server-event-arguments) rules check a call
+in a shared template only when all those components use the same `data`
+class for its handler.
 
 ### Data with extra keys
 

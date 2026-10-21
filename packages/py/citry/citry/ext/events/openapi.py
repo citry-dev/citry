@@ -215,18 +215,21 @@ def _enum_schema(enum_cls: type[Enum]) -> dict[str, Any]:
 def _literal_schema(members: tuple[Any, ...]) -> dict[str, Any]:
     """A ``Literal[...]`` annotation as a JSON Schema: the listed values, an Enum member by its value."""
     # The validator accepts an Enum member's value from the wire, so the
-    # schema lists that value, the same way an Enum field documents.
-    return _values_schema([member.value if isinstance(member, Enum) else member for member in members])
+    # schema lists that value, the same way an Enum field documents. A value
+    # JSON cannot hold, such as bytes, can never arrive, so it is left out.
+    values = [member.value if isinstance(member, Enum) else member for member in members]
+    return _values_schema([value for value in values if value is None or isinstance(value, (bool, int, float, str))])
 
 
 def _values_schema(values: list[Any]) -> dict[str, Any]:
     """A fixed set of values as a JSON Schema, typed when they are all strings, all booleans, or all ints."""
     schema: dict[str, Any] = {}
-    if all(isinstance(value, str) for value in values):
+    # An empty list matches no value, so it names no type either.
+    if values and all(isinstance(value, str) for value in values):
         schema["type"] = "string"
-    elif all(isinstance(value, bool) for value in values):
+    elif values and all(isinstance(value, bool) for value in values):
         schema["type"] = "boolean"
-    elif all(isinstance(value, int) and not isinstance(value, bool) for value in values):
+    elif values and all(isinstance(value, int) and not isinstance(value, bool) for value in values):
         schema["type"] = "integer"
     schema["enum"] = values
     return schema

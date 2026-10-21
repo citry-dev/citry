@@ -132,9 +132,14 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                            "condition whose two results are literals, and the server's "
                                                            'check for that field rejects it. The browser sends the '
                                                            'arguments as JSON, which the server checks strictly: a '
-                                                           'string is not turned into a number. Values that are not '
+                                                           'string is not turned into a number. For a handler that '
+                                                           'accepts GET, the browser may send them as a query string '
+                                                           'instead, which the server reads as text, so a value is '
+                                                           'reported only when both ways fail. Values that are not '
                                                            'literals are not checked. A Pydantic data class is not '
-                                                           'checked, because Pydantic converts values. citry check '
+                                                           'checked, because Pydantic converts values. When several '
+                                                           'components share the template, it is checked only when '
+                                                           'they use the same data class for the handler. citry check '
                                                            'needs your application for this rule.'},
  'citry.browser.invalid-model-target': {'code': 'citry.browser.invalid-model-target',
                                         'configurableSeverity': True,
@@ -258,8 +263,8 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'when': 'The arguments of an @c-* binding are an object literal with no '
                                                       '... spread and no computed key, and they leave out a field that '
                                                       'has no default; or the binding sends no arguments, as in save '
-                                                      'or save(), from an element that cannot hold a form, such as a '
-                                                      'button. A binding with no arguments on a <form>, or for the '
+                                                      'or save(), from an element that cannot contain a form, such as '
+                                                      'a button. A binding with no arguments on a <form>, or for the '
                                                       'submit event, is not reported, because the browser then sends '
                                                       "the form's fields. A Pydantic data class is not checked. When "
                                                       'several components share the template, it is checked only when '
@@ -553,23 +558,24 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                       'fix': 'Nothing is wrong with the code. Run citry check with your application '
                                              'loaded, as in citry --app module:engine check, to check the template.',
                                       'messages': {'default': 'Citry cannot tell from this file that {component} is a '
-                                                              'component, because its base class {base} comes from '
+                                                              'component, because it extends {base}, which comes from '
                                                               'another module, so this template is checked only by '
                                                               'citry check with your application loaded.'},
-                                      'parameters': {'base': 'The base class as written.',
+                                      'parameters': {'base': 'The imported class it extends, as written.',
                                                      'component': 'The class name.'},
-                                      'summary': 'A class sets a template, but its base class comes from another file '
+                                      'summary': 'A class sets a template, but it extends a class from another module '
                                                  'of your project, so the editor and citry check --static cannot tell '
                                                  'that it is a component and do not check its template.',
                                       'surfaces': ['check', 'lsp'],
                                       'title': 'Template checked only with the application',
-                                      'when': 'A class in a Python file sets template to a string literal, Citry '
-                                              'cannot prove from that file that the class is a component, and one of '
-                                              'its bases is imported from a module of your project rather than from an '
-                                              'installed package. citry check --static lists it as a note, and the '
-                                              'editor shows it as information on the class name. citry check with your '
-                                              'application loaded reads the component registry and checks the '
-                                              'template, so it does not report this.'},
+                                      'when': 'A class in a Python file sets template to a string literal that '
+                                              'contains a tag, Citry cannot prove from that file that the class is a '
+                                              'component, and it extends a class imported from a module of your '
+                                              'project, directly or through a class defined in the same file. A class '
+                                              'from an installed package does not count. citry check --static lists it '
+                                              'as a note, and the editor shows it as information on the class name. '
+                                              'citry check with your application loaded reads the component registry '
+                                              'and checks the template, so it does not report this.'},
  'citry.check.template-value-invalid': {'code': 'citry.check.template-value-invalid',
                                         'constant': 'CHECK_TEMPLATE_VALUE_INVALID',
                                         'defaultSeverity': 'error',
@@ -651,13 +657,15 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                    'fix': "Use the key's exact name. If another stylesheet sets this property on "
                                           'purpose, add a fallback, as in var(--name, inherit), or set '
                                           'rule_misspelled_css_variable to "ignore" for this component.',
-                                   'messages': {'default': 'Nothing sets --{name}, so this var() has no value. Did you '
-                                                           'mean --{suggestion}, from css_data()?'},
+                                   'messages': {'default': 'Nothing sets --{name}, so the browser ignores this '
+                                                           'declaration. Did you mean --{suggestion}, from '
+                                                           'css_data()?'},
                                    'parameters': {'name': 'The custom property as written, without the leading --.',
                                                   'suggestion': 'The css_data() key one typing slip away.'},
                                    'summary': "A component's CSS reads a custom property that is one typing slip from "
                                               'a key its css_data() returns, such as var(--acent) for accent. Nothing '
-                                              'sets that property, so the declaration falls back to its initial value.',
+                                              'sets that property, so the browser ignores the declaration: the '
+                                              'property inherits from the parent element or takes its initial value.',
                                    'surfaces': ['check'],
                                    'title': 'Misspelled css_data() variable',
                                    'when': "A var(--name) in the component's own css or css_file has no fallback "

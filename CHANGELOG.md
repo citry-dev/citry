@@ -41,13 +41,14 @@
     `save({amount: '1'})` for an `int` field
     (`rule_unknown_server_event_field`, `rule_missing_server_event_field`,
     `rule_incompatible_server_event_field`);
-  - a typo in a `var(--name)` that reads a `css_data()` key, such as
+  - a `var(--name)` that misspells a `css_data()` key, such as
     `var(--acent)`, as a warning (`rule_misspelled_css_variable`).
 
   These are errors by default except the CSS check, so `citry check` may
   now fail on an existing project.
-- `citry check` now warns when `js_data()` sends a module constant that
-  JSON cannot carry, such as a `PurePosixPath`.
+- With your application loaded, `citry check` now warns when `js_data()`
+  sends a module constant that JSON cannot carry, such as a
+  `PurePosixPath`.
 - `citry check --static` now lists, as a note, each template it skips
   because the component's base class comes from another module of your
   project.
@@ -96,7 +97,8 @@
   or the prop's own name. They also check both results of a condition
   whose results are literals.
 - The render error for a component that `<c-for>` repeats without
-  `#c-key` now names the tag, its template, and the line.
+  `#c-key`, or with a duplicate one, now names the tag, its template, and
+  the line.
 
 ### Fixes
 

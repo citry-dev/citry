@@ -7161,4 +7161,4 @@ def test_a_template_whose_base_comes_from_the_project_is_marked_as_unchecked(tmp
     (notice,) = [item for item in document.diagnostics if item.code == "citry.check.template-not-checked"]
     assert notice.severity == types.DiagnosticSeverity.Information
     assert notice.range == types.Range(_position(source, "Card(Base"), _position(source, "Card(Base", len("Card")))
-    assert "BaseCard comes from another module" in notice.message
+    assert "it extends BaseCard, which comes from another module" in notice.message

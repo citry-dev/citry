@@ -211,6 +211,15 @@ class NullOnly:
     value: None
 
 
+class Weight(Enum):
+    LIGHT = 1
+    HEAVY = 2
+
+
+class EnumLiteral:
+    weight: Literal[Weight.HEAVY]
+
+
 class LiteralChoices:
     level: Literal["low", "high"]
     size: Literal[1, 2] = 1
@@ -888,6 +897,11 @@ class TestLiteralFields:
         assert validate_args(LiteralChoices, {"level": "low", "color": "blue"}).fields == {
             "color": "Expected one of 'red', got 'blue'.",
         }
+
+    def test_an_enum_choice_with_a_number_value_matches_that_number(self):
+        # The wire carries an Enum member as its value, whatever its type.
+        assert validate_args(EnumLiteral, {"weight": 2}).value.weight is Weight.HEAVY
+        assert validate_args(EnumLiteral, {"weight": 1}).fields == {"weight": "Expected one of 2, got 1."}
 
     def test_a_string_transport_binds_each_choice_by_its_type(self):
         result = validate_args(LiteralChoices, StringArgs({"level": "low", "size": "2", "forced": "true"}))

@@ -77,16 +77,11 @@ def _collect_repeated_calls(
         tag = node.start_tag.name.content
         lower = _ascii_lower(tag)
         names = {_ascii_lower(attr.key.content) for attr in node.start_tag.attrs}
-        # A `<c-empty>` body renders once, when the loop has no items, so
-        # only the loop itself and an element carrying `c-for` repeat.
+        # A `<c-empty>` is the loop's sibling, so its body repeats only when
+        # an outer loop repeats it.
         repeats = in_loop or lower == "c-for" or "c-for" in names
-        if (
-            repeats
-            and lower.startswith("c-")
-            and lower != "c-element"
-            and lower not in RESERVED_TAG_NAMES
-            and "#c-key" not in names
-        ):
+        component = lower.startswith("c-") and lower != "c-element" and lower not in RESERVED_TAG_NAMES
+        if repeats and component and "#c-key" not in names:
             found.append(
                 RepeatedComponentCall(
                     tag,
@@ -94,6 +89,10 @@ def _collect_repeated_calls(
                     base_index + node.start_tag.name.end_index,
                 )
             )
+        # A keyed component call tells each repetition of everything inside
+        # it apart, so the calls in its body and fills need no key of their
+        # own. A key on a plain element does not do that for the runtime.
+        inner_loop = repeats and not (component and "#c-key" in names)
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
             # A template-valued attribute renders wherever its element does,
@@ -107,7 +106,7 @@ def _collect_repeated_calls(
                         found,
                         parse_nested=parse_nested,
                         base_index=base_index + inner.start_index + nested_start,
-                        in_loop=repeats,
+                        in_loop=inner_loop,
                     )
         body = getattr(node, "body", None)
         if body is not None:
@@ -116,7 +115,7 @@ def _collect_repeated_calls(
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index,
-                in_loop=repeats and lower != "c-empty",
+                in_loop=inner_loop,
             )
 
 
@@ -261,7 +260,6 @@ def _server_event_call(value: str, handler_names: frozenset[str]) -> tuple[str, 
 # other element may send a form's fields instead of nothing.
 _ELEMENTS_WITHOUT_FORMS = frozenset(
     {
-        "a",
         "abbr",
         "b",
         "button",
@@ -302,6 +300,8 @@ class ServerEventPayloadFinding:
 def server_event_payload_findings(
     call: ServerEventCall,
     data_class: type | None,
+    *,
+    query_string: bool = False,
 ) -> tuple[ServerEventPayloadFinding, ...]:
     """
     Compare the arguments one ``@c-*`` binding writes with its handler's data class.
@@ -325,6 +325,10 @@ def server_event_payload_findings(
         call: One binding, from ``server_event_calls``.
         data_class: The handler's ``data`` annotation, or None when the
             handler takes no ``data``.
+        query_string: Whether the browser may send the arguments as a GET
+            query string, which the server reads as text, so `'2'` fits an
+            `int` field. A value is then reported only when both ways of
+            sending it fail.
 
     Returns:
         Findings in source order.
@@ -347,14 +351,17 @@ def server_event_payload_findings(
     # The object literal's offsets count from its first non-space character.
     base = call.arguments_start + len(call.arguments[: len(call.arguments) - len(call.arguments.lstrip())].encode())
     findings: list[ServerEventPayloadFinding] = []
-    written: set[str] = set()
+    written = {item.name for item in properties}
+    # JavaScript keeps the last of two equal keys, so only its value is sent.
+    sent = {item.name: item for item in properties}
     for item in properties:
-        written.add(item.name)
         field = accepted.get(item.name)
         if field is None:
             findings.append(_unknown_field(call, item.name, data_class, accepted, base, item))
             continue
-        detail = _rejected_literal(field.annotation, item.value_source)
+        if sent[item.name] is not item:
+            continue
+        detail = _rejected_literal(field.annotation, item.value_source, query_string=query_string)
         if detail is not None:
             findings.append(
                 ServerEventPayloadFinding(
@@ -422,7 +429,7 @@ def _missing_field(call: ServerEventCall, name: str) -> ServerEventPayloadFindin
 _NOT_A_LITERAL = object()
 
 
-def _rejected_literal(annotation: Any, source: str) -> str | None:
+def _rejected_literal(annotation: Any, source: str, *, query_string: bool) -> str | None:
     """Return the server's message for a literal value it rejects, checking both results of a condition."""
     branches = _conditional_branches(source.strip())
     candidates = branches if branches is not None else (source,)
@@ -432,9 +439,23 @@ def _rejected_literal(annotation: Any, source: str) -> str | None:
         return None
     for value in values:
         error = json_value_error(annotation, value)
+        # A query string carries the value as text, which the server binds
+        # more loosely, so the call fails only when that fails too. The
+        # browser cannot put null in a query string at all.
+        if error is not None and query_string and value is not None:
+            error = json_value_error(annotation, _query_text(value), bind_strings=True)
         if error is not None:
             return error
     return None
+
+
+def _query_text(value: object) -> str:
+    """Write a JSON scalar the way the browser writes it into a GET query string."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 def _json_literal_value(source: str) -> object:

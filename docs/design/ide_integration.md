@@ -70,16 +70,22 @@ These rules need facts that only the loaded application gives, so
 - `rule_unknown_server_event_field`, `rule_missing_server_event_field`,
   and `rule_incompatible_server_event_field`
   (`citry.browser.*-server-event-field`): the literal arguments of an
-  `@c-*` call against the handler's `data` class. The editor does not
+  `@c-*` call against the handler's `data` class, read as a GET query
+  string too for a handler that accepts GET. The editor does not
   report them yet, because the handler description it receives does not
   say whether a data class is a Pydantic model.
 - `rule_misspelled_css_variable` (`citry.css.misspelled-variable`): a
   `var(--name)` one typing slip from a `css_data()` key.
 
-`citry check --static` notes, and the editor marks with an information
-diagnostic (`citry.check.template-not-checked`), a class with a literal
-template whose base class is imported from another module of the
-project, because reading one file cannot prove it is a component.
+Each of these rules reports nothing when it cannot read its input:
+component JavaScript that does not parse, `css_data()` keys that are not
+all known, a Pydantic data class, or arguments that are not literals.
+
+Some classes set a literal template but extend a class imported from
+another module of the project, so reading one file cannot prove they are
+components. `citry check --static` lists each as a note, and the editor
+marks it with an information diagnostic
+(`citry.check.template-not-checked`).
 
 Steps below that describe Alpine attributes,
 magics, and scope record the earlier Alpine design; where they conflict with

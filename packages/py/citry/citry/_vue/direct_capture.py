@@ -2762,7 +2762,7 @@ def _authored_call_tag(call: _PreparedCallMetadata | None, fallback: str) -> str
 def _call_site(call: _PreparedCallMetadata | None) -> str:
     """Describe where a component call sits, as `in <template>, line N`, for error messages."""
     if call is None:
-        return "in a Python call"
+        return "in a component rendered from Python"
     # Call spans are byte offsets into the authored template source.
     line = call.source.encode()[: call.source_span[0]].count(b"\n") + 1
     return f"in {call.origin}, line {line}" if call.origin else f"on line {line} of its template"

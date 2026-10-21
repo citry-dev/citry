@@ -542,7 +542,7 @@
       "code": "citry.css.misspelled-variable",
       "constant": "CSS_MISSPELLED_VARIABLE",
       "title": "Misspelled css_data() variable",
-      "summary": "A component's CSS reads a custom property that is one typing slip from a key its css_data() returns, such as var(--acent) for accent. Nothing sets that property, so the declaration falls back to its initial value.",
+      "summary": "A component's CSS reads a custom property that is one typing slip from a key its css_data() returns, such as var(--acent) for accent. Nothing sets that property, so the browser ignores the declaration: the property inherits from the parent element or takes its initial value.",
       "when": "A var(--name) in the component's own css or css_file has no fallback value, the same CSS does not set --name itself, every key that css_data() or CssData returns is known, name is not one of them, and name is one typing slip from one of them: two neighboring letters swapped, one letter typed twice, or one letter left out. Properties that a parent component or a site stylesheet sets are not reported unless they are that close to a key. citry check needs your application for this rule.",
       "fix": "Use the key's exact name. If another stylesheet sets this property on purpose, add a fallback, as in var(--name, inherit), or set rule_misspelled_css_variable to \"ignore\" for this component.",
       "defaultSeverity": "warning",
@@ -555,7 +555,7 @@
         "suggestion": "The css_data() key one typing slip away."
       },
       "messages": {
-        "default": "Nothing sets --{name}, so this var() has no value. Did you mean --{suggestion}, from css_data()?"
+        "default": "Nothing sets --{name}, so the browser ignores this declaration. Did you mean --{suggestion}, from css_data()?"
       },
       "examples": [
         {
@@ -1081,7 +1081,7 @@
       "constant": "BROWSER_MISSING_SERVER_EVENT_FIELD",
       "title": "Missing server event field",
       "summary": "An @c-* binding calls a server event without a field that the handler's data class requires. The server rejects the call, and the handler does not run.",
-      "when": "The arguments of an @c-* binding are an object literal with no ... spread and no computed key, and they leave out a field that has no default; or the binding sends no arguments, as in save or save(), from an element that cannot hold a form, such as a button. A binding with no arguments on a <form>, or for the submit event, is not reported, because the browser then sends the form's fields. A Pydantic data class is not checked. When several components share the template, it is checked only when they use the same data class for the handler. citry check needs your application for this rule.",
+      "when": "The arguments of an @c-* binding are an object literal with no ... spread and no computed key, and they leave out a field that has no default; or the binding sends no arguments, as in save or save(), from an element that cannot contain a form, such as a button. A binding with no arguments on a <form>, or for the submit event, is not reported, because the browser then sends the form's fields. A Pydantic data class is not checked. When several components share the template, it is checked only when they use the same data class for the handler. citry check needs your application for this rule.",
       "fix": "Send the field, or give it a default in the handler's data class.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
@@ -1109,7 +1109,7 @@
       "constant": "BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD",
       "title": "Wrong type for a server event field",
       "summary": "An @c-* binding sends a literal value that the handler's data class does not accept for that field. The server rejects the call, and the handler does not run.",
-      "when": "A key in the object literal of an @c-* binding has a literal value, such as '1', true, 2.5, or null, or a condition whose two results are literals, and the server's check for that field rejects it. The browser sends the arguments as JSON, which the server checks strictly: a string is not turned into a number. Values that are not literals are not checked. A Pydantic data class is not checked, because Pydantic converts values. citry check needs your application for this rule.",
+      "when": "A key in the object literal of an @c-* binding has a literal value, such as '1', true, 2.5, or null, or a condition whose two results are literals, and the server's check for that field rejects it. The browser sends the arguments as JSON, which the server checks strictly: a string is not turned into a number. For a handler that accepts GET, the browser may send them as a query string instead, which the server reads as text, so a value is reported only when both ways fail. Values that are not literals are not checked. A Pydantic data class is not checked, because Pydantic converts values. When several components share the template, it is checked only when they use the same data class for the handler. citry check needs your application for this rule.",
       "fix": "Send a value of the type the field declares, such as 1 instead of '1'.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
@@ -1265,8 +1265,8 @@
       "code": "citry.check.template-not-checked",
       "constant": "CHECK_TEMPLATE_NOT_CHECKED",
       "title": "Template checked only with the application",
-      "summary": "A class sets a template, but its base class comes from another file of your project, so the editor and citry check --static cannot tell that it is a component and do not check its template.",
-      "when": "A class in a Python file sets template to a string literal, Citry cannot prove from that file that the class is a component, and one of its bases is imported from a module of your project rather than from an installed package. citry check --static lists it as a note, and the editor shows it as information on the class name. citry check with your application loaded reads the component registry and checks the template, so it does not report this.",
+      "summary": "A class sets a template, but it extends a class from another module of your project, so the editor and citry check --static cannot tell that it is a component and do not check its template.",
+      "when": "A class in a Python file sets template to a string literal that contains a tag, Citry cannot prove from that file that the class is a component, and it extends a class imported from a module of your project, directly or through a class defined in the same file. A class from an installed package does not count. citry check --static lists it as a note, and the editor shows it as information on the class name. citry check with your application loaded reads the component registry and checks the template, so it does not report this.",
       "fix": "Nothing is wrong with the code. Run citry check with your application loaded, as in citry --app module:engine check, to check the template.",
       "defaultSeverity": "information",
       "surfaces": [
@@ -1275,10 +1275,10 @@
       ],
       "parameters": {
         "component": "The class name.",
-        "base": "The base class as written."
+        "base": "The imported class it extends, as written."
       },
       "messages": {
-        "default": "Citry cannot tell from this file that {component} is a component, because its base class {base} comes from another module, so this template is checked only by citry check with your application loaded."
+        "default": "Citry cannot tell from this file that {component} is a component, because it extends {base}, which comes from another module, so this template is checked only by citry check with your application loaded."
       },
       "examples": [
         {

@@ -466,6 +466,7 @@ class TestSchemaProjection:
             forced: Literal[True]
             mixed_literal: Literal["text", 1]
             choice_literal: Literal[TextChoice.FIRST]
+            number_choice_literal: Literal[NumberChoice.SECOND, b"raw"]
             nested: Nested
             optional_count: int | None
             label: str = ""
@@ -525,6 +526,8 @@ class TestSchemaProjection:
                 "forced": {"type": "boolean", "enum": [True]},
                 "mixed_literal": {"enum": ["text", 1]},
                 "choice_literal": {"type": "string", "enum": ["first"]},
+                # Bytes never arrive as JSON, so only the number is listed.
+                "number_choice_literal": {"type": "integer", "enum": [2]},
                 "nested": {"$ref": "#/components/schemas/Nested"},
                 "optional_count": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
                 "label": {"type": "string"},
@@ -561,6 +564,7 @@ class TestSchemaProjection:
                 "forced",
                 "mixed_literal",
                 "choice_literal",
+                "number_choice_literal",
                 "nested",
                 "optional_count",
             ],

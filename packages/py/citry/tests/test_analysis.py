@@ -715,10 +715,10 @@ def test_untraced_component_templates_follow_project_imports_only(tmp_path):
         is_project_module=lambda module, level: project_module_exists(module, level, file=card, root=tmp_path),
     )
 
-    # A base defined in the file is followed to its import; an installed
+    # A base defined in the file is followed to the class it imports; an installed
     # package, a template that is a file name, a dotted base, and a proven
     # component are not reported.
     assert [(item.component_name, item.base, item.line, item.start_column) for item in found] == [
-        ("Card", "Local", 8, 6),
+        ("Card", "BaseCard", 8, 6),
         ("Mixed", "Mixin", 10, 6),
     ]

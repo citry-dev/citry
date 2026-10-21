@@ -19,8 +19,10 @@ The coercion table, exactly (anything else is a per-field error):
   ``Enum`` (ISO strings, by enum value),
 - ``list`` to ``tuple`` / ``set``,
 - nested annotated classes from objects,
-- a ``Literal[...]`` field accepts exactly one of its listed values, each
-  checked by its own type's rule above.
+- a ``Literal[...]`` field accepts a value equal to one of its listed
+  values after that value's own rule above (an Enum member by its value),
+  so ``"2"`` from a form post binds to ``Literal[1, 2]`` and ``true`` never
+  matches ``1``.
 
 The binding is source-aware (design 3.3). A JSON payload stays strict for
 ``int`` / ``float`` / ``bool`` fields: JSON expresses those types natively,
@@ -280,15 +282,16 @@ def payload_fields(schema_cls: type) -> tuple[_FieldSpec, ...] | None:
         return None
 
 
-def json_value_error(annotation: Any, value: Any) -> str | None:
+def json_value_error(annotation: Any, value: Any, *, bind_strings: bool = False) -> str | None:
     """
     Return the message the server gives for ``value`` in a field annotated ``annotation``, or None when it fits.
 
-    ``value`` is checked as a JSON payload is, without the string rules of
-    a form post, because the browser sends ``@c-*`` arguments as JSON.
+    By default ``value`` is checked as a JSON payload is, without the string
+    rules of a form post, because the browser sends ``@c-*`` arguments as
+    JSON. ``bind_strings`` applies those rules, as for a GET query string.
     """
     errors: dict[str, str] = {}
-    if _coerce(value, annotation, "", errors, bind_strings=False) is not _INVALID:
+    if _coerce(value, annotation, "", errors, bind_strings=bind_strings) is not _INVALID:
         return None
     return next(iter(errors.values()), None)
 
@@ -585,14 +588,16 @@ def _coerce_literal(value: Any, annotation: Any, path: str, errors: dict[str, st
     """Coerce a ``Literal[...]`` value: it must equal one of the listed values, with that value's type."""
     members = get_args(annotation)
     for member in members:
+        # The wire carries an Enum member as its value, so the value is what
+        # the payload must match, read by the value's own type.
+        expected = member.value if isinstance(member, Enum) else member
         # Each listed value is read by its own type's rule, so a form post's
-        # "2" still binds to `Literal[1, 2]` and a string binds to an Enum
-        # member by value, as for a plain field of that type.
+        # "2" still binds to `Literal[1, 2]`, as for a plain field of that type.
         scratch: dict[str, str] = {}
-        coerced = _coerce(value, type(member), path, scratch, bind_strings=bind_strings)
+        coerced = _coerce(value, type(expected), path, scratch, bind_strings=bind_strings)
         # Python counts True == 1, so the type is compared too: JSON keeps
         # `true` and `1` apart, and so does the field.
-        if coerced is not _INVALID and type(coerced) is type(member) and coerced == member:
+        if coerced is not _INVALID and type(coerced) is type(expected) and coerced == expected:
             return member
     # Values are shown as the browser writes them, an Enum member by its value.
     listed = ", ".join(_literal_value_text(member.value if isinstance(member, Enum) else member) for member in members)

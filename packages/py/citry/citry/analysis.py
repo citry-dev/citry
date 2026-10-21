@@ -2100,7 +2100,12 @@ def _declared_prop_names(source: str) -> frozenset[str] | None:
 
 def _writes_name(source: bytes, start: int, end: int) -> bool:
     """Return whether the name at ``source[start:end]`` is assigned or updated there."""
-    return bool(_WRITE_AFTER_NAME.match(source, end)) or bool(_UPDATE_BEFORE_NAME.search(source[:start]))
+    if _WRITE_AFTER_NAME.match(source, end):
+        return True
+    update = _UPDATE_BEFORE_NAME.search(source[:start])
+    # `++` or `--` right after a value, as in `a--` before a line break, ends
+    # that value's expression, so it does not update the name that follows.
+    return update is not None and not re.search(rb"[\w$)\]]\s*$", source[: update.start()])
 
 
 def lint_prop_assignments(
@@ -2264,8 +2269,9 @@ def lint_misspelled_css_variables(
     Report ``var(--name)`` in a component's CSS that is one typing slip from a ``css_data()`` key.
 
     Citry sets one custom property per ``css_data()`` key, named after the
-    key. A ``var()`` that names a property nothing sets has no value, so the
-    declaration falls back to the property's initial value without an error.
+    key. When a ``var()`` names a property nothing sets, the browser ignores
+    the declaration without an error: the property inherits from the parent
+    element or takes its initial value.
     Only a name one typing slip from a key is reported, because a site
     stylesheet or a parent component may set any other property. A ``var()``
     with a fallback, and a property the same CSS sets itself, are left alone.
@@ -3684,7 +3690,8 @@ class UntracedComponentTemplate:
 
     Attributes:
         component_name: The class name.
-        base: The base class as written, such as ``BaseCard``.
+        base: The imported class it extends, directly or through a class
+            in the same file, as written, such as ``BaseCard``.
         line: The 1-based line of the class name.
         start_column: The character in that line where the class name starts.
         end_column: The character in that line where the class name ends.
@@ -3778,7 +3785,7 @@ def _project_base(
     *,
     seen: set[str],
 ) -> str | None:
-    """Return the first base, as written, that traces to an import from a project module, or None."""
+    """Return the imported class, as written, that a class extends directly or through a class in this file."""
     seen.add(class_node.name)
     for base in class_node.bases:
         if not isinstance(base, ast.Name):
@@ -3788,12 +3795,10 @@ def _project_base(
             return base.id
         # A base defined earlier in this file may itself extend an imported class.
         local = classes.get(base.id)
-        if (
-            local is not None
-            and local.name not in seen
-            and _project_base(local, imported, classes, is_project_module, seen=seen)
-        ):
-            return base.id
+        if local is not None and local.name not in seen:
+            found = _project_base(local, imported, classes, is_project_module, seen=seen)
+            if found is not None:
+                return found
     return None
 
 
