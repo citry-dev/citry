@@ -1374,7 +1374,7 @@ page provides `board`, and the card reads `bord`:
 </c-provide>
 ```
 
-```python
+```citry
 class Card(Component):
     def template_data(self, kwargs, slots):
         # Warning: No component above Card provides
