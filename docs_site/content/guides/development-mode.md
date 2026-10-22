@@ -36,7 +36,7 @@ Development mode changes three things:
 
 - When you turn a page into HTML, such as with `str(page)`, Citry warns
   if two elements on it share an `id`. See
-  [Fix repeated ids](#repeated-ids) below.
+  [Fix repeated ids](#repeated-ids).
 - The browser console warns when Vue's first render of a part it builds
   in the browser differs from the HTML the server sent. See
   [First render warnings](/vue/server-rendering/#first-render-warnings).
@@ -52,15 +52,16 @@ To pick up edited template, JS, or CSS files without a restart, turn on
 [hot reload](/guides/hot-reload/). It is separate from the mode and is
 for development only.
 
-## Fix repeated ids { #repeated-ids }
+## Less common cases
 
-When two elements on a page share an `id`, a label's `for`, a
-`#fragment` link, and `getElementById` find only the first. The
-[duplicate ids](/ide/template-linting/#find-duplicate-ids) rule finds a
-repeat inside one template. Development mode also finds one across the
-page: two components that write the same `id`, or one component rendered
-twice. When Citry turns such a page into HTML (`str(page)` or
-`.serialize()`), it issues a `RuntimeWarning` that names the components:
+Read on to fix a repeated id, when the id check stays silent or warns
+about a page that looks right, or when development mode refuses your
+translations. The browser console check lists its own limits under
+[Limits of the check](/vue/server-rendering/#first-render-check-limits).
+
+### Fix repeated ids { #repeated-ids }
+
+The warning names the components that write each repeated id:
 
 ```text
 RuntimeWarning: Citry found 1 id used by more than one element
@@ -70,27 +71,14 @@ on one page:
 ...
 ```
 
-When two different components use the same id, rename one. When one
-component appears more than once, build the id from a value it receives,
-so each occurrence gets its own:
+When two different components write the same id, rename one. When one
+component appears more than once, build the id from a value it
+receives, such as `c-id="'board-' + name"`, so each copy gets its own.
 
-```citry-html
-{# Wrong: every Board on the page has id="board" #}
-<section id="board">...</section>
-
-{# Right: the caller passes a different name to each Board #}
-<section c-id="'board-' + name">...</section>
-```
-
-You see the warning only on the first render that has the repeat:
-Python shows the same warning once per process.
-
-## Less common cases
-
-Read on when the id check stays silent or warns about a page that looks
-right, or when development mode refuses your translations. The browser
-console check lists its own limits under
-[Limits of the check](/vue/server-rendering/#first-render-check-limits).
+Python shows the same warning once per process, so you see it only on
+the first render that has the repeat. The
+[duplicate ids](/ide/template-linting/#find-duplicate-ids) rule in the
+editor already finds a repeat inside one template.
 
 ### Ids the check misses { #ids-the-check-misses }
 
