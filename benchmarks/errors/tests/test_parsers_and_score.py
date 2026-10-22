@@ -245,7 +245,7 @@ def test_inline_template_findings_map_to_their_python_file_line(tmp_path: Path) 
                 "code": "citry.template.unknown-variable",
                 "severity": "error",
                 "message": "Template variable 'ownr' is not available in this template.",
-                "range": {"start": {"line": 2, "column": 10}},
+                "range": {"source_kind": "inline", "start": {"line": 1, "column": 9}},
             }
         ]
     }
@@ -277,7 +277,7 @@ def test_findings_about_a_component_member_map_to_their_file_line(tmp_path: Path
                 "severity": "warning",
                 "message": "JsData field 'apiBase' is not a clean JSON value: API_BASE holds a value of type "
                 "PurePosixPath, which cannot be sent to the browser as JSON.",
-                "range": {"start": {"line": 2, "column": 16}, "end": {"line": 2, "column": 25}},
+                "range": {"source_kind": "file", "start": {"line": 2, "column": 16}, "end": {"line": 2, "column": 25}},
             },
             {
                 # A template checked without the app counts lines inside the template.
@@ -285,15 +285,15 @@ def test_findings_about_a_component_member_map_to_their_file_line(tmp_path: Path
                 "code": "citry.template.unknown-variable",
                 "severity": "error",
                 "message": "Template variable 'ownr' is not available in this template.",
-                "range": {"start": {"line": 2, "column": 10}},
+                "range": {"source_kind": "inline", "start": {"line": 1, "column": 9}},
             },
             {
-                # A JsData field: the range counts lines of the file from 0.
-                "origin": "app.components.board_page.BoardPage.JsData.api_base",
+                # A JsData field names the file, and the range counts lines of that file.
+                "origin": f"{file} (app.components.board_page.BoardPage.JsData.api_base)",
                 "code": "citry.js-data.unsupported-type",
                 "severity": "warning",
                 "message": "JsData field 'api_base' is not a clean JSON value.",
-                "range": {"start": {"line": 9, "column": 8}},
+                "range": {"source_kind": "file", "start": {"line": 9, "column": 8}},
             },
             {
                 # An i18n call in Python names the class alone, and counts lines of the file from 0.
@@ -301,7 +301,7 @@ def test_findings_about_a_component_member_map_to_their_file_line(tmp_path: Path
                 "code": "citry.i18n.unknown-message",
                 "severity": "error",
                 "message": "Unknown i18n message ID 'board-subtitel'.",
-                "range": {"start": {"line": 12, "column": 15}},
+                "range": {"source_kind": "file", "start": {"line": 12, "column": 15}},
             },
         ]
     }
@@ -312,6 +312,22 @@ def test_findings_about_a_component_member_map_to_their_file_line(tmp_path: Path
         ("app/components/board_page.py", 10),
         ("app/components/board_page.py", 13),
     ]
+
+
+def test_findings_in_a_template_file_map_to_that_file_line() -> None:
+    payload = {
+        "findings": [
+            {
+                "origin": f"{WORK}/app/templates/card.html",
+                "code": "citry.template.unknown-variable",
+                "severity": "error",
+                "message": "Template variable 'ownr' is not available in this template.",
+                "range": {"source_kind": "file", "start": {"line": 1, "column": 4}},
+            }
+        ]
+    }
+    [finding] = citry_json(json.dumps(payload), "", 1, WORK)
+    assert (finding.file, finding.line) == ("app/templates/card.html", 2)
 
 
 def test_a_type_check_that_did_not_run_has_no_verdict() -> None:

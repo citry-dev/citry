@@ -130,6 +130,15 @@
 - The render error for a component that `<c-for>` repeats without
   `#c-key`, or with a duplicate one, now names the tag, its template, and
   the line.
+- In `citry check --format json`, every finding's `range` now counts lines
+  and columns from 0, with columns in UTF-16 code units, as the Language
+  Server Protocol does. Syntax errors, unknown variables, unknown
+  components, and i18n catalog errors used to count from 1; if your tool
+  subtracted 1 from those, stop. Each `range` also says which text it
+  counts in, `"source_kind": "file"` or `"inline"` (a string written on
+  the class, such as `template`), and a `JsData` field's `origin` now
+  names its Python file
+  ([details](https://citry.dev/advanced/cli/#check-json-output)).
 - A form submitted through `@c-submit` now gives the handler the same
   values as the same form posted without JavaScript: text such as `"3"`
   fills an `int` or `float` field, a checked checkbox fills a `bool`

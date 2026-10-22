@@ -253,7 +253,7 @@ def test_checker_and_lsp_share_unknown_member_diagnostics(tmp_path):
             b: int
 
     javascript = "$component(({ component }) => { console.log(component.c); });"
-    findings = _check_browser_source(engine, _BrowserSource("card.js", javascript, [Card]), {})
+    findings = _check_browser_source(engine, _BrowserSource("card.js", javascript, [Card], "file"), {})
     project, document = _project_document(tmp_path, javascript, standalone=True, declared=True)
     diagnostics = browser_diagnostics(document, project)
     assert len(findings) == len(diagnostics) == 1
@@ -289,7 +289,7 @@ def test_checker_and_lsp_apply_the_component_member_rule_severity(tmp_path, rule
             rule_unknown_component_js_member = rule
 
     javascript = "$component(({ component }) => { console.log(component.c); });"
-    findings = _check_browser_source(engine, _BrowserSource("card.js", javascript, [Card]), {})
+    findings = _check_browser_source(engine, _BrowserSource("card.js", javascript, [Card], "file"), {})
     project, document = _project_document(tmp_path, javascript, standalone=True, declared=True, member_rule=rule)
     diagnostics = [
         diagnostic
@@ -328,8 +328,8 @@ def test_shared_javascript_uses_the_strictest_owner_member_severity():
             rule_unknown_component_js_member = "warning"
 
     javascript = "$component(({ component }) => { console.log(component.c); });"
-    both = _check_browser_source(engine, _BrowserSource("shared.js", javascript, [Quiet, Loud]), {})
-    quiet_only = _check_browser_source(engine, _BrowserSource("shared.js", javascript, [Quiet]), {})
+    both = _check_browser_source(engine, _BrowserSource("shared.js", javascript, [Quiet, Loud], "file"), {})
+    quiet_only = _check_browser_source(engine, _BrowserSource("shared.js", javascript, [Quiet], "file"), {})
     assert [(finding.code, finding.severity) for finding in both] == [
         ("citry.component-js.unknown-member", "warning"),
     ]

@@ -113,10 +113,10 @@ application registers, and reports:
   [template lint settings](/ide/template-linting/). Values from
   `template_globals` and declared analysis-only variables count as known.
 
-Each error shows the template excerpt and where it came from: the
-component, such as `myapp.card.Card.template`, or the template file. Line
-and column numbers count from the start of the template, not the start of
-the Python file.
+Each finding says where it came from, such as `myapp.card.Card.template`
+or a file path. A syntax error also shows the template excerpt, numbered
+from line 1 at the start of the template, not the start of the Python
+file.
 
 The exit status is:
 
@@ -125,9 +125,58 @@ The exit status is:
 - `2` when the command line is wrong, or the application could not be
   imported (see below).
 
-Add `--format json` to print one JSON report instead of text lines. Each
-finding has an `origin`, `code`, `severity`, `message`, and `range`.
-`range` is `null` when the finding has no position.
+Add `--format json` to print one JSON report instead of text lines; see
+[JSON report](#check-json-output).
+
+### JSON report { #check-json-output }
+
+With `--format json`, the command prints one JSON object. It holds the
+report's `schema_version`, the `app` you named, the `mode` the check ran
+in, the `exit_code`, any `notes`, the `app_failure` when the app could
+not be imported, and a `findings` list with one entry per finding:
+
+```json
+{
+  "origin": "myapp.card.Card.template",
+  "code": "citry.template.unknown-variable",
+  "severity": "error",
+  "message": "Template variable 'missing' is not ...",
+  "range": {
+    "source_kind": "inline",
+    "start_index": 24,
+    "end_index": 31,
+    "start": {"line": 1, "column": 23},
+    "end": {"line": 1, "column": 30}
+  }
+}
+```
+
+`range` is `null` when the finding has no position. Otherwise every
+finding counts its range the same way:
+
+- `start` and `end` lines and columns count from 0, the way the Language
+  Server Protocol counts them, so an editor plugin can use them unchanged.
+  Editors show positions from 1, so add 1 to match what you see on
+  screen. Columns count UTF-16 code units: most characters count as 1, an
+  emoji as 2.
+- `start_index` and `end_index` are UTF-8 byte offsets into the same text,
+  with each line break counted as one `\n` byte, as Python reads a text
+  file. `end_index` points just past the last byte.
+- `source_kind` says which text all of these count in:
+    - `"inline"`: the string written on the class attribute that `origin`
+      names, such as `template`, `js`, `css`, or `messages`. An inline
+      `messages` string is named `<file>::<Class>.messages`. Line 0 is the
+      text right after the opening quotes. Citry first removes the
+      indentation the lines share, and every number counts in the result.
+    - `"file"`: the file that `origin` names. That is a template,
+      JavaScript, CSS, or messages file, or a component's Python file, as
+      in `/srv/shop/app/card.py (app.card.Card.js_data)`. A messages
+      file inside a catalog package is named `package:path`, such as
+      `acme_ui:locales/en-US/main.ftl`.
+
+A TypeScript or ty finding from `--types` counts in its file too. Its
+`origin` also holds the position, counted from 1, as `tsc` prints it:
+`/srv/shop/app/components/lane.py:24:13`.
 
 ### `check --static` syntax
 
