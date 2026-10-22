@@ -622,6 +622,22 @@ class TestInvalidState:
 
 
 class TestStaleState:
+    def test_stale_checks_run_before_the_component_class_check(self, monkeypatch):
+        # The spec's State tokens section fixes the order: a stale token
+        # answers 409 even when it names another component class, so every
+        # server gives the same answer for the same token.
+        _pin_now(monkeypatch, FIXED_NOW)
+        token = mint_state_token(
+            CounterState(count=1), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=timedelta(seconds=60), max_bytes=8192
+        )
+        prefix, payload_b64, sig_b64 = token.split(".")
+        changed = f"{prefix}.{payload_b64}.{'A' if sig_b64[0] != 'A' else 'B'}{sig_b64[1:]}"
+        with pytest.raises(StaleStateError):
+            verify_state_token(changed, cls=OtherComp, secrets=[SIGNING_KEY])
+        _pin_now(monkeypatch, FIXED_NOW + 61)
+        with pytest.raises(StaleStateError):
+            verify_state_token(token, cls=OtherComp, secrets=[SIGNING_KEY])
+
     def test_signed_token_expiry(self, monkeypatch):
         _pin_now(monkeypatch, FIXED_NOW)
         token = mint_state_token(
@@ -726,6 +742,24 @@ class TestProtocolFixtureConformance:
         )
         with pytest.raises(StaleStateError) as exc_info:
             verify_state_token(token, cls=FakeCounter, secrets=[NEW_KEY])
+        assert exc_info.value.status == expected["status"]
+        assert exc_info.value.code == expected["code"]
+
+    def test_changed_signature_answers_the_stale_state_fixture_error(self):
+        result = self._load("error_stale_state.result.json")
+        expected = result["results"][0]["error"]
+        # The spec's State tokens section says a readable token whose
+        # signature no current secret matches answers stale_state, because
+        # the server cannot tell a changed signature from a removed secret.
+        # Change only the first signature character, which always changes the
+        # decoded bytes (the last one can carry ignored padding bits).
+        token = mint_state_token(
+            CounterState(count=0), class_id=CLASS_ID, secret=SIGNING_KEY, max_age=None, max_bytes=8192
+        )
+        prefix, payload_b64, sig_b64 = token.split(".")
+        changed_sig = ("A" if sig_b64[0] != "A" else "B") + sig_b64[1:]
+        with pytest.raises(StaleStateError) as exc_info:
+            verify_state_token(f"{prefix}.{payload_b64}.{changed_sig}", cls=FakeCounter, secrets=[SIGNING_KEY])
         assert exc_info.value.status == expected["status"]
         assert exc_info.value.code == expected["code"]
 
@@ -929,6 +963,21 @@ class TestServerStorage:
         with pytest.raises(InvalidStateError) as exc_info:
             verify_state_token(token, cls=OtherComp, secrets=[], cache=cache)
         assert exc_info.value.status == 403
+
+    def test_missing_server_state_is_stale_before_the_class_check(self):
+        # The spec's order: State the server no longer holds answers 409
+        # before the token's component class is compared.
+        token = mint_state_token(
+            CounterState(count=1),
+            class_id=CLASS_ID,
+            secret=None,
+            max_age=None,
+            max_bytes=8192,
+            storage="server",
+            cache=InMemoryCache(),
+        )
+        with pytest.raises(StaleStateError):
+            verify_state_token(token, cls=OtherComp, secrets=[], cache=InMemoryCache())
 
     def test_server_token_without_cache_is_invalid(self):
         cache = InMemoryCache()

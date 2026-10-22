@@ -709,8 +709,8 @@ Every wire error has exactly `status`, `code`, and `message`, plus optional
 | Code | Status | Meaning |
 |---|---:|---|
 | `invalid_args` | 422 | Handler args or State updates failed validation. |
-| `invalid_state` | 403 | The State token is malformed or fails signature verification. |
-| `stale_state` | 409 | The token expired or was signed only by a rotated-out secret. |
+| `invalid_state` | 403 | The server cannot read the State token, or the token belongs to another component class. See [State tokens](#state-tokens). |
+| `stale_state` | 409 | The token expired, its signature matches no current secret, the State it points to is gone, or its State no longer fits the component. See [State tokens](#state-tokens). |
 | `unknown_event` | 404 | The component class declares no handler under that name. |
 | `unknown_component` | 404 | No registered component class has that ID. |
 | `forbidden` | 403 | Application authorization denied the call. |
@@ -808,6 +808,36 @@ set up the component's reactive State, and a `state` action, which updates
 them after a handler changes State (see [State refresh](#state-refresh)). Server-only values never appear in either
 place. A refreshed token arrives the same two ways: in the Events records of a
 new render, or in a `state` action beside the refreshed values.
+
+When the server rejects a token, it answers one of two error codes. The
+difference matters to the browser: Citry's browser client offers to reload
+the page when a call answers `stale_state` (409), because a reload brings
+a fresh token. It treats `invalid_state` (403) like any other error.
+
+The server checks the token of a call that needs State in this order, and
+answers the first problem it finds:
+
+1. The call sends no token, or the server cannot read it as one of its own
+   tokens, for example because the encoding, the JSON, or a field is
+   wrong, or the token version is unknown: `invalid_state`.
+2. The token expired, its signature matches none of the server's current
+   signing secrets, or, for a token that points to State the server
+   stores, the server no longer holds that State: `stale_state`.
+3. The token was minted for a different component class than the call
+   names: `invalid_state`.
+4. The token's State fields no longer fit the component's State class, as
+   after a deploy that changed the class: `stale_state`.
+
+On a component that declares State, a call needs State when its handler
+reads State, when it sends `stateUpdates`, or when it sends a token at
+all. A component without State ignores a token.
+
+A server cannot tell a token with a changed signature from an honest token
+signed with a secret it has since removed, because both are readable
+tokens whose signature no current secret matches. Both therefore answer
+`stale_state`, even when the token also names another component class.
+The server reads such a token only to choose the error code and never
+uses its values.
 
 ## How the browser learns what it can call
 
