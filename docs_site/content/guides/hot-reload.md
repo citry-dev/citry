@@ -1,17 +1,14 @@
 ---
-title: Hot reload and development mode
-description: Pick up edits to a component's template, JS, or CSS file on the next render without restarting, and turn on development mode's page checks.
+title: Hot reload during development
+description: Pick up edits to a component's template, JS, or CSS file on the next render without restarting, using citry watch and the reload helpers.
 ---
 
-# Hot reload and development mode
+# Hot reload during development
 
 While you develop, you want an edit to a component's template, JavaScript,
 or CSS file to show up when you reload the page, without restarting the
 server. Turn on Citry's hot reload: when such a file changes, Citry forgets
 its stored copy, and the next render reads the file again.
-
-The last section, [Development mode](#development-mode), shows how to turn
-on checks for mistakes that only a running page shows.
 
 ## What reloads
 
@@ -246,80 +243,5 @@ time. Run a single process while you develop.
 In production, do not run `citry watch` and do not add the framework
 helpers.
 
-## Development mode { #development-mode }
-
-Some mistakes show only on a whole page while it runs, such as the same
-`id` on two components. Pass `mode="development"` while you develop, and
-Citry checks for them. Keep the default, `"production"`, for deployed
-apps:
-
-```python
-import os
-
-from citry import Citry
-
-debug = os.environ.get("DEBUG") == "1"
-app = Citry(mode="development" if debug else "production")
-```
-
-Development mode turns on:
-
-- a warning when two elements on one page share an `id` (see
-  [Repeated ids](#repeated-ids));
-- a browser console warning when Vue's first render of a part it builds
-  in the browser differs from the HTML the server sent (see
-  [First render warnings](/vue/server-rendering/#first-render-warnings));
-- reading translations straight from your `.ftl` files (see
-  [Production and deployment](/i18n/production/)).
-
-The checks cost time on every render and add a script to some pages, so
-leave them out of production. A production page does not load that
-script.
-
-### Repeated ids { #repeated-ids }
-
-When two elements share an `id`, a label's `for`, a `#fragment` link, and
-`getElementById` find only the first. The
-[duplicate ids](/ide/template-linting/#find-duplicate-ids) rule finds a
-repeat inside one template. Development mode also finds one across the
-page: two components that write the same `id`, or one component rendered
-twice. When Citry turns such a page into HTML (`str(page)` or
-`.serialize()`), it issues a `RuntimeWarning`:
-
-```text
-RuntimeWarning: Citry found 1 id used by more than one element
-on one page:
-- id "board": Board (app/board.py::Board), Sidebar
-  (app/sidebar.py::Sidebar)
-...
-```
-
-When two different components use the same id, rename one. When one
-component appears more than once, build the id from a value it receives,
-so each occurrence gets its own:
-
-```citry-html
-{# Wrong: every Board on the page has id="board" #}
-<section id="board">...</section>
-
-{# Right: the caller passes a different name to each Board #}
-<section c-id="'board-' + name">...</section>
-```
-
-Python shows the same warning only once per process, so a page that
-keeps the same repeat warns on its first render only. The check counts
-the ids in the HTML the server writes, so it does not see:
-
-- an id on or inside an element with `v-if`, `v-else-if`, `v-else`, or
-  `v-for`, or inside a `<template>` or `<noscript>`, because the browser
-  decides whether those exist;
-- an id that a Vue binding such as `:id`, or other browser code, sets;
-- a repeat between an HTML fragment, or a part of the page that a server
-  event renders again, and the page it lands in.
-
-Two cases can surprise you. A component in both branches of a `v-if`
-written on its own tag, such as `<c-Panel v-if="wide" />` and
-`<c-Panel v-else />`, warns even though only one branch shows; put the
-condition on an element around each call. A
-[simple component](/performance/simple-components/) (`simple = True`)
-writes its HTML into its caller's, so the warning names the caller.
+To have Citry also check running pages for mistakes while you develop,
+see [Development mode](/guides/development-mode/).

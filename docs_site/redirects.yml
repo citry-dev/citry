@@ -35,3 +35,5 @@ redirects:
     to: /advanced/cli/
   - from: /web-frameworks/
     to: /advanced/web-frameworks/
+  - from: /guides/dev-server/
+    to: /guides/hot-reload/

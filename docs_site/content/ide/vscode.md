@@ -506,11 +506,10 @@ A listener that names a parent method without calling it, such as
 `@drop-task="move"`, is checked too, because Vue calls the method with the
 emitted values. TypeScript reports a method that needs more values than the
 child sends, or a parameter of an unrelated type, such as a number where
-the child sends a string. A method with no typed parameters, an event
-declared with `null` in place of the function, as in `hide: null`, and a
-declared event of a child whose `emits` is an array are not checked. See
+the child sends a string. [Method listeners](#method-listeners) lists
+what is not checked, and
 [Catch payload mistakes](/vue/props-and-events/#catch-payload-mistakes)
-for the full rules.
+shows an example.
 
 On an HTML element, `$event` is the DOM event, such as `KeyboardEvent` for
 `@keydown`. A name the DOM does not define, such as `@board:notice`, is a
@@ -858,6 +857,35 @@ root element. A listener that names a method without calling it, such as
 when the child lists its events as an array. For a declared event of a
 child whose `emits` is an array, or any event of a child whose `emits`
 Citry cannot read, `$event` is `any`.
+
+### Method listeners { #method-listeners }
+
+The editor and `citry check --types` check a listener that names a
+parent method without calling it, such as `@hide="hideCard"`, against
+the values the child declares in `emits`, with these rules:
+
+- A method that takes fewer values than the child sends passes, because
+  JavaScript ignores extra arguments.
+- The child may leave out a value whose parameter has a default, or is
+  marked optional in a `@param {string} [reason]` comment above the
+  method.
+- A method whose parameters have no type comment takes any values, so it
+  is not checked. Once one parameter has a type, every parameter without
+  a default counts as required.
+- With the array form, such as `emits: ["hide"]`, or `null` in place of
+  the function, as in `hide: null`, a declared event's values can be
+  anything, so its listener is not checked. For an event the child does
+  not declare, see [Undeclared child events](#undeclared-child-events).
+- A parameter whose type is narrower than the payload, such as
+  `"a" | "b"` where the child sends any string, is not reported. The
+  check runs TypeScript with its `strict` option off, and TypeScript then
+  accepts a method whose parameter type is narrower than the value it
+  receives.
+- Only a name from the parent's `methods` is checked. A function stored
+  in `data()`, or a member such as `store.hide`, is not.
+- A listener that calls the method, such as `@hide="hideCard($event)"`,
+  or an inline function, is checked like any other call: `$event` has the
+  payload's type, and TypeScript reports a missing argument.
 
 ### Typing inside `data()`
 
