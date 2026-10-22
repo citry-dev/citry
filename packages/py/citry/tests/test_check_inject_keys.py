@@ -19,13 +19,15 @@ import ast
 import importlib.util
 import sys
 import textwrap
+import types
+import typing
 from typing import TYPE_CHECKING
 
 import pytest
 
 from citry._app_selection import CheckAppSelection
 from citry._checker import check_project
-from citry._provide_keys import engine_inject_keys, provides_argument_keys
+from citry._provide_keys import _in_standard_library, engine_inject_keys, provides_argument_keys
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -88,6 +90,7 @@ def _findings(
     app_file = tmp_path / f"{name}.py"
     app_file.write_text(source, encoding="utf-8")
     for relative, text in (files or {}).items():
+        (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / relative).write_text(textwrap.dedent(text), encoding="utf-8")
     spec = importlib.util.spec_from_file_location(name, app_file)
     assert spec is not None
@@ -420,6 +423,34 @@ def test_provides_argument_keys_reads_literal_keys_only():
     assert sorted(provides_argument_keys(tree)) == ["a", "c", "e"]
 
 
+def test_render_provides_keys_imported_from_a_loaded_module_count(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "board_keys", types.SimpleNamespace(BOARD="board"))
+    views = (
+        "import board_keys\nfrom board_keys import BOARD\n\n\n"
+        "def page(board):\n    return Card().render(provides={BOARD: board})\n"
+    )
+    attribute = views.replace("{BOARD: board}", "{board_keys.BOARD: board}")
+
+    # A keys module the app never imported is read from the project folder.
+    on_disk = views.replace("board_keys", "disk_keys")
+
+    for source in (views, attribute, on_disk):
+        files = {"views.py": source, "disk_keys.py": "BOARD = 'board'\n"}
+        found = _findings(tmp_path, monkeypatch, _card("board"), _page("Board", "<c-card />"), files=files)
+        assert found == []
+
+
+def test_a_project_package_named_like_a_standard_module_is_not_skipped(tmp_path, monkeypatch):
+    # The class's file decides, so a project's own `profile` package is read.
+    module = types.ModuleType("profile")
+    module.__file__ = str(tmp_path / "profile" / "__init__.py")
+    monkeypatch.setitem(sys.modules, "profile", module)
+    project_class = type("Mixin", (), {"__module__": "profile"})
+
+    assert not _in_standard_library(project_class)
+    assert _in_standard_library(typing.Generic)
+
+
 def test_a_project_folder_too_large_to_read_turns_the_rule_off(tmp_path, monkeypatch):
     # Past the limit Citry cannot see every `render(provides=...)` key.
     monkeypatch.setattr("citry._provide_keys._MAX_PROJECT_FILES", 0)
@@ -448,6 +479,46 @@ def test_a_project_folder_too_large_to_read_turns_the_rule_off(tmp_path, monkeyp
 def test_a_component_python_places_inside_other_content_is_not_reported_below(tmp_path, monkeypatch, parts, files):
     # Widget renders under Board's or Layout's <c-provide>, which Citry cannot see from the templates.
     assert _findings(tmp_path, monkeypatch, _card("board"), *parts, files=files) == []
+
+
+def test_a_component_python_places_through_a_variable_is_not_reported_below(tmp_path, monkeypatch):
+    views = "def page():\n    widget = Widget()\n    return str(Layout(slots={'default': widget}))\n"
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Widget", "<c-card />"),
+        _page("Layout", '<c-provide key="board" name="x"><c-slot /></c-provide>'),
+        files={"views.py": views},
+    )
+
+    assert found == []
+
+
+def test_a_component_python_places_and_no_template_uses_is_not_reported(tmp_path, monkeypatch):
+    # Card goes straight into Layout's slot, under a key Citry cannot read.
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Layout", '<c-provide c-key="key_name" name="x"><c-slot /></c-provide>'),
+        files={"views.py": "def page():\n    return str(Layout(slots={'default': Card()}))\n"},
+    )
+
+    assert found == []
+
+
+def test_a_test_file_that_places_a_component_does_not_hide_it(tmp_path, monkeypatch):
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("bord"),
+        _page("Board", _BOARD_PROVIDES),
+        _page("Layout", "<c-slot />"),
+        files={"tests/test_layout.py": "def test_it():\n    str(Layout(slots={'default': Card()}))\n"},
+    )
+
+    assert len(found) == 1
 
 
 def test_a_page_python_renders_on_its_own_still_gets_its_children_checked(tmp_path, monkeypatch):
@@ -515,10 +586,10 @@ class Tile(ReadsBoard, Component):
 def test_provide_and_inject_calls_in_mixins_count(tmp_path, monkeypatch):
     found = _findings(tmp_path, monkeypatch, _card("board"), _MIXINS, _page("Page", "<c-board /><c-tile />"))
 
-    # Card gets `board` from the mixin's provide(); the mixin's inject("bord") is reported once.
+    # Card gets `board` from the mixin's provide(); the mixin's inject("bord") is reported once, naming Tile.
     assert [message for _severity, _text, message in found] == [
-        "No component above ReadsBoard provides 'bord', so self.inject('bord') raises KeyError when the page"
-        " renders. Provide 'bord' above ReadsBoard, or pass a default to inject()."
+        "No component above Tile provides 'bord', so self.inject('bord') raises KeyError when the page"
+        " renders. Provide 'bord' above Tile, or pass a default to inject()."
     ]
 
 
@@ -592,16 +663,25 @@ def test_a_template_that_cannot_be_parsed_turns_the_rule_off(tmp_path, monkeypat
     assert found == []
 
 
-def test_a_component_whose_source_cannot_be_read_turns_the_fallback_off(tmp_path, monkeypatch):
-    # A class built with type() has no source, so it may provide any key.
-    found = _findings(
-        tmp_path,
-        monkeypatch,
-        _card("bord"),
-        'type("Hidden", (Component,), {"citry": engine, "template": "<p>x</p>"})\n',
-    )
+@pytest.mark.parametrize(
+    ("hidden", "reported"),
+    [
+        pytest.param(
+            'type("Hidden", (Component,), {"citry": engine, "template": "<p>x</p>"})\n', True, id="provides-nothing"
+        ),
+        pytest.param(
+            'type("Hidden", (Component,), {"citry": engine, "template": "<p>x</p>",'
+            ' "template_data": lambda self, kwargs, slots: self.provide(KEY) or {}})\n',
+            False,
+            id="calls-provide",
+        ),
+    ],
+)
+def test_a_component_without_source_counts_by_whether_its_code_calls_provide(tmp_path, monkeypatch, hidden, reported):
+    # A class built with type() has no class statement, so Citry looks at its compiled methods instead.
+    found = _findings(tmp_path, monkeypatch, "KEY = 'x'\n", _card("bord"), hidden)
 
-    assert found == []
+    assert bool(found) is reported
 
 
 def test_the_editor_record_carries_the_keys_and_component_ids(tmp_path, monkeypatch):

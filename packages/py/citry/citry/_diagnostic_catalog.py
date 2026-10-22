@@ -1837,31 +1837,36 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                'counts when a <c-provide key="..."> wraps the tag; when a component on '
                                                'the way calls self.provide() with it; when the tag is slot content and '
                                                'the component whose <c-slot> shows it wraps that <c-slot> in '
-                                               '<c-provide> or calls self.provide(); when a <c-provide> or '
-                                               'self.provide() wraps a <c-component c-is="...">, which may render any '
-                                               "component; or when a render(provides={...}) call in your project's "
-                                               'Python files passes it as a literal key, which counts for every '
-                                               'component. A key written as a module-level string constant counts as '
-                                               'that string. If the component appears in several places and one of '
-                                               'them provides the key, nothing is reported. When no template uses the '
-                                               "component's tag, because Python renders it, a <c-component "
-                                               'c-is="..."> picks it, or it appears only inside its own template, the '
-                                               'key is compared with every key the app provides anywhere. Citry '
-                                               'reports nothing for a call with a default, such as self.inject("key", '
-                                               'None), or a key written as a name or expression; below a <c-provide '
-                                               'c-key="...">, a self.provide() key written as an expression, a tag '
-                                               'inside a <c-component c-is="...">, markup in a component\'s attribute, '
-                                               "or a component Python builds inside a component's methods or passes to "
-                                               'another component, such as Layout(slots={"default": Widget()}); below '
-                                               'a component whose Python source it cannot read; and nothing at all '
-                                               'while a registered template cannot be parsed. A key the page does '
-                                               'provide is reported when Citry cannot see the provider: a provides '
-                                               'dictionary built elsewhere, a self.provide() call in a helper '
-                                               'function, or a render(provides=...) call outside the folder you run '
-                                               'citry check from. That is why the rule is a warning. The rule runs in '
-                                               'citry check with your application loaded, and in an editor that has '
-                                               'loaded your application; the editor checks the calls in the file you '
-                                               'edit against the keys your app provided when it last loaded.'},
+                                               '<c-provide> or calls self.provide(); when a <c-component c-is="...">, '
+                                               'which may render any component, sits inside a <c-provide> with the key '
+                                               'or in a component that calls self.provide() with it; or when a '
+                                               "render(provides={...}) call in your project's Python files passes it "
+                                               'as a literal key, which counts for every component. A key written as a '
+                                               'module-level string constant, also one imported from another module of '
+                                               'the project, counts as that string. If the component appears in '
+                                               'several places and one of them provides the key, nothing is reported. '
+                                               "When no template uses the component's tag, because Python renders it "
+                                               'or a <c-component c-is="..."> picks it, or when only templates that '
+                                               'use each other and that no other template uses use it, the key is '
+                                               'compared with every key the app provides anywhere. Citry reports '
+                                               'nothing for a call with a default, such as self.inject("key", None), a '
+                                               'key written as a name or expression, or a call in a class from an '
+                                               'installed package; below a <c-provide c-key="...">, a self.provide() '
+                                               'key written as an expression, a tag inside a <c-component c-is="...">, '
+                                               "markup in a component's attribute, or a component Python builds inside "
+                                               "a component's methods or passes to another component, such as "
+                                               'Layout(slots={"default": Widget()}); below a component whose Python '
+                                               'source it cannot read and whose code calls provide(); and nothing at '
+                                               'all while a registered template cannot be parsed or when the folder '
+                                               'citry check runs from holds more than 20,000 Python files. A key the '
+                                               'page does provide is reported when Citry cannot see the provider: a '
+                                               'provides dictionary built elsewhere, a self.provide() call in a helper '
+                                               'function, a template string rendered from Python, or a '
+                                               'render(provides=...) call outside the folder you run citry check from. '
+                                               'That is why the rule is a warning. The rule runs in citry check with '
+                                               'your application loaded, and in an editor that has loaded your '
+                                               'application; the editor checks the calls in the file you edit against '
+                                               'the keys your app provided when it last loaded.'},
  'citry.template.unknown-url': {'code': 'citry.template.unknown-url',
                                 'configurableSeverity': True,
                                 'constant': 'TEMPLATE_UNKNOWN_URL',

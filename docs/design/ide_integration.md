@@ -181,13 +181,19 @@ These rules need facts that only the loaded application gives, so
   gets every literal key the app provides. A `<c-provide c-key>`, a
   `provide()` key that is an expression, a tag inside a dynamic
   `<c-component>`, markup in a component attribute, a component Python
-  builds inside a component's methods or passes to another component, or
-  a component whose Python source cannot be read makes the answer "cannot
-  tell", and nothing is reported below it. An unreadable source also turns
-  off the every-key comparison, and a template that cannot be parsed turns
-  the rule off. A `provides` dictionary built elsewhere, a `provide()` in a
-  helper function, and `self.unprovide()` are not read, which is why the
-  rule is a warning.
+  builds inside a component's methods or passes to another component
+  (test files aside), or a component whose Python source cannot be read
+  and whose compiled methods name `provide` makes the answer "cannot
+  tell", and nothing is reported below it. Such a source also turns off
+  the every-key comparison; a template that cannot be parsed, or a project
+  folder with more than 20,000 Python files, turns the rule off. Citry's
+  own classes and the standard library's (found by file location) are not
+  read, and calls in installed packages are not reported. A `provides`
+  dictionary built elsewhere, a `provide()` in a helper function, a
+  template string rendered from Python, and `self.unprovide()` are not
+  read, which is why the rule is a warning. Slot answers are worked out
+  once per (component, slot) pair, repeated until they stop changing, so
+  slots passed on through many components stay fast.
 
 Each of these rules reports nothing when it cannot read its input:
 component JavaScript that does not parse, `css_data()` keys that are not

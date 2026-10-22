@@ -29,10 +29,13 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import sys
+import sysconfig
 import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import CodeType, FunctionType
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._class_introspection import _safe_class_import_path, _safe_class_text, _static_class_dict, _static_class_mro
@@ -56,7 +59,8 @@ class InjectKeyScope:
     Attributes:
         file: The Python file that defines the class.
         qualname: The class's qualified name in that file.
-        name: The class name, as messages show it.
+        name: The class name, as messages show it; for a mixin, the name of
+            a component that runs it.
         label: The class's import path, such as ``app.components.Card``.
         provided: Every key that reaches at least one registered component
             running this class's code, or ``None`` when some path holds a
@@ -132,9 +136,9 @@ class _ClassKeys:
 _STRUCTURAL_TAGS = frozenset(RESERVED_TAG_NAMES)
 
 
-# Stop reading the project's files past this many. A folder this large is
-# not one project, such as a home folder, and reading it would make the
-# check and the editor's load slow; the rule then reports nothing.
+# A folder with more Python files than this is usually a home folder or
+# several projects. Reading all of it would make the check and the editor's
+# load slow, so the rule reports nothing instead.
 _MAX_PROJECT_FILES = 20_000
 
 
@@ -174,9 +178,9 @@ def inject_key_scopes(
     authored = [comp_cls for comp_cls in classes if not engine._is_builtin_component(comp_cls)]
     reader = _SourceReader()
     own_keys = {id(comp_cls): reader.component_keys(comp_cls) for comp_cls in classes}
-    python_trees = _python_trees(classes, workspace)
-    render_keys = None if python_trees is None else _render_provides_keys(python_trees)
-    placed = frozenset() if python_trees is None else _placed_from_python(python_trees, authored)
+    project = _read_project_python(authored, workspace)
+    render_keys = None if project is None else project[0]
+    placed = frozenset() if project is None else project[1]
     resolver = _Reach(by_name, facts_by_class, own_keys, render_keys, placed)
 
     # Every key the app provides anywhere, for a component no template renders.
@@ -201,8 +205,13 @@ def inject_key_scopes(
         file = _loaded_python_file(owner)
         qualname = _safe_class_text(owner, "__qualname__")
         name = _safe_class_text(owner, "__name__")
-        if file is None or qualname is None or name is None:
+        # An installed package's code is its authors' to check, and the
+        # reader cannot change it.
+        if file is None or qualname is None or name is None or _installed(file):
             continue
+        # A mixin is never rendered on its own, so messages name a component that runs it.
+        if not any(component is owner for component in components):
+            name = min(_safe_class_text(component, "__name__") or name for component in components)
         answers = [resolver.reaching(component, everywhere) for component in components]
         provided: frozenset[str] | None = None
         if all(answer[0] is not None for answer in answers):
@@ -260,17 +269,31 @@ def _code_classes(comp_cls: type[Component]) -> Iterator[type]:
     Yield the component class and each base class or mixin whose methods it runs.
 
     Citry's own classes, such as ``Component``, and the standard library's,
-    such as ``typing.Generic``, are left out: they neither provide nor
-    inject the app's keys.
+    such as ``typing.Generic``, are left out, because app keys are provided
+    and injected only in app code.
     """
     for index, candidate in enumerate(_static_class_mro(comp_cls)):
         module = _safe_class_text(candidate, "__module__") or ""
-        top = module.split(".", 1)[0]
         # A built-in component is Citry's own class, but it is registered, so
         # its own `provide()` calls still count.
-        if index > 0 and (top in {"citry", "builtins"} or top in sys.stdlib_module_names):
+        if index > 0 and (module.split(".", 1)[0] in {"citry", "builtins"} or _in_standard_library(candidate)):
             continue
         yield candidate
+
+
+# Where the running Python keeps its standard library. A project package
+# can share a standard module's name, such as `profile`, so the check
+# looks at where the class's file is, not at its module name.
+_STANDARD_LIBRARY = Path(sysconfig.get_paths()["stdlib"]).resolve()
+
+
+def _in_standard_library(cls: type) -> bool:
+    file = _loaded_python_file(cls)
+    if file is None:
+        # A class with no file, such as one written in C, comes from Python itself.
+        module = sys.modules.get(_safe_class_text(cls, "__module__") or "")
+        return module is not None and getattr(module, "__file__", None) is None
+    return file.resolve().is_relative_to(_STANDARD_LIBRARY) and "site-packages" not in file.parts
 
 
 class _Reach:
@@ -289,8 +312,6 @@ class _Reach:
         self._own_keys = own_keys
         self._render_keys = render_keys
         self._placed = placed
-        # Answers for one slot of one component, kept once they are final.
-        self._slot_cache: dict[tuple[int, str | None], frozenset[str] | None] = {}
         # Who writes each component's tag, keyed by the written component's id.
         self._sites: dict[int, list[tuple[type[Component], _Context]]] = {}
         # Dynamic `<c-component>` tags, which may render any component.
@@ -308,6 +329,8 @@ class _Reach:
                 if written is not None:
                     self._sites.setdefault(id(written), []).append((writer, context))
         self._ancestors = {class_id: self._writers_above(class_id) for class_id in classes}
+        # What each component provides to each of its slots, keyed by (component id, slot name).
+        self._slots = self._solve_slots(facts_by_class)
         self._reach = self._solve(classes)
 
     def reaching(
@@ -322,6 +345,10 @@ class _Reach:
         that renders itself: Python renders the outermost one.
         """
         class_id = id(component)
+        # Python places this component inside other content, such as another
+        # component's slot, where Citry cannot see the keys.
+        if _safe_class_text(component, "__name__") in self._placed:
+            return None, False
         if class_id not in self._sites:
             return everywhere, True
         ancestors = self._ancestors[class_id]
@@ -341,6 +368,63 @@ class _Reach:
             pending.extend(id(writer) for writer, _context in self._sites.get(current, ()))
         return seen
 
+    def _solve_slots(
+        self, facts_by_class: Mapping[int, _TemplateFacts]
+    ) -> dict[tuple[int, str | None], frozenset[str] | None]:
+        """
+        Work out what each component provides to the content of each of its slots.
+
+        Those are its own ``provide()`` keys and the keys provided around each
+        matching ``<c-slot>`` in its template. A component that renders the
+        slot from Python, with no matching ``<c-slot>``, gives only its own
+        keys. A ``<c-slot>`` can pass the content on into another component's
+        slot, also back into itself, so the answers grow until they stop
+        changing; this keeps the work proportional to the number of slots,
+        however deep the content is passed on.
+        """
+        owners: dict[tuple[int, str | None], type[Component]] = {}
+        unique_facts = {id(facts): facts for facts in facts_by_class.values()}
+        for facts in unique_facts.values():
+            for _name, context in (*facts.sites, *facts.slots):
+                for frame in context:
+                    owner = self._by_name.get(frame.owner) if frame.kind == "fill" and frame.owner else None
+                    if owner is not None:
+                        owners[(id(owner), frame.slot)] = owner
+        answers: dict[tuple[int, str | None], frozenset[str] | None] = dict.fromkeys(owners, frozenset())
+        changed = True
+        while changed:
+            changed = False
+            for pair, owner in owners.items():
+                if answers[pair] is None:
+                    continue
+                found = self._slot_keys(owner, pair[1], answers)
+                if found != answers[pair]:
+                    answers[pair] = found
+                    changed = True
+        return answers
+
+    def _slot_keys(
+        self,
+        owner: type[Component],
+        slot: str | None,
+        slots: Mapping[tuple[int, str | None], frozenset[str] | None],
+    ) -> frozenset[str] | None:
+        """Return what ``owner`` provides to its slot ``slot``, reading other slots' answers from ``slots``."""
+        own = self._own_keys.get(id(owner))
+        if own is None or own.dynamic:
+            return None
+        keys = set(own.keys)
+        facts = self._facts.get(id(owner))
+        if facts is not None:
+            for name, context in facts.slots:
+                if name is not None and slot is not None and name != slot:
+                    continue
+                found = self._local(owner, context, slots)
+                if found is None:
+                    return None
+                keys.update(found)
+        return frozenset(keys)
+
     def _solve(self, classes: Mapping[int, type[Component]]) -> dict[int, frozenset[str] | None]:
         """
         Find every component's keys by repeating the walk up until nothing changes.
@@ -355,7 +439,7 @@ class _Reach:
         # around it count for every component; work them out once.
         dynamic_keys: frozenset[str] | None = frozenset()
         for writer, context in self._dynamic:
-            found = self._local(writer, context, ())[0]
+            found = self._local(writer, context, self._slots)
             dynamic_keys = None if dynamic_keys is None or found is None else dynamic_keys | found
         local: dict[int, frozenset[str] | None] = {}
         writers: dict[int, list[type[Component]]] = {}
@@ -368,7 +452,7 @@ class _Reach:
             if _safe_class_text(comp_cls, "__name__") in self._placed:
                 keys = None
             for writer, context in self._sites.get(class_id, ()):
-                found = self._local(writer, context, ())[0]
+                found = self._local(writer, context, self._slots)
                 keys = None if keys is None or found is None else keys | found
             local[class_id] = keys
             writers[class_id] = [writer for writer, _context in (*self._sites.get(class_id, ()), *self._dynamic)]
@@ -390,79 +474,30 @@ class _Reach:
         self,
         writer: type[Component],
         context: _Context,
-        visiting: tuple[tuple[int, str | None], ...],
-    ) -> tuple[frozenset[str] | None, bool]:
-        """
-        Return the keys provided at one place in ``writer``'s template, not counting what reaches ``writer``.
-
-        The second value is false when a slot passed back into a component
-        already being read was skipped, so the answer must not be kept.
-        """
+        slots: Mapping[tuple[int, str | None], frozenset[str] | None],
+    ) -> frozenset[str] | None:
+        """Return the keys provided at one place in ``writer``'s template, not counting what reaches ``writer``."""
         own = self._own_keys.get(id(writer))
         if own is None or own.dynamic:
-            return None, True
+            return None
         keys = set(own.keys)
-        final = True
         for frame in context:
             if frame.kind == "opaque":
-                return None, True
+                return None
             if frame.kind == "provide":
                 if frame.key is None:
-                    return None, True
+                    return None
                 keys.add(frame.key)
                 continue
             owner = self._by_name.get(frame.owner) if frame.owner is not None else None
             if owner is None:
-                return None, True
-            slot_keys, slot_final = self._slot_keys(owner, frame.slot, visiting)
+                return None
+            # Every slot a template fills is in `slots`; a missing one means "cannot tell".
+            slot_keys = slots.get((id(owner), frame.slot))
             if slot_keys is None:
-                return None, True
+                return None
             keys.update(slot_keys)
-            final = final and slot_final
-        return frozenset(keys), final
-
-    def _slot_keys(
-        self,
-        owner: type[Component],
-        slot: str | None,
-        visiting: tuple[tuple[int, str | None], ...],
-    ) -> tuple[frozenset[str] | None, bool]:
-        """
-        Return the keys the component ``owner`` provides to the content of its slot ``slot``.
-
-        Those are its own ``provide()`` keys and the keys provided around each
-        matching ``<c-slot>`` in its template. A component that renders the
-        slot from Python, with no matching ``<c-slot>``, gives only its own keys.
-        """
-        marker = (id(owner), slot)
-        # Slots passed on through many components would otherwise be read
-        # again for every way of reaching them.
-        if marker in self._slot_cache:
-            return self._slot_cache[marker], True
-        # A slot passed back into the same component adds nothing new.
-        if marker in visiting:
-            return frozenset(), False
-        own = self._own_keys.get(id(owner))
-        if own is None or own.dynamic:
-            self._slot_cache[marker] = None
-            return None, True
-        keys = set(own.keys)
-        final = True
-        facts = self._facts.get(id(owner))
-        if facts is not None:
-            for name, context in facts.slots:
-                if name is not None and slot is not None and name != slot:
-                    continue
-                found, found_final = self._local(owner, context, (*visiting, marker))
-                if found is None:
-                    self._slot_cache[marker] = None
-                    return None, True
-                keys.update(found)
-                final = final and found_final
-        result = frozenset(keys)
-        if final:
-            self._slot_cache[marker] = result
-        return result, final
+        return frozenset(keys)
 
 
 def _source_facts(engine: Citry, source: _Source) -> _TemplateFacts | None:
@@ -639,7 +674,11 @@ class _SourceReader:
         for owner in _code_classes(comp_cls):
             node = self.class_node(owner)
             if node is None:
-                return None
+                # Without the class statement, its compiled methods still
+                # show whether it calls `provide()` at all.
+                if _compiled_methods_call(owner, "provide"):
+                    return None
+                continue
             module = sys.modules.get(_safe_class_text(owner, "__module__") or "")
             found, found_dynamic = provide_call_keys(node, vars(module) if module is not None else {})
             keys.update(found)
@@ -654,6 +693,23 @@ class _SourceReader:
             except (OSError, SyntaxError, UnicodeError, ValueError, RecursionError):
                 self._trees[file] = None
         return self._trees[file]
+
+
+def _compiled_methods_call(cls: type, name: str) -> bool:
+    """Return whether any function stored on the class mentions the attribute ``name``, such as ``self.provide``."""
+    pending: list[CodeType] = []
+    for value in _static_class_dict(cls).values():
+        # `staticmethod` and `classmethod` keep the function under `__func__`.
+        function = getattr(value, "__func__", value)
+        if isinstance(function, FunctionType):
+            pending.append(function.__code__)
+    while pending:
+        code = pending.pop()
+        if name in code.co_names:
+            return True
+        # Nested functions and comprehensions are separate code objects.
+        pending.extend(constant for constant in code.co_consts if isinstance(constant, CodeType))
+    return False
 
 
 def python_class_node(tree: ast.Module, qualname: str) -> ast.ClassDef | None:
@@ -711,14 +767,18 @@ def method_calls(node: ast.ClassDef, method: str) -> Iterator[ast.Call]:
         stack.extend(child for child in ast.iter_child_nodes(current) if not isinstance(child, ast.ClassDef))
 
 
-def _python_trees(classes: list[type[Component]], workspace: Path | None) -> list[ast.Module] | None:
+def _read_project_python(
+    classes: list[type[Component]], workspace: Path | None
+) -> tuple[frozenset[str], frozenset[str]] | None:
     """
-    Parse the project's Python files that mention ``provides`` or a component class.
+    Read the project's Python files for ``render(provides=...)`` keys and components Python places.
 
-    The files are those under ``workspace``, outside hidden folders, virtual
-    environments and installed packages, and the modules that define
-    registered components. ``None`` means the folder holds too many files to
-    read, so Citry cannot tell what the project passes.
+    Returns the literal ``provides`` keys and the names of the component
+    classes that Python code places inside other content. The files are
+    those under ``workspace``, outside hidden folders, virtual environments
+    and installed packages, and the modules that define registered
+    components. ``None`` means the folder holds too many files to read, so
+    Citry cannot tell what the project passes.
     """
     files: set[Path] = set()
     if workspace is not None:
@@ -730,43 +790,100 @@ def _python_trees(classes: list[type[Component]], workspace: Path | None) -> lis
         module_file = _loaded_python_file(comp_cls)
         if module_file is not None:
             files.add(module_file)
-    # Parsing is the slow part, so only files that can matter are parsed.
-    words = [b"provides", *(name.encode() for name in _class_names(classes))]
-    trees: list[ast.Module] = []
+    names = _class_names(classes)
+    # Parsing is the slow part, so only a file that passes `provides` or
+    # calls a component class, such as `Card(`, is parsed.
+    calls = b"|".join(re.escape(name.encode()) for name in sorted(names))
+    matters = re.compile(rb"provides|\b(?:" + calls + rb")\s*\(" if names else rb"provides")
+    keys: set[str] = set()
+    placed: set[str] = set()
+    modules = _ModuleConstants(workspace)
     for file in sorted(files):
         try:
             raw = file.read_bytes()
         except OSError:
             continue
-        if not any(word in raw for word in words):
+        if matters.search(raw) is None:
             continue
         try:
-            trees.append(ast.parse(raw))
+            tree = ast.parse(raw)
         except (SyntaxError, ValueError, RecursionError):
             continue
-    return trees
+        keys.update(provides_argument_keys(tree, modules=modules))
+        # A test may place a component anywhere to try it out; that says
+        # nothing about where the app renders it.
+        if not _is_test_file(file):
+            visitor = _PythonPlacement(names)
+            visitor.visit(tree)
+            placed.update(visitor.placed)
+    return frozenset(keys), frozenset(placed)
+
+
+def _installed(file: Path) -> bool:
+    return any(part in {"site-packages", "dist-packages"} for part in file.parts)
+
+
+def _is_test_file(file: Path) -> bool:
+    name = file.name
+    return (
+        name.startswith("test_")
+        or name.endswith("_test.py")
+        or name == "conftest.py"
+        or any(part in {"tests", "test"} for part in file.parts[:-1])
+    )
 
 
 def _class_names(classes: list[type[Component]]) -> set[str]:
     return {name for comp_cls in classes if (name := _safe_class_text(comp_cls, "__name__")) is not None}
 
 
-def _render_provides_keys(trees: list[ast.Module]) -> frozenset[str]:
+class _ModuleConstants:
     """
-    Collect the literal keys of every ``provides=`` argument in the project's Python files.
+    Find the string constants of a module the project imports, by its dotted name.
 
-    A key written as a module-level string constant counts as that string.
-    A ``provides`` value built elsewhere, such as a variable, adds nothing.
+    The app may never import the file that renders a page with
+    ``render(provides={BOARD_KEY: ...})``, so the module that defines
+    ``BOARD_KEY`` may not be loaded either. Such a module is read from the
+    project folder instead.
     """
-    keys: set[str] = set()
-    for tree in trees:
-        keys.update(provides_argument_keys(tree))
-    return frozenset(keys)
+
+    def __init__(self, workspace: Path | None) -> None:
+        self._workspace = workspace
+        self._read: dict[str, dict[str, str]] = {}
+
+    def get(self, module: str) -> Mapping[str, object]:
+        """Return the module's top-level names, from the loaded module or from its file in the project."""
+        loaded = sys.modules.get(module)
+        if loaded is not None:
+            return vars(loaded)
+        if module not in self._read:
+            self._read[module] = self._from_file(module)
+        return self._read[module]
+
+    def _from_file(self, module: str) -> dict[str, str]:
+        if self._workspace is None:
+            return {}
+        base = self._workspace.joinpath(*module.split("."))
+        for file in (base.with_suffix(".py"), base / "__init__.py"):
+            try:
+                tree = ast.parse(file.read_bytes())
+            except (OSError, SyntaxError, ValueError, RecursionError):
+                continue
+            return _module_names(tree, None)[0]
+        return {}
 
 
-def provides_argument_keys(tree: ast.Module) -> Iterator[str]:
-    """Yield the literal keys of each ``provides={...}`` or ``provides=dict(...)`` keyword argument."""
-    constants = _module_string_constants(tree)
+def provides_argument_keys(tree: ast.Module, *, modules: _ModuleConstants | None = None) -> Iterator[str]:
+    """
+    Yield the literal keys of each ``provides={...}`` or ``provides=dict(...)`` keyword argument.
+
+    A key written as a module-level string constant counts as that string,
+    also when the module imports it from a module the app has loaded or
+    the project folder holds, as in ``from app.keys import BOARD_KEY`` or
+    ``keys.BOARD_KEY``. A ``provides`` value built elsewhere, such as a
+    variable, adds nothing.
+    """
+    constants, imported = _module_names(tree, modules)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -780,14 +897,42 @@ def provides_argument_keys(tree: ast.Module) -> Iterator[str]:
                         yield key.value
                     elif isinstance(key, ast.Name) and key.id in constants:
                         yield constants[key.id]
+                    elif (
+                        isinstance(key, ast.Attribute)
+                        and isinstance(key.value, ast.Name)
+                        and isinstance(found := imported.get(key.value.id, {}).get(key.attr), str)
+                    ):
+                        yield found
             elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "dict":
                 yield from (item.arg for item in value.keywords if item.arg is not None)
 
 
-def _module_string_constants(tree: ast.Module) -> dict[str, str]:
-    """Return the names a module assigns a string literal to at its top level, such as ``BOARD_KEY = "board"``."""
+def _module_names(
+    tree: ast.Module, modules: _ModuleConstants | None
+) -> tuple[dict[str, str], dict[str, Mapping[str, object]]]:
+    """
+    Return the string constants a module's top level binds, and the modules it imports by name.
+
+    A constant assigned in the module, such as ``BOARD_KEY = "board"``, is
+    read from the source. One imported with ``from ... import`` is read from
+    the imported module, through ``modules``.
+    """
     constants: dict[str, str] = {}
+    imported: dict[str, Mapping[str, object]] = {}
     for statement in tree.body:
+        if isinstance(statement, ast.ImportFrom) and statement.level == 0 and statement.module and modules:
+            names = modules.get(statement.module)
+            for alias in statement.names:
+                value = names.get(alias.name)
+                if isinstance(value, str):
+                    constants[alias.asname or alias.name] = value
+            continue
+        if isinstance(statement, ast.Import) and modules:
+            for alias in statement.names:
+                # `import app.keys` binds `app`; only `import app.keys as keys` names the module itself.
+                if alias.asname is not None or "." not in alias.name:
+                    imported[alias.asname or alias.name] = modules.get(alias.name)
+            continue
         target: ast.expr | None = None
         if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
             target = statement.targets[0]
@@ -796,34 +941,26 @@ def _module_string_constants(tree: ast.Module) -> dict[str, str]:
         value = getattr(statement, "value", None)
         if isinstance(target, ast.Name) and isinstance(value, ast.Constant) and isinstance(value.value, str):
             constants[target.id] = value.value
-    return constants
-
-
-def _placed_from_python(trees: list[ast.Module], classes: list[type[Component]]) -> frozenset[str]:
-    """
-    Return the names of component classes that Python code places inside other content.
-
-    A component built inside a component class's methods, such as a value
-    ``template_data()`` returns for ``{{ widget }}``, or passed to another
-    component, such as ``Layout(slots={"default": Widget()})``, renders under
-    keys Citry cannot see. A component built only to render a page, such as
-    ``str(BoardPage(...))``, is not placed anywhere.
-    """
-    names = _class_names(classes)
-    placed: set[str] = set()
-    for tree in trees:
-        visitor = _PythonPlacement(names)
-        visitor.visit(tree)
-        placed.update(visitor.placed)
-    return frozenset(placed)
+    return constants, imported
 
 
 class _PythonPlacement(ast.NodeVisitor):
-    """Find calls that build a component inside a component class, or inside another component's arguments."""
+    """
+    Find components that Python code places inside other content.
+
+    A component built inside a component class's methods, such as a value
+    ``template_data()`` returns for ``{{ widget }}``, or passed to another
+    component, such as ``Layout(slots={"default": Widget()})``, renders
+    under keys Citry cannot see. A component built only to render a page,
+    such as ``str(BoardPage(...))``, is not placed anywhere.
+    """
 
     def __init__(self, names: set[str]) -> None:
         self.names = names
         self.placed: set[str] = set()
+        # Variables holding a component, such as `card = Card()`, so passing
+        # the variable to another component counts too.
+        self._variables: dict[str, str] = {}
         self._in_component_class = 0
         self._in_component_arguments = 0
 
@@ -833,18 +970,37 @@ class _PythonPlacement(ast.NodeVisitor):
         self.generic_visit(node)
         self._in_component_class -= inside
 
+    def visit_Assign(self, node: ast.Assign) -> None:
+        name = self._built_component(node.value)
+        if name is not None:
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    self._variables[target.id] = name
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if self._in_component_arguments and node.id in self._variables:
+            self.placed.add(self._variables[node.id])
+
     def visit_Call(self, node: ast.Call) -> None:
+        name = self._built_component(node)
+        if name is not None and (self._in_component_class or self._in_component_arguments):
+            self.placed.add(name)
+        # Visit the called expression on its own, so the page in
+        # `Page().render()` stays a page Python renders at the top.
+        self.visit(node.func)
+        for argument in node.args:
+            self._visit_argument(argument, nested=name is not None)
+        for keyword in node.keywords:
+            self._visit_argument(keyword.value, nested=name is not None or keyword.arg == "slots")
+
+    def _built_component(self, node: ast.expr) -> str | None:
+        """Return the component class name a call such as ``Card(...)`` or ``ui.Card(...)`` builds."""
+        if not isinstance(node, ast.Call):
+            return None
         func = node.func
         name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
-        builds_component = name is not None and name in self.names
-        if name is not None and builds_component and (self._in_component_class or self._in_component_arguments):
-            self.placed.add(name)
-        # The receiver of `.render()` or `str()` around a page is not placed.
-        self.visit(func)
-        for argument in node.args:
-            self._visit_argument(argument, nested=builds_component)
-        for keyword in node.keywords:
-            self._visit_argument(keyword.value, nested=builds_component or keyword.arg == "slots")
+        return name if name in self.names else None
 
     def _visit_argument(self, value: ast.expr, *, nested: bool) -> None:
         self._in_component_arguments += nested

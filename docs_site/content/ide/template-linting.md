@@ -1420,24 +1420,29 @@ components, to the top of the page. A key counts when:
 
 If the component appears in several places and one of them provides the
 key, Citry reports nothing. A key written as a module-level string
-constant, such as `self.provide(BOARD_KEY, ...)`, counts as that string.
+constant, such as `self.provide(BOARD_KEY, ...)` or
+`render(provides={BOARD_KEY: ...})`, counts as that string, also when the
+module imports `BOARD_KEY` from another module of your project.
 
 When no template uses the component's tag, Citry compares the key with
 every key your app provides anywhere, and the message starts with
 "Nothing in your app provides". That happens when Python renders the
-component, when a `<c-component c-is="...">` picks it, or when it appears
-only inside its own template, such as a tree that renders itself.
+component, or when a `<c-component c-is="...">` picks it. It also happens
+for a component used only by templates that use each other and that no
+other template uses, such as a tree that renders itself.
 
 Citry checks a `self.inject()` call that has one string literal and no
-default, in the component's class or in a class it extends. A call in a
-base class that several components extend is reported once, and only when
-none of them gets the key. These calls are not checked:
+default, in the component's class or in a class or mixin it extends. A
+call in a base class that several components extend is reported once, and
+only when none of them gets the key; for a mixin, the message names one of
+the components that use it. These calls are not checked:
 
 - a call with a default, such as `self.inject("theme", None)`, because the
   key may be missing on purpose;
 - a key written as a name or an expression, such as
   `self.inject(BOARD_KEY)` or `self.inject(key_name)`;
-- a call in a helper function outside the class.
+- a call in a helper function outside the class;
+- a call in a class from an installed package, which you cannot change.
 
 Citry reports nothing for a component when the way up to it goes through
 something it cannot read:
@@ -1447,17 +1452,21 @@ something it cannot read:
 - a tag inside a `<c-component c-is="...">`;
 - markup passed in a component's attribute, such as `c-body="<>...</>"`;
 - a component that Python builds inside a component's methods, or passes
-  to another component, such as `Layout(slots={"default": Widget()})`;
-- a component whose Python source Citry cannot read.
+  to another component, such as `Layout(slots={"default": Widget()})`,
+  directly or through a variable. Your test files are not read for this;
+- a component whose Python source Citry cannot read and whose code calls
+  `provide()`.
 
-While Citry cannot read the Python source of one of your components, it
-also reports nothing for a component no template uses. While a
-registered template cannot be parsed, the rule reports nothing at all.
+Such a component also stops Citry from reporting a component no template
+uses. While a registered template cannot be parsed, or when the folder you
+run `citry check` from holds more than 20,000 Python files, the rule
+reports nothing at all.
 
 Citry also reports a key the page does provide when it cannot see the
 provider: a `provides` dictionary built elsewhere, such as
 `render(provides=shared)`; a `self.provide()` call in a helper function;
-or a `render(provides=...)` call outside the folder you run `citry check`
+a template written as a Python string and rendered from Python; or a
+`render(provides=...)` call outside the folder you run `citry check`
 from. That is why the rule is a warning. To turn it off, set
 `rule_unknown_inject_key` to `"ignore"` in the component's `Lint` class
 ([Override one component](#override-one-component)), or in
