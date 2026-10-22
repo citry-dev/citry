@@ -8,7 +8,7 @@ boost: 2
 <section class="landing-hero" markdown="1">
 <div class="landing-hero__grid" markdown="1">
 <div class="landing-hero__copy" markdown="1">
-# The complete frontend stack for Python.
+# The complete Python frontend engineered for AI agents.
 
 <p class="landing-hero__lede">
 Citry is a free, open source <strong>HTML-first frontend framework</strong> for Python web
