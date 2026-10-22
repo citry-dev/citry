@@ -247,3 +247,47 @@ def test_chart_can_leave_out_the_table_but_keeps_its_label(monkeypatch: pytest.M
     # The plot's label still gives screen readers every total.
     label = without_table.xpath(".//*[@role='img']")[0].attrib["aria-label"]
     assert label.endswith("Alpha 200 ms, Beta 300 ms, Gamma 100 ms.")
+
+
+def test_chart_view_can_sort_by_total_without_groups() -> None:
+    # Alpha, the reference, is in the middle by total; Beta and Gamma share a
+    # group whose heading must go once the rows are reordered.
+    view = chart_view(_data(), "first", sort="total")
+    assert [row.get("name") for row in view["rows"]] == ["Gamma", "Alpha", "Beta"]
+    assert not [row for row in view["rows"] if row["heading"]]
+    assert [row["is_reference"] for row in view["rows"]] == [False, True, False]
+    assert view["summary"].endswith("Gamma 100 ms, Alpha 200 ms, Beta 300 ms.")
+    # The default keeps the data's order under its group headings.
+    assert [row["heading"] for row in chart_view(_data(), "first")["rows"]] == [None, "Group B", None, None]
+
+
+def test_chart_view_can_draw_totals_without_phases() -> None:
+    view = chart_view(_data(), "first", phases=False, compact=True)
+    # One bar per framework, no legend, and Citry's bar in its own colour.
+    assert view["legend"] == []
+    alpha, beta, _gamma = (row for row in view["rows"] if not row["heading"])
+    assert len(alpha["segments"]) == 1
+    assert "var(--bench-bar-reference" in alpha["segments"][0]["style"]
+    assert "var(--bench-bar," in beta["segments"][0]["style"]
+    # Without an axis, the slowest bar (Beta, 300 ms) fills the track.
+    assert beta["segments"][0]["style"].startswith("width: 100.000%")
+    assert view["compact"] is True
+    # The table under a chart still lists every phase.
+    assert view["columns"] == ["Server builds the page", "Browser work and later requests"]
+
+
+def test_chart_view_rejects_an_unknown_sort() -> None:
+    with pytest.raises(ValueError, match="Unknown benchmark chart sort 'name'"):
+        chart_view(_data(), "first", sort="name")
+
+
+def test_chart_tag_draws_the_compact_chart(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("docs_site._internal.components.benchmark_chart._load_data", _data)
+    compact = html.fromstring(
+        str(BenchmarkChart(load="first", title="First", sort="total", phases=False, compact=True)).strip()
+    )
+    assert "bench-chart--compact" in compact.xpath("//figure")[0].attrib["class"]
+    # A chart without phases has no legend list at all.
+    assert not compact.xpath("//ul")
+    plain = html.fromstring(str(BenchmarkChart(load="first", title="First")).strip())
+    assert plain.xpath("//figure")[0].attrib["class"] == "bench-chart"

@@ -280,53 +280,101 @@ def test_extract_refuses_an_unscored_case_unless_a_preview_is_asked_for() -> Non
     assert extract(_report(), allow_partial=True)["codes"] == [{"code": "E", "meaning": "reported in the editor"}]
 
 
-def _ranked(static: dict[str, int], mistakes: int = 3) -> dict[str, Any]:
-    # One framework per entry, in this order; each reports its first
-    # `static[key]` mistakes as static errors and misses the rest.
+def _ranked(outcomes: dict[str, tuple[int, int]], mistakes: int = 4) -> dict[str, Any]:
+    # One framework per entry, in this order. For (static, absent), a
+    # framework reports its first `static` mistakes as static errors, has no
+    # equivalent for the next `absent`, and misses the rest.
+    def status(index: int, static: int, absent: int) -> tuple[str, str | None]:
+        if index < static:
+            return "ported", "static-error"
+        if index < static + absent:
+            return "not-applicable", None
+        return "ported", "missed"
+
     return {
         "run": "synthetic-run",
-        "frameworks": [{"key": key, "name": key.title()} for key in static],
+        "frameworks": [{"key": key, "name": f"{key.title()} + HTMX + Alpine"} for key in outcomes],
         "categories": [{"id": "names", "heading": "Names"}],
         "buckets": BUCKETS,
         "codes": [],
         "mistakes": [{"id": f"m{index}", "title": f"M{index}", "category": "names"} for index in range(mistakes)],
         "results": [
-            _record(key, f"m{index}", "ported", "static-error" if index < count else "missed", "E")
-            for key, count in static.items()
+            _record(key, f"m{index}", *status(index, static, absent), "E")
+            for key, (static, absent) in outcomes.items()
             for index in range(mistakes)
         ],
     }
 
 
-def test_chart_view_sorts_by_the_static_count_and_keeps_the_reference() -> None:
-    # The reference framework is listed first but reports the fewest, and
-    # beta and delta tie, so they must keep the data's order.
-    data = _ranked({"alpha": 1, "beta": 2, "gamma": 3, "delta": 2})
-    view = chart_view(data, sort="static")
+def test_chart_view_sorts_by_share_and_keeps_the_reference() -> None:
+    # Alpha, the reference, is listed first but has the lowest share. Gamma
+    # reports as many as beta, but only two mistakes apply to it, so only a
+    # share puts it first. Beta and delta tie and keep the data's order.
+    data = _ranked({"alpha": (1, 0), "beta": (2, 0), "gamma": (2, 2), "delta": (2, 0)})
+    view = chart_view(data, sort="share")
 
-    assert [(row["name"], row["total"]) for row in view["rows"]] == [
-        ("Gamma", "3"),
-        ("Beta", "2"),
-        ("Delta", "2"),
-        ("Alpha", "1"),
-    ]
+    assert [row["name"].split()[0] for row in view["rows"]] == ["Gamma", "Beta", "Delta", "Alpha"]
     # The bold name and the dashed line stay with the data's first framework.
     assert [row["is_reference"] for row in view["rows"]] == [False, False, False, True]
-    assert view["reference"]["label"] == "Alpha static/IDE: 1"
+    assert view["reference"]["label"] == "Alpha + HTMX + Alpine static/IDE: 1"
     # Screen readers hear the counts in the order the bars are drawn.
-    assert view["summary"].index("Gamma:") < view["summary"].index("Beta:") < view["summary"].index("Alpha:")
+    assert view["summary"].index("Gamma") < view["summary"].index("Beta") < view["summary"].index("Alpha")
     # Without the option the data's order stays.
-    assert [row["name"] for row in chart_view(data)["rows"]] == ["Alpha", "Beta", "Gamma", "Delta"]
+    assert [row["name"].split()[0] for row in chart_view(data)["rows"]] == ["Alpha", "Beta", "Gamma", "Delta"]
 
 
-def test_chart_view_rejects_an_unknown_sort() -> None:
-    with pytest.raises(ValueError, match="Unknown error chart sort 'total'"):
-        chart_view(_ranked({"alpha": 1}), sort="total")
+def test_chart_view_can_count_only_the_mistakes_that_apply() -> None:
+    data = _ranked({"alpha": (1, 1), "beta": (2, 2)})
+    view = chart_view(data, scale="applicable")
+
+    # Each bar spans only its framework's mistakes that apply, and its number
+    # says out of how many.
+    assert [row["total"] for row in view["rows"]] == ["1 of 3", "2 of 2"]
+    assert [segment["title"] for segment in view["rows"][1]["segments"]] == ["Static error: 2"]
+    assert view["rows"][1]["segments"][0]["style"].startswith("width: 100.000%")
+    assert "N/A or prevented" not in [item["label"] for item in view["legend"]]
+    # The default keeps the gray part and counts out of every mistake.
+    assert "N/A or prevented" in [item["label"] for item in chart_view(data)["legend"]]
+    assert [row["total"] for row in chart_view(data)["rows"]] == ["1", "2"]
 
 
-def test_chart_tag_passes_the_sort_to_the_view(monkeypatch: pytest.MonkeyPatch) -> None:
-    data = _ranked({"alpha": 1, "beta": 2})
+def test_chart_view_shortens_names_and_stripes_warnings_only_when_asked() -> None:
+    data = _ranked({"citry": (1, 0), "django-components": (1, 0)})
+    data["results"][0]["bucket"] = "static-warning"
+
+    short = chart_view(data, short_names=True, compact=True)
+    assert [row["name"] for row in short["rows"]] == ["Citry + HTMX + Alpine", "django-components"]
+    assert "repeating-linear-gradient" in short["legend"][1]["style"]
+    assert short["compact"] is True
+
+    plain = chart_view(data)
+    assert plain["rows"][1]["name"] == "Django-Components + HTMX + Alpine"
+    assert plain["legend"][1]["style"] == "background: #9ae6b4"
+    assert plain["compact"] is False
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        ({"sort": "total"}, "Unknown error chart sort 'total'"),
+        ({"scale": "some"}, "Unknown error chart scale 'some'"),
+        ({"scale": "applicable"}, r"no mistakes that apply to them: \['beta'\]"),
+        ({"sort": "share"}, r"no mistakes that apply to them: \['beta'\]"),
+    ],
+)
+def test_chart_view_rejects_options_it_cannot_draw(options: dict[str, str], message: str) -> None:
+    # Beta has no mistake that applies to it, so it has no share to draw.
+    with pytest.raises(ValueError, match=message):
+        chart_view(_ranked({"alpha": (1, 0), "beta": (0, 4)}), **options)
+
+
+def test_chart_tag_passes_its_options_to_the_view(monkeypatch: pytest.MonkeyPatch) -> None:
+    data = _ranked({"alpha": (1, 0), "beta": (2, 0)})
     monkeypatch.setattr("docs_site._internal.components.error_benchmark._load_data", lambda: data)
-    figure = html.fromstring(str(ErrorBenchmarkChart(title="Mistakes", sort="static")).strip())
-    names = figure.xpath(".//*[@class='bench-chart__name']/text()")
-    assert names == ["Beta", "Alpha"]
+    compact = html.fromstring(
+        str(ErrorBenchmarkChart(title="Mistakes", sort="share", scale="applicable", compact=True)).strip()
+    )
+    assert compact.xpath(".//*[@class='bench-chart__total']/text()") == ["2 of 4", "1 of 4"]
+    assert "bench-chart--compact" in compact.xpath("//figure")[0].attrib["class"]
+    plain = html.fromstring(str(ErrorBenchmarkChart(title="Mistakes")).strip())
+    assert plain.xpath("//figure")[0].attrib["class"] == "bench-chart bench-chart--counts"

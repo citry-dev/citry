@@ -57,38 +57,59 @@ hassle.
 
 <!-- Both charts read their numbers from docs_site/data/ through the components
 the Benchmarks page uses, so a new benchmark run redraws the bars on both pages.
-The counts in the card text (12 frameworks, 63 mistakes, 1,400 entries) are
-typed here, as on the Benchmarks page, so check them after a new run. -->
+Their options draw the shorter landing version; docs_site/scripts/benchmark_images.py
+draws the README image of the error chart with the same options. The counts in
+the text (12 frameworks, 63 mistakes, 1,400 entries) are typed here, as on the
+Benchmarks page, so check them after a new run. -->
 <div class="landing-benchmarks" id="benchmarks" markdown="1">
-<section class="landing-benchmark-card" markdown="1">
-## Catch mistakes before the app runs
+<section class="landing-benchmark" markdown="1">
+## Catch mistakes early
 
-<p class="landing-benchmark-card__lede">
+<p class="landing-section__intro">
 We built the same app in 12 frameworks and made the same 63 mistakes in each.
 </p>
 
+<div class="landing-benchmark-card" markdown="1">
+
 <c-error-benchmark-chart
-  title="How the 63 mistakes ended in each framework"
-  sort="static"
+  title="Mistakes reported before the app runs, out of those that apply"
+  sort="share"
+  scale="applicable"
+  short_names
+  compact
 />
 
-<a class="landing-benchmark-card__link" href="/about/benchmarks/#errors-how-we-measured">How we measured</a>
+<p class="landing-benchmark-card__note">
+Citry 0.6.1, measured before its release. Each bar counts only the mistakes
+that apply to that framework.
+<a href="/about/benchmarks/#errors-how-we-measured">How we measured</a>
+</p>
+</div>
 </section>
 
-<section class="landing-benchmark-card" markdown="1">
-## Page load time
+<section class="landing-benchmark" markdown="1">
+## As fast as Next.js
 
-<p class="landing-benchmark-card__lede">
+<p class="landing-section__intro">
 Time until a page with 1,400 entries is usable, the second time the server builds it.
 </p>
+
+<div class="landing-benchmark-card" markdown="1">
 
 <c-benchmark-chart
   load="second"
   title="Second load: time until usable, 1,400 entries"
+  sort="total"
+  c-phases="False"
+  compact
   c-show_table="False"
 />
 
-<a class="landing-benchmark-card__link" href="/about/benchmarks/#how-the-numbers-were-taken">How we measured</a>
+<p class="landing-benchmark-card__note">
+Citry 0.6.0, one run per framework. Shorter is faster.
+<a href="/about/benchmarks/#how-the-numbers-were-taken">How we measured</a>
+</p>
+</div>
 </section>
 </div>
 
@@ -148,7 +169,7 @@ See the [web framework integrations](/advanced/web-frameworks/) and
 </section>
 
 <section class="landing-section" id="reliability" markdown="1">
-## Catch mistakes early.
+## No silent failures.
 
 <!-- Every message below is the real one. Building this page applies each mistake
 to the component above, renders it, and prints back exactly what Citry raised.

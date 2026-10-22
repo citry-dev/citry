@@ -71,17 +71,22 @@ def load_data() -> dict[str, Any]:
     return json.loads(DATA_PATH.read_text(encoding="utf-8"))
 
 
-def static_counts(data: dict[str, Any]) -> list[tuple[str, int]]:
+def static_shares(data: dict[str, Any]) -> list[tuple[str, int, int]]:
     """
-    Return each framework's name and its count of mistakes reported before the app ran.
+    Return each framework's name, its count of mistakes reported before the app ran, and how many apply to it.
 
-    The list is ordered from the highest count to the lowest, and frameworks
-    with equal counts keep the data file's order. This is the order of the
-    chart drawn with ``sort="static"``, so the alt text reads the bars from
-    top to bottom.
+    The list is ordered from the highest share (count divided by the mistakes
+    that apply) to the lowest, and frameworks with equal shares keep the data
+    file's order. This is the order of the chart drawn with ``sort="share"``,
+    so the alt text reads the bars from top to bottom.
     """
     counts = dict.fromkeys((framework["key"] for framework in data["frameworks"]), 0)
+    # A mistake applies to a framework unless it has no equivalent there or
+    # the framework's design prevents it.
+    applicable = dict.fromkeys(counts, 0)
     for record in data["results"]:
+        if record["status"] not in {"not-applicable", "prevented"}:
+            applicable[record["framework"]] += 1
         if record["status"] == "missing" or (record["status"] == "ported" and record["bucket"] is None):
             # Data written by `error_benchmark_data.py --allow-partial` can
             # hold cases nobody wrote or scored yet. The README has no room to
@@ -96,9 +101,14 @@ def static_counts(data: dict[str, Any]) -> list[tuple[str, int]]:
         # adds nothing here.
         if record["status"] == "ported" and record["bucket"] in STATIC_BUCKETS:
             counts[record["framework"]] += 1
+    empty = [key for key, count in applicable.items() if not count]
+    if empty:
+        msg = f"Error benchmark frameworks have no mistakes that apply to them: {empty}"
+        raise ValueError(msg)
     names = {framework["key"]: framework["name"] for framework in data["frameworks"]}
-    # Python's sort is stable, so equal counts keep the data's order.
-    return sorted(((names[key], count) for key, count in counts.items()), key=lambda row: -row[1])
+    rows = [(names[key], counts[key], applicable[key]) for key in counts]
+    # Python's sort is stable, so equal shares keep the data's order.
+    return sorted(rows, key=lambda row: -row[1] / row[2])
 
 
 def image_name(run: str, png: bytes, theme: str) -> str:
@@ -130,9 +140,9 @@ def readme_block(data: dict[str, Any], light_name: str, dark_name: str) -> str:
     """
     frameworks = len(data["frameworks"])
     mistakes = len(data["mistakes"])
-    counts = ", ".join(f"{name} {count}" for name, count in static_counts(data))
+    counts = ", ".join(f"{name} {count} of {applicable}" for name, count, applicable in static_shares(data))
     alt = (
-        f"Bar chart of how the {mistakes} mistakes ended in each framework. "
+        "Bar chart of how the mistakes that apply to each framework ended. "
         f"Mistakes reported before the app runs: {counts}."
     )
     return "\n".join(
@@ -142,7 +152,7 @@ def readme_block(data: dict[str, Any], light_name: str, dark_name: str) -> str:
             "     docs_site/data/error_prevention.json. Rerun it rather than editing",
             "     this block by hand. -->",
             "",
-            "## Catch mistakes before the app runs",
+            "## Catch mistakes early",
             "",
             f"We built the same app in {frameworks} frameworks and made the same",
             f"{mistakes} mistakes in each.",
@@ -160,6 +170,7 @@ def readme_block(data: dict[str, Any], light_name: str, dark_name: str) -> str:
             "  >",
             "</picture>",
             "",
+            "Each bar counts only the mistakes that apply to that framework.",
             f"[How we measured]({DETAILS_URL})",
             END_MARKER,
         ],

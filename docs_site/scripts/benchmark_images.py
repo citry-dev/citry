@@ -4,8 +4,8 @@ Draw the README's benchmark chart as PNGs and point the README at them.
 
 GitHub and PyPI show a README without the docs site's stylesheet, so the
 README cannot embed the chart itself. This script renders the same
-``<c-error-benchmark-chart>`` markup the landing page uses (rows sorted by
-the number of mistakes reported before the app runs), with the site's own
+``<c-error-benchmark-chart>`` markup the landing page uses (its compact
+version, best share first, legend under the bars), with the site's own
 stylesheet and font, and takes a screenshot in the light and the dark theme.
 
 Each PNG goes to ``docs/assets/benchmarks/`` under a name that holds the
@@ -58,7 +58,7 @@ html, body {{ margin: 0; background: transparent; }}
   box-sizing: border-box;
   width: {width}px;
   max-width: none;
-  padding: 18px 22px 6px;
+  padding: 20px 24px 18px;
   border: 1px solid var(--c-border);
   border-radius: 12px;
   background: var(--c-bg);
@@ -70,9 +70,10 @@ html, body {{ margin: 0; background: transparent; }}
 
 
 def chart_markup(data: dict[str, Any]) -> str:
-    """Return the chart's HTML, drawn exactly as the landing page draws it."""
-    title = f"How the {len(data['mistakes'])} mistakes ended in each framework"
-    return str(ErrorBenchmarkChartMarkup(title=title, view=chart_view(data, sort="static")))
+    """Return the chart's HTML, drawn with the same options as on the landing page (docs_site/content/index.md)."""
+    view = chart_view(data, sort="share", scale="applicable", short_names=True, compact=True)
+    title = "Mistakes reported before the app runs, out of those that apply"
+    return str(ErrorBenchmarkChartMarkup(title=title, view=view))
 
 
 def page_html(chart: str, theme: str) -> str:
@@ -101,7 +102,7 @@ def main() -> int:
     data = benchmark_readme.load_data()
     try:
         benchmark_readme.find_block(readme)
-        benchmark_readme.static_counts(data)
+        benchmark_readme.static_shares(data)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

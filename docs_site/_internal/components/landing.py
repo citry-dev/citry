@@ -2417,43 +2417,44 @@ class LandingPage(Component):
         height: 3.5rem;
       }
 
-      /* The benchmark results under the hero: two cards side by side, which
-         stack once the window is too narrow for two charts with readable
-         framework names. The charts themselves are the Benchmarks page's
-         components, styled by the bench-chart rules in site.css. */
+      /* The benchmark results under the hero: two sections side by side,
+         each with a heading like the page's other sections and a card that
+         holds its chart. They stack once the window is too narrow for two
+         charts with readable framework names. The charts are the Benchmarks
+         page's components with their compact option, styled by the
+         bench-chart rules in site.css. */
       .landing-benchmarks {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 1.5rem;
-        align-items: start;
-        padding-bottom: clamp(3rem, 6vw, 4.5rem);
+        gap: clamp(2.5rem, 5vw, 3.5rem) 2rem;
+        padding: 1rem 0 clamp(4rem, 8vw, 6rem);
+      }
+
+      .landing-benchmark {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+      }
+
+      /* The intro sits between the heading and the card, so the card starts
+         a fixed step below it. */
+      .landing-benchmark .landing-section__intro {
+        margin-bottom: 1.5rem;
       }
 
       .landing-benchmark-card {
+        /* Citry's bar uses the page's own blue; the other bars stay a quiet
+           gray, so the colour marks which row is Citry, not a rank. */
+        --bench-bar: color-mix(in srgb, var(--landing-muted), transparent 55%);
+        --bench-bar-reference: var(--landing-blue);
         min-width: 0;
-        padding: 1.6rem 1.6rem 1.25rem;
+        padding: 1.5rem 1.6rem 1.25rem;
         border: 1px solid var(--landing-line);
         border-radius: 0.9rem;
         background: var(--landing-panel);
       }
 
-      .landing-content .landing-benchmark-card h2 {
-        margin: 0;
-        color: var(--landing-ink);
-        font-size: clamp(1.35rem, 2.2vw, 1.6rem);
-        line-height: 1.15;
-        letter-spacing: -0.02em;
-        text-wrap: balance;
-      }
-
-      .landing-benchmark-card__lede {
-        margin: 0.5rem 0 0;
-        color: var(--landing-muted);
-        font-size: 1rem;
-        line-height: 1.5;
-      }
-
-      /* The card's heading already names the chart, so the chart's own
+      /* The section heading already names the chart, so the chart's own
          caption is hidden visually but kept for screen readers, which also
          hear it at the start of the chart's label. */
       .landing-benchmark-card .bench-chart__title {
@@ -2466,7 +2467,7 @@ class LandingPage(Component):
       }
 
       .landing-benchmark-card .bench-chart {
-        margin: 1.25rem 0 0.75rem;
+        margin: 0;
       }
 
       /* The thin gap between two parts of a bar is drawn in the page colour;
@@ -2475,15 +2476,22 @@ class LandingPage(Component):
         box-shadow: inset 1px 0 0 var(--landing-panel);
       }
 
-      .landing-content .landing-benchmark-card__link {
-        color: var(--landing-blue);
-        font-size: 0.875rem;
-        font-weight: 600;
-        text-decoration: none;
+      .landing-content .landing-benchmark-card__note {
+        margin: 1rem 0 0;
+        color: var(--landing-faint);
+        font-size: 0.8125rem;
+        line-height: 1.5;
       }
 
-      .landing-content .landing-benchmark-card__link:hover,
-      .landing-content .landing-benchmark-card__link:focus-visible {
+      .landing-content .landing-benchmark-card__note a {
+        color: var(--landing-blue);
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .landing-content .landing-benchmark-card__note a:hover,
+      .landing-content .landing-benchmark-card__note a:focus-visible {
         text-decoration: underline;
       }
 
@@ -2538,6 +2546,7 @@ class LandingPage(Component):
       }
 
       .landing-content .landing-section h2,
+      .landing-content .landing-benchmark h2,
       .landing-content .landing-final h2 {
         max-width: 18ch;
         margin: 0;

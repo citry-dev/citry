@@ -85,12 +85,14 @@ def test_image_names_reject_values_that_do_not_fit_a_url(run: str, theme: str, m
 
 def test_alt_text_counts_match_the_sorted_chart() -> None:
     data = _sample()
-    counts = benchmark_readme.static_counts(data)
-    assert [count for _, count in counts] == [2, 2, 1]
+    shares = benchmark_readme.static_shares(data)
+    # Alpha's not-applicable mistake leaves it 1 of 2.
+    assert [(count, applicable) for _, count, applicable in shares] == [(2, 3), (2, 3), (1, 2)]
     # The README's alt text reads the bars from top to bottom, with the
     # number drawn beside each bar.
-    rows = chart_view(data, sort="static")["rows"]
-    assert counts == [(row["name"], int(row["total"])) for row in rows]
+    rows = chart_view(data, sort="share", scale="applicable")["rows"]
+    assert [f"{count} of {applicable}" for _, count, applicable in shares] == [row["total"] for row in rows]
+    assert [name for name, _, _ in shares] == [row["name"] for row in rows]
 
 
 @pytest.mark.parametrize(
@@ -103,7 +105,7 @@ def test_counts_refuse_a_case_without_a_result(change: dict[str, Any]) -> None:
     data = _sample()
     data["results"][0].update(change)
     with pytest.raises(ValueError, match="alpha / m0 has no result"):
-        benchmark_readme.static_counts(data)
+        benchmark_readme.static_shares(data)
 
 
 def test_readme_block_links_both_images_and_escapes_the_alt_text() -> None:
@@ -115,7 +117,7 @@ def test_readme_block_links_both_images_and_escapes_the_alt_text() -> None:
     assert f'srcset="{benchmark_readme.ASSET_URL}/dark.png"' in block
     assert f'src="{benchmark_readme.ASSET_URL}/light.png"' in block
     # A quote in a framework name is escaped rather than ending the attribute.
-    assert "Beta &quot;x&quot; 2, Gamma &quot;x&quot; 2, Alpha &quot;x&quot; 1." in block
+    assert "Beta &quot;x&quot; 2 of 3, Gamma &quot;x&quot; 2 of 3, Alpha &quot;x&quot; 1 of 2." in block
     assert "3 frameworks" in block
 
 

@@ -8,8 +8,8 @@ The chart gives each framework one bar, split by how the mistakes ended, from
 benchmark calls these five outcomes buckets. The number beside each bar and
 the dashed line count the mistakes reported before the app ran (static
 errors plus static warnings): the number for that framework, the line for
-the first framework (Citry). The bars follow the data file's order, or, with
-``sort="static"``, that number from highest to lowest. The table shows every
+the first framework (Citry). Options draw a shorter version of the chart for
+the landing page and the README (see ``chart_view``). The table shows every
 mistake in every framework as the short code the benchmark report uses.
 
 The results come from ``docs_site/data/error_prevention.json``, which
@@ -117,24 +117,59 @@ def _records(data: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
 
 
 # The row orders ``chart_view`` accepts: the data file's own order, or the
-# count of mistakes reported before the app ran, highest first.
-SORT_ORDERS = ("data", "static")
+# share of the mistakes that apply to a framework that a tool reported before
+# the app ran, highest first.
+SORT_ORDERS = ("data", "share")
+# What a bar's length stands for: all the mistakes, with the ones that do not
+# apply drawn in gray, or only the mistakes that apply to that framework.
+SCALES = ("all", "applicable")
+
+# Shorter names for a chart with less room, such as the landing page. Only
+# django-components drops its "+ HTMX + Alpine": it is a component library,
+# and the suffix would wrap its name onto three lines on a phone.
+SHORT_NAMES = {"django-components": "django-components"}
+
+# The compact chart draws the static warning in stripes of the static error's
+# green. The plain light green is hard to see against a white card, and the
+# stripes keep "warning" visible without relying on colour alone.
+STRIPED_WARNING = "repeating-linear-gradient(135deg, #2f855a 0 2px, #9ae6b4 2px 5px)"
 
 
-def chart_view(data: dict[str, Any], sort: str = "data") -> dict[str, Any]:
+def chart_view(
+    data: dict[str, Any],
+    sort: str = "data",
+    *,
+    scale: str = "all",
+    short_names: bool = False,
+    compact: bool = False,
+) -> dict[str, Any]:
     """
     Turn the benchmark data into what the chart template draws.
 
-    Each framework gets one bar, in the data's order or, with ``sort="static"``,
-    from the most mistakes reported before the app ran to the fewest. Frameworks
-    with the same count keep the data's order. The first framework in the data
-    (the data file lists Citry first) gets a bold name, and the dashed line
-    marks its count. The bar's parts follow the data's bucket order, then
-    any extra parts, so a reader can compare the green "error before running"
-    part across bars from the same left edge.
+    Each framework gets one bar. With the defaults, as on the Benchmarks page,
+    the bars follow the data's order and every bar spans all the mistakes,
+    the ones that do not apply drawn as "N/A or prevented". The first
+    framework in the data (the data file lists Citry first) gets a bold name,
+    and the dashed line marks its count. The bar's parts follow the data's
+    bucket order, then any extra parts, so a reader can compare the green
+    "error before running" part across bars from the same left edge.
+
+    The options draw the shorter version the landing page and the README use:
+
+    - ``sort="share"`` orders the bars by the share of the mistakes that apply
+      to each framework that a tool reported before the app ran, best first.
+      Equal shares keep the data's order.
+    - ``scale="applicable"`` makes each bar span only the mistakes that apply
+      to that framework and writes its number as "54 of 61".
+    - ``short_names`` uses ``SHORT_NAMES`` where one is defined.
+    - ``compact`` moves the legend under the bars, leaves out the dashed line,
+      and draws warnings in stripes (see ``bench-chart--compact`` in site.css).
     """
     if sort not in SORT_ORDERS:
         msg = f"Unknown error chart sort {sort!r}; use one of {list(SORT_ORDERS)}"
+        raise ValueError(msg)
+    if scale not in SCALES:
+        msg = f"Unknown error chart scale {scale!r}; use one of {list(SCALES)}"
         raise ValueError(msg)
     buckets = _checked_buckets(data)
     records = _records(data)
@@ -149,6 +184,16 @@ def chart_view(data: dict[str, Any], sort: str = "data") -> dict[str, Any]:
         )
         for framework in data["frameworks"]
     }
+    # How many mistakes apply to each framework: all of them except the ones
+    # it has no equivalent for or its design prevents.
+    applicable = {key: total - count[DOES_NOT_APPLY] for key, count in counts.items()}
+    if scale == "applicable" or sort == "share":
+        empty = [key for key, count in applicable.items() if not count]
+        if empty:
+            # A share of nothing has no meaning, and a bar of no length would
+            # hide the framework.
+            msg = f"Error benchmark frameworks have no mistakes that apply to them: {empty}"
+            raise ValueError(msg)
 
     # Every bucket keeps its legend entry and table column even at zero, since
     # "no framework reached this bucket" is itself a result. An extra part
@@ -158,9 +203,13 @@ def chart_view(data: dict[str, Any], sort: str = "data") -> dict[str, Any]:
         for key, (label, color) in EXTRA_PARTS.items()
         if any(count[key] for count in counts.values())
     ]
-    parts = [(row["id"], row["label"], BUCKET_COLORS[row["id"]]) for row in buckets]
-    # "N/A or prevented" goes just before the last bucket, the misses.
-    not_applicable = [part for part in extras if part[0] == DOES_NOT_APPLY]
+    colors = dict(BUCKET_COLORS)
+    if compact:
+        colors["static-warning"] = STRIPED_WARNING
+    parts = [(row["id"], row["label"], colors[row["id"]]) for row in buckets]
+    # "N/A or prevented" goes just before the last bucket, the misses. A bar
+    # that counts only the mistakes that apply has no such part.
+    not_applicable = [part for part in extras if part[0] == DOES_NOT_APPLY and scale == "all"]
     parts = parts[:-1] + not_applicable + parts[-1:] + [part for part in extras if part[0] != DOES_NOT_APPLY]
 
     # The number beside a bar counts what a tool reported before the app ran,
@@ -170,18 +219,32 @@ def chart_view(data: dict[str, Any], sort: str = "data") -> dict[str, Any]:
     # the dashed line even when another framework's bar is drawn first.
     reference = data["frameworks"][0]
     frameworks = list(data["frameworks"])
-    if sort == "static":
-        # Python's sort is stable, so equal counts keep the data's order and the
-        # chart does not reshuffle between builds.
-        frameworks.sort(key=lambda framework: -static[framework["key"]])
+    if sort == "share":
+        # Python's sort is stable, so equal shares keep the data's order and
+        # the chart does not reshuffle between builds.
+        frameworks.sort(key=lambda framework: -static[framework["key"]] / applicable[framework["key"]])
+    names = {
+        framework["key"]: SHORT_NAMES.get(framework["key"], framework["name"]) if short_names else framework["name"]
+        for framework in frameworks
+    }
+    # Each part's width is its share of the bar's length: all the mistakes,
+    # or only those that apply to that framework.
+    length = {key: total if scale == "all" else applicable[key] for key in counts}
+
+    def _total(key: str) -> str:
+        return str(static[key]) if scale == "all" else f"{static[key]} of {applicable[key]}"
+
     rows = [
         {
-            "name": framework["name"],
+            "name": names[framework["key"]],
             "is_reference": framework["key"] == reference["key"],
-            "total": str(static[framework["key"]]),
+            "total": _total(framework["key"]),
             "segments": [
                 {
-                    "style": f"width: {_percent(counts[framework['key']][key], total)}; background: {color}",
+                    "style": (
+                        f"width: {_percent(counts[framework['key']][key], length[framework['key']])}; "
+                        f"background: {color}"
+                    ),
                     "title": f"{label}: {counts[framework['key']][key]}",
                 }
                 for key, label, color in parts
@@ -193,11 +256,16 @@ def chart_view(data: dict[str, Any], sort: str = "data") -> dict[str, Any]:
     # The bar parts are hidden from screen readers, so the chart's label
     # carries every count instead, in the same order as the bars.
     totals = "; ".join(
-        f"{framework['name']}: "
+        f"{names[framework['key']]}: "
         + ", ".join(
             f"{label} {counts[framework['key']][key]}" for key, label, _ in parts if counts[framework["key"]][key]
         )
         for framework in frameworks
+    )
+    summary = (
+        f"Stacked bar chart of {total} mistakes. {totals}."
+        if scale == "all"
+        else f"Stacked bar chart; each bar counts the mistakes of {total} that apply to that framework. {totals}."
     )
     return {
         "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in parts],
@@ -208,7 +276,8 @@ def chart_view(data: dict[str, Any], sort: str = "data") -> dict[str, Any]:
             "label": f"{reference['name']} static/IDE: {static[reference['key']]}",
             "style": f"left: {_percent(static[reference['key']], total)}",
         },
-        "summary": f"Stacked bar chart of {total} mistakes. {totals}.",
+        "summary": summary,
+        "compact": compact,
     }
 
 
@@ -317,7 +386,10 @@ class ErrorBenchmarkChartMarkup(Component):
     # label lists every count, so screen readers skip the bar parts. The plot
     # has no axis: each part's count is in its title and its label.
     template = """
-      <figure class="bench-chart bench-chart--counts">
+      <figure
+        class="bench-chart bench-chart--counts"
+        c-class="{'bench-chart--compact': compact}"
+      >
         <figcaption class="bench-chart__title">{{ title }}</figcaption>
         <ul class="bench-chart__legend">
           <li c-for="item in legend">
@@ -372,15 +444,24 @@ class ErrorBenchmarkChart(Component):
     class Kwargs:
         # The caption above the chart; the table repeats it.
         title: str
-        # "data" keeps the data file's order; "static" puts the framework that
-        # reported the most mistakes before the app ran first.
-        sort: Literal["data", "static"] = "data"
+        # The options below draw the shorter landing-page chart; chart_view
+        # explains each one.
+        sort: Literal["data", "share"] = "data"
+        scale: Literal["all", "applicable"] = "all"
+        short_names: bool = False
+        compact: bool = False
 
     class Slots:
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
-        view = chart_view(_load_data(), sort=str(kwargs.sort))
+        view = chart_view(
+            _load_data(),
+            sort=str(kwargs.sort),
+            scale=str(kwargs.scale),
+            short_names=kwargs.short_names,
+            compact=kwargs.compact,
+        )
         return {"chart": _as_block(str(ErrorBenchmarkChartMarkup(title=str(kwargs.title), view=view)))}
 
     template = """

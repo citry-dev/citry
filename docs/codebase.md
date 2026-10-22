@@ -1163,7 +1163,7 @@ little differently on each machine, so a run elsewhere draws new files even
 when nothing changed.
 
 Each file name holds the benchmark run and a hash of the image, for example
-`errors-20261021T182412Z-086a1b4d6cf6-light.png`. The script never
+`errors-20261021T182412Z-33f45034c4c4-light.png`. The script never
 overwrites a file: a new run or a redrawn chart gets a new name, and the old
 file stays on `main` for the released pages that load it. Commit the new
 files with the README change.

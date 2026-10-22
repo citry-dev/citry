@@ -20,7 +20,7 @@ import json
 import math
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from markupsafe import Markup
 
@@ -76,14 +76,47 @@ def _percent(value: float, axis_max: float) -> str:
     return f"{value / axis_max * 100:.3f}%"
 
 
-def chart_view(data: dict[str, Any], load: str) -> dict[str, Any]:
+# The row orders ``chart_view`` accepts: the data file's own order, with its
+# group headings, or the total time from fastest to slowest.
+SORT_ORDERS = ("data", "total")
+
+# In a chart without phases, every bar is one colour and Citry's stands out.
+# A page can set these variables to its own colours; the landing page does.
+_TOTAL_BAR = "var(--bench-bar, #a0aec0)"
+_REFERENCE_BAR = "var(--bench-bar-reference, var(--c-accent))"
+
+
+def chart_view(
+    data: dict[str, Any],
+    load: str,
+    *,
+    sort: str = "data",
+    phases: bool = True,
+    compact: bool = False,
+) -> dict[str, Any]:
     """
     Turn the benchmark data into what the template draws for one page load.
 
-    Every load in ``data`` shares one axis, so the first-load and second-load
-    charts on a page can be compared by eye. The vertical line marks the first
-    framework's total; the data file lists Citry first for that reason.
+    With the defaults, as on the Benchmarks page, every load in ``data``
+    shares one axis, so the first-load and second-load charts on a page can be
+    compared by eye. The vertical line marks the first framework's total; the
+    data file lists Citry first for that reason. Bars follow the data's order
+    under its group headings and are split into the phases the time went to.
+
+    The options draw the shorter version the landing page uses:
+
+    - ``sort="total"`` orders the bars from fastest to slowest. Group headings
+      are left out, because a group's rows would no longer sit together.
+      Equal totals keep the data's order.
+    - ``phases=False`` draws each bar as one total, with no legend, and
+      Citry's bar in the accent colour.
+    - ``compact`` leaves out the axis and the dashed line (see
+      ``bench-chart--compact`` in site.css), and scales the bars to this
+      load's slowest framework, which then spans the whole track.
     """
+    if sort not in SORT_ORDERS:
+        msg = f"Unknown benchmark chart sort {sort!r}; use one of {list(SORT_ORDERS)}"
+        raise ValueError(msg)
     loads = {entry["id"]: entry for entry in data["loads"]}
     if load not in loads:
         msg = f"Unknown benchmark load {load!r}; the data has {sorted(loads)}"
@@ -99,55 +132,87 @@ def chart_view(data: dict[str, Any], load: str) -> dict[str, Any]:
         raise ValueError(msg)
 
     ticks = axis_ticks(max(row["total_ms"] for entry in data["loads"] for row in entry["frameworks"]))
-    axis_max = ticks[-1]
+    # A chart with no axis has no round number to end on, so its slowest bar
+    # fills the track instead.
+    axis_max = max(row["total_ms"] for row in frameworks) if compact else ticks[-1]
     # Only phases that occur in this load get a legend entry and a table column.
-    phases = [key for key in PHASES if any(key in row["phases_ms"] for row in frameworks)]
+    used_phases = [key for key in PHASES if any(key in row["phases_ms"] for row in frameworks)]
+
+    # The reference is picked before sorting, so Citry keeps its bold name and
+    # colour wherever its bar lands.
+    reference = frameworks[0]
+    ordered = list(frameworks)
+    if sort == "total":
+        # Python's sort is stable, so equal totals keep the data's order.
+        ordered.sort(key=lambda row: row["total_ms"])
 
     rows: list[dict[str, Any]] = []
     group: object = object()
-    for index, row in enumerate(frameworks):
-        # A heading opens each named group; a row without a group (Citry's) has none.
-        if row["group"] != group:
+    for row in ordered:
+        # A heading opens each named group; a row without a group (Citry's)
+        # has none, and a sorted chart has no groups to open.
+        if sort == "data" and row["group"] != group:
             group = row["group"]
             if group is not None:
                 rows.append({"heading": group})
+        is_reference = row is reference
+        if phases:
+            segments = [
+                {
+                    "style": f"width: {_percent(row['phases_ms'][key], axis_max)}; background: {PHASES[key][1]}",
+                    "title": f"{PHASES[key][0]}: {row['phases_ms'][key]:,.1f} ms",
+                }
+                for key in used_phases
+                if key in row["phases_ms"]
+            ]
+        else:
+            color = _REFERENCE_BAR if is_reference else _TOTAL_BAR
+            segments = [
+                {
+                    "style": f"width: {_percent(row['total_ms'], axis_max)}; background: {color}",
+                    "title": f"Total: {row['total_ms']:,.1f} ms",
+                },
+            ]
         rows.append(
             {
                 "heading": None,
                 "name": row["name"],
                 "total": _ms(row["total_ms"]),
-                "is_reference": index == 0,
-                "segments": [
-                    {
-                        "style": f"width: {_percent(row['phases_ms'][key], axis_max)}; background: {PHASES[key][1]}",
-                        "title": f"{PHASES[key][0]}: {row['phases_ms'][key]:,.1f} ms",
-                    }
-                    for key in phases
-                    if key in row["phases_ms"]
-                ],
+                "is_reference": is_reference,
+                "segments": segments,
             },
         )
 
-    reference = frameworks[0]
-    totals = ", ".join(f"{row['name']} {_ms(row['total_ms'])}" for row in frameworks)
+    # The screen-reader label reads the totals in the order of the bars.
+    totals = ", ".join(f"{row['name']} {_ms(row['total_ms'])}" for row in ordered)
+    summary = (
+        f"Stacked bar chart of total time in milliseconds: {totals}."
+        if phases
+        else f"Bar chart of total time in milliseconds: {totals}."
+    )
+    legend = [{"label": PHASES[key][0], "style": f"background: {PHASES[key][1]}"} for key in used_phases]
     return {
-        "legend": [{"label": PHASES[key][0], "style": f"background: {PHASES[key][1]}"} for key in phases],
+        # A chart without phases needs no key to its colours.
+        "legend": legend if phases else [],
         "rows": rows,
         "ticks": [{"label": f"{tick:,.10g} ms", "style": f"left: {_percent(tick, axis_max)}"} for tick in ticks],
         "reference": {
             "label": f"{reference['name']} {_ms(reference['total_ms'])}",
             "style": f"left: {_percent(reference['total_ms'], axis_max)}",
         },
-        "summary": f"Stacked bar chart of total time in milliseconds: {totals}.",
-        "columns": [PHASES[key][0] for key in phases],
+        "summary": summary,
+        "columns": [PHASES[key][0] for key in used_phases],
         "table": [
             {
                 "name": row["name"],
-                "cells": [f"{row['phases_ms'][key]:,.1f}" if key in row["phases_ms"] else "0.0" for key in phases],
+                "cells": [
+                    f"{row['phases_ms'][key]:,.1f}" if key in row["phases_ms"] else "0.0" for key in used_phases
+                ],
                 "total": f"{row['total_ms']:,.1f}",
             }
             for row in frameworks
         ],
+        "compact": compact,
     }
 
 
@@ -178,9 +243,15 @@ class BenchmarkChartMarkup(Component):
     # inner parts are hidden from screen readers, which get the table instead
     # when the page shows it.
     template = """
-      <figure class="bench-chart">
+      <figure
+        class="bench-chart"
+        c-class="{'bench-chart--compact': compact}"
+      >
         <figcaption class="bench-chart__title">{{ title }}</figcaption>
-        <ul class="bench-chart__legend">
+        <ul
+          c-if="legend"
+          class="bench-chart__legend"
+        >
           <li c-for="item in legend">
             <span
               class="bench-chart__swatch"
@@ -281,6 +352,11 @@ class BenchmarkChart(Component):
         title: str
         # Whether a collapsed table with every number follows the chart.
         show_table: bool = True
+        # The options below draw the shorter landing-page chart; chart_view
+        # explains each one.
+        sort: Literal["data", "total"] = "data"
+        phases: bool = True
+        compact: bool = False
 
     class Slots:
         pass
@@ -288,7 +364,13 @@ class BenchmarkChart(Component):
     template = "{{ chart }}"
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
-        view = chart_view(_load_data(), str(kwargs.load))
+        view = chart_view(
+            _load_data(),
+            str(kwargs.load),
+            sort=str(kwargs.sort),
+            phases=kwargs.phases,
+            compact=kwargs.compact,
+        )
         chart = BenchmarkChartMarkup(title=str(kwargs.title), view=view, show_table=kwargs.show_table)
         markup = flatten_for_markdown(str(chart))
         # Blank lines around the block keep the Markdown pass from joining it

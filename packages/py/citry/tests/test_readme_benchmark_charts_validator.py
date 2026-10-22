@@ -78,7 +78,7 @@ def test_a_missing_or_changed_image_fails(repo: ModuleType) -> None:
 
 def test_a_hand_edited_block_fails(repo: ModuleType) -> None:
     readme = repo.README_PATH.read_text(encoding="utf-8")
-    repo.README_PATH.write_text(readme.replace("Alpha 2", "Alpha 9"), encoding="utf-8")
+    repo.README_PATH.write_text(readme.replace("Alpha 2 of 2", "Alpha 9 of 2"), encoding="utf-8")
     assert "does not match the data" in readme_benchmark_charts.check()[0]
 
 
