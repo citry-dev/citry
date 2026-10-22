@@ -129,7 +129,8 @@ def build_pin_errors(root: Path) -> list[str]:
             )
 
     for package in sorted((root / "packages" / "py").glob("*/pyproject.toml")):
-        relative = package.relative_to(root)
+        # Forward slashes on every OS, so messages match the repository's paths.
+        relative = package.relative_to(root).as_posix()
         requires = tomllib.loads(package.read_text(encoding="utf-8")).get("build-system", {}).get("requires", [])
         for raw in requires:
             requirement = Requirement(raw)

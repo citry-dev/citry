@@ -145,7 +145,7 @@ def check() -> list[str]:
         manifest_path = REPO_ROOT / "crates" / crate / "Cargo.toml"
         manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("package", {}).get("rust-version") != {"workspace": True}:
-            errors.append(f"{manifest_path.relative_to(REPO_ROOT)} must inherit workspace rust-version")
+            errors.append(f"{manifest_path.relative_to(REPO_ROOT).as_posix()} must inherit workspace rust-version")
     wheel_profile = root_manifest.get("profile", {}).get("release-wheel")
     expected_wheel_profile = {
         "inherits": "release",
@@ -168,7 +168,7 @@ def check() -> list[str]:
     )
     for workflow_path in _DOCS_RUST_WORKFLOWS:
         workflow = workflow_path.read_text(encoding="utf-8")
-        label = workflow_path.relative_to(REPO_ROOT)
+        label = workflow_path.relative_to(REPO_ROOT).as_posix()
         if not re.search(rf'^  RUSTUP_TOOLCHAIN: ["\']{re.escape(docs_toolchain)}["\']$', workflow, re.MULTILINE):
             errors.append(f"{label} must pin docs Rust to the workspace MSRV {docs_toolchain}")
         rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", workflow))
@@ -194,7 +194,7 @@ def check() -> list[str]:
     uv_pin = pyodide.get("uv")
     # Without a recorded version there is nothing to compare the pins with.
     if not isinstance(uv_pin, str):
-        errors.append(f"{_PYODIDE_CONFIG.relative_to(REPO_ROOT)} must record the uv version under 'uv'")
+        errors.append(f"{_PYODIDE_CONFIG.relative_to(REPO_ROOT).as_posix()} must record the uv version under 'uv'")
     # The example projects ship their CI workflow to users who copy them, so
     # they use the same reviewed setup-uv commit as the release workflows.
     example_workflows = sorted(REPO_ROOT.glob("examples/*/*/.github/workflows/check.yml"))
@@ -205,7 +205,7 @@ def check() -> list[str]:
         *example_workflows,
     ):
         workflow = workflow_path.read_text(encoding="utf-8")
-        label = workflow_path.relative_to(REPO_ROOT)
+        label = workflow_path.relative_to(REPO_ROOT).as_posix()
         uv_actions = len(re.findall(r"uses:\s+astral-sh/setup-uv@", workflow))
         if workflow.count(f"uses: {_UV_ACTION}") != uv_actions:
             errors.append(f"every uv setup in {label} must use {_UV_ACTION}")
@@ -306,7 +306,8 @@ def check() -> list[str]:
     profile_setting = "maturin.build-args=--profile release-wheel"
     for script_path in (_PYODIDE_BUILDER, _DISTRIBUTION_VERIFIER):
         if script_path.read_text(encoding="utf-8").count(profile_setting) != 1:
-            errors.append(f"{script_path.relative_to(REPO_ROOT)} must select the release-wheel profile once")
+            script_label = script_path.relative_to(REPO_ROOT).as_posix()
+            errors.append(f"{script_label} must select the release-wheel profile once")
     if "skip-existing" in publish or "--clobber" in publish:
         errors.append("citry-core release retries must fail closed instead of replacing or skipping artifacts")
     for marker in (
@@ -446,7 +447,8 @@ def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
     g3_check = _g3_check(root / _DROP_G3_ACTION / "action.yml")
     for path in paths:
         workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        label = path.relative_to(root)
+        # Messages name files with forward slashes on every OS, as the repository does.
+        label = path.relative_to(root).as_posix()
         workflow_env = workflow.get("env") or {}
         for job_name, job in (workflow.get("jobs") or {}).items():
             env = {**workflow_env, **(job.get("env") or {})}
@@ -479,7 +481,7 @@ def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
     # stays with workflow jobs, where the earlier drop step can be seen.
     for path in sorted((root / ".github" / "actions").glob("*/action.y*ml")):
         action = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        where = f"{path.relative_to(root)} composite action"
+        where = f"{path.relative_to(root).as_posix()} composite action"
         for step in (action.get("runs") or {}).get("steps") or []:
             errors.extend(_action_pin_errors(where, step, {}, uv_pin))
     return errors

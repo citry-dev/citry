@@ -143,7 +143,7 @@ def _uv_version_result() -> dict[str, object] | None:
     # A broken pin would make every comparison meaningless, so report it in
     # the same shape as an old uv rather than crash before the JSON report.
     if required_version is None:
-        details = f"{_UV_PIN_FILE.relative_to(_REPO_ROOT)} must record the uv version as 'uv': 'X.Y.Z'"
+        details = f"{_UV_PIN_FILE.relative_to(_REPO_ROOT).as_posix()} must record the uv version as 'uv': 'X.Y.Z'"
         return {
             "name": "uv version",
             "command": " ".join(command),
