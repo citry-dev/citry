@@ -51,7 +51,7 @@ _CORE_CRATES = (
 )
 _MATURIN_ACTION = "PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
 _RUST_ACTION = "dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8"
-_PYPI_ACTION = "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33"
+_PYPI_ACTION = "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086"
 _UV_ACTION = "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78"
 _SCCACHE_ACTION = "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
 _RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
@@ -181,18 +181,26 @@ def check() -> list[str]:
             if workflow.count(setting) != rust_caches:
                 errors.append(f"every Rust cache in {label} must set {setting!r}")
 
+    pyodide: dict[str, object] = json.loads(_PYODIDE_CONFIG.read_text(encoding="utf-8"))
+    # The citry-core build settings already record the uv release, so every
+    # other pin is compared with that one value and moves in the same change.
+    uv_pin = pyodide.get("uv")
+    # The example projects ship their CI workflow to users who copy them, so
+    # they carry the same reviewed uv pin as the workflows that produce evidence.
+    example_workflows = sorted(REPO_ROOT.glob("examples/*/*/.github/workflows/check.yml"))
     for workflow_path in (
         _EXAMPLES_TEST_WORKFLOW,
         _DOCS_RELEASE_WORKFLOW.parent / "repo--docs-check.yml",
         _DOCS_RELEASE_WORKFLOW,
+        *example_workflows,
     ):
         workflow = workflow_path.read_text(encoding="utf-8")
         label = workflow_path.relative_to(REPO_ROOT)
         uv_actions = len(re.findall(r"uses:\s+astral-sh/setup-uv@", workflow))
         if workflow.count(f"uses: {_UV_ACTION}") != uv_actions:
             errors.append(f"every uv setup in release-evidence workflow {label} must use the reviewed commit")
-        if workflow.count('version: "0.10.12"') != uv_actions:
-            errors.append(f"every uv setup in release-evidence workflow {label} must pin uv 0.10.12")
+        if workflow.count(f'version: "{uv_pin}"') != uv_actions:
+            errors.append(f"every uv setup in {label} must pin uv {uv_pin}")
         pnpm_actions = len(re.findall(r"uses:\s+pnpm/action-setup@", workflow))
         if workflow.count(f"uses: {_PNPM_ACTION}") != pnpm_actions:
             errors.append(f"every pnpm setup in release-evidence workflow {label} must use the reviewed commit")
@@ -207,7 +215,6 @@ def check() -> list[str]:
     if examples_workflow.count(f"uses: {_RUST_CACHE_ACTION}") != examples_rust_caches:
         errors.append("every examples evidence Rust cache must use the reviewed immutable action commit")
 
-    pyodide: dict[str, object] = json.loads(_PYODIDE_CONFIG.read_text(encoding="utf-8"))
     if pyodide.get("rust") != f"{minimum}.0":
         errors.append(f"Pyodide Rust pin {pyodide.get('rust')!r} does not match Cargo minimum {minimum!r}")
     runtime: dict[str, object] = json.loads(_PLAYGROUND_RUNTIME.read_text(encoding="utf-8"))

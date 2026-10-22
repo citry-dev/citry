@@ -21,7 +21,12 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 
 # The context is this directory; only public package pins and this helper enter it.
 COPY requirements.lock /opt/agent-eval/requirements.lock
-RUN python -m pip install --no-cache-dir -r /opt/agent-eval/requirements.lock \
+# The base image's pip can predate 26.2.2, which stops trusting the eMudhra
+# (emSign) certificate authorities, so upgrade it before any other download.
+# pip checks the #sha256 fragment itself, so this step is safe on the old pip.
+RUN python -m pip install --no-cache-dir \
+        "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70" \
+    && python -m pip install --no-cache-dir -r /opt/agent-eval/requirements.lock \
     && python -m pip check \
     && python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/* \
