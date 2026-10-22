@@ -110,7 +110,8 @@ def _targets(text: str) -> list[tuple[int, str]]:
 def check() -> list[str]:
     problems: list[str] = []
     for readme in _published_readmes():
-        where = readme.relative_to(REPO_ROOT)
+        # Report the path with forward slashes on every OS, as the repository names it.
+        where = readme.relative_to(REPO_ROOT).as_posix()
         text = _blank_fences(readme.read_text(encoding="utf-8"))
         for offset, target in _targets(text):
             if not target.startswith(_ABSOLUTE_PREFIXES):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
@@ -1539,7 +1540,7 @@ def test_json_ranges_of_every_rule_family_count_from_zero(tmp_path, monkeypatch,
     payload = json.loads(capsys.readouterr().out)
 
     ranges = {
-        (finding["code"], finding["origin"].removeprefix(f"{tmp_path}/")): (
+        (finding["code"], finding["origin"].removeprefix(f"{tmp_path}{os.sep}")): (
             finding["range"]["source_kind"],
             finding["range"]["start"]["line"],
             finding["range"]["start"]["column"],
