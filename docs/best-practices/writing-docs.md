@@ -99,6 +99,12 @@ A heading says what the section helps the reader do. A reader skimming
 the page should know from the heading alone whether the section applies
 to them, so avoid vague headings such as "Notes" or "Caveats".
 
+Name the subject in the heading itself. "Turn it on" and "What it
+changes" leave the reader to guess what *it* is, and a heading often
+appears alone: in the sidebar, in search results, and in a link from
+another page. Write "Turn on development mode" instead. The same goes
+for "this", "its", and "them".
+
 Keep a heading to about four words and 24 characters. The "On this page"
 sidebar cuts longer headings off, and the words that get cut are usually
 the ones that tell sections apart. A longer heading is fine when the

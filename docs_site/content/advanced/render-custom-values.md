@@ -57,7 +57,7 @@ Look the component up on the `citry` argument, as above. Do not use a
 component class bound to the default instance or to another application's
 `Citry`; Citry raises `ValueError`.
 
-## Use it in a template
+## Insert a custom value
 
 Pass the object to the template like any other value:
 
@@ -80,7 +80,7 @@ Each time the template inserts `status`, Citry calls `__citry_element__()`
 once and renders the returned component in that place. The same works when
 you pass the object as slot content.
 
-## Render it elsewhere
+## Render the value alone
 
 The object knows which component to build only while a page is rendering,
 because that is when Citry supplies the `citry` argument. It has no
