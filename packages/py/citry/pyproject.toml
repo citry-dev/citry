@@ -140,8 +140,9 @@ include-package-data = false
 [tool.setuptools.package-data]
 # Non-Python files shipped inside the package: the type-checking marker, the
 # bundled browser runtime (`_vue/runtime.js`) that pages load or inline, the
-# development checks (`_vue/dev_checks.js`) that development pages inline, and
-# the i18n Vue plugin. The other `_vue/*.js` files are the sources that
-# `packages/js/citry-client` bundles into `runtime.js`, so installs never read
-# them; only the sdist carries them (see MANIFEST.in).
-citry = ["py.typed", "_vue/runtime.js", "_vue/dev_checks.js", "ext/i18n/client/*.js"]
+# minified development checks (`_vue/dev_checks.min.js`) that development pages
+# inline, and the i18n Vue plugin. The other `_vue/*.js` files are the sources
+# that `packages/js/citry-client` builds into `runtime.js` and
+# `dev_checks.min.js`, so installs never read them; only the sdist carries them
+# (see MANIFEST.in).
+citry = ["py.typed", "_vue/runtime.js", "_vue/dev_checks.min.js", "ext/i18n/client/*.js"]

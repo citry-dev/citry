@@ -15,6 +15,14 @@ who has the diagnostic on screen. Write `summary` as the mistake and what the
 reader sees, the optional `fix` as what they change, and `when` as the exact
 conditions under which Citry reports it.
 
+The generated Python module, `citry/_diagnostic_catalog.py`, ships in the
+`citry` wheel, so its table of diagnostics keeps only the fields Citry reads
+while it runs: for each code, its title, summary, severities, surfaces,
+parameters, messages, and documentation path. The module also names each code
+as a constant. The reference page reads `when`, `fix`, and `examples` from
+`catalog.json` itself. A new field that Citry must read at runtime also needs
+adding to `PYTHON_RUNTIME_FIELDS` in the generator.
+
 Run `python scripts/generate_diagnostic_catalog.py` after changing the catalog.
 Repository validation rejects stale generated language bindings, duplicate or
 invalid entries, and Citry-owned diagnostic codes that are absent from the

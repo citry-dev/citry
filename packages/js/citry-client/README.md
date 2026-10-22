@@ -18,15 +18,18 @@ The maintained TypeScript sources are:
   `src/citry-i18n-core.ts`, which implement the native Vue Fluent plugin.
 
 `pnpm run build` writes `_vue/vue.js`, `_vue/fragments.js`, `_vue/events.js`,
-the ordered combined `_vue/runtime.js`, and
+the ordered combined `_vue/runtime.js`, `_vue/dev_checks.min.js`, and
 `ext/i18n/client/vue-plugin.source.js` under the Python package.
 The combined runtime also carries the hand-written prepared coordinator,
-`_vue/client.js`, with its comments and indentation removed. Edit
-`client.js`, then run the build so `runtime.js` picks up the change.
+`_vue/client.js`, with its comments and indentation removed. The build
+removes them the same way from the hand-written development checks,
+`_vue/dev_checks.js`, to write `_vue/dev_checks.min.js`, the script that
+development pages inline. Edit `client.js` or `dev_checks.js`, then run the
+build so the generated files pick up the change.
 Generated files are committed so installed Citry applications never compile
-browser code at startup. The `citry` wheel ships only `_vue/runtime.js` and
-the i18n plugin; the other `_vue/*.js` files are build inputs that stay in the
-repository and the sdist.
+browser code at startup. The `citry` wheel ships only `_vue/runtime.js`,
+`_vue/dev_checks.min.js`, and the i18n plugin; the other `_vue/*.js` files
+are build inputs that stay in the repository and the sdist.
 
 Run the package checks with:
 
@@ -35,7 +38,7 @@ pnpm --dir packages/js/citry-client run build
 pnpm --dir packages/js/citry-client run check
 ```
 
-The canary tests rebuild the Vue runtime, fragment manager, Events bridge, and
-i18n plugin with esbuild and compare each with its committed file. They also
-rebuild `runtime.js` from its committed parts and check that it loads Vue
-before the coordinator and Events bridge.
+The canary tests rebuild the Vue runtime, fragment manager, Events bridge,
+development checks, and i18n plugin with esbuild and compare each with its
+committed file. They also rebuild `runtime.js` from its committed parts and
+check that it loads Vue before the coordinator and Events bridge.

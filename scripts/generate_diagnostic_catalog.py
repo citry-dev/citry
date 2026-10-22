@@ -15,6 +15,25 @@ PYTHON_PATH = ROOT / "packages/py/citry/citry/_diagnostic_catalog.py"
 PARSER_RUST_PATH = ROOT / "crates/citry_template_parser/src/diagnostic_catalog.rs"
 FORMATTER_RUST_PATH = ROOT / "crates/citry_template_formatter/src/diagnostic_catalog.rs"
 TYPESCRIPT_PATH = ROOT / "packages/editors/vscode/src/diagnosticCatalog.ts"
+# The catalog fields that `citry._diagnostics.diagnostic_definition` reads, the
+# only runtime reader of the Python table. `when`, `fix`, and `examples` explain
+# a rule on the diagnostics reference page, which reads catalog.json itself, and
+# `constant` becomes the module-level name for the code, so the table that
+# ships in the citry wheel leaves all four out. A new field that Citry reads at
+# runtime must be added here, or the generated table silently goes without it.
+PYTHON_RUNTIME_FIELDS = frozenset(
+    {
+        "code",
+        "configurableSeverity",
+        "defaultSeverity",
+        "documentationPath",
+        "messages",
+        "parameters",
+        "summary",
+        "surfaces",
+        "title",
+    }
+)
 
 
 def load_catalog() -> dict[str, Any]:
@@ -57,11 +76,14 @@ def write_generated() -> None:
 
 def _python(catalog: dict[str, Any]) -> str:
     constants = "\n".join(f"{item['constant']} = {item['code']!r}" for item in catalog["diagnostics"])
-    definitions = pformat(
-        {item["code"]: item for item in catalog["diagnostics"]},
-        sort_dicts=True,
-        width=120,
+    # One compact line per diagnostic, keyed and ordered by code. A pretty-printed
+    # table splits every long string over several indented lines, which makes the
+    # file the wheel ships about 1.8 times as large.
+    entries = "\n".join(
+        f"    {item['code']!r}: {_python_runtime_entry(item)!r},"
+        for item in sorted(catalog["diagnostics"], key=lambda item: item["code"])
     )
+    definitions = f"{{\n{entries}\n}}"
     prefixes = pformat(catalog["externalCodePrefixes"], sort_dicts=True, width=120)
     return (
         '"""Generated from packages/protocol/diagnostics/v1/catalog.json. Do not edit."""\n\n'
@@ -76,6 +98,11 @@ def _python(catalog: dict[str, Any]) -> str:
         f"EXTERNAL_CODE_PREFIXES: Final = {prefixes}\n\n"
         "# fmt: on\n"
     )
+
+
+def _python_runtime_entry(item: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the catalog fields Citry reads while it runs, with the top-level keys sorted."""
+    return {field: item[field] for field in sorted(PYTHON_RUNTIME_FIELDS) if field in item}
 
 
 def _rust(diagnostics: list[dict[str, Any]], *, surface: str) -> str:

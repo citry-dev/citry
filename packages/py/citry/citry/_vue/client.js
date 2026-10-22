@@ -4012,8 +4012,9 @@
       // (a shell, marked data-allow-mismatch="children"), so the page shows it before this runtime
       // starts. Vue keeps the attributes of any element it adopts under that marker, so the contents
       // are removed here, in the same task as the mount below, and Vue builds them anew.
-      // With Citry(mode="development") the page also carries `_vue/dev_checks.js`, which keeps those
-      // served contents first and compares them with Vue's first render right after the mount.
+      // With Citry(mode="development") the page also carries the development checks (built from
+      // `_vue/dev_checks.js`), which keep those served contents first and compare them with Vue's
+      // first render right after the mount.
       // Production pages carry neither that script nor the flag, so for them this reads one property.
       const shellCheck = hydrating && configuration.emptyShells === true && configuration.development === true
         ? globalThis.CitryVueDevChecks?.captureShells(hostElement) : undefined;

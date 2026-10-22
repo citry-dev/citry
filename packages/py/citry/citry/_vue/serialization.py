@@ -45,8 +45,10 @@ _BODY_CLOSE_RE = re.compile(r"</body\s*>", re.IGNORECASE)
 _HYDRATION_ADMISSION_EXTRA_KEY = "_citry_hydration_admission"
 
 # The browser half of the development check of server-rendered HTML. Only a
-# development page whose shells carry served contents includes it.
-DEV_CHECKS_SRC = Path(__file__).parent / "dev_checks.js"
+# development page whose shells carry served contents includes it. The wheel
+# ships this minified build; `packages/js/citry-client` writes it from the
+# readable `dev_checks.js` and checks that it is current.
+DEV_CHECKS_SRC = Path(__file__).parent / "dev_checks.min.js"
 
 
 @cache

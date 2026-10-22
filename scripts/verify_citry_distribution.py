@@ -36,19 +36,20 @@ if TYPE_CHECKING:
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
-# `packages/js/citry-client` bundles these inputs into `_vue/runtime.js`, and an
-# install reads only that bundle, so the wheel leaves them out. The sdist keeps
-# them (MANIFEST.in) because it carries sources and its tests read them. Paths
-# are relative to the `citry` package directory.
-SDIST_ONLY_SOURCES: Final = frozenset({"_vue/client.js", "_vue/events.js", "_vue/fragments.js", "_vue/vue.js"})
+# `packages/js/citry-client` builds these inputs into `_vue/runtime.js` and
+# `_vue/dev_checks.min.js`, and an install reads only those builds, so the wheel
+# leaves them out. The sdist keeps them (MANIFEST.in) because it carries sources
+# and its tests read them. Paths are relative to the `citry` package directory.
+SDIST_ONLY_SOURCES: Final = frozenset(
+    {"_vue/client.js", "_vue/dev_checks.js", "_vue/events.js", "_vue/fragments.js", "_vue/vue.js"}
+)
 # The package carries the bundled browser runtime, the i18n Vue plugin, and the
 # reusable browser programs in `_vue/leaf_program.py`, the template checks
 # with their generated HTML and ARIA tables, the CSS checks, the
-# development-mode browser check (`_vue/dev_checks.js`), and the check of
+# development-mode browser check (`_vue/dev_checks.min.js`), and the check of
 # `inject()` keys against the keys provided above a component. The wheel
-# measured 1,377,070 bytes when the inject-key check raised this cap, which
-# leaves about 15 KB of headroom, so the next sizeable addition raises it
-# again on purpose.
+# measured 1,349,416 bytes, about 43 KB under this cap. A sizeable addition
+# should raise the cap on purpose rather than use up the headroom unnoticed.
 MAX_WHEEL_BYTES: Final = 1_360 * 1024
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
@@ -593,11 +594,11 @@ root = importlib.resources.files("citry")
 delivered_runtime = root.joinpath("_vue/runtime.js")
 assert delivered_runtime.is_file()
 assert _runtime_js() == delivered_runtime.read_text(encoding="utf-8")
-# The bundle inputs stay in the repository; only the bundled runtime ships.
-for bundle_input in ("vue.js", "client.js", "events.js", "fragments.js"):
-    assert not root.joinpath("_vue", bundle_input).is_file(), bundle_input
-# Development pages inline the browser development checks from the package.
-assert root.joinpath("_vue/dev_checks.js").is_file()
+# The build inputs stay in the repository; only the built files ship.
+for build_input in ("vue.js", "client.js", "dev_checks.js", "events.js", "fragments.js"):
+    assert not root.joinpath("_vue", build_input).is_file(), build_input
+# Development pages inline the minified browser development checks from the package.
+assert root.joinpath("_vue/dev_checks.min.js").is_file()
 assert root.joinpath("ext/i18n/client/vue-plugin.source.js").is_file()
 assert root.joinpath("py.typed").is_file()
 
