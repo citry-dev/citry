@@ -82,7 +82,7 @@ if TYPE_CHECKING:
         PreparedVerbatimHtml,
     )
     from citry._vue.direct import DirectExecutionFrame
-    from citry._vue.leaf_program import PreparedLeafProgram
+    from citry._vue.leaf_program import LeafCallChildren, LeafProgramFragment, LeafProgramNode, PreparedLeafProgram
     from citry.citry import Citry
     from citry.citry_context import CitryContext
     from citry.citry_element import _PreparedCallMetadata
@@ -226,6 +226,13 @@ class SimpleVueRecord:
     would go. Serialization reads the row's recorded template values
     (``leaf``) from it and gives the occurrence its own Vue instance, as it
     would for an ordinary component.
+
+    On the native render path (``citry._vue.native_render``), Rust may have
+    read the row instead (``native``). The record then holds no leaf until
+    an output asks for one: ``leaf`` builds it once, by running the Python
+    evaluator over Rust's copy of the values. Code that only needs the
+    row's calls, fragment or Vue errors reads the properties below, which
+    answer without building it.
     """
 
     component_class: type[Component]
@@ -233,8 +240,9 @@ class SimpleVueRecord:
     render_id: str
     call_metadata: _PreparedCallMetadata | None
     js_data: dict[str, object]
-    leaf: PreparedLeafProgram
-    prepared_data: dict[str, object]
+    # The evaluated leaf; None only while a Rust-read row (``native``) has
+    # not been asked for it yet. Read it through ``leaf``.
+    _leaf: PreparedLeafProgram | None
     css_vars_hash: str | None = None
     root_markers: tuple[str, ...] = ()
     # True when a Python expression, public Slot call or render hook placed
@@ -242,6 +250,51 @@ class SimpleVueRecord:
     # reads this flag, set only by `wrap_python_composition_result()`, to tell it
     # apart from an authored tag whose call record went missing.
     python_composition: bool = False
+    # The row Rust read (a ``_NativeRow``) and the template node that can
+    # rebuild its Python leaf; both None for a row Python evaluated. A
+    # hydrated or client-mounted page writes the row's data from ``native``
+    # alone, unless the serializer also writes the HTML of the frame that
+    # holds the row (see ``docs/design/native_render.md``).
+    native: Any = None
+    _leaf_node: LeafProgramNode | None = None
+
+    @property
+    def leaf(self) -> PreparedLeafProgram:
+        """Return the row's evaluated leaf, building it from Rust's copy of the values on first use."""
+        leaf = self._leaf
+        if leaf is None:
+            leaf = cast("LeafProgramNode", self._leaf_node).render_native_snapshot(
+                self.native.snapshot(),
+                component_name=type.__getattribute__(self.component_class, "__name__"),
+            )
+            # The record is frozen; the leaf is a cache of values it already
+            # holds, so storing it does not change what the record means.
+            # Two threads may both build it; each result is equal.
+            object.__setattr__(self, "_leaf", leaf)
+        return leaf
+
+    @property
+    def prepared_data(self) -> dict[str, object]:
+        """Return the row's prepared data (this builds the leaf of a Rust-read row)."""
+        return self.leaf.prepared_data
+
+    @property
+    def call_children(self) -> LeafCallChildren | None:
+        """Return the children this row called; a Rust-read row never calls any."""
+        leaf = self._leaf
+        return None if leaf is None else leaf.call_children
+
+    @property
+    def fragment(self) -> LeafProgramFragment:
+        """Return the template's fragment without building a Rust-read row's leaf."""
+        leaf = self._leaf
+        return cast("LeafProgramNode", self._leaf_node).fragment if leaf is None else leaf.fragment
+
+    @property
+    def vue_errors(self) -> tuple[str, ...]:
+        """Return the row's stored Vue-code errors; a Rust-read row has none."""
+        leaf = self._leaf
+        return () if leaf is None else leaf.vue_errors
 
 
 @dataclass(frozen=True, slots=True)
@@ -821,7 +874,7 @@ def simple_vue_called_components(record: SimpleVueRecord) -> Iterator[CitryRende
     """
     pending: list[SimpleVueRecord] = [record]
     while pending:
-        children = pending.pop().leaf.call_children
+        children = pending.pop().call_children
         if children is None:
             continue
         for part in children.parts:
@@ -845,7 +898,7 @@ def selected_render_ids(render: CitryRender) -> frozenset[str]:
         for part in current.parts:
             if isinstance(part, SimpleVueRecord):
                 selected.add(part.render_id)
-                if part.leaf.call_children is None:
+                if part.call_children is None:
                     continue
                 for called in simple_vue_called_components(part):
                     if isinstance(called, SimpleVueRecord):

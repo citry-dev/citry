@@ -54,6 +54,7 @@ from citry._pure import (
     pure_body_lookup,
     store_pure_body,
 )
+from citry._vue import native_render as _native_render
 from citry._vue.capture import (
     PreparedTextValue,
     PreparedTrustedHtmlValue,
@@ -647,15 +648,32 @@ def _render_simple_vue_leaf(
         calls: dict[tuple[int, str], tuple[Any, dict[str, object], str | None]] | None = (
             {} if leaf_node.fragment.calls else None
         )
-        leaf = leaf_node.render_static_instance_free(
-            variables,
-            component_name=component_class.__name__,
-            calls=calls,
+        # Every callback has run, so on the native render path Rust can read
+        # the row now. It declines (returns None) anything it does not
+        # reproduce exactly, and the Python evaluator below then runs on the
+        # same variables, raising today's error when there is one. Rows with
+        # calls stay in Python because their children come from the Python
+        # leaf; rows with js_data or css_data stay because assembly converts
+        # their browser data and root markers in Python.
+        native = (
+            leaf_node.read_native_row(variables)
+            if calls is None and not js_data and not css_data and _native_render.ACTIVE
+            else None
+        )
+        leaf = (
+            leaf_node.render_static_instance_free(
+                variables,
+                component_name=component_class.__name__,
+                calls=calls,
+            )
+            if native is None
+            else None
         )
         if calls is not None:
             _defer_simple_vue_calls(
                 component_class,
-                leaf,
+                # A template with calls never asks Rust, so its leaf exists.
+                cast("PreparedLeafProgram", leaf),
                 calls,
                 parent_context,
                 metadata,
@@ -691,10 +709,11 @@ def _render_simple_vue_leaf(
             render_id=render_id,
             call_metadata=metadata,
             js_data=dict(js_data),
-            leaf=leaf,
-            prepared_data=leaf.prepared_data,
+            _leaf=leaf,
             css_vars_hash=css_vars_hash,
             root_markers=() if css_vars_hash is None else (f"data-ccss-{css_vars_hash}",),
+            native=native,
+            _leaf_node=None if native is None else leaf_node,
         )
     except Exception as error:
         call_metadata = element.prepared_call_metadata
@@ -780,7 +799,7 @@ def _simple_vue_child_tasks(
     depth: int,
 ) -> list[_RenderTask]:
     """Queue the children a ``simple='vue'`` occurrence called, in template order, at ``depth``."""
-    children = record.leaf.call_children
+    children = record.call_children
     if children is None:
         return []
     # The children's dependencies go where the record's own dependency
@@ -839,7 +858,7 @@ def render_impl(
                     owner_citry=owner,
                     render_target="prepared",
                 )
-                if record.leaf.call_children is None:
+                if record.call_children is None:
                     return root_render
                 # The children render through the ordinary render loop, in
                 # the same scopes an ordinary root render sets up.
@@ -1221,7 +1240,7 @@ def _settle_render(
                 _replace_in_parts(task.position.parts, task.position.idx, task.deferred, simple_record)
                 # Render the children it called next, before its later
                 # siblings, as an ordinary parent's children would be.
-                if simple_record.leaf.call_children is not None:
+                if simple_record.call_children is not None:
                     stack.extend(
                         reversed(_simple_vue_child_tasks(simple_record, task.position.parent_context, task.depth + 1))
                     )
@@ -1335,7 +1354,7 @@ def _scan_deferred_parts(
             # A root simple='vue' render holds its called children in its
             # leaf; they share the enclosing context. The record is already
             # rendered at this level, so its children are one level below.
-            if part.leaf.call_children is not None:
+            if part.call_children is not None:
                 tasks.extend(_simple_vue_child_tasks(part, context, depth + 1))
         else:
             unwrapped = part

@@ -3,6 +3,7 @@ members = [
     "crates/citry_core_py",
     "crates/citry_html_transform",
     "crates/citry_i18n",
+    "crates/citry_native_render",
     "crates/citry_template_formatter",
     "crates/citry_template_parser",
     "crates/citry_vue_compiler",

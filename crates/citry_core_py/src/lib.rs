@@ -7,6 +7,7 @@
 
 pub mod html_transform;
 pub mod i18n;
+mod native_render;
 pub mod safe_eval;
 pub mod template_formatter;
 pub mod template_parser;
@@ -49,7 +50,10 @@ use crate::template_parser::{
 ///
 /// NOTE: The name of this function will be the name of the Python module.
 ///       It MUST match the `module-name` setting in `pyproject.toml` in `packages/py/citry_core/`.
-#[pymodule]
+// The module needs the GIL: `native_render` reads Python dicts and lists
+// without locking them. Stating it here keeps a PyO3 upgrade from changing
+// that default silently.
+#[pymodule(gil_used = true)]
 fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Benchmarks read this to refuse an unoptimized build, whose Rust paths
     // run many times slower. Cargo turns debug assertions on in the `dev`
@@ -66,6 +70,11 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let vue_mod = PyModule::new(m.py(), "vue")?;
     vue::register(&vue_mod)?;
     m.add_submodule(&vue_mod)?;
+    // The native render path; `citry/_vue/native_render.py` decides when
+    // Citry uses it.
+    let native_render_mod = PyModule::new(m.py(), "native_render")?;
+    native_render::register(&native_render_mod)?;
+    m.add_submodule(&native_render_mod)?;
     // HTML transformer
     let html_transform_mod = PyModule::new(m.py(), "html_transform")?;
     m.add_submodule(&html_transform_mod)?;

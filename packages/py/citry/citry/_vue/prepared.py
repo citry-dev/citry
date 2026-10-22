@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, TypeAlias
 
 if TYPE_CHECKING:
@@ -196,6 +196,11 @@ class PreparedOccurrence:
     prepared_data: dict[str, object]
     parent_id: str | None
     placement_key: str | None
+    # The _NativeRow (citry._vue.native_render) whose JSON is this
+    # occurrence's prepared data; ``prepared_data`` then holds only
+    # {"calls": {}}, and the manifest encoder writes Rust's JSON in. Assembly
+    # sets it only on the precompile path. It is not part of equality.
+    _native: object = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         _nonempty_string(self.id, "occurrence id")
@@ -221,6 +226,8 @@ class PreparedOccurrence:
         prepared_data: dict[str, object],
         parent_id: str | None,
         placement_key: str | None,
+        *,
+        native: object = None,
     ) -> PreparedOccurrence:
         """Adopt trusted builder-owned prepared data and detach server data once."""
         _nonempty_string(occurrence_id, "occurrence id")
@@ -237,10 +244,16 @@ class PreparedOccurrence:
         object.__setattr__(value, "id", occurrence_id)
         object.__setattr__(value, "type_key", type_key)
         object.__setattr__(value, "definition_id", definition_id)
-        object.__setattr__(value, "server_data", _detach_object(server_data, "server_data"))
+        # A Rust-read row's server data is an empty dict assembly made
+        # itself, so the JSON round trip that detaches it would copy nothing.
+        if native is not None and type(server_data) is dict and not server_data:
+            object.__setattr__(value, "server_data", {})
+        else:
+            object.__setattr__(value, "server_data", _detach_object(server_data, "server_data"))
         object.__setattr__(value, "prepared_data", prepared_data)
         object.__setattr__(value, "parent_id", parent_id)
         object.__setattr__(value, "placement_key", placement_key)
+        object.__setattr__(value, "_native", native)
         return value
 
 

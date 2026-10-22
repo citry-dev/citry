@@ -147,7 +147,7 @@ def typed_document_shell(render: CitryRender, host_html: str) -> TypedDocumentSh
             if body_depth and type(part) is SimpleVueRecord:
                 record_region("body")
                 # Ordinary children the record called record their own regions.
-                if part.leaf.call_children is not None:
+                if part.call_children is not None:
                     visit([called for called in simple_vue_called_components(part) if isinstance(called, CitryRender)])
                 continue
             if body_depth and type(part) in {Markup, _EscapedSlotText}:

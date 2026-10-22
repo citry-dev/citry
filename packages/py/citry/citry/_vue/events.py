@@ -7,7 +7,7 @@ import re
 from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING, TypedDict, cast
 from weakref import WeakKeyDictionary, ref
@@ -118,6 +118,10 @@ class _PreparedResult:
     tags: dict[str, str] | None
     validate: Callable[[], None]
     extensions: tuple[PreparedBrowserExtension, ...] = ()
+    # Occurrence id -> the _NativeRow (citry._vue.native_render) whose JSON
+    # the manifest encoder writes as that payload occurrence's prepared data.
+    # Only the precompile path's assembly produces any.
+    native_rows: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -452,6 +456,9 @@ def precompile_selected_tree_for_serialization(
             tag_for_type=producer._tag_for_type,
             component_metadata_for_type=metadata.resolve,
             expected_citry=citry,
+            # No browser hook can read or change this view's prepared data,
+            # so rows Rust read keep Rust's JSON.
+            native_rows=True,
         )
     except Exception as error:  # noqa: BLE001 -- defer to the established post-validation boundary
         return EarlySelectedTreeCompilation(
@@ -1098,7 +1105,8 @@ class DirectVueEventsProducer:
             if built_in_metadata is not None
             else None
         )
-        return _PreparedResult(payload, cached_tags, validate_metadata, browser_extensions)
+        native_rows = {item.id: item._native for item in view.occurrences if item._native is not None}
+        return _PreparedResult(payload, cached_tags, validate_metadata, browser_extensions, native_rows)
 
 
 def native_compile_view(

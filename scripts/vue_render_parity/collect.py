@@ -98,13 +98,20 @@ class _Recorder:
 
         def prepare(*args: Any, **kwargs: Any) -> Any:
             recorder.pending.tree = kwargs.get("early_selected_tree")
-            return recorder.original_prepare(*args, **kwargs)
+            prepared = recorder.original_prepare(*args, **kwargs)
+            # Rows Rust read keep their data outside the manifest dict until
+            # it is serialized, so the recorder needs them to write the JSON
+            # the page embeds.
+            recorder.pending.native_rows = prepared.native_rows
+            return prepared
 
         def tags(producer: Any, manifest: dict[str, Any], cached_tags: dict[str, str] | None) -> dict[str, str]:
             result = recorder.original_tags(producer, manifest, cached_tags)
             tree = getattr(recorder.pending, "tree", None)
+            native_rows = getattr(recorder.pending, "native_rows", None) or {}
             recorder.pending.tree = None
-            recorder.record(manifest, result, tree)
+            recorder.pending.native_rows = None
+            recorder.record(manifest, result, tree, native_rows)
             return result
 
         self.serialization._prepare_initial_result = prepare
@@ -114,13 +121,13 @@ class _Recorder:
         self.serialization._prepare_initial_result = self.original_prepare
         self.serialization._component_tags_for_manifest = self.original_tags
 
-    def record(self, manifest: dict[str, Any], tags: dict[str, str], tree: Any) -> None:
+    def record(self, manifest: dict[str, Any], tags: dict[str, str], tree: Any, native_rows: dict[str, Any]) -> None:
         # Some unit tests pass hand-made manifest fragments through the tag
         # helper; only a manifest with a root is a page the server renders.
         if "rootId" not in manifest:
             return
         # The same JSON the page embeds and the hydration renderer reads.
-        manifest_json = self.serialization._script_json(manifest)
+        manifest_json = self.serialization._manifest_json(manifest, native_rows)
         compiled = getattr(tree, "compiled_by_definition", None) or {}
         by_id = {item.id: item for item in compiled.values()}
         definitions: dict[str, dict[str, Any]] = {}

@@ -18,7 +18,8 @@ except ImportError:  # Python < 3.11
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _PYPROJECT = REPO_ROOT / "packages" / "py" / "citry_core" / "pyproject.toml"
 
-_PYMODULE_FN_RE = re.compile(r"#\[pymodule\]\s*\n\s*fn\s+(\w+)")
+# The attribute may carry options, as in `#[pymodule(gil_used = true)]`.
+_PYMODULE_FN_RE = re.compile(r"#\[pymodule(?:\([^)]*\))?\]\s*\n\s*fn\s+(\w+)")
 _PYMODULE_NEW_RE = re.compile(r'PyModule::new\([^,]+,\s*["\']([^"\']+)["\']\)')
 # Top-level `class <name>:` only (the submodule namespaces); the AST classes are
 # nested inside them and intentionally not matched.

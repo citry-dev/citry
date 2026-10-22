@@ -1,0 +1,27 @@
+[package]
+name = "citry_native_render"
+description = "Evaluate one simple='vue' row template over copied values, write its prepared data as JSON, and compute the ids of repeated component calls"
+version = "0.1.0"
+edition = "2024"
+publish = false
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+# The fixtures are only read by this crate's own tests, so the citry-core
+# source distribution leaves them out.
+exclude = ["tests/fixtures"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# Citry names each row of a repeated component call with SHA-256 digests
+# (see src/digest.rs).
+sha2 = { workspace = true }
+
+[dev-dependencies]
+# Only the fixture tests read JSON.
+serde_json = { workspace = true }

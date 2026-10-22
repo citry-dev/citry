@@ -418,6 +418,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         "crates/citry_core_py/Cargo.toml",
         "crates/citry_i18n/Cargo.toml",
         "crates/citry_html_transform/Cargo.toml",
+        "crates/citry_native_render/Cargo.toml",
         "crates/citry_template_formatter/Cargo.toml",
         "crates/citry_template_parser/Cargo.toml",
         "crates/citry_vue_compiler/Cargo.toml",

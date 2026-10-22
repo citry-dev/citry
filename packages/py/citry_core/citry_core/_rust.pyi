@@ -24,7 +24,7 @@
 # - Functions without `self` are treated as module-level functions.
 #   This matches how typeshed defines modules.
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Literal
 
 # Whether this extension was compiled without optimizations ("debug", the
@@ -480,7 +480,7 @@ class template_formatter:
     ]: ...
 
 ########################################################
-# Template parser (V3)
+# Vue compiler
 ########################################################
 
 class vue:
@@ -537,6 +537,86 @@ class vue:
         removes before Vue hydrates. `html` is `None` and `reason` names why
         when the page should mount in the browser instead.
         """
+
+########################################################
+# Native render path
+########################################################
+
+class native_render:
+    """
+    The Rust half of Citry's native render path; every member is private to Citry.
+
+    ``citry._vue.native_render`` decides whether Citry uses this module. Citry
+    builds one ``_RowPlan`` per admitted ``simple='vue'`` template from
+    ``citry._vue.leaf_program.native_row_plan_tuples`` and asks it for each
+    row; ``_RunDigests`` computes the ids of each row of a call run (the
+    components one ``c-for`` places), for ordinary components too.
+    """
+
+    class _RowPlan:
+        """The template's operations and read set, ready to check and evaluate rows."""
+
+        def __new__(
+            cls,
+            ops: tuple[tuple[object, ...], ...],
+            roots: tuple[tuple[str, tuple[object, ...]], ...],
+            loop_targets: tuple[str, ...],
+            spread_limit: int,
+        ) -> native_render._RowPlan:
+            """
+            Build a plan from ``native_row_plan_tuples(node)``.
+
+            Raises `ValueError` when the description has a shape Rust cannot
+            evaluate exactly; the template then keeps the Python evaluator. A
+            Rust panic raises `RuntimeError`.
+            """
+        def read(self, variables: object, plain_scalar_types: frozenset[type]) -> native_render._NativeRow | None:
+            """
+            Check, copy and evaluate one row.
+
+            Returns None when the row is not plain data or is outside what Rust
+            reproduces exactly; Python's evaluator then runs on the same
+            variables and raises its own error when there is one. An error a
+            layout callback raises also gives None. A Rust panic raises
+            `RuntimeError`.
+            """
+
+    class _NativeRow:
+        """One row Rust read: its copied values and its prepared data's JSON."""
+
+        @property
+        def prepared_json(self) -> str:
+            """The row's prepared data as ``script_json({"calls": {}, **data}, sort_keys=True)`` writes it."""
+        def snapshot(self) -> dict[str, object]:
+            """Rebuild the values Rust read as a fresh variables dict. A Rust panic raises `RuntimeError`."""
+
+    class _RunDigests:
+        """The two ids of each row of one call run, with the run's shared leading text hashed once."""
+
+        def __new__(cls, placement_prefix_json: str, child_prefix_json: str) -> native_render._RunDigests:
+            """Take the JSON text Python's ``_DigestPrefix`` hashes before each row's own item."""
+        def member_ids(self, key: str) -> tuple[str, str] | None:
+            """Return ``(placement_key, child_id)``, or None for a key with no UTF-8 form."""
+
+    @staticmethod
+    def _encode_occurrences(
+        occurrences: list[dict[str, object]],
+        natives: dict[str, native_render._NativeRow],
+        fallback: Callable[[dict[str, object]], str],
+    ) -> str:
+        """
+        Write a manifest's occurrence array, with each Rust-read row's prepared data written in.
+
+        Every item whose id is not in ``natives`` is written by
+        ``fallback(item)``. Raises `ValueError` when an item is not a dict, a
+        Rust-read row's item does not have the exact shape assembly gives it,
+        or ``fallback`` returns something other than a str. A Rust panic
+        raises `RuntimeError`.
+        """
+
+########################################################
+# Template parser (V3)
+########################################################
 
 class template_parser:
     @staticmethod

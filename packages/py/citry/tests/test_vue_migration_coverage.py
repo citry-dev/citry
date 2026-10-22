@@ -88,7 +88,12 @@ from citry._vue.direct_capture import (
     _stable_owner,
 )
 from citry._vue.document import typed_document_shell
-from citry._vue.events import _validate_script_assets, _validate_style_assets, default_events_producer
+from citry._vue.events import (
+    _PreparedResult,
+    _validate_script_assets,
+    _validate_style_assets,
+    default_events_producer,
+)
 from citry._vue.leaf_program import (
     _Open,
     _prepared_open,
@@ -2312,7 +2317,7 @@ def test_vue_serialization_plan_rejects_runtime_removal_and_missing_standalone_a
     )._prepare_initial_result
 
     def missing_plugin(*_args, **_kwargs):
-        return (
+        return _PreparedResult(
             {"occurrences": [], "definitions": [], "scripts": [], "styles": []},
             {},
             lambda: None,
@@ -2372,7 +2377,7 @@ def test_vue_serialization_head_and_standalone_asset_guards(monkeypatch: pytest.
     )
 
     def fake_initial(*_args, **_kwargs):
-        return (
+        return _PreparedResult(
             {
                 "occurrences": [],
                 "definitions": [{"sha256": "a" * 64}],
@@ -2396,7 +2401,7 @@ def test_vue_serialization_head_and_standalone_asset_guards(monkeypatch: pytest.
         )
 
     def fake_script(*_args, **_kwargs):
-        return (
+        return _PreparedResult(
             {
                 "occurrences": [],
                 "definitions": [],
@@ -2420,7 +2425,7 @@ def test_vue_serialization_head_and_standalone_asset_guards(monkeypatch: pytest.
         )
 
     def fake_style(*_args, **_kwargs):
-        return (
+        return _PreparedResult(
             {
                 "occurrences": [],
                 "definitions": [],
@@ -2722,7 +2727,7 @@ def test_vue_serialization_rejects_unmounted_events_before_browser_plan(monkeypa
     )
 
     def fake_initial(*_args, **_kwargs):
-        return (
+        return _PreparedResult(
             {"occurrences": [{"eventContext": {}}], "definitions": [], "scripts": [], "styles": []},
             {},
             lambda: None,

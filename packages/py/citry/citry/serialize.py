@@ -373,11 +373,13 @@ def _simple_vue_record_defers(record: SimpleVueRecord, pending: list[CitryRender
     checked here, and a called ordinary render is added to ``pending`` for
     the caller's own child checks.
     """
-    leaf = record.leaf
-    if record.root_markers or not leaf.fragment.safe_body or leaf.vue_errors:
+    # The record's own properties answer without building the leaf of a
+    # row Rust read, so this check never evaluates one.
+    if record.root_markers or not record.fragment.safe_body or record.vue_errors:
         return False
-    if leaf.call_children is not None:
-        for child in leaf.call_children.parts:
+    call_children = record.call_children
+    if call_children is not None:
+        for child in call_children.parts:
             if type(child) is SimpleVueRecord:
                 if not _simple_vue_record_defers(child, pending):
                     return False
@@ -1105,7 +1107,7 @@ def _append_frame_parts(
                 # Python's recursion limit.
                 stack.append(iter(part.parts))
         elif isinstance(part, SimpleVueRecord):
-            if part.leaf.call_children is not None:
+            if part.call_children is not None:
                 # A record that called child components writes them through
                 # their own frames, like an ordinary component does, so it
                 # gets a frame of its own (see _simple_vue_record_frame).
@@ -1298,7 +1300,7 @@ def _append_frame_parts_with_fallback_tracking(
                 # Python's recursion limit.
                 stack.append(iter(part.parts))
         elif isinstance(part, SimpleVueRecord):
-            if part.leaf.call_children is not None:
+            if part.call_children is not None:
                 # A record that called child components writes them through
                 # their own frames, like an ordinary component does, so it
                 # gets a frame of its own (see _simple_vue_record_frame).

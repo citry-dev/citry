@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from citry._csp_validation import _CspRenderValidator
 from citry._owned_resource import OWNED_ASSET_CROSSORIGIN
+from citry._vue import native_render as _native_render
 from citry._vue.capture import PreparedElementOpen
 from citry._vue.document import typed_document_shell
 from citry.attrs import format_attrs
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
 
     from citry._javascript_policy import _JavascriptPolicy
     from citry._serialization_security import _ScriptSecurityMaterializer
+    from citry._vue.events import _PreparedResult
     from citry.citry_context import CitryContext
     from citry.ext.events.emission import EventInstanceEntry
     from citry.extension import OnSerializeContext
@@ -780,28 +782,32 @@ def _prepare_initial_result(
     citry: Any,
     app_id: str,
     *,
-    include_extensions: bool = False,
     dependency_options: dict[str, object] | None = None,
     early_selected_tree: Any = None,
-) -> tuple[Any, ...]:
-    from citry._vue.events import DirectVueEventsProducer  # noqa: PLC0415
+) -> _PreparedResult:
+    """Prepare the first manifest of a page, through the built-in producer's private path when it is in use."""
+    from citry._vue.events import DirectVueEventsProducer, _PreparedResult  # noqa: PLC0415
 
     if (
         "prepare_from_render" not in vars(producer)
         and getattr(producer.prepare_from_render, "__func__", None) is DirectVueEventsProducer.prepare_from_render
     ):
-        result = producer._prepare_from_render_result(
-            render,
-            citry=citry,
-            app_id=app_id,
-            revision=0,
-            dependency_options=dependency_options,
-            _early_selected_tree=early_selected_tree,
+        return cast(
+            "_PreparedResult",
+            producer._prepare_from_render_result(
+                render,
+                citry=citry,
+                app_id=app_id,
+                revision=0,
+                dependency_options=dependency_options,
+                _early_selected_tree=early_selected_tree,
+            ),
         )
-        base = (result.payload, result.tags, result.validate)
-        return (*base, result.extensions) if include_extensions else base
-    base = (producer.prepare_from_render(render, citry=citry, app_id=app_id, revision=0), None, lambda: None)
-    return (*base, ()) if include_extensions else base
+    # A custom producer returns only the payload; it has no tags, browser
+    # extensions or rows Rust read.
+    return _PreparedResult(
+        producer.prepare_from_render(render, citry=citry, app_id=app_id, revision=0), None, lambda: None
+    )
 
 
 _APP_ID_RE = re.compile(r"[0-9a-f]{32}")
@@ -846,7 +852,7 @@ def _selected_renders(render: CitryRender) -> list[CitryRender]:
         # Ordinary children a simple='vue' record called are selected too.
         # Most records call nothing, so the check stays one attribute read.
         for part in parts:
-            if type(part) is SimpleVueRecord and part.leaf.call_children is not None:
+            if type(part) is SimpleVueRecord and part.call_children is not None:
                 pending.extend(
                     called for called in simple_vue_called_components(part) if isinstance(called, CitryRender)
                 )
@@ -882,7 +888,7 @@ def analyze_vue_serialization(render: CitryRender) -> VueSerializationAnalysis:
         called.render_id
         for current in renders
         for part in current.parts
-        if type(part) is SimpleVueRecord and part.leaf.call_children is not None
+        if type(part) is SimpleVueRecord and part.call_children is not None
         for called in simple_vue_called_components(part)
         if type(called) is SimpleVueRecord
     }
@@ -1081,6 +1087,31 @@ def _script_json(value: object) -> str:
     return script_json(value, sort_keys=True)
 
 
+def _manifest_json(manifest: dict[str, Any], native_rows: Mapping[str, object]) -> str:
+    """
+    Serialize the manifest, writing in the prepared data of the rows Rust read.
+
+    With no such rows this is ``_script_json(manifest)``. Otherwise one Rust
+    call writes the occurrence array: each Rust-read row's item with Rust's
+    prepared-data JSON, every other item through ``_script_json``. The other
+    manifest entries are written by ``_script_json`` around it. With sorted
+    keys and compact separators, ``json.dumps`` writes a dict as its sorted
+    ``"key":value`` texts joined by commas, so the bytes equal
+    ``_script_json(manifest)`` had the rows' data been there.
+    """
+    if not native_rows:
+        return _script_json(manifest)
+    # Rust-read rows exist only when the native module is loaded.
+    native = cast("type[_rust.native_render]", _native_render.native)
+    occurrences = native._encode_occurrences(
+        manifest["occurrences"], cast("dict[str, _rust.native_render._NativeRow]", dict(native_rows)), _script_json
+    )
+    before = _script_json({key: value for key, value in manifest.items() if key < "occurrences"})
+    after = _script_json({key: value for key, value in manifest.items() if key > "occurrences"})
+    entries = [before[1:-1], f'"occurrences":{occurrences}', after[1:-1]]
+    return "{" + ",".join(entry for entry in entries if entry) + "}"
+
+
 def prepare_vue_serialization(
     ctx: OnSerializeContext,
     script_security: _ScriptSecurityMaterializer | None,
@@ -1116,12 +1147,11 @@ def prepare_vue_serialization(
     typed_shell = typed_document_shell(ctx.selected_render, f'<div id="citry-vue-{app_id}"></div>')
     if typed_shell is not None:
         _reject_head_browser_activity(ctx.selected_render, typed_shell.head_only_render_ids)
-    manifest, tags, validate_metadata, prepared_extensions = _prepare_initial_result(
+    prepared = _prepare_initial_result(
         producer,
         ctx.selected_render,
         ctx.citry,
         app_id,
-        include_extensions=True,
         dependency_options={
             "script_security": script_security,
             "security_csp": _security_csp,
@@ -1131,7 +1161,9 @@ def prepare_vue_serialization(
         },
         early_selected_tree=early_selected_tree,
     )
-    browser_plugins = {item.name: item.plugin for item in prepared_extensions}
+    manifest: dict[str, Any] = prepared.payload
+    tags, validate_metadata = prepared.tags, prepared.validate
+    browser_plugins = {item.name: item.plugin for item in prepared.extensions}
     if any(plugin is None for plugin in browser_plugins.values()):
         raise TypeError("A prepared browser extension has no registered plugin descriptor.")
     has_events = any("eventContext" in item for item in manifest["occurrences"])
@@ -1149,7 +1181,7 @@ def prepare_vue_serialization(
     tags = _component_tags_for_manifest(producer, manifest, tags)
     # The manifest is serialized once. The hydration renderer reads the same
     # JSON the configuration data block carries, so it sees exactly the browser's data.
-    manifest_json = _script_json(manifest)
+    manifest_json = _manifest_json(manifest, prepared.native_rows)
     hydration_html = None
     if (
         hydration_candidate

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -49,6 +50,12 @@ def main() -> None:
     }
     catalog = CatalogCompiler().compile(json.dumps(compile_request))
     rich = json.loads(catalog.resolve_rich_json("en-US", "rich", "{}", '["link"]'))
+    # The native render module ships in every wheel, including the ones
+    # whose interpreter takes the Python path, so check it imports and that
+    # its hashing gives Python's answer.
+    native_ids = _rust.native_render._RunDigests('["site"', '["parent"').member_ids("key")
+    native_placement = "citryPlacement" + hashlib.sha256(b'["site",["explicit","key"]]').hexdigest()[:24]
+    native_child = "citryOccurrence" + hashlib.sha256(f'["parent","{native_placement}"]'.encode()).hexdigest()[:24]
     segments, placeholders = mark_html(
         "<main><p>Hello</p></main>",
         ["data-citry"],
@@ -62,6 +69,7 @@ def main() -> None:
         "formatted": formatted,
         "locale": canonicalize_locale("en-us"),
         "marked": segments[0],
+        "native_render_ids": native_ids == (native_placement, native_child),
         "placeholders": placeholders,
         "python": sys.version,
         "safe_eval": evaluated,
@@ -78,6 +86,7 @@ def main() -> None:
         "embedded_languages": ["javascript", "css"],
         "locale": "en-US",
         "marked": '<main data-citry=""><p>Hello</p></main>',
+        "native_render_ids": True,
         "placeholders": [],
         "safe_eval": 42,
         "browser_references": ["known", "local"],

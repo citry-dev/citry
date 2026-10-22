@@ -64,6 +64,7 @@ import inspect
 import itertools
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -1149,7 +1150,7 @@ def _assert_matches(case: str, record: dict[str, Any]) -> None:
         assert record[part] == value, f"{case}: {part}"
 
 
-def _record_in_own_process(case: str) -> dict[str, Any]:
+def _record_in_own_process(case: str, render_path: str = "rust") -> dict[str, Any]:
     """Run one case in a fresh interpreter, for a change that would outlive the test."""
     script = """
 import json, sys
@@ -1162,6 +1163,8 @@ print(json.dumps(_run_case(sys.argv[1])))
         capture_output=True,
         text=True,
         check=False,
+        # The new interpreter decides its render path from this variable.
+        env={**os.environ, "CITRY_NATIVE_RENDER": "1" if render_path == "rust" else "0"},
     )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout.splitlines()[-1])
@@ -1172,13 +1175,14 @@ def test_every_case_has_a_locked_record() -> None:
 
 
 @pytest.mark.parametrize("case", [case for case in CASES if case not in _OWN_PROCESS_CASES])
-def test_render_calls_user_code_and_hooks_in_the_locked_order(case: str) -> None:
+def test_render_calls_user_code_and_hooks_in_the_locked_order(case: str, render_path: str) -> None:
+    del render_path  # the fixture switches the render path
     _assert_matches(case, _run_case(case))
 
 
 @pytest.mark.parametrize("case", sorted(_OWN_PROCESS_CASES))
-def test_process_wide_change_keeps_the_locked_order(case: str) -> None:
-    _assert_matches(case, _record_in_own_process(case))
+def test_process_wide_change_keeps_the_locked_order(case: str, render_path: str) -> None:
+    _assert_matches(case, _record_in_own_process(case, render_path))
 
 
 def _render_in_two_threads(render_once: Callable[[], dict[str, str]]) -> tuple[list[dict[str, str]], bool]:
@@ -1212,7 +1216,7 @@ def _render_in_two_threads(render_once: Callable[[], dict[str, str]]) -> tuple[l
     return outputs, overlapped
 
 
-def test_two_threads_rendering_together_write_the_same_html() -> None:
+def test_two_threads_rendering_together_write_the_same_html(render_path: str) -> None:
     """
     Two threads render the page at the same time and get the bytes one render gets alone.
 
@@ -1221,6 +1225,7 @@ def test_two_threads_rendering_together_write_the_same_html() -> None:
     counter shared by both threads could not do. The test also checks that
     the threads' renders really overlapped in time.
     """
+    del render_path  # the fixture switches the render path
     recorder = _Recorder()
     case = _build("plain", recorder)
 

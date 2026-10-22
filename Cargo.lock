@@ -346,6 +346,7 @@ version = "1.1.0"
 dependencies = [
  "citry_html_transform",
  "citry_i18n",
+ "citry_native_render",
  "citry_template_formatter",
  "citry_template_parser",
  "citry_vue_compiler",
@@ -385,6 +386,14 @@ dependencies = [
  "tinystr",
  "unic-langid",
  "writeable",
+]
+
+[[package]]
+name = "citry_native_render"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
