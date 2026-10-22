@@ -114,7 +114,7 @@
 - With `Citry(mode="development")`, turning a page into HTML now warns
   when two of its elements share an `id`, such as two components that
   both write `id="board"` or one component rendered twice, and names the
-  components ([details](https://citry.dev/guides/dev-server/#repeated-ids)).
+  components ([details](https://citry.dev/guides/development-mode/#repeated-ids)).
 - With `Citry(mode="development")`, the browser console now warns when
   Vue's first render of a part it builds in the browser differs from the
   HTML the server sent, for example a `created()` hook that opens a panel

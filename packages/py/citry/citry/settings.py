@@ -608,7 +608,7 @@ class CitrySettings:
             part Vue builds in the browser differs from the HTML the
             server sent. A production page does not load this browser
             check. An unrecognized value raises ``ValueError`` at
-            construction.
+            construction. See [Development mode](/guides/development-mode/).
         template_globals: Variables exposed to every component's template
             without being returned from each ``template_data()``. They are
             merged into every component's template variables on render, so a

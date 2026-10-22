@@ -308,8 +308,9 @@ that opens on wide windows. If that part is one Vue builds in the browser
 (see [Browser-built parts](#parts-vue-builds-in-the-browser)), Vue never
 compares it with the HTML the server sent, so the console says nothing.
 
-With `Citry(mode="development")`, Citry compares the two and logs a
-console warning that names the component and the first difference:
+In [development mode](/guides/development-mode/)
+(`Citry(mode="development")`), Citry compares the two and logs a console
+warning that names the component and the first difference:
 
 ```text
 [Citry] Details_05bc14: Vue's first render in the browser
@@ -364,7 +365,12 @@ element's parent in the browser too, so that parent loses focus and typed
 text as Vue starts.
 
 The check runs only in development mode; a production page does not
-load it. What it compares:
+load it.
+
+### Limits of the check { #first-render-check-limits }
+
+The check can miss a difference, and in one case reports one the page
+does not have:
 
 - It compares only values the server also has, such as `js_data()` keys
   and values from Python. State that starts in `data()` or `setup()`
