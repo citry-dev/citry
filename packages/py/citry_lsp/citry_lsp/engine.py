@@ -39,7 +39,7 @@ from citry._diagnostic_catalog import (
     TEMPLATE_MARKER_NAME_INVALID,
     TEMPLATE_UNKNOWN_COMPONENT,
 )
-from citry._diagnostics import diagnostic_documentation_url, render_diagnostic
+from citry._diagnostics import diagnostic_definition, diagnostic_documentation_url, render_diagnostic
 from citry._html_attribute_values import ENUMERATED_VALUES as ENUMERATED_ATTRIBUTE_VALUES
 from citry._html_attribute_values import HTML_ELEMENTS as HTML_ELEMENT_NAMES
 from citry._i18n_directives import looks_like_i18n_binding
@@ -53,6 +53,7 @@ from citry._registry_lint import (
     server_event_payload_findings,
     server_event_payload_from_description,
     template_urls,
+    unknown_inject_key_findings,
     unknown_url_findings,
 )
 from citry._source_lines import source_lines
@@ -67,6 +68,7 @@ from citry.analysis import (
     BrowserComponentBinding,
     BrowserComponentPropContribution,
     BrowserComponentPropSite,
+    BrowserComponentSourceAnalysis,
     BrowserExpression,
     BrowserObjectProperty,
     BrowserProp,
@@ -829,11 +831,23 @@ def _html_attribute_lint_diagnostics(
                 lint = analysis.component_lint.get(owner.definition_id, analysis.lint)
                 consumers.append(AlpineAttributeLintConsumer(lint.rule_alpine_attribute, lint.rule_alpine_cloak))
                 value_consumers.append(AttributeValueLintConsumer(lint.rule_invalid_attribute_value))
-                directive_consumers.append(MisspelledDirectiveLintConsumer(lint.rule_misspelled_directive))
+                javascript = _owner_js_facts(owner, project, document, open_documents)
+                directive_consumers.append(
+                    MisspelledDirectiveLintConsumer(
+                        lint.rule_misspelled_directive,
+                        declared_directives=javascript.declared_directives,
+                    )
+                )
                 # Vue passes a parent's attributes to the root element only
-                # of a component with browser code.
+                # of a component with browser code, and not when its
+                # JavaScript sets `inheritAttrs: false`.
                 markup_consumers.append(
-                    _markup_lint_consumer(lint, root_may_receive_attributes=_may_have_browser_code(owner, project))
+                    _markup_lint_consumer(
+                        lint,
+                        root_may_receive_attributes=(
+                            _may_have_browser_code(owner, project) and javascript.declared_inherit_attrs is not False
+                        ),
+                    )
                 )
             if not consumers:
                 # No proven owner: the application policy still applies,
@@ -891,9 +905,37 @@ def _html_attribute_lint_diagnostics(
                     code=finding.code,
                     code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
                     source="citry",
+                    data=_expression_range_data(region, finding),
                 )
             )
     return tuple(diagnostics)
+
+
+def _expression_range_data(
+    region: TemplateRegion,
+    finding: AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding | MarkupLintFinding,
+) -> dict[str, list[list[int]]] | None:
+    """
+    Return the whole expression's range for a finding that spans only part of it.
+
+    The TypeScript filter reads it to drop a TypeScript error elsewhere in the
+    same broken expression. It is plain JSON, ``[[line, character], [line,
+    character]]``, so it survives the trip to the editor and back.
+    """
+    if not isinstance(finding, MarkupLintFinding) or finding.context_start_index is None:
+        return None
+    if finding.context_end_index is None:
+        return None
+    try:
+        context = _range(region.source_map.map_range(finding.context_start_index, finding.context_end_index))
+    except ValueError:
+        return None
+    return {
+        EXPRESSION_RANGE_DATA_KEY: [
+            [context.start.line, context.start.character],
+            [context.end.line, context.end.character],
+        ]
+    }
 
 
 def _transparent_component_check(project: ProjectState) -> Callable[[str], bool | None] | None:
@@ -934,6 +976,51 @@ def _may_have_browser_code(owner: ComponentRecord, project: ProjectState) -> boo
     # only Component's own default sends nothing.
     overrides_js_data = not js_data or (js_data[-1].module, js_data[-1].qualname) != ("citry.component", "Component")
     return overrides_js_data or bool(state) or bool(handlers)
+
+
+# A Citry diagnostic that spans only part of an expression, such as the token
+# where a Vue expression stops parsing, carries the whole expression's range
+# under this key in `Diagnostic.data`, as `[[line, character], [line,
+# character]]`, so a TypeScript error elsewhere in it is still recognized as
+# the same mistake.
+EXPRESSION_RANGE_DATA_KEY = "expressionRange"
+
+
+@dataclass(frozen=True, slots=True)
+class _OwnerJsFacts:
+    """What one owner's JavaScript proves for the template rules; `None` means unknown."""
+
+    declared_directives: frozenset[str] | None
+    declared_inherit_attrs: bool | None
+
+
+def _owner_js_facts(
+    owner: ComponentRecord,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> _OwnerJsFacts:
+    """Read the directives an owner registers and its `inheritAttrs` from its current JavaScript."""
+    resolved = _component_js_asset_source(owner, project, document, open_documents)
+    if resolved is False:
+        # No JavaScript: nothing is registered locally, and Vue's default
+        # `inheritAttrs: true` applies.
+        return _OwnerJsFacts(frozenset(), declared_inherit_attrs=True)
+    if resolved is None:
+        return _OwnerJsFacts(None, None)
+    analysis = _cached_component_source_analysis(resolved[0])
+    return _OwnerJsFacts(analysis.declared_directives, analysis.declared_inherit_attrs)
+
+
+@lru_cache(maxsize=64)
+def _cached_component_source_analysis(source: str) -> BrowserComponentSourceAnalysis:
+    """
+    Analyze one component's JavaScript once per text.
+
+    Each lint pass reads every owner's JavaScript again; keying on the text
+    reuses the result until an edit changes it.
+    """
+    return analyze_browser_component_source(source)
 
 
 def _markup_lint_consumer(lint: TemplateLintInfo, *, root_may_receive_attributes: bool) -> MarkupLintConsumer:
@@ -1462,6 +1549,8 @@ def browser_diagnostics(
             )
     if project.catalog is None or project.source_analysis is None:
         return tuple(diagnostics)
+    if document.language_id == "python":
+        diagnostics.extend(_unknown_inject_key_diagnostics(document, project))
     for region in document.regions:
         parsed = document.parsed.get(region.key)
         if parsed is None:
@@ -2131,7 +2220,9 @@ def browser_projection(
             # The generated helper is not a template name, so never offer it.
             owned_names = (*owned_names, _TEMPLATE_COMPONENT_SOURCE)
         if listener:
-            owned_names = (*owned_names, _CHILD_COMPONENT_EMITS)
+            # Hide the generated listener helpers; the second is declared only
+            # when the listener's value names a parent method.
+            owned_names = (*owned_names, _CHILD_COMPONENT_EMITS, _CHILD_LISTENER_HELPER)
         if _native_bound_attribute(expression) is not None:
             owned_names = (*owned_names, _BIND_ATTRIBUTE_HELPER)
         owns_position = _browser_projection_owns_position(
@@ -2374,6 +2465,16 @@ def _template_expression_block(
         # parameters take the child's payload types.
         prefix = f"{opening}\nvoid (/** @type {{(...args: {listener.arguments}) => unknown}} */ (\n"
         suffix = "\n));\n"
+    elif listener is not None and _listener_method(scope, expression) is not None:
+        # Vue calls a bare method name with the emitted values too. A cast
+        # would accept any related function, so passing the method to a
+        # function typed from the payload makes TypeScript compare its
+        # parameters, and the finding lands on the method name.
+        prefix = (
+            f"{opening}\n/** @type {{(handler: (...args: {listener.arguments}) => unknown) => void}} */ "
+            f"var {_CHILD_LISTENER_HELPER};\n{_CHILD_LISTENER_HELPER}((\n"
+        )
+        suffix = "\n));\n"
     elif expression.mode == "statement":
         prefix = f"{opening}\n(function () {{\n"
         suffix = "\n})();\n"
@@ -2415,6 +2516,36 @@ _VUE_TYPES_PATH = (Path(__file__).parent / "types" / "node_modules" / "vue").res
 _BIND_ATTRIBUTE_HELPER = "__citryBindAttribute"
 # The generated helper that types one child component's prop value.
 _CHILD_PROP_HELPER = "__citryChildProp"
+# The generated helper that checks a parent method named as a child's event listener.
+_CHILD_LISTENER_HELPER = "__citryChildListener"
+
+
+def _listener_method(scope: _TemplateScope, expression: BrowserExpression) -> str | None:
+    """
+    Return the parent method a child component listener names, or `None`.
+
+    Vue calls a listener written as a bare name, such as `@hide="hideCard"`,
+    with every value the child emits. Only a name the parent's `methods`
+    declares is returned, because a `data()` value that starts as `null` and
+    later holds a function would look like a wrong handler. A name hidden by
+    a `v-for` or slot alias or by a `js_data()` key, a member such as
+    `foo.bar`, a call, and any other expression give `None`, so they are
+    typed as any other listener statement is.
+    """
+    # Without the parent's instance there are no `methods` to look in, and
+    # `@c-name` values are Citry's server event arguments, not Vue handlers.
+    if scope.instance is None or expression.host != "vue":
+        return None
+    name = expression.source.strip()
+    if not _is_js_variable_name(name) or name in expression.bindings:
+        return None
+    if any(root.name == name for root in scope.roots):
+        return None
+    if not any(
+        item.exposed_name == name and item.origin == "methods" for item in scope.instance.analysis.public_names
+    ):
+        return None
+    return name
 
 
 def _child_prop_type(expression: BrowserExpression, prop_types: Mapping[int, str] | None) -> str | None:
@@ -11152,6 +11283,69 @@ def _server_event_payload_diagnostics(
     return diagnostics
 
 
+def _unknown_inject_key_diagnostics(document: DocumentState, project: ProjectState) -> list[types.Diagnostic]:
+    """
+    Report ``self.inject("key")`` calls whose key no provider above the component gives, as `citry check` does.
+
+    The app worker worked out which keys reach each component class when the
+    app loaded. The calls come from the text being edited, so a call added
+    since then is checked at once, while a provider added since then counts
+    only after the app reloads.
+    """
+    records = project.inject_keys
+    analysis = project.analysis
+    path = file_uri_path(document.uri)
+    if not records or analysis is None or path is None:
+        return []
+    resolved = path.resolve()
+    mine = [record for record in records if record.provided is not None and record.file == resolved]
+    if not mine:
+        return []
+    try:
+        tree = ast.parse(document.source)
+    except (SyntaxError, ValueError):
+        # Half-typed code: the next edit that parses brings the warnings back.
+        return []
+    diagnostics: list[types.Diagnostic] = []
+    for record in mine:
+        provided = record.provided
+        if provided is None:
+            continue
+        # A class that several components run is reported unless all of them turn the rule off.
+        active = [
+            severity
+            for definition_id in record.definition_ids
+            if (severity := analysis.component_lint.get(definition_id, analysis.lint).rule_unknown_inject_key)
+            != "ignore"
+        ]
+        if not active:
+            continue
+        for finding in unknown_inject_key_findings(
+            document.source,
+            tree,
+            record.qualname,
+            component=record.name,
+            provided=provided,
+            everywhere=record.everywhere,
+        ):
+            try:
+                start = parser_char_index(document.source, finding.start_index)
+                end = parser_char_index(document.source, finding.end_index)
+            except ValueError:
+                continue
+            diagnostics.append(
+                types.Diagnostic(
+                    range=_range(document_range_for_offsets(document.source, start, end)),
+                    message=finding.message,
+                    severity=types.DiagnosticSeverity.Error if "error" in active else types.DiagnosticSeverity.Warning,
+                    code=finding.code,
+                    code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
+                    source="citry",
+                )
+            )
+    return diagnostics
+
+
 def _unknown_url_diagnostics(
     region: TemplateRegion,
     template: Template,
@@ -11390,6 +11584,15 @@ def _js_data_type_diagnostics(
             if not root.wire_type.unsupported:
                 continue
             detail = "; ".join(root.wire_type.unsupported)
+            # A Secret fails the render rather than only losing its browser
+            # type, so it gets the message that says so, when the installed
+            # citry's catalog has it.
+            variant = (
+                "secret"
+                if SECRET_UNSUPPORTED_REASON in root.wire_type.unsupported
+                and "secret" in diagnostic_definition(JS_DATA_UNSUPPORTED_TYPE).messages
+                else "default"
+            )
             for location in _js_data_root_locations(root, open_documents):
                 path = file_uri_path(location.uri)
                 if path is None or path.resolve() != canonical:
@@ -11403,13 +11606,21 @@ def _js_data_type_diagnostics(
                 )
                 found[key] = types.Diagnostic(
                     location.range,
-                    render_diagnostic(JS_DATA_UNSUPPORTED_TYPE, name=root.name, detail=detail),
+                    render_diagnostic(JS_DATA_UNSUPPORTED_TYPE, variant=variant, name=root.name, detail=detail),
                     severity=types.DiagnosticSeverity.Warning,
                     code=JS_DATA_UNSUPPORTED_TYPE,
                     code_description=types.CodeDescription(diagnostic_documentation_url(JS_DATA_UNSUPPORTED_TYPE)),
                     source="citry",
                 )
     return tuple(found[key] for key in sorted(found))
+
+
+# The same text as `citry._json_wire.SECRET_NOT_SENT_REASON`, written out so
+# the editor keeps working with a citry release that predates it. A `Secret`
+# value's reason starts with "Secret ", and the js-data warning looks for that
+# reason to pick its Secret message.
+SECRET_NOT_SENT_REASON = "values are never sent to the browser; read the value on the server instead"  # noqa: S105
+SECRET_UNSUPPORTED_REASON = f"Secret {SECRET_NOT_SENT_REASON}"
 
 
 def _js_data_public_name_diagnostics(

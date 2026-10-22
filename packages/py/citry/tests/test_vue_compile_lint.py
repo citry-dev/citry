@@ -285,7 +285,21 @@ def test_skips_a_template_whose_python_code_cannot_hold_its_text():
 # --- what another rule already reports ----------------------------------------
 
 
-@pytest.mark.parametrize("source", ['<p :title="a +">x</p>', '<div v-for="x">y</div>', '<i v-for="(a,) in">z</i>'])
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<p :title="a +">x</p>',
+        '<div v-for="x">y</div>',
+        '<i v-for="(a,) in">z</i>',
+        # The expression finding spans only the token where the parser
+        # stopped, while Vue's compiler reports the whole expression; the
+        # two must still count as one mistake.
+        '<p :title="first second third">x</p>',
+        '<p v-if="ready && (open">x</p>',
+        '<b @click="go() }">x</b>',
+        '<p :title="a); (b">x</p>',
+    ],
+)
 def test_leaves_a_broken_expression_to_the_expression_rule(source):
     assert _compile_errors(source) == []
 

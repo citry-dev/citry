@@ -2271,7 +2271,7 @@ def test_prepared_element_key_rejects_another_authored_key(authored_key: str) ->
             render_prepared(Page())
         return
     rendered = render_prepared(Page())
-    with pytest.raises(UnsupportedPreparedView, match="conflicts with another authored key"):
+    with pytest.raises(UnsupportedPreparedView, match="sets the same attribute as '#c-key'"):
         _assembled_view(
             rendered,
             revision=0,

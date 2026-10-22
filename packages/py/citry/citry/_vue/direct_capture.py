@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -12,6 +13,7 @@ from html import escape, unescape
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeGuard, TypeVar, cast
 
+from citry.assets import _TEMPLATE_CACHE
 from citry.attrs import (
     VueCodeError,
     _html_attr_identity,
@@ -29,6 +31,7 @@ from citry.citry_render import (
     RenderPart,
     SimpleVueRecord,
 )
+from citry.citry_template import CitryTemplate
 from citry.client_directives import ComponentTagClientBindingKind
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
 from citry.util.html import Markup, escape_to_str
@@ -48,6 +51,7 @@ from .capture import (
     StaticRunOpening,
     UnsupportedPreparedView,
     conflicting_attribute_targets,
+    element_key_conflict_message,
     format_prepared_element_attrs,
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
@@ -55,6 +59,7 @@ from .capture import (
     is_native_state_tag,
     is_vue_directive_name,
     prepared_spread_index,
+    template_location,
     vue_owned_native_marker,
     vue_owned_native_properties,
 )
@@ -78,7 +83,13 @@ from .direct import (
     DirectProjectionRender,
     DirectPythonComponentRender,
 )
-from .json_data import _copy_evaluated_json, _json_plain, _vue_attribute_value
+from .json_data import (
+    _copy_evaluated_json,
+    _json_plain,
+    _secret_key_path,
+    _SecretInBrowserDataError,
+    _vue_attribute_value,
+)
 from .leaf_program import (
     LeafCallChildren,
     LeafProgramFragment,
@@ -115,6 +126,38 @@ class Assembly:
     # the first such directive, so the compiled child's root can be checked
     # once every definition is compiled.
     root_directive_occurrences: Mapping[str, tuple[str, str, str]] = field(default_factory=dict)
+    # A transparent component has no Vue definition: its template is copied
+    # into the definition of another occurrence. These map each transparent
+    # render id to that occurrence and to the transparent component's class
+    # id. The assembly collects them anyway; `template_types` reads them only
+    # when a compile failure must be explained, so a page that compiles pays
+    # nothing for them.
+    transparent_template_owners: Mapping[str, str] = field(default_factory=dict)
+    transparent_class_ids: Mapping[str, str] = field(default_factory=dict)
+    # Turns a class id back into its component class, or raises KeyError
+    # when the app has unregistered it since the render started.
+    component_for_type: Callable[[str], type[Component]] | None = None
+
+    def template_types(self, definition_id: str) -> tuple[str, ...]:
+        """
+        Return the class ids of the components whose authored templates a definition was written from.
+
+        Its own component comes first, then each transparent component copied
+        into an occurrence that uses it. Used to explain a compile failure in
+        terms of the template the author wrote.
+        """
+        definition = next((item for item in self.view.definitions if item.id == definition_id), None)
+        if definition is None:
+            return ()
+        types = [definition.type_key]
+        definition_of = {item.id: item.definition_id for item in self.view.occurrences}
+        for render_id, owner_occurrence in self.transparent_template_owners.items():
+            class_id = self.transparent_class_ids.get(render_id)
+            if class_id is None or definition_of.get(owner_occurrence) != definition_id:
+                continue
+            if class_id not in types:
+                types.append(class_id)
+        return tuple(types)
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,6 +383,23 @@ def _rebase_metadata(values: list[_RebasableMetadataT], offset: int) -> list[_Re
     )
 
 
+def _secret_in_js_data_message(citry: Citry, class_id: str | None, js_data: object) -> str:
+    """Explain which ``js_data()`` key holds a ``citry.Secret`` and how to keep it on the server."""
+    # The class name is what the author wrote; the class id carries a hash
+    # suffix, so it is only the fallback for a class no longer registered.
+    label = class_id or "component"
+    with contextlib.suppress(KeyError):
+        if class_id:
+            label = citry.get_component_by_class_id(class_id).__name__
+    path = _secret_key_path(js_data) or ""
+    return (
+        f"{label}.js_data(){path} holds a citry.Secret, and Citry never sends a Secret to the browser, "
+        "where anyone could read it in the page source. Read the value with get_secret_value() in server "
+        "code that needs it, such as template_data() or an event handler, and leave it out of js_data(). "
+        "If an extension adds this key in its on_component_data hook, change the extension."
+    )
+
+
 def _json_attribute_map(values: Mapping[str, object]) -> dict[str, object]:
     """
     Encode resolved HTML attributes for Vue's object binding.
@@ -431,6 +491,9 @@ def assemble_typed_render(
     # Class names of transparent renders, so an error about a fill can name
     # the transparent component that wrote or received it.
     transparent_class_names: dict[str, str] = {}
+    # Class ids of transparent renders, so a compile failure in the template
+    # they were copied into can search their authored templates too.
+    transparent_class_ids: dict[str, str] = {}
     # While a fill that must be copied outside its author's component tree
     # is assembled, each entry collects the bindings in it that read the
     # author's browser data, keyed by the author's occurrence. It stays
@@ -714,6 +777,10 @@ def assemble_typed_render(
             raise UnsupportedPreparedView("component occurrence has no captured js_data")
         try:
             frame_data = _json_plain(raw_frame_data)
+        except _SecretInBrowserDataError as error:
+            # The author wrapped this value to keep it on the server, so say
+            # exactly which key holds it rather than only that a type is wrong.
+            raise TypeError(_secret_in_js_data_message(citry, frame.class_id, raw_frame_data)) from error
         except (TypeError, ValueError) as error:
             # js_data() is the author's code, and the bare conversion error
             # names neither the component nor what to return instead.
@@ -1398,6 +1465,8 @@ def assemble_typed_render(
                                 )
                             if render_part.frame.class_name:
                                 transparent_class_names[transparent_render_id] = render_part.frame.class_name
+                            if render_part.frame.class_id:
+                                transparent_class_ids[transparent_render_id] = render_part.frame.class_id
                             # A supplied slot can carry an ordinary transparent
                             # Python render through the receiver's physical
                             # occurrence. Its values remain owned by the slot's
@@ -1451,7 +1520,9 @@ def assemble_typed_render(
                             )
                             transparent_identity = (transparent_call_base, placement_route, explicit_key)
                             if transparent_identity in local_transparent_identity_keys:
-                                raise UnsupportedPreparedView(_duplicate_key_message(transparent_call))
+                                raise UnsupportedPreparedView(
+                                    _duplicate_key_message(transparent_call, explicit_key, citry)
+                                )
                             local_transparent_identity_keys.add(transparent_identity)
                             wrapper_digest = _digest(
                                 transparent_call_base, placement_route, ("explicit", explicit_key)
@@ -1555,7 +1626,9 @@ def assemble_typed_render(
                                 raise UnsupportedPreparedView("prepared #c-key must evaluate to a string")
                             member_identity = (member_base, placement_route, member_key)
                             if member_identity in local_identity_keys:
-                                raise UnsupportedPreparedView(_duplicate_key_message(member_metadata))
+                                raise UnsupportedPreparedView(
+                                    _duplicate_key_message(member_metadata, member_key, citry)
+                                )
                             local_identity_keys.add(member_identity)
                             member_placement_digest = _digest(member_base, placement_route, ("explicit", member_key))
                             member_placement_key = f"citryPlacement{member_placement_digest[:24]}"
@@ -1632,7 +1705,7 @@ def assemble_typed_render(
                     call_index = call_counts[call_site]
                     call_counts[call_site] += 1
                     if call_index and explicit_key is None:
-                        raise UnsupportedPreparedView(_missing_key_message(metadata))
+                        raise UnsupportedPreparedView(_missing_key_message(metadata, citry))
                     if explicit_key is None:
                         local_id = f"citryCall{_digest(call_base, placement_route, 0)[:16]}"
                         identity_key = local_id
@@ -1641,7 +1714,7 @@ def assemble_typed_render(
                             raise UnsupportedPreparedView("prepared #c-key must evaluate to a string")
                         identity = (call_base, placement_route, explicit_key)
                         if identity in local_identity_keys:
-                            raise UnsupportedPreparedView(_duplicate_key_message(metadata))
+                            raise UnsupportedPreparedView(_duplicate_key_message(metadata, explicit_key, citry))
                         local_identity_keys.add(identity)
                         local_id = f"citryCall{_digest(call_base, placement_route, call_index)[:16]}"
                         identity_key = explicit_key
@@ -2212,7 +2285,7 @@ def assemble_typed_render(
                     data_targets = {_html_attr_identity(name): name for name in effective_data_attrs}
                     element_metadata = dict(part.element_metadata)
                     if "key" in element_metadata and ("key" in source_targets or "key" in data_targets):
-                        raise UnsupportedPreparedView("prepared #c-key conflicts with another authored key")
+                        raise UnsupportedPreparedView(element_key_conflict_message(part, source_targets.get("key")))
                     conflict = conflicting_attribute_targets(source_targets, data_targets)
                     if conflict:
                         names = [f"{source_targets[identity]!r} / {data_targets[identity]!r}" for identity in conflict]
@@ -2333,7 +2406,13 @@ def assemble_typed_render(
                             f"attributes: {dynamic_bindings!r}"
                         )
                     if part.key is not None and "key" in source_targets:
-                        raise UnsupportedPreparedView("prepared #c-key conflicts with another authored key")
+                        # A dynamic element carries no template position, so
+                        # the tag and the two attributes are what can be named.
+                        other = source_targets["key"]
+                        raise UnsupportedPreparedView(
+                            f"'{other}' on <{part.tag}> sets the same attribute as '#c-key'. Keep '#c-key' if"
+                            f" Python should set the key, or remove '#c-key' and keep '{other}'."
+                        )
                     alias = f"citry-dynamic-{_digest(occurrence_types[occurrence_id], dynamic_site_index)[:16]}"
                     dynamic_site_index += 1
                     attrs_key = data_key("Attrs", alias, (0, 0), data_owner_id)
@@ -2681,6 +2760,11 @@ def assemble_typed_render(
         dict(occurrence_to_render),
         compile_inputs,
         root_directive_occurrences,
+        # Handed over as collected: the assembly is done with them, and
+        # Assembly.template_types reads them only to explain a failure.
+        transparent_template_owners,
+        transparent_class_ids,
+        citry.get_component_by_class_id,
     )
 
 
@@ -2768,30 +2852,49 @@ def _authored_call_tag(call: _PreparedCallMetadata | None, fallback: str) -> str
     return match.group(1) if match else fallback
 
 
-def _call_site(call: _PreparedCallMetadata | None) -> str:
-    """Describe where a component call sits, as `in <template>, line N`, for error messages."""
+def _template_source_for_origin(citry: Citry, origin: str | None) -> str | None:
+    """Return the source of the loaded component template whose origin is ``origin``, or None."""
+    if origin is None:
+        return None
+    for component_class in list(citry._classes_by_id.values()):
+        # Only a template that is already loaded counts: loading one here
+        # would run the app's template hooks just to word an error.
+        template = component_class.__dict__.get(_TEMPLATE_CACHE)
+        if isinstance(template, CitryTemplate) and template.origin == origin:
+            return template.source
+    return None
+
+
+def _call_site(call: _PreparedCallMetadata | None, citry: Citry) -> str:
+    """Describe where a component call sits, as `in template <origin>, line N`, for error messages."""
     if call is None:
         return "in a component rendered from Python"
     # Call spans are byte offsets into the authored template source.
-    line = call.source.encode()[: call.source_span[0]].count(b"\n") + 1
-    return f"in {call.origin}, line {line}" if call.origin else f"on line {line} of its template"
-
-
-def _missing_key_message(call: _PreparedCallMetadata | None) -> str:
-    """Name the repeated call that has no `#c-key`, and what to add."""
-    tag = _authored_call_tag(call, "component")
-    return (
-        f"<{tag}> {_call_site(call)} repeats inside a loop but has no #c-key. On a page that uses Vue, each"
-        f' repeated component needs a #c-key unique to its item, such as #c-key="item.id".'
+    return template_location(
+        call.source, call.source_span[0], call.origin, _template_source_for_origin(citry, call.origin)
     )
 
 
-def _duplicate_key_message(call: _PreparedCallMetadata | None) -> str:
-    """Name the repeated call whose `#c-key` value came up twice."""
+def _missing_key_message(call: _PreparedCallMetadata | None, citry: Citry) -> str:
+    """Name the repeated call that has no `#c-key`, and what to add."""
     tag = _authored_call_tag(call, "component")
+    # A `#c-key` whose value is None counts as no key, so name that case too.
     return (
-        f"<{tag}> {_call_site(call)} has a duplicate #c-key: two items of the loop gave it the same value."
-        " Give each item a unique #c-key."
+        f"<{tag}> {_call_site(call, citry)} repeats inside a loop but has no #c-key, or its #c-key is None."
+        " On a page that uses Vue, each repeated component needs a #c-key whose value identifies its item,"
+        f' such as #c-key="item.id" on <{tag}>.'
+    )
+
+
+def _duplicate_key_message(call: _PreparedCallMetadata | None, key: str, citry: Citry) -> str:
+    """Name the repeated call whose `#c-key` value came up twice, and the value."""
+    tag = _authored_call_tag(call, "component")
+    # Keys must differ across every repetition of one call, including the
+    # repetitions an outer loop makes, so the fix names nested loops too.
+    return (
+        f"<{tag}> {_call_site(call, citry)} has a duplicate #c-key, {key!r}: two of its repetitions got that"
+        " value. Each repetition needs its own key. When this loop is inside another loop, combine the outer"
+        " and inner loop values into one key."
     )
 
 
@@ -2927,11 +3030,12 @@ def _vue_expression_reads_instance(value: str, *, handler: bool, allowed_names: 
     # as a free name.
     if _THIS_KEYWORD.search(value):
         return True
-    valid, references = analyze_browser_source(value, "statement" if handler else "expression")
+    analysis = analyze_browser_source(value, "statement" if handler else "expression")
     # An expression the analyzer cannot parse cannot be shown to be safe.
-    if not valid:
+    if not analysis.valid:
         return True
-    for name, _start, _end in references:
+    for reference in analysis.references:
+        name = reference.name
         if name in _VUE_TEMPLATE_GLOBALS or name in allowed_names:
             continue
         # Vue gives an inline handler its event as `$event`, not from the instance.
@@ -3139,10 +3243,16 @@ _IGNORED_CONTENTS_ALLOWED = (
 
 def _ignored_element_label(part: PreparedElementOpen) -> str:
     """Name a `#c-ignore` element and where the template writes it."""
-    from citry.ext.events.bindings import _line_column  # noqa: PLC0415
-
-    line, column = _line_column(part.source, part.span[0])
-    return f"'#c-ignore' on the <{part.tag}> element that starts at line {line}, column {column},"
+    template = part.template
+    # Spans are byte offsets into the authored template source.
+    location = template_location(
+        part.source,
+        part.span[0],
+        template.origin if template is not None else None,
+        template.source if template is not None else None,
+        with_column=True,
+    )
+    return f"'#c-ignore' on the <{part.tag}> element {location},"
 
 
 def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int) -> int:

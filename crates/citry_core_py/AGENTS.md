@@ -24,7 +24,11 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   (`ServerRenderProgram`, `_read_server_render_program`,
   `_render_for_hydration`).
 - `src/template_parser.rs` - wraps `citry_template_parser`: `parse_template`
-  / `compile_template`, the V3 AST classes, and `TagRules`.
+  / `compile_template`, the V3 AST classes, `TagRules`, and the browser
+  analysis functions. `analyze_browser_source` and
+  `analyze_component_source` return the `#[pyclass]` record structs from
+  `citry_template_parser::browser` directly, so their fields are defined
+  once, in that crate, and `lib.rs` registers each record class.
 - `Cargo.toml` - depends on the sibling crates by path; `crate-type =
   ["cdylib"]`.
 

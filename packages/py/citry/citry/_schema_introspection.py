@@ -30,6 +30,7 @@ from citry.introspection import (
     _is_utf8_string,
     _UnsupportedJsonValue,
 )
+from citry.secret import Secret
 
 _SCHEMA_ROLES = {
     "kwargs": "Kwargs",
@@ -542,6 +543,11 @@ def _format_annotation_inner(annotation: object, active: set[int]) -> str | None
             (AbcMapping, "Mapping"),
         )
         label = next((value for expected_origin, value in labels if origin is expected_origin), None)
+        if origin is Secret:
+            # Citry's own generic marker is spelled by its import path, as a
+            # plain class is, so tools can import it and tell it from a
+            # project class that is also called Secret.
+            label = _safe_class_import_path(Secret)
         if label is None or not arguments:
             return None
         values = [_format_annotation_inner(value, active) for value in arguments]

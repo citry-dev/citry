@@ -1558,6 +1558,82 @@ def test_misspelled_directive_lint_severity_across_consumers():
         MisspelledDirectiveLintConsumer(rule_misspelled_directive="fatal")  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    ("source", "directives", "inherit_attrs"),
+    [
+        ("$component({ directives: { iff: {}, 'my-dir': {} }, inheritAttrs: false })", {"iff", "my-dir"}, False),
+        # No option: nothing registered locally, and Vue's default applies.
+        ("$component({ data() { return {} } })", set(), True),
+        ("$component(() => {})", set(), True),
+        # Unreadable values are unknown.
+        ("$component({ directives: shared, inheritAttrs: flag })", None, None),
+        ("$component({ mixins: [base] })", None, None),
+        ("$component(options)", None, None),
+        # Two calls in one source: the facts belong to neither alone.
+        ("$component({ inheritAttrs: false }); $component({})", None, None),
+        ("$component({", None, None),
+    ],
+)
+def test_component_source_analysis_reports_declared_directives_and_inherit_attrs(source, directives, inherit_attrs):
+    analysis = analyze_browser_component_source(source)
+    assert analysis.declared_directives == (None if directives is None else frozenset(directives))
+    assert analysis.declared_inherit_attrs is inherit_attrs
+
+
+def test_a_directive_every_consumer_registers_is_not_a_misspelling():
+    registers_iff = MisspelledDirectiveLintConsumer(declared_directives=frozenset({"iff"}))
+    assert _directives('<p v-iff="a"></p>', (registers_iff,)) == []
+    # Vue also finds `v-iff` under `Iff`, and `v-el-if` under `elIf`.
+    for registered in ("iff", "Iff"):
+        consumer = MisspelledDirectiveLintConsumer(declared_directives=frozenset({registered}))
+        assert _directives('<p v-iff="a"></p>', (consumer,)) == [], registered
+    camel = MisspelledDirectiveLintConsumer(declared_directives=frozenset({"elIf"}))
+    assert _directives('<p v-el-if="a"></p>', (camel,)) == []
+    # A registered name still leaves the other misspellings reported.
+    assert _directives('<p v-iff="a"></p><p v-shwo="b"></p>', (registers_iff,)) == [("v-shwo", "v-show", "error")]
+
+
+@pytest.mark.parametrize(
+    "consumers",
+    [
+        # The template also renders in a component that does not register it.
+        (
+            MisspelledDirectiveLintConsumer(declared_directives=frozenset({"iff"})),
+            MisspelledDirectiveLintConsumer(declared_directives=frozenset()),
+        ),
+        # A consumer whose directives are unknown might not register it.
+        (
+            MisspelledDirectiveLintConsumer(declared_directives=frozenset({"iff"})),
+            MisspelledDirectiveLintConsumer(),
+        ),
+        # No consumer is known at all.
+        (),
+        # A different directive is registered.
+        (MisspelledDirectiveLintConsumer(declared_directives=frozenset({"focus"})),),
+    ],
+)
+def test_a_directive_not_every_consumer_registers_is_still_reported(consumers):
+    assert _directives('<p v-iff="a"></p>', consumers) == [("v-iff", "v-if", "error")]
+
+
+def test_only_the_components_a_directive_fails_in_decide_its_report():
+    registers = MisspelledDirectiveLintConsumer("error", declared_directives=frozenset({"iff"}))
+    # A component that ignores the rule, as for a plugin directive, does not
+    # keep the name reported for the component that registers it.
+    for unknown in (frozenset(), None):
+        ignores = MisspelledDirectiveLintConsumer("ignore", declared_directives=unknown)
+        assert _directives('<p v-iff="a"></p>', (registers, ignores)) == []
+    # The page fails only in the component that does not register `iff`, so
+    # that component's severity is the finding's.
+    warns = MisspelledDirectiveLintConsumer("warning", declared_directives=frozenset())
+    assert _directives('<p v-iff="a"></p>', (registers, warns)) == [("v-iff", "v-if", "warning")]
+
+
+def test_declared_directives_must_be_a_frozenset_of_names():
+    with pytest.raises(TypeError, match="declared_directives"):
+        MisspelledDirectiveLintConsumer(declared_directives={"iff"})  # type: ignore[arg-type]
+
+
 def test_attribute_value_lint_consumer_rejects_an_unknown_severity():
     with pytest.raises(ValueError, match="rule_invalid_attribute_value"):
         AttributeValueLintConsumer(rule_invalid_attribute_value="fatal")  # type: ignore[arg-type]

@@ -13,17 +13,14 @@ both resolutions.
 
 from __future__ import annotations
 
-import os
-import sys
-import warnings
 from copy import copy
 from dataclasses import MISSING, Field, InitVar, dataclass, fields, is_dataclass
-from pathlib import Path
 from types import new_class
 from typing import TYPE_CHECKING, Any, ClassVar, cast, get_origin
 from weakref import WeakKeyDictionary
 
 from citry._annotation_introspection import _own_annotations
+from citry._caller_warnings import warn_at_caller
 from citry._class_introspection import (
     _safe_class_text,
     _static_class_attribute,
@@ -33,7 +30,6 @@ from citry._class_introspection import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
-    from types import FrameType
 
 _RAW_NESTED_DECLARATIONS_ATTR = "_citry_raw_nested_declarations"
 _SYNTHESIZED_DECLARATION_ATTR = "_citry_synthesized_declaration"
@@ -44,10 +40,6 @@ _HEAP_TYPE_FLAG = 1 << 9
 # A plain class that defines one of these constructs instances its own way,
 # so a generated dataclass ``__init__`` must not replace it.
 _CUSTOM_CONSTRUCTION_NAMES = frozenset({"__init__", "__new__", "__slots__", "model_fields", "__fields__", "_fields"})
-
-# The migration warning must point at the user's class statement or
-# register_library() call, not at the Citry frame that noticed the problem.
-_CITRY_PACKAGE_DIR = str(Path(__file__).resolve().parent) + os.sep
 
 # A library definition is materialized once per Citry instance that installs
 # it, so remember which definitions already warned to warn only once each.
@@ -386,12 +378,7 @@ def _warn_nested_schema_replaced(nearest: NestedClassDeclaration, message: str) 
 
     # Point the warning at the first frame outside Citry: the class statement
     # for a component, or the register_library() call for a library.
-    frame: FrameType | None = sys._getframe(1)
-    stacklevel = 2
-    while frame is not None and frame.f_code.co_filename.startswith(_CITRY_PACKAGE_DIR):
-        frame = frame.f_back
-        stacklevel += 1
-    warnings.warn(message, NestedSchemaReplacedWarning, stacklevel=stacklevel)
+    warn_at_caller(message, NestedSchemaReplacedWarning)
     # Mark it only once the warning went out: under warnings-as-errors the
     # first definition fails, and a later one must fail the same way.
     warned.add(nearest.name)

@@ -18,10 +18,15 @@
   text. The image check is a warning and the others are errors, so
   `citry check` may now fail on an existing project; each rule has a
   `rule_*` setting
-  ([details](https://citry.dev/ide/template-linting/)).
+  ([details](https://citry.dev/ide/template-linting/)). With your
+  application loaded, a component's only top-level `<img>` is reported when
+  the component sets `inheritAttrs: false`, because no parent's `alt` can
+  reach it then.
 - `citry check` and the editor now report Vue mistakes that would stop a
   component from rendering: an expression that is not valid JavaScript,
-  such as `v-if="open &&"` (`rule_invalid_vue_expression`), and `v-model`
+  such as `v-if="open &&"` (`rule_invalid_vue_expression`), where the
+  message names the JavaScript parser's error and the editor underlines the
+  place it points to, and `v-model`
   on an element that holds no value, such as `<form>`
   (`rule_invalid_model_target`). A misspelled DOM event in a listener,
   such as `@clik`, is a warning (`rule_misspelled_event`).
@@ -33,15 +38,17 @@
   ([details](https://citry.dev/ide/template-linting/#templates-vue-cannot-compile)).
 - The misspelled-directive check now also reports a typo in a Vue
   directive, such as `v-iff` or `v-elif`, which otherwise stops the page
-  with an error in the browser.
+  with an error in the browser. With your application loaded, a custom
+  directive that the component registers in the `directives` option of
+  `$component()` is not reported.
 - With your application loaded, `citry check` now reports more mistakes
   that fail only when the page runs
   ([details](https://citry.dev/ide/template-linting/)):
   - a component that `<c-for>` repeats without `#c-key` on a page that uses
     Vue (`rule_missing_component_key`);
   - a component that assigns to its own prop, such as
-    `@click="open = false"` (`rule_prop_assignment`), which the editor
-    reports too;
+    `@click="open = false"` in its template or `this.open = false` in its
+    JavaScript (`rule_prop_assignment`), which the editor reports too;
   - `@c-*` arguments the server would reject: an unknown key, a missing
     required field, or a literal of the wrong type, such as
     `save({amount: '1'})` for an `int` field
@@ -64,14 +71,21 @@
   or `citry.contrib.django.urlpatterns()`, so point `--app` at the module
   that mounts Citry
   ([details](https://citry.dev/ide/template-linting/#find-links-to-missing-pages)).
+- With your application loaded, `citry check` now warns about a
+  `self.inject("bord")` whose key no component above it provides, and
+  suggests the key the page does provide, such as `board`
+  (`rule_unknown_inject_key`,
+  [details](https://citry.dev/ide/template-linting/#find-unknown-inject-keys)).
 - If you build editor tooling on `citry.analysis`, you can now check a
   fill's `data` name against the slot's `SlotInput[T]`: pass
   `slot_data_types` to `build_schema_template_shadow()` or
   `build_inferred_template_shadow()`, keyed by the `slot_target` that
   `TemplatePythonControl` now records.
 - With your application loaded, `citry check` now warns when `js_data()`
-  sends a module constant that JSON cannot carry, such as a
-  `PurePosixPath`.
+  sends a module-level value that JSON cannot carry, such as a
+  `PurePosixPath`, including one nested in a dict or list, behind a
+  conditional or `Const(...)`, or read as an attribute such as
+  `config.EXPORT_DIR`.
 - `Citry.inspect_components()` now says, for each Events handler, whether
   an argument key the data class does not declare fails the call
   (`extra_fields`) and whether Citry or Pydantic checks the values
@@ -83,6 +97,41 @@
   accept `app_components`, the classes a loaded application registers in
   the file, so a tool can find the templates of components whose base
   class comes from another module.
+- `citry check --types` now reports a parent method used as a child
+  component's event listener, such as `@hide="hideCard"`, when it cannot
+  accept the values the child's typed `emits` declares, for example a
+  method that needs a second value the child never sends. The
+  [props and events guide](https://citry.dev/vue/props-and-events/) shows
+  how to type an event's values so both the child's `$emit` and the
+  parent's method are checked.
+- You can now wrap a server-only value, such as an API token, in
+  `citry.Secret`, and Citry refuses to send it to the browser: rendering
+  fails with an error naming the component and key when `js_data()`,
+  `css_data()`, or State holds one, `citry check` warns about one in
+  `js_data()`, and a template shows it as `***`. Annotate a `Kwargs` field
+  as `Secret[str]` to reject a plain string. A cached component cannot take
+  a `Secret` input unless its `Cache.vary()` leaves the secret out
+  ([details](https://citry.dev/advanced/secrets/)).
+- With your application loaded, `citry check` now warns when a template
+  class misspells one the component's CSS styles, such as `class="bord"`
+  for `.board`; such an element renders unstyled with no error
+  (`rule_misspelled_css_class`,
+  [details](https://citry.dev/ide/template-linting/#find-misspelled-css-classes)).
+- You can now turn on two stricter CSS checks, off by default:
+  `rule_undeclared_css_class` reports every template class that no CSS
+  Citry reads declares, and `rule_undeclared_css_variable` reports every
+  `var(--name)` without a fallback that nothing sets. Turn them on in
+  `LintSettings` or in a component's `Lint` class
+  ([details](https://citry.dev/ide/template-linting/#find-classes-without-css)).
+- With `Citry(mode="development")`, turning a page into HTML now warns
+  when two of its elements share an `id`, such as two components that
+  both write `id="board"` or one component rendered twice, and names the
+  components ([details](https://citry.dev/guides/development-mode/#repeated-ids)).
+- With `Citry(mode="development")`, the browser console now warns when
+  Vue's first render of a part it builds in the browser differs from the
+  HTML the server sent, for example a `created()` hook that opens a panel
+  on wide windows. A production page does not load the check
+  ([details](https://citry.dev/vue/server-rendering/#first-render-warnings)).
 
 ### Changed
 
@@ -128,8 +177,10 @@
   or the prop's own name. They also check both results of a condition
   whose results are literals.
 - The render error for a component that `<c-for>` repeats without
-  `#c-key`, or with a duplicate one, now names the tag, its template, and
-  the line.
+  `#c-key`, or with a duplicate one, now names the tag, its template and
+  line, and the repeated value, and says to combine the loop values into
+  one key when loops are nested. An element whose `#c-key` clashes with
+  another key now names its template, line and column.
 - A server expression that reads a Vue `v-for` variable, such as
   `c-name="member.name"` inside `<li v-for="member in members">`, now fails
   with an error that names the tag, its template, and the line, says the
@@ -145,6 +196,10 @@
   the class, such as `template`), and a `JsData` field's `origin` now
   names its Python file
   ([details](https://citry.dev/advanced/cli/#check-json-output)).
+- The render error for `v-model` on an element that holds no value, such
+  as `<div>` or `<form>`, now names each such element with its template
+  and line and lists the elements `v-model` works on, instead of an
+  internal Vue compiler message.
 - A form submitted through `@c-submit` now gives the handler the same
   values as the same form posted without JavaScript: text such as `"3"`
   fills an `int` or `float` field, a checked checkbox fills a `bool`
@@ -177,6 +232,11 @@
 - On Python 3.10, a browser update to an Events `State` field annotated as
   a parameterized container, such as `tuple[str, ...]` or `set[str]`, no
   longer fails with a server error.
+- A `security_csp="warn"` or `security_javascript="warn"` warning now
+  points at the line in your code that turned the page into HTML, not at
+  a line inside Citry. A warning from an Events response points at the
+  web framework code that called Citry, because your handler has already
+  returned.
 
 ## v0.6.0
 

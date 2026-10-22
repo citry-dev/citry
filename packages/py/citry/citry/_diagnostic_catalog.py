@@ -27,9 +27,13 @@ TEMPLATE_INVALID_NESTING = 'citry.template.invalid-nesting'
 TEMPLATE_DUPLICATE_ID = 'citry.template.duplicate-id'
 TEMPLATE_MISSING_IMAGE_ALT = 'citry.template.missing-image-alt'
 TEMPLATE_UNKNOWN_URL = 'citry.template.unknown-url'
+TEMPLATE_UNKNOWN_INJECT_KEY = 'citry.template.unknown-inject-key'
 JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 JS_DATA_PUBLIC_NAME_COLLISION = 'citry.js-data.public-name-collision'
 CSS_MISSPELLED_VARIABLE = 'citry.css.misspelled-variable'
+CSS_MISSPELLED_CLASS = 'citry.css.misspelled-class'
+CSS_UNDECLARED_CLASS = 'citry.css.undeclared-class'
+CSS_UNDECLARED_VARIABLE = 'citry.css.undeclared-variable'
 VUE_UNKNOWN_VARIABLE = 'citry.vue.unknown-variable'
 VUE_PYTHON_VARIABLE = 'citry.vue.python-variable'
 VUE_INVALID_EXPRESSION = 'citry.vue.invalid-expression'
@@ -339,13 +343,11 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                    'when': "In the component's own template, a Vue expression assigns to one of the "
                                            "component's declared props with =, +=, or another assignment operator, or "
                                            "with ++ or --, or binds it with v-model. In the component's JavaScript, it "
-                                           'is reported for an assignment through this or the $component context, such '
-                                           'as this.open = false. Citry finds the assignment by reading the text after '
-                                           'the name, so the JavaScript check reports at most a warning. A write to a '
-                                           'field of an object prop, such as open.count = 1, is not reported, and '
-                                           'neither is a name that a v-for or slot binds. citry check needs your '
-                                           'application for this rule, and the editor reports it once it has loaded '
-                                           'your application.'},
+                                           'is reported for an assignment or update through this or the $component '
+                                           'context, such as this.open = false or this.count++. A write to a field of '
+                                           'an object prop, such as open.count = 1, is not reported, and neither is a '
+                                           'name that a v-for or slot binds. citry check needs your application for '
+                                           'this rule, and the editor reports it once it has loaded your application.'},
  'citry.browser.undeclared-component-event': {'code': 'citry.browser.undeclared-component-event',
                                               'configurableSeverity': True,
                                               'constant': 'BROWSER_UNDECLARED_COMPONENT_EVENT',
@@ -809,6 +811,58 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                          'when': 'A name inside a $component initializer is not declared in that code, '
                                                  "destructured from the callback's argument, a JavaScript or browser "
                                                  'global, or a declared component_js_globals entry.'},
+ 'citry.css.misspelled-class': {'code': 'citry.css.misspelled-class',
+                                'configurableSeverity': True,
+                                'constant': 'CSS_MISSPELLED_CLASS',
+                                'defaultSeverity': 'warning',
+                                'documentationPath': '/ide/diagnostics/#citry.css.misspelled-class',
+                                'examples': [{'language': 'citry',
+                                              'source': 'class Board(Component):\n'
+                                                        '    template = """\n'
+                                                        '      <div class="bord"></div>\n'
+                                                        '    """\n'
+                                                        '\n'
+                                                        '    css = """\n'
+                                                        '      .board {\n'
+                                                        '        display: grid;\n'
+                                                        '      }\n'
+                                                        '    """',
+                                              'title': 'A dropped letter'}],
+                                'fix': 'Use the class name the CSS styles. If a stylesheet that Citry does not read '
+                                       'styles this class on purpose, set rule_misspelled_css_class to "ignore" for '
+                                       'this component.',
+                                'messages': {'default': "No CSS that Citry reads styles the class '{name}'. Did you "
+                                                        "mean '{suggestion}', from this component's CSS?"},
+                                'parameters': {'name': 'The class as written.',
+                                               'suggestion': "The class from the component's CSS one typing slip "
+                                                             'away.'},
+                                'summary': "A class in a template is one typing slip from a class the component's own "
+                                           'CSS styles, such as bord for board. No CSS that Citry reads styles the '
+                                           'class as written, so the element renders without those styles.',
+                                'surfaces': ['check'],
+                                'title': 'Misspelled CSS class',
+                                'when': "A static class attribute in a component's template, on an HTML element or a "
+                                        'component tag, holds a class of three or more characters that is one typing '
+                                        "slip from a class selector in the component's own css or css_file: two "
+                                        'neighboring letters swapped, one letter typed twice, or one letter left out. '
+                                        'These slips usually name another class of the same family, so they do not '
+                                        'count: one that moves, doubles, or drops a digit, such as col-1 for col-12; a '
+                                        'missing final s after a letter other than s, such as tab for tabs; one of '
+                                        'these short words, as the whole class or as its last word after a hyphen or '
+                                        'underscore, next to its longer form: close (closed), collapse (collapsed), '
+                                        'disable (disabled), enable (enabled), fade (faded), mute (muted), show '
+                                        '(shown), slide (slider), and toggle (toggled or toggler), such as '
+                                        'navbar-toggle for navbar-toggler; and one letter typed twice or left out in a '
+                                        'first hyphen-separated part of one or two characters, such as p-4 for px-4 or '
+                                        'm-auto for ml-auto. Two letters swapped in that part, such as iu-button for '
+                                        'ui-button, are reported. The class is reported only when no CSS that Citry '
+                                        "reads declares it: no selector in a registered component's css, css_file, "
+                                        'inline or local-file Dependencies stylesheet, or template <style> element '
+                                        'that holds CSS names it, and no attribute selector such as [class^="btn-"] '
+                                        'matches it. Bound classes, such as :class, v-bind:class, and c-class, words '
+                                        'inside {{ }} in a class attribute, and classes on tags that render no '
+                                        'element, such as c-if or template, are not checked. citry check needs your '
+                                        'application for this rule; the editor does not run it.'},
  'citry.css.misspelled-variable': {'code': 'citry.css.misspelled-variable',
                                    'configurableSeverity': True,
                                    'constant': 'CSS_MISSPELLED_VARIABLE',
@@ -820,15 +874,15 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                    'fix': "Use the key's exact name. If another stylesheet sets this property on "
                                           'purpose, add a fallback, as in var(--name, inherit), or set '
                                           'rule_misspelled_css_variable to "ignore" for this component.',
-                                   'messages': {'default': 'Nothing sets --{name}, so the browser ignores this '
-                                                           'declaration. Did you mean --{suggestion}, from '
+                                   'messages': {'default': 'Nothing sets --{name}, so this property gets its initial '
+                                                           'or inherited value. Did you mean --{suggestion}, from '
                                                            'css_data()?'},
                                    'parameters': {'name': 'The custom property as written, without the leading --.',
                                                   'suggestion': 'The css_data() key one typing slip away.'},
                                    'summary': "A component's CSS reads a custom property that is one typing slip from "
                                               'a key its css_data() returns, such as var(--acent) for accent. Nothing '
-                                              'sets that property, so the browser ignores the declaration: the '
-                                              'property inherits from the parent element or takes its initial value.',
+                                              'sets that property, so the CSS property that reads it gets its '
+                                              'inherited or initial value.',
                                    'surfaces': ['check'],
                                    'title': 'Misspelled css_data() variable',
                                    'when': "A var(--name) in the component's own css or css_file has no fallback "
@@ -838,6 +892,78 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                            'typed twice, or one letter left out. Properties that a parent component or '
                                            'a site stylesheet sets are not reported unless they are that close to a '
                                            'key. citry check needs your application for this rule.'},
+ 'citry.css.undeclared-class': {'code': 'citry.css.undeclared-class',
+                                'configurableSeverity': True,
+                                'constant': 'CSS_UNDECLARED_CLASS',
+                                'defaultSeverity': 'ignore',
+                                'documentationPath': '/ide/diagnostics/#citry.css.undeclared-class',
+                                'examples': [{'language': 'citry-html',
+                                              'source': '<div class="card-header">Title</div>',
+                                              'title': 'A class without CSS'}],
+                                'fix': 'Add CSS for the class to a component, or remove the class. For a component '
+                                       'that uses classes from a stylesheet Citry does not read, set '
+                                       'rule_undeclared_css_class to "ignore" in its Lint class.',
+                                'messages': {'default': "No CSS that Citry reads styles the class '{name}'."},
+                                'parameters': {'name': 'The class as written.'},
+                                'summary': 'A class in a template is not named by any CSS that Citry reads, so either '
+                                           'nothing styles it or a stylesheet outside Citry does.',
+                                'surfaces': ['check'],
+                                'title': 'Class that no CSS declares',
+                                'when': 'The rule is off by default, because it also reports classes from a site '
+                                        'stylesheet or a CSS framework such as Tailwind, and classes used only by '
+                                        'JavaScript or tests. With rule_undeclared_css_class set to "warning" or '
+                                        '"error", it reports each class in a static class attribute, on an HTML '
+                                        'element or a component tag, that no CSS Citry reads declares. A class counts '
+                                        "as declared when a selector in a registered component's css, css_file, inline "
+                                        'or local-file Dependencies stylesheet, or template <style> element that holds '
+                                        'CSS names it anywhere, as in .name, .card .name, .name:hover, or :is(.name), '
+                                        'including inside @media and nested rules, or when an attribute selector such '
+                                        'as [class~="name"] or [class^="btn-"] matches it. Citry does not read '
+                                        'stylesheets linked by URL, local files that cannot be read as UTF-8, sources '
+                                        'written in another language through css_lang, or <link> tags in templates, so '
+                                        'their classes are reported. Bound classes, words inside {{ }} in a class '
+                                        'attribute, and classes on tags that render no element are not checked, and a '
+                                        'class that citry.css.misspelled-class reports is not reported again. citry '
+                                        'check needs your application for this rule; the editor does not run it.'},
+ 'citry.css.undeclared-variable': {'code': 'citry.css.undeclared-variable',
+                                   'configurableSeverity': True,
+                                   'constant': 'CSS_UNDECLARED_VARIABLE',
+                                   'defaultSeverity': 'ignore',
+                                   'documentationPath': '/ide/diagnostics/#citry.css.undeclared-variable',
+                                   'examples': [{'language': 'css',
+                                                 'source': '.card {\n  padding: var(--card-gap);\n}',
+                                                 'title': 'A property set nowhere'}],
+                                   'fix': "Set the property in a component's CSS or css_data(), add a fallback, as in "
+                                          'var(--name, 1rem), or, for a component that reads properties a stylesheet '
+                                          'outside Citry sets, set rule_undeclared_css_variable to "ignore" in its '
+                                          'Lint class.',
+                                   'messages': {'default': 'Nothing that Citry reads sets --{name}, so this property '
+                                                           'gets its initial or inherited value unless a stylesheet or '
+                                                           'script outside Citry sets it.'},
+                                   'parameters': {'name': 'The custom property as written, without the leading --.'},
+                                   'summary': "A component's CSS reads a custom property with var(--name) and no "
+                                              'fallback, and nothing that Citry reads sets it. Unless a stylesheet or '
+                                              'script outside Citry sets it, the CSS property that reads it gets its '
+                                              'inherited or initial value.',
+                                   'surfaces': ['check'],
+                                   'title': 'Custom property that nothing sets',
+                                   'when': 'The rule is off by default, because it also reports properties that a site '
+                                           'stylesheet, a design system, or a script outside Citry sets. With '
+                                           'rule_undeclared_css_variable set to "warning" or "error", it reports each '
+                                           "var(--name) without a fallback value in a component's own css or css_file "
+                                           'when nothing that Citry reads sets --name. Citry counts as setting it: a '
+                                           '--name: declaration or an @property --name rule in a registered '
+                                           "component's css, css_file, inline or local-file Dependencies stylesheet, "
+                                           'or template <style> element that holds CSS; a css_data() or CssData key '
+                                           'called name on any registered component; a style attribute in a template '
+                                           'that sets --name; and the text --name in quotes, or followed by a colon, '
+                                           "in a :style or c-style binding, in a component's JavaScript, or in the "
+                                           'Python module that defines a component. A component whose own css_data() '
+                                           'keys Citry cannot all read is not checked, but a property that only such a '
+                                           'component sets is still reported where another component reads it. A var() '
+                                           "in a template's style attribute is not checked, and a var() that "
+                                           'citry.css.misspelled-variable reports is not reported again. citry check '
+                                           'needs your application for this rule; the editor does not run it.'},
  'citry.format.cancelled': {'code': 'citry.format.cancelled',
                             'constant': 'FORMAT_CANCELLED',
                             'defaultSeverity': 'information',
@@ -1163,24 +1289,44 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                   'title': 'Unsupported set value'}],
                                     'fix': 'Convert the value to JSON-friendly data in js_data(), such as a list, a '
                                            'string, or a dict of plain values, and change the JsData annotation to '
-                                           'match.',
+                                           'match. For a Secret, read its value on the server with get_secret_value() '
+                                           'where you need it, and leave it out of js_data().',
                                     'messages': {'default': "JsData field '{name}' is not a clean JSON value: "
-                                                            '{detail}. Browser tooling will treat its type as '
-                                                            'unknown.'},
+                                                            '{detail}. Browser tooling will treat its type as unknown.',
+                                                 'secret': "JsData field '{name}' can hold a citry.Secret, and "
+                                                           'rendering this component raises TypeError when it does: '
+                                                           '{detail}.'},
                                     'parameters': {'detail': 'Why the value is not a clean JSON type.',
                                                    'name': 'JsData field name.'},
                                     'summary': 'A JsData field has a type that cannot be sent to the browser as JSON, '
-                                               'such as a set or a date. Editor help treats the value as any.',
+                                               'such as a set or a date. Editor help treats the value as any. A '
+                                               'citry.Secret is reported too, because rendering refuses to send one.',
                                     'surfaces': ['check', 'lsp'],
                                     'title': 'JsData field is not a JSON type',
                                     'when': 'A declared or inferred JsData field has a type that strict JSON cannot '
                                             'carry, such as bytes, a set, a callable, a date or time, or a whole class '
-                                            'instance. With your application loaded, citry check also reads a module '
-                                            'constant that js_data() returns by name, such as API_BASE, and reports it '
-                                            'when its value is not JSON. The editor and citry check --types also '
-                                            'report a value that ty, the Python type checker Citry runs, types as a '
-                                            'standard library type JSON cannot carry, such as PurePosixPath, datetime, '
-                                            'Decimal, UUID, a set, or complex.'},
+                                            'instance. A citry.Secret counts too: Citry never sends one to the '
+                                            'browser, and rendering the component raises TypeError. With your '
+                                            'application loaded, citry check also reads a module-level value that '
+                                            'js_data() puts in its result, such as {"token": API_TOKEN} for API_TOKEN '
+                                            '= Secret(...), and reports it when its value is not JSON. It reads such a '
+                                            'value when it is the whole result, a value or item of a dict, list, or '
+                                            'tuple literal in it, a name unpacked into a list such as [*TOKENS], '
+                                            'either branch of a conditional expression, or the argument of Const(...); '
+                                            'the value may be an attribute of a module-level name, such as '
+                                            'config.API_TOKEN where config is a module or a plain class, when reading '
+                                            'it runs no code: a property, or an object with a __getattr__ hook such as '
+                                            "Django's lazy settings, is not read. A value read through an attribute is "
+                                            'judged only when it is built from plain dicts, lists, tuples, strings, '
+                                            'numbers, booleans, None, and Secrets. A module-level value holding '
+                                            "another kind of object is reported only when that object's class could "
+                                            'never pass the JSON check, so a lazy object or a dict subclass is '
+                                            'skipped. A value nested too deeply to read is skipped. Without --types, a '
+                                            'value that a call computes, such as get_token(), is not read. The editor '
+                                            'and citry check --types also report a value that ty, the Python type '
+                                            'checker Citry runs, types as a standard library type JSON cannot carry, '
+                                            'such as PurePosixPath, datetime, Decimal, UUID, a set, or complex, or as '
+                                            'a Secret.'},
  'citry.parse.configuration': {'code': 'citry.parse.configuration',
                                'constant': 'PARSE_CONFIGURATION',
                                'defaultSeverity': 'error',
@@ -1455,12 +1601,14 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'of a top-level c-if, c-elif, and c-else chain, when the component may '
                                               'have browser code (JavaScript, js_data(), State, or event handlers), '
                                               "because Vue passes the alt that a parent writes on the component's tag "
-                                              'to that element. citry check without --static, and an editor that has '
-                                              'loaded your application, report that image when the component has no '
-                                              'browser code. citry check --static and an editor that has not loaded '
-                                              "your application report the other images too, but never a component's "
-                                              "only top-level <img>, with the severity the component's own Lint class "
-                                              'sets as a plain string.'},
+                                              'to that element. A component whose JavaScript sets inheritAttrs: false '
+                                              'in $component({...}) stops Vue from passing it, so that image is '
+                                              'reported. citry check without --static, and an editor that has loaded '
+                                              'your application, report that image when the component has no browser '
+                                              'code or sets inheritAttrs: false. citry check --static and an editor '
+                                              'that has not loaded your application report the other images too, but '
+                                              "never a component's only top-level <img>, with the severity the "
+                                              "component's own Lint class sets as a plain string."},
  'citry.template.misspelled-attribute': {'code': 'citry.template.misspelled-attribute',
                                          'configurableSeverity': True,
                                          'constant': 'TEMPLATE_MISSPELLED_ATTRIBUTE',
@@ -1514,10 +1662,11 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                       {'language': 'citry-html',
                                                        'source': '<p v-iff="open">Details</p>',
                                                        'title': 'A typo in v-if'}],
-                                         'fix': 'Use the directive the message names. If the attribute really is meant '
-                                                'for the browser, pass it through c-bind, such as c-bind="{\'show\': '
-                                                'value}", or set rule_misspelled_directive to "ignore" for that '
-                                                'component.',
+                                         'fix': 'Use the directive the message names. For a custom directive, register '
+                                                'it in the directives option of $component({...}). If the attribute '
+                                                'really is meant for the browser, pass it through c-bind, such as '
+                                                'c-bind="{\'show\': value}". For a directive a plugin registers, set '
+                                                'rule_misspelled_directive to "ignore" for that component.',
                                          'messages': {'default': "'{name}' is not a Citry directive, so it renders an "
                                                                  "HTML attribute named '{attribute}'. Did you mean "
                                                                  "'{suggestion}'?",
@@ -1558,10 +1707,17 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                  'typed twice, or one letter left out) away from one, such as v-iff, '
                                                  'v-shwo, or v-IFF, or is a spelled-out v-else-if, such as v-elif or '
                                                  'v-elseif. A custom directive whose name is one slip from a Vue '
-                                                 'directive is reported too; set the rule to "ignore" for that '
-                                                 'component. citry check --static and an editor that has not loaded '
-                                                 "your application report it too, with the severity the component's "
-                                                 'own Lint class sets as a plain string.'},
+                                                 'directive is not reported when every component that renders the '
+                                                 'template registers it in the directives option of $component({...}), '
+                                                 'under the name as written, its camelCase form, or that form with a '
+                                                 'capital first letter, such as directives: { iff: {...} } for v-iff '
+                                                 'or { myDir: {...} } for v-my-dir. Only citry check without --static '
+                                                 'and an editor that has loaded your application skip it. It is still '
+                                                 'reported when Citry cannot read that option, and for a directive '
+                                                 'that a plugin registers with Citry.vue.use(plugin), which no check '
+                                                 'can see. citry check --static and an editor that has not loaded your '
+                                                 "application report it too, with the severity the component's own "
+                                                 'Lint class sets as a plain string.'},
  'citry.template.misspelled-element': {'code': 'citry.template.misspelled-element',
                                        'configurableSeverity': True,
                                        'constant': 'TEMPLATE_MISSPELLED_ELEMENT',
@@ -1643,6 +1799,82 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                       'title': 'Unknown component',
                                       'when': 'A <c-*> tag names no component in the selected application or library, '
                                               'counting built-in names and aliases.'},
+ 'citry.template.unknown-inject-key': {'code': 'citry.template.unknown-inject-key',
+                                       'configurableSeverity': True,
+                                       'constant': 'TEMPLATE_UNKNOWN_INJECT_KEY',
+                                       'defaultSeverity': 'warning',
+                                       'documentationPath': '/ide/diagnostics/#citry.template.unknown-inject-key',
+                                       'examples': [{'language': 'python',
+                                                     'source': 'board = self.inject("bord")  # the page provides '
+                                                               '"board"',
+                                                     'title': 'A misspelled key'}],
+                                       'fix': 'Correct the key to the one the page provides, or provide the key above '
+                                              'the component. Pass a default, such as self.inject("key", None), when '
+                                              'the value is optional. If the key comes from somewhere Citry cannot '
+                                              'see, set rule_unknown_inject_key to "ignore" in the component\'s Lint '
+                                              'class, or for the whole app in LintSettings.',
+                                       'messages': {'default': "No component above {component} provides '{key}', so "
+                                                               "self.inject('{key}') raises KeyError when the page "
+                                                               "renders. Provide '{key}' above {component}, or pass a "
+                                                               'default to inject().',
+                                                    'nowhere': "Nothing in your app provides '{key}', so "
+                                                               "self.inject('{key}') in {component} raises KeyError "
+                                                               "when the page renders. Provide '{key}' above "
+                                                               '{component}, or pass a default to inject().',
+                                                    'nowhereSuggestion': "Nothing in your app provides '{key}', so "
+                                                                         "self.inject('{key}') in {component} raises "
+                                                                         'KeyError when the page renders. Did you mean '
+                                                                         "'{suggestion}'?",
+                                                    'suggestion': "No component above {component} provides '{key}', so "
+                                                                  "self.inject('{key}') raises KeyError when the page "
+                                                                  "renders. Did you mean '{suggestion}'?"},
+                                       'parameters': {'component': 'The name of the component class that calls '
+                                                                   'inject().',
+                                                      'key': 'The key the component reads.',
+                                                      'suggestion': 'A provided key that is one typing slip from it.'},
+                                       'summary': 'A component reads a shared value with self.inject("key"), but no '
+                                                  'component above it provides that key, so rendering it raises '
+                                                  'KeyError.',
+                                       'surfaces': ['check', 'lsp'],
+                                       'title': 'Shared value read under a key nothing provides',
+                                       'when': 'A method of a component class, or of a base class or mixin it extends, '
+                                               'calls self.inject() with one string literal and no default, and no '
+                                               'provider Citry can see gives that key to the component. Citry starts '
+                                               "at each template that uses the component's tag, such as <c-card />, "
+                                               'and walks up through the templates that use those components. A key '
+                                               'counts when a <c-provide key="..."> wraps the tag; when a component on '
+                                               'the way calls self.provide() with it; when the tag is slot content and '
+                                               'the component whose <c-slot> shows it wraps that <c-slot> in '
+                                               '<c-provide> or calls self.provide(); when a <c-component c-is="...">, '
+                                               'which may render any component, sits inside a <c-provide> with the key '
+                                               'or in a component that calls self.provide() with it; or when a '
+                                               "render(provides={...}) call in your project's Python files passes it "
+                                               'as a literal key, which counts for every component. A key written as a '
+                                               'module-level string constant, also one imported from another module of '
+                                               'the project, counts as that string. If the component appears in '
+                                               'several places and one of them provides the key, nothing is reported. '
+                                               "When no template uses the component's tag, because Python renders it "
+                                               'or a <c-component c-is="..."> picks it, or when it is used only inside '
+                                               'a group of templates that use each other and that no template outside '
+                                               'the group uses, the key is compared with every key the app provides '
+                                               'anywhere. Citry reports nothing for a call with a default, such as '
+                                               'self.inject("key", None), a key written as a name or expression, or a '
+                                               'call in a class from an installed package; below a <c-provide '
+                                               'c-key="...">, a self.provide() key written as an expression, a tag '
+                                               'inside a <c-component c-is="...">, markup in a component\'s attribute, '
+                                               "or a component Python builds inside a component's methods or passes to "
+                                               'another component, such as Layout(slots={"default": Widget()}); below '
+                                               'a component whose Python source it cannot read and whose code calls '
+                                               'provide(); and nothing at all while a registered template cannot be '
+                                               'parsed or when the folder citry check runs from holds more than 20,000 '
+                                               'Python files. A key the page does provide is reported when Citry '
+                                               'cannot see the provider: a provides dictionary built elsewhere, a '
+                                               'self.provide() call in a helper function, a template string rendered '
+                                               'from Python, or a render(provides=...) call outside the folder you run '
+                                               'citry check from. That is why the rule is a warning. The rule runs in '
+                                               'citry check with your application loaded, and in an editor that has '
+                                               'loaded your application; the editor checks the calls in the file you '
+                                               'edit against the keys your app provided when it last loaded.'},
  'citry.template.unknown-url': {'code': 'citry.template.unknown-url',
                                 'configurableSeverity': True,
                                 'constant': 'TEMPLATE_UNKNOWN_URL',
@@ -1764,24 +1996,31 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                 'title': 'An unfinished condition'}],
                                   'fix': 'Complete or correct the expression, such as v-if="open && ready".',
                                   'messages': {'default': "The Vue expression in '{attribute}' is not valid "
-                                                          'JavaScript, so Vue cannot compile this template.'},
+                                                          'JavaScript, so Vue cannot compile this template.',
+                                               'parser': "The Vue expression in '{attribute}' is not valid JavaScript "
+                                                         '({detail}), so Vue cannot compile this template.'},
                                   'parameters': {'attribute': 'Attribute that holds the expression, as written in the '
-                                                              'template.'},
+                                                              'template.',
+                                                 'detail': "The JavaScript parser's message, such as Unexpected "
+                                                           'token.'},
                                   'summary': 'A Vue expression, such as the value of v-if, :title, or @click, is not '
                                              'valid JavaScript. Vue cannot compile the template, so the page fails '
                                              'when it renders.',
                                   'surfaces': ['check', 'lsp'],
                                   'title': 'Vue expression with a syntax error',
                                   'when': 'The expression does not parse as JavaScript, after character references '
-                                          'such as &amp;&amp; are decoded the way Vue decodes them. A listener may '
-                                          'also hold statements or a function expression. The arguments of a server '
-                                          'call such as @c-click="save({...})" are checked too. A valueless :title, '
-                                          'which Vue reads as :title="title", everything on or inside an element with '
-                                          'v-pre, which Vue does not compile, and custom directive values are not '
-                                          'checked, although Vue still fails on a custom directive value that is not '
-                                          'valid JavaScript. citry check --static and an editor that has not loaded '
-                                          "your application report it too, with the severity the component's own Lint "
-                                          'class sets as a plain string.'},
+                                          'such as &amp;&amp; are decoded the way Vue decodes them. Citry names the '
+                                          "parser's error in the message and underlines the place it points to, such "
+                                          'as the end of open &&. For an expression that holds a character reference, '
+                                          "it underlines the whole expression and leaves the parser's error out of the "
+                                          'message. A listener may also hold statements or a function expression. The '
+                                          'arguments of a server call such as @c-click="save({...})" are checked too. '
+                                          'A valueless :title, which Vue reads as :title="title", everything on or '
+                                          'inside an element with v-pre, which Vue does not compile, and custom '
+                                          'directive values are not checked, although Vue still fails on a custom '
+                                          'directive value that is not valid JavaScript. citry check --static and an '
+                                          'editor that has not loaded your application report it too, with the '
+                                          "severity the component's own Lint class sets as a plain string."},
  'citry.vue.misspelled-event': {'code': 'citry.vue.misspelled-event',
                                 'configurableSeverity': True,
                                 'constant': 'VUE_MISSPELLED_EVENT',

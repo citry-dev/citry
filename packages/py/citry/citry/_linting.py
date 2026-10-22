@@ -213,7 +213,11 @@ class TemplateLintInfo:
     rule_unknown_form_field: LintSeverity = "error"
     rule_missing_form_field: LintSeverity = "error"
     rule_misspelled_css_variable: LintSeverity = "warning"
+    rule_misspelled_css_class: LintSeverity = "warning"
+    rule_undeclared_css_class: LintSeverity = "ignore"
+    rule_undeclared_css_variable: LintSeverity = "ignore"
     rule_unknown_url: LintSeverity = "warning"
+    rule_unknown_inject_key: LintSeverity = "warning"
 
     def __post_init__(self) -> None:
         if (

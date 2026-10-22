@@ -37,6 +37,9 @@
 - Added configurable diagnostics for Vue code: `citry.vue.invalid-expression`
   and `citry.browser.invalid-model-target`, errors by default, and
   `citry.vue.misspelled-event`, a warning by default.
+- `citry.vue.invalid-expression` has the message variant `parser`, whose
+  `detail` parameter carries the JavaScript parser's message, such as
+  `Unexpected token`.
 - Added `citry.vue.compile-error`, the configurable error for a template that
   Vue's compiler rejects. Its one parameter, `detail`, carries the
   compiler's message.
@@ -68,6 +71,11 @@
   `citry.check.url-checker-failed` (message variant `several`), information
   diagnostics that `citry check` lists as notes when no web framework
   integration can answer for the links, or when its answer raises an error.
+- Added `citry.template.unknown-inject-key` (variants `suggestion`,
+  `nowhere`, and `nowhereSuggestion`), a configurable warning that
+  `citry check` and the language server report with the application
+  loaded, for a `self.inject()` key that no provider above the component
+  gives.
 - Added `citry.check.template-not-checked`, an information diagnostic for a
   class whose template `citry check --static` and the language server skip
   because its base class comes from another module and Citry has not
@@ -77,3 +85,15 @@
 - `citry.js-data.unsupported-type` also covers a module constant that
   `js_data()` returns and a value that ty types as a standard type JSON
   cannot carry.
+- `citry.js-data.unsupported-type` also covers a `citry.Secret` in
+  `js_data()` or a `JsData` field.
+- Added `citry.css.misspelled-class` (a warning), and
+  `citry.css.undeclared-class` and `citry.css.undeclared-variable`, both
+  off by default; `citry check` reports them with the application loaded.
+- `defaultSeverity` now accepts `ignore` for a rule that is off until the
+  application turns it on. It requires `configurableSeverity: true`, and
+  the public reference shows such a rule as off.
+- `citry.js-data.unsupported-type` adds the message variant `secret`,
+  used when the value is a `citry.Secret`.
+- The `citry.css.misspelled-variable` and `citry.css.undeclared-variable`
+  messages now say the property gets its initial or inherited value.

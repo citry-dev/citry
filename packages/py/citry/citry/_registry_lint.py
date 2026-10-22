@@ -30,11 +30,14 @@ from citry._diagnostic_catalog import (
     BROWSER_MISSING_SERVER_EVENT_FIELD,
     BROWSER_UNKNOWN_FORM_FIELD,
     BROWSER_UNKNOWN_SERVER_EVENT_FIELD,
+    TEMPLATE_UNKNOWN_INJECT_KEY,
     TEMPLATE_UNKNOWN_URL,
 )
 from citry._diagnostics import render_diagnostic
 from citry._html_attribute_values import HTML_ELEMENTS
 from citry._markup_lint import one_slip_from
+from citry._provide_keys import method_calls, python_class_node
+from citry._source_lines import source_lines
 from citry.ext.events.schemas import json_value_error, payload_fields
 from citry.util.html import decode_attribute_entities
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement
@@ -1178,6 +1181,83 @@ def unknown_url_findings(
     return findings
 
 
+@dataclass(frozen=True, slots=True)
+class UnknownInjectKeyFinding:
+    """One ``self.inject("key")`` call whose key reaches the component from no provider, at UTF-8 byte offsets."""
+
+    code: str
+    message: str
+    start_index: int
+    end_index: int
+
+
+def unknown_inject_key_findings(
+    source: str,
+    tree: ast.Module,
+    qualname: str,
+    *,
+    component: str,
+    provided: frozenset[str],
+    everywhere: bool,
+) -> list[UnknownInjectKeyFinding]:
+    """
+    Report each ``self.inject("key")`` in one class whose key is not in ``provided``.
+
+    Only a call with one string literal and no default counts: a default
+    says the key may be missing on purpose, and a key written as an
+    expression cannot be compared. ``everywhere`` says ``provided`` is every
+    key the app provides, because no template renders the component, which
+    changes the message. Offsets point at the key's string literal in
+    ``source``.
+    """
+    scope = python_class_node(tree, qualname)
+    if scope is None:
+        return []
+    lines = source_lines(source)
+    # Byte offset where each line starts, since `ast` gives byte columns.
+    starts = [0]
+    for line in lines:
+        starts.append(starts[-1] + len(line.encode("utf-8")))
+    findings: list[UnknownInjectKeyFinding] = []
+    for call in method_calls(scope, "inject"):
+        receiver = call.func.value if isinstance(call.func, ast.Attribute) else None
+        argument = call.args[0] if len(call.args) == 1 else None
+        if (
+            not isinstance(receiver, ast.Name)
+            or receiver.id != "self"
+            or call.keywords
+            or not isinstance(argument, ast.Constant)
+            or not isinstance(argument.value, str)
+            or argument.value in provided
+        ):
+            continue
+        key = argument.value
+        suggestion = next((candidate for candidate in sorted(provided) if one_slip_from(key, candidate)), None)
+        variant = "nowhere" if everywhere else "default"
+        if suggestion is None:
+            message = render_diagnostic(TEMPLATE_UNKNOWN_INJECT_KEY, variant=variant, component=component, key=key)
+        else:
+            message = render_diagnostic(
+                TEMPLATE_UNKNOWN_INJECT_KEY,
+                variant="nowhereSuggestion" if everywhere else "suggestion",
+                component=component,
+                key=key,
+                suggestion=suggestion,
+            )
+        end_lineno = argument.end_lineno if argument.end_lineno is not None else argument.lineno
+        end_col = argument.end_col_offset if argument.end_col_offset is not None else argument.col_offset
+        findings.append(
+            UnknownInjectKeyFinding(
+                TEMPLATE_UNKNOWN_INJECT_KEY,
+                message,
+                starts[argument.lineno - 1] + argument.col_offset,
+                starts[end_lineno - 1] + end_col,
+            )
+        )
+    findings.sort(key=lambda finding: finding.start_index)
+    return findings
+
+
 __all__ = [
     "FormControlName",
     "RepeatedComponentCall",
@@ -1187,6 +1267,7 @@ __all__ = [
     "ServerEventPayload",
     "ServerEventPayloadFinding",
     "TemplateUrl",
+    "UnknownInjectKeyFinding",
     "UnknownUrlFinding",
     "annotation_from_type_display",
     "root_relative_path",
@@ -1199,5 +1280,6 @@ __all__ = [
     "template_has_vue_attributes",
     "template_urls",
     "unkeyed_repeated_component_calls",
+    "unknown_inject_key_findings",
     "unknown_url_findings",
 ]

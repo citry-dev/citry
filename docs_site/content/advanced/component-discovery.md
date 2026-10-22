@@ -207,4 +207,4 @@ from your machine, so check it before you share it.
 - [`Citry.inspect_component_graph()`][citry.Citry.inspect_component_graph]
 - [`ComponentGraph`][citry.ComponentGraph]
 - [Registration](/concepts/registration/)
-- [Hot reload](/guides/dev-server/)
+- [Hot reload](/guides/hot-reload/)

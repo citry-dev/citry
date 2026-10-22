@@ -99,7 +99,8 @@ categories:
     slug: rendering
     title: Rendering
     intro: >-
-      The render pipeline, its output structs, and Citry's trusted-HTML marker.
+      The render pipeline, its output structs, Citry's trusted-HTML marker, and the
+      `Secret` marker that keeps a value out of the data sent to the browser.
       `citry.Markup` is exactly [`markupsafe.Markup`](https://markupsafe.palletsprojects.com/en/stable/escaping/#markupsafe.Markup).
       `Markup(value)` trusts the complete value without sanitizing or validating anything.
     symbols:
@@ -123,6 +124,7 @@ categories:
       - citry.is_const
       - citry.const_value
       - citry.Markup
+      - citry.Secret
       - citry.SecurityError
 
   - kind: generated_python

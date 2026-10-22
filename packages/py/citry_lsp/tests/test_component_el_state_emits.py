@@ -378,8 +378,9 @@ _PROP_JS = """$component({
             "",
             [
                 ("card.html", types.DiagnosticSeverity.Error),
-                # A write in the component's JavaScript is at most a warning.
-                ("card.js", types.DiagnosticSeverity.Warning),
+                # A write in the component's JavaScript follows the rule's
+                # severity, as the template's does.
+                ("card.js", types.DiagnosticSeverity.Error),
             ],
         ),
         ("rule_prop_assignment='ignore'", []),

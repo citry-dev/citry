@@ -3032,7 +3032,14 @@ def test_template_lint_diagnostics_report_the_html_rules_without_a_project():
         ("citry.vue.misspelled-event", warning),
     ]
     expression = next(item for item in diagnostics if item.code == "citry.vue.invalid-expression")
-    assert expression.range == types.Range(_position(source, "o &&"), _position(source, "o &&", len("o &&")))
+    # The parser stops after `&&`, so the squiggle sits on the last character
+    # written, and the whole expression travels in `data` for the TypeScript
+    # filter.
+    assert expression.range == types.Range(_position(source, "o &&", 3), _position(source, "o &&", 4))
+    whole = types.Range(_position(source, "o &&"), _position(source, "o &&", len("o &&")))
+    assert expression.data == {
+        "expressionRange": [[whole.start.line, whole.start.character], [whole.end.line, whole.end.character]]
+    }
     compile_error = next(item for item in diagnostics if item.code == "citry.vue.compile-error")
     row = "<div>Row"
     assert compile_error.range == types.Range(_position(source, row), _position(source, row, len("<div>")))
@@ -3082,6 +3089,60 @@ def test_template_lint_diagnostics_apply_owner_policy_to_the_html_rules(tmp_path
     assert codes("badge.html") == []
     assert codes("logo.html") == []
     assert codes("counter.html") == []
+
+
+def test_template_lint_diagnostics_read_directives_and_inherit_attrs_from_the_owner_javascript(tmp_path):
+    templates = {
+        "plain.html": '<img src="a.png">',
+        "closed.html": '<img src="a.png">',
+        "computed.html": '<img src="a.png">',
+        "registers.html": '<p v-iff="open">a</p>',
+        "unlisted.html": '<p v-iff="open">a</p>',
+    }
+    for name, template in templates.items():
+        (tmp_path / name).write_text(template, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Plain(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'plain.html'\n"
+        "    js = '$component({})'\n"
+        "class Closed(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'closed.html'\n"
+        "    js = '$component({ inheritAttrs: false })'\n"
+        "class Computed(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'computed.html'\n"
+        "    js = '$component({ inheritAttrs: window.flag })'\n"
+        "class Registers(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'registers.html'\n"
+        "    js = '$component({ props: [\"open\"], directives: { iff: {} } })'\n"
+        "class Unlisted(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'unlisted.html'\n"
+        "    js = '$component({ props: [\"open\"], directives: shared })'\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+
+    def codes(name: str) -> list[str]:
+        path = tmp_path / name
+        document = DocumentState(path.as_uri(), "citry-html", path.read_text(encoding="utf-8"), 1)
+        document.update(document.source, 1, project)
+        return [str(item.code) for item in template_lint_diagnostics(document, project, {})]
+
+    # Only a proven `inheritAttrs: false` stops a parent's alt reaching the root.
+    assert codes("plain.html") == []
+    assert codes("closed.html") == ["citry.template.missing-image-alt"]
+    assert codes("computed.html") == []
+    # A directive the owner registers is not a misspelling; one it may or may
+    # not register is still reported.
+    assert codes("registers.html") == []
+    assert codes("unlisted.html") == ["citry.template.misspelled-directive"]
 
 
 def test_template_lint_diagnostics_read_the_component_lint_class_without_a_project():

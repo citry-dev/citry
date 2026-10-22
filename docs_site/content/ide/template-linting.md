@@ -53,7 +53,11 @@ them. There is no separate editor setting.
 | [`citry.browser.unknown-form-field`](/ide/diagnostics/#citry.browser.unknown-form-field) | A control in a submitted form whose `name` the handler does not accept | error |
 | [`citry.browser.missing-form-field`](/ide/diagnostics/#citry.browser.missing-form-field) | A submitted form without a control for a field the handler requires | error |
 | [`citry.css.misspelled-variable`](/ide/diagnostics/#citry.css.misspelled-variable) | A `var(--name)` that misspells a `css_data()` key | warning |
+| [`citry.css.misspelled-class`](/ide/diagnostics/#citry.css.misspelled-class) | A class one typo away from a class in the component's CSS, such as `bord` for `.board` | warning |
+| [`citry.css.undeclared-class`](/ide/diagnostics/#citry.css.undeclared-class) | A class that no CSS read by Citry declares | off |
+| [`citry.css.undeclared-variable`](/ide/diagnostics/#citry.css.undeclared-variable) | A `var(--name)` that nothing sets | off |
 | [`citry.template.unknown-url`](/ide/diagnostics/#citry.template.unknown-url) | A link to a path your app has no page or file for | warning |
+| [`citry.template.unknown-inject-key`](/ide/diagnostics/#citry.template.unknown-inject-key) | A `self.inject("key")` whose key no component above provides | warning |
 
 ## Fix unknown names
 
@@ -203,7 +207,7 @@ to destructure it.
 
 Each rule has a `rule_*` setting on `LintSettings` that accepts `"ignore"`,
 `"warning"`, or `"error"`. Warnings are shown but do not fail `citry check`;
-errors do. These are the defaults:
+errors do, and `"ignore"` turns the rule off. These are the defaults:
 
 ```python
 from citry import Citry, LintSettings
@@ -236,6 +240,11 @@ app = Citry(
         rule_missing_server_event_field="error",
         rule_incompatible_server_event_field="error",
         rule_misspelled_css_variable="warning",
+        rule_misspelled_css_class="warning",
+        rule_undeclared_css_class="ignore",
+        rule_undeclared_css_variable="ignore",
+        rule_unknown_url="warning",
+        rule_unknown_inject_key="warning",
     ),
 )
 ```
@@ -493,10 +502,40 @@ A name that is itself a word, such as `v-tex`, `v-mode`, or `v-one`, is
 not reported. Neither is a typo of `v-once` or `v-memo`, because Citry
 does not support those two directives.
 
-If you register your own directive whose name is one typing slip from a
-Vue directive, set `rule_misspelled_directive = "ignore"` in the `Lint` class
-of the components that use it. This also turns off the `c-` directive
-checks for those components.
+With your application loaded, a custom directive whose name is one typing
+slip from a Vue directive passes when the component registers it in the
+`directives` option of `$component({...})`. `citry check --static`, and
+an editor that has not loaded your application, still report it:
+
+```citry
+from citry import Component
+
+
+class Disclosure(Component):
+    template = """
+        {# Passes: this component registers v-iff #}
+        <p v-iff="open">Details</p>
+    """
+    js = """
+        $component({
+          props: ["open"],
+          directives: { iff: { mounted(el) {} } },
+        });
+    """
+```
+
+Vue finds `v-my-dir` under `my-dir`, `myDir`, or `MyDir`, and so does the
+check. When several components share one template, such as subclasses
+that inherit it, each of them must register the directive, because the
+page fails in the one that does not.
+Citry reports the name when it cannot read the option, such as
+`directives: shared`.
+
+A directive that a plugin registers for every component, with
+`Citry.vue.use(plugin)`, is invisible to the check. For such a directive,
+set `rule_misspelled_directive = "ignore"` in the `Lint` class of the
+components that use it. This also turns off the `c-` directive checks for
+those components.
 
 ## Misspelled HTML names { #find-misspelled-html-names }
 
@@ -620,7 +659,8 @@ elements nest there.
 
 ```citry-html
 {# Error: The Vue expression in 'v-if' is not valid
-   JavaScript, so Vue cannot compile this template. #}
+   JavaScript (Unexpected token), so Vue cannot compile
+   this template. #}
 <p v-if="open &&">Details</p>
 
 {# Right #}
@@ -632,6 +672,12 @@ Citry checks every Vue expression, such as the value of `v-if`, `:title`,
 `@c-click="rate({ stars: 5 })"`. It decodes character references first, as Vue
 does, so `a &amp;&amp; b` passes. A listener may hold statements, such as
 `@click="count++; save()"`, or a function.
+
+The message names the JavaScript parser's error, and the editor
+underlines the place it points to, such as the end of `open &&` or the
+stray `)` in `go())`. An expression that contains a character reference,
+such as `&amp;`, is underlined as a whole instead, with no parser error
+in the message.
 
 It does not check:
 
@@ -819,7 +865,9 @@ So `c-if` and `c-else` branches may share an id. `v-show` does not count,
 because a hidden element is still in the page.
 
 The same id in two different templates is not reported, even when both
-render on one page.
+render on one page. Development mode reports that case when Citry
+turns the page into HTML; see
+[Repeated ids](/guides/development-mode/#repeated-ids).
 
 ## Images without alt text { #find-images-without-alt-text }
 
@@ -854,8 +902,28 @@ An `<img>` that is the template's only top-level element may get its
 tag to that element when the component has browser code. An `<img>`
 directly inside a single top-level `c-if`, `c-elif`, and `c-else` chain
 counts as that element too. Citry reports such an image only with your
-application loaded, and only for a component with no browser code (no
-`js`, `js_data()`, `State`, or event handlers).
+application loaded, and only when no parent's `alt` can reach it: the
+component has no browser code (no `js`, `js_data()`, `State`, or event
+handlers), or its JavaScript stops Vue from passing attributes on with
+`inheritAttrs: false`:
+
+```citry
+from citry import Component
+
+
+class Avatar(Component):
+    template = """
+        {# Warning: <img> has no alt text. #}
+        <img :src="src">
+    """
+    js = """
+        $component({ props: ["src"], inheritAttrs: false });
+    """
+```
+
+An `inheritAttrs` value that Citry cannot read, such as
+`inheritAttrs: settings.inherit`, counts as passing `alt` on, so the
+image is not reported.
 
 ## Loops without `#c-key` { #find-repeated-components-without-keys }
 
@@ -914,10 +982,11 @@ nothing:
 Citry reads the props from the component's `$component({ props })` and
 reports an assignment to one of them in the component's own template:
 `=`, `+=` and the other assignment operators, `++`, `--`, and
-`v-model="open"`. It reports `this.open = false` in the component's
-JavaScript too, but only as a warning, because it finds that assignment by
-reading the text. Changing a field of an object prop, such as
-`open.count = 1`, is allowed and not reported.
+`v-model="open"`. It reports `this.open = false`, `this.count++`, and
+the other writes through `this`, or through the `component` object that
+`$component` gives its callback, in the component's JavaScript too, at the
+severity `rule_prop_assignment` sets. Changing a field of
+an object prop, such as `open.count = 1`, is allowed and not reported.
 
 `citry --app ... check` reports this rule, and the editor reports it once
 it has loaded your application.
@@ -1057,7 +1126,8 @@ application.
 
 Each key that `css_data()` returns becomes a CSS custom property with the
 same name, such as `--accent` for the key `accent`. A typo in `var()` reads
-a property that nothing sets, so the browser ignores the declaration:
+a property that nothing sets, so the CSS property using it gets its
+inherited or initial value instead:
 
 ```citry
 class Board(Component):
@@ -1066,9 +1136,10 @@ class Board(Component):
 
     css = """
       h1 {
-        /* Warning: Nothing sets --acent, so the browser
-           ignores this declaration. Did you mean
-           --accent, from css_data()? */
+        /* Warning: Nothing sets --acent, so this
+           property gets its initial or inherited
+           value. Did you mean --accent, from
+           css_data()? */
         color: var(--acent);
       }
     """
@@ -1081,6 +1152,180 @@ fallback value, such as `var(--acent, blue)`, and a property the same CSS
 sets itself are not reported, and neither is a component whose
 `css_data()` keys Citry cannot all read. The rule is a warning by default
 and needs your application, so only `citry --app ... check` reports it.
+To find every `var()` that nothing sets, turn on
+[unset CSS variables](#find-unset-css-variables).
+
+## Misspelled CSS classes { #find-misspelled-css-classes }
+
+A typo in a `class` attribute leaves the element without its styles, and
+the browser does not say why:
+
+```citry
+class Board(Component):
+    template = """
+      {# Warning: No CSS that Citry reads styles the
+         class 'bord'. Did you mean 'board', from this
+         component's CSS? #}
+      <div class="bord"></div>
+    """
+
+    css = """
+      .board {
+        display: grid;
+      }
+    """
+```
+
+The CSS that Citry reads is, for every component your app registers:
+
+- its `css` or `css_file`;
+- the stylesheets in its `Dependencies` that are inline, such as
+  `Style(content=...)`, or local files; not a stylesheet linked by URL;
+- the `<style>` elements in its template that hold CSS, not another
+  language such as `lang="scss"`.
+
+Citry reports a class in a static `class` attribute, one written as plain
+text, when no CSS that Citry reads styles it and it is one typing slip
+from a class that the component's own `css` or `css_file` styles. A typing
+slip is two neighboring letters swapped, one letter typed twice, or one
+letter left out.
+
+A `class` on a component tag is checked too: the component receives it as
+an input and usually puts it on one of its elements.
+
+These are not checked:
+
+- a class set by `:class` or `c-class`;
+- the words inside `{{ }}` in a `class` attribute. Citry shows a plain
+  attribute's text exactly as written, so use `c-class` for a value that
+  changes;
+- a class shorter than three characters;
+- a class on a tag that renders no element of its own, such as `<c-if>`
+  or `<template>`;
+- a slip that usually names another class of the same family, such as
+  `col-1` next to `.col-12` or `tab` next to `.tabs`. See
+  [Similar class names](#similar-class-names) for the full list.
+
+The rule is a warning by default. Only `citry --app ... check` reports
+it; the editor does not. If a stylesheet that Citry does not read styles
+the class on purpose, set `rule_misspelled_css_class` to `"ignore"` in
+that component's `Lint` class
+([Override one component](#override-one-component)).
+
+## Classes without CSS { #find-classes-without-css }
+
+This rule is off by default. Turn it on to find every class in a template
+that no CSS styles, such as a class whose rule you deleted:
+
+```python
+app = Citry(
+    lint=LintSettings(
+        rule_undeclared_css_class="warning",
+    ),
+)
+```
+
+`citry --app ... check` then reports each class in a static `class`
+attribute that the [CSS Citry reads](#find-misspelled-css-classes) does
+not declare. A class that the
+[misspelled class](#find-misspelled-css-classes) rule reports is not
+reported again:
+
+```citry-html
+{# Warning: No CSS that Citry reads styles the
+   class 'card-header'. #}
+<div class="card-header">Title</div>
+```
+
+Like the misspelled class rule, it skips bound classes, the words inside
+`{{ }}`, and classes on tags that render no element. Unlike that rule, it
+also checks classes shorter than three characters. The editor does not
+run it.
+
+The rule also reports classes that work, which is why it is off by
+default:
+
+- classes from a stylesheet linked by URL or with a `<link>` tag, such as
+  a site stylesheet or a CSS framework;
+- utility classes that a build tool such as Tailwind generates;
+- classes used only by JavaScript or by tests, such as `js-toggle`;
+- classes styled by a stylesheet written in another language, with
+  `css_lang` or a template `<style lang="...">`, or in a local file that
+  is not UTF-8 text;
+- the classes of a component library you install, which you cannot
+  change.
+
+To check only your own components, leave the rule off in `LintSettings`
+and turn it on in their `Lint` class:
+
+```citry
+class Board(Component):
+    class Lint:
+        rule_undeclared_css_class = "warning"
+```
+
+Or turn it on for the app and set it to `"ignore"` in the `Lint` class of
+each component that uses a CSS framework.
+
+[What declares a class](#what-declares-a-class) lists the selectors
+that count.
+
+## Unset CSS variables { #find-unset-css-variables }
+
+This rule is off by default. Turn it on to find every `var(--name)` that
+reads a custom property nothing sets:
+
+```python
+app = Citry(
+    lint=LintSettings(
+        rule_undeclared_css_variable="warning",
+    ),
+)
+```
+
+With the rule on, Citry reports a `var()` that nothing sets:
+
+```citry
+class Card(Component):
+    css = """
+      .card {
+        /* Warning: Nothing that Citry reads sets
+           --card-gap, so this property gets its
+           initial or inherited value unless a
+           stylesheet or script outside Citry
+           sets it. */
+        padding: var(--card-gap);
+      }
+    """
+```
+
+Citry checks each `var(--name)` in a component's own `css` or `css_file`
+that has no fallback value; `var(--card-gap, 1rem)` is never reported. It
+counts these as setting `--name`:
+
+- a `--name: value` declaration or an `@property --name` rule in the
+  [CSS Citry reads](#find-misspelled-css-classes);
+- a `css_data()` or `CssData` key called `name` on any component. Citry
+  sets each key on that component's root element, and everything inside
+  it, other components included, inherits the value;
+- a `style` attribute in a template that sets `--name`;
+- the text `--name` in quotes, or followed by a colon, in a `:style` or
+  `c-style` binding, in a component's JavaScript, or in the Python module
+  that defines a component, as in `setProperty('--name', value)` or
+  `f"--name: {value};"`.
+
+A `var()` inside a template's `style` attribute is not checked. A
+component whose `css_data()` keys Citry cannot all read is skipped,
+because it may set any property, but a property that only such a
+component sets is still reported where another component reads it. A
+`var()` that the
+[misspelled CSS variable](#find-misspelled-css-variables) rule reports is
+not reported again. The editor does not run this rule.
+
+The rule also reports properties that a site stylesheet, a design system,
+or a script outside Citry sets, which is why it is off by default. Set it
+to `"ignore"` in the `Lint` class of a component that reads such
+properties, or turn it on only in the components you want checked.
 
 ## Links to missing pages { #find-links-to-missing-pages }
 
@@ -1174,6 +1419,104 @@ warning. To turn it off, set `rule_unknown_url` to `"ignore"` in the
 ([Override one component](#override-one-component)), or in
 `LintSettings` for the whole app.
 
+## Keys nothing provides { #find-unknown-inject-keys }
+
+A component that reads a shared value with
+[`self.inject()`](/concepts/provide-and-inject/) under a key that nothing
+above it provides fails with `KeyError` when the page renders. Here the
+page provides `board`, and the card reads `bord`:
+
+```citry-html
+<c-provide key="board" name="Projects">
+  <c-card />
+</c-provide>
+```
+
+```citry
+class Card(Component):
+    def template_data(self, kwargs, slots):
+        # Warning: No component above Card provides
+        # 'bord', so self.inject('bord') raises
+        # KeyError when the page renders. Did you
+        # mean 'board'?
+        board = self.inject("bord")
+        return {"board_name": board.name}
+```
+
+Citry starts at each template that uses the component's tag, such as
+`<c-card />`, and walks up through the templates that use those
+components, to the top of the page. A key counts when:
+
+- a `<c-provide key="...">` wraps the tag;
+- a component on the way calls `self.provide()` with it;
+- the tag is slot content, and the component whose `<c-slot>` shows it
+  wraps that `<c-slot>` in `<c-provide>` or calls `self.provide()`;
+- a `<c-component c-is="...">` sits inside a `<c-provide>` with the key,
+  or in a component that calls `self.provide()` with it, because it may
+  render any component;
+- a `render(provides={...})` call in your project's Python files passes it
+  as a literal key. Such a key counts for every component.
+
+If the component appears in several places and one of them provides the
+key, Citry reports nothing. A key written as a module-level string
+constant, such as `self.provide(BOARD_KEY, ...)` or
+`render(provides={BOARD_KEY: ...})`, counts as that string, also when the
+module imports `BOARD_KEY` from another module of your project.
+
+When no template uses the component's tag, Citry compares the key with
+every key your app provides anywhere, and the message starts with
+"Nothing in your app provides". That happens when Python renders the
+component, or when a `<c-component c-is="...">` picks it. It also happens
+for a component used only by templates that use each other and that no
+other template uses, such as a tree that renders itself.
+
+Citry checks a `self.inject()` call that has one string literal and no
+default, in the component's class or in a class or mixin it extends. A
+call in a base class that several components extend is reported once, and
+only when none of them gets the key; for a mixin, the message names one of
+the components that use it. These calls are not checked:
+
+- a call with a default, such as `self.inject("theme", None)`, because the
+  key may be missing on purpose;
+- a key written as a name or an expression, such as
+  `self.inject(BOARD_KEY)` or `self.inject(key_name)`;
+- a call in a helper function outside the class;
+- a call in a class from an installed package, which you cannot change.
+
+Citry reports nothing for a component when the way up to it goes through
+something it cannot read:
+
+- a `<c-provide c-key="...">`;
+- a `self.provide()` key written as an expression;
+- a tag inside a `<c-component c-is="...">`;
+- markup passed in a component's attribute, such as `c-body="<>...</>"`;
+- a component that Python builds inside a component's methods, or passes
+  to another component, such as `Layout(slots={"default": Widget()})`,
+  directly or through a variable. Your test files are not read for this;
+- a component whose Python source Citry cannot read and whose code calls
+  `provide()`.
+
+Such a component also stops Citry from reporting a component no template
+uses. While a registered template cannot be parsed, or when the folder you
+run `citry check` from holds more than 20,000 Python files, the rule
+reports nothing at all.
+
+Citry also reports a key the page does provide when it cannot see the
+provider: a `provides` dictionary built elsewhere, such as
+`render(provides=shared)`; a `self.provide()` call in a helper function;
+a template written as a Python string and rendered from Python; or a
+`render(provides=...)` call outside the folder you run `citry check`
+from. That is why the rule is a warning. To turn it off, set
+`rule_unknown_inject_key` to `"ignore"` in the component's `Lint` class
+([Override one component](#override-one-component)), or in
+`LintSettings` for the whole app.
+
+The editor checks the `self.inject()` calls in the file you are editing
+against the keys your app provided when it last loaded. A call you type in
+an existing component is checked at once. A new component, or a provider
+you add, counts after the next load, which VS Code starts when you save a
+Python file.
+
 ## Check rules in CI
 
 Run the check against your application, so it knows every component and
@@ -1198,8 +1541,12 @@ which reads each child's `emits`, and the rules for
 [repeated components](#find-repeated-components-without-keys),
 [prop assignments](#find-prop-assignments),
 [server event arguments](#check-server-event-arguments),
-[CSS variables](#find-misspelled-css-variables), and
-[links](#find-links-to-missing-pages).
+[misspelled CSS variables](#find-misspelled-css-variables),
+[misspelled CSS classes](#find-misspelled-css-classes),
+[classes without CSS](#find-classes-without-css),
+[unset CSS variables](#find-unset-css-variables),
+[links](#find-links-to-missing-pages), and
+[keys nothing provides](#find-unknown-inject-keys).
 
 They still run every rule that reads only the template: the Alpine,
 attribute-value, and misspelled-directive rules, and the rules for
@@ -1296,6 +1643,37 @@ A Pydantic schema that allows extra keys may receive any name at runtime, so
 Citry reports an undeclared name as a warning, not an error. Plain classes,
 dataclasses, NamedTuples, and Pydantic models that ignore or forbid extra
 keys are closed.
+
+### Similar class names { #similar-class-names }
+
+The [misspelled class](#find-misspelled-css-classes) rule does not
+report a slip that usually names another class of the same family:
+
+- a moved, doubled, or dropped digit, such as `col-1` next to `.col-12`;
+- a missing final `s`, such as `tab` next to `.tabs`, unless the class
+  already ends in `s`, as `progres` next to `.progress` does;
+- one of these short words next to its longer form, as the whole class
+  or as its last word after a hyphen or underscore, such as
+  `navbar-toggle` next to `.navbar-toggler`: `close` (`closed`),
+  `collapse` (`collapsed`), `disable` (`disabled`), `enable`
+  (`enabled`), `fade` (`faded`), `mute` (`muted`), `show` (`shown`),
+  `slide` (`slider`), and `toggle` (`toggled` or `toggler`). Any other
+  word missing its last letter, such as `heade` next to `.header`, is
+  reported;
+- one letter typed twice or left out in a first part of one or two
+  characters before a hyphen, such as `p-4` next to `.px-4` or `m-auto`
+  next to `.ml-auto`. Two letters swapped there, such as `iu-button`
+  next to `.ui-button`, are reported.
+
+### What declares a class { #what-declares-a-class }
+
+For the CSS class rules, a selector declares a class wherever it names
+it: `.name`, `.card .name`, `.name:hover`, `:is(.name)`, and inside
+`@media` or a nested rule. An attribute selector such as
+`[class~="name"]` declares it too, and `[class^="btn-"]` declares every
+class that starts with `btn-`. A class in a comment, a string, or a
+property value does not count. As in a browser, an unclosed comment runs
+to the end of the stylesheet, so no class after it counts.
 
 ### Mixins and extends
 

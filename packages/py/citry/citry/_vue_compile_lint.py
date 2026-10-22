@@ -346,6 +346,14 @@ def _specific_findings(template: Template) -> tuple[MarkupLintFinding, ...]:
     )
 
 
+def _context_start(finding: MarkupLintFinding) -> int:
+    return finding.start_index if finding.context_start_index is None else finding.context_start_index
+
+
+def _context_end(finding: MarkupLintFinding) -> int:
+    return finding.end_index if finding.context_end_index is None else finding.context_end_index
+
+
 def _already_reported(
     error: _CompilerError,
     located: tuple[int, int],
@@ -355,10 +363,13 @@ def _already_reported(
     """Whether another rule's more specific finding already explains this compiler error."""
     start, end = located
     if _is_expression_error(error):
+        # The expression finding may span only the token the parser stopped
+        # at, while Vue's compiler points elsewhere in the same expression,
+        # so compare with the whole expression it was found in.
         return any(
             finding.code == VUE_INVALID_EXPRESSION
-            and finding.start_index < max(end, start + 1)
-            and start < finding.end_index
+            and _context_start(finding) < max(end, start + 1)
+            and start < _context_end(finding)
             for finding in reported
         )
     nesting = [finding for finding in reported if finding.code == TEMPLATE_INVALID_NESTING]

@@ -130,6 +130,8 @@ Name the keys the JavaScript way, such as `itemCount`. The values must
 convert to JSON, so convert dates, model instances, and other objects
 first; see
 [JS data must be JSON](/advanced/js-and-css-dependencies/#js-data-must-be-json).
+Visitors can read every value in the page source, so never return an API
+token or password; see [Secrets](/advanced/secrets/).
 
 Two kinds of key fail:
 

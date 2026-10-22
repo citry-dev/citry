@@ -55,7 +55,11 @@ _LINT_RULE_CODES = {
     "rule_missing_server_event_field": "citry.browser.missing-server-event-field",
     "rule_incompatible_server_event_field": "citry.browser.incompatible-server-event-field",
     "rule_misspelled_css_variable": "citry.css.misspelled-variable",
+    "rule_misspelled_css_class": "citry.css.misspelled-class",
+    "rule_undeclared_css_class": "citry.css.undeclared-class",
+    "rule_undeclared_css_variable": "citry.css.undeclared-variable",
     "rule_unknown_url": "citry.template.unknown-url",
+    "rule_unknown_inject_key": "citry.template.unknown-inject-key",
     "rule_i18n_cross_language_fallback": "citry.i18n.cross-language-fallback",
 }
 

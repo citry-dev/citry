@@ -4012,6 +4012,11 @@
       // (a shell, marked data-allow-mismatch="children"), so the page shows it before this runtime
       // starts. Vue keeps the attributes of any element it adopts under that marker, so the contents
       // are removed here, in the same task as the mount below, and Vue builds them anew.
+      // With Citry(mode="development") the page also carries `_vue/dev_checks.js`, which keeps those
+      // served contents first and compares them with Vue's first render right after the mount.
+      // Production pages carry neither that script nor the flag, so for them this reads one property.
+      const shellCheck = hydrating && configuration.emptyShells === true && configuration.development === true
+        ? globalThis.CitryVueDevChecks?.captureShells(hostElement) : undefined;
       if (hydrating && configuration.emptyShells === true)
         for (const shell of hostElement.querySelectorAll('[data-allow-mismatch="children"]')) shell.replaceChildren();
       const hydrationBeforeElements = hydrationDiagnostics ? Array.from(hostElement.querySelectorAll("*")) : null;
@@ -4038,6 +4043,10 @@
       let hydrationMountError = null;
       try {
         vueApp.mount(hostElement);
+        // Compare before Vue's scheduler runs: mounted() hooks have run, but the re-render that
+        // their state changes ask for has not, so state set in mounted(), which is where
+        // browser-only state belongs, does not count as a difference.
+        shellCheck?.compare();
       } catch (error) {
         hydrationMountError = String(error);
         throw error;

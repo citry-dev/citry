@@ -10,7 +10,8 @@ use pyo3::exceptions::{PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 
 use citry_template_parser::browser::{
-    BrowserAnalysisMode, analyze_browser_binding_pattern as analyze_browser_binding_pattern_rust,
+    BrowserAnalysis, BrowserAnalysisMode, BrowserComponentAnalysis,
+    analyze_browser_binding_pattern as analyze_browser_binding_pattern_rust,
     analyze_browser_source as analyze_browser_source_rust,
     analyze_component_scope_writes as analyze_component_scope_writes_rust,
     analyze_component_source as analyze_component_source_rust,
@@ -134,24 +135,18 @@ pub fn compile_prepared_template(template: Template, lang: Option<&str>) -> PyRe
     compile_prepared_template_rust(template, lang_enum).map_err(compile_error_to_py)
 }
 
-/// Parse one browser expression/statement and return exact free identifier ranges.
+/// Parse one browser expression or listener statement.
+///
+/// Returns a `BrowserAnalysis` record: whether the text is valid, the
+/// parser's first syntax error when it is not, and each free name with
+/// whether the code writes to it. The record is the Rust struct itself, so
+/// its fields are defined once, in `citry_template_parser::browser`.
 #[pyfunction]
-pub fn analyze_browser_source(
-    input: &str,
-    mode: &str,
-) -> PyResult<(bool, Vec<(String, usize, usize)>)> {
+pub fn analyze_browser_source(input: &str, mode: &str) -> PyResult<BrowserAnalysis> {
     let mode = mode
         .parse::<BrowserAnalysisMode>()
         .map_err(PyValueError::new_err)?;
-    let analysis = analyze_browser_source_rust(input, mode);
-    Ok((
-        analysis.valid,
-        analysis
-            .references
-            .into_iter()
-            .map(|reference| (reference.name, reference.start, reference.end))
-            .collect(),
-    ))
+    Ok(analyze_browser_source_rust(input, mode))
 }
 
 /// Parse one Vue slot-props binding pattern and return bindings plus free references.
@@ -196,139 +191,9 @@ pub fn analyze_component_scope_writes(input: &str) -> Vec<(String, usize, usize,
         .collect()
 }
 
-/// The plain tuples that carry one `$component` source analysis to Python.
-type ComponentSourceAnalysis = (
-    bool,
-    Vec<(String, usize, usize)>,
-    Vec<(String, String, usize, usize, Vec<(usize, usize)>)>,
-    Vec<(
-        usize,
-        usize,
-        usize,
-        usize,
-        usize,
-        Option<usize>,
-        Option<usize>,
-    )>,
-    Vec<(
-        String,
-        String,
-        String,
-        usize,
-        usize,
-        Option<usize>,
-        Option<usize>,
-        Option<bool>,
-        Option<bool>,
-        Option<bool>,
-        Option<String>,
-    )>,
-    Vec<(String, String, Option<usize>, Option<usize>, Option<String>)>,
-    Vec<(String, String, usize, usize)>,
-    Vec<(String, String, Option<usize>, Option<usize>, Option<String>)>,
-    Vec<(String, usize, usize)>,
-);
-
-/// Return detached source facts for runtime `$component` initializers.
+/// Analyze the JavaScript of a component's `$component(...)` calls and return
+/// a `BrowserComponentAnalysis` record.
 #[pyfunction]
-pub fn analyze_component_source(input: &str) -> ComponentSourceAnalysis {
-    let analysis = analyze_component_source_rust(input);
-    (
-        analysis.valid,
-        analysis
-            .references
-            .into_iter()
-            .map(|reference| (reference.name, reference.start, reference.end))
-            .collect(),
-        analysis
-            .bindings
-            .into_iter()
-            .map(|binding| {
-                (
-                    binding.name,
-                    binding.local_name,
-                    binding.start,
-                    binding.end,
-                    binding.references,
-                )
-            })
-            .collect(),
-        analysis
-            .component_calls
-            .into_iter()
-            .map(|call| {
-                (
-                    call.call_start,
-                    call.call_end,
-                    call.callee_start,
-                    call.callee_end,
-                    call.open_paren_end,
-                    call.argument_start,
-                    call.argument_end,
-                )
-            })
-            .collect(),
-        analysis
-            .public_names
-            .into_iter()
-            .map(|name| {
-                (
-                    name.authored_name,
-                    name.exposed_name,
-                    name.origin,
-                    name.name_start,
-                    name.name_end,
-                    name.value_start,
-                    name.value_end,
-                    name.required,
-                    name.has_default,
-                    name.default_is_null,
-                    name.type_source,
-                )
-            })
-            .collect(),
-        analysis
-            .sections
-            .into_iter()
-            .map(|section| {
-                (
-                    section.name,
-                    section.state,
-                    section.start,
-                    section.end,
-                    section.unknown_reason,
-                )
-            })
-            .collect(),
-        analysis
-            .member_references
-            .into_iter()
-            .map(|reference| {
-                (
-                    reference.receiver,
-                    reference.name,
-                    reference.start,
-                    reference.end,
-                )
-            })
-            .collect(),
-        analysis
-            .emits_sections
-            .into_iter()
-            .map(|section| {
-                (
-                    section.name,
-                    section.state,
-                    section.start,
-                    section.end,
-                    section.unknown_reason,
-                )
-            })
-            .collect(),
-        analysis
-            .emit_names
-            .into_iter()
-            .map(|name| (name.name, name.start, name.end))
-            .collect(),
-    )
+pub fn analyze_component_source(input: &str) -> BrowserComponentAnalysis {
+    analyze_component_source_rust(input)
 }

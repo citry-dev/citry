@@ -2774,6 +2774,88 @@ def test_registry_check_reports_a_root_image_only_without_browser_code(tmp_path)
     assert "BrowserAvatar" not in finding.origin
 
 
+@pytest.mark.parametrize(
+    ("options", "reported"),
+    [
+        # Vue does not pass a parent's attributes on, so nothing adds alt.
+        ("inheritAttrs: false", True),
+        ("inheritAttrs: true", False),
+        # Vue's default passes them on.
+        ("props: ['src']", False),
+        # A value the check cannot read may be true.
+        ("inheritAttrs: window.flag", False),
+        ("inheritAttrs: false, ...shared", False),
+    ],
+)
+def test_registry_check_reports_a_root_image_whose_component_sets_inherit_attrs_false(tmp_path, options, reported):
+    engine = Citry(autodiscover=False)
+
+    class Avatar(Component):
+        citry = engine
+        template = '<img :src="src">'
+        js = f"""
+          $component({{ {options} }});
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    codes = [item.code for item in report.findings if item.code == "citry.template.missing-image-alt"]
+    assert codes == (["citry.template.missing-image-alt"] if reported else [])
+
+
+@pytest.mark.parametrize(
+    ("directives", "reported"),
+    [
+        ("directives: { iff: { mounted() {} } }", False),
+        ("directives: { Iff: { mounted() {} } }", False),
+        # A directive the check cannot list may be any name.
+        ("directives: shared", True),
+        ("directives: { focus: {} }", True),
+        ("props: ['open']", True),
+    ],
+)
+def test_registry_check_accepts_a_custom_directive_the_component_registers(tmp_path, directives, reported):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = '<p v-iff="open">Details</p>'
+        js = f"""
+          $component({{ props: ['open'], {directives} }});
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    codes = [item.code for item in report.findings if item.code == "citry.template.misspelled-directive"]
+    assert codes == (["citry.template.misspelled-directive"] if reported else [])
+
+
+def test_registry_check_reports_a_shared_template_one_owner_does_not_register(tmp_path):
+    (tmp_path / "details.html").write_text('<p v-iff="open">Details</p>', encoding="utf-8")
+    engine = Citry(autodiscover=False)
+
+    class Registers(Component):
+        citry = engine
+        template_file = str(tmp_path / "details.html")
+        js = """
+          $component({ props: ['open'], directives: { iff: {} } });
+        """
+
+    class Plain(Component):
+        citry = engine
+        template_file = str(tmp_path / "details.html")
+        js = """
+          $component({ props: ['open'] });
+        """
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    # The template fails in the component that does not register `iff`.
+    assert [item.code for item in report.findings if item.code == "citry.template.misspelled-directive"] == [
+        "citry.template.misspelled-directive"
+    ]
+
+
 def test_registry_check_reports_lowercase_child_listener_typos_with_the_configured_severity(tmp_path):
     engine = Citry(autodiscover=False, lint=LintSettings(rule_undeclared_component_event="error"))
 

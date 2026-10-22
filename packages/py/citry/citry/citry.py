@@ -219,7 +219,9 @@ class Citry:
 
         # The build environment (dev_prod_mode.md), validated in the settings.
         # Read directly off the instance by the pieces that vary by environment:
-        # the built-in extension set below, and how i18n loads catalog packages.
+        # the built-in extension set below, how i18n loads catalog packages, the
+        # serialization check for repeated ids, and the browser check of
+        # server-rendered HTML (its flag and script in the page configuration).
         self.mode: Literal["production", "development"] = self.settings.mode
 
         # The cache backend (docs/design/dependencies.md section 10): derived
@@ -1742,7 +1744,7 @@ class Citry:
         backs no loaded component, which a hot-reload handler can read as "not
         mine" and, if it wants, fall through to a full restart. This is the
         call a file watcher makes, whatever web framework hosts the app; see
-        [Hot reload during development](/guides/dev-server/) for the built-in
+        [Hot reload during development](/guides/hot-reload/) for the built-in
         watchers.
         """
         classes = self.get_components_for_file(path)

@@ -112,11 +112,13 @@ def _is_vue_variable_name(name: object) -> bool:
     if type(name) is not str or not name:
         return False
     try:
-        valid, references = analyze_browser_source(name, "expression")
+        analysis = analyze_browser_source(name, "expression")
     except (TypeError, ValueError, UnicodeError):
         return False
     encoded_length = len(name.encode("utf-8"))
-    return valid and references == [(name, 0, encoded_length)]
+    # The whole text must be that one name, so `a.b` or `a + b` is rejected.
+    references = [(reference.name, reference.start, reference.end) for reference in analysis.references]
+    return analysis.valid and references == [(name, 0, encoded_length)]
 
 
 # Rule severities that LintSettings, a component's Lint class, and the
@@ -142,7 +144,11 @@ _TEMPLATE_RULE_FIELDS = (
     "rule_unknown_form_field",
     "rule_missing_form_field",
     "rule_misspelled_css_variable",
+    "rule_misspelled_css_class",
+    "rule_undeclared_css_class",
+    "rule_undeclared_css_variable",
     "rule_unknown_url",
+    "rule_unknown_inject_key",
 )
 
 
@@ -264,11 +270,10 @@ class LintSettings:
             check`` reports it only with your application loaded. The
             default is ``"error"``.
         rule_prop_assignment: Severity for a component that assigns to one
-            of its own Vue props, such as ``@click="open = false"``. Props
-            are read-only, so the value does not change. An assignment in the
-            component's JavaScript, such as ``this.open = false``, is at most
-            a warning. ``citry check`` reports it only with your application
-            loaded. The default is ``"error"``.
+            of its own Vue props, such as ``@click="open = false"`` or
+            ``this.open = false`` in its JavaScript. Props are read-only, so
+            the value does not change. ``citry check`` reports it only with
+            your application loaded. The default is ``"error"``.
         rule_unknown_server_event_field: Severity for an ``@c-*`` binding
             that sends a key the handler's data class does not declare, such
             as ``save({amont: 1})``. The server rejects the call. ``citry
@@ -304,6 +309,45 @@ class LintSettings:
             ``accent``. Nothing sets the property. ``citry check`` reports
             it only with your application loaded. The default is
             ``"warning"``.
+        rule_misspelled_css_class: Severity for a class in a template's
+            static ``class`` attribute that is one typing slip (two
+            neighboring letters swapped, one doubled, or one left out) from
+            a class the component's own ``css`` or ``css_file`` styles, such
+            as ``bord`` for ``.board``. It is reported only when no CSS
+            Citry reads declares the class as written: no registered
+            component's CSS, ``Dependencies`` stylesheet, or template
+            ``<style>`` element. Slips that usually name another class of
+            the same family are not reported: a moved, doubled, or dropped
+            digit (``col-1`` for ``.col-12``); a missing final ``s`` after a
+            letter other than ``s`` (``tab`` for ``.tabs``); one of these
+            short words, as the whole class or as its last word after a
+            hyphen or underscore, next to its longer form: ``close``
+            (``closed``), ``collapse`` (``collapsed``), ``disable``
+            (``disabled``), ``enable`` (``enabled``), ``fade`` (``faded``),
+            ``mute`` (``muted``), ``show`` (``shown``), ``slide``
+            (``slider``), and ``toggle`` (``toggled`` or ``toggler``), as in
+            ``navbar-toggle`` for ``.navbar-toggler``; and one letter typed
+            twice or left out in a first hyphen-separated part of one or two
+            characters (``p-4`` for ``.px-4``). ``citry check`` reports it
+            only with your application loaded. The default is ``"warning"``.
+        rule_undeclared_css_class: Severity for every class in a template's
+            static ``class`` attribute that no CSS Citry reads declares: no
+            registered component's ``css``, ``css_file``, inline or
+            local-file ``Dependencies`` stylesheet, or template ``<style>``
+            element. Classes from a site stylesheet or a CSS framework such
+            as Tailwind, and classes used only by JavaScript or tests, are
+            reported too, so the default is ``"ignore"``, which turns the
+            rule off. ``citry check`` reports it only with your application
+            loaded.
+        rule_undeclared_css_variable: Severity for every ``var(--name)``
+            without a fallback in a component's ``css`` or ``css_file``
+            when nothing Citry reads sets ``--name``: no registered
+            component's CSS, ``css_data()`` key, template ``style``
+            attribute or binding, JavaScript, or Python module. Properties
+            that a site stylesheet, a design system, or a script outside
+            Citry sets are reported too, so the default is ``"ignore"``,
+            which turns the rule off. ``citry check`` reports it only with
+            your application loaded.
         rule_unknown_url: Severity for a literal ``href``, ``src``, or
             ``action`` path, such as ``/abuot``, that none of your app's
             routes or static files serves. ``citry check`` and the editor
@@ -313,6 +357,19 @@ class LintSettings:
             ``citry.contrib.django.urlpatterns()``) ran while the app loaded. A
             path another server answers, such as a reverse proxy, is
             reported too. The default is ``"warning"``.
+        rule_unknown_inject_key: Severity for a ``self.inject("key")``
+            call with a literal key and no default when no provider above
+            the component gives that key. Citry looks for a
+            ``<c-provide>`` around the component's tag in the templates
+            that use it, a ``provide()`` call in the components above it
+            or in the component whose ``<c-slot>`` shows it, and a literal
+            key in a ``render(provides={...})`` call in your project. When
+            no template uses the component, Citry compares the key with
+            every key the app provides. A key passed only in a
+            ``provides`` dictionary built elsewhere, or provided by a
+            helper function, is reported too, so the default is
+            ``"warning"``. ``citry check`` and the editor report it only
+            with your application loaded.
         check_input_types: Check that each value a component receives has
             the type its annotation names. On by default, in development and
             in production. Unlike the ``rule_*`` settings, this check runs
@@ -373,7 +430,11 @@ class LintSettings:
     rule_unknown_form_field: LintSeverity = "error"
     rule_missing_form_field: LintSeverity = "error"
     rule_misspelled_css_variable: LintSeverity = "warning"
+    rule_misspelled_css_class: LintSeverity = "warning"
+    rule_undeclared_css_class: LintSeverity = "ignore"
+    rule_undeclared_css_variable: LintSeverity = "ignore"
     rule_unknown_url: LintSeverity = "warning"
+    rule_unknown_inject_key: LintSeverity = "warning"
     check_input_types: bool = True
 
     # Hidden from type checkers so they keep checking calls against the
@@ -552,12 +613,18 @@ class CitrySettings:
             ``"development"``. In ``"production"``, each configured i18n
             catalog package must ship a valid compiled manifest, written by
             ``citry ext run i18n compile``; creating the ``Citry`` instance
-            raises ``ValueError`` when it is missing or does not match. In
-            ``"development"``, Citry reads the Fluent sources directly; if
-            the package also contains a compiled manifest, it must still
-            match the sources, so delete or recompile it after editing
-            translations. An unrecognized value raises ``ValueError`` at
-            construction.
+            raises ``ValueError`` when it is missing or does not match.
+            ``"development"`` turns on three things. Citry reads the Fluent
+            sources directly; if the package also contains a compiled
+            manifest, it must still match the sources, so delete or
+            recompile it after editing translations. Turning a page into
+            HTML issues a ``RuntimeWarning`` when two elements on it share
+            an ``id``, naming the components that wrote them. And Citry
+            logs a browser console warning when Vue's first render of a
+            part Vue builds in the browser differs from the HTML the
+            server sent. A production page does not load this browser
+            check. An unrecognized value raises ``ValueError`` at
+            construction. See [Development mode](/guides/development-mode/).
         template_globals: Variables exposed to every component's template
             without being returned from each ``template_data()``. They are
             merged into every component's template variables on render, so a

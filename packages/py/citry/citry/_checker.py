@@ -10,9 +10,19 @@ import symtable
 import sys
 import textwrap
 import tokenize
+import weakref
+from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import (
+    GetSetDescriptorType,
+    MappingProxyType,
+    MemberDescriptorType,
+    ModuleType,
+    SimpleNamespace,
+    WrapperDescriptorType,
+)
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message
@@ -23,6 +33,17 @@ from citry._class_introspection import (
     _static_class_mro,
 )
 from citry._component_introspection import _loaded_python_file
+from citry._css_lint import (
+    CssLintFinding,
+    TemplateCss,
+    code_custom_properties,
+    lint_misspelled_css_classes,
+    lint_undeclared_css_classes,
+    lint_undeclared_css_variables,
+    style_type_is_css,
+    template_css,
+)
+from citry._css_scan import ClassPattern, CssDeclarations, scan_css
 from citry._diagnostic_catalog import (
     BROWSER_INCOMPATIBLE_COMPONENT_PROP,
     BROWSER_INCOMPATIBLE_SERVER_EVENT_FIELD,
@@ -59,9 +80,11 @@ from citry._diagnostic_catalog import (
 from citry._diagnostics import render_diagnostic
 from citry._i18n_guards import i18n_configured_guarded_calls
 from citry._inline_assets import normalize_inline_asset
+from citry._json_wire import SECRET_UNSUPPORTED_REASON
 from citry._linting import _component_lint_info
 from citry._markup_lint import MARKUP_LINT_RULES
 from citry._path_checks import PathVerdict, check_paths, has_path_checkers, is_citry_path
+from citry._provide_keys import inject_key_scopes
 from citry._registry_lint import (
     ServerEventPayload,
     ServerEventPayloadFinding,
@@ -73,6 +96,7 @@ from citry._registry_lint import (
     template_has_vue_attributes,
     template_urls,
     unkeyed_repeated_component_calls,
+    unknown_inject_key_findings,
     unknown_url_findings,
 )
 from citry._source_lines import line_break_count, source_lines
@@ -81,7 +105,7 @@ from citry._template_data_source import (
     analyze_css_data_source,
     analyze_template_data_source,
 )
-from citry._vue.json_data import _json_plain
+from citry._vue.json_data import _json_plain, _secret_key_path, _SecretInBrowserDataError
 from citry._vue_compile_lint import lint_vue_compile
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
@@ -92,10 +116,12 @@ from citry.analysis import (
     AttributeValueLintConsumer,
     BrowserComponentPropContribution,
     BrowserComponentPropSite,
+    BrowserComponentSourceAnalysis,
     BrowserExpression,
     BrowserProp,
     ComponentJsLintConsumer,
     ComponentJsLintFinding,
+    CssVariableFinding,
     JsonWireType,
     MarkupLintConsumer,
     MarkupLintFinding,
@@ -153,10 +179,14 @@ from citry.assets import (
 from citry.autodiscovery import _iter_py_files
 from citry.component import Component
 from citry.component_registry import NotRegistered
+from citry.constness import Const, _unwrap_const_markers
+from citry.ext.dependencies.types import Style
 from citry.ext.events.csrf import csrf_field_names
 from citry.ext.events.extension import _component_events_info
+from citry.secret import Secret
 from citry.settings import LintSettings
 from citry.tag_rules import build_tag_rules
+from citry.util.html import decode_attribute_entities
 from citry_core.i18n import I18nCompileError
 from citry_core.template_parser import (
     RESERVED_TAG_NAMES,
@@ -170,7 +200,7 @@ from citry_core.template_parser import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Mapping
+    from collections.abc import Callable, Iterable
 
     from citry.citry import Citry
     from citry.ext.i18n.extension import I18nExtension
@@ -293,6 +323,8 @@ def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
         return CheckReport(findings=tuple(findings), app_failure=app_failure_message(exc), notes=tuple(notes))
 
     findings, notes = _check_registry(engine, registrations, rules)
+    # An inject key finding points into the component's Python file.
+    findings.extend(_counted_in(_unknown_inject_key_findings(engine, registrations, cwd), "file"))
     return CheckReport(findings=tuple(findings), notes=(TRANSFORM_NOTE, *notes))
 
 
@@ -317,6 +349,9 @@ def _check_registry(
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None
     i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None
     links = _LinkCheck(verdicts={}, failures={})
+    # The CSS rules compare each template with every component's CSS, so the
+    # template facts they need are kept until every template has been read.
+    css_templates: list[tuple[_TemplateSource, TemplateCss]] = []
 
     i18n = engine.extensions._extensions_by_name.get("i18n")
     # Component messages make i18n available without configuring it; only a
@@ -512,12 +547,19 @@ def _check_registry(
                 AttributeValueLintConsumer(_component_lint_info(engine, component).rule_invalid_attribute_value)
                 for component in source.consumers
             )
+            # Each consumer's JavaScript is read once here, for the directives
+            # it registers and for whether Vue passes a parent's attributes on.
+            js_analyses = {component: _disk_component_js_analysis(engine, component) for component in source.consumers}
             directive_lint_consumers = tuple(
-                MisspelledDirectiveLintConsumer(_component_lint_info(engine, component).rule_misspelled_directive)
+                MisspelledDirectiveLintConsumer(
+                    _component_lint_info(engine, component).rule_misspelled_directive,
+                    declared_directives=_declared_directives(js_analyses[component]),
+                )
                 for component in source.consumers
             )
             markup_lint_consumers = tuple(
-                _checker_markup_lint_consumer(engine, component) for component in source.consumers
+                _checker_markup_lint_consumer(engine, component, js_analyses[component])
+                for component in source.consumers
             )
             foreign_options = _checker_foreign_options(
                 engine,
@@ -566,6 +608,7 @@ def _check_registry(
                 component_props=component_props,
                 component_templates=component_templates,
                 links=links,
+                css_templates=css_templates,
             )
         )
     for browser_source in browser_sources.values():
@@ -575,8 +618,10 @@ def _check_registry(
                 browser_source.source_kind,
             )
         )
+    known_css = _KnownCss(engine, components, css_sources, browser_sources, css_templates)
+    findings.extend(_css_class_findings(engine, css_templates, known_css))
     for css_source in css_sources.values():
-        findings.extend(_counted_in(_check_css_source(engine, css_source), css_source.source_kind))
+        findings.extend(_counted_in(_check_css_source(engine, css_source, known_css), css_source.source_kind))
     return findings, links.notes()
 
 
@@ -713,8 +758,14 @@ def _check_template(
     component_props: Mapping[type[Component], tuple[BrowserProp, ...] | None] | None = None,
     component_templates: Mapping[type[Component], str] | None = None,
     links: _LinkCheck | None = None,
+    css_templates: list[tuple[_TemplateSource, TemplateCss]] | None = None,
 ) -> list[CheckFinding]:
-    """Parse one source and, in registry mode, inspect component tag names."""
+    """
+    Parse one source and, in registry mode, inspect component tag names.
+
+    With ``css_templates``, the template's classes and CSS are appended to
+    it, because the CSS rules can run only once every template has been read.
+    """
     try:
         template = parse_template(
             source.content,
@@ -925,6 +976,8 @@ def _check_template(
         findings.extend(_server_event_payload_findings(engine, source, template, parse_nested=nested_parser))
         if links is not None:
             findings.extend(_unknown_url_findings(engine, source, template, links, parse_nested=nested_parser))
+        if css_templates is not None:
+            css_templates.append((source, template_css(template, parse_nested=nested_parser)))
     for target_error in browser_state_binding_target_errors(template, parse_nested=nested_parser):
         findings.append(
             _browser_template_finding(
@@ -2182,6 +2235,71 @@ _PAYLOAD_RULES = {
 }
 
 
+def _unknown_inject_key_findings(
+    engine: Citry,
+    registrations: Mapping[str, type[Component]],
+    cwd: Path,
+) -> list[CheckFinding]:
+    """
+    Report each ``self.inject("key")`` whose key no provider above the component gives.
+
+    The keys come from the templates that render each component, walked up
+    to the page, with every key the app provides as the answer for a
+    component no template renders. ``cwd`` is the project folder searched for
+    ``render(provides={...})`` keys.
+    """
+    try:
+        scopes = inject_key_scopes(engine, registrations, cwd)
+    except (Exception, SystemExit):  # noqa: BLE001 - project code that breaks the walk must not stop the check
+        return []
+    if scopes is None:
+        return []
+    findings: list[CheckFinding] = []
+    trees: dict[Path, tuple[str, ast.Module] | None] = {}
+    for scope in scopes:
+        if scope.provided is None:
+            continue
+        # A class shared by several components is reported unless all of them turn the rule off.
+        active = [
+            severity
+            for component in scope.components
+            if (severity := _component_lint_info(engine, component).rule_unknown_inject_key) != "ignore"
+        ]
+        if not active:
+            continue
+        if scope.file not in trees:
+            try:
+                with tokenize.open(scope.file) as stream:
+                    text = stream.read()
+                trees[scope.file] = (text, ast.parse(text))
+            except (OSError, SyntaxError, UnicodeError, ValueError, RecursionError):
+                trees[scope.file] = None
+        parsed = trees[scope.file]
+        if parsed is None:
+            continue
+        source, tree = parsed
+        findings.extend(
+            _i18n_use_finding(
+                f"{scope.file} ({scope.label})",
+                source,
+                finding.message,
+                finding.code,
+                finding.start_index,
+                finding.end_index,
+                severity="error" if "error" in active else "warning",
+            )
+            for finding in unknown_inject_key_findings(
+                source,
+                tree,
+                scope.qualname,
+                component=scope.name,
+                provided=scope.provided,
+                everywhere=scope.everywhere,
+            )
+        )
+    return findings
+
+
 def _shared_event_handlers(consumers: list[type[Component]]) -> dict[str, tuple[type | None, bool]]:
     """
     Return each handler name every owner declares, with the data class they all use and whether GET may send it.
@@ -2210,22 +2328,41 @@ def _shared_event_handlers(consumers: list[type[Component]]) -> dict[str, tuple[
     return shared or {}
 
 
-def _check_css_source(engine: Citry, source: _BrowserSource) -> list[CheckFinding]:
-    """Report `var(--name)` in one component CSS source that looks like a misspelled `css_data()` key."""
-    active = [
-        rule_severity
-        for component in source.consumers
-        if (rule_severity := _component_lint_info(engine, component).rule_misspelled_css_variable) != "ignore"
-    ]
-    if not active:
+def _check_css_source(engine: Citry, source: _BrowserSource, known_css: _KnownCss) -> list[CheckFinding]:
+    """Report `var(--name)` in one component CSS source that misspells a `css_data()` key, or that nothing sets."""
+    lints = [_component_lint_info(engine, component) for component in source.consumers]
+    misspelled_active = [lint.rule_misspelled_css_variable for lint in lints]
+    undeclared_active = [lint.rule_undeclared_css_variable for lint in lints]
+    misspelled_active = [severity for severity in misspelled_active if severity != "ignore"]
+    undeclared_active = [severity for severity in undeclared_active if severity != "ignore"]
+    if not misspelled_active and not undeclared_active:
         return []
     keys: set[str] = set()
     for component in source.consumers:
-        component_keys = _css_data_keys(engine, component)
+        component_keys = known_css.css_data_keys(component)
         # One owner whose keys are not all known may set any property.
         if component_keys is None:
             return []
         keys.update(component_keys)
+    findings: list[CssVariableFinding | CssLintFinding] = list(
+        lint_misspelled_css_variables(
+            source.content,
+            keys,
+            severity="error" if "error" in misspelled_active else "warning",
+        )
+        if misspelled_active
+        else ()
+    )
+    if undeclared_active:
+        findings.extend(
+            lint_undeclared_css_variables(
+                source.content,
+                keys | known_css.custom_properties(),
+                severity="error" if "error" in undeclared_active else "warning",
+                # A misspelled key already has a finding with a suggestion.
+                reported={(finding.start_index, finding.end_index) for finding in findings},
+            )
+        )
     return [
         _browser_source_finding(
             source.origin,
@@ -2236,12 +2373,221 @@ def _check_css_source(engine: Citry, source: _BrowserSource) -> list[CheckFindin
             finding.message,
             finding.severity,
         )
-        for finding in lint_misspelled_css_variables(
-            source.content,
-            keys,
-            severity="error" if "error" in active else "warning",
-        )
+        for finding in findings
     ]
+
+
+@dataclass(slots=True)
+class _KnownCss:
+    """
+    The CSS that Citry reads for one `citry check` run, shared by the CSS rules.
+
+    It covers every registered component: its `css` or `css_file`, the
+    inline and local-file stylesheets in its `Dependencies`, and its
+    template's `<style>` elements and `style` attributes; for custom
+    properties also the `--name` strings in its JavaScript and Python module,
+    and the keys its `css_data()` returns. Each part is read the first time
+    a rule needs it, so a run with every CSS rule off reads nothing more.
+    """
+
+    engine: Citry
+    components: list[type[Component]]
+    css_sources: Mapping[tuple[object, ...], _BrowserSource]
+    browser_sources: Mapping[tuple[object, ...], _BrowserSource]
+    css_templates: list[tuple[_TemplateSource, TemplateCss]]
+    # What each component's own `css` or `css_file` declares.
+    own_declarations: dict[type[Component], CssDeclarations] | None = None
+    declarations: CssDeclarations | None = None
+    # Each component's `css_data()` keys, or None for a component whose keys
+    # Citry cannot list; filled in as the rules ask.
+    keys: dict[type[Component], frozenset[str] | None] | None = None
+    known_properties: frozenset[str] | None = None
+
+    def own(self, component: type[Component]) -> CssDeclarations:
+        """Return what the component's own `css` or `css_file` declares."""
+        if self.own_declarations is None:
+            self.own_declarations = {}
+            for css_source in self.css_sources.values():
+                scanned = scan_css(css_source.content)
+                for consumer in css_source.consumers:
+                    self.own_declarations[consumer] = scanned
+        return self.own_declarations.get(component, CssDeclarations())
+
+    def declared(self) -> CssDeclarations:
+        """Return what every stylesheet Citry reads declares."""
+        if self.declarations is None:
+            # One set per kind, built once: merging declarations one sheet at
+            # a time would copy the growing sets for every component.
+            classes: set[str] = set()
+            patterns: dict[ClassPattern, None] = {}
+            properties: set[str] = set()
+            parts = [
+                *(self.own(component) for component in self.components),
+                *(scan_css(text) for text in _dependency_stylesheets(self.components)),
+                *(used.declarations for _source, used in self.css_templates),
+            ]
+            for part in parts:
+                classes.update(part.classes)
+                patterns.update(dict.fromkeys(part.class_patterns))
+                properties.update(part.custom_properties)
+            self.declarations = CssDeclarations(
+                classes=frozenset(classes),
+                class_patterns=tuple(patterns),
+                custom_properties=frozenset(properties),
+            )
+        return self.declarations
+
+    def css_data_keys(self, component: type[Component]) -> frozenset[str] | None:
+        """Return the component's `css_data()` keys, reading its source at most once per run."""
+        if self.keys is None:
+            self.keys = {}
+        if component not in self.keys:
+            self.keys[component] = _css_data_keys(self.engine, component)
+        return self.keys[component]
+
+    def custom_properties(self) -> frozenset[str]:
+        """Return every custom property that something Citry reads sets, without the leading `--`."""
+        if self.known_properties is None:
+            # Citry sets each `css_data()` key on its component's root
+            # element, and every element inside it, other components'
+            # included, inherits the value.
+            properties = {key for component in self.components for key in self.css_data_keys(component) or ()}
+            properties.update(self.declared().custom_properties)
+            # A script or Python code may set a property by name, as in
+            # `style.setProperty("--gap", ...)` or `f"--accent: {color};"`.
+            for browser_source in self.browser_sources.values():
+                properties.update(code_custom_properties(browser_source.content))
+            for source in _python_module_sources(self.components):
+                properties.update(code_custom_properties(source))
+            self.known_properties = frozenset(properties)
+        return self.known_properties
+
+
+# A `<style>` element in a pre-rendered `Dependencies` tag, such as
+# `Markup("<style>.card { ... }</style>")`.
+_STYLE_ELEMENT = re.compile(r"<style\b([^>]*)>(.*?)</style\s*>", re.IGNORECASE | re.DOTALL)
+# A `type` or `lang` attribute in such a tag's attribute text.
+_STYLE_TYPE_ATTRIBUTE = re.compile(r"""\b(?:type|lang)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""", re.IGNORECASE)
+
+
+def _dependency_stylesheets(components: list[type[Component]]) -> list[str]:
+    """
+    Return the text of every `Dependencies` stylesheet Citry can read.
+
+    That is an inline `Style(content=...)`, a pre-rendered `<style>` tag, and
+    a local file that reads as UTF-8. A stylesheet linked by URL is not
+    read. Resolving `Dependencies` calls any callable entry the component
+    declares, as a render does; a declaration that raises is skipped.
+    """
+    texts: dict[object, str] = {}
+    for component in components:
+        try:
+            dependencies = component.get_dependencies()
+        except (Exception, SystemExit):  # noqa: BLE001, S112 - one bad declaration must not stop the batch
+            continue
+        for entries in dependencies.css.values():
+            for entry in entries:
+                if isinstance(entry, Style):
+                    if entry.content:
+                        texts.setdefault(("inline", entry.content), entry.content)
+                elif isinstance(entry, Path):
+                    if ("file", entry) not in texts:
+                        try:
+                            texts[("file", entry)] = entry.read_text(encoding="utf-8")
+                        except (OSError, UnicodeError):
+                            continue
+                elif callable(getattr(entry, "__html__", None)):
+                    try:
+                        html = str(entry.__html__())
+                    except (Exception, SystemExit):  # noqa: BLE001, S112 - one bad entry must not stop the batch
+                        continue
+                    for match in _STYLE_ELEMENT.finditer(html):
+                        # A tag such as `<style type="text/x-scss">` holds a
+                        # language Citry cannot read.
+                        types = [
+                            next(value for value in found.groups() if value is not None)
+                            for found in _STYLE_TYPE_ATTRIBUTE.finditer(match.group(1))
+                        ]
+                        if all(style_type_is_css(decode_attribute_entities(value)) for value in types):
+                            texts.setdefault(("inline", match.group(2)), match.group(2))
+    return list(texts.values())
+
+
+def _python_module_sources(components: list[type[Component]]) -> list[str]:
+    """Return the source of each module that defines a registered component, read once per file."""
+    sources: dict[Path, str] = {}
+    for component in components:
+        path = _loaded_python_file(component)
+        if path is None or path in sources:
+            continue
+        try:
+            with tokenize.open(path) as stream:
+                sources[path] = stream.read()
+        except (OSError, SyntaxError, UnicodeError):
+            continue
+    return list(sources.values())
+
+
+def _css_class_findings(
+    engine: Citry,
+    css_templates: list[tuple[_TemplateSource, TemplateCss]],
+    known_css: _KnownCss,
+) -> list[CheckFinding]:
+    """Report template classes that misspell a class the component's CSS styles, or that no CSS declares."""
+    findings: list[CheckFinding] = []
+    for source, used in css_templates:
+        if not used.classes:
+            continue
+        lints = {component: _component_lint_info(engine, component) for component in source.consumers}
+        misspelled_owners = [
+            component for component, lint in lints.items() if lint.rule_misspelled_css_class != "ignore"
+        ]
+        undeclared_active = [
+            lint.rule_undeclared_css_class for lint in lints.values() if lint.rule_undeclared_css_class != "ignore"
+        ]
+        # A template shared by several components is compared with the CSS of
+        # each one that checks it.
+        own = CssDeclarations()
+        for component in misspelled_owners:
+            own = own.merged(known_css.own(component))
+        misspelled_severities = {lints[component].rule_misspelled_css_class for component in misspelled_owners}
+        # Gathering every stylesheet Citry reads calls each component's
+        # get_dependencies() and reads its files. The rule is on by default
+        # and most templates have no near miss, so it is gathered only once
+        # a class is one slip from the component's own CSS.
+        class_findings: list[CssLintFinding] = list(
+            lint_misspelled_css_classes(
+                used.classes,
+                own,
+                known_css.declared,
+                severity="error" if "error" in misspelled_severities else "warning",
+            )
+            if own.classes
+            else ()
+        )
+        if undeclared_active:
+            class_findings.extend(
+                lint_undeclared_css_classes(
+                    used.classes,
+                    known_css.declared(),
+                    severity="error" if "error" in undeclared_active else "warning",
+                    # A misspelled class already has a finding with a suggestion.
+                    reported={(finding.start_index, finding.end_index) for finding in class_findings},
+                )
+            )
+        # The class positions count in the template, so each range does too.
+        findings.extend(
+            _ranged_finding(
+                source,
+                finding.message,
+                finding.code,
+                start_index=finding.start_index,
+                end_index=finding.end_index,
+                severity=finding.severity,
+            )
+            for finding in sorted(class_findings, key=lambda item: (item.start_index, item.end_index))
+        )
+    return findings
 
 
 def _css_data_keys(engine: Citry, component: type[Component]) -> frozenset[str] | None:
@@ -2273,12 +2619,23 @@ def _css_data_keys(engine: Citry, component: type[Component]) -> frozenset[str] 
     return None
 
 
-def _checker_markup_lint_consumer(engine: Citry, component: type[Component]) -> MarkupLintConsumer:
-    """Build one component's severities for the HTML rules, and whether a parent's attributes reach its root."""
+def _checker_markup_lint_consumer(
+    engine: Citry,
+    component: type[Component],
+    js_analysis: BrowserComponentSourceAnalysis | None,
+) -> MarkupLintConsumer:
+    """
+    Build one component's severities for the HTML rules, and whether a parent's attributes reach its root.
+
+    Vue passes them on for a component with browser code unless its
+    JavaScript proves ``inheritAttrs: false``; an unreadable value counts as
+    passing them on, so the image rule stays quiet when unsure.
+    """
     lint = _component_lint_info(engine, component)
+    inherits_attributes = js_analysis is None or js_analysis.declared_inherit_attrs is not False
     return MarkupLintConsumer(
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
-        root_may_receive_attributes=_may_have_browser_code(component),
+        root_may_receive_attributes=_may_have_browser_code(component) and inherits_attributes,
     )
 
 
@@ -2325,6 +2682,17 @@ def _may_have_browser_code(component: type[Component]) -> bool:
     except (Exception, SystemExit):  # noqa: BLE001 - an unreadable declaration may still be browser code
         return True
     return inline is not None or filepath is not None
+
+
+def _declared_directives(js_analysis: BrowserComponentSourceAnalysis | None) -> frozenset[str] | None:
+    """Return the directive names a component's JavaScript registers, or None when they are unknown."""
+    return None if js_analysis is None else js_analysis.declared_directives
+
+
+def _disk_component_js_analysis(engine: Citry, component: type[Component]) -> BrowserComponentSourceAnalysis | None:
+    """Analyze the one JavaScript source a component runs, or return None when there is not exactly one."""
+    source = _disk_component_js_source(engine, component)
+    return None if source is None else analyze_browser_component_source(source)
 
 
 def _disk_component_js_source(engine: Citry, component: type[Component]) -> str | None:
@@ -2398,6 +2766,7 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
                     origin=f"{field.source_file} ({label})" if field.source_file is not None else label,
                     message=render_diagnostic(
                         JS_DATA_UNSUPPORTED_TYPE,
+                        variant="secret" if SECRET_UNSUPPORTED_REASON in wire_type.unsupported else "default",
                         name=field.name,
                         detail="; ".join(wire_type.unsupported),
                     ),
@@ -2446,17 +2815,21 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
             for value in values
         ]
         issues = tuple(dict.fromkeys(issue for item in wire_types for issue in item.unsupported))
+        holds_secret = SECRET_UNSUPPORTED_REASON in issues
         if not issues:
             # A bare module-level name, such as `API_BASE`, has no type in
             # the source, but the loaded module holds the value js_data()
-            # sends, so the browser's own JSON check can run on it.
-            issues = tuple(
-                dict.fromkeys(
-                    issue
-                    for value, wire_type in zip(values, wire_types, strict=True)
-                    if wire_type.kind == "unknown" and (issue := module_values(value.strip())) is not None
-                )
-            )
+            # sends, so the browser's own JSON check can run on it. The same
+            # holds for a name written inside a dict or list literal, such as
+            # `{"config": {"token": SECRET_TOKEN}}`.
+            module_issues = [
+                issue
+                for value in values
+                for sent in _names_sent_as_written(value)
+                if (issue := module_values(sent)) is not None
+            ]
+            issues = tuple(dict.fromkeys(issue.detail for issue in module_issues))
+            holds_secret = any(issue.secret for issue in module_issues)
         if not issues:
             continue
         definition = root.definitions[-1]
@@ -2465,6 +2838,9 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
                 origin=f"{source_file} ({_class_label(component)}.js_data)",
                 message=render_diagnostic(
                     JS_DATA_UNSUPPORTED_TYPE,
+                    # Rendering raises for a Secret, so the message says that
+                    # rather than that only editor typing degrades.
+                    variant="secret" if holds_secret else "default",
                     name=root.name,
                     detail="; ".join(issues),
                 ),
@@ -2476,13 +2852,328 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
     return findings
 
 
-def _js_data_module_values(component: type[Component], source: str) -> Callable[[str], str | None]:
+@dataclass(frozen=True, slots=True)
+class _SentName:
     """
-    Return a check that says why a bare name in a component's `js_data()` holds a value JSON cannot carry.
+    A module-level name whose value `js_data()` sends unchanged.
+
+    Attributes:
+        path: The name and the attributes read from it, such as
+            `("config", "API_TOKEN")` for `config.API_TOKEN`.
+        starred: Whether the value is unpacked into a list, as in
+            `[*TOKENS]`, so its items are sent rather than the value itself.
+        wrappers: The callee of each `Const(...)` call around the value,
+            written the same way as `path`. The value counts only when each
+            one is Citry's `Const`, which sends what it wraps unchanged.
+
+    """
+
+    path: tuple[str, ...]
+    starred: bool = False
+    wrappers: tuple[tuple[str, ...], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class _ModuleValueIssue:
+    """Why a module-level value that `js_data()` sends cannot reach the browser."""
+
+    detail: str
+    # Rendering raises TypeError for a Secret, which the message then says.
+    secret: bool
+
+
+def _names_sent_as_written(value_source: str) -> list[_SentName]:
+    """
+    Return the module-level names whose values a `js_data()` value sends unchanged.
+
+    That is the value itself when it is a name or an attribute of one, such
+    as `config.API_TOKEN`, and each such name that is a whole item of a
+    dict, list, or tuple literal inside it, unpacked with `*` into one,
+    either branch of a conditional expression, or the first argument of a
+    `Const(...)` call. A name used any other way, such as
+    `len(TOKEN.get_secret_value())` or `get_token()`, is left out, because
+    the browser receives what the expression computes, not the name's
+    value.
+    """
+    try:
+        node = ast.parse(value_source.strip(), mode="eval").body
+    except (SyntaxError, ValueError):
+        return []
+    names: list[_SentName] = []
+    pending: list[tuple[ast.expr, bool, tuple[tuple[str, ...], ...]]] = [(node, False, ())]
+    while pending:
+        current, starred, wrappers = pending.pop(0)
+        path = _attribute_path(current)
+        if path is not None:
+            names.append(_SentName(path, starred=starred, wrappers=wrappers))
+        elif isinstance(current, ast.Dict) and starred:
+            # `[*{"a": TOKEN}]` sends the dict's keys, not its values.
+            pending.extend((key, False, wrappers) for key in current.keys if key is not None)
+        elif isinstance(current, ast.Dict):
+            # `{**CONFIG}` has no key, and sends CONFIG's items, which the
+            # JSON check reads the same way as CONFIG itself.
+            pending.extend((value, False, wrappers) for value in current.values)
+        elif isinstance(current, (ast.List, ast.Tuple)):
+            pending.extend(
+                (item.value, True, wrappers) if isinstance(item, ast.Starred) else (item, False, wrappers)
+                for item in current.elts
+            )
+        elif isinstance(current, ast.IfExp):
+            # Either branch may be the one sent, so both are read.
+            pending.extend([(current.body, starred, wrappers), (current.orelse, starred, wrappers)])
+        elif isinstance(current, ast.Call) and current.args and not isinstance(current.args[0], ast.Starred):
+            # Only a call that may be `Const` is followed; the issue check
+            # confirms the callee on the loaded module before it counts.
+            callee = _attribute_path(current.func)
+            if callee is not None and callee[-1] == "Const":
+                pending.append((current.args[0], starred, (*wrappers, callee)))
+    return names
+
+
+def _attribute_path(node: ast.expr) -> tuple[str, ...] | None:
+    """Return `("a", "b", "c")` for a name or attribute chain `a.b.c`, or None for any other expression."""
+    attributes: list[str] = []
+    while isinstance(node, ast.Attribute):
+        attributes.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    return (node.id, *reversed(attributes))
+
+
+# The getters behind `cls.__dict__` and `cls.__mro__`, taken from `type`
+# itself, so a metaclass that defines either name cannot run code when the
+# check reads a class.
+_CLASS_NAMESPACE = type.__dict__["__dict__"]
+_CLASS_MRO = type.__dict__["__mro__"]
+# The names whose definition on a class makes reading an attribute run code.
+_ATTRIBUTE_HOOKS = ("__getattr__", "__getattribute__")
+# Every ordinary class also holds a `__dict__` entry: the getter Python
+# builds for it, which runs no user code. Any other kind, such as a
+# property, could.
+_BUILT_IN_GETTERS = (GetSetDescriptorType, MemberDescriptorType)
+# Classes whose attribute reading Citry knows runs no user code. On Python
+# 3.10, SimpleNamespace lists its own C `__getattribute__` in its class
+# namespace, which would otherwise read as a hook that might run code.
+_PLAIN_ATTRIBUTE_CLASSES = (object, type, ModuleType, SimpleNamespace)
+# The exact types of a value the JSON check can read without running any
+# code the value's own class defines. A Secret is a leaf the check reports.
+_PLAIN_JSON_LEAVES = (type(None), bool, int, float, str, Secret)
+_PLAIN_JSON_KEYS = (type(None), bool, int, float, str)
+# Frames that rendering has already used when it starts reading data, so a
+# part this close to Python's recursion limit is never reached.
+_RECURSION_MARGIN = 200
+
+
+def _is_one_of(cls: type, classes: tuple[type, ...]) -> bool:
+    """Return whether ``cls`` is one of ``classes``, comparing identity so no metaclass ``__eq__`` runs."""
+    return any(cls is candidate for candidate in classes)
+
+
+def _stored_entry(namespace: object, name: str) -> tuple[bool, object]:
+    """
+    Return the entry ``name`` of a plain dict or a class namespace.
+
+    Looking the name up with ``in`` or ``[]`` would compare it with a key of
+    the same hash, which runs that key's ``__eq__`` when the key is not a
+    plain ``str``. So only exact ``str`` keys are compared.
+    """
+    if not _is_one_of(type(namespace), (dict, MappingProxyType)):
+        return False, None
+    for key, value in cast("Mapping[object, object]", namespace).items():
+        if type(key) is str and key == name:
+            return True, value
+    return False, None
+
+
+def _class_attribute(cls: type, name: str) -> tuple[bool, object]:
+    """Return the first value named ``name`` in the namespaces of ``cls`` and its bases, in MRO order."""
+    for base in _CLASS_MRO.__get__(cls):
+        found, value = _stored_entry(_CLASS_NAMESPACE.__get__(base), name)
+        if found:
+            return True, value
+    return False, None
+
+
+def _is_descriptor(value: object) -> bool:
+    """Return whether reading ``value`` as a class attribute calls its ``__get__``."""
+    return _class_attribute(type(value), "__get__")[0]
+
+
+def _is_data_descriptor(value: object) -> bool:
+    """Return whether ``value``, as a class attribute, wins over an instance's own ``__dict__`` entry."""
+    value_type = type(value)
+    return _class_attribute(value_type, "__set__")[0] or _class_attribute(value_type, "__delete__")[0]
+
+
+def _read_stored_attribute(owner: object, name: str) -> tuple[bool, object]:
+    """
+    Read an attribute that is stored on a module, a class, or an instance, without calling any code.
+
+    A property, a `__getattr__` hook, or a lazy settings object, such as
+    Django's `settings`, would run code to produce the value, which a static
+    check must not do. So the owner's class and its bases must leave
+    attribute reading alone, and only a value stored in the owner's own
+    `__dict__` counts. A class attribute that is itself a descriptor, such
+    as a property or a method, does not count either, because reading it
+    through the class calls it. Every class and namespace is read through
+    `type`'s own getters, and names are compared only with exact `str`
+    keys, so no `__eq__`, `__hash__`, or metaclass hook runs.
+
+    Returns:
+        Whether the value was found, and the value.
+
+    """
+    try:
+        owner_mro = _CLASS_MRO.__get__(type(owner))
+        for base in owner_mro:
+            if _is_one_of(base, _PLAIN_ATTRIBUTE_CLASSES):
+                continue
+            namespace = _CLASS_NAMESPACE.__get__(base)
+            if any(_stored_entry(namespace, hook)[0] for hook in _ATTRIBUTE_HOOKS):
+                return False, None
+            found, getter = _stored_entry(namespace, "__dict__")
+            if found and not _is_one_of(type(getter), _BUILT_IN_GETTERS):
+                return False, None
+        # A data descriptor of the same name on the owner's class, such as a
+        # property, is what Python returns, not the `__dict__` entry.
+        found, class_value = _class_attribute(type(owner), name)
+        if found and _is_data_descriptor(class_value):
+            return False, None
+        stored = object.__getattribute__(owner, "__dict__")
+        # A dict subclass could run code when it is read.
+        found, value = _stored_entry(stored, name)
+        if not found:
+            return False, None
+        # Python calls a descriptor stored on a class when the class is read.
+        if any(base is type for base in owner_mro) and _is_descriptor(value):
+            return False, None
+    except Exception:  # noqa: BLE001 - an exotic object must not stop the check
+        return False, None
+    return True, value
+
+
+@dataclass(frozen=True, slots=True)
+class _OpaquePart:
+    """A part of a module value that the JSON check cannot read without running the part's own code."""
+
+    value: object
+    # Where the part sits, written the way Python reads it back, such as
+    # `["config"]["path"]`; empty for the value itself.
+    path: str
+    # Whether the part is a dict key rather than a value.
+    is_key: bool
+    # How many containers deep the part sits.
+    depth: int
+
+
+def _key_text(key: object) -> str:
+    """Write an exact built-in dict key the way Python reads it back, such as ``["name"]`` or ``[1]``."""
+    if type(key) is str:
+        return f"[{json.dumps(key, ensure_ascii=False)}]"
+    return f"[{key!r}]"
+
+
+def _first_opaque_part(value: object) -> _OpaquePart | None:
+    """
+    Return the first part of ``value`` that is not an exact built-in JSON type or a Secret, or None.
+
+    The JSON check reads a value with ``isinstance`` and ``.items()``, which
+    run code that a dict subclass or an object posing as another class, such
+    as Django's ``SimpleLazyObject``, defines. This walk compares exact types
+    only, so it runs none of it, and it does not recurse, so a deeply nested
+    value cannot stop the check.
+    """
+    pending: list[tuple[object, str, int]] = [(value, "", 0)]
+    seen: set[int] = set()
+    while pending:
+        current, path, depth = pending.pop()
+        # Citry's own Const proxy sends what it wraps unchanged.
+        unwrapped, current = _unwrap_const_markers(current)
+        if not unwrapped:
+            return _OpaquePart(current, path, is_key=False, depth=depth)
+        current_type = type(current)
+        if _is_one_of(current_type, _PLAIN_JSON_LEAVES):
+            continue
+        # A container that holds itself is the JSON check's to report, so
+        # the walk only stops at the second visit.
+        if id(current) in seen:
+            continue
+        if current_type is dict:
+            seen.add(id(current))
+            items = list(cast("dict[object, object]", current).items())
+            for key, _item in items:
+                if not _is_one_of(type(key), _PLAIN_JSON_KEYS):
+                    return _OpaquePart(key, path, is_key=True, depth=depth)
+            # Reversed so the stack pops them in the order the JSON check reads them.
+            pending.extend((item, f"{path}{_key_text(key)}", depth + 1) for key, item in reversed(items))
+        elif current_type is list or current_type is tuple:
+            seen.add(id(current))
+            items = list(enumerate(cast("list[object]", current)))
+            pending.extend((item, f"{path}[{index}]", depth + 1) for index, item in reversed(items))
+        else:
+            return _OpaquePart(current, path, is_key=False, depth=depth)
+    return None
+
+
+def _runs_only_builtin_code(base: type, entry: object) -> bool:
+    """
+    Return whether an attribute hook on ``base`` is Python's own C code from the standard library.
+
+    Many standard library types, such as ``Decimal`` or a bound method, list
+    a ``__getattribute__`` that is only the built-in lookup, which never
+    makes the value pass for another class. A weak reference proxy forwards
+    the lookup to the object it points at, and so may a C type from another
+    package, so those still count as hooks.
+    """
+    if type(entry) is not WrapperDescriptorType:
+        return False
+    # A weak reference proxy passes every lookup, `__class__` included, on
+    # to the object it points at.
+    if any(base is proxy for proxy in weakref.ProxyTypes):
+        return False
+    module = _safe_class_text(base, "__module__")
+    return module is not None and (module == "builtins" or module.split(".")[0] in sys.stdlib_module_names)
+
+
+def _never_json(value: object, *, is_key: bool = False) -> bool:
+    """
+    Return whether the JSON check refuses ``value`` whatever its class's own code would answer.
+
+    As a value, the check accepts a dict, list, or tuple subclass and any
+    registered ``Mapping``; as a dict key, it accepts a ``str`` subclass. An
+    object that redefines ``__class__`` or attribute lookup, as a lazy
+    object does, can pass for one of those. Only an object of any other
+    class is certain to be refused.
+    """
+    try:
+        value_type = type(value)
+        mro = _CLASS_MRO.__get__(value_type)
+        accepted: tuple[type, ...] = (str,) if is_key else (dict, list, tuple)
+        if any(_is_one_of(base, accepted) for base in mro):
+            return False
+        for base in mro:
+            if base is object:
+                continue
+            namespace = _CLASS_NAMESPACE.__get__(base)
+            for hook in ("__class__", *_ATTRIBUTE_HOOKS):
+                found, entry = _stored_entry(namespace, hook)
+                if found and not (hook != "__class__" and _runs_only_builtin_code(base, entry)):
+                    return False
+        # The key check is `isinstance(key, str)`, which no registry changes.
+        # The ABC check asks the class registry, not the value.
+        return is_key or not issubclass(value_type, Mapping)
+    except Exception:  # noqa: BLE001 - an exotic class must not stop the check
+        return False
+
+
+def _js_data_module_values(component: type[Component], source: str) -> Callable[[_SentName], _ModuleValueIssue | None]:
+    """
+    Return a check that says why a module-level value in a component's `js_data()` cannot be sent as JSON.
 
     The check answers None for a name that `js_data()` binds itself, for a
-    name its module does not define, and for a value the browser can
-    receive.
+    name its module does not define, for an attribute it cannot read
+    without running code, and for a value the browser can receive.
     """
     owner = next(
         (candidate for candidate in _static_class_mro(component) if "js_data" in _static_class_dict(candidate)), None
@@ -2490,11 +3181,11 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
     module = sys.modules.get(getattr(owner, "__module__", "")) if owner is not None else None
     qualname = _safe_class_text(owner, "__qualname__") if owner is not None else None
     if module is None or qualname is None:
-        return lambda _name: None
+        return lambda _sent: None
     try:
         scope = _python_qualified_scope(ast.parse(source), qualname)
     except (SyntaxError, ValueError):
-        return lambda _name: None
+        return lambda _sent: None
     method = next(
         (
             statement
@@ -2504,22 +3195,86 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         None,
     )
     if method is None:
-        return lambda _name: None
+        return lambda _sent: None
     local_names = _function_local_names(source, method)
     if local_names is None:
-        return lambda _name: None
-    namespace = vars(module)
+        return lambda _sent: None
 
-    def issue(name: str) -> str | None:
-        if not name.isidentifier() or name in local_names or name not in namespace:
+    def resolve(path: tuple[str, ...]) -> tuple[bool, object]:
+        root = path[0]
+        # A name js_data() binds itself hides the module name of the same
+        # spelling, so the module's value is not what it sends.
+        if not root.isidentifier() or root in local_names:
+            return False, None
+        # The module itself is read the same careful way as its attributes,
+        # because `sys.modules` may hold any object.
+        found, value = _read_stored_attribute(module, root)
+        if not found:
+            return False, None
+        for name in path[1:]:
+            found, value = _read_stored_attribute(value, name)
+            if not found:
+                return False, None
+        return True, value
+
+    def issue(sent: _SentName) -> _ModuleValueIssue | None:
+        # A call that only looks like `Const(...)` may compute anything.
+        for wrapper in sent.wrappers:
+            found, callee = resolve(wrapper)
+            if not found or callee is not Const:
+                return None
+        found, value = resolve(sent.path)
+        if not found:
             return None
-        value = namespace[name]
+        label = ".".join(sent.path)
+        if sent.starred:
+            # `[*TOKENS]` sends TOKENS' items as a list; anything other than
+            # a plain collection would run code to produce them.
+            if not _is_one_of(type(value), (list, tuple, set, frozenset, dict)):
+                return None
+            value = list(cast("Iterable[object]", value))
+        opaque = _first_opaque_part(value)
+        if opaque is not None:
+            # A value reached through attributes is judged only when it is
+            # plain data. A module constant that holds something else is
+            # reported only when no code of its own could make it pass, and
+            # only within the depth rendering can read. Rendering fails with
+            # RecursionError somewhat before Python's recursion limit,
+            # because frames are already in use, so the cutoff leaves room.
+            name = _safe_class_text(type(opaque.value), "__name__")
+            if (
+                len(sent.path) > 1
+                or name is None
+                or opaque.depth >= sys.getrecursionlimit() - _RECURSION_MARGIN
+                or not _never_json(opaque.value, is_key=opaque.is_key)
+            ):
+                return None
+            what = "a dict key" if opaque.is_key else "a value"
+            return _ModuleValueIssue(
+                f"{label}{opaque.path} holds {what} of type {name}, which cannot be sent to the browser as JSON",
+                secret=False,
+            )
         try:
             _json_plain(value)
-        except TypeError:
-            return f"{name} holds a value of type {type(value).__name__}, which cannot be sent to the browser as JSON"
+        except _SecretInBrowserDataError:
+            # Rendering would raise for this value, so name the key that
+            # holds the Secret, the way the runtime error does.
+            try:
+                path = _secret_key_path(value) or ""
+            except RecursionError:
+                path = ""
+            return _ModuleValueIssue(
+                f"{label}{path} is a Secret; read the value on the server instead",
+                secret=True,
+            )
+        except TypeError as exc:
+            return _ModuleValueIssue(f"{label}: {exc}", secret=False)
         except ValueError as exc:
-            return str(exc)
+            return _ModuleValueIssue(f"{label}: {exc}", secret=False)
+        except RecursionError:
+            # A value nested too deeply for the JSON check is left
+            # unjudged, so one constant cannot stop the whole check.
+            return None
         return None
 
     return issue

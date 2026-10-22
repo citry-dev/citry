@@ -17,7 +17,9 @@ from lsprotocol import types
 from pygls.exceptions import JsonRpcInvalidParams
 from pytest_lsp import ClientServerConfig, LanguageClient
 
+import citry
 from citry._checker import CheckFinding, CheckReport
+from citry._json_wire import SECRET_NOT_SENT_REASON
 from citry.commands.check import _with_type_findings
 from citry_lsp import project as project_module
 from citry_lsp.engine import (
@@ -314,6 +316,30 @@ def test_template_expressions_are_checked_against_the_component(tmp_path, lane_p
     ]
 
 
+def test_a_broken_template_expression_gets_one_citry_diagnostic_and_no_typescript_error(tmp_path):
+    # `startDrag('a')` is a type error (TS2345), and declaring `x` twice makes
+    # the listener invalid. TypeScript reports the type error on its own;
+    # Citry reports the second `x`, and the filter must drop TypeScript's
+    # report from the same expression even though the ranges do not touch.
+    html = "<button @click=\"startDrag('a');;let x = 1; let x = 2\">Go</button>"
+    project, documents = _documents(
+        tmp_path,
+        {"lane.js": ("javascript", _LANE_JS), "lane.html": ("citry-html", html)},
+    )
+    document = documents[(tmp_path / "lane.html").as_uri()]
+    citry = [
+        *template_lint_diagnostics(document, project, documents),
+        *browser_diagnostics(document, project, documents),
+    ]
+
+    assert [(item.code, item.range.start.character, item.range.end.character) for item in citry] == [
+        ("citry.vue.invalid-expression", 47, 48)
+    ]
+    alone = check_document_types(document, project, documents, _command(), ())
+    assert [(item.code, item.range.start.character) for item in alone] == [("citry.typescript.ts2345", 26)]
+    assert check_document_types(document, project, documents, _command(), citry) == ()
+
+
 _INLINE_APP = '''from citry import Citry, Component
 engine = Citry(autodiscover=False)
 class Board(Component):
@@ -342,6 +368,140 @@ class Board(Component):
       });
     """
 '''
+
+
+_LISTENER_APP = """from pathlib import Path
+from citry import Citry, Component
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Card(Component):
+    citry = engine
+    template_file = 'card.html'
+    js_file = 'card.js'
+    def js_data(self, kwargs, slots):
+        return {'title': 'Inbox', 'count': 3}
+class Tag(Component):
+    citry = engine
+    template = '<span></span>'
+    js = "$component({ emits: ['hide'] });"
+class Board(Component):
+    citry = engine
+    template_file = 'board.html'
+    js_file = 'board.js'
+    def js_data(self, kwargs, slots):
+        return {'hideKey': 1, 'labels': ['Inbox']}
+"""
+# The card declares typed payloads; its button sends the count where the
+# `hide` validator expects the title.
+_LISTENER_CARD_JS = """$component({
+  emits: {
+    hide: (/** @type {string} */ title) => true,
+    closeCard: (/** @type {string} */ title) => true,
+  },
+});
+"""
+_LISTENER_CARD_HTML = """<button @click="$emit('hide', count)">Hide</button>"""
+_LISTENER_BOARD_JS = """$component({
+  methods: {
+    /**
+     * @param {string} title
+     * @param {string} reason
+     */
+    hideCard(title, reason) {},
+    hideCount(/** @type {number} */ count) {},
+    hideTitle(/** @type {string} */ title) {},
+    hideAll() {},
+    hideWithDefault(/** @type {string} */ title, reason = 'none') {},
+    /**
+     * @param {string} title
+     * @param {string} [reason]
+     */
+    hideOptional(title, reason) {},
+    hideUntyped(title, reason) {},
+    hideKey(/** @type {number} */ count) {},
+  },
+});
+"""
+# One listener per line, so each finding names its line. The first four
+# lines hold mistakes; the rest must stay quiet.
+_LISTENER_BOARD_HTML = (
+    '<c-Card @hide="hideCard" />\n'
+    '<c-Card @hide.once="hideCount" />\n'
+    '<c-Card @close-card="hideCard" />\n'
+    '<c-Card @click="hideCard" />\n'
+    '<c-Card @hide="hideTitle" />\n'
+    '<c-Card @hide="hideAll" />\n'
+    '<c-Card @hide="hideWithDefault" />\n'
+    '<c-Card @hide="hideOptional" />\n'
+    '<c-Card @hide="hideUntyped" />\n'
+    '<c-Tag @hide="hideCard" />\n'
+    '<c-Card @hide="hideMissing" />\n'
+    '<div v-for="hideCard in labels"><c-Card @hide="hideCard" /></div>\n'
+    '<c-Card @hide="hideKey" />\n'
+    '<c-Card @c-hide="hideCard" />\n'
+    '<button @click="hideCard">Hide</button>'
+)
+
+
+def test_a_method_named_as_a_child_listener_is_checked_against_the_payload(tmp_path):
+    project, documents = _documents(
+        tmp_path,
+        {
+            "card.js": ("javascript", _LISTENER_CARD_JS),
+            "card.html": ("citry-html", _LISTENER_CARD_HTML),
+            "board.js": ("javascript", _LISTENER_BOARD_JS),
+            "board.html": ("citry-html", _LISTENER_BOARD_HTML),
+        },
+        app=_LISTENER_APP,
+    )
+
+    # The child's own `$emit` checks the payload against its validator. With
+    # two declared events `$emit` has one overload per event.
+    assert [(code, text) for code, text, _range in _findings(tmp_path, "card.html", project, documents)] == [
+        ("citry.typescript.ts2769", "count"),
+    ]
+    # Vue calls a bare method name with the emitted values, so a method that
+    # needs a second value, or a value of another type, is reported on its
+    # name, after any modifier and in either spelling of the event name. An
+    # event the child does not declare reaches its root element, so the
+    # method gets a DOM event. A method that ignores values or makes them
+    # optional, an untyped method, the array form of `emits`, a name the
+    # parent does not declare, a `v-for` alias or `js_data()` key that hides
+    # a method, Citry's `@c-` server event arguments, and a DOM listener
+    # stay quiet.
+    assert [(code, text, found[0]) for code, text, found in _findings(tmp_path, "board.html", project, documents)] == [
+        ("citry.typescript.ts2345", "hideCard", 0),
+        ("citry.typescript.ts2345", "hideCount", 1),
+        ("citry.typescript.ts2345", "hideCard", 2),
+        ("citry.typescript.ts2345", "hideCard", 3),
+    ]
+    # TypeScript names an unlabeled payload value after the generated rest
+    # parameter in its message, so it reads `args_0`, the listener's first
+    # argument.
+    board = documents[(tmp_path / "board.html").as_uri()]
+    citry_findings = browser_diagnostics(board, project, documents)
+    messages = [item.message for item in check_document_types(board, project, documents, _command(), citry_findings)]
+    assert any("(args_0: " in message for message in messages), messages
+    assert not any("payload" in message for message in messages), messages
+
+
+def test_child_listener_helper_is_never_offered_as_a_completion(tmp_path):
+    project, documents = _documents(
+        tmp_path,
+        {
+            "card.js": ("javascript", _LISTENER_CARD_JS),
+            "card.html": ("citry-html", _LISTENER_CARD_HTML),
+            "board.js": ("javascript", _LISTENER_BOARD_JS),
+            "board.html": ("citry-html", _LISTENER_BOARD_HTML),
+        },
+        app=_LISTENER_APP,
+    )
+    document = documents[(tmp_path / "board.html").as_uri()]
+
+    projection = browser_projection(document, types.Position(0, len('<c-Card @hide="hide')), project, documents)
+
+    assert projection is not None
+    assert "__citryChildListener((\nhideCard\n));" in projection.source
+    assert "__citryChildListener" in projection.owned_root_names
 
 
 def test_inline_python_assets_map_through_indentation_without_false_positives(tmp_path):
@@ -428,6 +588,36 @@ def test_a_citry_finding_on_the_same_text_wins():
 
     assert map_type_check_findings((projection,), (finding,), (citry,)) == ()
     assert len(map_type_check_findings((projection,), (finding,), (unrelated,))) == 1
+
+
+def test_a_narrowed_citry_finding_still_hides_a_typescript_error_in_its_expression():
+    mapping = ProjectionSourceMapping(
+        types.Range(types.Position(0, 0), types.Position(0, 20)),
+        types.Range(types.Position(5, 0), types.Position(5, 20)),
+    )
+    projection = TypeCheckProjection("template:0", "", (mapping,))
+    # TypeScript's error sits at the start of the expression, and Citry's
+    # syntax finding only at the token where the parser stopped.
+    finding = TypeScriptFinding("template:0", types.Range(types.Position(5, 2), types.Position(5, 6)), 2322, "m")
+    narrowed = types.Diagnostic(
+        types.Range(types.Position(0, 12), types.Position(0, 13)),
+        "not valid JavaScript",
+        code="citry.vue.invalid-expression",
+    )
+    with_expression = types.Diagnostic(
+        narrowed.range,
+        narrowed.message,
+        code=narrowed.code,
+        data={"expressionRange": [[0, 1], [0, 14]]},
+    )
+    # A client that changes `data` only loses the wider match.
+    malformed = types.Diagnostic(
+        narrowed.range, narrowed.message, code=narrowed.code, data={"expressionRange": [[0, 1]]}
+    )
+
+    assert len(map_type_check_findings((projection,), (finding,), (narrowed,))) == 1
+    assert map_type_check_findings((projection,), (finding,), (with_expression,)) == ()
+    assert len(map_type_check_findings((projection,), (finding,), (malformed,))) == 1
 
 
 def test_tsc_output_is_read_with_chained_messages():
@@ -811,6 +1001,53 @@ def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_path(t
             7,
             "JsData field 'apiBase' is not a clean JSON value: PurePosixPath values are not serialized by Citry's"
             " JSON wire format. Browser tooling will treat its type as unknown.",
+        ),
+    ]
+
+
+# Case m42-secret-sent-to-browser in benchmarks/errors/cases, once the
+# project wraps its token in a Secret: js_data() sends a constant from
+# another module, so only ty can tell it is a Secret.
+_M42_SETTINGS = """from citry import Secret
+SECRET_TOKEN = Secret("s3cr3t")
+"""
+_M42_APP = """from citry import Citry, Component
+from settings import SECRET_TOKEN
+engine = Citry(autodiscover=False)
+class BoardPage(Component):
+    citry = engine
+    template = "<p></p>"
+    def js_data(self, kwargs, slots):
+        return {"apiBase": "/api", "hiddenTitles": [], "secretToken": SECRET_TOKEN}
+"""
+
+
+def test_check_project_python_types_reports_a_js_data_value_ty_types_as_a_secret(tmp_path, monkeypatch):
+    # An editable install of citry is found through an import hook that ty
+    # does not run, so ty is told where the package source is, as an
+    # ordinary installed citry would be found.
+    citry_source = Path(citry.__file__).resolve().parents[1]
+    ty_config = f"[environment]\nextra-paths = [{json.dumps(str(citry_source))}]\n"
+    (tmp_path / "ty.toml").write_text(ty_config, encoding="utf-8")
+    (tmp_path / "settings.py").write_text(_M42_SETTINGS, encoding="utf-8")
+    (tmp_path / "app.py").write_text(_M42_APP, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready, project.status
+
+    found = check_project_python_types(project, tmp_path)
+
+    # Only the Secret is reported; the plain values next to it are JSON.
+    assert [
+        (item.path.name, item.diagnostic.code, item.diagnostic.range.start.line, item.diagnostic.message)
+        for item in found
+    ] == [
+        (
+            "app.py",
+            "citry.js-data.unsupported-type",
+            7,
+            "JsData field 'secretToken' can hold a citry.Secret, and rendering this component raises TypeError"
+            " when it does: Secret values are never sent to the browser; read the value on the server instead.",
         ),
     ]
 
@@ -1403,6 +1640,9 @@ def test_ty_type_displays_become_json_types(display, expected):
     assert (value.javascript if value is not None else None) == expected
 
 
+_SECRET_REASON = "Secret values are never sent to the browser; read the value on the server instead"  # noqa: S105
+
+
 @pytest.mark.parametrize(
     ("display", "reasons"),
     [
@@ -1412,6 +1652,13 @@ def test_ty_type_displays_become_json_types(display, expected):
         ("set[int]", ("sets are not JSON-serializable",)),
         ("frozenset[str]", ("sets are not JSON-serializable",)),
         ("complex", ("complex values are not JSON-serializable",)),
+        # Citry never sends its own Secret marker, whatever it holds.
+        ("Secret[str]", (_SECRET_REASON,)),
+        ("Secret[bytes] | None", (_SECRET_REASON,)),
+        # Nested, or wrapping a value ty could not type, is still a Secret.
+        ("dict[str, Secret[str]]", (_SECRET_REASON,)),
+        ("list[Secret[str]]", (_SECRET_REASON,)),
+        ("Secret[Unknown]", (_SECRET_REASON,)),
         # Any other class may be a TypedDict, which is sent as an object.
         ("Task", None),
         ("Unknown | PurePosixPath", None),
@@ -1421,6 +1668,12 @@ def test_ty_displays_of_standard_non_json_types_keep_their_reason(display, reaso
     value = _json_type_from_ty_display(display)
 
     assert (value.unsupported if value is not None else None) == reasons
+
+
+def test_the_ty_secret_reason_matches_citrys_own():
+    # citry-lsp keeps its own copy so it works with an older citry; the two
+    # texts must stay equal so both checks give the same advice.
+    assert f"Secret {SECRET_NOT_SENT_REASON}" == _SECRET_REASON
 
 
 def test_a_bound_string_the_attribute_rule_reports_is_not_reported_by_typescript(tmp_path):

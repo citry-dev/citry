@@ -33,12 +33,13 @@ Ordered by value to a Citry user. A "plain fix" is a bug fix you can approve wit
 | 6 | Links to routes and static files | m45, m61, m48 | Option 3 for files, Option 1 for routes | Option 3: yes/no. Option 1: yes/no |
 | 7 | Type prop values written as expressions | m27 (beyond literals) | Option 1 for props; defer payloads | Option 1 for props: yes/no |
 | 8 | Emit payload types and handler arguments | m30, m60 | Options 1 and 2 | yes/no |
-| 9 | Exact error text for Vue syntax errors; exact prop-write check | m19, m28 | Option 2 (new PyO3 function, existing ones unchanged) | PyO3 addition in the next citry-core release: yes/no |
-| 10 | Let the `v-iff` rule skip directives a component declares | m21 | Option 3 now, Option 1 with item 9 | Option 1 later: yes/no |
+| 9 | Exact error text for Vue syntax errors; exact prop-write check | m19, m28 | Option 2 (new PyO3 function, existing ones unchanged) | Decided: Option 1 (records), citry-core 1.9.0 |
+| 10 | Let the `v-iff` rule skip directives a component declares | m21 | Option 3 now, Option 1 with item 9 | Decided: Option 1 with item 9, plus `inheritAttrs` (m53) |
 | 11 | Secrets and server-only values sent to the browser | m42 | Option 2 (a marker type) + docs | New public `citry.Secret`: yes/no. Option 1 off by default: yes/no |
 | 12 | Clearer runtime errors and development-only checks | m51, m63, m14, m57 | Plain fixes for m51 and m63; Option 1 for m14; m57 your call | 12a, 12b, 12c: yes/no each. 12d: yes/no/defer |
 | 13 | Misspelled CSS class | m16 | Defer | Off-by-default rule now, or defer |
 | 14 | Side bugs found while tracing | - | See each | 14a, 14b: choose 1 or 2. 14c: yes/no |
+| 15 | A shared value read under a key no ancestor provides | m50 | Option 2, falling back to Option 1 | Choose 1, 2 or 3; warning or error |
 
 ## 1. Components whose base class lives in another module
 
@@ -422,7 +423,7 @@ Both limits exist because `analyze_browser_source` (`crates/citry_core_py/src/te
 
 **Recommendation:** Option 2, in the next citry-core release, together with item 10.
 
-**Decision:** PyO3 addition in the next citry-core release: yes/no.
+**Decision:** Option 1, in citry-core 1.9.0. `analyze_browser_source` and `analyze_component_source` return records (Python objects with named fields) instead of tuples, so a later field does not break callers again. The syntax error comes from parsing the authored text alone, and text that closes the generated wrapper, such as `a); (b`, now counts as invalid. The rule spans the token the parser points to and names its message; an expression with a character reference keeps the whole range and the generic message.
 
 ## 10. Let the `v-iff` rule skip directives a component declares
 
@@ -440,7 +441,7 @@ No code reads `$component({directives})` today. The Rust analysis reads only pro
 
 **Recommendation:** Option 3 now; Option 1 when item 9 ships.
 
-**Decision:** Option 1 later: yes/no.
+**Decision:** Option 1, with item 9 in citry-core 1.9.0. A `v-*` name is skipped only when every component that renders the template registers it, under Vue's lookup (`my-dir`, `myDir`, `MyDir`). The same change reads `inheritAttrs` (m53, approved separately): `citry.template.missing-image-alt` reports a component's single root `<img>` when its JavaScript sets `inheritAttrs: false`.
 
 ## 11. Secrets and server-only values sent to the browser
 
@@ -595,6 +596,56 @@ CLAUDE.md says the PyO3 surface is `template_parser`, `safe_eval` and `html_tran
 - **The CSRF hidden input is rejected:** decision 4a.
 - **Form text values for number fields:** decision 4b.
 
+## 15. A shared value read under a key no ancestor provides (m50)
+
+**What the developer sees today.** The page provides the board's name under `board`, and the card reads it under `bord`:
+
+```citry-html
+<c-provide key="board" name="Projects">
+  <c-Card c-for="project in projects" ... />
+</c-provide>
+```
+
+```python
+class Card(Component):
+    def template_data(self, kwargs, slots):
+        board = self.inject("bord")
+```
+
+The render fails with a `KeyError` that names the component and the key and suggests the near key ("Did you mean 'board'?", `inject_value` in `provide.py:87`). No check reports it before the page renders, because no rule reads `inject()` calls.
+
+**What exists.**
+- A value is provided in three ways: `<c-provide key="...">` in a template, `self.provide("...")` in a component's Python code, and `render(provides={...})` at a render root.
+- `Citry.inspect_component_graph()` (`docs/design/component_graph.md`) lists, for each registered component, the registered components whose templates write its tag. It records who wrote the tag: a card written inside a `<c-fill>` is listed under the component that wrote the fill, not under the component whose slot renders it.
+- The runtime looks the key up along the render path, which includes the component whose slot renders the card (`Component.inject` docstring).
+
+**Options.** Each one reads only an `inject()` call whose key is a string literal and that passes no default, since a default means the key may be missing on purpose.
+
+1. **The key is provided nowhere.** With the app loaded, collect every literal key the app provides: the `key` of each `<c-provide>` in any registered template, and the first argument of each literal `provide("...")` call in any registered component's source. Report an `inject("bord")` whose key is not in that set, with a "did you mean" hint.
+   - Cost: small.
+   - It catches m50, because a misspelled key is rarely provided anywhere.
+   - It misses a key that one page provides and the page that renders the card does not.
+   - Error modes:
+     - A key provided only through `render(provides={...})` in application code, or through a key written as an expression (`<c-provide c-key="...">`, `provide(name)`), is invisible, so the rule reports it falsely. The rule could also collect literal keys from `render(provides={...})` calls in the project's Python files, but a dictionary built elsewhere stays invisible. This is why it should be a warning, and a component can turn it off in its `Lint` class.
+     - A component whose source cannot be read is skipped as a provider, so its keys count as missing; skip the rule entirely when any registered component's source cannot be read.
+2. **The key is provided on a path above the component.** Start from the templates that render the component (the graph's reverse references) and walk up: a key counts when a `<c-provide>` around the tag provides it, when the writing component calls `provide()` with it, or when any component further up does. When the tag sits inside a `<c-fill>`, the component whose slot renders the fill, and the `<c-provide>` elements around its `<c-slot>`, count too. Report when no path provides the key.
+   - Cost: medium to high. It needs a walk over the graph and the slot owners, which no code does today.
+   - It catches m50, and also a key that only another page provides.
+   - Error modes:
+     - No registered template renders the component (it is rendered only from Python, or only through `<c-component is=...>` with a dynamic name): fall back to Option 1.
+     - A fill whose slot owner cannot be resolved (a dynamic component, a slot passed through several components): treat that path as providing every key, so nothing is reported for it.
+     - `render(provides={...})` at the root: as in Option 1.
+     - A component rendered on two paths where only one provides the key: not reported, because the rule cannot tell whether the other path is ever rendered. The runtime error still catches it.
+3. **Leave the runtime error.** It already names the component and the near key. No cost.
+
+Browser-side `inject` in `$component({inject: [...]})` is a separate mechanism (Vue's own provide and inject) and is not covered by any of these options.
+
+**Who owns it:** `citry check` with the app loaded (`_registry_lint.py`, next to the other rules that read every registered component), and the editor when it has loaded the app. Suggested names: `rule_unknown_inject_key`, `citry.template.unknown-inject-key`, a warning.
+
+**Recommendation:** Option 2, which compares each literal `inject()` key with the `<c-provide>` keys in the templates that render the component, as you suggested, built on Option 1's collection of keys: Option 1 is the fallback whenever a path cannot be resolved. Ship it as a warning, because `render(provides={...})` keys can always be invisible.
+
+**Decision:** choose 1, 2 or 3. If 1 or 2: warning or error by default.
+
 ## Decisions recorded
 
 The maintainer's answers, as of 2026-10-21:
@@ -609,5 +660,19 @@ The maintainer's answers, as of 2026-10-21:
 | 5 | Typed slot data in the editor and `--types` | Option 1. **Done:** the app worker sends `slot_data_classes`, `TemplatePythonControl.slot_target` names the fill's component and slot, and the ty check file declares the name as a `Mapping[str, Any]` subclass with the slot's fields |
 | 6 | Links to routes and static files | Ask each framework integration through `mount()` / `urlpatterns()`. No `static=` setting. The rule is `rule_unknown_url` in `LintSettings`, a warning by default. It runs only when an integration has registered a checker, and a project or a component can turn it off. **Done** as `citry.template.unknown-url`, with the notes `citry.check.url-checker-missing` and `citry.check.url-checker-failed`. The integration must run while `citry check` loads the app, so `--app` names the module that mounts Citry. The error-prevention benchmark's Citry app serves its pages from hand-written ASGI code, so m45, m48 and m61 stay unreported there |
 | 7 | Prop values written as expressions | Option 1, for props only; payload expressions deferred. **Done** in the TypeScript check file |
+| 8 | Emit payload types and handler arguments | Options 1 and 2. **Done:** the props and events guide shows typed emits (`emits: { hide: (/** @type {string} */ title) => true }`), which report a wrong payload at the child's `$emit` (m30). In the TypeScript check file, a listener whose value is only the name of a method the parent's `methods` declares (`@hide="hideCard"`) is passed to a generated function typed from the child's payload, so tsc reports a method that needs more values than the child sends on the method name (m60, `ts2345`). Nothing is reported for an untyped method, array-form `emits`, or a name that is not in `methods`. Because the check runs with `strict` off, a parameter type narrower than the payload is not reported. The benchmark's own app uses `emits: ['hide']` and an untyped `hideCard`, so m30 and m60 stay unreported there |
+| 9 | Exact error text for Vue syntax errors; exact prop-write check | Not decided yet |
+| 10 | Let the `v-iff` rule skip directives a component declares | Not decided yet |
+| 11 | Secrets sent to the browser | Option 2; Option 1 not built. **Done:** the public `citry.Secret` (`Secret[str]`, read with `get_secret_value()`, shown as `***` wherever Python turns it into text). Rendering fails with an error naming the component and the key path when `js_data()`, `css_data()` or State holds one; `citry.js-data.unsupported-type` reports one in a `JsData` annotation, a module-level value that `js_data()` puts in its result (also inside a dict or list literal, unpacked with `*`, in either branch of a conditional expression, inside `Const(...)`, or read as an attribute such as `config.API_TOKEN`, where `config` is a module or a plain class), and a value ty types as `Secret`. A plain string secret is still not detected. A cached component cannot take a `Secret` input unless its `Cache.vary()` leaves it out: the cache key would otherwise hold the secret, so building it raises `CacheKeyError`. A `Secret` in an action a handler returns is refused only by the events protocol's generic JSON check, which does not name the key. The benchmark's app keeps `SECRET_TOKEN` a plain string, so m42 stays unreported there |
+| 12a | Repeated component without `#c-key` | Plain fix. #230 added the tag, template and line. **Done:** the line is right for template files, slot fills and template-valued attributes, the duplicate-key message names the repeated value and explains nested loops, and the element-key conflict uses the parser's wording |
+| 12b | `v-model` on an element that holds no value | Plain fix. **Done in Python, with no Rust change:** when the Vue compiler reports `MODEL_HELPER_MISMATCH`, the render runs the `rule_invalid_model_target` check over the authored templates the Vue template came from and names each element, its template and line. When it finds none, the error names the component and keeps the compiler's text. A template-valued attribute written without the `<>...</>` wrapper, such as `c-body="<b>Hi</b> <div v-model='q'></div>"`, still renders as a template, but the search and `rule_invalid_model_target` read only a wrapped value, so a bad `v-model` there gets that generic message |
+| 12c | Server and browser render different content | Option 1. **Done**, in development mode only: a hydrating page whose shells carry served contents inlines `_vue/dev_checks.js`, and after `mount()` the runtime compares each element Vue rebuilds (marked `data-allow-mismatch="children"`) with the HTML the server sent, and logs one `console.warn` per element naming the component, the element, the first difference, and the `data-allow-mismatch` value that silences it. The comparison is one-sided: it reports only a text or attribute value the server wrote that Vue shows differently, because the server leaves out what it cannot compute. Content meant to differ (a clock, a random id) also warns; move it to `mounted()` or add `data-allow-mismatch`. Elements Vue adopts normally, state changed in `mounted()` or after an `await`, and elements only one side has are not compared. m14 warns on a 1280px window (`aria-expanded`), not at 600px or in production. A production page does not load the check: it carries no flag and no script, and the runtime keeps only the short call that looks for the script. Known limits: a list that `created()` filters can go unreported, and a browser-only `v-if` next to a browser-only `v-for` of the same tag can still warn |
+| 12d | The same id from two components | Yes, in development mode only. **Done** on the server, because only the server can name every component, including those without browser code: serialization passes each component's own HTML to `_page_ids.py`, which issues one `RuntimeWarning` per page listing each repeated id with the components and template files that wrote it. Ids set by Vue bindings or scripts, ids in `<template>`, `<noscript>` or a `v-if`/`v-else`/`v-for` element, and fragments a server event renders again (checked on their own) are not compared. Known limits: a `v-if` written on a component's own tag still warns, and a `simple` component's ids are named under its caller |
+| 13 | Misspelled CSS class | Option 1, a warning, on by default. **Done** as `citry.css.misspelled-class` (`rule_misspelled_css_class`), in `citry check` with the app loaded (not the editor, like `citry.css.misspelled-variable`). A slip that moves, doubles or drops a digit, a missing final `s` after a letter other than `s`, one of the listed short words `close`, `collapse`, `disable`, `enable`, `fade`, `mute`, `show`, `slide` and `toggle` next to its longer form, and one letter typed twice or left out in a first hyphen part of one or two characters are not reported, because they usually name another class of the same family (`col-1`/`col-12`, `tab`/`tabs`, `disable`/`disabled`, `navbar-toggle`/`navbar-toggler`, `p-4`/`px-4`). Any other cut-short word (`heade`/`header`) and two letters swapped in a short first part (`iu-button`/`ui-button`) are reported. Pairs where both forms are real classes outside that list, such as Tailwind's `tracking-wide`/`tracking-wider`, are still reported. A class one slip from the component's own selectors is reported even when a stylesheet Citry does not read styles it. No findings on this repository's apps, citry_ui, or the docs site |
+| 13+ | Every undeclared CSS class and variable | Two more rules, off by default (`"ignore"`, which the diagnostics schema now allows for a configurable rule). **Done** as `citry.css.undeclared-class` (`rule_undeclared_css_class`): a static class that no CSS Citry reads declares; and `citry.css.undeclared-variable` (`rule_undeclared_css_variable`): a `var(--x)` without a fallback in a component's CSS that nothing Citry reads sets. Citry reads each registered component's `css` or `css_file`, its inline or local-file `Dependencies` stylesheets, its template's `<style>` elements, and, for variables, every `css_data()` key and `--x` strings in templates, component JavaScript and Python modules. It does not read stylesheets linked by URL, so Tailwind utilities and site stylesheets are reported, which is why both are off |
+| 14a | `Literal` field on an event's data class | Option 1; already done on main (`ext/events/schemas.py`) |
+| 14b | `events.md` §5.1 form merge | Option 1; §5.1 was already fixed on main. **Done:** the component-tag section (relocated `@c-submit`) still described the merge and now matches the code |
+| 14c | CLAUDE.md lists too few PyO3 submodules | **Done:** CLAUDE.md and `docs/agent/INDEX.md` list `template_parser`, `vue`, `html_transform`, `i18n`, `safe_eval` and `template_formatter` |
+| 15 | A shared value read under a key no ancestor provides | Option 2, with Option 1 as the fallback, a warning. **Done** as `citry.template.unknown-inject-key` (`rule_unknown_inject_key`), in `citry check` with the app loaded and in the editor once it has loaded the app. `citry/_provide_keys.py` reads every registered template once and works out the keys that reach each component: from each template that uses its tag, the `<c-provide>` keys around the tag, the `provide()` keys of the component whose template it is, and, for slot content, the keys the component whose `<c-slot>` shows it provides (its `provide()` keys and the `<c-provide>` keys around that `<c-slot>`, also through a slot passed on to another component), plus the keys that reach the component whose template it is, repeated until nothing changes. The literal keys of `render(provides={...})` and `provides=dict(...)` calls in the project's Python files (under the check's folder, skipping hidden folders, virtual environments and installed packages, plus the modules that define registered components) count everywhere; past 20,000 files the rule reports nothing. A component no template uses, including one only a dynamic `<c-component>` picks or one used only inside its own cycle of templates, falls back to every literal key the app provides. Differences from this section: a dynamic `<c-component>` also counts as a place that may render every component, so its surroundings count too; a `provide()` or `render(provides=...)` key written as a module-level string constant counts as that string, also one imported from a loaded module or a module in the project folder; calls in base classes and mixins count, Citry's and the standard library's classes aside (found by file location), and calls in installed packages are not reported; and a `<c-provide c-key>`, a `provide()` key written as an expression, a tag inside a dynamic `<c-component>`, markup in a component attribute, or a component Python builds inside a component's methods or passes to another component (`Layout(slots={"default": Widget()})`, also through a variable; test files are not read for this) makes the path provide every key (the fallback still ignores expression keys, as Option 1 says). A component whose source cannot be read counts as providing every key when its compiled methods name `provide`, and as providing nothing otherwise; while a component of the first kind exists the fallback reports nothing; any registered template that cannot be read or parsed turns the rule off. Only `self.inject()` with one string literal and no default is read; an `inject()` on a base class is reported once, when no registered subclass gets the key. `provide()` in a helper function, a template string rendered from Python, and `self.unprovide()` are not read. Built-in templates' own dynamic `<c-component>` (the `<c-i18n>` host) counts as passing its slot through. The editor receives the keys from the app worker (`inject_keys`) and reads the calls from the open buffer. The benchmark's m50 is reported with "Did you mean 'board'?"; no findings on the examples, citry_ui, the docs site with its examples, or the benchmark baseline app |
 | m53 | `<img>` without `alt` | Warning by default; a project can raise it to an error |
 | m62 | Boolean attributes | Follow the HTML standard: any value other than empty or the attribute's own name is reported, including `"true"` |

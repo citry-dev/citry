@@ -45,7 +45,12 @@ from citry._diagnostic_catalog import (
     VUE_PYTHON_VARIABLE,
     VUE_UNKNOWN_VARIABLE,
 )
-from citry_lsp.engine import browser_diagnostics, template_lint_diagnostics, type_check_projections
+from citry_lsp.engine import (
+    EXPRESSION_RANGE_DATA_KEY,
+    browser_diagnostics,
+    template_lint_diagnostics,
+    type_check_projections,
+)
 from citry_lsp.project_check import ProjectTypeFinding, project_documents
 from citry_lsp.uri import file_uri_path
 
@@ -197,6 +202,24 @@ class TypeScriptFinding:
     category: Literal["error", "warning", "suggestion", "message"] = "error"
 
 
+def _owned_range(diagnostic: types.Diagnostic) -> types.Range:
+    """Return the text a Citry diagnostic is about: its whole expression when it says so, else its range."""
+    data = diagnostic.data
+    value = data.get(EXPRESSION_RANGE_DATA_KEY) if isinstance(data, dict) else None
+    # Anything but the exact shape the engine writes is ignored, so a client
+    # that changes `data` only loses the wider match.
+    if (
+        isinstance(value, list)
+        and len(value) == 2
+        and all(
+            isinstance(point, list) and len(point) == 2 and all(type(part) is int for part in point) for point in value
+        )
+    ):
+        (start_line, start_character), (end_line, end_character) = value
+        return types.Range(types.Position(start_line, start_character), types.Position(end_line, end_character))
+    return diagnostic.range
+
+
 def map_type_check_findings(
     projections: Sequence[TypeCheckProjection],
     findings: Iterable[TypeScriptFinding],
@@ -214,7 +237,7 @@ def map_type_check_findings(
     """
     by_identity = {projection.identity: projection for projection in projections}
     owned = tuple(
-        diagnostic.range
+        _owned_range(diagnostic)
         for diagnostic in citry_diagnostics
         if isinstance(diagnostic.code, str) and diagnostic.code in _CITRY_OWNED_CODES
     )

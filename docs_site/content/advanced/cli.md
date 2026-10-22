@@ -413,7 +413,7 @@ citry --app myproject.engine:app watch \
 
 `watch` does not reload changed Python code or restart your web server.
 Run your framework's reloader alongside it. See
-[Hot reload](/guides/dev-server/) for the complete setup.
+[Hot reload](/guides/hot-reload/) for the complete setup.
 
 If `watchfiles` or `watchdog` is installed, Citry uses it to get file
 change events from the operating system. Otherwise it checks the files

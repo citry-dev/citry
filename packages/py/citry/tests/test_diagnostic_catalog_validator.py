@@ -58,3 +58,47 @@ def test_module_paths_and_external_prefixes_are_not_codes(roots):
         "",
     )
     assert problems == []
+
+
+def _catalog_with(entry_fields: dict[str, object]) -> dict[str, object]:
+    entry = {
+        "code": "citry.example.rule",
+        "constant": "EXAMPLE_RULE",
+        "title": "Example rule",
+        "summary": "Something is wrong.",
+        "when": "A test writes it.",
+        "defaultSeverity": "warning",
+        "surfaces": ["check"],
+        "parameters": {},
+        "messages": {"default": "Something is wrong."},
+        "documentationPath": "/ide/diagnostics/#citry.example.rule",
+        **entry_fields,
+    }
+    return {
+        "schemaVersion": 1,
+        "documentationBaseUrl": "https://citry.dev",
+        "externalCodePrefixes": [],
+        "diagnostics": [entry],
+    }
+
+
+@pytest.mark.parametrize(
+    ("entry_fields", "expected"),
+    [
+        # A rule that is off by default must be one the application can turn on.
+        ({"defaultSeverity": "ignore", "configurableSeverity": True}, []),
+        (
+            {"defaultSeverity": "ignore"},
+            ["diagnostics[0].defaultSeverity may be ignore only when configurableSeverity is true"],
+        ),
+        (
+            {"defaultSeverity": "ignore", "configurableSeverity": False},
+            ["diagnostics[0].defaultSeverity may be ignore only when configurableSeverity is true"],
+        ),
+        ({"defaultSeverity": "off", "configurableSeverity": True}, ["diagnostics[0].defaultSeverity is invalid"]),
+    ],
+)
+def test_an_off_by_default_rule_must_have_a_configurable_severity(entry_fields, expected):
+    problems: list[str] = []
+    diagnostic_catalog._validate_catalog(_catalog_with(entry_fields), problems)
+    assert problems == expected
