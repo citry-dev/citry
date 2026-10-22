@@ -1126,11 +1126,11 @@ size in `og_card.py`.
 
 A README that ships outside the repository (PyPI, the VS Code Marketplace) is
 rendered on that host's own domain, where a repo-relative path such as
-`docs/assets/benchmark.png` or `./LICENSE` resolves against *their* site and
+`docs/assets/citry-wordmark.png` or `./LICENSE` resolves against *their* site and
 404s. GitHub resolves the same path fine, so the breakage is invisible until
 someone opens the package page. Every reference in those files therefore has to
 be absolute: images at `https://raw.githubusercontent.com/...`, repository files
-at `https://github.com/citry-dev/citry/blob/main/...`. The
+at `https://github.com/citry-dev/citry/blob/...`. The
 `published_readme_links` validator enforces this, so a relative path fails the
 gate rather than shipping.
 
@@ -1140,10 +1140,11 @@ published version; the new description appears with that package's next
 release. Do not create an otherwise-empty patch release merely to refresh the
 description unless maintainers explicitly choose to do so.
 
-A released description keeps loading its images from `main`. The READMEs of
-`citry` 0.4.0 to 0.5.1 load `docs/assets/benchmark.png` this way. Published
-descriptions never change, so keep such an image on `main` even after the
-current README stops using it.
+A released description never changes, so its links must not depend on what
+`main` holds later. Point each image and file link in a published README at a
+commit SHA or a release tag that exists when the package is published, not at
+`main`. A link to `main` breaks for every old release as soon as the file
+moves or is deleted.
 
 #### Benchmark chart images in the README
 
