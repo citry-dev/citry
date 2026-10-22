@@ -161,6 +161,39 @@ These rules need facts that only the loaded application gives, so
   and adds one note for the run (`citry.check.url-checker-failed`). A path
   that a proxy serves is reported even though it works, which is why the
   rule is a warning.
+- `rule_unknown_inject_key` (`citry.template.unknown-inject-key`, a warning
+  by default): a `self.inject("key")` with a literal key and no default,
+  in a component class or a base class or mixin it extends, whose key
+  reaches none of the registered components that run that code.
+  `citry/_provide_keys.py` reads every registered template once and
+  records each component tag, each `<c-slot>`, and the `<c-provide>` and
+  `<c-fill>` elements around them. The keys that reach a component are the
+  literal keys of `render(provides={...})` calls in the project's Python
+  files, plus, for each place that uses its tag, the keys of the
+  `<c-provide>` elements around the tag, the `provide()` keys of the
+  component whose template it is, the keys the component whose `<c-slot>`
+  shows slot content provides (its `provide()` keys and the `<c-provide>`
+  keys around that `<c-slot>`), and the keys that reach the component whose
+  template it is. A dynamic `<c-component>` may render any component, so
+  the keys around it count for every component. Templates can use each
+  other in a cycle, so the sets grow until they stop changing. A component
+  no template uses, or one used only inside its own cycle of templates,
+  gets every literal key the app provides. A `<c-provide c-key>`, a
+  `provide()` key that is an expression, a tag inside a dynamic
+  `<c-component>`, markup in a component attribute, a component Python
+  builds inside a component's methods or passes to another component
+  (test files aside), or a component whose Python source cannot be read
+  and whose compiled methods name `provide` makes the answer "cannot
+  tell", and nothing is reported below it. Such a source also turns off
+  the every-key comparison; a template that cannot be parsed, or a project
+  folder with more than 20,000 Python files, turns the rule off. Citry's
+  own classes and the standard library's (found by file location) are not
+  read, and calls in installed packages are not reported. A `provides`
+  dictionary built elsewhere, a `provide()` in a helper function, a
+  template string rendered from Python, and `self.unprovide()` are not
+  read, which is why the rule is a warning. Slot answers are worked out
+  once per (component, slot) pair, repeated until they stop changing, so
+  slots passed on through many components stay fast.
 
 Each of these rules reports nothing when it cannot read its input:
 component JavaScript that does not parse, `css_data()` keys that are not
@@ -196,6 +229,17 @@ editor reports `rule_unknown_url` only for a path the worker answered, so a
 link added after the app loaded is checked at the next load. When the
 worker sends `checked: false`, or runs an older Citry without path checks,
 the editor checks no links.
+
+The worker also sends, as `inject_keys: {"checked", "classes"}`, the keys
+that reach each component class (with its file, qualified name, and the
+definition ids of the registered components that run it, for their lint
+severities). The editor reads the `self.inject()` calls from the open
+buffer, so a call typed after the app loaded is checked at once, while a
+provider added since then counts only after the next load. When the worker
+sends `checked: false`, or runs an older Citry, the editor checks no keys. A
+record with a missing or wrong-typed field fails the app load as a protocol
+mismatch, like the other worker fields; a field a newer Citry adds is
+ignored.
 
 Two type checks need the loaded app too, and run in the editor and in
 `citry check --types`. The worker sends, for each component, the fields

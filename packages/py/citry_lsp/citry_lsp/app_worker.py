@@ -67,6 +67,12 @@ except ImportError:  # pragma: no cover - an older citry in the app's environmen
     # Without it the worker sends no link verdicts, and the editor checks no links.
     engine_path_verdicts = None  # type: ignore[assignment]
 
+try:
+    from citry._provide_keys import engine_inject_keys
+except ImportError:  # pragma: no cover - an older citry in the app's environment
+    # Without it the worker sends no provide keys, and the editor checks no inject() keys.
+    engine_inject_keys = None  # type: ignore[assignment]
+
 if TYPE_CHECKING:
     from citry import TemplateAnalysis
     from citry.introspection import ComponentCatalog
@@ -154,6 +160,7 @@ def _run(app: str, workspace: Path) -> dict[str, object]:
         "source_analysis": _source_analysis(engine, catalog, analysis, app),
         "extensions": _extension_analysis(engine),
         "paths": _path_verdicts(engine),
+        "inject_keys": _inject_keys(engine, workspace),
     }
 
 
@@ -170,6 +177,21 @@ def _path_verdicts(engine: Citry) -> dict[str, object]:
         return engine_path_verdicts(engine)
     except Exception:  # noqa: BLE001 - a failing link check must not stop the editor from loading the app
         return {"checked": False, "verdicts": {}}
+
+
+def _inject_keys(engine: Citry, workspace: Path) -> dict[str, object]:
+    """
+    Work out which provide keys reach each component class, while the app is loaded.
+
+    The editor compares the ``self.inject()`` keys in the file being edited
+    with these, so it needs no loaded app of its own.
+    """
+    if engine_inject_keys is None:
+        return {"checked": False, "classes": []}
+    try:
+        return engine_inject_keys(engine, workspace)
+    except Exception:  # noqa: BLE001 - a failing walk must not stop the editor from loading the app
+        return {"checked": False, "classes": []}
 
 
 def _extension_analysis(engine: Citry) -> dict[str, object]:

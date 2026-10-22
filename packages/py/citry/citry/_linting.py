@@ -217,6 +217,7 @@ class TemplateLintInfo:
     rule_undeclared_css_class: LintSeverity = "ignore"
     rule_undeclared_css_variable: LintSeverity = "ignore"
     rule_unknown_url: LintSeverity = "warning"
+    rule_unknown_inject_key: LintSeverity = "warning"
 
     def __post_init__(self) -> None:
         if (

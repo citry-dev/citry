@@ -88,6 +88,12 @@ theme = self.inject("theme", None)
 locale = self.inject("locale", "en")
 ```
 
+!!! info "Missing keys are reported before the page renders"
+    `citry --app ... check` and the editor warn when a
+    `self.inject("key")` without a default reads a key that no component
+    above it provides, such as `bord` under a page that provides `board`.
+    See [Keys nothing provides](/ide/template-linting/#find-unknown-inject-keys).
+
 ## `provide()` from Python
 
 Call [`Component.provide()`][citry.Component.provide] in a data method when
