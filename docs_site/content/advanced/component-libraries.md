@@ -119,7 +119,7 @@ The components then work in templates like any other registered component:
 <c-acme-badge label="Ready" tone="success" />
 ```
 
-## Use it from Python
+## Use components in Python
 
 Calling a library component records its inputs. Citry builds the actual
 component when a template inserts the value, using the `Citry` instance
@@ -177,7 +177,7 @@ badge = Badge(label="Ready")
 html = str(badge)
 ```
 
-## Show it in the editor
+## Set up VS Code
 
 The Citry VS Code extension can read the manifest directly. Point
 `citry.app` at it:

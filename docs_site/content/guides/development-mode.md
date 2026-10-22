@@ -1,21 +1,20 @@
 ---
 title: Development mode
-description: Turn on development mode while you develop, so Citry warns when two elements share an id or when Vue changes the page as it starts, and reads translations straight from your .ftl files.
+description: Turn on development mode while you work on your app, so Citry warns about mistakes on the running page and reads translations straight from your .ftl files.
 ---
 
 # Development mode
 
-Some mistakes show up only on a whole page while it runs. Two components
-both write `id="board"`, so a label points at the wrong element. A panel
-opens the moment Vue starts, so the page jumps. Each template looks right
-on its own, so the editor and `citry check` cannot see these.
+Development mode makes Citry favor fast feedback over render speed
+while you work on your app. It warns about mistakes that only show up
+on a whole running page, such as two components that both write
+`id="board"`, or a part of the page that changes when Vue starts. It
+also reads translations straight from your `.ftl` files.
 
-Pass `mode="development"` while you develop, and Citry checks the running
-page for them and warns you. It also reads translations straight from
-your `.ftl` files, so you can edit them without compiling. Keep the
-default, `"production"`, for deployed apps.
+Pass `mode="development"` on your own machine, and keep the default,
+`"production"`, for deployed apps.
 
-## Turn it on
+## Turn on development mode
 
 Pick the mode where you create the [Citry][citry.Citry] instance. Reading
 it from an environment variable keeps one code path for both:
@@ -31,9 +30,9 @@ app = Citry(mode="development" if debug else "production")
 
 Any other value raises `ValueError` when you create the instance.
 
-## What it turns on
+## What development mode changes
 
-Development mode turns on three things:
+Development mode changes three things:
 
 - When you turn a page into HTML, such as with `str(page)`, Citry warns
   if two elements on it share an `id`. See
