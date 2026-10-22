@@ -1,6 +1,6 @@
 # Design: development and production mode
 
-**Status (2026-07-25): proposal, partially implemented.** The `Citry(mode=...)`
+**Status (2026-10-21): proposal, partially implemented.** The `Citry(mode=...)`
 setting is implemented. Its debug-extension consumer (section 4) is written but
 temporarily gated off (`extension._AUTO_DEBUG_IN_DEVELOPMENT = False`) pending a
 bug: the debug extension's render-cache participation turns a cached
@@ -8,7 +8,8 @@ bug: the debug extension's render-cache participation turns a cached
 uninvoked instance that still names a parent), even with both highlight flags
 off, so auto-registering it in development would break dev pages that use
 cache. The client ownership graph consumer (section 3) is specified here and
-lands in a following change. Broader consumers (verbose diagnostics, source
+lands in a following change. The two page checks in section 5 are
+implemented (2026-10-21). Broader consumers (verbose diagnostics, source
 maps for the browser error overlay, cache behavior) are future work. The
 setting is the single source of truth for all of them.
 
@@ -25,9 +26,9 @@ clearest case is the client ownership graph. A **component-tag client
 binding** is a browser-side `$c-props`, `@click`, or `@c-poll.5s` binding
 resolved from a nested `<c-*>` tag. Every recorded nested component tag,
 client binding, fill, and slot carries a byte range into its template source
-so a future error overlay can show the authored snippet. Production never reads those
-offsets, and they are roughly half of the uncompressed manifest, so shipping
-them to every visitor pays for a feature only a developer uses.
+so a future error overlay can show the authored snippet. Production never
+reads those offsets, and they are roughly half of the uncompressed manifest,
+so shipping them to every visitor pays for a feature only a developer uses.
 
 The server is the only place that can decide this. It knows the component
 tree, it builds the manifest, and it is where a framework-wide "this is a
@@ -94,7 +95,188 @@ hits the normal duplicate-name rejection. In production the extension is not
 built in, so a project may still opt into it explicitly for a production-like
 build that wants boundaries.
 
-## 5. Open questions
+## 5. Third and fourth consumers: page checks
+
+Issue #207 measured two mistakes that only show on a whole, running page.
+`"development"` turns on a check for each. `"production"` runs neither, and a
+production page does not load the browser check; the runtime keeps only the
+short call that looks for the browser check's script.
+
+### 5.1 Browser render differs from served HTML
+
+The server writes a page's HTML for Vue to adopt. Where it cannot write a
+part exactly as Vue would, it marks the nearest element as a shell
+(`data-allow-mismatch="children"`, see
+[`vue_ssr_selected_tree_plan.md`](vue_ssr_selected_tree_plan.md)); Vue builds
+that element's children in the browser and never reports a difference there.
+A shell appears whenever a component is called with listeners or extra
+attributes, so a mistake such as `created() { this.open =
+window.matchMedia(...).matches }` silently changes the page as Vue starts
+(benchmark case m14).
+
+How it works:
+
+1. In development the document configuration of every Vue page carries
+   `"development": true`. When the page hydrates and has served shell
+   contents (`"emptyShells": true`), it also inlines
+   `citry/_vue/dev_checks.js` as a classic script before the module script
+   that starts the app.
+2. `client.js` asks that script to keep each shell's served child nodes
+   (`CitryVueDevChecks.captureShells`) right before it empties the shells,
+   in the same task as the mount.
+3. Right after `vueApp.mount()` returns, the script compares the kept nodes
+   with what Vue built and logs one `console.warn` per shell that differs,
+   naming the component whose template wrote the differing element (the
+   vnode's `ctx`), the element, and the first difference. A failure inside
+   the check is logged with `console.error` and never stops the app. By then
+   Vue has run the `mounted()` hooks, but the re-render their state changes
+   ask for waits for Vue's scheduler, so the comparison sees the first
+   render.
+
+The server writes a shell's contents from the values it knows: it leaves out
+a list, a text node or an attribute only the browser can compute, and it
+writes every branch of a condition only the browser can test. So the
+comparison is one-sided. It pairs elements of the same tag in order. A score
+is how well two elements agree, used to choose which served element pairs
+with which browser element. The check picks the pairing with the most
+agreeing pairs and, among those, the most pairs, so an element the browser
+changed still pairs with its served copy and is reported, unless another
+browser element agrees with that copy. When the server wrote more elements of
+a tag under one parent than the browser built, one may be a branch only the
+server sent; for that tag the check scores each pair by its whole subtree. So
+when the server writes both branches of a browser-only `v-if`/`v-else` with
+the same tag, the browser's branch pairs with its own served copy.
+
+A pair of that tag is first checked cheaply: the two subtrees' texts must be
+able to agree, given that one side may hold text the other leaves out. When
+each side holds text the other lacks, as in a branch that holds both a nested
+browser-only `v-if` and text only the browser computes, this check rules the
+pair out. A browser element that the pairing leaves without an agreeing
+partner then has those ruled-out pairs compared in full, and when one of them
+agrees, the elements pair again. For other tags the score counts the
+elements' own attributes and text, so a server-known list whose rows hold
+their text in child elements is still reported when `created()` reorders it,
+unless a served-only element of the same tag shares the parent.
+
+The check ignores elements, attributes and text that only one side has,
+ignores comments and whitespace, and reports a served attribute value the
+browser changed or removed, a served class or style property missing in the
+browser, or served text the browser shows differently. An attribute Vue sets
+as a DOM property (`value`, `checked`, `selected`, `muted`) is compared
+through the property; when the browser element has no such attribute, the
+warning names the property's value. A `display: none` only the browser has is
+skipped, because the server keeps an element's own `display` when only the
+browser can test its `v-show`.
+
+When one parent has so many children that pairing them would take more than
+40,000 steps, its children are not compared. Whole-subtree scores cost more
+at every level, so a shell spends at most about 200,000 steps on them,
+counting each score, the subtree text it reads and searches, and the nodes,
+text and element pairs compared inside it, and a score nests at most 64
+levels deep. Past that, pairs not yet compared are scored by their own
+attributes and text only, and two same-tag branches can again pair the wrong
+way and warn.
+
+`data-allow-mismatch` on an element in Vue's render silences the kinds it
+names, with Vue's own reading of the value: the nearest element carrying it
+decides a text or children difference.
+
+Error modes and limits:
+
+- Only values the server has are compared: `js_data()` keys and prepared
+  values from Python. State that starts in `data()` or `setup()` exists
+  only in the browser, so the server leaves out what reads it and the
+  check never sees it.
+- Content meant to differ (a clock that `created()` sets from a
+  `js_data()` value, data from `localStorage` written over a server value)
+  warns too. The author adds `data-allow-mismatch` (empty
+  for every kind, or `text`, `children`, `class`, `style`, `attribute`) to
+  the element, as for Vue's own hydration warnings, or moves the code to
+  `mounted()`.
+- An element or text that only one side has is never reported, so a
+  `v-if` whose server-known condition flips in the browser warns only
+  through a value next to it, such as the `:aria-expanded` in m14. For the
+  same reason a server-known list that `created()` filters, or a reordered
+  list whose rows hold their text directly, can go unreported: a removed or
+  moved row reads as an element only one side has.
+- A browser-only `v-if` next to a browser-only list of the same tag, under
+  one parent, can pair the wrong way and warn: the list's elements hide the
+  served-only branch from the element count, so the pairing can match a
+  branch with a list element or with the other branch. Giving the branches
+  different classes does not avoid it in every order. The author puts the
+  list in its own wrapper element, or adds `data-allow-mismatch` to each
+  element a warning names.
+- Only shells are compared. Elements Vue adopts are Vue's to check: its
+  production build logs "Hydration completed but contains mismatches."
+  without details. A page that cannot hydrate sends HTML with Vue's
+  bindings unevaluated, and a shell the server sent empty has nothing to
+  compare, so neither is checked.
+- The comparison sees the first render only: state changed in `mounted()`,
+  after an `await`, or by a later update is not compared, because Vue's
+  scheduler re-renders after `mount()` returns. A direct DOM edit in a
+  `mounted()` hook or a directive's `mounted` hook is already on the page
+  and can be reported.
+- Text from a browser-only `v-if` over bare text, merged by the browser's
+  parser with text only the browser knows, can be reported; wrapping the
+  text in an element avoids it.
+
+Alternatives considered: a static warning when `data`, `setup` or
+`created` reads `window` and writes state (rejected in the #207 proposal for
+its false reports), and comparing component state before and after
+`created()` (it cannot tell whether the changed key reaches the HTML).
+Shipping the check inside the runtime bundle was rejected because standalone
+pages inline the runtime, so production pages would carry its bytes.
+
+### 5.2 One id on two elements of a page
+
+The `citry.template.duplicate-id` rule sees one template. The same id from
+two components, or from one component rendered twice, needs the whole page
+(benchmark case m57). Serialization already builds each component's own HTML
+with its children as `<template>` placeholders, so in development
+`serialize.py` passes each of those pieces to `PageIdCheck`
+(`citry/_page_ids.py`), which counts every `id` and issues one
+`RuntimeWarning` per serialization listing each repeated id with the
+components (and their template origins) that wrote it. A page Vue hydrates
+skips building its body's components; the check builds them separately and
+discards the result, so the serialize hooks receive the same placeholders as
+in production.
+
+The check runs on the server because only the server can name every
+component, including components that have no browser code. A browser check
+after mount would also see ids from Vue bindings (`:id`), rows a Vue
+`v-for` repeats, and ids that browser code adds, but it could not name
+server-only components and would run only on pages that load Vue.
+
+Error modes and limits:
+
+- Ids inside a `<template>` or `<noscript>` and on or inside an element
+  with `v-if`, `v-else-if`, `v-else` or `v-for` are not counted: the
+  browser decides whether they exist. The same holds for a child
+  component whose placeholder sits there; the scanner returns those
+  placeholders and the frame builder skips them and their descendants. A
+  Citry `<c-if>` or `<c-for>` has already run, so its rendered branches
+  and rows count.
+- A `v-if` or `v-else` written on a component's own tag does not reach
+  the caller's HTML (it holds only the child's placeholder), so the child
+  is counted, and the same component in both branches can warn.
+- A component declared `simple` writes its HTML into its caller's, so its
+  ids are named under the caller.
+- Ids in `<c-raw>` contents and trusted `Markup` count, because the browser
+  shows them; they are named under the component whose HTML holds them,
+  which for a slot fill is the component that renders the slot.
+- Ids that a Vue binding or browser code sets are not seen.
+- Each serialization is one page. A fragment, or a component an Events
+  action renders again, is checked on its own, so an id it shares with the
+  page it lands in is missed.
+- The warning goes through Python's `warnings` module, so a repeated
+  identical message is shown once per process under the default filters.
+  The cost, in development only, is one HTML parse of the page per
+  serialization, plus a second build of the body's components on a page
+  Vue hydrates.
+- A component whose HTML the parser cannot read is skipped without a
+  warning, so its ids are not counted.
+
+## 6. Open questions
 
 - whether host integrations should default `mode` from a detected environment
   variable or require an explicit value;
@@ -105,7 +287,7 @@ build that wants boundaries.
 - which other outputs (diagnostic verbosity, cache bypass, unminified client
   assets) should read `mode` rather than their own separate flags.
 
-## 6. Non-goals
+## 7. Non-goals
 
 `mode` is not a security boundary and not a correctness switch: a component
 renders the same tree in both modes, and production still validates everything

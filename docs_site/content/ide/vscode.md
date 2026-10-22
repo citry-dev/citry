@@ -396,7 +396,9 @@ moment to appear after you open or save a file. A value that ty types as a
 class or as `Any`, or cannot type, stays `any`. A value that ty types as a
 standard library type that JSON cannot carry, such as a `PurePosixPath`, a
 `datetime`, or a set, gets the `citry.js-data.unsupported-type` warning
-described next, and `citry check --types` reports it too.
+described next, and `citry check --types` reports it too. So does a value
+that ty types as a [`Secret`][citry.Secret], or as a list or dict that
+holds one, because rendering the component would fail.
 
 Returning a whole class instance, such as `kwargs.task`, is a
 [`citry.js-data.unsupported-type`](/ide/diagnostics/#citry.js-data.unsupported-type)
@@ -500,6 +502,15 @@ The parameters of an inline function, such as
 `@drop-task="(payload) => move(payload)"`, get the same type, and so does
 `$event` in an `@c-drop-task` binding on that tag.
 
+A listener that names a parent method without calling it, such as
+`@drop-task="move"`, is checked too, because Vue calls the method with the
+emitted values. TypeScript reports a method that needs more values than the
+child sends, or a parameter of an unrelated type, such as a number where
+the child sends a string. [Method listeners](#method-listeners) lists
+what is not checked, and
+[Catch payload mistakes](/vue/props-and-events/#catch-payload-mistakes)
+shows an example.
+
 On an HTML element, `$event` is the DOM event, such as `KeyboardEvent` for
 `@keydown`. A name the DOM does not define, such as `@board:notice`, is a
 `CustomEvent`, so `$event.detail` works.
@@ -585,6 +596,7 @@ TypeScript's own.
 | A syntax error in JavaScript inside a Python string | `const = 1` | 1000 to 1999 |
 | A bound HTML attribute value of the wrong type | `:style="1"` | 2345 |
 | A child component prop value of the wrong type | `:open="String(shown)"` for a Boolean prop | 2345 |
+| A parent method that does not accept a child event's values | `@drop-task="move"` where `move` needs two values | 2345 |
 
 A bound attribute on an HTML element is checked against Vue's types for that
 attribute, so `:style="1"` is an error while `:style="{ color: 'red' }"`
@@ -840,8 +852,40 @@ are not checked.
 
 A listener for an event the child does not declare gets the DOM event of
 that name as `$event`, because Vue then passes the listener to the child's
-root element. When the child lists its events as an array, or Citry cannot
-read its `emits`, `$event` is `any`.
+root element. A listener that names a method without calling it, such as
+`@click="select"`, is checked against that DOM event too. This holds even
+when the child lists its events as an array. For a declared event of a
+child whose `emits` is an array, or any event of a child whose `emits`
+Citry cannot read, `$event` is `any`.
+
+### Method listeners { #method-listeners }
+
+The editor and `citry check --types` check a listener that names a
+parent method without calling it, such as `@hide="hideCard"`, against
+the values the child declares in `emits`, with these rules:
+
+- A method that takes fewer values than the child sends passes, because
+  JavaScript ignores extra arguments.
+- The child may leave out a value whose parameter has a default, or is
+  marked optional in a `@param {string} [reason]` comment above the
+  method.
+- A method whose parameters have no type comment takes any values, so it
+  is not checked. Once one parameter has a type, every parameter without
+  a default counts as required.
+- With the array form, such as `emits: ["hide"]`, or `null` in place of
+  the function, as in `hide: null`, a declared event's values can be
+  anything, so its listener is not checked. For an event the child does
+  not declare, see [Undeclared child events](#undeclared-child-events).
+- A parameter whose type is narrower than the payload, such as
+  `"a" | "b"` where the child sends any string, is not reported. The
+  check runs TypeScript with its `strict` option off, and TypeScript then
+  accepts a method whose parameter type is narrower than the value it
+  receives.
+- Only a name from the parent's `methods` is checked. A function stored
+  in `data()`, or a member such as `store.hide`, is not.
+- A listener that calls the method, such as `@hide="hideCard($event)"`,
+  or an inline function, is checked like any other call: `$event` has the
+  payload's type, and TypeScript reports a missing argument.
 
 ### Typing inside `data()`
 

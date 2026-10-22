@@ -218,6 +218,24 @@ def _is_const_marker(value: Any) -> bool:
     return type(value) is _ConstProxy
 
 
+def _unwrap_const_markers(value: Any) -> tuple[bool, Any]:
+    """
+    Remove ``Const`` markers around a value by their exact type, or return False for a marker loop.
+
+    ``const_value()`` tests the markers with ``isinstance``, which reads
+    ``__class__`` from the wrapped value and so may run the value's own
+    code, as a lazy object does. Code that must not run it, such as a
+    static check, uses this instead.
+    """
+    seen: set[int] = set()
+    while _is_const_marker(value):
+        if id(value) in seen:
+            return False, value
+        seen.add(id(value))
+        value = value.__wrapped__
+    return True, value
+
+
 def _is_builtin_container(value: Any) -> bool:
     """Detect traversable exact builtins without invoking an opaque type's equality."""
     value_type = type(value)

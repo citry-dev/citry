@@ -110,11 +110,11 @@ and wrapped by Python modules under
 [`packages/py/citry_core/citry_core/`](../../packages/py/citry_core/citry_core/).
 These four must stay in sync (see CLAUDE.md Mechanism 4). The
 `template_parser` module is registered in `lib.rs` (`parse_template`,
-`compile_template`, and the AST classes), alongside `safe_eval` and
-`html_transform`. The `i18n` submodule exposes ICU4X locale canonicalization
-and direction lookup plus the checked Fluent catalog runtime. The language-
-neutral message code lives in `citry_i18n`; `citry_core_py` only wraps it for
-Python.
+`compile_template`, and the AST classes), alongside `vue`, `html_transform`,
+`i18n`, `safe_eval`, and `template_formatter`. The `i18n` submodule exposes
+ICU4X locale canonicalization and direction lookup plus the checked Fluent
+catalog runtime. The language-neutral message code lives in `citry_i18n`;
+`citry_core_py` only wraps it for Python.
 
 ---
 

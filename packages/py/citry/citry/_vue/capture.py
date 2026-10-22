@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from citry.citry_context import CitryContext
     from citry.citry_element import CitryElement
     from citry.citry_render import PreparedRenderPart, RenderPart
+    from citry.citry_template import CitryTemplate
     from citry.nodes import BodyItem, FillSink
 
 
@@ -432,6 +433,10 @@ class PreparedElementOpen:
     runtime_events_candidate: bool = False
     runtime_poll_bindings: tuple[Mapping[str, object], ...] = ()
     has_spread: bool = False
+    # The loaded template this opening was written in, so an error can name
+    # it and count the line from its top. It names a place, not a value, so
+    # it takes no part in comparing two openings.
+    template: CitryTemplate | None = field(default=None, compare=False, repr=False)
     authored_attrs: tuple[str, ...] = field(init=False, repr=False)
     data_attrs: Mapping[str, object] = field(init=False, repr=False)
 
@@ -465,6 +470,87 @@ def format_prepared_element_attrs(value: PreparedElementOpen) -> tuple[str, ...]
             if formatted:
                 rendered.append(formatted)
     return tuple(rendered)
+
+
+def _line_and_column(prefix: str, *, with_column: bool) -> str:
+    """Return where the end of ``prefix`` sits, as ``line N`` or ``line N, column M``, counting from 1."""
+    line = prefix.count("\n") + 1
+    if not with_column:
+        return f"line {line}"
+    column = len(prefix.rsplit("\n", 1)[-1]) + 1
+    return f"line {line}, column {column}"
+
+
+def template_location(
+    source: str,
+    byte_offset: int,
+    origin: str | None,
+    template_source: str | None,
+    *,
+    with_column: bool = False,
+) -> str:
+    """
+    Describe where a byte offset into authored template text sits, for error messages.
+
+    ``source`` is the text the offset counts into: the component's template,
+    or the value of a template-valued attribute such as ``c-body="..."``
+    inside it. ``origin`` and ``template_source`` name the loaded template
+    and give its text, so an attribute's offset can be shifted to count from
+    the top of the template. Returns, for example,
+    ``in template cards.html, line 4``, or, when the attribute's value cannot
+    be found in the template text,
+    ``in template cards.html, inside a template-valued attribute (line 2 of its value)``.
+    """
+    prefix = source.encode("utf-8")[:byte_offset].decode("utf-8", errors="ignore")
+    if template_source is not None and source != template_source:
+        # A template-valued attribute's text counts from the attribute value.
+        # Shift it by where that value starts, when it appears in the
+        # template once; otherwise the start cannot be told apart.
+        start = template_source.find(source)
+        if start < 0 or template_source.find(source, start + 1) >= 0:
+            # Count within the value instead, and say so, so the reader does
+            # not look for the line from the top of the template.
+            within = _line_and_column(prefix, with_column=with_column)
+            inside = f"inside a template-valued attribute ({within} of its value)"
+            return f"in template {origin}, {inside}" if origin else f"in its template, {inside}"
+        prefix = template_source[:start] + prefix
+    position = _line_and_column(prefix, with_column=with_column)
+    if not origin:
+        return f"on {position} of its template"
+    # "In template" matches the template parser's own errors, and tells the
+    # reader that an inline template's line counts from the template string,
+    # not from the top of the Python file.
+    return f"in template {origin}, {position}"
+
+
+def element_key_conflict_message(value: PreparedElementOpen, authored_name: str | None) -> str:
+    """
+    Explain an element whose ``#c-key`` and another attribute both set its Vue key.
+
+    ``authored_name`` is the attribute the template writes beside ``#c-key``,
+    such as ``key``, or None when the other key is a Python value from
+    ``c-key`` or ``c-bind``. The parser already rejects ``:key`` this way;
+    this covers the forms only a render can see.
+    """
+    template = value.template
+    # Spans are byte offsets into the authored template source.
+    location = template_location(
+        value.source,
+        value.span[0],
+        template.origin if template is not None else None,
+        template.source if template is not None else None,
+        with_column=True,
+    )
+    where = f"the <{value.tag}> element {location}"
+    if authored_name is None:
+        return (
+            f"{where[0].upper()}{where[1:]} has '#c-key' and also gets a 'key' attribute from Python, through"
+            " c-key or c-bind. Both set the element's key. Keep '#c-key' and remove the other."
+        )
+    return (
+        f"'{authored_name}' on {where} sets the same attribute as '#c-key'. "
+        f"Keep '#c-key' if Python should set the key, or remove '#c-key' and keep '{authored_name}'."
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1074,6 +1160,9 @@ class PreparedElementOpenNode(ElementAttrsNode):
             self._runtime_events_candidate,
             runtime_poll_bindings,
             self._has_spread,
+            # The context renders the template this node was parsed from, also
+            # for a node inside a template-valued attribute of that template.
+            context.template_record,
         )
 
     def _data_attr_span(self, name: str) -> tuple[int, int]:

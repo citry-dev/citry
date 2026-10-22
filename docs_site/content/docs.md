@@ -54,7 +54,7 @@ The server steps use FastAPI so they can show complete, runnable code.
 Citry also works with Django, Flask, Starlette, and other
 [ASGI and WSGI applications](/advanced/web-frameworks/).
 
-## Try it in the browser
+## Try Citry in the browser
 
 - [Playground](/playground/): write Python components and render them in
   the browser.

@@ -2,12 +2,24 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Mapping
 from typing import cast
 
 from citry.constness import const_value, is_const
+from citry.secret import Secret
 from citry.util.html import decode_attribute_entities
+
+
+class _SecretInBrowserDataError(TypeError):
+    """
+    Raised when data bound for the browser holds a ``citry.Secret``.
+
+    A subclass of the ``TypeError`` every other non-JSON value raises, so
+    existing handlers keep working, while a caller that knows the component
+    can tell this case apart and name the key that holds the secret.
+    """
 
 
 def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
@@ -46,10 +58,59 @@ def _json_plain(value: object, _ancestors: set[int] | None = None) -> object:
             return [_json_plain(item, ancestors) for item in value]
         finally:
             ancestors.remove(id(value))
+    # Checked only after every JSON type, so ordinary data pays nothing. A
+    # Secret is not a str, so without this branch it would still be refused,
+    # but by a message that does not say why or what to do.
+    if type(value) is Secret:
+        raise _SecretInBrowserDataError(
+            "data sent to the browser must not contain a citry.Secret; read the value on the server instead"
+        )
     raise TypeError(
         "data sent to the browser must contain only dicts, lists, strings, numbers, booleans, and None, "
         f"got {type(value).__name__}"
     )
+
+
+def _secret_key_path(value: object) -> str | None:
+    """
+    Return where the first ``citry.Secret`` sits inside data bound for the browser, or None when there is none.
+
+    The path is written the way Python reads it back, such as
+    ``["config"]["token"]`` or ``["rows"][0]``, and is empty for a Secret at
+    the top. It walks the same containers in the same order as
+    ``_json_plain``, so after ``_json_plain`` raised for a Secret this finds
+    that same Secret. It runs only after that error, so rendering never
+    pays for it.
+    """
+    found = _secret_key_parts(value, set())
+    return None if found is None else "".join(f"[{json.dumps(part, ensure_ascii=False)}]" for part in found)
+
+
+def _secret_key_parts(value: object, ancestors: set[int]) -> list[str | int] | None:
+    """Return the keys leading to the first Secret, innermost last, or None."""
+    if is_const(value):
+        value = const_value(value)
+    if type(value) is Secret:
+        return []
+    if isinstance(value, Mapping):
+        items: list[tuple[str | int, object]] = [(str(key), item) for key, item in value.items()]
+    elif isinstance(value, (list, tuple)):
+        items = list(enumerate(value))
+    else:
+        return None
+    # A container that holds itself would loop forever; _json_plain reports
+    # the loop itself, so here it only stops the walk.
+    if id(value) in ancestors:
+        return None
+    ancestors.add(id(value))
+    try:
+        for key, item in items:
+            found = _secret_key_parts(item, ancestors)
+            if found is not None:
+                return [key, *found]
+    finally:
+        ancestors.remove(id(value))
+    return None
 
 
 def _first_non_string_key(value: Mapping[object, object]) -> str:

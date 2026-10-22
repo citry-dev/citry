@@ -72,6 +72,11 @@ def _diagnostic_block(item: dict[str, Any]) -> str:
     # and only then the exact conditions and which tools report it.
     fix = f"<p><strong>Fix:</strong> {escape(item['fix'])}</p>" if item.get("fix") else ""
     configurable = " Your application can change this severity." if item.get("configurableSeverity") else ""
+    severity_text = f"<code>{severity}</code>.{configurable}"
+    if item["defaultSeverity"] == "ignore":
+        # An off-by-default rule reports nothing until the reader turns it on,
+        # so the entry says that instead of naming a severity no one sees.
+        severity_text = "off (<code>ignore</code>). Your application can turn it on."
     return (
         f'<section class="diagnostic-reference" aria-labelledby="{code}">'
         f'<h2 id="{code}" class="toc-heading"><code>{code}</code></h2>'
@@ -80,7 +85,7 @@ def _diagnostic_block(item: dict[str, Any]) -> str:
         f"{_examples_block(item.get('examples', []))}"
         f"{fix}"
         f"<p><strong>When this appears:</strong> {when}</p>"
-        f"<p><strong>Default severity:</strong> <code>{severity}</code>.{configurable}"
+        f"<p><strong>Default severity:</strong> {severity_text}"
         f" <strong>Reported by:</strong> {reported_by}.</p>"
         "</section>"
     )

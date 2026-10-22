@@ -54,6 +54,7 @@ def capture_instance(extension: EventsExtension, ctx: OnComponentDataContext) ->
             max_bytes=meta.max_bytes,
             storage=meta.storage,
             cache=ctx.citry.cache,
+            component_name=comp_cls.__name__,
         )
         values = public_state_values(state, meta)
     else:

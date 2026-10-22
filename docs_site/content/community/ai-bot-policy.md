@@ -19,7 +19,7 @@ the docs, and there is no list of named bots to keep up to date.
 The same `User-agent: *` group also has `Disallow` lines for older
 documentation versions, so no crawler, search or AI, indexes those pages.
 
-## Why we allow them
+## Why we allow AI bots
 
 Citry is an open-source, community-maintained framework. When AI search and
 AI coding tools can read the docs, people find Citry more easily and write

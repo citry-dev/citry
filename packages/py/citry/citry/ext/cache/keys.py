@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry.constness import const_value, is_const
+from citry.secret import Secret
 
-from .errors import CacheKeyError
+from .errors import CacheKeyError, _secret_cache_key_error
 from .limits import _MAX_KEY_BYTES, _MAX_KEY_DEPTH, _MAX_KEY_NODES
 
 if TYPE_CHECKING:
@@ -368,6 +369,9 @@ def _canonical_cache_tree(value: object, *, path: str, state: _EncodingState, de
         finally:
             state.active.remove(container_id)
 
+    # Checked only after every supported type, so ordinary keys pay nothing.
+    if type(value) is Secret:
+        raise _secret_cache_key_error(path)
     raise CacheKeyError(path, f"unsupported value type {type(value).__name__}")
 
 

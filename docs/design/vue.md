@@ -3399,6 +3399,14 @@ numbers of anchors as the plan lists. `scripts/vue_render_parity/check.py`
 compares the server's HTML with Vue's own `renderToString` for every page
 the non-browser tests prepare.
 
+Those checks cover the server's half. A shell, an element whose children
+Vue builds in the browser, hides the other half: its served contents can
+differ from Vue's first render when browser code sets state before that
+render, and Vue does not report it. With `Citry(mode="development")` the
+runtime compares the two and logs a console warning; a production page has
+no `development` configuration flag and does not load the check. The design
+and its limits are in [`dev_prod_mode.md`](dev_prod_mode.md) section 5.1.
+
 Before compiling, the native compiler parses the generated template to find
 its elements and component calls, and the hydration plan parses it again the
 same way. Both parses read each tag Citry wrote for a component call as a Vue

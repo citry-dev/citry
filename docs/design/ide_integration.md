@@ -8,10 +8,10 @@ with an explicitly bounded static fallback, and the companion language server
 plus VS Code client provide the implemented editor intelligence. The VS Code
 extension 0.1.2 is published on Visual Studio Marketplace and Open VSX.
 `citry-lsp` 0.1.3 and `pygments-citry` 0.2.0 are published on PyPI. The
-original design is the synthesis of a research and design-panel process: five recon reports,
-three competing design drafts, and two adversarial judge verdicts, all in
-[`ide_research/`](ide_research/README.md) and all dated 2026-07-07. Both
-judges ranked the ship-first draft
+original design is the synthesis of a research and design-panel process:
+five recon reports, three competing design drafts, and two adversarial judge
+verdicts, all in [`ide_research/`](ide_research/README.md) and all dated
+2026-07-07. Both judges ranked the ship-first draft
 ([`ide_research/design-A-ship-first.md`](ide_research/design-A-ship-first.md))
 first, so this document builds on that skeleton and grafts the strongest
 elements of the platform-first and ecosystem-first drafts onto it; section 11
@@ -89,6 +89,61 @@ These rules need facts that only the loaded application gives, so
 
 - `rule_misspelled_css_variable` (`citry.css.misspelled-variable`): a
   `var(--name)` one typing slip from a `css_data()` key.
+- `rule_misspelled_css_class` (`citry.css.misspelled-class`, a warning by
+  default): a class in a static `class` attribute that is one typing slip
+  from a class selector in the component's own `css` or `css_file`, when
+  no CSS that Citry reads (listed below) declares the class as written.
+  These slips do not count, because they usually name another class of the
+  same family: a moved, doubled, or dropped digit (`col-1` for `col-12`); a
+  missing final `s` after a letter other than `s` (`tab` for `tabs`, while
+  `progres` for `progress` is reported); one of the short words `close`,
+  `collapse`, `disable`, `enable`, `fade`, `mute`, `show`, `slide`, and
+  `toggle`, as the whole class or its last word after a hyphen or
+  underscore, next to its longer form (`closed`, `collapsed`, `disabled`,
+  `enabled`, `faded`, `muted`, `shown`, `slider`, `toggled`, `toggler`), as
+  in `navbar-toggle` for `navbar-toggler`; and one letter typed twice or
+  left out in a first hyphen part of one or two characters (`p-4` for
+  `px-4`). Every other truncation (`heade` for `header`) and a swap in a
+  short first part (`iu-button` for `ui-button`) are reported.
+- `rule_undeclared_css_class` (`citry.css.undeclared-class`) and
+  `rule_undeclared_css_variable` (`citry.css.undeclared-variable`), both
+  off by default (`"ignore"`): every static class that no CSS Citry reads
+  declares, and every `var(--name)` without a fallback in a component's
+  own CSS that nothing Citry reads sets. They also report classes and
+  properties that a stylesheet or script outside Citry provides, which is
+  why a project turns them on only when its CSS lives in its components.
+
+  The three rules need every registered component's CSS, because a class
+  or a property one component uses may come from another.
+  `citry/_css_scan.py` is the one reader of selectors and custom property
+  declarations (`var()` reads are found by `_css_var_arguments` in
+  `citry/analysis.py`, which the `css_data()` variable rule shares). It
+  records which classes a selector names (anywhere in it, including
+  `@scope` preludes and `[class...]` attribute selectors) and which custom
+  properties a declaration or `@property` rule sets, skipping comments,
+  strings, escapes, `url(...)`, and declaration values. It walks nested
+  blocks with a stack, so deeply nested CSS cannot exhaust Python's call
+  stack. `citry/_css_lint.py` reads each template's static classes,
+  `<style>` elements, `style` attributes, and `:style`/`c-style` bindings,
+  and holds the rules. `_check_registry` keeps each template's classes
+  until every template has been read, then reads the CSS that Citry reads
+  at most once per run, only when a rule asks (`_KnownCss`): every
+  component's `css` or `css_file`, the `Dependencies` stylesheets that are
+  inline (`Style(content=...)` or a pre-rendered `<style>` tag) or local
+  UTF-8 files, its template's `<style>` elements that hold CSS, and, for custom
+  properties, the `--name` strings in its JavaScript and its Python module
+  and every component's `css_data()` keys.
+
+  Error modes: a stylesheet linked by URL, a local file that cannot be
+  read as UTF-8, a `Dependencies` declaration that raises, a `css_lang`
+  source, and CSS an `on_css_loaded` hook adds are not read, so their
+  classes and properties are reported by the two off-by-default rules. A
+  component whose `css_data()` keys cannot be listed is not checked for
+  unset properties, but its keys do not count for other components
+  either. CSS is read close to how a browser reads it: an unclosed
+  comment hides the rest of its stylesheet. The editor does not run these
+  rules, as it does not run the `css_data()` variable rule: it would need
+  every component's CSS from the app worker.
 - `rule_unknown_url` (`citry.template.unknown-url`, a warning by default):
   a literal root-relative `href`, `src`, or `action` path on an HTML
   element that the host app does not serve. Citry does not know the host's
@@ -99,12 +154,13 @@ These rules need facts that only the loaded application gives, so
   query string and fragment removed, whether a route or static file serves
   it, and lists served paths a reader may have meant, from which the rule
   suggests one a typing slip away. `citry check` asks the checkers only
-  about paths a template links to, once per distinct path, and treats a path under Citry's own mounted
-  prefix as served. When no integration registered a checker, it checks no
-  links and adds one note (`citry.check.url-checker-missing`); a checker
-  that raises skips that path and adds one note for the run
-  (`citry.check.url-checker-failed`). A path that a proxy serves is
-  reported even though it works, which is why the rule is a warning.
+  about paths a template links to, once per distinct path, and treats a path
+  under Citry's own mounted prefix as served. When no integration registered
+  a checker, it checks no links and adds one note
+  (`citry.check.url-checker-missing`); a checker that raises skips that path
+  and adds one note for the run (`citry.check.url-checker-failed`). A path
+  that a proxy serves is reported even though it works, which is why the
+  rule is a warning.
 
 Each of these rules reports nothing when it cannot read its input:
 component JavaScript that does not parse, `css_data()` keys that are not
@@ -149,16 +205,16 @@ each typed slot passes to its fill (`slot_data_classes`, built by
 `<c-fill name="footer" data="card">`, carries the component tag and slot
 name on its `TemplatePythonControl.slot_target`, and the ty check file
 (the Python file Citry generates from a template so ty can type-check its
-expressions) declares it as a generated `Mapping[str, Any]` subclass with `T`'s fields,
-not as `T` itself, because the fill receives a `SlotData` mapping. A
-computed slot name, a slot without a finite data class, or a worker on an
-older Citry leaves the name untyped. In the TypeScript check file (the
-JavaScript file citry-lsp generates from a template so tsc can type-check
-its Vue expressions), a `:prop` value on a child component tag is passed to a helper typed from the
-prop's `type` in the child's `$component` source, with `''` and the
-hyphenated prop name added for a Boolean prop, as Vue converts them. A
-prop without a convertible type, or a value a later object `v-bind` can
-replace, stays untyped.
+expressions) declares it as a generated `Mapping[str, Any]` subclass with
+`T`'s fields, not as `T` itself, because the fill receives a `SlotData`
+mapping. A computed slot name, a slot without a finite data class, or a
+worker on an older Citry leaves the name untyped. In the TypeScript check
+file (the JavaScript file citry-lsp generates from a template so tsc can
+type-check its Vue expressions), a `:prop` value on a child component tag
+is passed to a helper typed from the prop's `type` in the child's
+`$component` source, with `''` and the hyphenated prop name added for a
+Boolean prop, as Vue converts them. A prop without a convertible type, or
+a value a later object `v-bind` can replace, stays untyped.
 
 Some classes set a literal template but extend a class imported from
 another module of the project, so reading one file cannot prove they are
@@ -166,16 +222,17 @@ components. Once the app worker has loaded the app, the editor reads the
 component records' `owner_file` and `owner_qualname` for each inline
 template, JavaScript, and CSS, and passes the module-level class names in
 the open file to discovery as `app_components`. Discovery then accepts
-those classes even though the file does not show their base class, so their templates
-get the same checks as any other, and `citry check --types` gets them too
-through `project_check.py`. The worker also says, for each component,
-whether its effective `template_lang` is `None`; a template is read as
-Citry only when every component that renders it says so, because a base
-class in another module may set another template language. When the app
-fails to import, or a class was added or renamed after the app loaded,
-discovery does not accept it: `citry check --static` lists each such class
-as a note, and the editor marks it with an information diagnostic
-(`citry.check.template-not-checked`) until the app loads again.
+those classes even though the file does not show their base class, so
+their templates get the same checks as any other, and `citry check
+--types` gets them too through `project_check.py`. The worker also says,
+for each component, whether its effective `template_lang` is `None`; a
+template is read as Citry only when every component that renders it says
+so, because a base class in another module may set another template
+language. When the app fails to import, or a class was added or renamed
+after the app loaded, discovery does not accept it: `citry check --static`
+lists each such class as a note, and the editor marks it with an
+information diagnostic (`citry.check.template-not-checked`) until the app
+loads again.
 
 Steps below that describe Alpine attributes,
 magics, and scope record the earlier Alpine design; where they conflict with
@@ -248,11 +305,11 @@ node start/end tokens (`Token`: start/end index, line/col,
 `crates/citry_template_parser/src/ast.rs:23-35`); used and
 introduced variables are tracked per scope as tokens with positions, kept on
 the node specifically for def/use linking (`ast.rs:641-740`;
-[`template_grammar.md`](template_grammar.md) records the intent); slots are collected with
-required-ness; and `TagRules` (`parser_context.rs:36-101`, a `#[pyclass]`)
-lets a caller feed per-tag validation into `parse_template`, which is exactly
-the hook component-aware diagnostics need: derive rules from each
-component's `Kwargs` / `Slots` and the parser itself reports unknown or
+[`template_grammar.md`](template_grammar.md) records the intent); slots are
+collected with required-ness; and `TagRules` (`parser_context.rs:36-101`, a
+`#[pyclass]`) lets a caller feed per-tag validation into `parse_template`,
+which is exactly the hook component-aware diagnostics need: derive rules from
+each component's `Kwargs` / `Slots` and the parser itself reports unknown or
 missing attributes and slot violations for every component in the rule map.
 A tag with no entry in the map is allowed through unvalidated (the rule
 lookup falls through to allow-anything, `parser.rs:2595-2598`; same shape
@@ -297,11 +354,12 @@ and 6.1): no highlight-only marker stopgaps (no typed aliases, no
 third-party fork adoption, no `# language=` convention shipped as the
 official story); the `*_lang` declaration attributes; a curated
 rich-editing set; and a staged build path (extension skeleton, then
-grammar, then server) where each layer ships on its own. [`extensions_roadmap.md`](extensions_roadmap.md) files the
-LSP, formatter, and highlighting as standalone tooling on the Rust parser,
-not extensions. The implemented CLI locates an explicit `Citry` instance with
-`--app module:attribute`. A `[tool.citry]` table or `CITRY_APP` variable remains
-a later ergonomics decision, not a current discovery contract.
+grammar, then server) where each layer ships on its own.
+[`extensions_roadmap.md`](extensions_roadmap.md) files the LSP, formatter,
+and highlighting as standalone tooling on the Rust parser, not extensions.
+The implemented CLI locates an explicit `Citry` instance with `--app
+module:attribute`. A `[tool.citry]` table or `CITRY_APP` variable remains a
+later ergonomics decision, not a current discovery contract.
 
 ### 1.2 The field (from the recon corpus)
 
@@ -1631,14 +1689,14 @@ degradation contract in section 3.4.1.
     whether the key is always or conditionally present and whether the complete
     shape is closed or remains open with a reason. The source pass does not
     infer value types; kwargs-derived roots reuse their existing structured
-    schema type when all consumers agree. Repeated literal keys follow Python's last-write order within
-    one mapping. When several reachable branches define the same key, retain
-    every definition and return every distinct standard LSP location; never
-    choose one arbitrarily. Unknown unpacking preserves proven key existence
-    while discarding any value definition it may overwrite. Passing a tracked
-    mapping to unsupported code or referencing it from unmodelled control flow
-    withholds that affected mapping's roots rather than guessing. Invalid or
-    unreadable source, an unsaved class or method
+    schema type when all consumers agree. Repeated literal keys follow Python's
+    last-write order within one mapping. When several reachable branches define
+    the same key, retain every definition and return every distinct standard
+    LSP location; never choose one arbitrarily. Unknown unpacking preserves
+    proven key existence while discarding any value definition it may
+    overwrite. Passing a tracked mapping to unsupported code or referencing it
+    from unmodelled control flow withholds that affected mapping's roots rather
+    than guessing. Invalid or unreadable source, an unsaved class or method
     rename that no longer matches runtime provenance, or anything other than
     one exact owning AST node contributes no inferred roots for that owner and
     never reuses stale definition ranges. A key can complete and navigate to
@@ -1953,10 +2011,23 @@ degradation contract in section 3.4.1.
     `this` as the full instance, including `$emit` from the `emits` option.
     `$el` is typed from the template's top-level node (`Node` for several
     nodes or an unreadable template), and a listener on a child component tag
-    types `$event` from the child's `emits`. The analyzer reports `emits`
-    separately from the instance names, so an `emits` it cannot read leaves
-    the other names typed. When it can read `emits`, Citry reports a literal
-    event name that `emits` does not declare as
+    types `$event` from the child's `emits`. A listener whose value is only
+    the name of a method the parent's `methods` declares, such as
+    `@hide="hideCard"`, is passed in the TypeScript check file to a
+    generated function whose parameter is a callback taking the child's
+    payload. TypeScript then compares the method's parameters with the
+    payload and reports a mismatch on the method name (`ts2345`). A name the
+    parent does not declare in `methods`, a `v-for` or slot alias, a
+    `js_data()` key, a member, a call, and an `@c-` server event binding are
+    typed as other listener statements are. Nothing is reported for an
+    untyped method, a `null` validator, the array form of `emits`, a child
+    whose `emits` cannot be read, or a template several components share.
+    Because the check runs with `strict` off, TypeScript compares parameter
+    types in both directions, so a parameter narrower than the payload
+    (`'a' | 'b'` for `string`) is not reported. The analyzer
+    reports `emits` separately from the instance names, so an `emits` it
+    cannot read leaves the other names typed. When it can read `emits`,
+    Citry reports a literal event name that `emits` does not declare as
     `citry.browser.undeclared-emit` (an `$emit` call) or
     `citry.browser.undeclared-component-event` (a listener on a child tag).
     An `emits` built from a variable, a spread, a computed key, or a mixin
@@ -1993,14 +2064,14 @@ degradation contract in section 3.4.1.
     base name, preserving existing modifiers and handler values. The checker
     and LSP report `citry.browser.unknown-state-field` on the field-name range
     when the public namespace is known. Unknown ownership or stale schema
-    evidence withholds these field-specific answers. Modifier completion follows the
-    runtime's channel-specific tables: event bindings offer event flags and
-    key/timing filters, State bindings offer update-event and timing filters,
-    and `@c-poll` offers representative whole-second intervals. Modifier
-    hover explains accepted value shapes, including the unbounded whole-number
-    `ms` and `s` duration forms. Unknown modifiers receive no misleading help,
-    and missing or stale registry evidence degrades a State key to generic
-    syntax help without a Python target.
+    evidence withholds these field-specific answers. Modifier completion
+    follows the runtime's channel-specific tables: event bindings offer event
+    flags and key/timing filters, State bindings offer update-event and timing
+    filters, and `@c-poll` offers representative whole-second intervals.
+    Modifier hover explains accepted value shapes, including the unbounded
+    whole-number `ms` and `s` duration forms. Unknown modifiers receive no
+    misleading help, and missing or stale registry evidence degrades a State
+    key to generic syntax help without a Python target.
 
     Citry-owned browser APIs have first-party hover records with their
     JavaScript signature, a concise explanation, and a canonical documentation

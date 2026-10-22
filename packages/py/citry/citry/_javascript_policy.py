@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import warnings
 from base64 import b64decode
 from binascii import Error as BinasciiError
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
 from urllib.parse import unquote_to_bytes
 
+from citry._caller_warnings import warn_at_caller
 from citry._csp_validation import (
     _ASCII_LOWER,
     _decode_html_attribute,
@@ -271,10 +271,10 @@ class _JavascriptPolicy:
             raise ValueError(
                 f"security_javascript='forbid' found {len(self._findings)} client behavior requirement(s):\n{body}"
             )
-        warnings.warn(
+        # Point at the author's serialize call, wherever Citry noticed it.
+        warn_at_caller(
             f"security_javascript={self._mode!r} found {len(self._findings)} client behavior requirement(s):\n{body}",
             RuntimeWarning,
-            stacklevel=4,
         )
 
     def _walk_template(

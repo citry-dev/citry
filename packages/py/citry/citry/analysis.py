@@ -2274,9 +2274,9 @@ def lint_misspelled_css_variables(
     Report ``var(--name)`` in a component's CSS that is one typing slip from a ``css_data()`` key.
 
     Citry sets one custom property per ``css_data()`` key, named after the
-    key. When a ``var()`` names a property nothing sets, the browser ignores
-    the declaration without an error: the property inherits from the parent
-    element or takes its initial value.
+    key. When a ``var()`` without a fallback names a property nothing sets,
+    the CSS property that reads it gets its inherited or initial value, and
+    the browser shows no error.
     Only a name one typing slip from a key is reported, because a site
     stylesheet or a parent component may set any other property. A ``var()``
     with a fallback, and a property the same CSS sets itself, are left alone.

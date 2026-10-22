@@ -78,6 +78,18 @@ class JsonWireType:
 
 UNKNOWN_JSON_TYPE = JsonWireType("unknown")
 
+# Why a `citry.Secret` cannot be sent, after its type name, as in "Secret
+# values are ...". citry_lsp keeps a copy of this text for the types ty
+# reports, and a test there keeps the two equal.
+SECRET_NOT_SENT_REASON = "values are never sent to the browser; read the value on the server instead"  # noqa: S105 - advice text
+# The reason given for an annotation, or a value ty types, as a Secret.
+# `citry check` looks for this text to choose the Secret wording of its
+# message.
+SECRET_UNSUPPORTED_REASON = f"Secret {SECRET_NOT_SENT_REASON}"
+# The ways an annotation names `citry.Secret`: imported by name, through the
+# package, or by the import path Citry writes for a schema field.
+_SECRET_NAMES = frozenset({"Secret", "citry.Secret", "citry.secret.Secret"})
+
 # A JSON scalar an Enum member value may be, so `.value` can type as its literals.
 _ENUM_VALUE_TYPES = (bool, int, float, str)
 
@@ -269,6 +281,8 @@ def _annotation_type(node: ast.expr) -> JsonWireType:
     if isinstance(node, ast.Subscript):
         name = _qualified_name(node.value)
         arguments = node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]
+        if name in _SECRET_NAMES:
+            return _unsupported(SECRET_UNSUPPORTED_REASON)
         # `Annotated` metadata and TypedDict key markers wrap the value type,
         # however the annotation spells their module.
         if name in {
@@ -330,6 +344,8 @@ def _annotation_type(node: ast.expr) -> JsonWireType:
         return JsonWireType("string")
     if name in {"Any", "typing.Any"}:
         return _unsupported("Any does not prove a strict JSON value")
+    if name in _SECRET_NAMES:
+        return _unsupported(SECRET_UNSUPPORTED_REASON)
     if name in {"bytes", "bytearray", "memoryview"}:
         return _unsupported(f"{name} values are not JSON-serializable")
     if name in {
@@ -595,6 +611,8 @@ def _js_property(name: str) -> str:
 
 
 __all__ = [
+    "SECRET_NOT_SENT_REASON",
+    "SECRET_UNSUPPORTED_REASON",
     "UNKNOWN_JSON_TYPE",
     "JsonWireField",
     "JsonWireKind",

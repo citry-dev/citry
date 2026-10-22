@@ -330,6 +330,34 @@ class CompiledView:
         object.__setattr__(self, "definitions", MappingProxyType(dict(self.definitions)))
 
 
+class VueCompilerDiagnosticsError(ValueError):
+    """
+    Report that Vue's compiler rejected a generated Vue template.
+
+    It is a ``ValueError``, so an ``except ValueError`` handler still catches
+    it. It keeps the compiler's diagnostics as data, so a caller that knows
+    which component the template belongs to can explain a diagnostic by its
+    code.
+
+    Attributes:
+        diagnostics: The compiler's diagnostics, each a dict with ``stage``,
+            ``code``, ``message``, ``start`` and ``end``.
+
+    """
+
+    def __init__(self, diagnostics: list[dict[str, object]]) -> None:
+        super().__init__(f"Vue compiler diagnostics: {diagnostics!r}")
+        self.diagnostics = diagnostics
+
+    def codes(self) -> frozenset[str]:
+        """Return the diagnostic codes, skipping any entry without a string code."""
+        # The diagnostics come from the native compiler's JSON, so an entry
+        # of an unexpected shape is skipped rather than trusted.
+        return frozenset(
+            code for item in self.diagnostics if isinstance(item, dict) and isinstance(code := item.get("code"), str)
+        )
+
+
 ORDINARY_TARGET = "ordinary-vnodes/1"
 _NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.3"}
 _TEXT_ACTION_RULES = {
@@ -559,7 +587,7 @@ class NativeCompiler:
                 response.get("elements", []), runtime_event_sites
             )
             if diagnostics:
-                raise ValueError(f"Vue compiler diagnostics: {diagnostics!r}")
+                raise VueCompilerDiagnosticsError(diagnostics)
             # Read after diagnostics so a rejected template reports its
             # diagnostics rather than a plan built from rejected output.
             hydration_plan = _validate_hydration_plan(response, template)

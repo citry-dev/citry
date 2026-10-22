@@ -192,6 +192,37 @@ def lint_markup(
     return tuple(sorted(walker.found, key=lambda item: (item.start_index, item.end_index)))
 
 
+# A consumer that turns on only the `v-model` target rule. Every other rule
+# is listed as ignored, so a rule added later stays off here too.
+_MODEL_TARGET_ONLY = MarkupLintConsumer(
+    **(dict.fromkeys(MARKUP_LINT_RULES, "ignore") | {"rule_invalid_model_target": "error"}),  # type: ignore[arg-type]
+)
+
+
+def find_invalid_model_targets(
+    template: Template,
+    *,
+    parse_nested: Callable[[str], Template] = _parse_template,
+) -> tuple[MarkupLintFinding, ...]:
+    """
+    Return every ``v-model`` on an element that holds no value, as ``rule_invalid_model_target`` finds them.
+
+    A render whose Vue compile fails on such a ``v-model`` uses this to name
+    the element, so the runtime error names the same elements the static
+    rule reports.
+
+    Args:
+        template: Parsed Citry template AST.
+        parse_nested: Parser for template-valued attributes.
+
+    Returns:
+        Findings in source order, each spanning the ``v-model`` attribute
+        name, with byte offsets into the template source.
+
+    """
+    return lint_markup(template, (_MODEL_TARGET_ONLY,), parse_nested=parse_nested)
+
+
 def lint_invalid_vue_expressions(
     template: Template,
     expressions: Sequence[BrowserExpression],

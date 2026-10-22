@@ -56,6 +56,7 @@ from .capture import (
     PreparedVerbatimHtmlNode,
     _reject_executable_dynamic_attrs,
     conflicting_attribute_targets,
+    element_key_conflict_message,
     format_prepared_element_attrs,
     include_prepared_attribute,
     is_native_state_tag,
@@ -3269,7 +3270,7 @@ def _validate_open(value: PreparedElementOpen) -> str | None:
     }
     metadata = dict(value.element_metadata)
     if "key" in metadata and ("key" in source_targets or "key" in data_targets):
-        return "prepared #c-key conflicts with another authored key"
+        return element_key_conflict_message(value, source_targets.get("key"))
     conflict = conflicting_attribute_targets(source_targets, data_targets)
     if conflict:
         names = [f"{source_targets[identity]!r} / {data_targets[identity]!r}" for identity in conflict]

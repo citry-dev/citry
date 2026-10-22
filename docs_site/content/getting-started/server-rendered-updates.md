@@ -54,7 +54,7 @@ The region belongs to `TutorialPage`, which stays on the page. When
 `Confirmation` takes the form's place inside it, screen readers announce the
 confirmation.
 
-## Set its browser data
+## Pass data to Vue
 
 `Confirmation` has its own [`js_data()`][citry.Component.js_data]:
 
@@ -76,7 +76,7 @@ Vue can use `email` as soon as the new component is on the page:
 
 The text Python rendered shows until Vue starts. Then `v-text` replaces it.
 
-## Load its CSS and JS
+## Load the CSS and JS
 
 `TutorialPage` now places `<c-css />` in the head and `<c-js />` at the end
 of the body. These tags mark where Citry puts the CSS and JavaScript that the

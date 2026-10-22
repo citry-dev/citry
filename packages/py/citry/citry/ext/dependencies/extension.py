@@ -23,6 +23,7 @@ from citry.ext.dependencies.emission import EXTRA_KEY, emit_dependencies
 from citry.ext.dependencies.scripts import (
     _cache_component_css_vars_capture,
     _css_vars_capture,
+    _reject_secret_css_data,
     _VariablesScriptCapture,
     evict_component_script_keys,
     evict_component_scripts,
@@ -212,6 +213,10 @@ class DependenciesExtension(Extension):
             and not has_component_asset("css", comp_cls)
             and not comp_cls.get_dependencies()
         ):
+            # Nothing here sends css_data() to the browser, but a Secret in it
+            # still fails, so the mistake shows before the component gets CSS.
+            if ctx.css_data:
+                _reject_secret_css_data(comp_cls, ctx.css_data)
             return
         # Per-render variables: hash each data method's result and cache the
         # generated script/stylesheet under the hash, so identical data is

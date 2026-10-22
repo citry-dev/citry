@@ -242,3 +242,6 @@ time. Run a single process while you develop.
 
 In production, do not run `citry watch` and do not add the framework
 helpers.
+
+To have Citry also check running pages for mistakes while you develop,
+see [Development mode](/guides/development-mode/).
