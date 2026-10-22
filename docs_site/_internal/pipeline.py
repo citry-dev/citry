@@ -53,6 +53,7 @@ from docs_site._internal.community_packages import (
 # <c-youtube-video> by name.
 from docs_site._internal.components import (  # noqa: F401
     benchmark_chart,
+    benchmark_text,
     blog,
     builtin,
     community_packages,

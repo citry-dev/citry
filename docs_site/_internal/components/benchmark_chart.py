@@ -27,6 +27,12 @@ from markupsafe import Markup
 from citry import Component
 from docs_site._internal.util import flatten_for_markdown
 
+# Whole milliseconds beside the bars; the decimals stay in the table. The
+# README's alt text prints the totals with the same function, so the
+# image's description and the bars it describes read the same numbers. It
+# lives beside the README code, which must run without the docs dependencies.
+from docs_site.scripts.benchmark_readme import format_ms
+
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "benchmark_time_to_interactive.json"
 
 # Phase colours follow the benchmark report, so a reader who knows the report
@@ -65,11 +71,6 @@ def axis_ticks(maximum: float) -> list[float]:
     count = math.ceil(maximum / step)
     # Rounding drops float noise such as 0.6000000000000001 from fractional steps.
     return [round(step * index, 10) for index in range(count + 1)]
-
-
-def _ms(value: float) -> str:
-    # Whole milliseconds with a thousands separator; the decimals stay in the table.
-    return f"{value:,.0f} ms"
 
 
 def _percent(value: float, axis_max: float) -> str:
@@ -177,14 +178,14 @@ def chart_view(
             {
                 "heading": None,
                 "name": row["name"],
-                "total": _ms(row["total_ms"]),
+                "total": format_ms(row["total_ms"]),
                 "is_reference": is_reference,
                 "segments": segments,
             },
         )
 
     # The screen-reader label reads the totals in the order of the bars.
-    totals = ", ".join(f"{row['name']} {_ms(row['total_ms'])}" for row in ordered)
+    totals = ", ".join(f"{row['name']} {format_ms(row['total_ms'])}" for row in ordered)
     summary = (
         f"Stacked bar chart of total time in milliseconds: {totals}."
         if phases
@@ -197,7 +198,7 @@ def chart_view(
         "rows": rows,
         "ticks": [{"label": f"{tick:,.10g} ms", "style": f"left: {_percent(tick, axis_max)}"} for tick in ticks],
         "reference": {
-            "label": f"{reference['name']} {_ms(reference['total_ms'])}",
+            "label": f"{reference['name']} {format_ms(reference['total_ms'])}",
             "style": f"left: {_percent(reference['total_ms'], axis_max)}",
         },
         "summary": summary,

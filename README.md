@@ -30,13 +30,15 @@ applications.
 
 <!-- benchmark-chart:errors start -->
 <!-- Written by `python -m docs_site.scripts.benchmark_images` from
-     docs_site/data/error_prevention.json. Rerun it rather than editing
-     this block by hand. -->
+     docs_site/data/error_prevention.json. Rerun it rather than
+     editing this block by hand. -->
 
 ## Catch mistakes early
 
-We built the same app in 12 frameworks and made the same
-63 mistakes in each.
+We built the same app in 12 frameworks and made the same 63 mistakes in
+each.
+
+More green = earlier feedback = better
 
 <picture>
   <source
@@ -50,9 +52,36 @@ We built the same app in 12 frameworks and made the same
   >
 </picture>
 
-Citry 0.6.1, measured before its release. Each bar counts only the mistakes that apply to that framework.
+Citry 0.6.1, measured before its release. Each bar counts only the
+mistakes that apply to that framework.
 [How we measured](https://citry.dev/about/benchmarks/#errors-how-we-measured)
 <!-- benchmark-chart:errors end -->
+
+<!-- benchmark-chart:speed start -->
+<!-- Written by `python -m docs_site.scripts.benchmark_images` from
+     docs_site/data/benchmark_time_to_interactive.json. Rerun it rather than
+     editing this block by hand. -->
+
+## As fast as Next.js
+
+Time until a page with 1,400 entries is usable, the second time the
+server builds it.
+
+<picture>
+  <source
+    media="(prefers-color-scheme: dark)"
+    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-70d4a8802900-90d576e71b4a-dark.png"
+  >
+  <img
+    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-70d4a8802900-7fe8bbd937c4-light.png"
+    alt="Bar chart of the time until the page is usable, fastest first: Nuxt 230 ms, Rusty + HTMX + Alpine 294 ms, Jinja + HTMX + Alpine 300 ms, Citry 323 ms, Next.js 324 ms, Tetra 326 ms, Django + HTMX + Alpine 342 ms, Reflex 409 ms, django-components 475 ms, django-unicorn 508 ms, FastHTML 667 ms, ReactPy 910 ms."
+    width="720"
+  >
+</picture>
+
+Citry 0.6.0, one run per framework. Shorter is faster.
+[How we measured](https://citry.dev/about/benchmarks/#how-the-numbers-were-taken)
+<!-- benchmark-chart:speed end -->
 
 ## Watch the tutorial:
 
