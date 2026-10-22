@@ -128,8 +128,8 @@ rustup override set nightly
 
 ### Installing UV
 
-Install [UV](https://astral.sh/uv) 0.13.5 or later, the release CI pins, using
-one of these methods:
+Install [UV](https://astral.sh/uv) 0.13.5 or later (the version the release
+workflows pin) with one of these methods:
 
 ```bash
 # macOS/Linux

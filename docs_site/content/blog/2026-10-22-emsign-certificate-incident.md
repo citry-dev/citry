@@ -10,13 +10,14 @@ tags: Security, Project updates
 On October 20, 2026, the Python Security Developer-in-Residence
 [announced](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576){: target="\_blank" rel="noopener"}
 that the private keys of several eMudhra (emSign) certificate authorities
-can be recovered. Anyone who has those keys can pretend to be any HTTPS
-site, including pypi.org, to a program that still trusts them.
+can be recovered. Anyone who has those keys and controls part of your
+network can pretend to be any HTTPS site, including pypi.org, to a
+program that still trusts them.
 
 This post explains what that means if you use Citry, what to update on
 your machine and in your CI, and what we changed in Citry.
 
-## What happened
+## The emSign incident
 
 Your computer decides whether to trust an HTTPS site by checking its
 certificate against a list of trusted root certificates. The affected
@@ -27,7 +28,7 @@ being removed from every such list.
 Several Python tools ship their own copy of the list, so each of them
 needs an update:
 
-| Tool | Update to |
+| Package | Update to |
 |---|---|
 | pip | 26.2.2 |
 | uv | 0.13.5 |
@@ -64,12 +65,14 @@ HTTPS requests with a library that uses certifi, such as `requests` or
 ## Update your tools
 
 Upgrade pip in each Python installation and virtual environment that has
-it. On a network you do not trust, use the checksum method from the
-announcement instead, which makes pip check the download itself:
+it:
 
 ```sh
 python -m pip install --upgrade "pip>=26.2.2"
 ```
+
+On a network you do not trust, install pip from the URL and checksum
+given in the announcement instead, so that pip checks the download itself.
 
 Until your operating system's update removes the emSign root, tell pip
 26.2.2 to use only its own list:
@@ -78,7 +81,10 @@ Until your operating system's update removes the emSign root, tell pip
 export PIP_USE_DEPRECATED=legacy-certs
 ```
 
-Older pip rejects this setting, so set it after the upgrade.
+Set it only in the shell or CI job that runs pip 26.2.2. An older pip in
+another environment stops with "invalid choice", and pip with this
+setting no longer trusts certificates your company added to the
+operating system's list, such as one for a private package index.
 
 Upgrade uv the same way you installed it, then install the Python builds
 that come with pip 26.2.2:
@@ -99,7 +105,7 @@ If you publish to PyPI with the `pypa/gh-action-pypi-publish` action,
 update it to 1.14.3 or later
 ([advisory](https://github.com/pypa/gh-action-pypi-publish/security/advisories/GHSA-5xjx-3w67-w9x9){: target="\_blank" rel="noopener"}).
 
-On Ubuntu, update the operating system's list:
+On Ubuntu 24.04, update the operating system's list:
 
 ```sh
 sudo apt-get update
@@ -135,13 +141,13 @@ place where our builds use a Python tool to download or upload packages:
   connection, including the request for a short-lived upload token and
   the upload itself. Our publish workflows now use version 1.14.3, whose
   certifi no longer trusts emSign.
-- **uv.** Our release and documentation workflows pinned uv 0.10.12. They
-  now pin 0.13.5, and a repository check fails if any of them or any
-  starter pins a different version.
+- **uv.** Our release workflows, our documentation workflows, and the
+  starters pinned uv 0.10.12 or used the newest uv. They now pin 0.13.5,
+  and a repository check fails if any of them pins a different version.
 - **pip.** The workflows that test the installed `citry-ui` wheel and the
   VS Code extension used the pip that comes with Python, which can be
   older than 26.2.2. They now install pip 26.2.2 from a URL with a
-  checksum before they download anything else, and then use only pip's
+  checksum before pip downloads anything else, and then use only pip's
   own list.
 - **certifi.** Our development and benchmark lock files now use certifi
   2026.10.19.
@@ -151,11 +157,12 @@ with hashes. The exposed steps were the PyPI upload, the build backends
 that uv downloaded to build our packages, and a few test installs that
 picked packages by version only, without hashes.
 
-Some steps in our builds also download through Node.js, which ships its
+Some steps in our builds also connect through Node.js, which ships its
 own list and still trusts emSign. These steps download the tools
-themselves (uv, Python, Node.js) and the Playwright browsers. They will
-stop trusting emSign when GitHub's runners get a Node.js release without
-those roots.
+themselves (uv, Python, Node.js) and the Playwright browsers, and they
+upload the VS Code extension to the Visual Studio Marketplace and Open
+VSX. They will stop trusting emSign when GitHub's runners get a Node.js
+release without that root.
 
 We checked PyPI against our own releases: every Citry package file there
 comes from a release our workflows made, and nothing has been uploaded

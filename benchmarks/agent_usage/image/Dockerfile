@@ -21,16 +21,17 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 
 # The context is this directory; only public package pins and this helper enter it.
 COPY requirements.lock /opt/agent-eval/requirements.lock
-# The base image's pip can be older than 26.2.2, the first pip that no longer
-# trusts the eMudhra (emSign) certificate authorities, so upgrade it before any
-# other download. pip checks the #sha256 fragment itself, so this step is safe
-# even on the older pip.
+# The base image's pip can be older than 26.2.2, the first pip whose own
+# certificate list drops the affected eMudhra (emSign) root, so upgrade it before
+# any other download. pip checks the #sha256 fragment itself, so this step is
+# safe even on the older pip.
 RUN python -m pip install --no-cache-dir \
         "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
-# Debian bookworm's certificate list still holds the affected emSign root, and pip 26.2.2
-# trusts that list as well as its own, so pip uses only its own list from here.
-ENV PIP_USE_DEPRECATED=legacy-certs
-RUN python -m pip install --no-cache-dir -r /opt/agent-eval/requirements.lock \
+# Debian bookworm's certificate list still holds that root, and pip 26.2.2 trusts
+# that list as well as its own, so this install uses only pip's own list. The
+# setting stays off the finished image: an agent's new virtual environment gets
+# an older pip that would reject it.
+RUN PIP_USE_DEPRECATED=legacy-certs python -m pip install --no-cache-dir -r /opt/agent-eval/requirements.lock \
     && python -m pip check \
     && python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/* \
