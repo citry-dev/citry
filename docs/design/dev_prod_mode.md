@@ -119,8 +119,11 @@ How it works:
 1. In development the document configuration of every Vue page carries
    `"development": true`. When the page hydrates and has served shell
    contents (`"emptyShells": true`), it also inlines
-   `citry/_vue/dev_checks.js` as a classic script before the module script
-   that starts the app.
+   `citry/_vue/dev_checks.min.js` as a classic script before the module
+   script that starts the app. That file is the readable
+   `citry/_vue/dev_checks.js` with comments and indentation removed;
+   `pnpm --dir packages/js/citry-client run build` writes it, and the
+   package's canary test fails when it is stale.
 2. `client.js` asks that script to keep each shell's served child nodes
    (`CitryVueDevChecks.captureShells`) right before it empties the shells,
    in the same task as the mount.

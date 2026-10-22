@@ -284,6 +284,7 @@ How the pieces fit:
    element the runtime finds is a shell the server wrote.
 5. With `Citry(mode="development")` the configuration also carries
    `"development": true`, and a page with served shell contents inlines
+   `citry/_vue/dev_checks.min.js`, the minified build of
    `citry/_vue/dev_checks.js`. The runtime then keeps each shell's served
    children before emptying it and, right after the mount, logs a console
    warning where Vue's first render contradicts them. The comparison and

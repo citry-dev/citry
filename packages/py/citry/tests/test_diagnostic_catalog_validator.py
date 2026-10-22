@@ -1,8 +1,9 @@
-"""The diagnostic catalog validator finds code literals that the catalog does not own."""
+"""The diagnostic catalog validator and the Python table the generator writes from the catalog."""
 
 from pathlib import Path
 
 import pytest
+from scripts import generate_diagnostic_catalog
 from scripts.validators import diagnostic_catalog
 
 
@@ -102,3 +103,33 @@ def test_an_off_by_default_rule_must_have_a_configurable_severity(entry_fields, 
     problems: list[str] = []
     diagnostic_catalog._validate_catalog(_catalog_with(entry_fields), problems)
     assert problems == expected
+
+
+def test_the_python_table_keeps_only_the_fields_citry_reads_while_it_runs():
+    # The reference page reads catalog.json for the explanation fields, so the
+    # Python table in the wheel leaves them out but keeps every runtime field.
+    entry = {
+        "configurableSeverity": True,
+        "examples": [{"title": "Example", "language": "citry-html", "source": "<p>x</p>"}],
+        "fix": "Fix it.",
+        "parameters": {"name": "The name."},
+        "messages": {"default": "Name {name} is wrong."},
+    }
+    catalog = _catalog_with(entry)
+    namespace: dict[str, object] = {}
+    exec(generate_diagnostic_catalog._python(catalog), namespace)  # noqa: S102 - the generator's own output
+
+    assert namespace["EXAMPLE_RULE"] == "citry.example.rule"
+    assert namespace["DIAGNOSTICS"] == {
+        "citry.example.rule": {
+            "code": "citry.example.rule",
+            "configurableSeverity": True,
+            "defaultSeverity": "warning",
+            "documentationPath": "/ide/diagnostics/#citry.example.rule",
+            "messages": {"default": "Name {name} is wrong."},
+            "parameters": {"name": "The name."},
+            "summary": "Something is wrong.",
+            "surfaces": ["check"],
+            "title": "Example rule",
+        }
+    }

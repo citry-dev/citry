@@ -6,8 +6,10 @@ import { build } from "esbuild";
 import { version as vueVersion } from "vue";
 
 import {
+  CITRY_DEV_CHECKS_PATH,
   CITRY_RUNTIME_PATH,
   VUE_VERSION,
+  buildCitryDevChecks,
   buildCitryI18n,
   buildCitryVueRuntime,
   citryVueBuildOptions,
@@ -56,6 +58,12 @@ test("the committed combined runtime exactly matches a fresh assembly of its par
   // The hand-written coordinator reaches browsers only through this file, so an edit to
   // `_vue/client.js` without a rebuild would otherwise ship the old coordinator.
   assert.equal(await buildCitryVueRuntime(), readFileSync(CITRY_RUNTIME_PATH, "utf8"));
+});
+
+test("the committed development checks exactly match a fresh build of their readable source", async () => {
+  // Development pages inline only the minified file, so an edit to `_vue/dev_checks.js` without
+  // a rebuild would otherwise ship the old check.
+  assert.equal(await buildCitryDevChecks(), readFileSync(CITRY_DEV_CHECKS_PATH, "utf8"));
 });
 
 test("the committed Vue i18n plugin exactly matches its source build", async () => {

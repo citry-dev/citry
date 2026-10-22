@@ -586,7 +586,9 @@ the Vue Events bridge in `packages/js/citry-client`. The client build
 combines the production Vue runtime, the fragment manager, the prepared
 coordinator, and the Events bridge into `citry/_vue/runtime.js`; i18n has a separate generated bundle. The
 coordinator is the hand-written `citry/_vue/client.js`; the build removes its
-comments and indentation, so rebuild after editing it. Package-local
+comments and indentation, so rebuild after editing it. The build does the same
+to the hand-written development checks, `citry/_vue/dev_checks.js`, and writes
+`citry/_vue/dev_checks.min.js`, the file the wheel ships. Package-local
 `pnpm run check` commands type-check the sources, replay shared cases, and
 reject stale generated files:
 
@@ -627,8 +629,8 @@ The verifier compares every installed `citry/` source file with both wheels
 and the source distribution, compares the two wheels member by member, and
 installs each wheel into its own fresh environment. The installed checks run
 outside the repository with Node absent from `PATH` and without `jsonschema`.
-They exercise both embedded protocol packages, both browser data files, the
-typing marker, the top-level import, and `citry --help`. Both wheels must also
+They exercise both embedded protocol packages, the three browser files
+(the runtime, the development checks, and the i18n plugin), the typing marker, the top-level import, and `citry --help`. Both wheels must also
 stay below the release size cap, `MAX_WHEEL_BYTES` in the verifier.
 
 Pull requests run the wheel part of this check earlier. The `citry-ui-wheel-build`

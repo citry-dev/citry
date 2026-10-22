@@ -20,8 +20,9 @@ from citry import Citry, Component
 from citry._vue import serialization
 from citry._vue.serialization import DEV_CHECKS_SRC
 
-# A global the check's script defines; only the script contains it.
-_SCRIPT_MARKER = "CitryVueDevChecks = Object.freeze"
+# How the minified script assigns its global, spelled the way the inlined file
+# writes it. Only that script contains this text.
+_SCRIPT_MARKER = "CitryVueDevChecks=Object.freeze"
 # The page's start configuration, a JSON block the runtime reads.
 _CONFIGURATION = re.compile(
     r'<script type="application/json" data-citry-vue-document="[^"]+">(.*?)</script>', re.DOTALL
@@ -137,9 +138,12 @@ def test_development_page_without_served_shells_carries_only_the_flag() -> None:
     assert _SCRIPT_MARKER not in html
 
 
-def test_the_check_script_ships_as_a_readable_file() -> None:
-    # Development pages inline this file, so the package must include it.
-    assert _SCRIPT_MARKER in DEV_CHECKS_SRC.read_text(encoding="utf8")
+def test_the_check_script_ships_minified() -> None:
+    # Development pages inline this file, so the package must include it, and
+    # the wheel ships it without the readable source's comments.
+    script = DEV_CHECKS_SRC.read_text(encoding="utf8")
+    assert _SCRIPT_MARKER in script
+    assert "Citry development checks for the browser." not in script
 
 
 def test_the_check_script_is_read_from_disk_once(monkeypatch: pytest.MonkeyPatch) -> None:

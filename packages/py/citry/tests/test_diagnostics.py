@@ -118,3 +118,12 @@ def test_catalog_renderer_rejects_parameter_drift() -> None:
         render_diagnostic(TEMPLATE_UNKNOWN_VARIABLE, variant="closed")
     with pytest.raises(TypeError, match="unexpected typo"):
         render_diagnostic(TEMPLATE_UNKNOWN_VARIABLE, variant="closed", name="missing", typo=True)
+
+
+def test_every_catalog_entry_carries_the_fields_the_runtime_reads() -> None:
+    # The generated table keeps only some catalog fields to stay small in the
+    # wheel, so check that each entry still has every field the lookup reads.
+    for code in DIAGNOSTICS:
+        definition = diagnostic_definition(code)
+        assert definition.code == code
+        assert diagnostic_documentation_url(code) == f"https://citry.dev/ide/diagnostics/#{code}"

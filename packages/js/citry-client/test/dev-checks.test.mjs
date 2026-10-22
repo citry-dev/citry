@@ -1,14 +1,16 @@
 /**
- * The development check that compares a shell's served HTML with Vue's first render
- * (`citry/_vue/dev_checks.js`). The comparison runs over a small fake DOM here; the browser tests
- * in `tests/e2e/test_vue_dev_checks_e2e.py` run it on real pages.
+ * The development check that compares a shell's served HTML with Vue's first render. These tests
+ * run the minified `citry/_vue/dev_checks.min.js` that development pages inline, built from the
+ * readable `citry/_vue/dev_checks.js`, so they also catch a minification that changes behavior.
+ * The comparison runs over a small fake DOM here; the browser tests in
+ * `tests/e2e/test_vue_dev_checks_e2e.py` run it on real pages.
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-const source = await readFile(new URL("../../../py/citry/citry/_vue/dev_checks.js", import.meta.url), "utf8");
+const source = await readFile(new URL("../../../py/citry/citry/_vue/dev_checks.min.js", import.meta.url), "utf8");
 
 function devChecks() {
   const context = { console };
