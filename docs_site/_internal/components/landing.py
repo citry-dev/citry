@@ -2445,6 +2445,16 @@ class LandingPage(Component):
         margin-bottom: 1.5rem;
       }
 
+      /* The takeaway sentence sits right under the intro it explains, so
+         the two read as one block above the chart. */
+      .landing-benchmark .landing-section__intro:has(+ .landing-section__intro) {
+        margin-bottom: 0;
+      }
+
+      .landing-benchmark .landing-section__intro + .landing-section__intro {
+        margin-top: 0.75rem;
+      }
+
       .landing-benchmark-card {
         /* Citry's bar uses the page's own blue; the other bars stay a quiet
            gray, so the colour marks which row is Citry, not a rank. */
@@ -2477,6 +2487,16 @@ class LandingPage(Component):
          on the card it has to match the card instead. */
       .landing-benchmark-card .bench-chart__segment + .bench-chart__segment {
         box-shadow: inset 1px 0 0 var(--landing-panel);
+      }
+
+      /* One line above the error chart tells a first-time reader which way
+         is good before they decode the five legend colours. It reuses the
+         legend's size and colour so it reads as part of the chart. */
+      .landing-content .landing-benchmark-card__hint {
+        margin: 0 0 1rem;
+        color: var(--c-fg-muted);
+        font-size: 0.8125rem;
+        text-align: center;
       }
 
       .landing-content .landing-benchmark-card__note {
@@ -2568,7 +2588,7 @@ class LandingPage(Component):
       }
 
       .landing-section__intro {
-        max-width: 42rem;
+        max-width: 43rem;
         margin: 1.4rem 0 0;
         color: var(--landing-muted);
         font-size: 1.1rem;
