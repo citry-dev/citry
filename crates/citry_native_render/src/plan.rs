@@ -373,8 +373,8 @@ impl<'a> Builder<'a> {
         key.to_owned()
     }
 
-    /// Turn one scope into ops. Ranks are filled in afterwards, once every key is
-    /// known, so this stores each key's text in a placeholder list.
+    /// Turn one scope into ops. Ranks are filled in afterwards, once every
+    /// key is known, so this stores each key's text in a placeholder list.
     fn ops(
         &mut self,
         ops: &'a [OpSpec],

@@ -56,8 +56,8 @@ def main() -> None:
     native_ids = _rust.native_render._RunDigests('["site"', '["parent"').member_ids("key")
     native_placement = "citryPlacement" + hashlib.sha256(b'["site",["explicit","key"]]').hexdigest()[:24]
     native_child = "citryOccurrence" + hashlib.sha256(f'["parent","{native_placement}"]'.encode()).hexdigest()[:24]
-    # One row through the C API reader (a float goes through CPython's own
-    # formatter) and the occurrence writer, as citry calls them.
+    # Read one row through the C API (its float goes through CPython's own
+    # formatter) and write it with the occurrence writer, as citry calls them.
     native = _rust.native_render
     plan = native._RowPlan(
         (("text", "citryText0", ("p", "v", ())), ("open", "citryAttrs0", (("data-n", ("p", "n", ())),))),

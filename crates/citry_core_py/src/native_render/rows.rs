@@ -3,10 +3,10 @@
 //! run. The design, the decision of when this runs and every error mode are
 //! in `docs/design/native_render.md`.
 //!
-//! Python turns the operations and read set of a `simple='vue'` template it
-//! can evaluate without a component instance into plain
-//! tuples (`native_row_plan_tuples` in `citry/_vue/leaf_program.py`) and
-//! builds a [`RowPlan`] from them once per template. For each row, after the
+//! For a `simple='vue'` template it can evaluate without a component
+//! instance, Python turns the operations and read set into plain tuples
+//! (`native_row_plan_tuples` in `citry/_vue/leaf_program.py`) and builds a
+//! [`RowPlan`] from them once per template. For each row, after the
 //! row's data callbacks ran, `RowPlan.read(variables, plain_scalar_types)`:
 //!
 //! 1. reads every value the template reads through the C API, applying the
@@ -137,8 +137,8 @@ fn lower_expr(value: &Bound<'_, PyAny>) -> PyResult<ExprSpec> {
     }
 }
 
-/// Turn one scope into ops, collecting each spread's layout callback in the order
-/// the plan numbers spreads (source order, top level only).
+/// Turn one scope into ops, collecting each spread's layout callback in the
+/// order the plan numbers spreads (source order, top level only).
 fn lower_ops(value: &Bound<'_, PyAny>, callbacks: &mut Vec<Py<PyAny>>) -> PyResult<Vec<OpSpec>> {
     let mut ops = Vec::new();
     for op in as_tuple(value)?.iter() {

@@ -29,8 +29,8 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
 
 ## Gotchas
 
-- **Never copy a Python rule or constant into Rust.** Python passes it in
-  (the spread layout callback, the layout cache size, the JavaScript int
+- **Pass Python rules and constants in; do not copy them.** Python passes
+  them in (the spread layout callback, the layout cache size, the JavaScript int
   limit). A copied constant goes stale silently: a test that changes the
   Python value would then compare Rust with Rust. What cannot be passed
   in (the manifest's fixed key names, how a value is written) is locked

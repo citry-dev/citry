@@ -1,7 +1,8 @@
-//! Fixture tests: a template's plan, evaluated over rows whose expected JSON
-//! was observed from Citry's Python evaluator. `scripts/native_render_fixtures.py`
-//! writes the fixtures: the row template of the benchmark's project-board
-//! page with board-shaped and edge rows, and a template covering the shapes the board does not use.
+//! Fixture tests: a template's plan, evaluated over rows whose expected
+//! JSON was observed from Citry's Python evaluator.
+//! `scripts/native_render_fixtures.py` writes the fixtures: the row template
+//! of the benchmark's project-board page with board-shaped and edge rows,
+//! and a template covering the shapes the board does not use.
 
 use citry_native_render::{
     Attrs, Const, ExprSpec, Kinds, OpSpec, Plan, PlanSpec, ReadNode, ReadNodeSpec, SpreadLayout,

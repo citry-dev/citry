@@ -49,8 +49,9 @@ timing harness. Nothing here depends on it.
 Without Rust, each row runs its data callbacks (`template_data`,
 `js_data`, `css_data`), then a Python function generated from its
 template (the evaluator) checks that every value the template reads is
-plain data (the read-set check) and records the template's values. Serialize later copies
-those values into the manifest and writes them as JSON.
+plain data (the read-set check) and records the template's values.
+Serialize later copies those values into the manifest and writes them as
+JSON.
 
 With level A:
 
@@ -80,7 +81,7 @@ ordinary components too, from the same leading JSON text Python's
 `_DigestPrefix` hashes. A key with no UTF-8 form (a lone surrogate) gets
 its ids from Python, inside a run whose other ids come from Rust.
 
-Python owns every rule it can pass in. Rust receives the template's
+Python passes Rust every rule it can. Rust receives the template's
 operations and the paths it reads as plain tuples built from the same
 structures the Python evaluator is built from (`native_row_plan_tuples` in
 `citry/_vue/leaf_program.py`), asks Python through a callback for the
@@ -176,11 +177,11 @@ Accepted differences, none of which changes output:
   equality. A record still compares its leaf, which a Rust-read record
   builds on first read, so its equality to a copy can change then.
   Nothing in Citry compares records.
-- The call-run tag lookup skipped for later rows also skips the built-in
-  metadata check that a component class was swapped in the middle of one
-  assembly; such a swap then fails on the registry identity check instead,
-  with a different message. Only another thread replacing a class during
-  serialize can cause it.
+- Assembly looks up a call run's component tag once per class, not once
+  per row, so it also checks only once whether that class was replaced. If
+  another thread replaces the class while serialize runs, the later check
+  that the class is still registered fails instead, with a different
+  message.
 
 ## 5. Where the code lives
 
@@ -223,8 +224,9 @@ Accepted differences, none of which changes output:
 
 A new level follows the same rules:
 
-1. Python owns every rule. Pass a Python constant or callback into Rust;
-   never copy it.
+1. Pass every Python rule, constant or callback into Rust that can be
+   passed. Lock what cannot be passed, such as fixed key names, with a
+   fixture generated from Python.
 2. When Rust cannot reproduce an input exactly, decline and let Python
    handle it, so the error and its timing are Python's own.
 3. Read `native_render.ACTIVE` at the call site, build plans from

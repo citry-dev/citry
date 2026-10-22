@@ -1178,8 +1178,8 @@ def test_every_case_has_a_locked_record() -> None:
 
 
 # Cases whose rows never reach the native row read: no rows, an error
-# before the first row, rows with browser data or a data schema Rust leaves
-# to Python, rows that call children, and a traced input fault.
+# before the first row, rows whose js_data() returns values, rows that call
+# children, and a loop that fails on a missing key before any row is read.
 _NO_NATIVE_ROWS = {
     "empty_loop",
     "too_deep",
