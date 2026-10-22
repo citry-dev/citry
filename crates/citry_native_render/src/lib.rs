@@ -14,7 +14,7 @@
 //! 2. The caller (the PyO3 layer in `crates/citry_core_py/src/native_render/`)
 //!    copies every value the template reads into a [`Value`] tree, checking
 //!    each value's type as it goes. A failed check means the caller declines
-//!    the row (hands it back) and Python evaluates it.
+//!    the row and Python evaluates it.
 //! 3. [`Plan::write_row`] evaluates the operations over that tree and writes
 //!    the prepared data as JSON, byte for byte what Python's
 //!    `script_json({"calls": {}, **data}, sort_keys=True)` writes.

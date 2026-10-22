@@ -28,7 +28,7 @@ each entry to one paragraph and link to longer docs rather than copying them.
 | Internationalization runtime: checked Fluent catalogs | [`crates/citry_i18n/AGENTS.md`](../../crates/citry_i18n/AGENTS.md) |
 | Sandboxed Python expression transform | [`crates/python_safe_eval/AGENTS.md`](../../crates/python_safe_eval/AGENTS.md) |
 | HTML attribute transformer | [`crates/citry_html_transform/AGENTS.md`](../../crates/citry_html_transform/AGENTS.md) |
-| Native render path: Rust reads `simple = "vue"` rows, decision of when it runs, both-path tests | [`docs/design/native_render.md`](../design/native_render.md), [`crates/citry_native_render/AGENTS.md`](../../crates/citry_native_render/AGENTS.md) |
+| Native render path: Rust reads `simple = "vue"` rows; when Citry uses it; tests that run both paths | [`docs/design/native_render.md`](../design/native_render.md), [`crates/citry_native_render/AGENTS.md`](../../crates/citry_native_render/AGENTS.md) |
 | Python package surface (`citry_core` on PyPI) | [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md) |
 | Monorepo dev / build / release conventions | [`docs/codebase.md`](../codebase.md) |
 | Vue rendering, native slots, component identity, server revisions, and cutover status | [`docs/design/vue.md`](../design/vue.md) |

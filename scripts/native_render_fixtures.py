@@ -49,8 +49,9 @@ if TYPE_CHECKING:
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "crates" / "citry_native_render" / "tests" / "fixtures"
 
-# The project board's row template (the benchmark page's `ProjectOutput`),
-# copied here so the fixtures do not change when the benchmark app does.
+# The row template of the benchmark's project-board page (`ProjectOutput` in
+# benchmarks/web/apps/citry), copied here so the fixtures do not change when
+# the benchmark app does.
 BOARD_ROW_TEMPLATE = """
 <article c-bind="row_attrs" data-output-expanded="true">
 <header>

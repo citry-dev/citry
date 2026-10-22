@@ -26,7 +26,7 @@ citry/
 │   ├── citry_core_py/   # Main Rust crate exposed to Python
 │   ├── citry_html_transform/
 │   ├── citry_i18n/     # Language-neutral Fluent catalog runtime
-│   ├── citry_native_render/ # Rust half of the native render path
+│   ├── citry_native_render/ # Rust code that reads simple="vue" rows on CPython
 │   ├── citry_vue_compiler/ # Native browser-template compilation
 │   ├── citry_template_formatter/
 │   ├── python_safe_eval/
@@ -477,7 +477,6 @@ Test fidelity comes first, but setup cost should match the boundary under test:
   when a cheaper test already covers the ordinary behavior. The fast profile
   omits that marker. The full profile runs it in a separate two-worker phase
   without coverage instrumentation, and the Python version matrix retains it.
-
 - Citry renders on two paths: the native (Rust) render path on standard
   CPython and the Python path everywhere else
   ([`native_render.md`](design/native_render.md)). Tests run on the native
@@ -485,8 +484,9 @@ Test fidelity comes first, but setup cost should match the boundary under test:
   the `python_render_path` fixture; a test that must hold on both paths
   asks for `render_path`, or compares them with `render_both` from
   `packages/py/citry/tests/_render_paths.py`. `pytest --python-render-path`
-  runs a whole session on the Python path, as the ubuntu / Python 3.10 CI
-  cell does; run it once locally before opening a pull request that
+  runs a whole session on the Python path (tests that ask for
+  `render_path` or call `render_both` still run both), as the ubuntu /
+  Python 3.10 CI cell does; run it once locally before opening a pull request that
   touches rendering. Set `CITRY_NATIVE_RENDER=0` to do the same outside
   pytest.
 

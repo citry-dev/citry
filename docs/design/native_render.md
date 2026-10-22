@@ -18,19 +18,25 @@ Terms used below:
 
 - **Row**: one occurrence of a `simple = "vue"` component. It renders
   without a Python component object.
-- **Call run**: the rows one `<c-for>` places at one component call site.
-  Assembly names each row of a run with two SHA-256 ids, its placement key
-  and its child occurrence id.
+- **Call run**: the components one `<c-for>` places at one call site,
+  whether `simple = "vue"` rows or ordinary components. Assembly names
+  each of them with two SHA-256 ids, its placement key and its child
+  occurrence id.
+- **Assembly**: the step (`assemble_typed_render` in
+  `citry/_vue/direct_capture.py`) that turns a finished render into the
+  manifest's occurrences and component definitions.
 - **Prepared data**: the values a row sends to its Vue instance in the
   page's manifest (the JSON block the browser reads).
+- **Leaf**: the Python object (`PreparedLeafProgram`) that holds a row's
+  recorded template values.
 - **Decline**: Rust returns `None` instead of a result, and Python then
   handles that row the way it always has.
-- **Hand-back**: an output that needs a Rust-read row's HTML (static HTML,
-  a fragment, a page that cannot hydrate) gets it by running the Python
-  evaluator over a copy of the values Rust read.
-- **The precompile path**: when no browser hook can change the selected
-  component tree, serialize assembles it before writing the page
-  (`precompile_selected_tree_for_serialization` in
+- **Rebuild**: Python builds a Rust-read row's leaf by running its
+  evaluator over a copy of the values Rust read, when an output needs the
+  row's HTML or a Python copy of its data.
+- **The precompile path**: when no browser hook can change the components
+  the page sends to the browser, serialize runs assembly before writing
+  the page (`precompile_selected_tree_for_serialization` in
   `citry/_vue/events.py`).
 
 The research that measured these levels is on the branch
@@ -43,7 +49,7 @@ timing harness. Nothing here depends on it.
 Without Rust, each row runs its data callbacks (`template_data`,
 `js_data`, `css_data`), then a Python function generated from its
 template (the evaluator) checks that every value the template reads is
-plain data and records the template's values. Serialize later copies
+plain data (the read-set check) and records the template's values. Serialize later copies
 those values into the manifest and writes them as JSON.
 
 With level A:
@@ -60,8 +66,8 @@ With level A:
 4. The row's record (`SimpleVueRecord`) holds the Rust row
    (`native`) and no Python leaf. Code that only needs to know whether the
    row called children, its template fragment or its Vue errors reads the
-   record's properties, which answer without a leaf. Reading `leaf` builds
-   it once, through the hand-back.
+   record's properties, which answer without a leaf. Reading `leaf`
+   rebuilds it once.
 5. On the precompile path, assembly records the row's occurrence without
    copying any of its values (`native_rows=True` in
    `assemble_typed_render`), and the manifest writer
@@ -77,12 +83,13 @@ its ids from Python, inside a run whose other ids come from Rust.
 Python owns every rule. Rust receives the template's operations and the
 paths it reads as plain tuples built from the same structures the Python
 evaluator is built from (`native_row_plan_tuples` in
-`citry/_vue/leaf_program.py`), asks Python for the layout of each new
-root `c-bind` key set through a callback, and is told the size of
+`citry/_vue/leaf_program.py`), asks Python through a callback for the
+layout of each new root `c-bind` key set (how its keys merge with the
+element's own attributes), and is told the size of
 Python's layout cache. Nothing in the Rust crate copies a Python
 constant.
 
-## 2. When Citry uses the Rust code
+## 2. When Rust runs
 
 `citry/_vue/native_render.py` decides once, when it is first imported:
 
@@ -101,7 +108,7 @@ constant.
 | CPython with `citry_core._rust.native_render` missing or older | Python path and one `RuntimeWarning` naming the missing name. citry pins citry-core exactly, so this means an inconsistent install or a stale development build. |
 | `CITRY_NATIVE_RENDER=0` | Python path, no warning. This is the workaround for a bug only the Rust path has. |
 | `CITRY_NATIVE_RENDER` set to anything but `0` or `1` | One `RuntimeWarning`; the value is ignored. |
-| The component's `Citry` instance has `mode="development"` | Rows are not read in Rust. A development page checks every element id it writes, so the serializer needs every row's HTML, and reading the row in Rust first would only add work. The check runs at the row read, because mode belongs to each `Citry` instance. |
+| The component's `Citry` instance has `mode="development"` | Rows are not read in Rust. A development page checks every element id it writes, so the serializer needs every row's HTML, and reading the row in Rust first would only add work. The check runs at the row read, because mode belongs to each `Citry` instance. Call-run ids still come from Rust; they need no rebuild. |
 
 Every step after a Rust object exists follows that object (`record.native`,
 `PreparedOccurrence._native`), not the flag, so a render serializes
@@ -109,20 +116,30 @@ correctly even if the flag changed in between. The Rust module stays
 declared as needing the GIL (`#[pymodule(gil_used = true)]` in
 `crates/citry_core_py/src/lib.rs`).
 
-## 3. Which outputs rebuild a row in Python
+## 3. Rows rebuilt in Python
 
-A hydrated or client-mounted page (`ssr=False`) writes a Rust-read row
-from its JSON alone, as long as the serializer leaves out the root's body
-(`_can_skip_vue_document_body` in `citry/serialize.py`). When it does not,
-it writes every frame of the body, so every Rust-read row on the page,
-in a child component or in the root template, is rebuilt once through the
-hand-back. That happens on:
+A page Vue hydrates, or one it mounts in the browser (`ssr=False`),
+writes a Rust-read row from its JSON alone, as long as the serializer
+leaves out the root's body (`_can_skip_vue_document_body` in
+`citry/serialize.py`). When it cannot, it writes every frame of the body,
+so every Rust-read row on the page, in a child component or in the root
+template, is rebuilt once. The serializer keeps the body for:
 
 - static HTML, fragments and pages that decline hydration, which need the
   rows' HTML anyway;
-- pages the body skip refuses only at serialize time: strict CSP or a
-  nonce, a JavaScript or script-integrity policy, a `deps_position` other
-  than `"smart"`, or an `on_serialize` hook other than the built-in one.
+- a root template that is not one `<html><head><body>` document;
+- any CSP mode other than `"off"`, or a nonce;
+- a JavaScript or script-integrity policy;
+- a `deps_position` other than `"smart"`;
+- an `on_serialize` hook other than the built-in one;
+- a placeholder or trusted HTML value written directly in the root body,
+  or a child component whose root marker is not one of Citry's own
+  (`data-cid-*`, `data-citry*`).
+
+Two other cases rebuild each row for its data rather than its HTML:
+Events update responses, and pages kept off the precompile path (a custom
+component tag callback or a browser hook). Their assembly copies each
+row's values from its leaf.
 
 A row's leaf is built at most once per render, so serializing the same
 render as several outputs rebuilds each row once.
@@ -139,7 +156,7 @@ render as several outputs rebuilds each row once.
 | Building the plan raises anything but `ValueError` | The error propagates and nothing is cached, so every render fails loudly; `CITRY_NATIVE_RENDER=0` works around it. |
 | A call-run key with no UTF-8 form | Python computes that row's ids. |
 | A `str` subclass render id | Written from its text, as `json.dumps` does. |
-| `ComponentLike.register(...)` or a lower `sys.set_int_max_str_digits` between render and serialize | The hand-back skips the read-set check and Rust only copies ints inside the 64-bit range, so values the render accepted stay accepted. |
+| `ComponentLike.register(...)` or a lower `sys.set_int_max_str_digits` between render and serialize | A rebuild skips the read-set check and Rust only copies ints inside the 64-bit range, so values the render accepted stay accepted. |
 | A row's dicts changed after the render | The output keeps the values each row had when Rust read it, as the Python leaf does. |
 | A Rust panic | `RuntimeError` through `without_panics`; a panic during the row read fails the render with Citry's component path in the message. Rust's panic hook also prints the message to stderr. |
 | The occurrence list holds an item assembly never makes for a Rust row | `ValueError` from `_encode_occurrences`; this is a Citry bug, never user input. |
@@ -163,7 +180,7 @@ Accepted differences, none of which changes output:
 | The PyO3 classes `_RowPlan`, `_NativeRow`, `_RunDigests` and `_encode_occurrences` | `crates/citry_core_py/src/native_render/` |
 | Their type stub | `class native_render` in `packages/py/citry_core/citry_core/_rust.pyi` |
 | The decision | `citry/_vue/native_render.py` |
-| The plan tuples, the row read and the hand-back | `citry/_vue/leaf_program.py` |
+| The plan tuples, the row read and the rebuild | `citry/_vue/leaf_program.py` |
 | The row read's call site | `_render_simple_vue_leaf` in `citry/component_render.py` |
 | The record properties | `SimpleVueRecord` in `citry/citry_render.py` |
 | Assembly (`start_occurrence`, `native_definition`, `register_native_member`, the call-run ids) | `citry/_vue/direct_capture.py` |
@@ -174,12 +191,14 @@ Accepted differences, none of which changes output:
 - `tests/_render_paths.py` has `render_both(run)`, which calls `run` on
   each path in one process, pins render ids, the Vue app id and the
   Events token clock, compares the results, and counts the rows Rust read
-  and the rows the hand-back rebuilt, so a case cannot pass because both
+  and the rows Python rebuilt, so a case cannot pass because both
   runs took the Python path.
 - The `render_path` fixture runs a test once per path; `python_render_path`
   forces the Python path for a test that checks the Python evaluator's own
   internals. Both live in `packages/py/citry/tests/conftest.py`.
-- `pytest --python-render-path` runs a whole session on the Python path.
+- `pytest --python-render-path` runs a whole session on the Python path,
+  except the tests that ask for `render_path` or call `render_both`,
+  which still run both.
   The ubuntu / Python 3.10 cell of `py--tests.yml` uses it, because no CI
   job runs the suite on PyPy, Pyodide or free-threaded builds.
 - `tests/test_call_run_order.py` locks the order of user callbacks and

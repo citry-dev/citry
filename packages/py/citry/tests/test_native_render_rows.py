@@ -32,9 +32,9 @@ from scripts import native_render_fixtures
 
 from citry import Citry, Component
 from citry._protocol.events import build_call, build_call_envelope
-from citry._vue import native_render
+from citry._vue import leaf_program, native_render
 from citry._vue.json_data import _copy_evaluated_json
-from citry._vue.leaf_program import LeafProgramNode
+from citry._vue.leaf_program import LeafProgramNode, native_row_plan_tuples
 from citry._vue.serialization import _script_json
 from citry.citry_render import SimpleVueRecord
 from citry.component_render import _simple_vue_admission
@@ -234,9 +234,10 @@ def serialize_all(board: Board, outputs: dict[str, dict[str, Any]]) -> dict[str,
 def test_every_output_writes_the_same_bytes_on_both_paths(
     output: str, size: int, *, in_root: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Rows in a child component never need their HTML on a page Vue mounts
-    # or hydrates. Rows in the root template also do not, on a page whose
-    # body the serializer leaves out; strict CSP with a nonce keeps the body.
+    # On a full HTML document Vue mounts or hydrates, the serializer leaves
+    # out the body, so no row needs its HTML, in a child component or in
+    # the root template. The HTML outputs and strict CSP with a nonce keep
+    # the body, so every row is rebuilt.
     rebuilt = size if output in HTML_OUTPUTS else 0
     render_both(
         lambda: serialize_all(build_board(make_rows(size), in_root=in_root), {output: OUTPUTS[output]}),
@@ -422,7 +423,7 @@ def test_events_updates_send_the_same_responses_on_both_paths(monkeypatch: pytes
 
 
 # ---------------------------------------------------------------------------
-# Faults: rows Rust hands back, and errors raised on both paths
+# Faults: rows Rust declines, and errors raised on both paths
 # ---------------------------------------------------------------------------
 
 FAULT_ROW = 5
@@ -524,7 +525,7 @@ FAULT_ROWS_READ = {
     "tuple": FAULT_ROW,
     "int_past_digit_limit": FAULT_ROW,
     "onclick": FAULT_ROW,
-    # Values Python renders but Rust hands back: the row renders in Python.
+    # Values Python renders but Rust declines: the row renders in Python.
     "lone_surrogate": 39,
     "int_beyond_i64": 39,
     "style": 39,
@@ -546,7 +547,7 @@ def test_faults_raise_or_render_the_same_on_both_paths(name: str, monkeypatch: p
 
 
 def test_a_lowered_digit_limit_after_render_changes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Rust hands back every int outside i64, so a row's copy never depends on
+    # Rust declines every int outside i64, so a row's copy never depends on
     # the digit limit in force when a later output rebuilds it.
     def run() -> object:
         limit = sys.get_int_max_str_digits()
@@ -619,7 +620,7 @@ def test_component_like_registration_gives_the_same_result_on_both_paths(name: s
     assert rust_result == python_result
     assert python_rows == 0
     # A registered float makes row FAULT_ROW's float a component value:
-    # Rust hands the row back and Python's check fails the render there. A
+    # Rust declines the row and Python's check fails the render there. A
     # registered str breaks the page before any row renders.
     assert rust_rows == (FAULT_ROW if name == "component_like_float" else 0)
 
@@ -947,3 +948,14 @@ def test_the_cargo_fixtures_match_what_python_writes() -> None:
     # The Rust crate's tests compare against these files; they must be the
     # current Python code's own output.
     assert native_render_fixtures.check() == []
+
+
+def test_templates_rust_does_not_run_have_no_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The expression subset admits only None, bool and str literals; any
+    # other literal means the subset grew, and Rust must not guess its text.
+    assert leaf_program._native_row_expr(leaf_program._SimpleJsonExpr(kind="constant", value=5)) is None
+    assert leaf_program._native_row_expr(leaf_program._SimpleJsonExpr(kind="call")) is None
+    # A template the Python evaluator cannot run has no Rust plan either.
+    plain = _node(ROW_TEMPLATE)
+    monkeypatch.setattr(plain, "static_instance_free_template_supported", lambda: False)
+    assert native_row_plan_tuples(plain) is None

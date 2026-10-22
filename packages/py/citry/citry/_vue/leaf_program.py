@@ -2406,7 +2406,7 @@ class LeafProgramNode(Node):
         Ask Rust to check, copy and evaluate one row; return its ``_NativeRow``, or None.
 
         None means Rust declined the row (or this template has no Rust plan),
-        and the caller evaluates the row in Python as before. The scalar set
+        and the caller evaluates the row in Python. The scalar set
         is read again for every row, as Python's own check reads it, so a
         type registered with ``ComponentLike`` affects the next row.
         """
@@ -2597,8 +2597,7 @@ class LeafProgramNode(Node):
         that were already accepted.
         """
         program = self._simple_json_program
-        if program is None:
-            # A Rust plan exists only for a template this evaluator runs.
+        if program is None:  # pragma: no cover - a Rust plan exists only for a template this evaluator runs
             raise AssertionError("a Rust-read simple='vue' row has no Python evaluator")
         return self._evaluate_instance_free(program, variables, component_name=component_name, calls=None)
 

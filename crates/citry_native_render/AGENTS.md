@@ -34,7 +34,7 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   goes stale silently: a test that changes the Python value would then
   compare Rust with Rust.
 - **Decline rather than guess.** When an input is outside what this crate
-  reproduces exactly, the caller hands the row back to Python, which then
+  reproduces exactly, the caller declines the row, and Python then
   produces the result or raises the error it always has. A new case gets a
   decline first and an exact implementation only with a fixture proving it.
 - **The Python half shares one start for every occurrence.**

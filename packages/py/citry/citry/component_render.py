@@ -651,13 +651,13 @@ def _render_simple_vue_leaf(
         # Every callback has run, so on the native render path Rust can read
         # the row now. It declines (returns None) anything it does not
         # reproduce exactly, and the Python evaluator below then runs on the
-        # same variables, raising today's error when there is one. Rows with
+        # same variables, raising the error Python raises for it. Rows with
         # calls stay in Python because their children come from the Python
         # leaf; rows with js_data or css_data stay because assembly converts
-        # their browser data and root markers in Python. A development
-        # engine checks every element id the page writes, so its serializer
-        # needs every row's HTML and would rebuild each Rust-read row in
-        # Python; such rows stay on the Python path from the start.
+        # their browser data and root markers in Python. A `Citry` instance
+        # in development mode checks every element id the page writes, so its
+        # serializer needs every row's HTML and would rebuild each Rust-read
+        # row in Python; such rows stay on the Python path from the start.
         native = (
             leaf_node.read_native_row(variables)
             if calls is None

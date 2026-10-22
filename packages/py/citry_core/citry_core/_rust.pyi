@@ -547,7 +547,8 @@ class native_render:
     The Rust half of Citry's native render path; every member is private to Citry.
 
     ``citry._vue.native_render`` decides whether Citry uses this module. Citry
-    builds one ``_RowPlan`` per admitted ``simple='vue'`` template from
+    builds one ``_RowPlan`` per ``simple='vue'`` template its Python
+    evaluator can run without a component instance, from
     ``citry._vue.leaf_program.native_row_plan_tuples`` and asks it for each
     row; ``_RunDigests`` computes the ids of each row of a call run (the
     components one ``c-for`` places), for ordinary components too.

@@ -68,7 +68,7 @@ pub enum ExprSpec {
     },
 }
 
-/// One operation of the generated evaluator, as Python lowers it.
+/// One operation of the generated evaluator, as Python describes it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpSpec {
     /// `{{ expr }}`: writes the value's text under `key`.
@@ -260,7 +260,7 @@ impl SpreadLayout {
     }
 }
 
-/// Lowering state: the read set paths resolve against, every key seen, and
+/// Planning state: the read set paths resolve against, every key seen, and
 /// the spreads found so far. `'a` covers both the spec and the read set.
 struct Builder<'a> {
     roots: &'a [ReadNode],
@@ -368,7 +368,7 @@ impl<'a> Builder<'a> {
         key.to_owned()
     }
 
-    /// Lower one scope. Ranks are filled in afterwards, once every key is
+    /// Turn one scope into ops. Ranks are filled in afterwards, once every key is
     /// known, so this stores each key's text in a placeholder list.
     fn ops(
         &mut self,

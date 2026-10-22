@@ -3,7 +3,8 @@
 //! run. The design, the decision of when this runs and every error mode are
 //! in `docs/design/native_render.md`.
 //!
-//! Python turns an admitted template's operations and read set into plain
+//! Python turns the operations and read set of a `simple='vue'` template it
+//! can evaluate without a component instance into plain
 //! tuples (`native_row_plan_tuples` in `citry/_vue/leaf_program.py`) and
 //! builds a [`RowPlan`] from them once per template. For each row, after the
 //! row's data callbacks ran, `RowPlan.read(variables, plain_scalar_types)`:
@@ -14,13 +15,14 @@
 //! 2. evaluates the template over that copy and writes the row's prepared
 //!    data as JSON;
 //! 3. returns a [`NativeRow`] holding both, or None when any check fails or
-//!    a case is outside what Rust reproduces exactly (the row is "declined").
+//!    a case is outside what Rust reproduces exactly (Rust "declines" the row).
 //!    Python then runs its own evaluator on the same variables, which raises
-//!    today's error or produces today's result.
+//!    its own error or gives its own result.
 //!
 //! `NativeRow.snapshot()` rebuilds the read values as fresh Python objects,
 //! so every output that needs Python's own leaf (static HTML, fragments,
-//! hydration fallbacks) can run the Python evaluator over them later.
+//! pages that keep their body, Events updates) can run the Python evaluator
+//! over them later.
 //! `_encode_occurrences` writes a manifest's occurrence array, putting each
 //! native row's JSON in place of its prepared data. `_RunDigests` computes
 //! the ids of each row of a repeated component call, as Python's
@@ -45,7 +47,7 @@ use citry_native_render::{
 // Why a row goes back to Python.
 // ---------------------------------------------------------------------------
 
-/// Why Rust handed a row back to Python.
+/// Why Rust declines a row, so that Python evaluates it.
 // Each variant names one reason for the reader of this file; nothing
 // counts or reports them, because Python's evaluator then handles the row
 // and raises its own error when there is one.
@@ -135,7 +137,7 @@ fn lower_expr(value: &Bound<'_, PyAny>) -> PyResult<ExprSpec> {
     }
 }
 
-/// Lower one scope, collecting each spread's layout callback in the order
+/// Turn one scope into ops, collecting each spread's layout callback in the order
 /// the plan numbers spreads (source order, top level only).
 fn lower_ops(value: &Bound<'_, PyAny>, callbacks: &mut Vec<Py<PyAny>>) -> PyResult<Vec<OpSpec>> {
     let mut ops = Vec::new();
@@ -272,7 +274,7 @@ struct SpreadSite {
     layouts: Mutex<HashMap<Vec<String>, Option<Arc<SpreadLayout>>>>,
 }
 
-/// The Rust row plan for one admitted template.
+/// The Rust row plan for one `simple='vue'` template.
 #[pyclass(frozen, name = "_RowPlan", module = "citry_core._rust.native_render")]
 pub struct RowPlan {
     shared: Arc<Shared>,
@@ -847,8 +849,8 @@ impl NativeRow {
     ///
     /// Python's evaluator over this dict gives the same prepared data as it
     /// would have given over the row's own variables when Rust read them,
-    /// even if those dicts changed since. Every value is a plain scalar of
-    /// i64 range or less, so rebuilding it does not depend on interpreter
+    /// even if those dicts changed since. Every value is plain data and every
+    /// int fits in i64, so rebuilding it does not depend on interpreter
     /// settings.
     fn snapshot<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         without_panics(|| {
