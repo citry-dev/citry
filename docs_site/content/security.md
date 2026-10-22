@@ -379,14 +379,13 @@ Citry then refuses to send it to the browser: rendering fails with an
 error that names the component and the key. `citry check` reports
 such a `Secret` in `js_data()` before the page runs when it can see where
 the value comes from; see
-[Check JS code](/vue/component-options/#check-js-code). Read the value on
+[Catch secrets early](/advanced/secrets/#check-for-secrets). Read the value on
 the server with `get_secret_value()` where you need it. In a template it
 shows as `***`.
 
 Citry detects only the values you wrap. A secret kept in a plain string
-is sent like any other text. See
-[Keep tokens off the page](/vue/component-options/#keep-tokens-off-the-page)
-for a full example.
+is sent like any other text. See [Secrets](/advanced/secrets/) for a
+full example.
 
 ## Use a CSP nonce { #apply-a-request-csp-nonce-centrally }
 
