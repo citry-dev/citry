@@ -239,10 +239,10 @@ with its children as `<template>` placeholders, so in development
 `serialize.py` passes each of those pieces to `PageIdCheck`
 (`citry/_page_ids.py`), which counts every `id` and issues one
 `RuntimeWarning` per serialization listing each repeated id with the
-components (and their template origins) that wrote it. A page Vue hydrates
-skips building its body's components; the check builds them separately and
-discards the result, so the serialize hooks receive the same placeholders as
-in production.
+components (and their template origins) that wrote it. In development,
+serialize builds the whole body, also on pages that Vue hydrates or mounts
+in the browser, so the check sees every id. Only production skips building
+the body those pages replace.
 
 The check runs on the server because only the server can name every
 component, including components that have no browser code. A browser check
@@ -274,8 +274,8 @@ Error modes and limits:
 - The warning goes through Python's `warnings` module, so a repeated
   identical message is shown once per process under the default filters.
   The cost, in development only, is one HTML parse of the page per
-  serialization, plus a second build of the body's components on a page
-  Vue hydrates.
+  serialization, plus building the body on pages that production
+  serializes without it.
 - A component whose HTML the parser cannot read is skipped without a
   warning, so its ids are not counted.
 

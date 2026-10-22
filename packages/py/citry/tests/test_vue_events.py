@@ -26,7 +26,7 @@ from citry.ext.events.emission import EXTRA_KEY, EventInstanceEntry
 from citry.ext.events.renderers import VuePreparedRenderEncoder, dispatcher_for
 from citry.ext.events.results import RenderEncodingContext
 from citry.extension import Extension
-from citry.serialize import _can_defer_vue_body_children
+from citry.serialize import _can_skip_vue_document_body
 from citry.slots import Slot
 
 
@@ -1267,7 +1267,7 @@ def test_vue_document_rejects_head_only_component_javascript_before_prepared_ass
         Page().render().serialize()
 
 
-def test_vue_body_deferral_is_limited_to_the_builtin_default_document_contract() -> None:
+def test_vue_body_skip_is_limited_to_the_builtin_default_document_contract() -> None:
     registry = Citry(autodiscover=False)
 
     class Child(Component):
@@ -1293,7 +1293,7 @@ def test_vue_body_deferral_is_limited_to_the_builtin_default_document_contract()
             "csp_nonce": None,
             **overrides,
         }
-        return _can_defer_vue_body_children(candidate, **options)
+        return _can_skip_vue_document_body(candidate, **options)
 
     assert eligible()
     assert not eligible(deps_position="append")

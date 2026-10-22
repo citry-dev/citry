@@ -1052,7 +1052,13 @@ def _server_host_contents(full_html: str, placeholders: Mapping[str, str]) -> st
     """
     openings = list(_BODY_OPEN_RE.finditer(full_html))
     closings = list(_BODY_CLOSE_RE.finditer(full_html))
-    if openings and closings:
+    if openings or closings:
+        # Body-like text elsewhere in the page, such as ``</body>`` in a
+        # comment, makes the body's real edges unknown. A cut at the wrong
+        # match would swallow the host's closing tag and the scripts after
+        # it, so such a page keeps an empty host.
+        if len(openings) != 1 or len(closings) != 1 or openings[0].end() > closings[0].start():
+            return None
         contents = full_html[openings[0].end() : closings[0].start()]
     else:
         # Output that is not a document is the Vue host's whole content

@@ -198,6 +198,19 @@ def test_noscript_contents_are_not_counted() -> None:
     assert _serialize_warnings(page()) == []
 
 
+def test_a_page_served_without_server_html_still_warns() -> None:
+    # Vue mounts this page in the browser, so its body's HTML is not sent,
+    # but the ids it would write still repeat.
+    page = _page(Citry(autodiscover=False, mode="development"), "<c-Board /><c-Sidebar />", interactive=True)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        page().render().serialize(ssr=False)
+
+    [message] = [str(item.message) for item in caught if "used by more than one element" in str(item.message)]
+    assert '- id "board": Board (' in message
+
+
 @pytest.mark.parametrize("simple", [True, "vue"])
 def test_a_simple_component_rendered_twice_warns(simple: object) -> None:
     engine = Citry(autodiscover=False, mode="development")
@@ -220,8 +233,8 @@ def test_a_simple_component_rendered_twice_warns(simple: object) -> None:
 
 
 def test_a_page_that_cannot_hydrate_counts_each_component_once() -> None:
-    # Such a page skips its body's components, then builds them again for
-    # the HTML it serves; the check must not count them twice.
+    # Such a page serves HTML built from its whole body; the check must
+    # count each component in it once.
     engine = Citry(autodiscover=False, mode="development")
 
     class Board(Component):

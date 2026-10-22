@@ -198,7 +198,7 @@ def _serialize_decoration_edge(parts: tuple[object, ...]) -> str:
     return "".join(output)
 
 
-def _can_defer_vue_body_children(
+def _can_skip_vue_document_body(
     render: CitryRender,
     *,
     deps_strategy: DepsStrategy,
@@ -208,7 +208,7 @@ def _can_defer_vue_body_children(
     security_script_integrity: SecurityScriptIntegrityMode,
     csp_nonce: str | None,
 ) -> bool:
-    """Allow the existing Vue body shortcut only for a proven direct document."""
+    """Whether serialize may leave out the root's body content because the Vue host replaces it."""
     if (
         deps_strategy != "document"
         or deps_position != "smart"
@@ -335,6 +335,30 @@ def _can_defer_vue_body_children(
             ):
                 return False
     return True
+
+
+def _document_shell_parts(parts: list[RenderPart]) -> list[RenderPart]:
+    """
+    Return a document root's parts without the content of its ``<body>``.
+
+    The caller has run ``_can_skip_vue_document_body``, which accepts only a
+    root whose top-level parts open and close exactly one ``<body>``, with
+    every component, row and leaf program between them. The body's own tags
+    stay, because the Vue shell finds the body by them.
+    """
+    from citry._vue.capture import PreparedElementClose, PreparedElementOpen  # noqa: PLC0415
+
+    body_open = next(
+        index
+        for index, part in enumerate(parts)
+        if isinstance(part, PreparedElementOpen) and part.tag.lower() == "body"
+    )
+    body_close = next(
+        index
+        for index, part in enumerate(parts)
+        if isinstance(part, PreparedElementClose) and part.tag.lower() == "body"
+    )
+    return [*parts[: body_open + 1], *parts[body_close:]]
 
 
 def _simple_vue_record_defers(record: SimpleVueRecord, pending: list[CitryRender]) -> bool:
@@ -679,15 +703,18 @@ def _serialize_render_result(
     placeholder_nonce = token_hex(16)
     omit_handler_marker = f"data-citry-omit-handler-{token_hex(16)}" if session.security_javascript == "omit" else None
 
-    deferred_children: list[_FrameStackItem] = []
     # With Citry(mode="development"), count the ids each component writes so
     # an id repeated across the page is reported. Production skips it.
     id_check = PageIdCheck() if owner is not None and owner.mode == "development" else None
     # Child render ids whose HTML the browser may never show (a component
     # inside a Vue `v-if` branch, say), so the id check skips them.
     uncounted_ids: set[str] = set()
+    # Set when pass 1 left out the contents of the root's <body>; the
+    # server_html fallback below then builds the whole page again.
+    root_body_skipped = False
 
-    def build_frames(stack: list[_FrameStackItem]) -> None:
+    def build_frames(stack: list[_FrameStackItem], *, skip_root_body: bool) -> None:
+        nonlocal root_body_skipped
         while stack:
             render, inherited, inherited_valued, key = stack.pop()
             component = render.context.component
@@ -700,6 +727,30 @@ def _serialize_render_result(
                 if type(part) is SimpleVueRecord:
                     component_classes[part.render_id] = type.__getattribute__(part.component_class, "__name__")
 
+            # A client-mounted or hydrated document replaces everything inside
+            # its <body> with the Vue host, so the root's own body content
+            # (its markup, simple='vue' rows written directly in it, and its
+            # child components) is left out here. Only the document shell
+            # around the body is written. A page that declines hydration may
+            # still send that content, so server_html builds it when asked.
+            frame_parts = render.parts
+            if (
+                skip_root_body
+                and vue_required
+                and key == root_key
+                and _can_skip_vue_document_body(
+                    render,
+                    deps_strategy=deps_strategy,
+                    deps_position=deps_position,
+                    security_csp=session.security_csp,
+                    security_javascript=session.security_javascript,
+                    security_script_integrity=session.security_script_integrity,
+                    csp_nonce=session.csp_nonce,
+                )
+            ):
+                frame_parts = _document_shell_parts(render.parts)
+                root_body_skipped = True
+
             children: list[tuple[CitryRender, str]] = []
             frame = _build_frame(
                 render,
@@ -708,6 +759,7 @@ def _serialize_render_result(
                 placeholder_nonce,
                 omit_handler_marker,
                 compensate_textarea_lf=not vue_runtime_installed,
+                parts=frame_parts,
             )
             if id_check is not None:
                 # The frame holds only this component's own HTML: each child
@@ -767,28 +819,11 @@ def _serialize_render_result(
                 decorations[key] = render
             order.append(key)
             added_by_child = {child_id: added for child_id, _, added in placeholders}
-            defer_body_children = (
-                vue_required
-                and key == root_key
-                and _can_defer_vue_body_children(
-                    render,
-                    deps_strategy=deps_strategy,
-                    deps_position=deps_position,
-                    security_csp=session.security_csp,
-                    security_javascript=session.security_javascript,
-                    security_script_integrity=session.security_script_integrity,
-                    csp_nonce=session.csp_nonce,
-                )
-            )
-            # A client-mounted document skips its body's children: Vue builds
-            # them in the browser. They are kept aside, because a page that
-            # cannot hydrate still sends their ordinary HTML (server_html below).
             for child_render, child_id in children:
                 added = added_by_child.get(child_id, [])
                 # Valued markers reach a child exactly when the plain markers did:
                 # the child's placeholder sat at this component's root.
-                item = (child_render, added, valued_markers if added else [], child_id)
-                (deferred_children if defer_body_children else stack).append(item)
+                stack.append((child_render, added, valued_markers if added else [], child_id))
             # mark_html may have spliced markers onto a Placeholder's template
             # tag (when it sits at a component root); record the exact final
             # text, since that is what the on_serialize hook must find in the
@@ -821,40 +856,37 @@ def _serialize_render_result(
             finished[key] = body
         return finished[root_key]
 
-    build_frames([(root, [], [], root_key)])
+    # The id check needs every id the body writes, so a development page
+    # builds the whole body; only production skips it.
+    build_frames([(root, [], [], root_key)], skip_root_body=id_check is None)
     html = join_frames()
+    # server_html reads this copy, because `html` is replaced once the
+    # on_serialize hooks have run.
+    first_html = html
 
     full_html: list[str] = []
 
     def server_html() -> str:
-        """Return the page with every body child written, building skipped children on first use."""
-        # Only a page that cannot hydrate asks for this, so the skipped
-        # children cost nothing on the pages that hydrate or opt out.
+        """Return the page with its whole body written, building a skipped body on first use."""
+        # Only a page that cannot hydrate asks for this, so the skipped body
+        # costs nothing on the pages that hydrate or opt out. The page is
+        # built again from the root, exactly as it is when nothing is
+        # skipped, so the served bytes match that output. Pass 1 added no
+        # placeholders (a page with one never skips its body), so building
+        # again cannot renumber them.
         if not full_html:
-            if deferred_children:
-                build_frames(deferred_children[:])
-                deferred_children.clear()
+            if root_body_skipped:
+                frame_by_key.clear()
+                decorations.clear()
+                order.clear()
+                build_frames([(root, [], [], root_key)], skip_root_body=False)
                 full_html.append(join_frames())
             else:
-                full_html.append(html)
+                full_html.append(first_html)
         return full_html[0]
 
     if id_check is not None:
-        # A client-mounted document skips its body's components above. The
-        # check still needs their ids, so it builds their HTML separately and
-        # throws it away, leaving this serialization's own state untouched.
-        _add_deferred_ids(
-            id_check,
-            [(item[0], item[3]) for item in deferred_children],
-            uncounted_ids,
-            placeholder_nonce=placeholder_nonce,
-            omit_handler_marker=omit_handler_marker,
-            compensate_textarea_lf=not vue_runtime_installed,
-        )
         id_check.report()
-        # A page that cannot hydrate builds those components again below;
-        # they are counted already, so the frame builder stops counting.
-        id_check = None
 
     if javascript_policy is not None:
         javascript_policy.validate_pre_extension_html(html, component_classes=component_classes)
@@ -1446,38 +1478,6 @@ def _add_frame_ids(
     uncounted_ids.update(id_check.add(frame, name, template_record.origin if template_record is not None else None))
 
 
-def _add_deferred_ids(
-    id_check: PageIdCheck,
-    renders: list[tuple[CitryRender, str]],
-    uncounted_ids: set[str],
-    *,
-    placeholder_nonce: str,
-    omit_handler_marker: str | None,
-    compensate_textarea_lf: bool,
-) -> None:
-    """
-    Count the ids of components whose HTML this serialization skipped.
-
-    The frames are built into throwaway lists, so the placeholders they
-    record never reach the serialize hooks.
-    """
-    scratch_placeholders: dict[str, str] = {}
-    stack = list(renders)
-    while stack:
-        render, key = stack.pop()
-        children: list[tuple[CitryRender, str]] = []
-        frame = _build_frame(
-            render,
-            children,
-            scratch_placeholders,
-            placeholder_nonce,
-            omit_handler_marker,
-            compensate_textarea_lf=compensate_textarea_lf,
-        )
-        _add_frame_ids(id_check, render, frame, children, key, uncounted_ids)
-        stack.extend(children)
-
-
 def _build_frame(
     render: CitryRender,
     children: list[tuple[CitryRender, str]],
@@ -1486,6 +1486,7 @@ def _build_frame(
     omit_handler_marker: str | None,
     *,
     compensate_textarea_lf: bool,
+    parts: list[RenderPart] | None = None,
 ) -> str:
     """
     Join one component's parts into an HTML string.
@@ -1502,10 +1503,13 @@ def _build_frame(
     slot-fill content (which carries the context of the component that
     *wrote* the fill, but renders as part of this frame). The explicit
     stack also handles deeply nested interior content.
+
+    ``parts`` replaces ``render.parts`` when the caller writes only some of
+    them, such as a document's shell without its body content.
     """
     out: list[str] = []
     _append_frame_parts(
-        render.parts,
+        render.parts if parts is None else parts,
         render=render,
         children=children,
         placeholder_map=placeholder_map,

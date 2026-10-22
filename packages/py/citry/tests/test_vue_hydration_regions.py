@@ -727,7 +727,7 @@ def test_page_that_cannot_hydrate_writes_the_body_children_it_skipped() -> None:
     html = rendered.serialize()
 
     # A browser-only v-if at the host root cannot hydrate. A document like
-    # this one normally skips its body children, so the server builds them
+    # this one normally skips its body content, so the server builds them
     # now: the host carries the child's HTML for Vue to replace.
     assert '"hydrate":true' not in html
     host = _host_between(html)

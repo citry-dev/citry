@@ -237,6 +237,9 @@
   a line inside Citry. A warning from an Events response points at the
   web framework code that called Citry, because your handler has already
   returned.
+- A Vue page whose body text contains `</body>`, for example inside a
+  comment, now serializes instead of raising `ValueError`; until Vue
+  mounts, its body is empty.
 - A component's `on_dependencies()` now runs once per rendered instance
   each time an interactive page is serialized, as documented, instead of
   twice.
