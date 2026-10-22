@@ -228,3 +228,21 @@ def test_selector_accepts_the_citry_specific_qualification_name() -> None:
         )
         == artifact
     )
+
+
+def test_sdist_rebuild_gets_the_hashed_build_pins(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    output = tmp_path / "wheel"
+
+    def fake_run(command: list[str], *, cwd: Path, env: object = None) -> str:
+        del cwd, env
+        # --no-config hides the root build pins, so the rebuild must get them as a hashed file.
+        assert command[-3] == "--build-constraints"
+        assert command[-1] == "--require-hashes"
+        assert "--hash=sha256:" in Path(command[-2]).read_text(encoding="utf-8")
+        (output / "rebuilt.whl").write_bytes(b"wheel")
+        return ""
+
+    monkeypatch.setattr(distribution_verifier, "_run", fake_run)
+    assert distribution_verifier._build_sdist_wheel(tmp_path / "citry.tar.gz", output, cwd=tmp_path) == (
+        output / "rebuilt.whl"
+    )

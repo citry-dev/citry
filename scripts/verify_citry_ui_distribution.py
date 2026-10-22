@@ -24,6 +24,11 @@ try:
 except ModuleNotFoundError:  # Python 3.10 qualification runner
     tomllib = None  # type: ignore[assignment]
 
+try:
+    from scripts import build_constraints
+except ImportError:  # Run as `python scripts/<name>.py`, where scripts/ itself is on sys.path.
+    import build_constraints  # type: ignore[no-redef]
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from email.message import Message
@@ -394,20 +399,23 @@ def _unique(directory: Path, pattern: str) -> Path:
 def _build_sdist_wheel(sdist: Path, directory: Path, *, cwd: Path) -> Path:
     sdist = sdist.resolve()
     directory.mkdir(parents=True, exist_ok=True)
-    _run(
-        [
-            "uv",
-            "build",
-            str(sdist),
-            "--wheel",
-            "--out-dir",
-            str(directory),
-            "--clear",
-            "--no-config",
-            "--no-build-logs",
-        ],
-        cwd=cwd,
-    )
+    # --no-config hides the root build pins, so pass them as a hashed constraints file.
+    with build_constraints.exported_constraint_args() as constraint_args:
+        _run(
+            [
+                "uv",
+                "build",
+                str(sdist),
+                "--wheel",
+                "--out-dir",
+                str(directory),
+                "--clear",
+                "--no-config",
+                "--no-build-logs",
+                *constraint_args,
+            ],
+            cwd=cwd,
+        )
     return _unique(directory, "*.whl")
 
 

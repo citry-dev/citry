@@ -87,6 +87,10 @@ def test_sdist_rebuild_resolves_input_before_switching_workdir(
         del env
         assert cwd == outside
         assert command[2] == str(sdist.resolve())
+        # --no-config hides the root build pins, so the rebuild must get them as a hashed file.
+        assert command[-3] == "--build-constraints"
+        assert command[-1] == "--require-hashes"
+        assert "--hash=sha256:" in Path(command[-2]).read_text(encoding="utf-8")
         (output / "rebuilt.whl").write_bytes(b"wheel")
         return ""
 

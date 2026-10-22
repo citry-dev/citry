@@ -366,3 +366,90 @@ def test_qualification_selector_requires_one_live_artifact_for_the_commit() -> N
 
     with pytest.raises(QualificationSelectionError, match="one live"):
         select_artifact({"artifacts": [{**artifact, "expired": True}]}, commit=commit)
+
+
+def _assert_hashed_build_pins(command: list[str]) -> None:
+    # --no-config hides the root build pins, so the rebuild must get them as a hashed file.
+    index = command.index("--build-constraints")
+    assert command[index + 2] == "--require-hashes"
+    assert "--hash=sha256:" in Path(command[index + 1]).read_text(encoding="utf-8")
+
+
+def test_sdist_smoke_rebuild_gets_the_hashed_build_pins(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_run(command: list[str], *, cwd: Path, env: object = None) -> str:
+        del env
+        _assert_hashed_build_pins(command)
+        output = Path(command[command.index("--out-dir") + 1])
+        output.mkdir(parents=True)
+        (output / "rebuilt.whl").write_bytes(b"wheel")
+        return ""
+
+    monkeypatch.setattr(distribution_verifier, "verify_sdist", lambda *args, **kwargs: None)  # noqa: ARG005
+    monkeypatch.setattr(distribution_verifier, "verify_wheel", lambda *args, **kwargs: {})  # noqa: ARG005
+    monkeypatch.setattr(distribution_verifier, "smoke_wheel", lambda *args, **kwargs: {})  # noqa: ARG005
+    monkeypatch.setattr(distribution_verifier, "_run", fake_run)
+    report = distribution_verifier.smoke_sdist(Path("citry_core.tar.gz"), rust_toolchain="1.96.0")
+    assert report["sdist"] == "citry_core.tar.gz"
+
+
+def _pyodide_tree(tmp_path: Path) -> tuple[Path, Path, dict[str, str | int]]:
+    # The smallest workspace and cross-build environment that build_wheel accepts.
+    workspace = tmp_path / "workspace"
+    source = workspace / "packages" / "py" / "citry_core"
+    (source / "citry_core").mkdir(parents=True)
+    (source / "pyproject.toml").write_text("[project]\nversion = '1.0.0'\n", encoding="utf-8")
+    (source / "pyodide-build.json").write_text((ROOT / "packages/py/citry_core/pyodide-build.json").read_text())
+    (workspace / "Cargo.toml").write_text("", encoding="utf-8")
+    (workspace / "pyproject.toml").write_text((ROOT / "pyproject.toml").read_text(), encoding="utf-8")
+    config = load_build_config(source / "pyodide-build.json")
+    xbuildenv = tmp_path / "xbuildenv"
+    pyodide_root = xbuildenv / str(config["pyodide"])
+    for relative in (
+        "xbuildenv/pyodide-root/dist/pyodide.mjs",
+        "emsdk/upstream/bin/wasm-opt",
+        "emsdk/upstream/emscripten/emcc",
+    ):
+        (pyodide_root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (pyodide_root / relative).write_bytes(b"")
+    (tmp_path / "cargo-home").mkdir()
+    return source, xbuildenv, config
+
+
+def _build_pyodide(tmp_path: Path, source: Path, xbuildenv: Path) -> None:
+    pyodide_builder.build_wheel(
+        source=source,
+        out_dir=tmp_path / "out",
+        xbuildenv_path=xbuildenv,
+        cargo_target_dir=tmp_path / "target",
+        source_date_epoch=1,
+        cargo_home=tmp_path / "cargo-home",
+    )
+
+
+def test_pyodide_build_checks_the_maturin_hash_through_uv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    source, xbuildenv, config = _pyodide_tree(tmp_path)
+    seen: dict[str, str] = {}
+
+    def fake_run(command: list[str], *, cwd: Path, env: dict[str, str] | None = None) -> None:
+        del command, cwd
+        assert env is not None
+        # pyodide-build's `uv pip install` reads the pins from this file and checks their hashes.
+        seen["constraints"] = Path(env["UV_CONSTRAINT"]).read_text(encoding="utf-8")
+        wheel = tmp_path / "out" / expected_wheel_name("1.0.0", config)
+        wheel.write_bytes(b"wheel")
+
+    monkeypatch.setattr(pyodide_builder, "_verify_emscripten_version", lambda *args, **kwargs: None)  # noqa: ARG005
+    monkeypatch.setattr(pyodide_builder, "_normalize_wheel", lambda *args, **kwargs: None)  # noqa: ARG005
+    monkeypatch.setattr(pyodide_builder.shutil, "which", lambda name, path=None: f"/bin/{name}")  # noqa: ARG005
+    monkeypatch.setattr(pyodide_builder, "_run", fake_run)
+    _build_pyodide(tmp_path, source, xbuildenv)
+    assert f"maturin=={config['maturin']} \\\n    --hash=sha256:" in seen["constraints"]
+
+
+def test_pyodide_build_refuses_to_run_without_uv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    source, xbuildenv, _ = _pyodide_tree(tmp_path)
+    monkeypatch.setattr(pyodide_builder, "_verify_emscripten_version", lambda *args, **kwargs: None)  # noqa: ARG005
+    # Without uv, pyodide-build would install maturin with pip and skip the hash check.
+    monkeypatch.setattr(pyodide_builder.shutil, "which", lambda name, path=None: None)  # noqa: ARG005
+    with pytest.raises(PyodideBuildError, match="uv must be on PATH"):
+        _build_pyodide(tmp_path, source, xbuildenv)

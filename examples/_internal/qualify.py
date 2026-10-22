@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from scripts import build_constraints
+
 from .catalog import ExampleProject, select_projects
 
 if TYPE_CHECKING:
@@ -136,23 +138,37 @@ def install_project(
     if editable_root is not None and wheels:
         raise ValueError("Use either --editable-root or --wheel, not both")
     if editable_root is not None:
-        run_checked(
-            [
-                "uv",
-                "pip",
-                "install",
-                "--python",
-                str(project_dir / ".venv" / "bin" / "python"),
-                "--reinstall",
-                "--no-deps",
-                "--editable",
-                str(editable_root / "packages/py/citry_core"),
-                "--editable",
-                str(editable_root / "packages/py/citry"),
-            ],
-            project_dir,
-            environment,
-        )
+        with tempfile.TemporaryDirectory(prefix="citry-example-build-constraints-") as temporary:
+            # The copied project sits outside the workspace, so uv cannot see the
+            # root build pins; pass them and require a hash for every backend.
+            constraints = build_constraints.export(
+                Path(temporary) / "build-constraints.txt",
+                pyproject=editable_root / "pyproject.toml",
+            )
+            run_checked(
+                [
+                    "uv",
+                    "pip",
+                    "install",
+                    "--python",
+                    str(project_dir / ".venv" / "bin" / "python"),
+                    "--reinstall",
+                    "--no-deps",
+                    # --require-hashes would also demand hashes for the editable
+                    # sources, so require them for build dependencies only.
+                    "--build-constraints",
+                    str(constraints),
+                    "--require-build-hashes",
+                    "--preview-features",
+                    "build-dependency-hashes",
+                    "--editable",
+                    str(editable_root / "packages/py/citry_core"),
+                    "--editable",
+                    str(editable_root / "packages/py/citry"),
+                ],
+                project_dir,
+                environment,
+            )
     elif wheels:
         run_checked(
             [

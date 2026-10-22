@@ -14,6 +14,7 @@ on:
       - "benchmarks/i18n.py"
       - "benchmarks/native_build.py"
       - "scripts/build_citry_core_pyodide_wheel.py"
+      - "scripts/build_constraints.py"
       - "scripts/select_citry_core_qualification.py"
       - "scripts/sync_protocol_python.py"
       - "scripts/verify_citry_core_distribution.py"
@@ -45,6 +46,7 @@ on:
       - "benchmarks/i18n.py"
       - "benchmarks/native_build.py"
       - "scripts/build_citry_core_pyodide_wheel.py"
+      - "scripts/build_constraints.py"
       - "scripts/select_citry_core_qualification.py"
       - "scripts/sync_protocol_python.py"
       - "scripts/verify_citry_core_distribution.py"
@@ -445,11 +447,15 @@ jobs:
       - name: Rebuild and check the wheel from the source distribution
         shell: bash
         run: |
+          # --no-config hides the root build pins, so pass them as a hashed constraints file.
+          python scripts/build_constraints.py export "$RUNNER_TEMP/build-constraints.txt"
           uv build dist/citry_ui-*.tar.gz \
             --wheel \
             --out-dir dist-from-sdist \
             --no-config \
-            --no-build-logs
+            --no-build-logs \
+            --build-constraints "$RUNNER_TEMP/build-constraints.txt" \
+            --require-hashes
           python packages/py/citry_ui/citry_ui/quality/qualify_wheel.py \
             dist-from-sdist/citry_ui-*.whl
 
