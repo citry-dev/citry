@@ -15,8 +15,7 @@ Citry is a free, open source <strong>HTML-first frontend framework</strong> for 
 applications.
 </p>
 <p class="landing-hero__lede">
-HTML, JS, CSS, event endpoints, server state, translations... one component holds all of it.
-
+Everything is typed and checked, so AI agents catch their own mistakes.
 </p>
 <p class="landing-hero__lede">
 No NPM, no NodeJS build, no server-browser API
