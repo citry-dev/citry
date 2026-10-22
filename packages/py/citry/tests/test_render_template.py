@@ -35,6 +35,16 @@ def test_render_template_renders_registered_components_normally() -> None:
     assert str(rendered) == '<section><b data-cid-c2="">new</b></section>'
 
 
+def test_render_template_keeps_a_nul_character_in_text_attributes_and_expressions() -> None:
+    # Python refuses source code that holds a NUL, so the compiled template
+    # must carry it as an escape and still render the same characters.
+    app = Citry()
+
+    rendered = app.render_template("<p title='a\x00b'>c\x00d{{ 'e\x00' }}</p>")
+
+    assert str(rendered) == "<p title='a\x00b'>c\x00de\x00</p>"
+
+
 def test_render_template_caches_load_span_and_compile_work_once_across_threads() -> None:
     calls = {"loaded": 0, "spans": 0, "compiled": 0}
 

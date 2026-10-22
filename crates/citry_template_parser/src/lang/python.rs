@@ -229,7 +229,14 @@ fn format_lang_spec_arg(arg: &LangSpecArgument) -> String {
     match arg {
         LangSpecArgument::Variable(name) => name.clone(),
         LangSpecArgument::UnsafeString(content) => escape_text_in_triple_quotes(content),
-        LangSpecArgument::SafeString(content) => format!("\"{}\"", content),
+        // The compiler builds these from names the parser already checked, so
+        // escaping changes nothing for them. It still runs, because one value,
+        // a foreign span's provider name, reaches the parser from the host
+        // with only a check that it is not empty, and an unescaped quote in it
+        // would end the literal early.
+        LangSpecArgument::SafeString(content) => {
+            format!("\"{}\"", escape_python_string_content(content, true))
+        }
         LangSpecArgument::Int(value) => value.to_string(),
         LangSpecArgument::Bool(value) => {
             if *value {
@@ -380,20 +387,43 @@ fn _byte_offset_to_line_col(source: &str, byte_offset: usize) -> (usize, usize) 
 /// Escape text content for use in Python triple-quoted strings.
 ///
 /// This escapes backslashes, double quotes (including triple-quote sequences),
-/// and carriage returns. Always uses triple double quotes `"""` for consistency.
+/// carriage returns, and NUL characters. Always uses triple double quotes `"""`
+/// for consistency.
 ///
 /// A literal newline is left as-is: it is legal inside a triple-quoted string and
 /// round-trips faithfully. A carriage return must be escaped as `\r`, because
 /// Python applies universal-newline normalization to *source* before tokenizing,
 /// so a raw `\r` (or `\r\n`) inside a literal would be silently rewritten to `\n`,
-/// losing the original bytes.
+/// losing the original bytes. Every other character Rust can hold in a `&str`
+/// survives a triple-quoted literal unchanged, except NUL, which Python refuses
+/// anywhere in source code.
 fn escape_text_in_triple_quotes(text: &str) -> String {
-    // Escape backslashes first (so we don't double-escape), then escape double
-    // quotes (so even `"""` becomes `\"\"\"` and won't terminate the string),
-    // then carriage returns (so they survive Python's universal-newline handling).
-    let escaped = text
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\r', "\\r");
-    format!("\"\"\"{}\"\"\"", escaped)
+    format!("\"\"\"{}\"\"\"", escape_python_string_content(text, false))
+}
+
+/// Escape the characters a Python string literal cannot hold as written.
+///
+/// Set `escape_newlines` for a one-line `"..."` literal, which a raw newline
+/// would end. Every character is visited once, so a backslash added
+/// by one rule is never escaped again by another.
+fn escape_python_string_content(text: &str, escape_newlines: bool) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            // A raw backslash would start an escape sequence, and a trailing
+            // one would escape the closing quote.
+            '\\' => escaped.push_str("\\\\"),
+            // Escaping every quote keeps even `"""` from ending the literal.
+            '"' => escaped.push_str("\\\""),
+            // Python rewrites a raw `\r` to `\n` before it reads the source.
+            '\r' => escaped.push_str("\\r"),
+            '\n' if escape_newlines => escaped.push_str("\\n"),
+            // Python rejects source that contains a NUL byte. `\x00` rather
+            // than `\0`, because a following digit would turn `\0` into a
+            // longer octal escape.
+            '\0' => escaped.push_str("\\x00"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped
 }
