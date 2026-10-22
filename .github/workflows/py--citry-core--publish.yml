@@ -107,9 +107,10 @@ jobs:
           sccache: "true"
           manylinux: auto
           working-directory: ${{ env.PROJECT_DIR }}
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         if: ${{ matrix.target == 'x86_64' }}
         with:
+          prune-cache: true
           version: "0.13.5"
       - uses: actions/setup-python@v7
         if: ${{ matrix.target == 'x86_64' }}
@@ -232,8 +233,9 @@ jobs:
         with:
           ref: ${{ inputs.release_commit }}
           submodules: recursive
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: "0.13.5"
       - uses: actions/setup-python@v7
         id: python310
@@ -311,8 +313,9 @@ jobs:
         with:
           ref: ${{ inputs.release_commit }}
           submodules: recursive
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: "0.13.5"
       - uses: actions/setup-python@v7
         id: python310
@@ -363,8 +366,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: "0.13.5"
           enable-cache: true
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
@@ -412,8 +416,9 @@ jobs:
         if: ${{ matrix.copy == 'a' }}
         with:
           node-version: "24"
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: "0.13.5"
           enable-cache: true
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18

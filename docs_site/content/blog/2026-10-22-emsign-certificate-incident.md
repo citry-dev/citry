@@ -101,6 +101,9 @@ If your project lists certifi in a lock file, raise it to 2026.10.19:
 uv lock --upgrade-package certifi
 ```
 
+If you use Node.js, upgrade to 22.23.4, 24.22.1, or 26.12.1, or a later
+release. Earlier releases in those lines still trust the emSign root.
+
 If you publish to PyPI with the `pypa/gh-action-pypi-publish` action,
 update it to 1.14.3 or later
 ([advisory](https://github.com/pypa/gh-action-pypi-publish/security/advisories/GHSA-5xjx-3w67-w9x9){: target="\_blank" rel="noopener"}).
@@ -120,20 +123,24 @@ list after a rebuild, so keep `PIP_USE_DEPRECATED=legacy-certs` set there.
 
 If you created your project from a Citry starter or demo, its CI workflow
 in `.github/workflows/check.yml` pins uv 0.10.12, which still trusts the
-emSign authorities. Change the pin to 0.13.5:
+emSign authorities. It also uses setup-uv 7.6.0, which installs any uv
+newer than 0.10.10 without checking the download's checksum. Change both,
+and keep the cache pruning that setup-uv 10 no longer does by default. The
+commit below is setup-uv 10.3.2:
 
 ```yaml
-- uses: astral-sh/setup-uv@... # unchanged
+- uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
   with:
+    prune-cache: true
     version: "0.13.5"
 ```
 
-The starters now ship with this pin.
+The starters now ship with these settings.
 
 ## What we changed in Citry
 
 We build, test, and publish Citry on GitHub Actions, so we checked every
-place where our builds use a Python tool to download or upload packages:
+place where our builds download or upload packages:
 
 - **The PyPI upload.** We publish to PyPI with the
   `pypa/gh-action-pypi-publish` action. Its earlier versions shipped a
@@ -144,6 +151,9 @@ place where our builds use a Python tool to download or upload packages:
 - **uv.** Our release workflows, our documentation workflows, and the
   starters pinned uv 0.10.12 or used the newest uv. They now pin 0.13.5,
   and a repository check fails if any of them pins a different version.
+  Every workflow also uses setup-uv 10.3.2, which checks the uv download
+  against uv's published checksum; the older setup-uv skipped that check
+  for any uv newer than 0.10.10.
 - **pip.** The workflows that test the installed `citry-ui` wheel and the
   VS Code extension used the pip that comes with Python, which can be
   older than 26.2.2. They now install pip 26.2.2 from a URL with a
@@ -151,18 +161,26 @@ place where our builds use a Python tool to download or upload packages:
   own list.
 - **certifi.** Our development and benchmark lock files now use certifi
   2026.10.19.
+- **Build backends.** When uv builds a Citry package, it downloads a build
+  backend (setuptools or maturin) that the lock file does not cover. These
+  downloads must now match hashes we record, and uv stops on a mismatch.
+- **Node.js.** Node.js 22.23.4, 24.22.1, and 26.12.1 drop the emSign root.
+  The VS Code extension uploads to the Visual Studio Marketplace and Open
+  VSX now run on Node.js 22.23.4, with the Open VSX client pinned in our
+  lock file. Playwright bundles an older Node.js, so its browser downloads
+  now use the runner's updated system list instead.
 
 Most of our installs were already safe, because they come from lock files
-with hashes. The exposed steps were the PyPI upload, the build backends
-that uv downloaded to build our packages, and a few test installs that
-picked packages by version only, without hashes.
+with hashes. The exposed steps were the PyPI upload, the VS Code extension
+uploads, the Playwright browser downloads, the build backends that uv
+downloaded to build our packages, and a few test installs that picked
+packages by version only, without hashes.
 
-Some steps in our builds also connect through Node.js, which ships its
-own list and still trusts emSign. These steps download the tools
-themselves (uv, Python, Node.js) and the Playwright browsers, and they
-upload the VS Code extension to the Visual Studio Marketplace and Open
-VSX. They will stop trusting emSign when GitHub's runners get a Node.js
-release without that root.
+Two parts remain. The GitHub Actions that download Python, Node.js, and
+pnpm run on the runner's own Node.js, which trusts the emSign root until
+GitHub ships a runner with Node.js 24.22.1. The action that builds the
+`citry-core` wheels downloads maturin without checking a checksum; we have
+not replaced it yet.
 
 We checked PyPI against our own releases: every Citry package file there
 comes from a release our workflows made, and nothing has been uploaded

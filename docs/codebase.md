@@ -1356,6 +1356,78 @@ uv run pytest
 uv run maturin develop
 ```
 
+### Pin build backends
+
+Every build backend uv downloads for a workspace package is pinned to an exact
+version and hash in the root `pyproject.toml`. When you change a package's
+`[build-system] requires`, want a newer backend release, or see the
+`build_backend_pins` validator fail, refresh the pins:
+
+```bash
+python scripts/build_constraints.py update
+uv lock
+```
+
+When uv builds or syncs a workspace package, it first downloads that package's
+build backend from PyPI: setuptools for citry, citry-lsp, citry-ui, and
+pygments-citry, and maturin for citry-core. `uv.lock` records the packages
+Citry installs, but not these build-time downloads. So the root
+`pyproject.toml` lists every build backend, and each package a backend needs
+(tomli for maturin on Python 3.10), in `[tool.uv]
+build-constraint-dependencies` with an exact version and the sha256 hash of
+each file PyPI publishes for it. It also sets `require-build-hashes = true`.
+uv then stops the build when a download does not match a listed hash, or when
+a build needs a package the list leaves out. uv reuses a workspace package
+wheel it has already built and cached without checking the backend again.
+
+uv reads the pins only when it runs inside this workspace: from the repository
+root, or on a path inside it. A command run from a project outside the
+workspace, such as an example project copied to a temporary folder, has to
+pass the pins itself (`examples/_internal/qualify.py` does this for
+`--editable-root`). The published citry-core wheels are built by
+maturin-action, which downloads maturin from GitHub itself and does not use
+these pins.
+
+`update` resolves every `[build-system] requires` entry under `packages/py/`
+for Python 3.10 and later on every platform, then rewrites the lines between
+the `BEGIN build constraints` and `END build constraints` comments. `uv lock`
+copies the pins into `uv.lock`. The `build_backend_pins` validator fails when
+a package asks for a backend or a version range the list does not cover, and
+its message names these two commands.
+
+The release verifiers and the Citry UI rebuild in `py--tests.yml` pass
+`--no-config` when they rebuild a wheel from a fresh sdist, so they never read
+the root table. Those builds export the pins to a
+file (`python scripts/build_constraints.py export <file>`, or
+`build_constraints.export()` from Python) and pass
+`--build-constraints <file> --require-hashes` to `uv build`.
+
+The Pyodide build sets `UV_CONSTRAINT` to the same file, so the
+`uv pip install` that pyodide-build runs to fill its build environment checks
+maturin's hashes. `uvx` reads `UV_CONSTRAINT` for versions but ignores its
+hashes, so the tools `uvx` installs, such as pyodide-build itself, are not
+checked. Because `uvx` applies the versions, the `maturin` version in
+`packages/py/citry_core/pyodide-build.json` must match the root pin, or the
+Pyodide build stops with a resolver conflict.
+
+The pins apply only to builds in this repository. The published sdists keep
+their `[build-system] requires` ranges, so someone building Citry from source
+still picks their own backend version.
+
+This needs uv 0.13.5 or later, the first uv that reads hashed
+`build-constraint-dependencies` entries. An older uv cannot read them:
+`uv sync`, `uv lock`, `uv run`, and `uv build` stop with an error that points
+at the root `pyproject.toml`, while `uv pip` prints a warning and ignores the
+whole `[tool.uv]` table. Every CI workflow pins the same uv release, so a uv
+release that changes this setting cannot break CI before the pin moves; the
+setting is still marked experimental (`build-dependency-hashes`), so check
+uv's release notes when raising the pin.
+
+The pins cover the build backends of this repository's own packages. When uv
+has to build a third-party package from its sdist, because no wheel fits the
+interpreter (for example on a free-threaded Python), that backend has no pin
+and the build stops. Install a Python build that the package ships wheels for.
+
 ### Root pyproject.toml Protection
 
 The root `pyproject.toml` is **explicitly marked as non-releasable**:
@@ -2254,9 +2326,9 @@ Neither route reuses the PyPI trusted-publisher configuration.
    contributor and can publish; the separate public ownership claim controls
    whether the namespace is shown as verified and may remain pending.
 3. Store the token in the same `vscode-marketplaces` GitHub environment as
-   `OVSX_PAT`. The workflow invokes the exact command-level `ovsx@1.1.1`
-   version only in the publishing job, so routine workspace installs do not
-   carry the registry client.
+   `OVSX_PAT`. The publishing job runs the `ovsx` client that the extension's
+   devDependencies pin in `pnpm-lock.yaml`, so the client that receives the
+   token is the one the lockfile records.
 
 In that GitHub environment, choose **Selected branches and tags**, allow the
 `main` branch, and retain any desired reviewer gate. Promotion is a controlled

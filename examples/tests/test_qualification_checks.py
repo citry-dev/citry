@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from examples._internal.catalog import CATALOG_PATH, EXAMPLES_ROOT, load_catalog
-from examples._internal.qualify import LINKS_NOT_CHECKED_CODES, project_environment, qualify_project
+from examples._internal.qualify import (
+    LINKS_NOT_CHECKED_CODES,
+    install_project,
+    project_environment,
+    qualify_project,
+)
 
-if TYPE_CHECKING:
-    from pathlib import Path
+_REPO = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.parametrize("project_id", ["starter-standalone", "starter-django"])
@@ -90,3 +94,29 @@ def test_link_note_codes_exist_in_the_diagnostic_catalog() -> None:
     catalog = json.loads(CATALOG_JSON.read_text(encoding="utf-8"))
     codes = {entry["code"] for entry in catalog["diagnostics"]}
     assert set(LINKS_NOT_CHECKED_CODES) <= codes
+
+
+def test_editable_install_gets_the_hashed_build_pins(tmp_path: Path) -> None:
+    constraint_texts: list[str] = []
+
+    def fake_run(command: list[str], cwd: Path, environment: dict[str, str]) -> str:
+        del cwd, environment
+        if "--build-constraints" in command:
+            # The exported file is deleted after the call, so read it during the call.
+            constraint_texts.append(
+                Path(command[command.index("--build-constraints") + 1]).read_text(encoding="utf-8")
+            )
+        return ""
+
+    with patch("examples._internal.qualify.run_checked", side_effect=fake_run) as run:
+        install_project(tmp_path, project_environment(), None, _REPO, [])
+    install = run.call_args_list[-1].args[0]
+    # The copied project sits outside the workspace, so the editable install
+    # must carry the root build pins and require a hash for each backend.
+    assert install[:3] == ["uv", "pip", "install"]
+    assert "--build-constraints" in install
+    assert "--require-build-hashes" in install
+    assert install[install.index("--preview-features") + 1] == "build-dependency-hashes"
+    assert str(_REPO / "packages/py/citry") in install
+    assert len(constraint_texts) == 1
+    assert "--hash=sha256:" in constraint_texts[0]

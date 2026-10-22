@@ -10,6 +10,9 @@ pages the pytest phase recorded, and the custom validators (scripts/validate.py)
 Every phase runs even after an earlier one fails, so a single invocation
 surfaces every problem at once instead of one-at-a-time.
 
+Before any phase, the gate compares `uv --version` with the uv release recorded
+in packages/py/citry_core/pyodide-build.json and stops when uv is older.
+
 This only CHECKS; it never edits files. Fix the reported issues yourself, then
 re-run. It assumes the workspace is already set up (`uv sync --all-packages`,
 plus `pnpm install` for the pinned Node tools and package-local checks) and that
@@ -24,6 +27,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,6 +37,10 @@ from typing import Literal, cast
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CRATES_DIR = _REPO_ROOT / "crates"
+# The citry-core build settings record the uv release CI installs. The gate
+# requires at least that release because older uv cannot parse the hashed
+# build-constraint entries in the root pyproject.toml.
+_UV_PIN_FILE = _REPO_ROOT / "packages" / "py" / "citry_core" / "pyodide-build.json"
 _TAIL_LINES = 60
 _HEARTBEAT_SECONDS = 30.0
 
@@ -114,6 +122,64 @@ def _vue_render_parity_command(parity_corpus: Path) -> list[str]:
         "--corpus",
         str(parity_corpus),
     ]
+
+
+def _version(text: str) -> tuple[int, int, int, int] | None:
+    """Return a comparable `(major, minor, patch, final)` for a uv version, or None when unreadable."""
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(\+\S*)?(.*)", text)
+    if match is None:
+        return None
+    # A pre-release such as 0.13.5rc1 comes before 0.13.5 itself, while a
+    # `+build` suffix names the same release.
+    final = 0 if match.group(5) else 1
+    return int(match.group(1)), int(match.group(2)), int(match.group(3)), final
+
+
+def _uv_version_result() -> dict[str, object] | None:
+    """Return a failed report entry when the uv on PATH is older than the repository's uv pin."""
+    command = ["uv", "--version"]
+    required = json.loads(_UV_PIN_FILE.read_text(encoding="utf-8")).get("uv")
+    required_version = _version(required) if isinstance(required, str) else None
+    # A broken pin would make every comparison meaningless, so report it in
+    # the same shape as an old uv rather than crash before the JSON report.
+    if required_version is None:
+        details = f"{_UV_PIN_FILE.relative_to(_REPO_ROOT).as_posix()} must record the uv version as 'uv': 'X.Y.Z'"
+        return {
+            "name": "uv version",
+            "command": " ".join(command),
+            "status": "FAILED",
+            "durationSeconds": 0.0,
+            "exitCode": 1,
+            "details": details,
+        }
+    try:
+        completed = subprocess.run(command, cwd=_REPO_ROOT, capture_output=True, text=True, check=False)
+        output: str | None = completed.stdout.strip()
+    except FileNotFoundError:
+        output = None
+    # `uv --version` prints e.g. "uv 0.13.5 (46776a95d 2026-10-21 ...)".
+    found = re.match(r"uv (\S+)", output or "")
+    found_version = _version(found.group(1)) if found else None
+    if found_version is not None and found_version >= required_version:
+        return None
+    if output is None:
+        current = "uv was not found on PATH"
+    elif found:
+        current = f"uv {found.group(1)} found"
+    else:
+        current = f"could not read a uv version from {output!r}"
+    return {
+        "name": "uv version",
+        "command": " ".join(command),
+        "status": "FAILED",
+        "durationSeconds": 0.0,
+        "exitCode": 1,
+        "details": (
+            f"{current}; this repository needs uv {required} or later because the root pyproject.toml "
+            "uses hashed build-constraint-dependencies; upgrade uv (for example `uv self update` "
+            "or your package manager) and re-run."
+        ),
+    }
 
 
 def _phases(profile: CheckProfile = "full", *, parity_corpus: Path) -> list[tuple[str, list[str]]]:
@@ -340,11 +406,19 @@ def main(argv: list[str] | None = None) -> int:
 
     results: list[dict[str, object]] = []
     gate_started = time.monotonic()
-    # A directory per gate run keeps two gates in one worktree from reading
-    # each other's recorded pages, and never compares a stale page.
-    with tempfile.TemporaryDirectory(prefix="citry-vue-render-parity-") as parity_corpus:
-        for name, cmd in _phases(profile, parity_corpus=Path(parity_corpus)):
-            results.append(_run_phase(name, cmd, agent=agent))
+    # Most phases run through uv, and an older uv fails each of them with the
+    # same config error, so stop with one clear report instead.
+    uv_problem = _uv_version_result()
+    if uv_problem is not None:
+        results.append(uv_problem)
+        if not agent:
+            print(f"FAIL: uv version\n{uv_problem['details']}", file=sys.stderr)
+    else:
+        # A directory per gate run keeps two gates in one worktree from reading
+        # each other's recorded pages, and never compares a stale page.
+        with tempfile.TemporaryDirectory(prefix="citry-vue-render-parity-") as parity_corpus:
+            for name, cmd in _phases(profile, parity_corpus=Path(parity_corpus)):
+                results.append(_run_phase(name, cmd, agent=agent))
 
     failed = [str(r["name"]) for r in results if r["status"] == "FAILED"]
     total_duration = time.monotonic() - gate_started

@@ -43,6 +43,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/repo--docs-deploy.yml"
+      - ".github/actions/**"
   workflow_dispatch:
 
 permissions:
@@ -82,8 +83,9 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: "0.13.5"
 
       - name: Set up Python
@@ -131,8 +133,16 @@ jobs:
       - name: Check the generated playground bundle
         run: pnpm --dir docs_site/_internal/frontend run check
 
+      - name: Drop the emSign ECC Root CA - G3 from the system certificates
+        uses: ./.github/actions/drop-emsign-g3
+
       - name: Install the chromium browser
         run: uv run --no-sync playwright install --with-deps chromium
+        # Playwright's bundled Node.js still trusts emSign ECC Root CA - G3,
+        # so its downloads use the refreshed system list.
+        env:
+          NODE_OPTIONS: --use-openssl-ca
+          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 
       # Reuse rendered cards across deploys: they are content-addressed, so only
       # new or changed pages launch the browser.

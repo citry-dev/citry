@@ -77,8 +77,9 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: ${{ env.UV_VERSION }}
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -146,8 +147,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: ${{ env.UV_VERSION }}
       - name: Rebuild the sdist and smoke the public dependency closure
         if: inputs.workspace_dependencies == ''
@@ -177,8 +179,9 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: ${{ env.UV_VERSION }}
       - name: Install the exact wheel and public dependency closure
         if: inputs.workspace_dependencies == ''
@@ -190,8 +193,27 @@ jobs:
         run: >-
           uv pip install --system --only-binary :all:
           candidate-dependencies/*.whl dist/citry_ui-*.whl playwright==1.61.0
+      - name: Drop the emSign ECC Root CA - G3 from the system certificates
+        # Same check as .github/actions/drop-emsign-g3, written out because
+        # this job tests the installed artifact without checking out the repo.
+        run: |
+          g3=MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBrMQswCQYDVQQG
+          if grep -RqF "$g3" /etc/ssl/certs/; then
+            sudo apt-get update -qq
+            sudo apt-get install --only-upgrade -y -qq ca-certificates
+          fi
+          if grep -RqF "$g3" /etc/ssl/certs/; then
+            echo "::error::the system certificate list still trusts emSign ECC Root CA - G3"
+            exit 1
+          fi
+
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
+        # Playwright's bundled Node.js still trusts emSign ECC Root CA - G3,
+        # so its downloads use the refreshed system list.
+        env:
+          NODE_OPTIONS: --use-openssl-ca
+          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       - name: Exercise an installed interactive component
         shell: bash
         run: |
@@ -252,8 +274,9 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
+          prune-cache: true
           version: ${{ env.UV_VERSION }}
       - name: Verify and stage the closed release pair
         run: >-

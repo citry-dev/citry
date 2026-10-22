@@ -76,9 +76,10 @@ jobs:
           --target "$PYTEST_TARGET"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
-          version: "latest"
+          prune-cache: true
+          version: "0.13.5"
 
       # The moving nightly is part of the wheel identity. Resolve the actual
       # compiler before cache lookup so a newly published nightly cannot reuse

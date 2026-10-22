@@ -12,7 +12,7 @@ contributors and AI agents.
 
 ## Getting set up
 
-Install [uv](https://docs.astral.sh/uv/), Rust through
+Install [uv](https://docs.astral.sh/uv/) 0.13.5 or later, Rust through
 [rustup](https://rustup.rs/), Node.js (current LTS), and
 [pnpm](https://pnpm.io/). Then clone with submodules and install the
 packages from the repository root:

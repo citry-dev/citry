@@ -23,7 +23,8 @@ For a shorter overview of ways to help, see the
 Install these four tools:
 
 - [uv](https://docs.astral.sh/uv/){: target="_blank" rel="noopener"} -
-  the Python dependency manager.
+  the Python dependency manager, version 0.13.5 or later. An older uv
+  cannot read the repository's `pyproject.toml`.
 - [Rust via rustup](https://rustup.rs/){: target="_blank" rel="noopener"} -
   installs `cargo`. The repository's `rust-toolchain.toml` picks the
   required nightly toolchain when you run `cargo` inside it.

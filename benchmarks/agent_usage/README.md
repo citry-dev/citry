@@ -19,7 +19,7 @@ The selected skill is copied there for the two skill conditions.
 ## Build and verify
 
 Requirements: Docker with a running Linux engine and host Python 3.10.0 or later.
-The image contains Python 3.12.14, Node 22.23.2, Codex CLI 0.153.4, Citry 0.4.6,
+The image contains Python 3.12.14, Node 22.23.4, Codex CLI 0.153.4, Citry 0.4.6,
 FastAPI, pytest, and Playwright with Chromium. The complete Python dependency
 closure is pinned in [`image/requirements.lock`](image/requirements.lock).
 Prepared trials record the immutable image ID. Rebuilding can update Debian
