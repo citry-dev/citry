@@ -139,8 +139,8 @@ Present a written plan (via `ExitPlanMode`) before editing when the change:
 - Adds or changes a PyO3-exposed function/class
 
 The plan must include: prior art, the chosen design, one or two alternatives
-considered and why rejected, and what would falsify the chosen design. This
-applies even when the user has not explicitly asked for plan mode.
+considered and why rejected, and what result would show the chosen design is
+wrong. This applies even when the user has not explicitly asked for plan mode.
 
 ## Mechanism 3 - when you fix a bug, sweep for the whole class
 
@@ -230,7 +230,7 @@ run it at **high or greater** effort. Fold its findings back before delivery.
 - **Prove uncertain behavior, do not assert it.** A claim that some mechanism
   "is enough" or "is not needed" is a hypothesis until a harness or a walked
   edge case (the teleport-out-of-subtree case, the empty input, the concurrent
-  render) has tried to break it. Enumerate the cases that would falsify the
+  render) has tried to break it. Enumerate the cases that would disprove the
   claim and check them; if you cannot check one, say so and mark it unproven.
 
 ## Where new agent knowledge goes
@@ -722,6 +722,14 @@ forward before continuing.
 - Sentence case for markdown headings.
 - Don't use `vendor` as a verb. This generalizes further - the way you talk and write
   should be simpler and avoid needless jargon, so that even a newcomer engineer could understand.
+- Don't use `falsify` or its other forms (`falsifies`, `falsified`,
+  `falsifier`, `falsification`, `falsifiability`) unless no plainer word fits.
+  Say what the evidence shows instead: "the measurement rules out one third",
+  "this result would show the design is wrong", "the test that would disprove
+  X". The word reads as jargon and leaves unclear whether a claim was tested,
+  disproved, or only shown to be testable. Existing design docs under
+  `docs/design/` keep their wording until a section is next edited; reword the
+  section you touch.
 
 ## Writing rule - don't document what isn't there
 

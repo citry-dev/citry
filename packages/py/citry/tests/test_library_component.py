@@ -1,4 +1,4 @@
-"""Falsifier tests for engine-neutral component library publication."""
+"""Tests that try to break engine-neutral component library publication."""
 
 from __future__ import annotations
 

@@ -419,9 +419,9 @@ Tests provide evidence at three different boundaries. Use the narrowest one
 that answers the question at hand:
 
 1. **While implementing, run focused checks.** Run the affected test file,
-   package check, formatter, type checker, or a small falsifier suite. Repeat
-   these freely because they should complete in seconds. A reviewer should
-   likewise run the cases that could disprove the change, not the entire
+   package check, formatter, type checker, or a few tests that could disprove
+   the change. Repeat these freely because they should complete in seconds. A
+   reviewer should likewise run those targeted cases, not the entire
    repository.
 2. **When the touched surfaces settle, run the fast repository profile.** It
    runs every static, type, package, and validator phase plus the portable

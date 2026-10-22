@@ -3,8 +3,9 @@ Django parity tests for the events HTTP layer (WP13): the same pipeline the
 FastAPI suite drives (test_events_routes.py), served through
 ``citry.contrib.django.urlpatterns`` and Django's test client, plus the
 host-token CSRF proof: the events routes run under Django's CSRF middleware
-untouched, and no view is ``csrf_exempt`` (docs/design/events.md 7.4 and its
-section 15 falsifier).
+untouched, and no view is ``csrf_exempt`` (docs/design/events.md 7.4;
+section 15 item 5 names a ``csrf_exempt`` view as the result that would
+show the CSRF design is wrong).
 
 Like the other Django suites, this file skips without Django installed (it
 ships in the ``benchmark`` dependency group).
