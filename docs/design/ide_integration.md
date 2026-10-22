@@ -161,6 +161,25 @@ These rules need facts that only the loaded application gives, so
   and adds one note for the run (`citry.check.url-checker-failed`). A path
   that a proxy serves is reported even though it works, which is why the
   rule is a warning.
+- `rule_unknown_inject_key` (`citry.template.unknown-inject-key`, a warning
+  by default): a `self.inject("key")` with a literal key and no default,
+  in a component class or a component base class, whose key reaches none
+  of the components that run that code. `citry/_provide_keys.py` reads
+  every registered template once and records each component tag, each
+  `<c-slot>`, and the `<c-provide>` and `<c-fill>` elements around them.
+  The keys that reach a component are the literal keys of
+  `render(provides={...})` calls in the project's Python files, plus, for
+  each place that writes its tag, the keys of the `<c-provide>` elements
+  around the tag, the `provide()` keys of the writing component, the keys
+  the component whose `<c-slot>` shows slot content provides around that
+  slot, and the keys that reach the writing component. Templates can write
+  each other in a cycle, so the sets grow until they stop changing. A
+  component no template writes gets every literal key the app provides.
+  A `<c-provide c-key>`, a `provide()` key that is an expression, a
+  dynamic `<c-component>`, or markup in a component attribute on the way
+  makes the answer "cannot tell", and nothing is reported; a template
+  that cannot be parsed turns the rule off. A `provides` dictionary built
+  elsewhere is invisible, which is why the rule is a warning.
 
 Each of these rules reports nothing when it cannot read its input:
 component JavaScript that does not parse, `css_data()` keys that are not
@@ -196,6 +215,14 @@ editor reports `rule_unknown_url` only for a path the worker answered, so a
 link added after the app loaded is checked at the next load. When the
 worker sends `checked: false`, or runs an older Citry without path checks,
 the editor checks no links.
+
+The worker also sends, as `inject_keys: {"checked", "classes"}`, the keys
+that reach each component class (with its file, qualified name, and the
+definition ids of the registered components that run it, for their lint
+severities). The editor reads the `self.inject()` calls from the open
+buffer, so a call typed after the app loaded is checked at once, while a
+provider added since then counts only after the next load. When the worker
+sends `checked: false`, or runs an older Citry, the editor checks no keys.
 
 Two type checks need the loaded app too, and run in the editor and in
 `citry check --types`. The worker sends, for each component, the fields

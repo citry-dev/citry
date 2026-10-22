@@ -616,6 +616,69 @@ def _path_verdicts(value: object) -> dict[str, tuple[bool, str | None]] | None:
     return verdicts if value["checked"] else None
 
 
+@dataclass(frozen=True, slots=True)
+class InjectKeyClass:
+    """
+    The provide keys that reach one component class, as the app worker found them.
+
+    ``provided`` is ``None`` when some path holds a provider Citry cannot
+    read, so nothing is reported. ``everywhere`` is true when no template
+    renders the class's components, so ``provided`` is every key the app
+    provides.
+    """
+
+    file: Path
+    qualname: str
+    name: str
+    provided: frozenset[str] | None
+    everywhere: bool
+    definition_ids: tuple[str, ...]
+
+
+_INJECT_KEY_CLASS_FIELDS = frozenset({"file", "qualname", "name", "provided", "everywhere", "definition_ids"})
+
+
+def _inject_keys(value: object) -> tuple[InjectKeyClass, ...] | None:
+    """
+    Read the provide keys the worker copied, or ``None`` when it could not work them out.
+
+    A worker on an older citry sends no record, which reads as no keys.
+    """
+    if value is None:
+        return None
+    if type(value) is not dict or set(value) != {"checked", "classes"} or type(value["checked"]) is not bool:
+        raise ValueError("inject key envelope is invalid")
+    raw = value["classes"]
+    if type(raw) is not list:
+        raise ValueError("inject key classes must be a list")
+    classes: list[InjectKeyClass] = []
+    for record in raw:
+        if (
+            type(record) is not dict
+            or set(record) != _INJECT_KEY_CLASS_FIELDS
+            or any(type(record[name]) is not str for name in ("file", "qualname", "name"))
+            or type(record["everywhere"]) is not bool
+            or (
+                record["provided"] is not None
+                and (type(record["provided"]) is not list or any(type(key) is not str for key in record["provided"]))
+            )
+            or type(record["definition_ids"]) is not list
+            or any(type(item) is not str for item in record["definition_ids"])
+        ):
+            raise ValueError("inject key classes must hold valid records")
+        classes.append(
+            InjectKeyClass(
+                file=Path(record["file"]),
+                qualname=record["qualname"],
+                name=record["name"],
+                provided=None if record["provided"] is None else frozenset(record["provided"]),
+                everywhere=record["everywhere"],
+                definition_ids=tuple(record["definition_ids"]),
+            )
+        )
+    return tuple(classes) if value["checked"] else None
+
+
 def _events_csrf_field_names(value: object) -> frozenset[str]:
     """Read the CSRF field names the worker copied from the app's Events settings."""
     names = value.get("csrf_field_names") if type(value) is dict else None
@@ -841,6 +904,10 @@ class ProjectState:
     # a missing one. `None` means no integration could answer, so the
     # editor checks no links.
     path_verdicts: Mapping[str, tuple[bool, str | None]] | None = None
+    # The provide keys that reach each component class when the app loaded,
+    # for the `self.inject()` key check. `None` means the worker could not
+    # work them out, so the editor checks no keys.
+    inject_keys: tuple[InjectKeyClass, ...] | None = None
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
     # ty's types for `js_data()` value parts, per file, source text, and class.
     _js_data_inferred: dict[tuple[Path, str, str], Mapping[tuple[int, int], JsonWireType]] = field(
@@ -1149,6 +1216,7 @@ def _project_from_worker_output(
         i18n = I18nProjectIndex(raw_extensions.get("i18n"))
         csrf_field_names = _events_csrf_field_names(raw_extensions.get("events"))
         path_verdicts = _path_verdicts(payload.get("paths"))
+        inject_keys = _inject_keys(payload.get("inject_keys"))
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}", environment_file=environment_file)
     project_output = payload.get("project_output")
@@ -1176,6 +1244,7 @@ def _project_from_worker_output(
         i18n=i18n,
         csrf_field_names=csrf_field_names,
         path_verdicts=path_verdicts,
+        inject_keys=inject_keys,
     )
 
 

@@ -64,6 +64,11 @@
   or `citry.contrib.django.urlpatterns()`, so point `--app` at the module
   that mounts Citry
   ([details](https://citry.dev/ide/template-linting/#find-links-to-missing-pages)).
+- With your application loaded, `citry check` now warns about a
+  `self.inject("bord")` whose key no component above it provides, and
+  suggests the key the page does provide, such as `board`
+  (`rule_unknown_inject_key`,
+  [details](https://citry.dev/ide/template-linting/#find-unknown-inject-keys)).
 - If you build editor tooling on `citry.analysis`, you can now check a
   fill's `data` name against the slot's `SlotInput[T]`: pass
   `slot_data_types` to `build_schema_template_shadow()` or

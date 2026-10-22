@@ -68,6 +68,11 @@
   `citry.check.url-checker-failed` (message variant `several`), information
   diagnostics that `citry check` lists as notes when no web framework
   integration can answer for the links, or when its answer raises an error.
+- Added `citry.template.unknown-inject-key` (variants `suggestion`,
+  `nowhere`, and `nowhereSuggestion`), a configurable warning that
+  `citry check` and the language server report with the application
+  loaded, for a `self.inject()` key that no provider above the component
+  gives.
 - Added `citry.check.template-not-checked`, an information diagnostic for a
   class whose template `citry check --static` and the language server skip
   because its base class comes from another module and Citry has not

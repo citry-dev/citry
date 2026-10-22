@@ -59,6 +59,7 @@ _LINT_RULE_CODES = {
     "rule_undeclared_css_class": "citry.css.undeclared-class",
     "rule_undeclared_css_variable": "citry.css.undeclared-variable",
     "rule_unknown_url": "citry.template.unknown-url",
+    "rule_unknown_inject_key": "citry.template.unknown-inject-key",
     "rule_i18n_cross_language_fallback": "citry.i18n.cross-language-fallback",
 }
 

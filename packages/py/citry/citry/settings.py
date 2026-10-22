@@ -146,6 +146,7 @@ _TEMPLATE_RULE_FIELDS = (
     "rule_undeclared_css_class",
     "rule_undeclared_css_variable",
     "rule_unknown_url",
+    "rule_unknown_inject_key",
 )
 
 
@@ -355,6 +356,17 @@ class LintSettings:
             ``citry.contrib.django.urlpatterns()``) ran while the app loaded. A
             path another server answers, such as a reverse proxy, is
             reported too. The default is ``"warning"``.
+        rule_unknown_inject_key: Severity for a ``self.inject("key")``
+            call, written with a literal key and no default, whose key no
+            component above provides: no ``<c-provide>`` around the tag in
+            the templates that render the component, no ``provide()`` call
+            in the components above or in the component whose ``<c-slot>``
+            shows it, and no literal key in a ``render(provides={...})``
+            call in your project. When no template renders the component,
+            the key is compared with every key the app provides. A key
+            passed only in a ``provides`` dictionary built elsewhere is
+            reported too, so the default is ``"warning"``. ``citry check``
+            and the editor report it only with your application loaded.
         check_input_types: Check that each value a component receives has
             the type its annotation names. On by default, in development and
             in production. Unlike the ``rule_*`` settings, this check runs
@@ -419,6 +431,7 @@ class LintSettings:
     rule_undeclared_css_class: LintSeverity = "ignore"
     rule_undeclared_css_variable: LintSeverity = "ignore"
     rule_unknown_url: LintSeverity = "warning"
+    rule_unknown_inject_key: LintSeverity = "warning"
     check_input_types: bool = True
 
     # Hidden from type checkers so they keep checking calls against the

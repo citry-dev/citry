@@ -53,6 +53,7 @@ from citry._registry_lint import (
     server_event_payload_findings,
     server_event_payload_from_description,
     template_urls,
+    unknown_inject_key_findings,
     unknown_url_findings,
 )
 from citry._source_lines import source_lines
@@ -1462,6 +1463,8 @@ def browser_diagnostics(
             )
     if project.catalog is None or project.source_analysis is None:
         return tuple(diagnostics)
+    if document.language_id == "python":
+        diagnostics.extend(_unknown_inject_key_diagnostics(document, project))
     for region in document.regions:
         parsed = document.parsed.get(region.key)
         if parsed is None:
@@ -11191,6 +11194,69 @@ def _server_event_payload_diagnostics(
                 source="citry",
             )
         )
+    return diagnostics
+
+
+def _unknown_inject_key_diagnostics(document: DocumentState, project: ProjectState) -> list[types.Diagnostic]:
+    """
+    Report ``self.inject("key")`` calls whose key no provider above the component gives, as `citry check` does.
+
+    The app worker worked out which keys reach each component class when the
+    app loaded. The calls come from the text being edited, so a call added
+    since then is checked at once, while a provider added since then counts
+    only after the app reloads.
+    """
+    records = project.inject_keys
+    analysis = project.analysis
+    path = file_uri_path(document.uri)
+    if not records or analysis is None or path is None:
+        return []
+    resolved = path.resolve()
+    mine = [record for record in records if record.provided is not None and record.file.resolve() == resolved]
+    if not mine:
+        return []
+    try:
+        tree = ast.parse(document.source)
+    except (SyntaxError, ValueError):
+        # Half-typed code: the next edit that parses brings the warnings back.
+        return []
+    diagnostics: list[types.Diagnostic] = []
+    for record in mine:
+        provided = record.provided
+        if provided is None:
+            continue
+        # A class that several components run is reported unless all of them turn the rule off.
+        active = [
+            severity
+            for definition_id in record.definition_ids
+            if (severity := analysis.component_lint.get(definition_id, analysis.lint).rule_unknown_inject_key)
+            != "ignore"
+        ]
+        if not active:
+            continue
+        for finding in unknown_inject_key_findings(
+            document.source,
+            tree,
+            record.qualname,
+            component=record.name,
+            provided=provided,
+            everywhere=record.everywhere,
+        ):
+            try:
+                start = parser_char_index(document.source, finding.start_index)
+                end = parser_char_index(document.source, finding.end_index)
+            except ValueError:
+                continue
+            diagnostics.append(
+                types.Diagnostic(
+                    range=_range(document_range_for_offsets(document.source, start, end)),
+                    message=finding.message,
+                    severity=types.DiagnosticSeverity.Error if "error" in active else types.DiagnosticSeverity.Warning,
+                    code=finding.code,
+                    code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
+                    source="citry",
+                )
+            )
     return diagnostics
 
 

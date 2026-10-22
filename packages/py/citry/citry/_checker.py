@@ -83,6 +83,7 @@ from citry._json_wire import SECRET_UNSUPPORTED_REASON
 from citry._linting import _component_lint_info
 from citry._markup_lint import MARKUP_LINT_RULES
 from citry._path_checks import PathVerdict, check_paths, has_path_checkers, is_citry_path
+from citry._provide_keys import inject_key_scopes
 from citry._registry_lint import (
     ServerEventPayload,
     ServerEventPayloadFinding,
@@ -94,6 +95,7 @@ from citry._registry_lint import (
     template_has_vue_attributes,
     template_urls,
     unkeyed_repeated_component_calls,
+    unknown_inject_key_findings,
     unknown_url_findings,
 )
 from citry._template_data_source import (
@@ -281,6 +283,7 @@ def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
         return CheckReport(findings=tuple(findings), app_failure=app_failure_message(exc), notes=tuple(notes))
 
     findings, notes = _check_registry(engine, registrations, rules)
+    findings.extend(_unknown_inject_key_findings(engine, registrations, cwd))
     return CheckReport(findings=tuple(findings), notes=(TRANSFORM_NOTE, *notes))
 
 
@@ -2163,6 +2166,71 @@ _PAYLOAD_RULES = {
     BROWSER_UNKNOWN_FORM_FIELD: "rule_unknown_form_field",
     BROWSER_MISSING_FORM_FIELD: "rule_missing_form_field",
 }
+
+
+def _unknown_inject_key_findings(
+    engine: Citry,
+    registrations: Mapping[str, type[Component]],
+    cwd: Path,
+) -> list[CheckFinding]:
+    """
+    Report each ``self.inject("key")`` whose key no provider above the component gives.
+
+    The keys come from the templates that render each component, walked up
+    to the page, with every key the app provides as the answer for a
+    component no template renders. ``cwd`` is the project folder searched for
+    ``render(provides={...})`` keys.
+    """
+    try:
+        scopes = inject_key_scopes(engine, registrations, cwd)
+    except (Exception, SystemExit):  # noqa: BLE001 - project code that breaks the walk must not stop the check
+        return []
+    if scopes is None:
+        return []
+    findings: list[CheckFinding] = []
+    trees: dict[Path, tuple[str, ast.Module] | None] = {}
+    for scope in scopes:
+        if scope.provided is None:
+            continue
+        # A class shared by several components is reported unless all of them turn the rule off.
+        active = [
+            severity
+            for component in scope.components
+            if (severity := _component_lint_info(engine, component).rule_unknown_inject_key) != "ignore"
+        ]
+        if not active:
+            continue
+        if scope.file not in trees:
+            try:
+                with tokenize.open(scope.file) as stream:
+                    text = stream.read()
+                trees[scope.file] = (text, ast.parse(text))
+            except (OSError, SyntaxError, UnicodeError, ValueError):
+                trees[scope.file] = None
+        parsed = trees[scope.file]
+        if parsed is None:
+            continue
+        source, tree = parsed
+        findings.extend(
+            _i18n_use_finding(
+                f"{scope.file} ({scope.label})",
+                source,
+                finding.message,
+                finding.code,
+                finding.start_index,
+                finding.end_index,
+                severity="error" if "error" in active else "warning",
+            )
+            for finding in unknown_inject_key_findings(
+                source,
+                tree,
+                scope.qualname,
+                component=scope.name,
+                provided=scope.provided,
+                everywhere=scope.everywhere,
+            )
+        )
+    return findings
 
 
 def _shared_event_handlers(consumers: list[type[Component]]) -> dict[str, tuple[type | None, bool]]:

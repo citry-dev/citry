@@ -1,0 +1,490 @@
+"""
+Tests for ``citry.template.unknown-inject-key``, which ``citry check`` reports with the app loaded.
+
+A component reads a shared value with ``self.inject("key")``. The rule walks
+up from each template that renders the component and reports a key that no
+``<c-provide>``, ``provide()`` call, or ``render(provides={...})`` key on
+the way gives. When no template renders the component, it compares the key
+with every key the app provides. The benchmark's m50 case (a card that reads
+``bord`` under a page that provides ``board``) must be reported, and the
+ways a key can legitimately arrive must stay silent.
+
+Each test writes a small app module, because the rule reads the components'
+Python source.
+"""
+
+from __future__ import annotations
+
+import ast
+import importlib.util
+import sys
+import textwrap
+from typing import TYPE_CHECKING
+
+import pytest
+
+from citry._app_selection import CheckAppSelection
+from citry._checker import check_project
+from citry._provide_keys import engine_inject_keys, provides_argument_keys
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_CODE = "citry.template.unknown-inject-key"
+
+_HEADER = """\
+from citry import Citry, Component, LintSettings
+
+engine = Citry(autodiscover=False{options})
+"""
+
+# The benchmark's card: it reads the board's name that the page provides.
+_CARD_SOURCE = '''
+class Card(Component):
+    citry = engine
+
+    def template_data(self, kwargs, slots):
+        board = READ
+        return {"name": board.name}
+
+    template = """
+      <p>{{ name }}</p>
+    """
+'''
+
+
+def _card(key: str = "board", *, read: str | None = None) -> str:
+    """Return the card's source, reading ``key`` with ``self.inject(key)`` or with the given ``read`` expression."""
+    return _CARD_SOURCE.replace("READ", read if read is not None else f'self.inject("{key}")')
+
+
+def _page(name: str, template: str, *, body: str = "") -> str:
+    """Return the source of a component class with the given template and data method body."""
+    method = f"\n    def template_data(self, kwargs, slots):\n{textwrap.indent(body, ' ' * 8)}\n        return {{}}\n"
+    return f'''
+class {name}(Component):
+    citry = engine
+{method if body else ""}
+    template = """
+{textwrap.indent(textwrap.dedent(template).strip(), " " * 6)}
+    """
+'''
+
+
+_counter = [0]
+
+
+def _findings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *parts: str,
+    options: str = "",
+    files: dict[str, str] | None = None,
+) -> list[tuple[str, str, str]]:
+    """Load an app built from ``parts`` and return each finding's severity, covered source text, and message."""
+    _counter[0] += 1
+    name = f"inject_app_{_counter[0]}"
+    source = _HEADER.format(options=options) + "".join(parts)
+    app_file = tmp_path / f"{name}.py"
+    app_file.write_text(source, encoding="utf-8")
+    for relative, text in (files or {}).items():
+        (tmp_path / relative).write_text(textwrap.dedent(text), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(name, app_file)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # The rule reads each class's module from `sys.modules`, as for an imported app.
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    report = check_project(CheckAppSelection(spec=f"{name}:engine", engine=module.engine), tmp_path)
+    encoded = source.encode()
+    return [
+        (
+            finding.severity,
+            encoded[finding.start_index : finding.end_index].decode(),
+            finding.message,
+        )
+        for finding in report.findings
+        if finding.code == _CODE
+        and finding.start_index is not None
+        and finding.end_index is not None
+        and finding.origin.startswith(str(app_file))
+    ]
+
+
+_BOARD_PROVIDES = """
+<c-provide key="board" name="Projects">
+  <c-card />
+</c-provide>
+"""
+
+
+def test_the_benchmark_misspelled_key_is_reported_with_the_provided_key(tmp_path, monkeypatch):
+    found = _findings(tmp_path, monkeypatch, _card("bord"), _page("Board", _BOARD_PROVIDES))
+
+    assert found == [
+        (
+            "warning",
+            '"bord"',
+            "No component above Card provides 'bord', so self.inject('bord') raises KeyError when Card renders. "
+            "Did you mean 'board'?",
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "card",
+    [
+        pytest.param(_card("board"), id="provided-key"),
+        pytest.param(_card(read='self.inject("bord", None)'), id="positional-default"),
+        pytest.param(_card(read='self.inject("bord", default=None)'), id="keyword-default"),
+        pytest.param(_card(read="self.inject(KEY)"), id="expression-key"),
+        pytest.param(_card(read='[other := self, other.inject("bord")][1]'), id="other-receiver"),
+    ],
+)
+def test_provided_keys_defaults_and_expression_keys_are_not_reported(tmp_path, monkeypatch, card):
+    assert _findings(tmp_path, monkeypatch, "KEY = 'bord'\n", card, _page("Board", _BOARD_PROVIDES)) == []
+
+
+def test_a_key_that_only_another_page_provides_is_reported(tmp_path, monkeypatch):
+    # `Other` provides the key, but it never renders the card.
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Board", "<main><c-card /></main>"),
+        _page("Other", '<c-provide key="board" name="x"><p>no card</p></c-provide>'),
+    )
+
+    assert [message for _severity, _text, message in found] == [
+        "No component above Card provides 'board', so self.inject('board') raises KeyError when Card renders."
+    ]
+
+
+def test_a_component_rendered_on_two_paths_is_not_reported_when_one_provides_the_key(tmp_path, monkeypatch):
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Board", _BOARD_PROVIDES),
+        _page("Plain", "<main><c-card /></main>"),
+    )
+
+    assert found == []
+
+
+@pytest.mark.parametrize(
+    ("pages", "reported"),
+    [
+        pytest.param(
+            [_page("Board", "<c-card />", body='self.provide("board", name="x")')],
+            False,
+            id="provide-in-the-writing-component",
+        ),
+        pytest.param(
+            [
+                _page("Column", "<c-card />"),
+                _page("Board", "<c-column />", body='self.provide("board", name="x")'),
+            ],
+            False,
+            id="provide-further-up",
+        ),
+        pytest.param(
+            [
+                _page("Column", "<c-card />"),
+                _page("Board", '<c-provide key="board" name="x"><c-column /></c-provide>'),
+            ],
+            False,
+            id="c-provide-further-up",
+        ),
+        pytest.param(
+            [_page("Board", "<c-card />", body="self.provide(BOARD_KEY, name='x')")],
+            False,
+            id="module-constant-key",
+        ),
+        pytest.param(
+            [_page("Column", "<c-card />"), _page("Board", "<c-column />")],
+            True,
+            id="nothing-on-the-way",
+        ),
+    ],
+)
+def test_keys_provided_in_python_and_further_up_count(tmp_path, monkeypatch, pages, reported):
+    found = _findings(tmp_path, monkeypatch, "BOARD_KEY = 'board'\n", _card("board"), *pages)
+
+    assert bool(found) is reported
+
+
+_LAYOUT_SLOT = """
+<div>
+  <c-provide key="board" name="x">
+    <c-slot name="body" />
+  </c-provide>
+  <c-slot />
+</div>
+"""
+
+
+@pytest.mark.parametrize(
+    ("page", "reported"),
+    [
+        pytest.param(
+            '<c-layout><c-fill name="body"><c-card /></c-fill></c-layout>',
+            False,
+            id="fill-of-a-slot-inside-c-provide",
+        ),
+        pytest.param("<c-layout><c-card /></c-layout>", True, id="default-slot-outside-c-provide"),
+        pytest.param(
+            '<c-layout><c-fill name="body"><c-if cond="True"><c-card /></c-if></c-fill></c-layout>',
+            False,
+            id="nested-inside-the-fill",
+        ),
+        pytest.param(
+            '<c-layout><c-if cond="True"><c-fill name="body"><c-card /></c-fill></c-if></c-layout>',
+            False,
+            id="fill-inside-c-if",
+        ),
+        pytest.param(
+            '<c-layout><c-fill c-name="slot_name"><c-card /></c-fill></c-layout>',
+            False,
+            id="fill-name-written-as-an-expression",
+        ),
+    ],
+)
+def test_slot_content_sees_the_keys_around_the_slot_that_renders_it(tmp_path, monkeypatch, page, reported):
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Layout", _LAYOUT_SLOT),
+        _page("Board", page),
+    )
+
+    assert bool(found) is reported
+
+
+def test_a_slot_passed_on_to_another_component_keeps_its_keys(tmp_path, monkeypatch):
+    # Shell passes its own slot content into Layout's `body` slot, which Layout wraps in <c-provide>.
+    shell = _page("Shell", '<c-layout><c-fill name="body"><c-slot /></c-fill></c-layout>')
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Layout", _LAYOUT_SLOT),
+        shell,
+        _page("Board", "<c-shell><c-card /></c-shell>"),
+    )
+
+    assert found == []
+
+
+def test_a_slot_owner_that_provides_in_python_counts(tmp_path, monkeypatch):
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Layout", "<div><c-slot /></div>", body='self.provide("board", name="x")'),
+        _page("Board", "<c-layout><c-card /></c-layout>"),
+    )
+
+    assert found == []
+
+
+@pytest.mark.parametrize(
+    "page",
+    [
+        pytest.param('<c-provide c-key="key_name" name="x"><c-card /></c-provide>', id="c-provide-c-key"),
+        pytest.param('<c-component c-is="wrapper"><c-card /></c-component>', id="dynamic-slot-owner"),
+        pytest.param('<c-layout c-body="<><c-card /></>" />', id="markup-in-a-component-attribute"),
+    ],
+)
+def test_a_path_through_a_provider_citry_cannot_read_is_not_reported(tmp_path, monkeypatch, page):
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("bord"),
+        _page("Layout", "<div>{{ body }}<c-slot /></div>"),
+        _page("Board", page),
+    )
+
+    assert found == []
+
+
+def test_a_provide_call_with_an_expression_key_counts_as_any_key_on_its_path(tmp_path, monkeypatch):
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("bord"),
+        _page("Board", "<c-card />", body="self.provide(kwargs['key'], name='x')"),
+    )
+
+    assert found == []
+
+
+def test_a_component_no_template_renders_is_compared_with_every_key_the_app_provides(tmp_path, monkeypatch):
+    # Python renders Card, so any key the app provides anywhere counts.
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("bord"),
+        _page("Other", '<c-provide key="board" name="x"><p>x</p></c-provide>'),
+    )
+
+    assert found == [
+        (
+            "warning",
+            '"bord"',
+            "Nothing in your app provides 'bord', so self.inject('bord') raises KeyError when Card renders. "
+            "Did you mean 'board'?",
+        )
+    ]
+    assert (
+        _findings(
+            tmp_path,
+            monkeypatch,
+            _card("board"),
+            _page("Other", '<c-provide key="board" name="x"><p>x</p></c-provide>'),
+        )
+        == []
+    )
+
+
+def test_a_component_only_a_dynamic_c_component_renders_uses_every_provided_key(tmp_path, monkeypatch):
+    page = _page("Board", '<c-provide key="board" name="x"><c-component c-is="picked" /></c-provide>')
+
+    assert _findings(tmp_path, monkeypatch, _card("board"), page) == []
+    assert [text for _severity, text, _message in _findings(tmp_path, monkeypatch, _card("bord"), page)] == ['"bord"']
+
+
+@pytest.mark.parametrize(
+    ("views", "reported"),
+    [
+        pytest.param('Card().render(provides={"board": board})', False, id="dict-literal"),
+        pytest.param("Card().render(provides=dict(board=board))", False, id="dict-call"),
+        pytest.param("Card().render(provides=shared)", True, id="built-elsewhere"),
+    ],
+)
+def test_render_provides_keys_in_project_files_count(tmp_path, monkeypatch, views, reported):
+    # views.py is never imported: the rule reads the project's Python files as text.
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Board", "<c-card />"),
+        files={"views.py": f"def page(board, shared):\n    return {views}\n"},
+    )
+
+    assert bool(found) is reported
+
+
+def test_render_provides_files_in_virtual_environments_are_skipped(tmp_path, monkeypatch):
+    venv = tmp_path / "env"
+    venv.mkdir()
+    (venv / "pyvenv.cfg").write_text("home = /usr\n", encoding="utf-8")
+    (venv / "lib.py").write_text('render(provides={"board": 1})\n', encoding="utf-8")
+
+    found = _findings(tmp_path, monkeypatch, _card("board"), _page("Board", "<c-card />"))
+
+    assert len(found) == 1
+
+
+def test_provides_argument_keys_reads_literal_keys_only():
+    tree = ast.parse('f(provides={"a": 1, **rest, b: 2}); g(provides=dict(c=1, **more)); h(other={"d": 1})')
+
+    assert sorted(provides_argument_keys(tree)) == ["a", "c"]
+
+
+def test_the_rule_follows_the_settings_and_the_component_lint_class(tmp_path, monkeypatch):
+    parts = (_card("bord"), _page("Board", _BOARD_PROVIDES))
+    ignore = ", lint=LintSettings(rule_unknown_inject_key='ignore')"
+    error = ", lint=LintSettings(rule_unknown_inject_key='error')"
+
+    assert _findings(tmp_path, monkeypatch, *parts, options=ignore) == []
+    assert [item[0] for item in _findings(tmp_path, monkeypatch, *parts, options=error)] == ["error"]
+    lint = "    class Lint:\n        rule_unknown_inject_key = 'ignore'\n"
+    silenced = _card("bord").replace("    citry = engine\n", f"    citry = engine\n\n{lint}", 1)
+    assert _findings(tmp_path, monkeypatch, silenced, _page("Board", _BOARD_PROVIDES)) == []
+
+
+# Reader is registered too. The page renders it without the key, so only
+# the subclasses can bring the key.
+_BASE = '''
+class Reader(Component):
+    citry = engine
+
+    def template_data(self, kwargs, slots):
+        self.inject("board")
+        return {}
+
+    template = """
+      <p>x</p>
+    """
+
+
+class Card(Reader):
+    citry = engine
+
+
+class Tile(Reader):
+    citry = engine
+'''
+
+
+@pytest.mark.parametrize(
+    ("page", "reported"),
+    [
+        pytest.param("<c-reader /><c-card /><c-tile />", True, id="no-subclass-gets-the-key"),
+        pytest.param(
+            '<c-reader /><c-card /><c-provide key="board" name="x"><c-tile /></c-provide>',
+            False,
+            id="one-subclass-gets-it",
+        ),
+    ],
+)
+def test_an_inject_call_on_a_base_class_is_reported_once_unless_a_subclass_gets_the_key(
+    tmp_path, monkeypatch, page, reported
+):
+    found = _findings(tmp_path, monkeypatch, _BASE, _page("Board", page))
+
+    assert len(found) == int(reported)
+    if reported:
+        assert "above Reader provides 'board'" in found[0][2]
+
+
+def test_a_template_that_cannot_be_parsed_turns_the_rule_off(tmp_path, monkeypatch):
+    # The broken template could render the card under any provider.
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("bord"),
+        _page("Board", _BOARD_PROVIDES),
+        _page("Broken", "<c-if>"),
+    )
+
+    assert found == []
+
+
+def test_a_component_whose_source_cannot_be_read_turns_the_fallback_off(tmp_path, monkeypatch):
+    # A class built with type() has no source, so it may provide any key.
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("bord"),
+        'type("Hidden", (Component,), {"citry": engine, "template": "<p>x</p>"})\n',
+    )
+
+    assert found == []
+
+
+def test_the_editor_record_carries_the_keys_and_component_ids(tmp_path, monkeypatch):
+    _findings(tmp_path, monkeypatch, _card("bord"), _page("Board", _BOARD_PROVIDES))
+    module = sys.modules[f"inject_app_{_counter[0]}"]
+    module.engine.initialize()
+
+    record = engine_inject_keys(module.engine, tmp_path)
+    card = next(item for item in record["classes"] if item["qualname"] == "Card")  # type: ignore[union-attr]
+
+    assert record["checked"] is True
+    assert card["provided"] == ["board"]
+    assert card["everywhere"] is False
+    assert card["definition_ids"] == [module.Card.definition_id]
