@@ -172,7 +172,10 @@ def test_simple_vue_direct_root_keeps_owning_engine_and_policy() -> None:
     assert "registerTypeOptions" in html
     assert re.search(r'"renderId":"[^"]+","serverData":\{\},"typeKey":"Root_', html)
     assert rendered.serialize(deps_strategy="simple").find("root fallback") >= 0
-    assert "rootReady" not in rendered.serialize(deps_strategy="simple")
+    # "simple" writes the component's own script as a plain tag, as it does
+    # for a fresh render; the earlier Vue serialize must not take it away.
+    assert "rootReady" in rendered.serialize(deps_strategy="simple")
+    assert "registerTypeOptions" not in rendered.serialize(deps_strategy="simple")
     assert rendered.serialize(deps_strategy="ignore").find("root fallback") >= 0
     assert "rootReady" not in rendered.serialize(deps_strategy="ignore")
 

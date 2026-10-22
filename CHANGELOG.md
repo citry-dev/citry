@@ -240,6 +240,13 @@
 - A Vue page whose body text contains `</body>`, for example inside a
   comment, now serializes instead of raising `ValueError`; until Vue
   mounts, its body is empty.
+- A component's `on_dependencies()` now runs once per rendered instance
+  each time an interactive page is serialized, as documented, instead of
+  twice.
+- Serializing a render again with `deps_strategy="simple"`, after an
+  interactive `"document"` or `"fragment"` serialization of it, now writes
+  its scripts and stylesheets like a fresh render instead of leaving them
+  out.
 
 ## v0.6.0
 
