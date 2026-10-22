@@ -623,11 +623,14 @@ publication rather than preserving an absolute claim.
 
 Use this as the reliability-section heading:
 
-> Catch mistakes early.
+> No silent failures.
 
-The earlier "Python frontend that catches mistakes early" was distinctive but
-could classify Citry as a linter or testing tool. The reliability section has
-enough context to make the same benefit precise.
+"Catch mistakes early" heads the benchmark section under the sponsor belt,
+where the error benchmark chart backs it with measured counts. As a hero line,
+"Python frontend that catches mistakes early" was distinctive but could
+classify Citry as a linter or testing tool; the benchmark section has enough
+context to make the same benefit precise, and the reliability section shows
+the errors themselves.
 
 Use this over the component field or capability section:
 

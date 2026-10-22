@@ -8,15 +8,14 @@ boost: 2
 <section class="landing-hero" markdown="1">
 <div class="landing-hero__grid" markdown="1">
 <div class="landing-hero__copy" markdown="1">
-# The complete frontend stack for Python.
+# The complete Python frontend engineered for AI agents.
 
 <p class="landing-hero__lede">
 Citry is a free, open source <strong>HTML-first frontend framework</strong> for Python web
 applications.
 </p>
 <p class="landing-hero__lede">
-HTML, JS, CSS, event endpoints, server state, translations... one component holds all of it.
-
+Everything is typed and checked, so AI agents catch their own mistakes.
 </p>
 <p class="landing-hero__lede">
 No NPM, no NodeJS build, no server-browser API
@@ -71,6 +70,77 @@ hassle.
   </ul>
 </section>
 
+<!-- Both charts read their numbers from docs_site/data/ through the components
+the Benchmarks page uses, so a new benchmark run redraws the bars on both pages.
+Their options draw the shorter landing version; docs_site/scripts/benchmark_images.py
+draws the README image of the error chart with the same options.
+Some text here is typed by hand and nothing checks it, so recheck it after a
+new run of either benchmark. The intros type the counts (12 frameworks, 63
+mistakes, 1,400 entries), which the Benchmarks page also types. The card
+notes type the versions: "Citry 0.6.1, measured before its release." must
+match VERSION_NOTES in docs_site/scripts/benchmark_readme.py, and
+"Citry 0.6.0" names the speed run. The heading "As fast as Next.js" rests on
+a gap of under 2 ms between Citry and Next.js on the second load.
+-->
+
+<div class="landing-benchmarks" id="benchmarks" markdown="1">
+<section class="landing-benchmark" markdown="1">
+## Catch mistakes early
+
+<p class="landing-section__intro">
+We built the same app in 12 frameworks and made the same 63 mistakes in each.
+</p>
+
+<p class="landing-section__intro">
+Citry catches more errors than other Python frameworks and reports them earlier.
+</p>
+
+<div class="landing-benchmark-card" markdown="1">
+
+<p class="landing-benchmark-card__hint">More green = earlier feedback = better</p>
+
+<c-error-benchmark-chart
+  title="Mistakes reported before the app runs, out of those that apply"
+  sort="share"
+  scale="applicable"
+  short_names
+  compact
+/>
+
+<p class="landing-benchmark-card__note">
+Citry 0.6.1, measured before its release. Each bar counts only the mistakes
+that apply to that framework.
+<a href="/about/benchmarks/#errors-how-we-measured">How we measured</a>
+</p>
+</div>
+</section>
+
+<section class="landing-benchmark" markdown="1">
+## As fast as Next.js
+
+<p class="landing-section__intro">
+Time until a page with 1,400 entries is usable, the second time the server builds it.
+</p>
+
+<div class="landing-benchmark-card" markdown="1">
+
+<c-benchmark-chart
+  load="second"
+  title="Second load: time until usable, 1,400 entries"
+  sort="total"
+  c-phases="False"
+  compact
+  c-show_table="False"
+/>
+
+<p class="landing-benchmark-card__note">
+Citry 0.6.0, one run per framework. Shorter is faster.
+<a href="/about/benchmarks/#how-the-numbers-were-taken">How we measured</a>
+</p>
+</div>
+</section>
+</div>
+
 <!-- TODO: Overview video how it all works (incl VSCode, UI Lib, etc)
 -->
 
@@ -111,7 +181,7 @@ See the [web framework integrations](/advanced/web-frameworks/) and
 </section>
 
 <section class="landing-section" id="reliability" markdown="1">
-## Catch mistakes early.
+## No silent failures.
 
 <!-- Every message below is the real one. Building this page applies each mistake
 to the component above, renders it, and prints back exactly what Citry raised.

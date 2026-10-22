@@ -2531,7 +2531,10 @@ body.djc-drawer-open .djc-drawer-overlay {
   font-weight: 600;
 }
 
-.prose .bench-chart__legend {
+/* The legend is a list, so it is scoped like the page's own lists to win
+   over their bullets and spacing, in a docs page and on the landing page. */
+.prose .bench-chart__legend,
+.landing-content .bench-chart__legend {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 1.25rem;
@@ -2542,7 +2545,8 @@ body.djc-drawer-open .djc-drawer-overlay {
   list-style: none;
 }
 
-.prose .bench-chart__legend li {
+.prose .bench-chart__legend li,
+.landing-content .bench-chart__legend li {
   margin: 0;
 }
 
@@ -2726,6 +2730,75 @@ body.djc-drawer-open .djc-drawer-overlay {
 .bench-chart--counts {
   --bench-axis: 0.25rem;
   --bench-total: 1.5rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Compact benchmark charts (the `compact` option of both charts)       */
+/* ------------------------------------------------------------------ */
+/* The landing page and the README image show a shorter chart: names on the
+   left edge, no axis or dashed line, and the legend under the bars, so the
+   bars come first. The figure becomes a column so the legend can move below
+   the plot without changing the order a screen reader reads them in. These
+   rules come after the counts rules above so they win at every width. */
+.bench-chart--compact {
+  --bench-top: 0.25rem;
+  --bench-axis: 0.25rem;
+  --bench-total: 4.25rem;
+  --bench-label: 0.875rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.bench-chart--compact .bench-chart__guides,
+.bench-chart--compact .bench-chart__axis {
+  display: none;
+}
+
+.bench-chart--compact .bench-chart__legend {
+  order: 1;
+  margin: 0.9rem 0 0;
+}
+
+/* A compact chart that keeps its table shows it after the legend. */
+.bench-chart--compact .bench-chart__details {
+  order: 2;
+}
+
+.bench-chart--compact .bench-chart__name {
+  text-align: left;
+}
+
+/* A total-time bar is one colour with nothing inside it to read, so it can
+   be thinner than a bar split into outcomes. */
+.bench-chart--compact:not(.bench-chart--counts) .bench-chart__bar {
+  height: 0.625rem;
+}
+
+/* Only Citry's number stays bold, like its name, so the eye finds its row. */
+.bench-chart--compact .bench-chart__total {
+  color: var(--c-fg-muted);
+  font-weight: 400;
+  text-align: right;
+}
+
+.bench-chart--compact .bench-chart__row--reference .bench-chart__total {
+  color: var(--c-fg);
+  font-weight: 700;
+}
+
+/* A wrapped name makes its row taller, so rows keep a little air between
+   them, and on a phone the name column is wide enough that no single word
+   such as "django-components" breaks. */
+.bench-chart--compact .bench-chart__row {
+  padding: 0.1rem 0;
+}
+
+@media (max-width: 640px) {
+  .bench-chart--compact {
+    --bench-name: 9rem;
+    --bench-total: 3.9rem;
+    --bench-label: 0.8125rem;
+  }
 }
 
 /* The code meanings are sentences, which read better one per line than

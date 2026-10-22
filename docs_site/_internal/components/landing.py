@@ -2070,6 +2070,7 @@ class LandingPage(Component):
       }
 
       .landing-hero,
+      .landing-benchmarks,
       .landing-section,
       .landing-final {
         width: min(76rem, calc(100% - 3rem));
@@ -2416,6 +2417,107 @@ class LandingPage(Component):
         height: 3.5rem;
       }
 
+      /* The benchmark results under the sponsor belt: two sections, one
+         above the other, each with a heading like the page's other sections
+         and a card that holds its chart. The cards span the same 76rem
+         column as the page's other blocks, which also keeps the bars from
+         stretching across a wide window. The charts are the Benchmarks
+         page's components with their compact option, styled by the
+         bench-chart rules in site.css. */
+      .landing-benchmarks {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: clamp(4rem, 8vw, 6rem);
+        /* The sponsor belt's rule sits just above, so the headings get the
+           same room above them as the space left before the video below. */
+        padding: clamp(4rem, 8vw, 6rem) 0;
+      }
+
+      .landing-benchmark {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+      }
+
+      /* The intro sits between the heading and the card, so the card starts
+         a fixed step below it. */
+      .landing-benchmark .landing-section__intro {
+        margin-bottom: 1.5rem;
+      }
+
+      /* The takeaway sentence sits right under the intro it explains, so
+         the two read as one block above the chart. */
+      .landing-benchmark .landing-section__intro:has(+ .landing-section__intro) {
+        margin-bottom: 0;
+      }
+
+      .landing-benchmark .landing-section__intro + .landing-section__intro {
+        margin-top: 0.75rem;
+      }
+
+      .landing-benchmark-card {
+        /* Citry's bar uses the page's own blue; the other bars stay a quiet
+           gray, so the colour marks which row is Citry, not a rank. */
+        --bench-bar: color-mix(in srgb, var(--landing-muted), transparent 55%);
+        --bench-bar-reference: var(--landing-blue);
+        min-width: 0;
+        padding: 1.5rem 1.6rem 1.25rem;
+        border: 1px solid var(--landing-line);
+        border-radius: 0.9rem;
+        background: var(--landing-panel);
+      }
+
+      /* The section heading already names the chart, so the chart's own
+         caption is hidden visually but kept for screen readers, which also
+         hear it at the start of the chart's label. */
+      .landing-benchmark-card .bench-chart__title {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      .landing-benchmark-card .bench-chart {
+        margin: 0;
+      }
+
+      /* The thin gap between two parts of a bar is drawn in the page colour;
+         on the card it has to match the card instead. */
+      .landing-benchmark-card .bench-chart__segment + .bench-chart__segment {
+        box-shadow: inset 1px 0 0 var(--landing-panel);
+      }
+
+      /* One line above the error chart tells a first-time reader which way
+         is good before they decode the five legend colours. It reuses the
+         legend's size and colour so it reads as part of the chart. */
+      .landing-content .landing-benchmark-card__hint {
+        margin: 0 0 1rem;
+        color: var(--c-fg-muted);
+        font-size: 0.8125rem;
+        text-align: center;
+      }
+
+      .landing-content .landing-benchmark-card__note {
+        margin: 1rem 0 0;
+        color: var(--landing-faint);
+        font-size: 0.8125rem;
+        line-height: 1.5;
+      }
+
+      .landing-content .landing-benchmark-card__note a {
+        color: var(--landing-blue);
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .landing-content .landing-benchmark-card__note a:hover,
+      .landing-content .landing-benchmark-card__note a:focus-visible {
+        text-decoration: underline;
+      }
+
       .landing-section {
         padding: clamp(5rem, 10vw, 9rem) 0;
         border-top: 1px solid var(--landing-line);
@@ -2461,6 +2563,7 @@ class LandingPage(Component):
       }
 
       .landing-content .landing-section h2,
+      .landing-content .landing-benchmark h2,
       .landing-content .landing-final h2 {
         max-width: 18ch;
         margin: 0;
@@ -2485,7 +2588,7 @@ class LandingPage(Component):
       }
 
       .landing-section__intro {
-        max-width: 42rem;
+        max-width: 43rem;
         margin: 1.4rem 0 0;
         color: var(--landing-muted);
         font-size: 1.1rem;
@@ -4052,10 +4155,15 @@ class LandingPage(Component):
         }
 
         .landing-hero,
+        .landing-benchmarks,
         .landing-section,
         .landing-final,
         .landing-footer {
           width: min(100% - 2rem, 76rem);
+        }
+
+        .landing-benchmark-card {
+          padding: 1.25rem 1rem 1rem;
         }
 
         .landing-hero {
