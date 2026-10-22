@@ -54,7 +54,9 @@
 //! - Lists: trailing comma, e.g. `[a, b,]`; empty `[]`.
 //! - Tuples: trailing comma, e.g. `(a, b,)`; empty `()`; single `(x,)`.
 //! - Strings: triple double-quoted with every `"` escaped as `\"`,
-//!   e.g. `"""a \"b\" c"""`.
+//!   e.g. `"""a \"b\" c"""`. Backslashes, carriage returns, and NUL
+//!   characters are escaped too (`\\`, `\r`, `\x00`), so the literal
+//!   evaluates to exactly the template text.
 //! - Consecutive static text/HTML items are coalesced into a single string.
 //! - Component names are lowercased: `<c-Card>` -> `"""card"""`.
 //!   Kebab-case names are preserved: `<c-my-card>` -> `"""my-card"""`.

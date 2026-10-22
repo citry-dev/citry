@@ -3407,6 +3407,24 @@ runtime compares the two and logs a console warning; a production page has
 no `development` configuration flag and does not load the check. The design
 and its limits are in [`dev_prod_mode.md`](dev_prod_mode.md) section 5.1.
 
+Before compiling, the native compiler parses the generated template to find
+its elements and component calls, and the hydration plan parses it again the
+same way. Both parses read each tag Citry wrote for a component call as a Vue
+component, not an HTML element: the tag each local call names, and the
+`<component>` loop written for a run of calls. Vize applies the browser's HTML
+rules to elements, so it would otherwise move such a tag out of a `<table>`,
+`<tbody>`, `<thead>`, `<tfoot>`, `<tr>`, or `<colgroup>` and report "Foster
+parenting moved this element", although the tag never reaches the browser.
+Vue's own compiler also reads every `<component>` as a component. Every other
+tag keeps Vize's default reading, so a `<div>` or a custom element the author
+writes directly inside a `<table>` still fails. Whether the child's own root
+element fits where it lands is decided when the server writes HTML for
+hydration: a row written straight into a `<table>` makes the table a shell
+that Vue fills in the browser. A `<c-element>` whose `c-is` value resolves to
+a table part, such as `tr`, still fails inside a table, because the compiler
+sees only its `citry-dynamic-*` alias, which Vize reads as an element in both
+parses.
+
 ### Compile during serialization, before delivery
 
 Use native Rust compilation and Vue's runtime-only browser build. The full

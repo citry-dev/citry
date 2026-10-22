@@ -253,6 +253,67 @@ def test_inline_template_findings_map_to_their_python_file_line(tmp_path: Path) 
     assert (finding.file, finding.line) == ("app/components/board_page.py", 7)
 
 
+def test_findings_about_a_component_member_map_to_their_file_line(tmp_path: Path) -> None:
+    work = tmp_path / "work" / "m41-browser-value-not-json"
+    module = work / "app" / "components"
+    module.mkdir(parents=True)
+    (module / "board_page.py").write_text(
+        "class BoardPage:\n"
+        "    def js_data(self, kwargs, slots):\n"
+        '        return {"apiBase": API_BASE}\n\n'
+        '    template = """\n      <p>{{ ownr }}</p>\n    """\n\n'
+        "    class JsData:\n"
+        "        api_base: PurePosixPath\n\n"
+        "    def subtitle(self):\n"
+        '        return self.i18n.tr("board-subtitel")\n'
+    )
+    file = f"{work}/app/components/board_page.py"
+    payload = {
+        "findings": [
+            {
+                # A value js_data() returns: the range counts lines of the file from 0.
+                "origin": f"{file} (app.components.board_page.BoardPage.js_data)",
+                "code": "citry.js-data.unsupported-type",
+                "severity": "warning",
+                "message": "JsData field 'apiBase' is not a clean JSON value: API_BASE holds a value of type "
+                "PurePosixPath, which cannot be sent to the browser as JSON.",
+                "range": {"start": {"line": 2, "column": 16}, "end": {"line": 2, "column": 25}},
+            },
+            {
+                # A template checked without the app counts lines inside the template.
+                "origin": f"{file} (BoardPage.template)",
+                "code": "citry.template.unknown-variable",
+                "severity": "error",
+                "message": "Template variable 'ownr' is not available in this template.",
+                "range": {"start": {"line": 2, "column": 10}},
+            },
+            {
+                # A JsData field: the range counts lines of the file from 0.
+                "origin": "app.components.board_page.BoardPage.JsData.api_base",
+                "code": "citry.js-data.unsupported-type",
+                "severity": "warning",
+                "message": "JsData field 'api_base' is not a clean JSON value.",
+                "range": {"start": {"line": 9, "column": 8}},
+            },
+            {
+                # An i18n call in Python names the class alone, and counts lines of the file from 0.
+                "origin": f"{file} (app.components.board_page.BoardPage)",
+                "code": "citry.i18n.unknown-message",
+                "severity": "error",
+                "message": "Unknown i18n message ID 'board-subtitel'.",
+                "range": {"start": {"line": 12, "column": 15}},
+            },
+        ]
+    }
+    findings = citry_json(json.dumps(payload), "", 1, work)
+    assert [(finding.file, finding.line) for finding in findings] == [
+        ("app/components/board_page.py", 3),
+        ("app/components/board_page.py", 6),
+        ("app/components/board_page.py", 10),
+        ("app/components/board_page.py", 13),
+    ]
+
+
 def test_a_type_check_that_did_not_run_has_no_verdict() -> None:
     payload = {"findings": [], "notes": ["--types did not run TypeScript or ty; it needs an app"], "exit_code": 0}
     with pytest.raises(ToolUnavailable):

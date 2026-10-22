@@ -194,6 +194,10 @@
   before it checks the event's data class, with or without JavaScript,
   instead of rejecting the call for an unknown field. Name other token
   fields in `extensions_defaults={"events": {"_csrf_field_names": [...]}}`.
+- In a component that uses Vue, a component call inside a `<table>`,
+  `<tbody>`, `<thead>`, `<tfoot>`, `<tr>`, or `<colgroup>` now renders.
+  It used to fail with "Foster parenting moved this element before the
+  nearest open table".
 - An Events data class field annotated as `Literal[...]` now accepts the
   values it lists. Every call used to fail with "Unsupported annotation".
 - An Events `State` field annotated as a tuple is a tuple again in event

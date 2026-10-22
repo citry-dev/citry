@@ -88,7 +88,7 @@ Pydantic models and installs the djc-ext-pydantic extension, which the \
 django-components project publishes. The benchmark turns on a framework's \
 stricter check when other frameworks here have the same kind of check, and \
 Citry, Next.js, Nuxt and FastHTML check the types of a component's inputs \
-(before the app runs; Citry 0.6.0 does not check them again when a component \
+(before the app runs; Citry also checks them when a component \
 renders), so this app turns that type check on: djc-ext-pydantic 1.1.0 (with \
 Pydantic 2.14.1) is listed in `COMPONENTS["extensions"]`, and those classes \
 are Pydantic `BaseModel`s. Pydantic's default ignores names a model does not \

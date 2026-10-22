@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import tomllib
 from contextlib import nullcontext
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -34,7 +35,7 @@ from .execute import StageOutput, run_stages
 from .parsers import PARSE, Finding, ToolUnavailable
 from .runtime import Observation, observe
 from .score import StageResult, earliest, score_stage
-from .work import changed_files, env_dir, materialize, mistake_lines, prepare
+from .work import changed_files, env_dir, local_sources, materialize, mistake_lines, prepare
 
 
 def _record_stages(
@@ -155,6 +156,47 @@ def _source() -> dict:
         "inputs_tree": inputs_tree,
         "inputs_changed": bool(inputs_changed),
     }
+
+
+def _from_checkout(frameworks: list[Framework], repo: Path = REPO_ROOT) -> dict[str, list[dict]]:
+    """
+    Name each package a framework installs from this repository rather than from a registry, by framework key.
+
+    The lockfile names no release for such a package, so the record gives
+    its version, the git tree of its folder at the run's commit (which, like
+    `inputs_tree`, survives a rebase) and whether it had uncommitted changes.
+    """
+
+    def git(*argv: str) -> str:
+        completed = subprocess.run(["git", *argv], cwd=repo, capture_output=True, text=True, check=False)
+        return completed.stdout.strip() if completed.returncode == 0 else ""
+
+    record: dict[str, list[dict]] = {}
+    for framework in frameworks:
+        packages = []
+        for name, path in local_sources(framework).items():
+            # Only a folder inside this repository has a commit to name.
+            if not path.is_dir() or not path.is_relative_to(repo):
+                continue
+            folder = path.relative_to(repo).as_posix()
+            manifest = path / "pyproject.toml"
+            version = (
+                tomllib.loads(manifest.read_text(encoding="utf-8")).get("project", {}).get("version", "")
+                if manifest.is_file()
+                else ""
+            )
+            packages.append(
+                {
+                    "name": name,
+                    "version": version,
+                    "path": folder,
+                    "tree": git("rev-parse", f"HEAD:{folder}"),
+                    "changed": bool(git("status", "--porcelain", "--", folder)),
+                }
+            )
+        if packages:
+            record[framework.key] = packages
+    return record
 
 
 _print_lock = threading.Lock()
@@ -450,7 +492,11 @@ def _run_locked(
     args: argparse.Namespace, selected: list[Framework], ports: dict[tuple[str, str], Port], mistakes: list[Mistake]
 ) -> Path:
     run_dir = _new_run_dir(datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"))
-    source = _source() | {"jobs": args.jobs, "static_jobs": args.static_jobs}
+    source = _source() | {
+        "from_checkout": _from_checkout(selected),
+        "jobs": args.jobs,
+        "static_jobs": args.static_jobs,
+    }
     (run_dir / "run.json").write_text(json.dumps(source, indent=2) + "\n")
     for framework in selected:
         prepare(framework)

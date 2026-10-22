@@ -183,6 +183,15 @@ def write(run_dir: Path, output: Path) -> None:
         # Runs recorded before the inputs tree was added have no tree id.
         tree = f", benchmark inputs tree `{source['inputs_tree']}`" if source.get("inputs_tree") else ""
         lines += [f"Cases and tools from commit `{source['commit']}`{tree}{dirty}.", ""]
+        for key, packages, changed in html_report.checkout_packages(source):
+            # Such a framework is measured from unreleased sources, which the
+            # reader needs before comparing it with a release.
+            name = frameworks[key].name if key in frameworks else key
+            lines += [
+                f"{name}: {packages} built from this repository at commit `{source['commit']}`"
+                f"{' plus uncommitted changes to them' if changed else ''}, not a published release.",
+                "",
+            ]
 
     lines += ["## How each mistake ended", "", f"| Outcome | {names} |", "| --- |" + " --- |" * len(keys)]
     counts = {

@@ -158,9 +158,10 @@ pub enum LangSpecArgument {
     ///
     /// For example, in Python this might become `"""value"""` depending on content.
     UnsafeString(String),
-    /// A string that doesn't need escaping when converted to code.
+    /// A short string, such as a name, written as a one-line literal.
     ///
     /// For example, in Python this might become `"a"` (simple string literal).
+    /// Each language still escapes any character the literal cannot hold.
     SafeString(String),
     /// The integer value
     Int(usize),
