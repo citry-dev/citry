@@ -77,8 +77,11 @@ concurrency:
 env:
   # pip before 26.2.2 trusts the distrusted eMudhra (emSign) certificate
   # authorities, and the pip that setup-python provides can be older. pip checks
-  # the #sha256 fragment itself, so this download is safe even over a connection
-  # an older pip cannot verify.
+  # the #sha256 fragment itself, so this download is safe even if an attacker
+  # controls the connection. pip 26.2.2 still adds the operating system's
+  # certificate list, which can still hold the affected emSign root, so the upgrade step then
+  # sets PIP_USE_DEPRECATED=legacy-certs for later steps: pip uses only its own
+  # list. Older pip rejects that value, so it cannot be set here.
   PIP_WHEEL: "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"
 
 jobs:
@@ -484,7 +487,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Upgrade pip to a release with the current certificate list
-        run: python -m pip install --disable-pip-version-check "$PIP_WHEEL"
+        run: |
+          python -m pip install --disable-pip-version-check "$PIP_WHEEL"
+          echo "PIP_USE_DEPRECATED=legacy-certs" >> "$GITHUB_ENV"
 
       - name: Prepare an offline wheelhouse
         shell: bash
@@ -519,6 +524,10 @@ jobs:
       - name: Install and exercise the wheel with pip outside the checkout
         shell: bash
         run: |
+          # This venv starts with the pip bundled in Python, which can predate the
+          # legacy-certs option and would reject it. Its installs are offline, so
+          # it never uses a certificate list.
+          unset PIP_USE_DEPRECATED
           test_dir="$RUNNER_TEMP/citry-ui-pip-test"
           python -m venv "$test_dir"
           "$test_dir/bin/python" -m pip install \
@@ -604,7 +613,9 @@ jobs:
           python-version: "3.14"
 
       - name: Upgrade pip to a release with the current certificate list
-        run: python -m pip install --disable-pip-version-check "$PIP_WHEEL"
+        run: |
+          python -m pip install --disable-pip-version-check "$PIP_WHEEL"
+          echo "PIP_USE_DEPRECATED=legacy-certs" >> "$GITHUB_ENV"
 
       - name: Prepare an offline wheelhouse with the matching local Citry
         shell: bash

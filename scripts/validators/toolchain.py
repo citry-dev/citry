@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml  # type: ignore[import-untyped]
+
 try:
     import tomllib
 except ImportError:  # Python < 3.11
@@ -185,8 +187,11 @@ def check() -> list[str]:
     # The citry-core build settings already record the uv release, so every
     # other pin is compared with that one value and moves in the same change.
     uv_pin = pyodide.get("uv")
+    # Without a recorded version there is nothing to compare the pins with.
+    if not isinstance(uv_pin, str):
+        errors.append(f"{_PYODIDE_CONFIG.relative_to(REPO_ROOT)} must record the uv version under 'uv'")
     # The example projects ship their CI workflow to users who copy them, so
-    # they carry the same reviewed uv pin as the workflows that produce evidence.
+    # they use the same reviewed setup-uv commit as the release workflows.
     example_workflows = sorted(REPO_ROOT.glob("examples/*/*/.github/workflows/check.yml"))
     for workflow_path in (
         _EXAMPLES_TEST_WORKFLOW,
@@ -198,12 +203,12 @@ def check() -> list[str]:
         label = workflow_path.relative_to(REPO_ROOT)
         uv_actions = len(re.findall(r"uses:\s+astral-sh/setup-uv@", workflow))
         if workflow.count(f"uses: {_UV_ACTION}") != uv_actions:
-            errors.append(f"every uv setup in release-evidence workflow {label} must use the reviewed commit")
-        if workflow.count(f'version: "{uv_pin}"') != uv_actions:
-            errors.append(f"every uv setup in {label} must pin uv {uv_pin}")
+            errors.append(f"every uv setup in {label} must use the reviewed commit")
+    if isinstance(uv_pin, str):
+        errors.extend(pinned_action_errors(REPO_ROOT, uv_pin))
         pnpm_actions = len(re.findall(r"uses:\s+pnpm/action-setup@", workflow))
         if workflow.count(f"uses: {_PNPM_ACTION}") != pnpm_actions:
-            errors.append(f"every pnpm setup in release-evidence workflow {label} must use the reviewed commit")
+            errors.append(f"every pnpm setup in {label} must use the reviewed commit")
 
     examples_workflow = _EXAMPLES_TEST_WORKFLOW.read_text(encoding="utf-8")
     examples_rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", examples_workflow))
@@ -409,4 +414,46 @@ def check() -> list[str]:
     ):
         if marker not in release_workflow:
             errors.append(f"mandatory release workflow is missing {marker!r}")
+    return errors
+
+
+def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
+    """
+    Report setup-uv and PyPI upload steps that leave the reviewed pins.
+
+    A text count can miss one wrong pin among several, or a version kept in a
+    workflow ``env`` value, so this reads each workflow and resolves the value
+    a step actually receives. Publishing, the docs build, and the examples must
+    run the reviewed uv release; other test jobs may ask for ``latest``.
+    """
+    errors: list[str] = []
+    paths = sorted((root / ".github" / "workflows").glob("*.yml"))
+    # Users copy the example workflows, so they follow the same pins.
+    paths += sorted(root.glob("examples/*/*/.github/workflows/check.yml"))
+    for path in paths:
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        label = path.relative_to(root)
+        # These workflows produce what users install or read, so they cannot
+        # drift to whatever uv is newest on the day they run.
+        exact = (
+            path.name.endswith("--publish.yml")
+            or path.name in {"repo--docs-check.yml", "repo--docs-release.yml", "py--examples--tests.yml"}
+            or label.parts[0] == "examples"
+        )
+        workflow_env = workflow.get("env") or {}
+        for job_name, job in (workflow.get("jobs") or {}).items():
+            env = {**workflow_env, **(job.get("env") or {})}
+            for step in job.get("steps") or []:
+                uses = str(step.get("uses", ""))
+                if uses.startswith("pypa/gh-action-pypi-publish@") and uses != _PYPI_ACTION:
+                    errors.append(f"{label} job {job_name} must upload with {_PYPI_ACTION}")
+                if not uses.startswith("astral-sh/setup-uv@"):
+                    continue
+                version = str((step.get("with") or {}).get("version", ""))
+                # A `${{ env.NAME }}` reference pins whatever that env value holds.
+                reference = re.fullmatch(r"\$\{\{\s*env\.(\w+)\s*\}\}", version)
+                if reference:
+                    version = str(env.get(reference.group(1), ""))
+                if version != uv_pin and (exact or version != "latest"):
+                    errors.append(f"{label} job {job_name} pins uv {version or 'nothing'}, not {uv_pin}")
     return errors
