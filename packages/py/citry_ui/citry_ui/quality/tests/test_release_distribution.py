@@ -43,3 +43,19 @@ def test_promotion_rejects_an_untrusted_digest(tmp_path):
             expected_digest="sha256:not-a-digest",
             output_dir=tmp_path / "verified",
         )
+
+
+def test_sdist_rebuild_gets_the_hashed_build_pins(monkeypatch, tmp_path):
+    output = tmp_path / "wheel"
+
+    def fake_run(command, *, cwd, env=None):
+        del cwd, env
+        # --no-config hides the root build pins, so the rebuild must get them as a hashed file.
+        assert command[-3] == "--build-constraints"
+        assert command[-1] == "--require-hashes"
+        assert "--hash=sha256:" in Path(command[-2]).read_text(encoding="utf-8")
+        (output / "rebuilt.whl").write_bytes(b"wheel")
+        return ""
+
+    monkeypatch.setattr(_MODULE, "_run", fake_run)
+    assert _MODULE._build_sdist_wheel(tmp_path / "citry_ui.tar.gz", output, cwd=tmp_path) == output / "rebuilt.whl"
