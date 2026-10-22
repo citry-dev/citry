@@ -2205,7 +2205,7 @@ def _unknown_inject_key_findings(
                 with tokenize.open(scope.file) as stream:
                     text = stream.read()
                 trees[scope.file] = (text, ast.parse(text))
-            except (OSError, SyntaxError, UnicodeError, ValueError):
+            except (OSError, SyntaxError, UnicodeError, ValueError, RecursionError):
                 trees[scope.file] = None
         parsed = trees[scope.file]
         if parsed is None:

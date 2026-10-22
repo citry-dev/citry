@@ -1380,11 +1380,12 @@ warning. To turn it off, set `rule_unknown_url` to `"ignore"` in the
 ([Override one component](#override-one-component)), or in
 `LintSettings` for the whole app.
 
-## Shared value keys { #find-unknown-inject-keys }
+## Keys nothing provides { #find-unknown-inject-keys }
 
-A component that reads a shared value under a key that nothing above it
-provides fails with `KeyError` when the page renders. Here the page
-provides `board`, and the card reads `bord`:
+A component that reads a shared value with
+[`self.inject()`](/concepts/provide-and-inject/) under a key that nothing
+above it provides fails with `KeyError` when the page renders. Here the
+page provides `board`, and the card reads `bord`:
 
 ```citry-html
 <c-provide key="board" name="Projects">
@@ -1397,60 +1398,76 @@ class Card(Component):
     def template_data(self, kwargs, slots):
         # Warning: No component above Card provides
         # 'bord', so self.inject('bord') raises
-        # KeyError when Card renders. Did you mean
-        # 'board'?
+        # KeyError when the page renders. Did you
+        # mean 'board'?
         board = self.inject("bord")
         return {"board_name": board.name}
 ```
 
-Citry starts at each template that writes the component's tag and walks
-up through the templates that write those components, to the top of the
-page. A key counts when:
+Citry starts at each template that uses the component's tag, such as
+`<c-card />`, and walks up through the templates that use those
+components, to the top of the page. A key counts when:
 
 - a `<c-provide key="...">` wraps the tag;
 - a component on the way calls `self.provide()` with it;
 - the tag is slot content, and the component whose `<c-slot>` shows it
   wraps that `<c-slot>` in `<c-provide>` or calls `self.provide()`;
+- a `<c-component c-is="...">` sits inside a `<c-provide>` with the key,
+  or in a component that calls `self.provide()` with it, because it may
+  render any component;
 - a `render(provides={...})` call in your project's Python files passes it
-  as a literal key.
+  as a literal key. Such a key counts for every component.
 
 If the component appears in several places and one of them provides the
-key, nothing is reported. A key written as a module-level string constant,
-such as `self.provide(BOARD_KEY, ...)`, counts as that string.
+key, Citry reports nothing. A key written as a module-level string
+constant, such as `self.provide(BOARD_KEY, ...)`, counts as that string.
 
-When no template writes the component's tag, because Python renders it or
-a `<c-component c-is="...">` picks it, Citry compares the key with every
-key your app provides anywhere. The message then starts with "Nothing in
-your app provides".
+When no template uses the component's tag, Citry compares the key with
+every key your app provides anywhere, and the message starts with
+"Nothing in your app provides". That happens when Python renders the
+component, when a `<c-component c-is="...">` picks it, or when it appears
+only inside its own template, such as a tree that renders itself.
 
-Only a `self.inject()` call in the component's class, or in a component
-class it extends, with one string literal and no default is checked. These
-are not checked:
+Citry checks a `self.inject()` call that has one string literal and no
+default, in the component's class or in a class it extends. A call in a
+base class that several components extend is reported once, and only when
+none of them gets the key. These calls are not checked:
 
-- a call with a default, such as `self.inject("theme", None)`, because
-  the key may be missing on purpose;
-- a key written as an expression, such as `self.inject(key_name)`;
+- a call with a default, such as `self.inject("theme", None)`, because the
+  key may be missing on purpose;
+- a key written as a name or an expression, such as
+  `self.inject(BOARD_KEY)` or `self.inject(key_name)`;
 - a call in a helper function outside the class.
 
-Nothing is reported for a place that passes through something Citry
-cannot read: a `<c-provide c-key="...">`, a `self.provide()` key written
-as an expression, a `<c-component c-is="...">`, or markup passed in a
-component's attribute, such as `c-body="<>...</>"`. A component whose
-Python source Citry cannot read may provide any key, so nothing is
-reported below it, or for a component no template writes. The rule
-reports nothing at all while a registered template cannot be parsed.
+Citry reports nothing for a component when the way up to it goes through
+something it cannot read:
 
-A key passed only in a `provides` dictionary built elsewhere, such as
-`render(provides=shared)`, is reported even though the page works. That
-is why the rule is a warning. To turn it off, set
+- a `<c-provide c-key="...">`;
+- a `self.provide()` key written as an expression;
+- a tag inside a `<c-component c-is="...">`;
+- markup passed in a component's attribute, such as `c-body="<>...</>"`;
+- a component that Python builds inside a component's methods, or passes
+  to another component, such as `Layout(slots={"default": Widget()})`;
+- a component whose Python source Citry cannot read.
+
+While Citry cannot read the Python source of one of your components, it
+also reports nothing for a component no template uses. While a
+registered template cannot be parsed, the rule reports nothing at all.
+
+Citry also reports a key the page does provide when it cannot see the
+provider: a `provides` dictionary built elsewhere, such as
+`render(provides=shared)`; a `self.provide()` call in a helper function;
+or a `render(provides=...)` call outside the folder you run `citry check`
+from. That is why the rule is a warning. To turn it off, set
 `rule_unknown_inject_key` to `"ignore"` in the component's `Lint` class
 ([Override one component](#override-one-component)), or in
 `LintSettings` for the whole app.
 
 The editor checks the `self.inject()` calls in the file you are editing
-against the keys your app provided when it last loaded. A call you type
-is checked at once; a provider you add counts after the next load, which
-VS Code starts when you save a Python file.
+against the keys your app provided when it last loaded. A call you type in
+an existing component is checked at once. A new component, or a provider
+you add, counts after the next load, which VS Code starts when you save a
+Python file.
 
 ## Check rules in CI
 
@@ -1481,7 +1498,7 @@ which reads each child's `emits`, and the rules for
 [classes without CSS](#find-classes-without-css),
 [unset CSS variables](#find-unset-css-variables),
 [links](#find-links-to-missing-pages), and
-[shared value keys](#find-unknown-inject-keys).
+[keys nothing provides](#find-unknown-inject-keys).
 
 They still run every rule that reads only the template: the Alpine,
 attribute-value, and misspelled-directive rules, and the rules for

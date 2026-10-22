@@ -76,7 +76,7 @@ def test_the_editor_reports_the_benchmark_misspelled_key(tmp_path):
     assert _findings(tmp_path, "bord") == [
         (
             '"bord"',
-            "No component above Card provides 'bord', so self.inject('bord') raises KeyError when Card renders. "
+            "No component above Card provides 'bord', so self.inject('bord') raises KeyError when the page renders. "
             "Did you mean 'board'?",
             2,
         )
@@ -112,6 +112,10 @@ def test_the_worker_record_is_read_and_checked():
     assert classes[0].provided == frozenset({"board"})
     assert _inject_keys(None) is None
     assert _inject_keys({"checked": False, "classes": []}) is None
+    # A field a newer citry adds does not stop an older editor from loading the app.
+    newer = _inject_keys({"checked": True, "classes": [{**record, "later": 1}], "later": 1})
+    assert newer is not None
+    assert newer[0].qualname == "Card"
 
 
 @pytest.mark.parametrize(

@@ -88,10 +88,10 @@ theme = self.inject("theme", None)
 locale = self.inject("locale", "en")
 ```
 
-`citry --app ... check` and the editor warn before the page runs when a
-`self.inject("key")` without a default reads a key that no component
+`citry --app ... check` and the editor warn before the page renders when
+a `self.inject("key")` without a default reads a key that no component
 above it provides, such as `bord` under a page that provides `board`.
-See [Shared value keys](/ide/template-linting/#find-unknown-inject-keys).
+See [Keys nothing provides](/ide/template-linting/#find-unknown-inject-keys).
 
 ## `provide()` from Python
 

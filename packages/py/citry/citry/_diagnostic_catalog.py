@@ -1806,18 +1806,20 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'see, set rule_unknown_inject_key to "ignore" in the component\'s Lint '
                                               'class, or for the whole app in LintSettings.',
                                        'messages': {'default': "No component above {component} provides '{key}', so "
-                                                               "self.inject('{key}') raises KeyError when {component} "
-                                                               'renders.',
+                                                               "self.inject('{key}') raises KeyError when the page "
+                                                               "renders. Provide '{key}' above {component}, or pass a "
+                                                               'default to inject().',
                                                     'nowhere': "Nothing in your app provides '{key}', so "
-                                                               "self.inject('{key}') raises KeyError when {component} "
-                                                               'renders.',
+                                                               "self.inject('{key}') in {component} raises KeyError "
+                                                               "when the page renders. Provide '{key}' above "
+                                                               '{component}, or pass a default to inject().',
                                                     'nowhereSuggestion': "Nothing in your app provides '{key}', so "
-                                                                         "self.inject('{key}') raises KeyError when "
-                                                                         '{component} renders. Did you mean '
+                                                                         "self.inject('{key}') in {component} raises "
+                                                                         'KeyError when the page renders. Did you mean '
                                                                          "'{suggestion}'?",
                                                     'suggestion': "No component above {component} provides '{key}', so "
-                                                                  "self.inject('{key}') raises KeyError when "
-                                                                  "{component} renders. Did you mean '{suggestion}'?"},
+                                                                  "self.inject('{key}') raises KeyError when the page "
+                                                                  "renders. Did you mean '{suggestion}'?"},
                                        'parameters': {'component': 'The name of the component class that calls '
                                                                    'inject().',
                                                       'key': 'The key the component reads.',
@@ -1827,31 +1829,39 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                   'KeyError.',
                                        'surfaces': ['check', 'lsp'],
                                        'title': 'Shared value read under a key nothing provides',
-                                       'when': 'A method of a component class, or of a component class it extends, '
-                                               'calls self.inject() with one string literal and no default, and that '
-                                               'key reaches the component on none of the ways Citry can see. Citry '
-                                               "starts at each template that writes the component's tag and walks up "
-                                               'through the templates that write those components. A key counts when a '
-                                               '<c-provide key="..."> wraps the tag, when a component on the way calls '
-                                               'self.provide() with it, when the tag is slot content and the component '
-                                               'whose <c-slot> shows it wraps that <c-slot> in <c-provide> or calls '
-                                               'self.provide(), or when a render(provides={...}) call in your '
-                                               "project's Python files passes it as a literal key. If the component "
-                                               'appears in several places and one of them provides the key, nothing is '
-                                               "reported. When no template writes the component's tag, because Python "
-                                               'renders it or a <c-component c-is="..."> picks it, the key is compared '
-                                               'with every key the app provides anywhere. Nothing is reported for a '
-                                               'call with a default, such as self.inject("key", None); for a key '
-                                               'written as an expression; for a place that passes through a <c-provide '
-                                               'c-key="...">, a self.provide() key written as an expression, a '
-                                               '<c-component c-is="...">, or markup in a component\'s attribute; below '
-                                               'a component whose Python source Citry cannot read; or while a '
-                                               'registered template cannot be parsed. A key passed only in a provides '
-                                               'dictionary built elsewhere is reported too, which is why the rule is a '
-                                               'warning. The rule runs in citry check with your application loaded, '
-                                               'and in an editor that has loaded your application; the editor checks '
-                                               'the calls in the file you edit against the keys your app provided when '
-                                               'it last loaded.'},
+                                       'when': 'A method of a component class, or of a base class or mixin it extends, '
+                                               'calls self.inject() with one string literal and no default, and no '
+                                               'provider Citry can see gives that key to the component. Citry starts '
+                                               "at each template that uses the component's tag, such as <c-card />, "
+                                               'and walks up through the templates that use those components. A key '
+                                               'counts when a <c-provide key="..."> wraps the tag; when a component on '
+                                               'the way calls self.provide() with it; when the tag is slot content and '
+                                               'the component whose <c-slot> shows it wraps that <c-slot> in '
+                                               '<c-provide> or calls self.provide(); when a <c-provide> or '
+                                               'self.provide() wraps a <c-component c-is="...">, which may render any '
+                                               "component; or when a render(provides={...}) call in your project's "
+                                               'Python files passes it as a literal key, which counts for every '
+                                               'component. A key written as a module-level string constant counts as '
+                                               'that string. If the component appears in several places and one of '
+                                               'them provides the key, nothing is reported. When no template uses the '
+                                               "component's tag, because Python renders it, a <c-component "
+                                               'c-is="..."> picks it, or it appears only inside its own template, the '
+                                               'key is compared with every key the app provides anywhere. Citry '
+                                               'reports nothing for a call with a default, such as self.inject("key", '
+                                               'None), or a key written as a name or expression; below a <c-provide '
+                                               'c-key="...">, a self.provide() key written as an expression, a tag '
+                                               'inside a <c-component c-is="...">, markup in a component\'s attribute, '
+                                               "or a component Python builds inside a component's methods or passes to "
+                                               'another component, such as Layout(slots={"default": Widget()}); below '
+                                               'a component whose Python source it cannot read; and nothing at all '
+                                               'while a registered template cannot be parsed. A key the page does '
+                                               'provide is reported when Citry cannot see the provider: a provides '
+                                               'dictionary built elsewhere, a self.provide() call in a helper '
+                                               'function, or a render(provides=...) call outside the folder you run '
+                                               'citry check from. That is why the rule is a warning. The rule runs in '
+                                               'citry check with your application loaded, and in an editor that has '
+                                               'loaded your application; the editor checks the calls in the file you '
+                                               'edit against the keys your app provided when it last loaded.'},
  'citry.template.unknown-url': {'code': 'citry.template.unknown-url',
                                 'configurableSeverity': True,
                                 'constant': 'TEMPLATE_UNKNOWN_URL',

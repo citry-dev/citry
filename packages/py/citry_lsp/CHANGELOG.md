@@ -54,7 +54,7 @@ All notable changes to `citry-lsp` are documented here.
   `self.inject("bord")` whose key no component above it provides, and
   suggests the provided key, such as `board` (`rule_unknown_inject_key`).
   A call you type is checked at once; a provider you add counts at the
-  next reload.
+  next reload, which saving a Python file starts.
 - The editor and `citry check --types` warn about a `js_data()` value that
   ty types as a standard type JSON cannot carry, such as a
   `PurePosixPath`, a `datetime`, or a set.

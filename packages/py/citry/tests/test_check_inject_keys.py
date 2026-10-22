@@ -126,7 +126,7 @@ def test_the_benchmark_misspelled_key_is_reported_with_the_provided_key(tmp_path
         (
             "warning",
             '"bord"',
-            "No component above Card provides 'bord', so self.inject('bord') raises KeyError when Card renders. "
+            "No component above Card provides 'bord', so self.inject('bord') raises KeyError when the page renders. "
             "Did you mean 'board'?",
         )
     ]
@@ -157,7 +157,8 @@ def test_a_key_that_only_another_page_provides_is_reported(tmp_path, monkeypatch
     )
 
     assert [message for _severity, _text, message in found] == [
-        "No component above Card provides 'board', so self.inject('board') raises KeyError when Card renders."
+        "No component above Card provides 'board', so self.inject('board') raises KeyError when the page"
+        " renders. Provide 'board' above Card, or pass a default to inject()."
     ]
 
 
@@ -278,6 +279,28 @@ def test_a_slot_passed_on_to_another_component_keeps_its_keys(tmp_path, monkeypa
     assert found == []
 
 
+_INNER = _page("Inner", '<c-provide key="board" name="x"><c-slot /></c-provide>')
+
+
+@pytest.mark.parametrize(
+    ("owner", "page"),
+    [
+        pytest.param("<c-inner><c-slot /></c-inner>", "<c-owner><c-card /></c-owner>", id="slot-in-the-body"),
+        pytest.param(
+            '<c-inner><c-if cond="True"><c-slot /></c-if></c-inner>',
+            "<c-owner><c-card /></c-owner>",
+            id="slot-under-c-if-in-the-body",
+        ),
+        pytest.param("<c-inner><c-slot><c-card /></c-slot></c-inner>", "<c-owner />", id="fallback-content"),
+    ],
+)
+def test_a_slot_written_in_another_components_body_gets_that_components_keys(tmp_path, monkeypatch, owner, page):
+    # Owner passes its slot content, or its fallback, into Inner's default slot, which Inner wraps in <c-provide>.
+    found = _findings(tmp_path, monkeypatch, _card("board"), _INNER, _page("Owner", owner), _page("Board", page))
+
+    assert found == []
+
+
 def test_a_slot_owner_that_provides_in_python_counts(tmp_path, monkeypatch):
     found = _findings(
         tmp_path,
@@ -334,8 +357,8 @@ def test_a_component_no_template_renders_is_compared_with_every_key_the_app_prov
         (
             "warning",
             '"bord"',
-            "Nothing in your app provides 'bord', so self.inject('bord') raises KeyError when Card renders. "
-            "Did you mean 'board'?",
+            "Nothing in your app provides 'bord', so self.inject('bord') in Card raises KeyError when the page"
+            " renders. Did you mean 'board'?",
         )
     ]
     assert (
@@ -361,6 +384,7 @@ def test_a_component_only_a_dynamic_c_component_renders_uses_every_provided_key(
     [
         pytest.param('Card().render(provides={"board": board})', False, id="dict-literal"),
         pytest.param("Card().render(provides=dict(board=board))", False, id="dict-call"),
+        pytest.param("Card().render(provides={BOARD_KEY: board})", False, id="module-constant-key"),
         pytest.param("Card().render(provides=shared)", True, id="built-elsewhere"),
     ],
 )
@@ -371,7 +395,7 @@ def test_render_provides_keys_in_project_files_count(tmp_path, monkeypatch, view
         monkeypatch,
         _card("board"),
         _page("Board", "<c-card />"),
-        files={"views.py": f"def page(board, shared):\n    return {views}\n"},
+        files={"views.py": f"BOARD_KEY = 'board'\n\n\ndef page(board, shared):\n    return {views}\n"},
     )
 
     assert bool(found) is reported
@@ -389,9 +413,113 @@ def test_render_provides_files_in_virtual_environments_are_skipped(tmp_path, mon
 
 
 def test_provides_argument_keys_reads_literal_keys_only():
-    tree = ast.parse('f(provides={"a": 1, **rest, b: 2}); g(provides=dict(c=1, **more)); h(other={"d": 1})')
+    tree = ast.parse(
+        'E = "e"\nf(provides={"a": 1, **rest, b: 2, E: 3}); g(provides=dict(c=1, **more)); h(other={"d": 1})'
+    )
 
-    assert sorted(provides_argument_keys(tree)) == ["a", "c"]
+    assert sorted(provides_argument_keys(tree)) == ["a", "c", "e"]
+
+
+def test_a_project_folder_too_large_to_read_turns_the_rule_off(tmp_path, monkeypatch):
+    # Past the limit Citry cannot see every `render(provides=...)` key.
+    monkeypatch.setattr("citry._provide_keys._MAX_PROJECT_FILES", 0)
+
+    assert _findings(tmp_path, monkeypatch, _card("bord"), _page("Board", _BOARD_PROVIDES)) == []
+
+
+@pytest.mark.parametrize(
+    ("parts", "files"),
+    [
+        pytest.param(
+            (
+                _page("Widget", "<c-card />"),
+                _page("Board", '<c-provide key="board" name="x">{{ widget }}</c-provide>', body="widget = Widget()"),
+            ),
+            {},
+            id="built-in-a-data-method",
+        ),
+        pytest.param(
+            (_page("Widget", "<c-card />"), _page("Layout", '<c-provide key="board" name="x"><c-slot /></c-provide>')),
+            {"views.py": "def page():\n    return str(Layout(slots={'default': Widget()}))\n"},
+            id="passed-in-slots",
+        ),
+    ],
+)
+def test_a_component_python_places_inside_other_content_is_not_reported_below(tmp_path, monkeypatch, parts, files):
+    # Widget renders under Board's or Layout's <c-provide>, which Citry cannot see from the templates.
+    assert _findings(tmp_path, monkeypatch, _card("board"), *parts, files=files) == []
+
+
+def test_a_page_python_renders_on_its_own_still_gets_its_children_checked(tmp_path, monkeypatch):
+    found = _findings(
+        tmp_path,
+        monkeypatch,
+        _card("board"),
+        _page("Board", "<c-card />"),
+        files={"views.py": "def page():\n    return str(Board())\n"},
+    )
+
+    assert len(found) == 1
+
+
+_TREE = '''
+class Tree(Component):
+    citry = engine
+
+    def template_data(self, kwargs, slots):
+        self.inject("board")
+        return {"kids": []}
+
+    template = """
+      <ul><c-for each="kid in kids"><c-tree /></c-for></ul>
+    """
+'''
+
+
+def test_a_component_written_only_in_its_own_template_uses_every_provided_key(tmp_path, monkeypatch):
+    # Python renders the outermost tree, under whatever the page provides.
+    layout = _page("Layout", '<c-provide key="board" name="x"><c-slot /></c-provide>')
+
+    assert _findings(tmp_path, monkeypatch, _TREE, layout) == []
+    assert len(_findings(tmp_path, monkeypatch, _TREE)) == 1
+
+
+_MIXINS = '''
+class ProvidesBoard:
+    def template_data(self, kwargs, slots):
+        self.provide("board", name="x")
+        return {}
+
+
+class ReadsBoard:
+    def template_data(self, kwargs, slots):
+        self.inject("bord")
+        return {}
+
+
+class Board(ProvidesBoard, Component):
+    citry = engine
+    template = """
+      <c-card />
+    """
+
+
+class Tile(ReadsBoard, Component):
+    citry = engine
+    template = """
+      <p>x</p>
+    """
+'''
+
+
+def test_provide_and_inject_calls_in_mixins_count(tmp_path, monkeypatch):
+    found = _findings(tmp_path, monkeypatch, _card("board"), _MIXINS, _page("Page", "<c-board /><c-tile />"))
+
+    # Card gets `board` from the mixin's provide(); the mixin's inject("bord") is reported once.
+    assert [message for _severity, _text, message in found] == [
+        "No component above ReadsBoard provides 'bord', so self.inject('bord') raises KeyError when the page"
+        " renders. Provide 'bord' above ReadsBoard, or pass a default to inject()."
+    ]
 
 
 def test_the_rule_follows_the_settings_and_the_component_lint_class(tmp_path, monkeypatch):

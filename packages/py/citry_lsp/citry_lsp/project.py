@@ -642,11 +642,14 @@ def _inject_keys(value: object) -> tuple[InjectKeyClass, ...] | None:
     """
     Read the provide keys the worker copied, or ``None`` when it could not work them out.
 
-    A worker on an older citry sends no record, which reads as no keys.
+    A worker on an older citry sends no record, and the editor then checks
+    no keys. A record with a missing or wrong-typed field raises
+    ``ValueError``, which fails the app load as a protocol mismatch. A field
+    added by a newer citry is ignored.
     """
     if value is None:
         return None
-    if type(value) is not dict or set(value) != {"checked", "classes"} or type(value["checked"]) is not bool:
+    if type(value) is not dict or not {"checked", "classes"} <= set(value) or type(value["checked"]) is not bool:
         raise ValueError("inject key envelope is invalid")
     raw = value["classes"]
     if type(raw) is not list:
@@ -655,7 +658,7 @@ def _inject_keys(value: object) -> tuple[InjectKeyClass, ...] | None:
     for record in raw:
         if (
             type(record) is not dict
-            or set(record) != _INJECT_KEY_CLASS_FIELDS
+            or not set(record) >= _INJECT_KEY_CLASS_FIELDS
             or any(type(record[name]) is not str for name in ("file", "qualname", "name"))
             or type(record["everywhere"]) is not bool
             or (
@@ -668,7 +671,8 @@ def _inject_keys(value: object) -> tuple[InjectKeyClass, ...] | None:
             raise ValueError("inject key classes must hold valid records")
         classes.append(
             InjectKeyClass(
-                file=Path(record["file"]),
+                # Resolved once here, so each diagnostics pass compares paths without asking the file system.
+                file=Path(record["file"]).resolve(),
                 qualname=record["qualname"],
                 name=record["name"],
                 provided=None if record["provided"] is None else frozenset(record["provided"]),

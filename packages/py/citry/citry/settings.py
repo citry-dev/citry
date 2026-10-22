@@ -357,16 +357,18 @@ class LintSettings:
             path another server answers, such as a reverse proxy, is
             reported too. The default is ``"warning"``.
         rule_unknown_inject_key: Severity for a ``self.inject("key")``
-            call, written with a literal key and no default, whose key no
-            component above provides: no ``<c-provide>`` around the tag in
-            the templates that render the component, no ``provide()`` call
-            in the components above or in the component whose ``<c-slot>``
-            shows it, and no literal key in a ``render(provides={...})``
-            call in your project. When no template renders the component,
-            the key is compared with every key the app provides. A key
-            passed only in a ``provides`` dictionary built elsewhere is
-            reported too, so the default is ``"warning"``. ``citry check``
-            and the editor report it only with your application loaded.
+            call with a literal key and no default when no provider above
+            the component gives that key. Citry looks for a
+            ``<c-provide>`` around the component's tag in the templates
+            that use it, a ``provide()`` call in the components above it
+            or in the component whose ``<c-slot>`` shows it, and a literal
+            key in a ``render(provides={...})`` call in your project. When
+            no template uses the component, Citry compares the key with
+            every key the app provides. A key passed only in a
+            ``provides`` dictionary built elsewhere, or provided by a
+            helper function, is reported too, so the default is
+            ``"warning"``. ``citry check`` and the editor report it only
+            with your application loaded.
         check_input_types: Check that each value a component receives has
             the type its annotation names. On by default, in development and
             in production. Unlike the ``rule_*`` settings, this check runs

@@ -11212,7 +11212,7 @@ def _unknown_inject_key_diagnostics(document: DocumentState, project: ProjectSta
     if not records or analysis is None or path is None:
         return []
     resolved = path.resolve()
-    mine = [record for record in records if record.provided is not None and record.file.resolve() == resolved]
+    mine = [record for record in records if record.provided is not None and record.file == resolved]
     if not mine:
         return []
     try:
