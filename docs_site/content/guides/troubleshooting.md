@@ -135,6 +135,41 @@ Repeat the component with '<c-for>'.
 your Python components. Repeat the component with
 [`<c-for>`](/syntax/control-flow/), which loops on the server.
 
+## Loop variable missing
+
+The page fails to render, and the error says that a variable exists only
+in the browser:
+
+```text
+<c-Card> in template /app/team.py::Team, line 3 reads 'member' in
+c-name="member.name", but 'member' exists only in the browser: the
+Vue v-for on <li> (line 3) declares it.
+```
+
+Citry evaluates `{{ }}`, `c-*` attributes, and component inputs on the
+server while it renders the page. A `v-for` runs later, in the browser,
+so its loop variable does not exist yet when the server reads it:
+
+```citry-html
+{# Fails: c-name reads member on the server #}
+<li v-for="member in members">
+  <c-Card c-name="member.name" />
+</li>
+```
+
+Loop on the server with [`<c-for>`](/syntax/control-flow/), over a list
+that `template_data()` returns:
+
+```citry-html
+<c-for each="member in members">
+  <li><c-Card c-name="member.name" /></li>
+</c-for>
+```
+
+Text or an HTML attribute with no component around it can stay in the
+`v-for` if Vue reads the value instead, as in
+`<span v-text="member.name"></span>` or `:title="member.name"`.
+
 ## Missing or wrong prop
 
 `citry check` or the editor reports that a required Vue prop is missing,

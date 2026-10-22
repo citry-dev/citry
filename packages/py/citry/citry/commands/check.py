@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, ClassVar, NoReturn, cast
 
 from citry._app_selection import CheckAppSelection, app_failure_message, load_app
-from citry._checker import CheckFinding, CheckReport, _lsp_range_coordinates, check_project
+from citry._checker import CheckReport, _lsp_range_coordinates, _source_finding, check_project
 from citry.command import CommandArg
 from citry.extension import ExtensionCommand
 
@@ -158,6 +158,7 @@ def _json_report(report: CheckReport, *, static: bool, app_spec: str | None) -> 
                 "message": finding.message,
                 "range": (
                     {
+                        "source_kind": finding.source_kind,
                         "start_index": finding.start_index,
                         "end_index": finding.end_index,
                         "start": {"line": finding.line, "column": finding.column},
@@ -253,12 +254,14 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
         if coordinates is not None and (code, item.path.resolve(), *coordinates[2:]) in reported:
             continue
         findings.append(
-            CheckFinding(
-                f"{item.path}:{start.line + 1}:{start.character + 1}",
-                item.diagnostic.message,
-                code,
-                "warning" if severity == DiagnosticSeverity.Warning else "error",
-                *(coordinates or ()),
+            _source_finding(
+                origin=f"{item.path}:{start.line + 1}:{start.character + 1}",
+                message=item.diagnostic.message,
+                code=code,
+                severity="warning" if severity == DiagnosticSeverity.Warning else "error",
+                coordinates=coordinates,
+                # TypeScript and ty place a finding in the file the origin names.
+                source_kind="file",
             )
         )
     return CheckReport(tuple(findings), report.app_failure, report.notes)

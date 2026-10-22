@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -11,7 +12,14 @@ import pytest
 from citry import Citry, Component, Extension, ForeignSpan, ForeignSpanSet, LintSettings
 from citry.__main__ import main
 from citry._app_selection import CheckAppSelection
-from citry._checker import TRANSFORM_NOTE, check_project
+from citry._checker import (
+    TRANSFORM_NOTE,
+    CheckFinding,
+    CheckReport,
+    _byte_offset_coordinates,
+    _lsp_range_coordinates,
+    check_project,
+)
 from citry._diagnostic_catalog import I18N_CATALOG_INVALID, I18N_MISSING_PARAM_TYPE, TEMPLATE_MARKER_NAME_INVALID
 from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
 from citry.ext.i18n.extension import I18nExtension
@@ -502,7 +510,9 @@ class TestRegistryMode:
         assert finding.code == I18N_CATALOG_INVALID
         assert "selector $count must have type int or Decimal" in finding.message
         assert finding.origin.endswith("::Picker.messages")
-        assert (finding.line, finding.column, finding.end_line, finding.end_column) == (2, 11, 2, 17)
+        # Lines and columns count from 0 in the dedented messages string.
+        assert (finding.line, finding.column, finding.end_line, finding.end_column) == (1, 10, 1, 16)
+        assert finding.source_kind == "inline"
         assert report.exit_code == 1
 
     def test_catalog_failure_without_a_source_position_names_the_catalog(self, tmp_path, monkeypatch):
@@ -1444,6 +1454,230 @@ def test_json_format_has_versioned_structured_parser_diagnostic(tmp_path, monkey
     assert payload["exit_code"] == 1
     assert payload["findings"][0]["code"] == "citry.parse.syntax"
     assert payload["findings"][0]["range"]["start_index"] is not None
+    # Static mode reads the template string from the class, so its range
+    # counts inside that string.
+    assert payload["findings"][0]["range"]["source_kind"] == "inline"
+
+
+_RANGES_APP = """\
+from citry import Citry, Component
+
+engine = Citry(
+    autodiscover=False,
+    extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
+)
+
+
+class Greeting(Component):
+    citry = engine
+    messages = \"\"\"
+        known = Known
+    \"\"\"
+    template = \"\"\"
+      <p>é {{ missing }} <c-nope /> <span v-text="nope"></span></p>
+    \"\"\"
+    js = \"\"\"
+      sendEvent("missing");
+    \"\"\"
+
+    class JsData:
+        note: str = "é"; tags: set[str]
+
+    class Events:
+        def save(self):
+            pass
+
+    def subtitle(self):
+        return self.i18n.tr("missing-id")
+
+
+class Broken(Component):
+    citry = engine
+    template = \"\"\"
+      <p>x</p>
+      <c-if cond="x">
+    \"\"\"
+
+
+class Styled(Component):
+    citry = engine
+    template = \"\"\"
+      <p>Styled</p>
+    \"\"\"
+    css = \"\"\"
+      .note { color: var(--acent); }
+    \"\"\"
+
+    class CssData:
+        accent: str
+
+
+class FromFile(Component):
+    citry = engine
+    template_file = "from_file.html"
+    js_file = "from_file.js"
+    css_file = "from_file.css"
+
+    class CssData:
+        accent: str
+"""
+
+
+def test_json_ranges_of_every_rule_family_count_from_zero(tmp_path, monkeypatch, capsys):
+    # Every rule family numbers its range the same way (#203). Each template,
+    # JavaScript, and CSS mistake below sits on line 1 or 2 of its source,
+    # counted from 0, and the `é` before some of them makes a byte offset
+    # differ from a column.
+    monkeypatch.chdir(tmp_path)
+    spec = _write_app(tmp_path, _RANGES_APP, name="check_project_ranges")
+    (tmp_path / "from_file.html").write_text("<p>\n  é {{ gone }}\n</p>\n", encoding="utf-8")
+    (tmp_path / "from_file.js").write_text('\nsendEvent("missing");\n', encoding="utf-8")
+    (tmp_path / "from_file.css").write_text("\n.note { color: var(--acent); }\n", encoding="utf-8")
+    app_file = str(tmp_path / "check_project_ranges.py")
+
+    assert _run_main(["--app", spec, "check", "--format", "json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    ranges = {
+        (finding["code"], finding["origin"].removeprefix(f"{tmp_path}/")): (
+            finding["range"]["source_kind"],
+            finding["range"]["start"]["line"],
+            finding["range"]["start"]["column"],
+            finding["range"]["end"]["line"],
+            finding["range"]["end"]["column"],
+        )
+        for finding in payload["findings"]
+    }
+    assert ranges == {
+        # Inline template: the parser, Citry's own rules, and the Vue rules.
+        ("citry.parse.syntax", "check_project_ranges.Broken.template"): ("inline", 2, 0, 2, 15),
+        ("citry.template.unknown-variable", "check_project_ranges.Greeting.template"): ("inline", 1, 8, 1, 15),
+        ("citry.template.unknown-component", "check_project_ranges.Greeting.template"): ("inline", 1, 20, 1, 26),
+        ("citry.vue.unknown-variable", "check_project_ranges.Greeting.template"): ("inline", 1, 44, 1, 48),
+        # Inline JavaScript and CSS count in their own string.
+        ("citry.browser.unknown-server-event", "check_project_ranges.Greeting.js"): ("inline", 1, 11, 1, 18),
+        ("citry.css.misspelled-variable", "check_project_ranges.Styled.css"): ("inline", 1, 19, 1, 26),
+        # Template, JavaScript, and CSS files count in the file.
+        ("citry.template.unknown-variable", "from_file.html"): ("file", 1, 7, 1, 11),
+        ("citry.browser.unknown-server-event", "from_file.js"): ("file", 1, 11, 1, 18),
+        ("citry.css.misspelled-variable", "from_file.css"): ("file", 1, 19, 1, 26),
+        # Python code counts in the component's file, which the origin names.
+        (
+            "citry.js-data.unsupported-type",
+            "check_project_ranges.py (check_project_ranges.Greeting.JsData.tags)",
+        ): ("file", 21, 25, 21, 29),
+        ("citry.i18n.unknown-message", "check_project_ranges.py (check_project_ranges.Greeting)"): (
+            "file",
+            28,
+            15,
+            28,
+            41,
+        ),
+    }
+    # The byte offsets count in the same text as the lines and columns.
+    by_code = {finding["code"]: finding["range"] for finding in payload["findings"]}
+    source = (tmp_path / "check_project_ranges.py").read_text(encoding="utf-8")
+    js_data = by_code["citry.js-data.unsupported-type"]
+    assert source.encode()[js_data["start_index"] : js_data["end_index"]] == b"tags"
+    assert app_file in {finding["origin"].split(" (", 1)[0] for finding in payload["findings"]}
+
+
+def test_json_ranges_count_crlf_files_as_python_reads_them(tmp_path, monkeypatch, capsys):
+    # A file with CR LF line endings counts lines the same way, and its byte
+    # offsets count each line break as one "\n", as Python reads the file.
+    monkeypatch.chdir(tmp_path)
+    app = (
+        "from citry import Citry, Component\n"
+        "engine = Citry(autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class JsData:\n"
+        "        tags: set[str]\n"
+    )
+    (tmp_path / "check_project_crlf.py").write_bytes(app.replace("\n", "\r\n").encode())
+    (tmp_path / "card.html").write_bytes(b"<p>\r\n  {{ gone }}\r\n</p>\r\n")
+
+    assert _run_main(["--app", "check_project_crlf:engine", "check", "--format", "json"]) == 1
+    ranges = {finding["code"]: finding["range"] for finding in json.loads(capsys.readouterr().out)["findings"]}
+
+    template = ranges["citry.template.unknown-variable"]
+    assert (template["source_kind"], template["start"], template["end"]) == (
+        "file",
+        {"line": 1, "column": 5},
+        {"line": 1, "column": 9},
+    )
+    text = (tmp_path / "card.html").read_text(encoding="utf-8").encode()
+    assert text[template["start_index"] : template["end_index"]] == b"gone"
+    js_data = ranges["citry.js-data.unsupported-type"]
+    assert (js_data["start"], js_data["end"]) == ({"line": 6, "column": 8}, {"line": 6, "column": 12})
+    text = (tmp_path / "check_project_crlf.py").read_text(encoding="utf-8").encode()
+    assert text[js_data["start_index"] : js_data["end_index"]] == b"tags"
+
+
+def test_messages_file_catalog_error_counts_in_the_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    spec = _write_app(
+        tmp_path,
+        "from citry import Citry, Component\n"
+        "engine = Citry(\n"
+        "    autodiscover=False,\n"
+        "    extensions_defaults={'i18n': {'source_locale': 'en-US', 'locales': ('en-US',)}},\n"
+        ")\n"
+        "class Picker(Component):\n"
+        "    citry = engine\n"
+        "    messages_file = 'picker.ftl'\n",
+    )
+    # A selector variable without an @param type is a compile error.
+    (tmp_path / "picker.ftl").write_text(
+        "ok = Fine\nitems = { $count ->\n    [one] One item\n   *[other] Many items\n}\n",
+        encoding="utf-8",
+    )
+
+    assert _run_main(["--app", spec, "check", "--format", "json"]) == 1
+    [finding] = json.loads(capsys.readouterr().out)["findings"]
+
+    assert finding["origin"] == str(tmp_path / "picker.ftl")
+    assert (finding["range"]["source_kind"], finding["range"]["start"], finding["range"]["end"]) == (
+        "file",
+        {"line": 1, "column": 10},
+        {"line": 1, "column": 16},
+    )
+
+
+def test_byte_offsets_map_to_lines_and_columns_as_editors_count_them():
+    # Lines end at CR LF, CR, and LF only, as in Python and the Language
+    # Server Protocol; a form feed or U+2028 stays inside its line. Columns
+    # count UTF-16 code units, so an emoji takes two.
+    source = "a\r\nb\rc\x0cd\u2028e\n😀f"
+
+    def at(text: str) -> tuple[int, int]:
+        return _byte_offset_coordinates(source, len(source[: source.index(text)].encode("utf-8")))
+
+    assert at("b") == (1, 0)
+    assert at("c") == (2, 0)
+    assert at("d") == (2, 2)
+    assert at("e") == (2, 4)
+    assert at("f") == (3, 2)
+
+
+def test_type_checker_ranges_count_bytes_as_python_reads_the_file():
+    # ty and TypeScript read a file's raw text, CR LF included. Their range
+    # keeps its lines and columns, and its byte offsets count each line
+    # break as one "\n", as the checker's own rules do.
+    def position(line: int, character: int) -> SimpleNamespace:
+        return SimpleNamespace(line=line, character=character)
+
+    value_range = SimpleNamespace(start=position(1, 2), end=position(1, 6))
+
+    assert _lsp_range_coordinates("a\r\né tags\r\n", value_range) == (5, 9, 1, 2, 1, 6)
+
+
+def test_a_report_rejects_a_range_without_the_text_it_counts_in():
+    finding = CheckFinding("app.Card.template", "x", "citry.parse.syntax", "error", 0, 1, 0, 0, 0, 1)
+
+    with pytest.raises(ValueError, match="has a range but no source_kind"):
+        CheckReport((finding,))
 
 
 def test_json_degraded_mode_reports_app_failure_once(tmp_path, monkeypatch, capsys):

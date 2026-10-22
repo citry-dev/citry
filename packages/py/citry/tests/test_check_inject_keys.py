@@ -112,6 +112,8 @@ def _findings(
         and finding.start_index is not None
         and finding.end_index is not None
         and finding.origin.startswith(str(app_file))
+        # The range counts in the Python file the origin names.
+        and finding.source_kind == "file"
     ]
 
 

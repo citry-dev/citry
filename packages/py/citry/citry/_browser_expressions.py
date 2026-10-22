@@ -5,7 +5,7 @@ from __future__ import annotations
 import ast
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from citry._i18n_directives import (
     I18nBindingNameError,
@@ -89,6 +89,20 @@ class BrowserBinding:
     source: str
     source_start_index: int
     source_end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class EnclosingVueLoop:
+    """One Vue ``v-for`` variable in scope at a template position, and the element whose ``v-for`` declares it."""
+
+    binding: BrowserBinding
+    tag: str
+    tag_start_index: int
+    # The whole `v-for` value, such as `(member, index) in members`.
+    expression: str
+    # The tags of the elements inside the loop element that also contain the
+    # position, outermost first, such as a component call around it.
+    inner_tags: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -832,6 +846,62 @@ def browser_bindings(
         base_index=0,
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
+
+
+def enclosing_vue_loops(template: Template, start_index: int, end_index: int) -> tuple[EnclosingVueLoop, ...]:
+    """
+    Return the Vue ``v-for`` variables in scope over a byte span of ``template``, outermost loop first.
+
+    A variable a ``v-for`` declares exists only in the browser, so render
+    errors use this to explain a server expression that reads one. Only the
+    elements that contain the whole span count; template-valued attributes
+    are separate sources and are not searched.
+    """
+    elements: list[tuple[object, str, int]] = []
+    _collect_enclosing_elements(template, start_index, end_index, elements)
+    tags = [tag for _node, tag, _start in elements]
+    return tuple(
+        EnclosingVueLoop(binding, tag, tag_start, _v_for_expression(node), tuple(tags[depth + 1 :]))
+        for depth, (node, tag, tag_start) in enumerate(elements)
+        # The element's own v-for is in scope for its attributes too, as in Vue.
+        for binding in _node_browser_bindings(node, 0)
+        if binding.kind == "v-for"
+    )
+
+
+def _collect_enclosing_elements(
+    template: Template,
+    start_index: int,
+    end_index: int,
+    found: list[tuple[object, str, int]],
+) -> None:
+    """Append each element that contains the byte span, outermost first, with its tag name and start."""
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        tag_token = node.start_tag.token
+        # An element without an end tag covers only its start tag.
+        end_tag = getattr(node, "end_tag", None)
+        node_end = end_tag.token.end_index if end_tag is not None else tag_token.end_index
+        if not tag_token.start_index <= start_index <= end_index <= node_end:
+            continue
+        found.append((node, node.start_tag.name.content, tag_token.start_index))
+        body = getattr(node, "body", None)
+        if body is not None:
+            _collect_enclosing_elements(body, start_index, end_index, found)
+
+
+def _v_for_expression(node: Any) -> str:
+    """Return an element's whole ``v-for`` value, or an empty string."""
+    return next(
+        (
+            attr.inner_value.content
+            for attr in node.start_tag.attrs
+            if attr.inner_value is not None and _ascii_lower(attr.key.content) == "v-for"
+        ),
+        "",
+    )
 
 
 def browser_component_prop_sites(
@@ -3190,6 +3260,7 @@ __all__ = [
     "BrowserStateBinding",
     "BrowserStateBindingTargetError",
     "BrowserSyntaxError",
+    "EnclosingVueLoop",
     "MarkLiteralFinding",
     "analyze_browser_component_source",
     "analyze_browser_expression",
@@ -3216,6 +3287,7 @@ __all__ = [
     "browser_proven_member_literal_calls",
     "browser_state_bindings",
     "component_js_i18n_owners",
+    "enclosing_vue_loops",
     "mark_literal_findings",
     "python_event_handler_coordinates",
 ]

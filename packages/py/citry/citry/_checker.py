@@ -12,6 +12,7 @@ import textwrap
 import tokenize
 import weakref
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import (
@@ -98,6 +99,7 @@ from citry._registry_lint import (
     unknown_inject_key_findings,
     unknown_url_findings,
 )
+from citry._source_lines import line_break_count, source_lines
 from citry._template_data_source import (
     TemplateDataSourceShape,
     analyze_css_data_source,
@@ -167,7 +169,13 @@ from citry.analysis import (
     mark_literal_findings,
     project_module_exists,
 )
-from citry.assets import _find_pair_declaration, _inspect_asset_path, module_dir
+from citry.assets import (
+    _find_pair_declaration,
+    _inline_origin,
+    _inspect_asset_path,
+    loaded_messages_source,
+    module_dir,
+)
 from citry.autodiscovery import _iter_py_files
 from citry.component import Component
 from citry.component_registry import NotRegistered
@@ -201,6 +209,12 @@ if TYPE_CHECKING:
 
 
 TRANSFORM_NOTE = "extension-transformed template validation is unavailable; checking authored Citry source"
+# Which text a finding's range counts in: the whole file its origin names, or
+# the inline class attribute (`template`, `js`, `css`, `messages`) it names.
+# `citry.component_graph.ComponentGraphLocation.source_kind` uses the same values.
+SourceKind = Literal["file", "inline"]
+# A line break other than "\n": CR LF or a lone CR, which Python reads as "\n".
+_CR_LINE_BREAK = re.compile(r"\r\n|\r")
 
 _I18N_FORMAT_KINDS = (
     "number",
@@ -217,7 +231,17 @@ _I18N_FORMAT_KINDS = (
 
 @dataclass(frozen=True, slots=True)
 class CheckFinding:
-    """One source or template finding."""
+    """
+    One source or template finding.
+
+    A finding with a position carries it twice: ``start_index`` and
+    ``end_index`` are UTF-8 byte offsets, and the line and column fields count
+    from 0, with columns in UTF-16 code units, as the Language Server Protocol
+    does. ``source_kind`` says which text both count in: ``"file"`` for the
+    file that ``origin`` names, ``"inline"`` for the inline string (such as a
+    class's ``template``) that ``origin`` names, after its shared indentation
+    is removed.
+    """
 
     origin: str
     message: str
@@ -229,6 +253,7 @@ class CheckFinding:
     column: int | None = None
     end_line: int | None = None
     end_column: int | None = None
+    source_kind: SourceKind | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,6 +263,15 @@ class CheckReport:
     findings: tuple[CheckFinding, ...] = ()
     app_failure: str | None = None
     notes: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        # A position without its base cannot be placed by a tool reading the
+        # report, so a producer that forgets to say which text it counts in
+        # fails here rather than shipping an ambiguous range.
+        for finding in self.findings:
+            if finding.start_index is not None and finding.source_kind is None:
+                msg = f"check finding {finding.code} at {finding.origin} has a range but no source_kind"
+                raise ValueError(msg)
 
     @property
     def exit_code(self) -> int:
@@ -254,6 +288,9 @@ class _TemplateSource:
     origin: str
     content: str
     consumers: list[type[Component]]
+    # Whether `content` is a whole file or an inline class attribute, which
+    # tells a reader of the report where line 0 of a finding's range is.
+    source_kind: SourceKind
 
 
 @dataclass(slots=True)
@@ -263,6 +300,8 @@ class _BrowserSource:
     origin: str
     content: str
     consumers: list[type[Component]]
+    # As for `_TemplateSource`: a whole file, or an inline `js` or `css` string.
+    source_kind: SourceKind
 
 
 def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
@@ -284,7 +323,8 @@ def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
         return CheckReport(findings=tuple(findings), app_failure=app_failure_message(exc), notes=tuple(notes))
 
     findings, notes = _check_registry(engine, registrations, rules)
-    findings.extend(_unknown_inject_key_findings(engine, registrations, cwd))
+    # An inject key finding points into the component's Python file.
+    findings.extend(_counted_in(_unknown_inject_key_findings(engine, registrations, cwd), "file"))
     return CheckReport(findings=tuple(findings), notes=(TRANSFORM_NOTE, *notes))
 
 
@@ -330,9 +370,11 @@ def _check_registry(
                 if compiled_catalog is None:
                     raise ValueError("The i18n compiler did not produce a project artifact.")
                 artifact = json.loads(compiled_catalog.artifact_json())
+                catalog_texts = _i18n_catalog_texts(engine, i18n_extension, components)
                 findings.extend(
                     _i18n_diagnostic_finding(
                         diagnostic,
+                        catalog_texts,
                         message=diagnostic["message"],
                         code=diagnostic["code"],
                         severity=diagnostic["severity"],
@@ -348,7 +390,14 @@ def _check_registry(
             if diagnostic is None:
                 findings.append(CheckFinding("i18n catalog", message, I18N_CATALOG_INVALID))
             else:
-                findings.append(_i18n_diagnostic_finding(diagnostic, message=message, code=I18N_CATALOG_INVALID))
+                findings.append(
+                    _i18n_diagnostic_finding(
+                        diagnostic,
+                        _i18n_catalog_texts(engine, cast("I18nExtension", i18n), components),
+                        message=message,
+                        code=I18N_CATALOG_INVALID,
+                    )
+                )
 
     for comp_cls in components:
         if engine._is_builtin_component(comp_cls):
@@ -359,16 +408,20 @@ def _check_registry(
             # check reports it.
             fallback_severity = _component_lint_info(engine, comp_cls).rule_i18n_cross_language_fallback
             findings.extend(_client_message_findings(comp_cls, i18n_manifest, fallback_severity=fallback_severity))
+            # These read the component's Python file, so ranges count in it.
             findings.extend(
-                _i18n_python_findings(
-                    comp_cls,
-                    i18n_manifest,
-                    i18n_profiles or {},
-                    i18n_configured=i18n_configured,
-                    fallback_severity=fallback_severity,
+                _counted_in(
+                    _i18n_python_findings(
+                        comp_cls,
+                        i18n_manifest,
+                        i18n_profiles or {},
+                        i18n_configured=i18n_configured,
+                        fallback_severity=fallback_severity,
+                    ),
+                    "file",
                 )
             )
-        findings.extend(_check_js_data_types(engine, comp_cls))
+        findings.extend(_counted_in(_check_js_data_types(engine, comp_cls), "file"))
         _collect_browser_source(engine, comp_cls, browser_sources)
         _collect_browser_source(engine, comp_cls, css_sources, kind="css")
         class_label = _class_label(comp_cls)
@@ -414,6 +467,7 @@ def _check_registry(
                     origin=f"{_class_label(owner)}.template",
                     content=normalize_inline_asset(inline),
                     consumers=[comp_cls],
+                    source_kind="inline",
                 )
             else:
                 existing.consumers.append(comp_cls)
@@ -464,7 +518,9 @@ def _check_registry(
         file_key = ("file", resolved_identity)
         existing = sources.get(file_key)
         if existing is None:
-            sources[file_key] = _TemplateSource(origin=str(resolved), content=content, consumers=[comp_cls])
+            sources[file_key] = _TemplateSource(
+                origin=str(resolved), content=content, consumers=[comp_cls], source_kind="file"
+            )
         else:
             existing.consumers.append(comp_cls)
 
@@ -557,12 +613,15 @@ def _check_registry(
         )
     for browser_source in browser_sources.values():
         findings.extend(
-            _check_browser_source(engine, browser_source, i18n_profiles or {}, i18n_configured=i18n_configured)
+            _counted_in(
+                _check_browser_source(engine, browser_source, i18n_profiles or {}, i18n_configured=i18n_configured),
+                browser_source.source_kind,
+            )
         )
     known_css = _KnownCss(engine, components, css_sources, browser_sources, css_templates)
     findings.extend(_css_class_findings(engine, css_templates, known_css))
     for css_source in css_sources.values():
-        findings.extend(_check_css_source(engine, css_source, known_css))
+        findings.extend(_counted_in(_check_css_source(engine, css_source, known_css), css_source.source_kind))
     return findings, links.notes()
 
 
@@ -666,6 +725,7 @@ def _check_static(cwd: Path) -> tuple[list[CheckFinding], list[str]]:
                         origin=f"{path} ({region.component_name}.template)",
                         content=region.source_map.template_source,
                         consumers=[],
+                        source_kind="inline",
                     ),
                     alpine_lint_consumers=tuple(lint.alpine_consumer() for lint in region.owner_lint),
                     attribute_value_lint_consumers=tuple(
@@ -716,20 +776,20 @@ def _check_template(
         diagnostic = parse_diagnostic(exc)
         if diagnostic is None:
             return [CheckFinding(source.origin, str(exc), code=PARSE_CONFIGURATION)]
+        if diagnostic.start_index is None or diagnostic.end_index is None:
+            return [CheckFinding(source.origin, str(exc), code=diagnostic.code)]
+        # The parser's own line and column count from 1, so the range is
+        # rebuilt from its byte offsets to count like every other finding.
         return [
-            CheckFinding(
-                source.origin,
+            _ranged_finding(
+                source,
                 str(exc),
-                code=diagnostic.code,
+                diagnostic.code,
                 start_index=diagnostic.start_index,
                 end_index=diagnostic.end_index,
-                line=diagnostic.start_line,
-                column=diagnostic.start_column,
-                end_line=diagnostic.end_line,
-                end_column=diagnostic.end_column,
             )
         ]
-    findings = _unknown_component_findings(source.origin, template, known_names) if known_names is not None else []
+    findings = _unknown_component_findings(source, template, known_names) if known_names is not None else []
     nested_parser = lambda value: parse_template(  # noqa: E731 - parser hook is passed as a value
         value,
         user_rules=dict(rules) if rules is not None else None,
@@ -773,18 +833,16 @@ def _check_template(
             )
         )
     if not (foreign_options is not None and any(span.may_control_body for span in foreign_options.foreign_spans)):
+        # The lint finding's own line and column count from 1, so the range
+        # is rebuilt from its byte offsets to count like every other finding.
         findings.extend(
-            CheckFinding(
-                origin=source.origin,
-                message=finding.message,
-                code=finding.code,
-                severity=finding.severity,
+            _ranged_finding(
+                source,
+                finding.message,
+                finding.code,
                 start_index=finding.start_index,
                 end_index=finding.end_index,
-                line=finding.line,
-                column=finding.column,
-                end_line=finding.line,
-                end_column=finding.column + len(finding.name),
+                severity=finding.severity,
             )
             for finding in lint_unknown_template_variables(template, lint_consumers)
         )
@@ -960,7 +1018,7 @@ def _check_template(
                         event.end_index,
                     )
                 )
-    return findings
+    return _counted_in(findings, source.source_kind)
 
 
 def _known_template_types(engine: Citry | None, consumers: list[type[Component]]) -> dict[str, str]:
@@ -1293,7 +1351,8 @@ def _is_self_i18n_tr(node: ast.expr) -> bool:
 
 
 def _python_ast_byte_range(source: str, node: ast.expr) -> tuple[int, int]:
-    lines = source.splitlines(keepends=True)
+    # Python's line numbers end lines only at CR LF, CR, and LF.
+    lines = source_lines(source)
     end_lineno = node.end_lineno if node.end_lineno is not None else node.lineno
     end_col_offset = node.end_col_offset if node.end_col_offset is not None else node.col_offset
     start = sum(len(line.encode("utf-8")) for line in lines[: node.lineno - 1]) + node.col_offset
@@ -2516,23 +2575,18 @@ def _css_class_findings(
                     reported={(finding.start_index, finding.end_index) for finding in class_findings},
                 )
             )
-        for finding in sorted(class_findings, key=lambda item: (item.start_index, item.end_index)):
-            line, column = _byte_offset_coordinates(source.content, finding.start_index)
-            end_line, end_column = _byte_offset_coordinates(source.content, finding.end_index)
-            findings.append(
-                CheckFinding(
-                    source.origin,
-                    finding.message,
-                    finding.code,
-                    severity=finding.severity,
-                    start_index=finding.start_index,
-                    end_index=finding.end_index,
-                    line=line,
-                    column=column,
-                    end_line=end_line,
-                    end_column=end_column,
-                )
+        # The class positions count in the template, so each range does too.
+        findings.extend(
+            _ranged_finding(
+                source,
+                finding.message,
+                finding.code,
+                start_index=finding.start_index,
+                end_index=finding.end_index,
+                severity=finding.severity,
             )
+            for finding in sorted(class_findings, key=lambda item: (item.start_index, item.end_index))
+        )
     return findings
 
 
@@ -2704,9 +2758,12 @@ def _check_js_data_types(engine: Citry, component: type[Component]) -> list[Chec
             if wire_type is None or not wire_type.unsupported:
                 continue
             coordinates = _field_coordinates(field.source_file, field.source_qualname, field.name)
+            label = f"{_class_label(component)}.JsData.{field.name}"
             findings.append(
                 _source_finding(
-                    origin=f"{_class_label(component)}.JsData.{field.name}",
+                    # The range counts in the Python file, so the origin names
+                    # that file, as the other findings about Python code do.
+                    origin=f"{field.source_file} ({label})" if field.source_file is not None else label,
                     message=render_diagnostic(
                         JS_DATA_UNSUPPORTED_TYPE,
                         variant="secret" if SECRET_UNSUPPORTED_REASON in wire_type.unsupported else "default",
@@ -3292,6 +3349,7 @@ def _collect_browser_source(
                 f"{_class_label(owner)}.{kind}",
                 normalize_inline_asset(inline),
                 [component],
+                "inline",
             )
         else:
             existing.consumers.append(component)
@@ -3309,7 +3367,7 @@ def _collect_browser_source(
         return
     existing = sources.get(file_key)
     if existing is None:
-        sources[file_key] = _BrowserSource(str(resolved), content, [component])
+        sources[file_key] = _BrowserSource(str(resolved), content, [component], "file")
     else:
         existing.consumers.append(component)
 
@@ -3564,7 +3622,7 @@ def _browser_template_finding(
 
 
 def _unknown_component_findings(
-    origin: str,
+    source: _TemplateSource,
     template: Template,
     known_names: set[str],
 ) -> list[CheckFinding]:
@@ -3579,21 +3637,18 @@ def _unknown_component_findings(
         if normalized_tag is not None and normalized_tag not in RESERVED_TAG_NAMES:
             component_name = normalized_tag.removeprefix("c-")
             if component_name not in known_names:
-                line, column = tag_token.line_col
                 findings.append(
-                    CheckFinding(
-                        origin,
+                    _ranged_finding(
+                        source,
                         render_diagnostic(TEMPLATE_UNKNOWN_COMPONENT, tag=tag_name),
-                        code=TEMPLATE_UNKNOWN_COMPONENT,
+                        TEMPLATE_UNKNOWN_COMPONENT,
                         start_index=tag_token.start_index,
                         end_index=tag_token.end_index,
-                        line=line,
-                        column=column,
                     )
                 )
         body = getattr(node, "body", None)
         if body is not None:
-            findings.extend(_unknown_component_findings(origin, body, known_names))
+            findings.extend(_unknown_component_findings(source, body, known_names))
     return findings
 
 
@@ -3642,17 +3697,12 @@ def _field_coordinates(
     if len(targets) != 1:
         return None
     target = targets[0]
-    lines = source.splitlines(keepends=True)
+    # `col_offset` counts UTF-8 bytes on Python's own line, so the line is
+    # split the way Python splits it before the offset is added.
+    lines = source_lines(source)
     start_index = sum(len(line.encode("utf-8")) for line in lines[: target.lineno - 1]) + target.col_offset
     end_index = start_index + len(name.encode("utf-8"))
-    return (
-        start_index,
-        end_index,
-        target.lineno - 1,
-        target.col_offset,
-        target.lineno - 1,
-        target.col_offset + len(name),
-    )
+    return _byte_range_coordinates(source, start_index, end_index)
 
 
 def _range_source(source: str, value_range: Any) -> str | None:
@@ -3664,22 +3714,24 @@ def _range_source(source: str, value_range: Any) -> str | None:
 
 
 def _lsp_range_coordinates(source: str, value_range: Any) -> tuple[int, int, int, int, int, int] | None:
-    start_char = _lsp_position_char_offset(source, value_range.start.line, value_range.start.character)
-    end_char = _lsp_position_char_offset(source, value_range.end.line, value_range.end.character)
+    # The checker reads every other file the way Python reads text, with
+    # each line break as one "\n", so byte offsets here count the same way.
+    # Lines and columns do not depend on how a line ends.
+    text = _CR_LINE_BREAK.sub("\n", source)
+    start_char = _lsp_position_char_offset(text, value_range.start.line, value_range.start.character)
+    end_char = _lsp_position_char_offset(text, value_range.end.line, value_range.end.character)
     if start_char is None or end_char is None:
         return None
-    return (
-        len(source[:start_char].encode("utf-8")),
-        len(source[:end_char].encode("utf-8")),
-        value_range.start.line,
-        value_range.start.character,
-        value_range.end.line,
-        value_range.end.character,
+    return _byte_range_coordinates(
+        text,
+        len(text[:start_char].encode("utf-8")),
+        len(text[:end_char].encode("utf-8")),
     )
 
 
 def _lsp_position_char_offset(source: str, line: int, character: int) -> int | None:
-    lines = source.splitlines(keepends=True)
+    # LSP clients end lines only at CR LF, CR, and LF.
+    lines = source_lines(source)
     if line < 0 or line >= len(lines):
         return None
     content = lines[line].removesuffix("\n").removesuffix("\r")
@@ -3700,6 +3752,7 @@ def _source_finding(
     code: str,
     severity: Literal["warning", "error"],
     coordinates: tuple[int, int, int, int, int, int] | None,
+    source_kind: SourceKind | None = None,
 ) -> CheckFinding:
     if coordinates is None:
         return CheckFinding(origin, message, code, severity)
@@ -3715,14 +3768,72 @@ def _source_finding(
         column,
         end_line,
         end_column,
+        source_kind,
     )
 
 
 def _byte_offset_coordinates(source: str, offset: int) -> tuple[int, int]:
+    """
+    Return the line and column of a UTF-8 byte offset in ``source``.
+
+    Both count from 0 and the column is in UTF-16 code units, as the Language
+    Server Protocol counts them, so an editor can use them unchanged. Every
+    finding range whose text the checker holds goes through here, which keeps
+    all rules on one numbering.
+    """
     prefix = source.encode("utf-8")[:offset].decode("utf-8")
-    line = prefix.count("\n")
-    current = prefix.rsplit("\n", 1)[-1]
-    return line, len(current.encode("utf-16-le")) // 2
+    # Lines end where Python and editors end them (CR LF, CR, or LF), so a
+    # Python file and the template inside it count lines the same way.
+    current = source_lines(prefix)[-1] if prefix else ""
+    if current.endswith(("\n", "\r")):
+        current = ""
+    return line_break_count(prefix), len(current.encode("utf-16-le")) // 2
+
+
+def _byte_range_coordinates(source: str, start_index: int, end_index: int) -> tuple[int, int, int, int, int, int]:
+    """Return a byte range in ``source`` with the line and column of each end, as ``_source_finding`` takes it."""
+    line, column = _byte_offset_coordinates(source, start_index)
+    end_line, end_column = _byte_offset_coordinates(source, end_index)
+    return start_index, end_index, line, column, end_line, end_column
+
+
+def _ranged_finding(
+    source: _TemplateSource | _BrowserSource,
+    message: str,
+    code: str,
+    *,
+    start_index: int,
+    end_index: int,
+    severity: Literal["warning", "error"] = "error",
+) -> CheckFinding:
+    """Place a finding at byte offsets in one checked source, counting its range from that source's start."""
+    line, column = _byte_offset_coordinates(source.content, start_index)
+    end_line, end_column = _byte_offset_coordinates(source.content, end_index)
+    return CheckFinding(
+        source.origin,
+        message,
+        code,
+        severity,
+        start_index,
+        end_index,
+        line,
+        column,
+        end_line,
+        end_column,
+        source.source_kind,
+    )
+
+
+def _counted_in(findings: Iterable[CheckFinding], source_kind: SourceKind) -> list[CheckFinding]:
+    """Record which text each positioned finding counts its range in."""
+    # The rules for one source compute ranges in that source's text; only the
+    # caller knows whether that text is a whole file or an inline attribute.
+    return [
+        replace(finding, source_kind=source_kind)
+        if finding.start_index is not None and finding.source_kind is None
+        else finding
+        for finding in findings
+    ]
 
 
 def _i18n_compile_diagnostic(exc: BaseException) -> dict[str, Any] | None:
@@ -3749,27 +3860,82 @@ def _i18n_compile_diagnostic(exc: BaseException) -> dict[str, Any] | None:
     return None
 
 
+def _i18n_catalog_texts(
+    engine: Citry,
+    extension: I18nExtension,
+    components: Iterable[type[Component]],
+) -> dict[str, tuple[str, SourceKind]]:
+    """
+    Return the text of each message source the i18n compiler reads, keyed by the path its diagnostics name.
+
+    Each text comes with whether it is a file or a component's inline
+    ``messages`` string, which is what a finding's ``source_kind`` reports.
+    A component source is the text the messages loader produced, after
+    extension hooks; one that failed to load, such as one the compiler
+    rejected, is read again from its declaration.
+    """
+    texts: dict[str, tuple[str, SourceKind]] = {}
+    # This only improves how a catalog error is placed, so a source the
+    # checker cannot read back is skipped rather than turned into a crash.
+    with suppress(Exception):
+        for package in extension._packages:
+            for package_source in package.sources:
+                texts[package_source.path] = (package_source.content, "file")
+    for component in components:
+        with suppress(Exception):
+            owner, inline, filepath = _find_pair_declaration(component, "messages", "messages_file")
+            loaded = loaded_messages_source(component)
+            if loaded is not None:
+                _loaded_owner, content, origin = loaded
+                texts[origin] = (content, "inline" if type(inline) is str else "file")
+                continue
+            # The keys repeat how the messages loader names each source.
+            if type(inline) is str:
+                texts[f"{_inline_origin(owner)}.messages"] = (normalize_inline_asset(inline), "inline")
+            elif isinstance(filepath, (str, Path)):
+                resolved = _inspect_asset_path(
+                    filepath,
+                    owner_dir=module_dir(owner),
+                    search_dirs=engine.settings.dirs,
+                ).resolved_path
+                if resolved is not None:
+                    texts[str(resolved)] = (resolved.read_text(encoding="utf-8"), "file")
+    return texts
+
+
 def _i18n_diagnostic_finding(
     diagnostic: Mapping[str, Any],
+    catalog_texts: Mapping[str, tuple[str, SourceKind]],
     *,
     message: str,
     code: str,
     severity: Literal["warning", "error"] = "error",
 ) -> CheckFinding:
     """Place one i18n compiler diagnostic at the message source it names."""
-    return CheckFinding(
+    start, end = diagnostic["start"], diagnostic["end"]
+    found = catalog_texts.get(diagnostic["path"])
+    if found is not None and 0 <= start <= end <= len(found[0].encode("utf-8")):
+        # The compiler counts lines and characters from 1, so the range is
+        # rebuilt from its byte offsets to count like every other finding.
+        text, source_kind = found
+        coordinates = _byte_range_coordinates(text, start, end)
+    else:
+        # Without the text, shift the compiler's own numbers to count from 0;
+        # its columns count characters, which matches UTF-16 units except
+        # after an emoji. Its diagnostics cover one line, so the end column
+        # follows from the span length. The messages loader names an inline
+        # source `<module file>::<Class>.messages`, and anything else is a file.
+        line, column = diagnostic["line"] - 1, diagnostic["column"] - 1
+        coordinates = (start, end, line, column, line, column + end - start)
+        path = diagnostic["path"]
+        source_kind = "inline" if "::" in path and path.endswith(".messages") else "file"
+    return _source_finding(
         origin=diagnostic["path"],
         message=message,
         code=code,
         severity=severity,
-        start_index=diagnostic["start"],
-        end_index=diagnostic["end"],
-        line=diagnostic["line"],
-        column=diagnostic["column"],
-        # Compiler diagnostics cover one line, so the end column follows
-        # from the span length.
-        end_line=diagnostic["line"],
-        end_column=diagnostic["column"] + diagnostic["end"] - diagnostic["start"],
+        coordinates=coordinates,
+        source_kind=source_kind,
     )
 
 

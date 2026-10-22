@@ -181,6 +181,21 @@
   line, and the repeated value, and says to combine the loop values into
   one key when loops are nested. An element whose `#c-key` clashes with
   another key now names its template, line and column.
+- A server expression that reads a Vue `v-for` variable, such as
+  `c-name="member.name"` inside `<li v-for="member in members">`, now fails
+  with an error that names the tag, its template, and the line, says the
+  variable exists only in the browser, and shows the `<c-for>` that fixes
+  it, instead of a bare `KeyError`. It is still a `KeyError`, so an
+  existing `except KeyError` keeps catching it.
+- In `citry check --format json`, every finding's `range` now counts lines
+  and columns from 0, with columns in UTF-16 code units, as the Language
+  Server Protocol does. Syntax errors, unknown variables, unknown
+  components, and i18n catalog errors used to count from 1; if your tool
+  subtracted 1 from those, stop. Each `range` also says which text it
+  counts in, `"source_kind": "file"` or `"inline"` (a string written on
+  the class, such as `template`), and a `JsData` field's `origin` now
+  names its Python file
+  ([details](https://citry.dev/advanced/cli/#check-json-output)).
 - The render error for `v-model` on an element that holds no value, such
   as `<div>` or `<form>`, now names each such element with its template
   and line and lists the elements `v-model` works on, instead of an

@@ -260,7 +260,7 @@ def test_batch_checker_uses_the_same_public_state_key_contract():
         """
 
     engine.initialize()
-    source = _TemplateSource("test.html", Card.template, [Card])
+    source = _TemplateSource("test.html", Card.template, [Card], "file")
     findings = _check_template(source)
 
     assert [finding.code for finding in findings] == ["citry.browser.unknown-state-field"] * 2
@@ -268,4 +268,4 @@ def test_batch_checker_uses_the_same_public_state_key_contract():
         b"secret",
         b"querylol",
     ]
-    assert _check_template(_TemplateSource("test.html", source.content, [])) == []
+    assert _check_template(_TemplateSource("test.html", source.content, [], "file")) == []

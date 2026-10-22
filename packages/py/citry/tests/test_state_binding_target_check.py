@@ -15,7 +15,7 @@ from citry._checker import _check_template, _TemplateSource
     ],
 )
 def test_static_check_reports_invalid_state_targets_at_the_attribute_key(source):
-    findings = _check_template(_TemplateSource(origin="card.html", content=source, consumers=[]))
+    findings = _check_template(_TemplateSource(origin="card.html", content=source, consumers=[], source_kind="file"))
     assert len(findings) == 1
     finding = findings[0]
     assert finding.code == "citry.browser.invalid-state-binding-target"
@@ -25,4 +25,4 @@ def test_static_check_reports_invalid_state_targets_at_the_attribute_key(source)
 
 def test_static_check_accepts_supported_and_unresolved_targets():
     source = '<input :c-query><c-element c-is="target" :c-query></c-element>'
-    assert _check_template(_TemplateSource(origin="card.html", content=source, consumers=[])) == []
+    assert _check_template(_TemplateSource(origin="card.html", content=source, consumers=[], source_kind="file")) == []

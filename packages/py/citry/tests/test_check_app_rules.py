@@ -1053,11 +1053,13 @@ def test_a_class_one_slip_from_the_components_own_css_is_reported(tmp_path):
             _CLASS,
             "warning",
             "No CSS that Citry reads styles the class 'bord'. Did you mean 'board', from this component's CSS?",
-            # The finding starts at the class name inside the attribute value.
+            # The finding starts at the class name inside the attribute value,
+            # counted from 0 in the inline template.
             2,
             12,
         ),
     ]
+    assert [item.source_kind for item in report.findings] == ["inline"]
 
 
 def test_a_misspelled_class_is_reported_once_among_other_classes_and_on_a_component_tag(tmp_path):

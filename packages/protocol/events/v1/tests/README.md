@@ -85,8 +85,8 @@ and self-addressed `render:` targets derived from a live render ID.
 | `rename_coerce` | A State mutation returns the State refresh first, with the token and public State values, then an event and data value. |
 | `batch_two` | `results[i]` answers `calls[i]`, including mixed stateful and stateless calls. |
 | `error_invalid_args` | `invalid_args` carries a strict `fieldErrors` map. |
-| `error_invalid_state` | A malformed or tampered token answers `invalid_state`. |
-| `error_stale_state` | An expired or rotated-out token answers `stale_state`. |
+| `error_invalid_state` | A token the server cannot read answers `invalid_state`. |
+| `error_stale_state` | An expired token, or one whose signature matches no current secret, answers `stale_state`. |
 | `error_unknown_event` | An undeclared handler answers `unknown_event`. |
 | `error_unknown_component` | An unregistered class ID answers `unknown_component`. |
 | `error_forbidden` | A guard-raised 403 answers `forbidden`. |

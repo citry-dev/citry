@@ -912,6 +912,7 @@ def test_check_types_reports_findings_with_file_positions(tmp_path):
     assert typed[0]["message"] == "Property 'nope' does not exist on type '{ taskId: number; }'."
     # The JSON range is the file's own zero-based position.
     assert typed[3]["range"]["start"] == {"line": 9, "column": 6}
+    assert typed[3]["range"]["source_kind"] == "file"
 
 
 def test_check_types_says_what_to_install_without_node(tmp_path):
@@ -1276,6 +1277,7 @@ def test_check_types_reports_a_js_data_warning_once_per_file_and_place(tmp_path,
         0,
         0,
         1,
+        "file",
     )
 
     report = _with_type_findings(CheckReport((registry,), None, ()), "app:engine", tmp_path)
