@@ -2,7 +2,7 @@
      outside the repository and cannot resolve a repo-relative path. -->
 <img src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/citry-wordmark.png" alt="Citry" width="170">
 
-# Citry: a fully typed frontend framework for Python
+# Citry: Python frontend engineered for AI agents.
 
 [![PyPI - Version](https://img.shields.io/pypi/v/citry)](https://pypi.org/project/citry/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/citry)](https://pypi.org/project/citry/)

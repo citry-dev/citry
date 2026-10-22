@@ -309,7 +309,7 @@ early, a direct line to the maintainer, and a say in what gets built next.
 </section>
 
 <section class="landing-final" markdown="1">
-## Discover frontend that brings joy.
+## Discover safer and faster frontend.
 
 <div class="landing-actions">
   <a class="landing-button landing-button--primary" href="/getting-started/installation/">
