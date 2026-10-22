@@ -18,6 +18,8 @@ on:
       - "pnpm-lock.yaml"
       - "uv.lock"
       - ".github/workflows/py--examples--tests.yml"
+      - ".github/actions/**"
+      - "scripts/build_constraints.py"
   pull_request:
     paths:
       - "examples/**"
@@ -34,6 +36,8 @@ on:
       - "pnpm-lock.yaml"
       - "uv.lock"
       - ".github/workflows/py--examples--tests.yml"
+      - ".github/actions/**"
+      - "scripts/build_constraints.py"
   schedule:
     - cron: "30 5 * * 1"
   workflow_dispatch:

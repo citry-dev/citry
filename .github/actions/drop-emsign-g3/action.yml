@@ -12,7 +12,8 @@ runs:
       shell: bash
       run: |
         # The first base64 line of the G3 certificate; Ubuntu and certifi wrap
-        # PEM lines the same way, so this line is present only with the root.
+        # PEM lines the same way, so finding this line means the list still
+        # holds the root.
         g3=MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBrMQswCQYDVQQG
         # Runner images built before Ubuntu's 2026-10-20 update still have it;
         # newer images skip the apt round trip.

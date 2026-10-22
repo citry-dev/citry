@@ -1395,9 +1395,9 @@ copies the pins into `uv.lock`. The `build_backend_pins` validator fails when
 a package asks for a backend or a version range the list does not cover, and
 its message names these two commands.
 
-Some builds pass `--no-config` and so never read the root table: the release
-verifiers rebuild a wheel from the sdist they just built that way, and so does
-the Citry UI rebuild in `py--tests.yml`. Those builds export the pins to a
+The release verifiers and the Citry UI rebuild in `py--tests.yml` pass
+`--no-config` when they rebuild a wheel from a fresh sdist, so they never read
+the root table. Those builds export the pins to a
 file (`python scripts/build_constraints.py export <file>`, or
 `build_constraints.export()` from Python) and pass
 `--build-constraints <file> --require-hashes` to `uv build`.
@@ -1414,11 +1414,19 @@ The pins apply only to builds in this repository. The published sdists keep
 their `[build-system] requires` ranges, so someone building Citry from source
 still picks their own backend version.
 
-This needs uv 0.13.5 or later, which writes `uv.lock` at lockfile revision 5.
-An older uv cannot read the `build-constraint-dependencies` entries: `uv sync`,
-`uv lock`, and `uv build` stop with an error that points at the root
-`pyproject.toml`, while `uv pip` prints a warning and ignores the whole
-`[tool.uv]` table.
+This needs uv 0.13.5 or later, the first uv that reads hashed
+`build-constraint-dependencies` entries. An older uv cannot read them:
+`uv sync`, `uv lock`, `uv run`, and `uv build` stop with an error that points
+at the root `pyproject.toml`, while `uv pip` prints a warning and ignores the
+whole `[tool.uv]` table. Every CI workflow pins the same uv release, so a uv
+release that changes this setting cannot break CI before the pin moves; the
+setting is still marked experimental (`build-dependency-hashes`), so check
+uv's release notes when raising the pin.
+
+The pins cover the build backends of this repository's own packages. When uv
+has to build a third-party package from its sdist, because no wheel fits the
+interpreter (for example on a free-threaded Python), that backend has no pin
+and the build stops. Install a Python build that the package ships wheels for.
 
 ### Root pyproject.toml Protection
 

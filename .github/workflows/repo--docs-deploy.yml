@@ -43,6 +43,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - ".github/workflows/repo--docs-deploy.yml"
+      - ".github/actions/**"
   workflow_dispatch:
 
 permissions:
