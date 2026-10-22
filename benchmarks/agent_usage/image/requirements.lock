@@ -1,9 +1,11 @@
 # Resolved from public PyPI on Linux with Python 3.12.14 on 2026-09-08.
 # Citry 0.4.6 has no FastAPI extra, so FastAPI and Uvicorn are explicit.
+# certifi is pinned to 2026.10.19, which drops the affected eMudhra (emSign) root
+# and keeps the unaffected ones; the other pins come from the 2026-09-08 resolve.
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
-certifi==2026.7.22
+certifi==2026.10.19
 citry==0.4.6
 citry_core==1.6.1
 click==8.5.0

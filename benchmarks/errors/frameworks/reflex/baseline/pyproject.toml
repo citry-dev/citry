@@ -23,7 +23,7 @@ package = false
 constraint-dependencies = [
     "anyio==4.15.1",
     "bidict==0.24.1",
-    "certifi==2026.7.22",
+    "certifi==2026.10.19",
     "click==8.5.0",
     "granian==2.8.2",
     "h11==0.16.0",

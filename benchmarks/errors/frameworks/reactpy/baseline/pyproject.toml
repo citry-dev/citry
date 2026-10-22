@@ -28,7 +28,7 @@ package = false
 # The same resolved versions as the ReactPy app in benchmarks/web, so the two
 # benchmarks describe one ReactPy install.
 constraint-dependencies = [
-    "certifi==2026.7.22",
+    "certifi==2026.10.19",
     "charset-normalizer==3.5.1",
     "idna==3.19",
     "jsonpatch==1.33",

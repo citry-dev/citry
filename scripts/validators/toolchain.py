@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml  # type: ignore[import-untyped]
+
 try:
     import tomllib
 except ImportError:  # Python < 3.11
@@ -51,7 +53,7 @@ _CORE_CRATES = (
 )
 _MATURIN_ACTION = "PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
 _RUST_ACTION = "dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8"
-_PYPI_ACTION = "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33"
+_PYPI_ACTION = "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086"
 _UV_ACTION = "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78"
 _SCCACHE_ACTION = "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
 _RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
@@ -138,7 +140,7 @@ def check() -> list[str]:
         manifest_path = REPO_ROOT / "crates" / crate / "Cargo.toml"
         manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("package", {}).get("rust-version") != {"workspace": True}:
-            errors.append(f"{manifest_path.relative_to(REPO_ROOT)} must inherit workspace rust-version")
+            errors.append(f"{manifest_path.relative_to(REPO_ROOT).as_posix()} must inherit workspace rust-version")
     wheel_profile = root_manifest.get("profile", {}).get("release-wheel")
     expected_wheel_profile = {
         "inherits": "release",
@@ -161,7 +163,7 @@ def check() -> list[str]:
     )
     for workflow_path in _DOCS_RUST_WORKFLOWS:
         workflow = workflow_path.read_text(encoding="utf-8")
-        label = workflow_path.relative_to(REPO_ROOT)
+        label = workflow_path.relative_to(REPO_ROOT).as_posix()
         if not re.search(rf'^  RUSTUP_TOOLCHAIN: ["\']{re.escape(docs_toolchain)}["\']$', workflow, re.MULTILINE):
             errors.append(f"{label} must pin docs Rust to the workspace MSRV {docs_toolchain}")
         rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", workflow))
@@ -181,21 +183,32 @@ def check() -> list[str]:
             if workflow.count(setting) != rust_caches:
                 errors.append(f"every Rust cache in {label} must set {setting!r}")
 
+    pyodide: dict[str, object] = json.loads(_PYODIDE_CONFIG.read_text(encoding="utf-8"))
+    # The citry-core build settings already record the uv release, so every
+    # other pin is compared with that one value and moves in the same change.
+    uv_pin = pyodide.get("uv")
+    # Without a recorded version there is nothing to compare the pins with.
+    if not isinstance(uv_pin, str):
+        errors.append(f"{_PYODIDE_CONFIG.relative_to(REPO_ROOT).as_posix()} must record the uv version under 'uv'")
+    # The example projects ship their CI workflow to users who copy them, so
+    # they use the same reviewed setup-uv commit as the release workflows.
+    example_workflows = sorted(REPO_ROOT.glob("examples/*/*/.github/workflows/check.yml"))
     for workflow_path in (
         _EXAMPLES_TEST_WORKFLOW,
         _DOCS_RELEASE_WORKFLOW.parent / "repo--docs-check.yml",
         _DOCS_RELEASE_WORKFLOW,
+        *example_workflows,
     ):
         workflow = workflow_path.read_text(encoding="utf-8")
-        label = workflow_path.relative_to(REPO_ROOT)
+        label = workflow_path.relative_to(REPO_ROOT).as_posix()
         uv_actions = len(re.findall(r"uses:\s+astral-sh/setup-uv@", workflow))
         if workflow.count(f"uses: {_UV_ACTION}") != uv_actions:
-            errors.append(f"every uv setup in release-evidence workflow {label} must use the reviewed commit")
-        if workflow.count('version: "0.10.12"') != uv_actions:
-            errors.append(f"every uv setup in release-evidence workflow {label} must pin uv 0.10.12")
+            errors.append(f"every uv setup in {label} must use {_UV_ACTION}")
         pnpm_actions = len(re.findall(r"uses:\s+pnpm/action-setup@", workflow))
         if workflow.count(f"uses: {_PNPM_ACTION}") != pnpm_actions:
-            errors.append(f"every pnpm setup in release-evidence workflow {label} must use the reviewed commit")
+            errors.append(f"every pnpm setup in {label} must use {_PNPM_ACTION}")
+    if isinstance(uv_pin, str):
+        errors.extend(pinned_action_errors(REPO_ROOT, uv_pin))
 
     examples_workflow = _EXAMPLES_TEST_WORKFLOW.read_text(encoding="utf-8")
     examples_rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", examples_workflow))
@@ -207,7 +220,6 @@ def check() -> list[str]:
     if examples_workflow.count(f"uses: {_RUST_CACHE_ACTION}") != examples_rust_caches:
         errors.append("every examples evidence Rust cache must use the reviewed immutable action commit")
 
-    pyodide: dict[str, object] = json.loads(_PYODIDE_CONFIG.read_text(encoding="utf-8"))
     if pyodide.get("rust") != f"{minimum}.0":
         errors.append(f"Pyodide Rust pin {pyodide.get('rust')!r} does not match Cargo minimum {minimum!r}")
     runtime: dict[str, object] = json.loads(_PLAYGROUND_RUNTIME.read_text(encoding="utf-8"))
@@ -289,7 +301,8 @@ def check() -> list[str]:
     profile_setting = "maturin.build-args=--profile release-wheel"
     for script_path in (_PYODIDE_BUILDER, _DISTRIBUTION_VERIFIER):
         if script_path.read_text(encoding="utf-8").count(profile_setting) != 1:
-            errors.append(f"{script_path.relative_to(REPO_ROOT)} must select the release-wheel profile once")
+            script_label = script_path.relative_to(REPO_ROOT).as_posix()
+            errors.append(f"{script_label} must select the release-wheel profile once")
     if "skip-existing" in publish or "--clobber" in publish:
         errors.append("citry-core release retries must fail closed instead of replacing or skipping artifacts")
     for marker in (
@@ -402,4 +415,54 @@ def check() -> list[str]:
     ):
         if marker not in release_workflow:
             errors.append(f"mandatory release workflow is missing {marker!r}")
+    return errors
+
+
+def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
+    """
+    Report setup-uv and PyPI upload steps that leave the reviewed pins.
+
+    Each workflow is read as YAML, and the version a step receives is resolved
+    through ``${{ env.NAME }}`` references at workflow, job, and step level.
+    Publishing, the docs workflows, and the examples must run the reviewed uv
+    release; other workflows may ask for ``latest``.
+    """
+    errors: list[str] = []
+    # GitHub runs both spellings of the YAML extension.
+    paths = sorted(path for path in (root / ".github" / "workflows").glob("*.y*ml"))
+    # Users copy the example workflows, so they follow the same pins.
+    paths += sorted(root.glob("examples/*/*/.github/workflows/*.y*ml"))
+    for path in paths:
+        workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        relative = path.relative_to(root)
+        # Messages name files with forward slashes on every OS, as the repository does.
+        label = relative.as_posix()
+        # These workflows produce what users install or read, so they cannot
+        # drift to whatever uv is newest on the day they run.
+        exact = (
+            path.name.endswith("--publish.yml")
+            or path.name
+            in {"repo--docs-check.yml", "repo--docs-release.yml", "repo--docs-deploy.yml", "py--examples--tests.yml"}
+            or relative.parts[0] == "examples"
+        )
+        workflow_env = workflow.get("env") or {}
+        for job_name, job in (workflow.get("jobs") or {}).items():
+            env = {**workflow_env, **(job.get("env") or {})}
+            for step in job.get("steps") or []:
+                # GitHub matches action owners and names without regard to case.
+                uses = str(step.get("uses", "")).lower()
+                if uses.startswith("pypa/gh-action-pypi-publish@") and uses != _PYPI_ACTION.lower():
+                    errors.append(f"{label} job {job_name} must upload with {_PYPI_ACTION}")
+                if not uses.startswith("astral-sh/setup-uv@"):
+                    continue
+                version = str((step.get("with") or {}).get("version", ""))
+                # A `${{ env.NAME }}` reference pins whatever that env value holds.
+                reference = re.fullmatch(r"\$\{\{\s*env\.(\w+)\s*\}\}", version)
+                if reference:
+                    step_env = {**env, **(step.get("env") or {})}
+                    version = str(step_env.get(reference.group(1), ""))
+                if version != uv_pin and (exact or version != "latest"):
+                    allowed = f'"{uv_pin}"' if exact else f'"{uv_pin}" or "latest"'
+                    found = f"sets uv {version!r}" if version else "does not set a uv version"
+                    errors.append(f"{label} job {job_name} {found}; set version: {allowed}")
     return errors

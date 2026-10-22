@@ -40,7 +40,7 @@ permissions:
 env:
   PROJECT_DIR: packages/py/pygments_citry
   SOURCE_DATE_EPOCH: "315532800"
-  UV_VERSION: "0.10.12"
+  UV_VERSION: "0.13.5"
 
 jobs:
   verify-version:
@@ -280,7 +280,7 @@ jobs:
             verified/qualification-provenance.json
       - name: Publish to PyPI
         if: steps.public-state.outputs.publish == 'true'
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
       - name: Verify the exact public artifact pair
         run: |
           for attempt in $(seq 1 20); do
