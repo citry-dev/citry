@@ -187,6 +187,62 @@ def test_default_producer_rejects_render_from_replaced_registered_class() -> Non
         producer.prepare_from_render(rendered, citry=registry, app_id="metadata", revision=0)
 
 
+def _count_dependency_lookups(monkeypatch, *, treat_as_built_in: bool) -> int:
+    """Prepare three rows of one class with JS and count lookups of that class."""
+    registry = Citry(autodiscover=False)
+
+    class Row(Component):
+        citry = registry
+        template = """
+            <p>{{ value }}</p>
+        """
+        js = """
+            console.log("row");
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"value": kwargs["value"]}
+
+    class Root(Component):
+        citry = registry
+        template = """
+            <c-for each="value in values">
+              <c-Row
+                #c-key="value"
+                c-value="value"
+              />
+            </c-for>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"values": ["a", "b", "c"]}
+
+    calls: list[str] = []
+    original = Citry.get_component_by_class_id
+
+    def counted(self, class_id):
+        calls.append(class_id)
+        return original(self, class_id)
+
+    monkeypatch.setattr(Citry, "get_component_by_class_id", counted)
+    if treat_as_built_in:
+        monkeypatch.setattr(vue_events, "_BUILT_IN_CLASS_ID_LOOKUP", counted)
+    rendered = render_prepared_direct(Root())
+    calls.clear()
+    producer = default_events_producer(registry)
+    producer.prepare_from_render(rendered, citry=registry, app_id="metadata", revision=0)
+    return calls.count(Row.class_id)
+
+
+def test_default_producer_checks_each_dependency_class_once_with_built_in_lookup(monkeypatch) -> None:
+    replaced = _count_dependency_lookups(monkeypatch, treat_as_built_in=False)
+    monkeypatch.undo()
+    built_in = _count_dependency_lookups(monkeypatch, treat_as_built_in=True)
+    # A replaced lookup is user code, so it still sees one call per row's
+    # dependency record; the built-in lookup checks the class once.
+    assert replaced - built_in == 2
+
+
 def test_default_producer_second_preparation_observes_new_component_name() -> None:
     registry = Citry(autodiscover=False)
 

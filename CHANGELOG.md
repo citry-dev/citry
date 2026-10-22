@@ -248,6 +248,11 @@
   its scripts and stylesheets like a fresh render instead of leaving them
   out.
 
+### Performance
+
+- Pages that repeat a component many times render up to about 9% faster
+  on the server.
+
 ## v0.6.0
 
 Citry 0.6.0 replaces Alpine with Vue. Most Python components, templates,

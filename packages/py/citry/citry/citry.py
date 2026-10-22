@@ -1140,7 +1140,11 @@ class Citry:
 
         """
         normalized = _normalize_name(name)
-        with self._registry._lifecycle.read("look up a component"):
+        lifecycle = self._registry._lifecycle
+        # The same check as `lifecycle.read()`, written inline because every
+        # template component call runs it.
+        with lifecycle._state_lock:
+            lifecycle.check_read("look up a component")
             if self._registry_ready():
                 return self._registry._get(normalized)
         with self._registry._lifecycle.operation("component discovery and registry initialization"):
@@ -1557,7 +1561,11 @@ class Citry:
                 lifecycle state.
 
         """
-        with self._registry._lifecycle.read("look up a component class ID"):
+        lifecycle = self._registry._lifecycle
+        # The same check as `lifecycle.read()`, written inline because rendering
+        # runs it several times per component.
+        with lifecycle._state_lock:
+            lifecycle.check_read("look up a component class ID")
             comp_cls = self._classes_by_id.get(class_id)
             if comp_cls is None:
                 msg = f"No component class with class_id {class_id!r} is registered with this Citry instance"

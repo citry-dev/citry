@@ -107,6 +107,71 @@ class TestLifecycleCoordinator:
         assert completed.returncode == 0, completed.stderr
         assert "CLASS-GC-WITH-HELD-LIFECYCLE-LOCK-COMPLETED" in completed.stdout
 
+    def test_read_releases_the_lock_when_its_body_raises(self):
+        coordinator = _LifecycleCoordinator()
+        with pytest.raises(KeyError), coordinator.read("look up a component"):
+            raise KeyError("missing")
+        # A held lock would make this non-blocking acquire fail.
+        assert coordinator._state_lock.acquire(blocking=False)
+        coordinator._state_lock.release()
+
+    def test_read_rejected_inside_a_blocking_operation_releases_the_lock(self):
+        coordinator = _LifecycleCoordinator()
+        with coordinator.operation("Citry.initialize()", reentrant=False, blocks_nested=True):
+            with pytest.raises(RuntimeError, match=r"cannot run while Citry\.initialize"):
+                with coordinator.read("look up a component"):
+                    pytest.fail("the read body must not run")
+            assert coordinator._state_lock.acquire(blocking=False)
+            coordinator._state_lock.release()
+
+    def test_read_from_another_thread_fails_fast_and_releases_the_lock(self):
+        coordinator = _LifecycleCoordinator()
+        errors: list[BaseException] = []
+
+        def read_elsewhere():
+            try:
+                with coordinator.read("look up a component"):
+                    pass
+            except CitryLifecycleInProgress as error:
+                errors.append(error)
+
+        with coordinator.operation("component registration"):
+            thread = threading.Thread(target=read_elsewhere)
+            thread.start()
+            thread.join()
+            assert coordinator._state_lock.acquire(blocking=False)
+            coordinator._state_lock.release()
+        assert len(errors) == 1
+        assert "Cannot look up a component while component registration" in str(errors[0])
+
+    def test_lookups_from_another_thread_fail_fast_and_release_the_lock(self):
+        app = Citry(autodiscover=False)
+
+        class Card(Component):
+            citry = app
+
+        app.initialize()
+        errors: list[str] = []
+
+        def look_up_elsewhere():
+            for lookup in (lambda: app.get("card"), lambda: app.get_component_by_class_id(Card.class_id)):
+                try:
+                    lookup()
+                except CitryLifecycleInProgress as error:
+                    errors.append(str(error))
+
+        with app._registry._lifecycle.operation("component registration"):
+            thread = threading.Thread(target=look_up_elsewhere)
+            thread.start()
+            thread.join()
+        assert [message.split(" while ")[0] for message in errors] == [
+            "Cannot look up a component",
+            "Cannot look up a component class ID",
+        ]
+        # Both lookups work again once the operation ends, so the lock was released.
+        assert app.get("card") is Card
+        assert app.get_component_by_class_id(Card.class_id) is Card
+
 
 class TestRegistration:
     def test_registry_strongly_owns_a_class_until_explicit_unregistration(self):

@@ -590,7 +590,7 @@ class VueSerializationPlan:
             or self._owned_host is None
             or self._owned_start_scripts is None
             or self._owned_host.count(self.host_id) != 1
-            or self.configuration.count(self.host_id) < 1
+            or self.host_id not in self.configuration
         ):
             return False
         # A replaced or edited start script could mount instead of hydrating,

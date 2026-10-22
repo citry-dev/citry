@@ -65,7 +65,12 @@ def typed_document_shell(render: CitryRender, host_html: str) -> TypedDocumentSh
 
     def record_region(region: str) -> None:
         for render_id in active_render_ids:
-            states_by_render.setdefault(render_id, set()).add(region)
+            # Most calls find the set already there; avoid building a spare one.
+            regions = states_by_render.get(render_id)
+            if regions is None:
+                states_by_render[render_id] = {region}
+            else:
+                regions.add(region)
 
     def visit(parts: Iterable[object]) -> None:
         nonlocal body_count, body_depth, document_marker
