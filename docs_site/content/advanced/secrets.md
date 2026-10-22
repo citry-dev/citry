@@ -100,8 +100,8 @@ warning. It finds one when it can see where the value comes from:
 
 Without `--types`, `citry check` does not see a `Secret` that a call
 returns, such as `get_token()`. The Citry editor extension and
-`citry check --types`
-report one when the type checker can tell the call returns a `Secret`.
+`citry check --types` report one when the type checker can tell the
+call returns a `Secret`.
 
 ## Less common cases
 
