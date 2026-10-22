@@ -314,6 +314,27 @@ def test_template_expressions_are_checked_against_the_component(tmp_path, lane_p
     ]
 
 
+def test_a_broken_template_expression_gets_one_citry_diagnostic_and_no_typescript_error(tmp_path):
+    # `startDrag('a')` alone is a type error (TS2345), and `+*` makes the
+    # expression invalid. Citry reports the syntax error at `*`; TypeScript
+    # must not add a second report anywhere in the same expression.
+    html = "<button @click=\"startDrag('a') +* 1\">Go</button>"
+    project, documents = _documents(
+        tmp_path,
+        {"lane.js": ("javascript", _LANE_JS), "lane.html": ("citry-html", html)},
+    )
+    document = documents[(tmp_path / "lane.html").as_uri()]
+    citry = [
+        *template_lint_diagnostics(document, project, documents),
+        *browser_diagnostics(document, project, documents),
+    ]
+
+    assert [(item.code, item.range.start.character, item.range.end.character) for item in citry] == [
+        ("citry.vue.invalid-expression", 32, 33)
+    ]
+    assert check_document_types(document, project, documents, _command(), citry) == ()
+
+
 _INLINE_APP = '''from citry import Citry, Component
 engine = Citry(autodiscover=False)
 class Board(Component):
