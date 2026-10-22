@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,11 @@ try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 matrix
     import tomli as tomllib
+
+try:
+    from scripts import build_constraints
+except ImportError:  # Run as `python scripts/<name>.py`, where scripts/ itself is on sys.path.
+    import build_constraints  # type: ignore[no-redef]
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -263,7 +269,20 @@ def build_wheel(
         "maturin.build-args=--profile release-wheel",
         "-v",
     ]
-    _run(command, cwd=source, env=build_env)
+    # Without uv on PATH, pyodide-build installs build dependencies with pip,
+    # which ignores UV_CONSTRAINT and would skip the hash check without a word.
+    if shutil.which("uv", path=build_env.get("PATH")) is None:
+        raise PyodideBuildError("uv must be on PATH so pyodide-build checks the pinned build-backend hashes")
+    with tempfile.TemporaryDirectory(prefix="citry-core-pyodide-constraints-") as temporary:
+        # pyodide-build fills its build environment with `uv pip install`,
+        # which checks the hashes in UV_CONSTRAINT. uvx reads the same variable
+        # for versions only, so `maturin` in pyodide-build.json must match the
+        # root pin. The pins come from the built tree's own root pyproject.
+        constraints = build_constraints.export(
+            Path(temporary) / "build-constraints.txt",
+            pyproject=source_workspace / "pyproject.toml",
+        )
+        _run(command, cwd=source, env={**build_env, "UV_CONSTRAINT": str(constraints)})
     wheels = sorted(out_dir.glob("citry_core-*.whl"))
     if len(wheels) != 1 or wheels[0].name != expected_name:
         names = ", ".join(path.name for path in wheels)

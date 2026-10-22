@@ -35,6 +35,11 @@ except ModuleNotFoundError:  # Python 3.10 is part of the package test matrix.
 else:
     _tomllib = _stdlib_tomllib
 
+try:
+    from scripts import build_constraints
+except ImportError:  # Run as `python scripts/<name>.py`, where scripts/ itself is on sys.path.
+    import build_constraints  # type: ignore[no-redef]
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from email.message import Message
@@ -657,6 +662,8 @@ def smoke_sdist(sdist: Path, *, rust_toolchain: str) -> dict[str, Any]:
         output_dir = root / "dist"
         env = dict(os.environ)
         env["RUSTUP_TOOLCHAIN"] = rust_toolchain
+        # --no-config hides the root build pins, so pass them as a hashed constraints file.
+        constraints = build_constraints.export(root / "build-constraints.txt")
         _run(
             [
                 "uv",
@@ -667,6 +674,7 @@ def smoke_sdist(sdist: Path, *, rust_toolchain: str) -> dict[str, Any]:
                 str(output_dir),
                 "--no-config",
                 "--no-build-logs",
+                *build_constraints.constraint_args(constraints),
                 "--config-setting",
                 "maturin.build-args=--profile release-wheel",
             ],
