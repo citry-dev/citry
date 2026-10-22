@@ -121,7 +121,7 @@ def js_data(self, kwargs: Kwargs, slots):
 Returning a [`Secret`][citry.Secret] raises the same `TypeError`, and the
 error names the key that holds it. Leave it out of `js_data()` and read
 it on the server; see
-[Keep tokens off the page](/vue/component-options/#keep-tokens-off-the-page).
+[Secrets](/advanced/secrets/).
 
 Returning a dataclass or Pydantic instance as the whole result works:
 Citry turns its fields into the top-level keys. Values inside those fields

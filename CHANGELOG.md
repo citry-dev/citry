@@ -99,7 +99,7 @@
   `js_data()`, and a template shows it as `***`. Annotate a `Kwargs` field
   as `Secret[str]` to reject a plain string. A cached component cannot take
   a `Secret` input unless its `Cache.vary()` leaves the secret out
-  ([details](https://citry.dev/vue/component-options/#keep-tokens-off-the-page)).
+  ([details](https://citry.dev/advanced/secrets/)).
 - With your application loaded, `citry check` now warns when a template
   class misspells one the component's CSS styles, such as `class="bord"`
   for `.board`; such an element renders unstyled with no error
