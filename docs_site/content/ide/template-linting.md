@@ -830,7 +830,7 @@ because a hidden element is still in the page.
 The same id in two different templates is not reported, even when both
 render on one page. Development mode reports that case when Citry
 turns the page into HTML; see
-[Repeated ids](/guides/dev-server/#repeated-ids).
+[Repeated ids](/guides/development-mode/#repeated-ids).
 
 ## Images without alt text { #find-images-without-alt-text }
 
@@ -1144,23 +1144,9 @@ These are not checked:
 - a class shorter than three characters;
 - a class on a tag that renders no element of its own, such as `<c-if>`
   or `<template>`;
-- a slip that usually names another class of the same family:
-    - a moved, doubled, or dropped digit, such as `col-1` next to
-      `.col-12`;
-    - a missing final `s`, such as `tab` next to `.tabs`, unless the
-      class already ends in `s`, as `progres` next to `.progress` does;
-    - one of these short words next to its longer form, as the whole
-      class or as its last word after a hyphen or underscore, such as
-      `navbar-toggle` next to `.navbar-toggler`: `close` (`closed`),
-      `collapse` (`collapsed`), `disable` (`disabled`), `enable`
-      (`enabled`), `fade` (`faded`), `mute` (`muted`), `show` (`shown`),
-      `slide` (`slider`), and `toggle` (`toggled` or `toggler`). Any
-      other word missing its last letter, such as `heade` next to
-      `.header`, is reported;
-    - one letter typed twice or left out in a first part of one or two
-      characters before a hyphen, such as `p-4` next to `.px-4` or
-      `m-auto` next to `.ml-auto`. Two letters swapped there, such as
-      `iu-button` next to `.ui-button`, are reported.
+- a slip that usually names another class of the same family, such as
+  `col-1` next to `.col-12` or `tab` next to `.tabs`. See
+  [Similar class names](#similar-class-names) for the full list.
 
 The rule is a warning by default. Only `citry --app ... check` reports
 it; the editor does not. If a stylesheet that Citry does not read styles
@@ -1223,13 +1209,8 @@ class Board(Component):
 Or turn it on for the app and set it to `"ignore"` in the `Lint` class of
 each component that uses a CSS framework.
 
-A selector declares a class wherever it names it: `.name`, `.card .name`,
-`.name:hover`, `:is(.name)`, and inside `@media` or a nested rule. An
-attribute selector such as `[class~="name"]` declares it too, and
-`[class^="btn-"]` declares every class that starts with `btn-`. A class
-in a comment, a string, or a property value does not count. As in a
-browser, an unclosed comment runs to the end of the stylesheet, so no
-class after it counts.
+[What declares a class](#what-declares-a-class) lists the selectors
+that count.
 
 ## Unset CSS variables { #find-unset-css-variables }
 
@@ -1604,6 +1585,37 @@ A Pydantic schema that allows extra keys may receive any name at runtime, so
 Citry reports an undeclared name as a warning, not an error. Plain classes,
 dataclasses, NamedTuples, and Pydantic models that ignore or forbid extra
 keys are closed.
+
+### Similar class names { #similar-class-names }
+
+The [misspelled class](#find-misspelled-css-classes) rule does not
+report a slip that usually names another class of the same family:
+
+- a moved, doubled, or dropped digit, such as `col-1` next to `.col-12`;
+- a missing final `s`, such as `tab` next to `.tabs`, unless the class
+  already ends in `s`, as `progres` next to `.progress` does;
+- one of these short words next to its longer form, as the whole class
+  or as its last word after a hyphen or underscore, such as
+  `navbar-toggle` next to `.navbar-toggler`: `close` (`closed`),
+  `collapse` (`collapsed`), `disable` (`disabled`), `enable`
+  (`enabled`), `fade` (`faded`), `mute` (`muted`), `show` (`shown`),
+  `slide` (`slider`), and `toggle` (`toggled` or `toggler`). Any other
+  word missing its last letter, such as `heade` next to `.header`, is
+  reported;
+- one letter typed twice or left out in a first part of one or two
+  characters before a hyphen, such as `p-4` next to `.px-4` or `m-auto`
+  next to `.ml-auto`. Two letters swapped there, such as `iu-button`
+  next to `.ui-button`, are reported.
+
+### What declares a class { #what-declares-a-class }
+
+For the CSS class rules, a selector declares a class wherever it names
+it: `.name`, `.card .name`, `.name:hover`, `:is(.name)`, and inside
+`@media` or a nested rule. An attribute selector such as
+`[class~="name"]` declares it too, and `[class^="btn-"]` declares every
+class that starts with `btn-`. A class in a comment, a string, or a
+property value does not count. As in a browser, an unclosed comment runs
+to the end of the stylesheet, so no class after it counts.
 
 ### Mixins and extends
 
