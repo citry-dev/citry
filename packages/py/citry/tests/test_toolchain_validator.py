@@ -69,3 +69,10 @@ def test_an_old_pypi_upload_action_fails(root, stale):
     workflow = root / ".github/workflows/py--pygments-citry--publish.yml"
     _replace_once(workflow, toolchain._PYPI_ACTION, stale)
     assert any("must upload with" in error for error in pinned_action_errors(root, _UV_PIN))
+
+
+def test_a_floating_setup_uv_tag_fails(root):
+    # A tag can point at any setup-uv release, including one that skips the checksum.
+    _replace_once(root / ".github/workflows/py--tests.yml", toolchain._UV_ACTION, "astral-sh/setup-uv@v7")
+    errors = pinned_action_errors(root, _UV_PIN)
+    assert any("must use" in error and "py--tests.yml" in error for error in errors)

@@ -54,7 +54,7 @@ _CORE_CRATES = (
 _MATURIN_ACTION = "PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
 _RUST_ACTION = "dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8"
 _PYPI_ACTION = "pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086"
-_UV_ACTION = "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78"
+_UV_ACTION = "astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e"
 _SCCACHE_ACTION = "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
 _RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
 _PNPM_ACTION = "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86"
@@ -419,7 +419,7 @@ def check() -> list[str]:
 
 def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
     """
-    Report setup-uv and PyPI upload steps that leave the reviewed pins.
+    Report setup-uv and PyPI upload steps that leave the reviewed actions or pins.
 
     Each workflow is read as YAML, and the version a step receives is resolved
     through ``${{ env.NAME }}`` references at workflow, job, and step level.
@@ -452,6 +452,10 @@ def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
                     errors.append(f"{label} job {job_name} must upload with {_PYPI_ACTION}")
                 if not uses.startswith("astral-sh/setup-uv@"):
                     continue
+                # Only the reviewed commit is known to check the uv download
+                # against a built-in checksum, so every job uses it.
+                if uses != _UV_ACTION.lower():
+                    errors.append(f"{label} job {job_name} must use {_UV_ACTION}")
                 version = str((step.get("with") or {}).get("version", ""))
                 # A `${{ env.NAME }}` reference pins whatever that env value holds.
                 reference = re.fullmatch(r"\$\{\{\s*env\.(\w+)\s*\}\}", version)

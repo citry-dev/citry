@@ -120,15 +120,18 @@ list after a rebuild, so keep `PIP_USE_DEPRECATED=legacy-certs` set there.
 
 If you created your project from a Citry starter or demo, its CI workflow
 in `.github/workflows/check.yml` pins uv 0.10.12, which still trusts the
-emSign authorities. Change the pin to 0.13.5:
+emSign authorities. It also uses setup-uv 7.6.0, which installs any uv
+newer than 0.10.10 without checking the download's checksum. Change both
+(the commit is setup-uv 10.3.2):
 
 ```yaml
-- uses: astral-sh/setup-uv@... # unchanged
+- uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
   with:
+    prune-cache: true
     version: "0.13.5"
 ```
 
-The starters now ship with this pin.
+The starters now ship with these settings.
 
 ## What we changed in Citry
 
