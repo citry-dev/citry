@@ -31,7 +31,7 @@ package = false
 # run from this folder (`--directory`), because it reads ${PROJECT_ROOT}
 # as the folder it was started in.
 override-dependencies = [
-  "citry-core==1.8.0",
+  "citry-core==1.9.0",
   "citry @ file:///${PROJECT_ROOT}/../../../../../packages/py/citry",
 ]
 

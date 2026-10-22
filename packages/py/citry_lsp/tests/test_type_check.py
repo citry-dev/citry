@@ -316,6 +316,30 @@ def test_template_expressions_are_checked_against_the_component(tmp_path, lane_p
     ]
 
 
+def test_a_broken_template_expression_gets_one_citry_diagnostic_and_no_typescript_error(tmp_path):
+    # `startDrag('a')` is a type error (TS2345), and declaring `x` twice makes
+    # the listener invalid. TypeScript reports the type error on its own;
+    # Citry reports the second `x`, and the filter must drop TypeScript's
+    # report from the same expression even though the ranges do not touch.
+    html = "<button @click=\"startDrag('a');;let x = 1; let x = 2\">Go</button>"
+    project, documents = _documents(
+        tmp_path,
+        {"lane.js": ("javascript", _LANE_JS), "lane.html": ("citry-html", html)},
+    )
+    document = documents[(tmp_path / "lane.html").as_uri()]
+    citry = [
+        *template_lint_diagnostics(document, project, documents),
+        *browser_diagnostics(document, project, documents),
+    ]
+
+    assert [(item.code, item.range.start.character, item.range.end.character) for item in citry] == [
+        ("citry.vue.invalid-expression", 47, 48)
+    ]
+    alone = check_document_types(document, project, documents, _command(), ())
+    assert [(item.code, item.range.start.character) for item in alone] == [("citry.typescript.ts2345", 26)]
+    assert check_document_types(document, project, documents, _command(), citry) == ()
+
+
 _INLINE_APP = '''from citry import Citry, Component
 engine = Citry(autodiscover=False)
 class Board(Component):
@@ -564,6 +588,36 @@ def test_a_citry_finding_on_the_same_text_wins():
 
     assert map_type_check_findings((projection,), (finding,), (citry,)) == ()
     assert len(map_type_check_findings((projection,), (finding,), (unrelated,))) == 1
+
+
+def test_a_narrowed_citry_finding_still_hides_a_typescript_error_in_its_expression():
+    mapping = ProjectionSourceMapping(
+        types.Range(types.Position(0, 0), types.Position(0, 20)),
+        types.Range(types.Position(5, 0), types.Position(5, 20)),
+    )
+    projection = TypeCheckProjection("template:0", "", (mapping,))
+    # TypeScript's error sits at the start of the expression, and Citry's
+    # syntax finding only at the token where the parser stopped.
+    finding = TypeScriptFinding("template:0", types.Range(types.Position(5, 2), types.Position(5, 6)), 2322, "m")
+    narrowed = types.Diagnostic(
+        types.Range(types.Position(0, 12), types.Position(0, 13)),
+        "not valid JavaScript",
+        code="citry.vue.invalid-expression",
+    )
+    with_expression = types.Diagnostic(
+        narrowed.range,
+        narrowed.message,
+        code=narrowed.code,
+        data={"expressionRange": [[0, 1], [0, 14]]},
+    )
+    # A client that changes `data` only loses the wider match.
+    malformed = types.Diagnostic(
+        narrowed.range, narrowed.message, code=narrowed.code, data={"expressionRange": [[0, 1]]}
+    )
+
+    assert len(map_type_check_findings((projection,), (finding,), (narrowed,))) == 1
+    assert map_type_check_findings((projection,), (finding,), (with_expression,)) == ()
+    assert len(map_type_check_findings((projection,), (finding,), (malformed,))) == 1
 
 
 def test_tsc_output_is_read_with_chained_messages():

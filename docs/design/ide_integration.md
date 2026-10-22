@@ -28,7 +28,9 @@ static HTML attribute value outside the keywords the HTML Standard allows
 reports a `c-*` name that is not an HTML attribute of its element but looks
 like a misspelled directive, such as `c-iff`, or a `v-*` name one typing
 slip from a Vue directive, such as `v-iff`
-(`citry.template.misspelled-directive`).
+(`citry.template.misspelled-directive`). With the application loaded, a
+`v-*` name that every rendering component registers in
+`$component({ directives })` is not reported.
 
 These rules read only the template's HTML, so they also run in
 `citry check --static` and in an editor that has not loaded the
@@ -45,7 +47,9 @@ application:
 - `rule_duplicate_id` (`citry.template.duplicate-id`): a literal `id` two
   elements always render.
 - `rule_missing_image_alt` (`citry.template.missing-image-alt`): an
-  `<img>` without alt text.
+  `<img>` without alt text. With the application loaded, a component's
+  single root `<img>` is reported when the component has no browser code or
+  its JavaScript sets `inheritAttrs: false`.
 - `rule_invalid_model_target` (`citry.browser.invalid-model-target`):
   `v-model` on an element that holds no value.
 - `rule_misspelled_event` (`citry.vue.misspelled-event`): a misspelled DOM
@@ -73,8 +77,9 @@ These rules need facts that only the loaded application gives, so
   component or the repeated one makes the page use Vue.
 - `rule_prop_assignment` (`citry.browser.prop-assignment`): a component's
   own template or JavaScript assigns to one of its props. The editor
-  reports it too once the application is loaded. A write in JavaScript is
-  at most a warning.
+  reports it too once the application is loaded. The JavaScript parser
+  marks each write, so a write in JavaScript follows the rule's severity
+  like one in the template.
 - `rule_unknown_server_event_field`, `rule_missing_server_event_field`,
   and `rule_incompatible_server_event_field`
   (`citry.browser.*-server-event-field`): the literal arguments of an

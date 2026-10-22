@@ -26,6 +26,9 @@ validation, the exact compiler output format), see
 - `src/constants.rs` - tag names, node class names, void elements, attribute
   validation rules, control-flow groups, tag ordering rules.
 - `src/parser_context.rs` - `ParserContext` and user-supplied `TagRules`.
+- `src/browser.rs` - OXC analysis of Vue expressions and `$component`
+  JavaScript. Its result structs are `#[pyclass(frozen, eq)]` records that
+  Python receives as they are.
 - `tests/` - one file per feature area, plus `tests/common/mod.rs` (AST builder
   helpers) and `tests/tag_compiler.rs` (compiler output assertions).
 
@@ -42,7 +45,9 @@ validation, the exact compiler output format), see
 - **V1/V2/V3 context.** This crate implements V3. The `v2_*.md` files are
   working notes, not a spec. See the cross-crate INDEX for the version model.
 - **Changes here surface in Python.** `parse_template`, `compile_template`,
-  and the `#[pyclass]` AST types are exposed through
+  the `#[pyclass]` AST types, and the browser analysis records in
+  `src/browser.rs` (`BrowserAnalysis`, `BrowserComponentAnalysis`, and the
+  records they hold) are exposed through
   `crates/citry_core_py/src/lib.rs` and mirrored by hand in
   `packages/py/citry_core/citry_core/_rust.pyi`, so a change to any of them
   triggers the cross-binding audit (Mechanism 4 in `/CLAUDE.md`).

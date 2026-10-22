@@ -16,7 +16,8 @@ All notable changes to `citry-lsp` are documented here.
   block inside a `<p>`, a repeated `id`, an `<img>` without alt text, a
   Vue expression that is not valid JavaScript, and `v-model` on an
   element that holds no value. Each follows its `rule_*` setting, and
-  each works before your application loads.
+  each works before your application loads. A broken Vue expression is
+  underlined where the JavaScript parser stops, with the parser's message.
 - The editor runs Vue's compiler over each template and underlines what it
   rejects, such as a `<div>` directly inside a `<table>` or a `v-else` with
   no `v-if` before it, at the severity `rule_vue_compile_error` sets. It
@@ -24,10 +25,15 @@ All notable changes to `citry-lsp` are documented here.
 - The editor reports a typo in a Vue directive, such as `v-iff`, a
   boolean attribute with a value such as `disabled="false"`, and, once
   your application loads, a lowercase listener on a component for an
-  event the child does not declare, such as `@hdie`.
+  event the child does not declare, such as `@hdie`. Once your
+  application loads, a custom directive that the component registers in
+  the `directives` option of `$component()` is not reported, and a
+  component's only top-level `<img>` without alt text is reported when
+  the component sets `inheritAttrs: false`.
 - Once your application loads, the editor reports a component that
-  assigns to its own prop, such as `@click="open = false"`, at the
-  severity `rule_prop_assignment` sets.
+  assigns to its own prop, such as `@click="open = false"` in its
+  template or `this.open = false` in its JavaScript, at the severity
+  `rule_prop_assignment` sets.
 - Once your application loads, the editor reports `@c-*` arguments the
   server would reject, such as `save({amont: 1})` or `save({amount: '1'})`
   for an `int` field, and a control in a submitted form whose `name` the
@@ -72,6 +78,12 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
+- citry-lsp now requires Citry 0.6.1 or later, which provides the
+  custom-directive, `inheritAttrs`, and parser-error checks listed above.
+  Installing this citry-lsp upgrades Citry when needed. An earlier
+  citry-lsp with Citry 0.6.1 can show a TypeScript error next to Citry's
+  message on some broken Vue expressions, such as a listener that declares
+  a name twice.
 - `citry check --types` no longer checks components installed in a `.venv`
   or `site-packages` folder inside your project; their authors check them.
 

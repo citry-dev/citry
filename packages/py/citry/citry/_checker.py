@@ -114,6 +114,7 @@ from citry.analysis import (
     AttributeValueLintConsumer,
     BrowserComponentPropContribution,
     BrowserComponentPropSite,
+    BrowserComponentSourceAnalysis,
     BrowserExpression,
     BrowserProp,
     ComponentJsLintConsumer,
@@ -490,12 +491,19 @@ def _check_registry(
                 AttributeValueLintConsumer(_component_lint_info(engine, component).rule_invalid_attribute_value)
                 for component in source.consumers
             )
+            # Each consumer's JavaScript is read once here, for the directives
+            # it registers and for whether Vue passes a parent's attributes on.
+            js_analyses = {component: _disk_component_js_analysis(engine, component) for component in source.consumers}
             directive_lint_consumers = tuple(
-                MisspelledDirectiveLintConsumer(_component_lint_info(engine, component).rule_misspelled_directive)
+                MisspelledDirectiveLintConsumer(
+                    _component_lint_info(engine, component).rule_misspelled_directive,
+                    declared_directives=_declared_directives(js_analyses[component]),
+                )
                 for component in source.consumers
             )
             markup_lint_consumers = tuple(
-                _checker_markup_lint_consumer(engine, component) for component in source.consumers
+                _checker_markup_lint_consumer(engine, component, js_analyses[component])
+                for component in source.consumers
             )
             foreign_options = _checker_foreign_options(
                 engine,
@@ -2557,12 +2565,23 @@ def _css_data_keys(engine: Citry, component: type[Component]) -> frozenset[str] 
     return None
 
 
-def _checker_markup_lint_consumer(engine: Citry, component: type[Component]) -> MarkupLintConsumer:
-    """Build one component's severities for the HTML rules, and whether a parent's attributes reach its root."""
+def _checker_markup_lint_consumer(
+    engine: Citry,
+    component: type[Component],
+    js_analysis: BrowserComponentSourceAnalysis | None,
+) -> MarkupLintConsumer:
+    """
+    Build one component's severities for the HTML rules, and whether a parent's attributes reach its root.
+
+    Vue passes them on for a component with browser code unless its
+    JavaScript proves ``inheritAttrs: false``; an unreadable value counts as
+    passing them on, so the image rule stays quiet when unsure.
+    """
     lint = _component_lint_info(engine, component)
+    inherits_attributes = js_analysis is None or js_analysis.declared_inherit_attrs is not False
     return MarkupLintConsumer(
         **{rule_name: getattr(lint, rule_name) for rule_name in MARKUP_LINT_RULES},
-        root_may_receive_attributes=_may_have_browser_code(component),
+        root_may_receive_attributes=_may_have_browser_code(component) and inherits_attributes,
     )
 
 
@@ -2609,6 +2628,17 @@ def _may_have_browser_code(component: type[Component]) -> bool:
     except (Exception, SystemExit):  # noqa: BLE001 - an unreadable declaration may still be browser code
         return True
     return inline is not None or filepath is not None
+
+
+def _declared_directives(js_analysis: BrowserComponentSourceAnalysis | None) -> frozenset[str] | None:
+    """Return the directive names a component's JavaScript registers, or None when they are unknown."""
+    return None if js_analysis is None else js_analysis.declared_directives
+
+
+def _disk_component_js_analysis(engine: Citry, component: type[Component]) -> BrowserComponentSourceAnalysis | None:
+    """Analyze the one JavaScript source a component runs, or return None when there is not exactly one."""
+    source = _disk_component_js_source(engine, component)
+    return None if source is None else analyze_browser_component_source(source)
 
 
 def _disk_component_js_source(engine: Citry, component: type[Component]) -> str | None:

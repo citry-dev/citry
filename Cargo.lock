@@ -412,6 +412,7 @@ dependencies = [
  "oxc_allocator 0.143.0",
  "oxc_ast 0.143.0",
  "oxc_ast_visit 0.143.0",
+ "oxc_diagnostics 0.143.0",
  "oxc_parser 0.143.0",
  "oxc_semantic 0.143.0",
  "oxc_span 0.143.0",

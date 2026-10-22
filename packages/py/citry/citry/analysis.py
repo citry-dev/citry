@@ -31,6 +31,7 @@ from citry._browser_expressions import (
     BrowserComponentSection,
     BrowserComponentSourceAnalysis,
     BrowserDeclarativeEvent,
+    BrowserDirectiveName,
     BrowserEmitName,
     BrowserExpression,
     BrowserExpressionMode,
@@ -47,6 +48,7 @@ from citry._browser_expressions import (
     BrowserSourceAnalysis,
     BrowserStateBinding,
     BrowserStateBindingTargetError,
+    BrowserSyntaxError,
     MarkLiteralFinding,
     _ascii_lower,
     _nested_template,
@@ -415,16 +417,28 @@ class MisspelledDirectiveLintConsumer:
         rule_misspelled_directive: Configured severity for a name such as
             ``c-iff``, which Citry renders as an ordinary HTML attribute, or
             ``v-iff``, which Vue reads as an unknown custom directive.
+        declared_directives: The custom directive names the component's
+            ``$component({...})`` registers in its ``directives`` option, so
+            ``v-iff`` passes in a component that registers ``iff``. ``None``,
+            the default, means the names are unknown: the component's
+            JavaScript was not read or does not show them.
 
     """
 
     rule_misspelled_directive: Literal["ignore", "warning", "error"] = "error"
+    declared_directives: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
         severity = self.rule_misspelled_directive
         if type(severity) is not str or severity not in {"ignore", "warning", "error"}:
             msg = f"Unknown rule_misspelled_directive severity: {severity!r}"
             raise ValueError(msg)
+        declared = self.declared_directives
+        if declared is not None and (
+            type(declared) is not frozenset or not all(type(name) is str for name in declared)
+        ):
+            msg = "MisspelledDirectiveLintConsumer.declared_directives must be a frozenset of str or None"
+            raise TypeError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1509,7 +1523,13 @@ def lint_misspelled_directives(
     and Citry's browser code stops with an error when none of that name is
     registered. Names on or inside an element with ``v-pre`` are skipped,
     because Vue leaves them as written, and no message suggests ``v-once``
-    or ``v-memo``, which Citry does not support.
+    or ``v-memo``, which Citry does not support. A consumer registers such a
+    name when its ``declared_directives`` holds the name as written, its
+    camelCase form, or that form with a capital first letter, which are the
+    names Vue looks up. The name is reported for the consumers that do not
+    register it and do not ignore the rule, with their severity, because a
+    template that two components render fails in the one that does not
+    register it. A consumer whose names are unknown never registers it.
 
     A finding is reported unless every consumer ignores the rule, and it is an
     error when any reporting consumer says ``"error"``. The check needs no
@@ -1536,7 +1556,14 @@ def lint_misspelled_directives(
         return ()
     severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
     found: list[MisspelledDirectiveFinding] = []
-    _collect_misspelled_directives(template, found, severity, parse_nested=parse_nested, base_index=0)
+    _collect_misspelled_directives(
+        template,
+        found,
+        severity,
+        parse_nested=parse_nested,
+        base_index=0,
+        consumers=effective,
+    )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
@@ -1547,13 +1574,16 @@ def _collect_misspelled_directives(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
+    consumers: tuple[MisspelledDirectiveLintConsumer, ...],
     vue_skipped: bool = False,
 ) -> None:
     """
     Check each ``c-*`` and ``v-*`` attribute of each element in one template and its nested templates.
 
-    ``vue_skipped`` is true on and inside an element with ``v-pre``, which
-    Vue leaves as written, so its ``v-*`` names are not directives.
+    ``consumers`` decide, per ``v-*`` name, whether it is reported and how
+    severely. ``vue_skipped`` is true on and inside an element with
+    ``v-pre``, which Vue leaves as written, so its ``v-*`` names are not
+    directives.
     """
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -1572,7 +1602,7 @@ def _collect_misspelled_directives(
         for attr in node.start_tag.attrs:
             # Vue reads a `v-*` name as a directive on any tag, components
             # included, so its typos are checked everywhere Vue compiles.
-            vue_finding = None if inside_v_pre else _misspelled_vue_directive_finding(attr, severity, base_index)
+            vue_finding = None if inside_v_pre else _misspelled_vue_directive_finding(attr, consumers, base_index)
             if vue_finding is not None:
                 found.append(vue_finding)
             if accepted is not None:
@@ -1598,6 +1628,7 @@ def _collect_misspelled_directives(
                         severity,
                         parse_nested=parse_nested,
                         base_index=base_index + inner.start_index + nested_start,
+                        consumers=consumers,
                         vue_skipped=inside_v_pre,
                     )
         body = getattr(node, "body", None)
@@ -1608,6 +1639,7 @@ def _collect_misspelled_directives(
                 severity,
                 parse_nested=parse_nested,
                 base_index=base_index,
+                consumers=consumers,
                 vue_skipped=inside_v_pre,
             )
 
@@ -1730,7 +1762,7 @@ _SPELLED_OUT_VUE_ELSE_IF = frozenset({"elif", "elseif", "elsif", "else_if"})
 
 def _misspelled_vue_directive_finding(
     attr: HtmlAttr,
-    severity: Literal["warning", "error"],
+    consumers: tuple[MisspelledDirectiveLintConsumer, ...],
     base_index: int,
 ) -> MisspelledDirectiveFinding | None:
     """
@@ -1750,6 +1782,21 @@ def _misspelled_vue_directive_finding(
     lowered = _ascii_lower(directive)
     if not lowered or lowered in _VUE_DIRECTIVES:
         return None
+    # Vue looks a directive up by the name as written, then camelized, then
+    # camelized with a capital first letter, so `v-my-dir` finds `myDir`.
+    camel = _vue_camelize(directive)
+    lookup = {directive, camel, camel[:1].upper() + camel[1:]}
+    # The page fails only in a component that does not register the name,
+    # so those components alone decide whether and how it is reported.
+    failing = [
+        consumer.rule_misspelled_directive
+        for consumer in consumers
+        if consumer.rule_misspelled_directive != "ignore"
+        and (consumer.declared_directives is None or not lookup & consumer.declared_directives)
+    ]
+    if not failing:
+        return None
+    severity: Literal["warning", "error"] = "error" if "error" in failing else "warning"
     if lowered in _SPELLED_OUT_VUE_ELSE_IF:
         suggestion = "else-if"
     else:
@@ -2088,29 +2135,12 @@ def _declared_event_suggestion(event: str, analysis: BrowserComponentSourceAnaly
     return None
 
 
-# An assignment or update right after a name, as in `open = false`,
-# `count += 1`, or `count++`. `==`, `===`, and `=>` are not assignments.
-_WRITE_AFTER_NAME = re.compile(rb"\s*(?:(?:\*\*|<<|>>>?|&&|\|\||\?\?|[-+*/%&|^])?=(?![=>])|\+\+|--)")
-# An update right before a name, as in `++count`, possibly through `this.`.
-_UPDATE_BEFORE_NAME = re.compile(rb"(?:\+\+|--)\s*(?:[A-Za-z_$][\w$]*\s*\.\s*)?$")
-
-
 def _declared_prop_names(source: str) -> frozenset[str] | None:
     """Return the props a component's JavaScript declares, or None when its source cannot be read."""
     analysis = analyze_browser_component_source(source)
     if not analysis.valid:
         return None
     return frozenset(item.exposed_name for item in analysis.public_names if item.origin == "props")
-
-
-def _writes_name(source: bytes, start: int, end: int) -> bool:
-    """Return whether the name at ``source[start:end]`` is assigned or updated there."""
-    if _WRITE_AFTER_NAME.match(source, end):
-        return True
-    update = _UPDATE_BEFORE_NAME.search(source[:start])
-    # `++` or `--` right after a value, as in `a--` before a line break, ends
-    # that value's expression, so it does not update the name that follows.
-    return update is not None and not re.search(rb"[\w$)\]]\s*$", source[: update.start()])
 
 
 def lint_prop_assignments(
@@ -2125,10 +2155,11 @@ def lint_prop_assignments(
     Vue props are read-only: `@click="open = false"` in the component that
     receives `open` leaves the value unchanged and only logs a warning in
     the browser. This reports an assignment (`=`, `+=`, and the other
-    assignment operators), an update (`++`, `--`), and `v-model` bound to a
-    prop. A write to a field of an object prop, such as `open.count = 1`, is
-    allowed by Vue and not reported, and neither is a name that an enclosing
-    `v-for` or slot binds.
+    assignment operators), an update (`++`, `--`), a destructuring target
+    such as `[open] = pair`, and `v-model` bound to a prop. A write to a
+    field of an object prop, such as `open.count = 1`, is allowed by Vue and
+    not reported, and neither is a name that an enclosing `v-for` or slot
+    binds.
 
     Args:
         expressions: The Vue expressions of one template.
@@ -2166,13 +2197,12 @@ def lint_prop_assignments(
             if name in props and name not in expression.bindings:
                 findings.append(_prop_assignment_finding(name, expression, severity, variant="v-model"))
             continue
-        encoded = expression.source.encode("utf-8")
         for reference in analyze_browser_expression(expression).references:
             if reference.name not in props or reference.name in expression.bindings:
                 continue
-            start = reference.start_index - expression.start_index
-            end = reference.end_index - expression.start_index
-            if _writes_name(encoded, start, end):
+            # The parser marks the name itself as written; `open.count = 1`
+            # only reads `open`.
+            if reference.written:
                 findings.append(
                     VueLintFinding(
                         name=reference.name,
@@ -2212,9 +2242,9 @@ def lint_component_js_prop_assignments(
     Report component JavaScript that assigns to one of the component's own props, such as `this.open = false`.
 
     Only a write through `this` or the `$component` context counts, because
-    the analyzer proves those receivers are the component. The operator
-    after the name is read from the text, so a finding is at most a warning,
-    even when the rule says ``"error"``.
+    the analyzer proves those receivers are the component. An assignment, an
+    update such as `this.count++`, and a destructuring target are writes;
+    `this.open.count = 1` writes a field and is not reported.
 
     Args:
         source: The component's JavaScript.
@@ -2222,28 +2252,28 @@ def lint_component_js_prop_assignments(
             this JavaScript, combined as for ``lint_prop_assignments``.
 
     Returns:
-        Warning findings spanning each written prop name.
+        Findings spanning each written prop name.
 
     """
     active = [severity for severity in (severities or ("error",)) if severity != "ignore"]
     if not active:
         return ()
+    severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
     analysis = analyze_browser_component_source(source)
     if not analysis.valid:
         return ()
     props = frozenset(item.exposed_name for item in analysis.public_names if item.origin == "props")
-    encoded = source.encode("utf-8")
     return tuple(
         VueLintFinding(
             name=reference.name,
             message=render_diagnostic(BROWSER_PROP_ASSIGNMENT, name=reference.name),
             code=BROWSER_PROP_ASSIGNMENT,
-            severity="warning",
+            severity=severity,
             start_index=reference.start_index,
             end_index=reference.end_index,
         )
         for reference in analysis.member_references
-        if reference.name in props and _writes_name(encoded, reference.start_index, reference.end_index)
+        if reference.name in props and reference.written
     )
 
 
@@ -6192,6 +6222,7 @@ __all__ = [
     "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
+    "BrowserDirectiveName",
     "BrowserEmitName",
     "BrowserExpression",
     "BrowserExpressionMode",
@@ -6208,6 +6239,7 @@ __all__ = [
     "BrowserSourceAnalysis",
     "BrowserStateBinding",
     "BrowserStateBindingTargetError",
+    "BrowserSyntaxError",
     "ComponentJsLintConsumer",
     "ComponentJsLintFinding",
     "ComponentNameMatch",
