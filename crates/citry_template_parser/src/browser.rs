@@ -68,6 +68,8 @@ impl PyRepr for String {
     fn py_repr(&self) -> String {
         // Python quotes with `'` unless the text holds a `'` and no `"`, and
         // writes a backslash, the quote, and control characters as escapes.
+        // This matches Python's `repr()` for printable text; Python also
+        // escapes some invisible characters, such as U+2028, that this keeps.
         let quote = if self.contains('\'') && !self.contains('"') {
             '"'
         } else {
@@ -85,11 +87,9 @@ impl PyRepr for String {
                     quoted.push('\\');
                     quoted.push(character);
                 }
-                _ if character.is_control() && (character as u32) < 0x100 => {
-                    quoted.push_str(&format!("\\x{:02x}", character as u32));
-                }
+                // Every control character is below U+0100.
                 _ if character.is_control() => {
-                    quoted.push_str(&format!("\\u{:04x}", character as u32));
+                    quoted.push_str(&format!("\\x{:02x}", character as u32));
                 }
                 _ => quoted.push(character),
             }
@@ -657,15 +657,23 @@ pub fn analyze_browser_source(source: &str, mode: BrowserAnalysisMode) -> Browse
         let wrapped_error = syntax_diagnostic(diagnostic, prefix.len(), source.len());
         let standalone_error = standalone_syntax_error(source, mode);
         // The standalone parse runs at the top level, where some code the
-        // generated function allows is an error, such as `new.target`. An
-        // error it finds before the place the wrapped parse stopped inside
-        // the authored text is such a context error, so the wrapped one is
-        // the author's mistake. When the wrapped parse stopped in the
-        // generated text after it, only the standalone error describes the
-        // authored text.
-        let wrapped_stopped_inside = wrapped_error.start < source.len();
+        // generated function allows is an error, such as `new.target`. The
+        // wrapped parse can get past an earlier standalone error in only two
+        // ways: the code there is valid inside a function, so the wrapped
+        // error is the author's mistake; or the text closes the generated
+        // function with a stray `)`, `]`, or `}`, so the standalone error on
+        // that bracket is the mistake and the wrapped one describes
+        // generated code.
+        let on_closing_bracket = |error: &BrowserSyntaxDiagnostic| {
+            source[error.start..]
+                .chars()
+                .next()
+                .is_some_and(|character| matches!(character, ')' | ']' | '}'))
+        };
         return invalid(match standalone_error {
-            Some(error) if !(wrapped_stopped_inside && error.start < wrapped_error.start) => error,
+            Some(error) if error.start >= wrapped_error.start || on_closing_bracket(&error) => {
+                error
+            }
             _ => wrapped_error,
         });
     }
@@ -3242,11 +3250,25 @@ if (enabled) realComponent({});
 
     #[test]
     fn an_error_only_top_level_code_raises_does_not_hide_the_authored_mistake() {
+        use BrowserAnalysisMode::{Expression, Statement};
         // `new.target` is valid inside the generated function but not at the
-        // top level, where the standalone parse runs; the mistake is the `*`.
-        assert_eq!(
-            syntax_error("new.target; a +* b", BrowserAnalysisMode::Statement),
-            ("Unexpected token".to_string(), 15, 16)
-        );
+        // top level, where the standalone parse runs; the mistake is later.
+        for (source, mode, message, start, end) in [
+            ("new.target; a +* b", Statement, "Unexpected token", 15, 16),
+            ("new.target; a &&", Statement, "Unexpected token", 16, 16),
+            // A stray closing bracket that closes the generated function is
+            // the mistake, even when the text goes on to fail later.
+            ("a))", Expression, "Unexpected token", 1, 2),
+            ("a) b", Expression, "Unexpected token", 1, 2),
+            ("a) +* b", Expression, "Unexpected token", 1, 2),
+            ("a } b c", Statement, "Unexpected token", 2, 3),
+            ("go() } x y", Statement, "Unexpected token", 5, 6),
+        ] {
+            assert_eq!(
+                syntax_error(source, mode),
+                (message.to_string(), start, end),
+                "{source:?} in {mode:?} mode"
+            );
+        }
     }
 }

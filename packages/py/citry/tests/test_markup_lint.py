@@ -476,6 +476,8 @@ def test_invalid_vue_expression_checks_bindings_listeners_loops_and_server_call_
         ('<b @click="function () { a +* b }">x</b>', "*", "Unexpected token"),
         # A trailing comment is skipped when the parser stops at the end.
         ('<p :title="open && // note"></p>', "&", "Unexpected token"),
+        # A quote inside a regular expression does not start a string.
+        ('<p :title="a.match(/\'/) &&"></p>', "&", "Unexpected token"),
     ],
 )
 def test_invalid_vue_expression_names_the_parser_error_where_it_points(source, span, detail):

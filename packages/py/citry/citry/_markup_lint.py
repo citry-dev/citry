@@ -356,8 +356,17 @@ def _visible_error_range(expression: BrowserExpression, error: BrowserSyntaxErro
     if not tokens:
         return expression.start_index, expression.end_index
     last = tokens[-1]
+    text = last.source
+    # The tokenizer does not know regular expressions, so a quote inside
+    # one, as in `a.match(/'/) &&`, starts a string that never ends; the
+    # last character written is then the safer place to point.
+    if last.kind == "string" and (len(text) < 2 or text[-1] != text[0]):
+        stripped = written.rstrip()
+        text = stripped[-1]
+        start = expression.start_index + len(stripped[:-1].encode("utf-8"))
+        return start, start + len(text.encode("utf-8"))
     start = expression.start_index + len(written[: last.start].encode("utf-8"))
-    return start, start + len(last.source.encode("utf-8"))
+    return start, start + len(text.encode("utf-8"))
 
 
 def _v_pre_ranges(
