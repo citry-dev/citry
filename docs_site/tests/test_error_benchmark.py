@@ -378,3 +378,14 @@ def test_chart_tag_passes_its_options_to_the_view(monkeypatch: pytest.MonkeyPatc
     assert "bench-chart--compact" in compact.xpath("//figure")[0].attrib["class"]
     plain = html.fromstring(str(ErrorBenchmarkChart(title="Mistakes")).strip())
     assert plain.xpath("//figure")[0].attrib["class"] == "bench-chart bench-chart--counts"
+
+
+def test_dashed_line_follows_the_scale_of_the_bars() -> None:
+    # Alpha, the reference, reports 1 of the 2 mistakes that apply to it,
+    # out of 4 in all.
+    data = _ranked({"alpha": (1, 2), "beta": (2, 0)})
+    assert chart_view(data)["reference"] == {"label": "Alpha + HTMX + Alpine static/IDE: 1", "style": "left: 25.000%"}
+    assert chart_view(data, scale="applicable")["reference"] == {
+        "label": "Alpha + HTMX + Alpine static/IDE: 1 of 2",
+        "style": "left: 50.000%",
+    }

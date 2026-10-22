@@ -2759,6 +2759,11 @@ body.djc-drawer-open .djc-drawer-overlay {
   margin: 0.9rem 0 0;
 }
 
+/* A compact chart that keeps its table shows it after the legend. */
+.bench-chart--compact .bench-chart__details {
+  order: 2;
+}
+
 .bench-chart--compact .bench-chart__name {
   text-align: left;
 }

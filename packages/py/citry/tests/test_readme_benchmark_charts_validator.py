@@ -34,6 +34,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     helper.DATA_PATH = tmp_path / "data.json"
     helper.ASSET_DIR = tmp_path / "assets"
     helper.ASSET_DIR.mkdir()
+    helper.VERSION_NOTES = {"20990101T000000Z": "Citry 9.9.9, synthetic."}
     data = _data()
     helper.DATA_PATH.write_text(json.dumps(data), encoding="utf-8")
     names = {}
@@ -97,3 +98,11 @@ def test_a_missing_block_or_image_link_fails(repo: ModuleType, readme: str, mess
     problems = readme_benchmark_charts.check()
     assert len(problems) == 1
     assert problems[0].startswith(message)
+
+
+def test_a_run_without_a_version_note_fails(repo: ModuleType) -> None:
+    # The README must not show a count without the Citry version it measured.
+    repo.VERSION_NOTES = {}
+    problems = readme_benchmark_charts.check()
+    assert len(problems) == 1
+    assert problems[0].startswith("README.md:3 No version note for error benchmark run 20990101T000000Z")

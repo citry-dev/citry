@@ -32,6 +32,10 @@ from markupsafe import Markup
 from citry import Component
 from docs_site._internal.util import flatten_for_markdown
 
+# The README's alt text names frameworks from the same table, so it lives
+# beside the README code, which must run without the docs dependencies.
+from docs_site.scripts.benchmark_readme import SHORT_NAMES
+
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "error_prevention.json"
 
 # One color per bucket the benchmark report defines. Greens mean the mistake
@@ -124,10 +128,6 @@ SORT_ORDERS = ("data", "share")
 # apply drawn in gray, or only the mistakes that apply to that framework.
 SCALES = ("all", "applicable")
 
-# Shorter names for a chart with less room, such as the landing page. Only
-# django-components drops its "+ HTMX + Alpine": it is a component library,
-# and the suffix would wrap its name onto three lines on a phone.
-SHORT_NAMES = {"django-components": "django-components"}
 
 # The compact chart draws the static warning in stripes of the static error's
 # green. The plain light green is hard to see against a white card, and the
@@ -265,16 +265,20 @@ def chart_view(
     summary = (
         f"Stacked bar chart of {total} mistakes. {totals}."
         if scale == "all"
-        else f"Stacked bar chart; each bar counts the mistakes of {total} that apply to that framework. {totals}."
+        else f"Stacked bar chart of the mistakes, out of {total}, that apply to each framework. {totals}."
     )
+    # The dashed line marks the first framework's static count on the same
+    # scale as the bars: out of all the mistakes, or out of those that apply
+    # to it, which every bar then compares against as a share.
+    reference_key = reference["key"]
     return {
         "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in parts],
         "rows": rows,
         # The dashed line at the first framework's static count shows which
         # frameworks report more mistakes before running and which fewer.
         "reference": {
-            "label": f"{reference['name']} static/IDE: {static[reference['key']]}",
-            "style": f"left: {_percent(static[reference['key']], total)}",
+            "label": f"{names[reference_key]} static/IDE: {_total(reference_key)}",
+            "style": f"left: {_percent(static[reference_key], length[reference_key])}",
         },
         "summary": summary,
         "compact": compact,

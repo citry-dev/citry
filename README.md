@@ -45,12 +45,12 @@ We built the same app in 12 frameworks and made the same
   >
   <img
     src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/errors-20261021T182412Z-33f45034c4c4-light.png"
-    alt="Bar chart of how the mistakes that apply to each framework ended. Mistakes reported before the app runs: Citry 54 of 61, Next.js (TypeScript) 45 of 57, Reflex 38 of 54, Nuxt (TypeScript) 39 of 58, ReactPy 24 of 56, FastHTML 20 of 48, django-unicorn 12 of 55, Tetra 9 of 57, Rusty + HTMX + Alpine 6 of 50, Django + HTMX + Alpine 6 of 52, django-components + HTMX + Alpine 6 of 54, Jinja + HTMX + Alpine 5 of 51."
+    alt="Bar chart of how the mistakes that apply to each framework ended. Mistakes reported before the app runs: Citry 54 of 61, Next.js (TypeScript) 45 of 57, Reflex 38 of 54, Nuxt (TypeScript) 39 of 58, ReactPy 24 of 56, FastHTML 20 of 48, django-unicorn 12 of 55, Tetra 9 of 57, Rusty + HTMX + Alpine 6 of 50, Django + HTMX + Alpine 6 of 52, django-components 6 of 54, Jinja + HTMX + Alpine 5 of 51."
     width="720"
   >
 </picture>
 
-Each bar counts only the mistakes that apply to that framework.
+Citry 0.6.1, measured before its release. Each bar counts only the mistakes that apply to that framework.
 [How we measured](https://citry.dev/about/benchmarks/#errors-how-we-measured)
 <!-- benchmark-chart:errors end -->
 

@@ -1147,8 +1147,9 @@ current README stops using it.
 
 The root README (which PyPI shows as the `citry` description) carries the
 error benchmark chart as two PNGs, one for a light page and one for a dark
-page. They are screenshots of the same `<c-error-benchmark-chart>` the
-landing page draws from the data in `docs_site/data/error_prevention.json`. After that data changes, run:
+page. They are screenshots of the same `<c-error-benchmark-chart>` the landing
+page draws from the data in `docs_site/data/error_prevention.json`. After that
+data changes, run:
 
 ```bash
 uv run --no-sync python -m docs_site.scripts.benchmark_images

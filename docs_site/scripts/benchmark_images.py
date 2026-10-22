@@ -5,8 +5,10 @@ Draw the README's benchmark chart as PNGs and point the README at them.
 GitHub and PyPI show a README without the docs site's stylesheet, so the
 README cannot embed the chart itself. This script renders the same
 ``<c-error-benchmark-chart>`` markup the landing page uses (its compact
-version, best share first, legend under the bars), with the site's own
-stylesheet and font, and takes a screenshot in the light and the dark theme.
+version: frameworks ordered by the share of their mistakes reported before
+the app runs, highest first, with the legend under the bars), with the
+site's own stylesheet and font, and takes a screenshot in the light and the
+dark theme.
 
 Each PNG goes to ``docs/assets/benchmarks/`` under a name that holds the
 benchmark run and a hash of the image, for example

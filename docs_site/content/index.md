@@ -74,9 +74,16 @@ hassle.
 <!-- Both charts read their numbers from docs_site/data/ through the components
 the Benchmarks page uses, so a new benchmark run redraws the bars on both pages.
 Their options draw the shorter landing version; docs_site/scripts/benchmark_images.py
-draws the README image of the error chart with the same options. The counts in
-the text (12 frameworks, 63 mistakes, 1,400 entries) are typed here, as on the
-Benchmarks page, so check them after a new run. -->
+draws the README image of the error chart with the same options.
+Some text here is typed by hand and nothing checks it, so recheck it after a
+new run of either benchmark:
+- the counts in the intros (12 frameworks, 63 mistakes, 1,400 entries), which
+  the Benchmarks page also types;
+- the versions in the card notes ("Citry 0.6.1, measured before its release."
+  must match VERSION_NOTES in docs_site/scripts/benchmark_readme.py, and
+  "Citry 0.6.0" the speed run);
+- the heading "As fast as Next.js", which rests on a gap of under 2 ms between
+  Citry and Next.js on the second load. -->
 <div class="landing-benchmarks" id="benchmarks" markdown="1">
 <section class="landing-benchmark" markdown="1">
 ## Catch mistakes early

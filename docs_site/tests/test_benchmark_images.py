@@ -108,7 +108,8 @@ def test_counts_refuse_a_case_without_a_result(change: dict[str, Any]) -> None:
         benchmark_readme.static_shares(data)
 
 
-def test_readme_block_links_both_images_and_escapes_the_alt_text() -> None:
+def test_readme_block_links_both_images_and_escapes_the_alt_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(benchmark_readme, "VERSION_NOTES", {"20990101T000000Z": "Citry 9.9.9, synthetic."})
     block = benchmark_readme.readme_block(_sample(), light_name="light.png", dark_name="dark.png")
 
     assert block.startswith(benchmark_readme.START_MARKER)
@@ -119,6 +120,47 @@ def test_readme_block_links_both_images_and_escapes_the_alt_text() -> None:
     # A quote in a framework name is escaped rather than ending the attribute.
     assert "Beta &quot;x&quot; 2 of 3, Gamma &quot;x&quot; 2 of 3, Alpha &quot;x&quot; 1 of 2." in block
     assert "3 frameworks" in block
+    # The version the run measured stands beside the counts.
+    assert "Citry 9.9.9, synthetic. Each bar counts only" in block
+
+
+def test_readme_block_needs_a_version_note_for_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(benchmark_readme, "VERSION_NOTES", {})
+    with pytest.raises(ValueError, match="No version note for error benchmark run 20990101T000000Z"):
+        benchmark_readme.readme_block(_sample(), light_name="light.png", dark_name="dark.png")
+
+
+def test_counts_use_the_short_names_only_when_asked() -> None:
+    data = _sample()
+    data["frameworks"][1]["key"] = "django-components"
+    for record in data["results"]:
+        if record["framework"] == "beta":
+            record["framework"] = "django-components"
+    assert benchmark_readme.static_shares(data, short_names=True)[0][0] == "django-components"
+    assert benchmark_readme.static_shares(data)[0][0] == 'Beta "x"'
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        # An unknown status, which the chart would also refuse.
+        (lambda data: data["results"][0].update(status="skipped"), "alpha / m0 has an unknown status 'skipped'"),
+        # A repeated record would count twice.
+        (lambda data: data["results"].append(dict(data["results"][0])), "more than one record for alpha / m0"),
+        # A missing record would count for nobody.
+        (lambda data: data["results"].pop(0), r"no record for: \['alpha / m0'\]"),
+        # A record for a framework the data does not list.
+        (
+            lambda data: data["results"].append({**data["results"][0], "framework": "omega"}),
+            "omega / m0 names a framework or mistake the data does not list",
+        ),
+    ],
+)
+def test_counts_need_exactly_one_known_record_per_case(change: Any, message: str) -> None:
+    data = _sample()
+    change(data)
+    with pytest.raises(ValueError, match=message):
+        benchmark_readme.static_shares(data)
 
 
 def test_replace_block_swaps_only_the_marked_text() -> None:

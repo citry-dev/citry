@@ -9,7 +9,9 @@ the old images and the old counts in its alt text until someone reruns the
 script. This check rebuilds the README block from the data and fails when the
 two differ, so the README cannot fall behind the site unnoticed.
 
-It also checks that each linked image exists and still holds the bytes its
+The block also names the Citry version the run measured, from
+`VERSION_NOTES` in `benchmark_readme.py`, so a new run fails here until
+someone adds its note. It also checks that each linked image exists and still holds the bytes its
 name's hash was taken from. A released package's PyPI page loads these files
 from `main`, so a file that was changed in place would change that page too.
 
@@ -83,6 +85,12 @@ def check() -> list[str]:
 
     light = next(name for name, info in parsed.items() if info and info["theme"] == "light")
     dark = next(name for name, info in parsed.items() if info and info["theme"] == "dark")
-    if block != helper.readme_block(data, light_name=light, dark_name=dark):
+    try:
+        expected = helper.readme_block(data, light_name=light, dark_name=dark)
+    except ValueError as exc:
+        # The data cannot be drawn as it is, for example a run with no
+        # version note or a case without a result.
+        return [f"README.md:{line} {exc}"]
+    if block != expected:
         problems.append(f"README.md:{line} benchmark chart block does not match the data; {_RERUN}")
     return problems

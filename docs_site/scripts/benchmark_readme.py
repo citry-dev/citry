@@ -52,6 +52,24 @@ IMAGE_WIDTH = 720
 # The buckets in which a tool reported the mistake before the app ran. Their
 # sum is the number beside each bar in the chart.
 STATIC_BUCKETS = ("static-error", "static-warning")
+# Every status a record can have; the chart rejects any other, and so does
+# this module, so the two cannot count the same data differently.
+_STATUSES = frozenset({"ported", "not-applicable", "prevented", "missing"})
+
+# Shorter names for the compact chart on the landing page and in the README.
+# Only django-components drops its "+ HTMX + Alpine": it is a component
+# library, and the suffix would wrap its name onto three lines on a phone.
+# The chart component reads this table too, so the image and its alt text
+# name every framework the same way.
+SHORT_NAMES = {"django-components": "django-components"}
+
+# Which Citry each error benchmark run measured, as the README says it under
+# the chart. A released 0.6.0 reports far fewer mistakes before the app runs
+# than this run's code, so the README must not show the count without the
+# version. The landing page's error card repeats the same sentence.
+VERSION_NOTES = {
+    "20261021T182412Z": "Citry 0.6.1, measured before its release.",
+}
 
 # A file name records the chart, the benchmark run it shows, the first
 # characters of the PNG's SHA-256, and the colour theme. The run ties the
@@ -71,44 +89,90 @@ def load_data() -> dict[str, Any]:
     return json.loads(DATA_PATH.read_text(encoding="utf-8"))
 
 
-def static_shares(data: dict[str, Any]) -> list[tuple[str, int, int]]:
+def static_shares(data: dict[str, Any], *, short_names: bool = False) -> list[tuple[str, int, int]]:
     """
     Return each framework's name, its count of mistakes reported before the app ran, and how many apply to it.
 
     The list is ordered from the highest share (count divided by the mistakes
     that apply) to the lowest, and frameworks with equal shares keep the data
     file's order. This is the order of the chart drawn with ``sort="share"``,
-    so the alt text reads the bars from top to bottom.
+    so the alt text reads the bars from top to bottom. With ``short_names``,
+    a framework listed in ``SHORT_NAMES`` gets its shorter name, as in that
+    chart.
+
+    Like the chart, it needs exactly one record per framework and mistake, and
+    raises ``ValueError`` on a missing, repeated, or unknown record.
     """
-    counts = dict.fromkeys((framework["key"] for framework in data["frameworks"]), 0)
+    keys = [framework["key"] for framework in data["frameworks"]]
+    expected = {(key, mistake["id"]) for key in keys for mistake in data["mistakes"]}
+    seen: set[tuple[str, str]] = set()
+    counts = dict.fromkeys(keys, 0)
     # A mistake applies to a framework unless it has no equivalent there or
     # the framework's design prevents it.
-    applicable = dict.fromkeys(counts, 0)
+    applicable = dict.fromkeys(keys, 0)
     for record in data["results"]:
-        if record["status"] not in {"not-applicable", "prevented"}:
-            applicable[record["framework"]] += 1
-        if record["status"] == "missing" or (record["status"] == "ported" and record["bucket"] is None):
+        pair = (record["framework"], record["mistake"])
+        label = f"{pair[0]} / {pair[1]}"
+        # A repeated or stray record would count twice or count for nobody,
+        # and the chart drawn from the same data would disagree.
+        if pair not in expected:
+            msg = f"Error benchmark record {label} names a framework or mistake the data does not list"
+            raise ValueError(msg)
+        if pair in seen:
+            msg = f"Error benchmark data has more than one record for {label}"
+            raise ValueError(msg)
+        seen.add(pair)
+        status = record["status"]
+        if status not in _STATUSES:
+            msg = f"Error benchmark record {label} has an unknown status {status!r}"
+            raise ValueError(msg)
+        if status == "missing" or (status == "ported" and record["bucket"] is None):
             # Data written by `error_benchmark_data.py --allow-partial` can
             # hold cases nobody wrote or scored yet. The README has no room to
             # say a count is incomplete, so it refuses them.
             msg = (
-                f"Error benchmark case {record['framework']} / {record['mistake']} has no result; "
+                f"Error benchmark case {label} has no result; "
                 "regenerate docs_site/data/error_prevention.json without --allow-partial "
                 "before drawing the README chart"
             )
             raise ValueError(msg)
-        # A mistake that does not apply to a framework has no bucket, so it
-        # adds nothing here.
-        if record["status"] == "ported" and record["bucket"] in STATIC_BUCKETS:
-            counts[record["framework"]] += 1
+        if status == "ported":
+            applicable[pair[0]] += 1
+            if record["bucket"] in STATIC_BUCKETS:
+                counts[pair[0]] += 1
+    absent = sorted(expected - seen)
+    if absent:
+        msg = f"Error benchmark data has no record for: {[f'{key} / {mistake}' for key, mistake in absent]}"
+        raise ValueError(msg)
     empty = [key for key, count in applicable.items() if not count]
     if empty:
         msg = f"Error benchmark frameworks have no mistakes that apply to them: {empty}"
         raise ValueError(msg)
-    names = {framework["key"]: framework["name"] for framework in data["frameworks"]}
-    rows = [(names[key], counts[key], applicable[key]) for key in counts]
+    names = {
+        framework["key"]: SHORT_NAMES.get(framework["key"], framework["name"]) if short_names else framework["name"]
+        for framework in data["frameworks"]
+    }
+    rows = [(names[key], counts[key], applicable[key]) for key in keys]
     # Python's sort is stable, so equal shares keep the data's order.
     return sorted(rows, key=lambda row: -row[1] / row[2])
+
+
+def version_note(data: dict[str, Any]) -> str:
+    """
+    Return the sentence that says which Citry the README's error chart measured.
+
+    The data file does not record the version, so each run's note lives in
+    ``VERSION_NOTES``. A run without one raises ``ValueError``, so a new run
+    cannot reach the README under an old run's version.
+    """
+    try:
+        return VERSION_NOTES[data["run"]]
+    except KeyError:
+        msg = (
+            f"No version note for error benchmark run {data['run']}; add one to VERSION_NOTES in "
+            "docs_site/scripts/benchmark_readme.py, and update the note on the landing page's error card"
+        )
+        raise ValueError(msg) from None
 
 
 def image_name(run: str, png: bytes, theme: str) -> str:
@@ -134,13 +198,14 @@ def readme_block(data: dict[str, Any], light_name: str, dark_name: str) -> str:
     """
     Return the README block, markers included, for the given data and image files.
 
-    GitHub picks the dark image for a reader in dark mode. PyPI drops the
-    ``<source>`` element and shows the light image to everyone, which works
-    because each image carries its own background.
+    GitHub picks the dark image for a reader in dark mode. PyPI may ignore the
+    ``<source>``; each image carries its own background, so either works.
     """
     frameworks = len(data["frameworks"])
     mistakes = len(data["mistakes"])
-    counts = ", ".join(f"{name} {count} of {applicable}" for name, count, applicable in static_shares(data))
+    shares = static_shares(data, short_names=True)
+    counts = ", ".join(f"{name} {count} of {applicable}" for name, count, applicable in shares)
+    note = version_note(data)
     alt = (
         "Bar chart of how the mistakes that apply to each framework ended. "
         f"Mistakes reported before the app runs: {counts}."
@@ -170,7 +235,7 @@ def readme_block(data: dict[str, Any], light_name: str, dark_name: str) -> str:
             "  >",
             "</picture>",
             "",
-            "Each bar counts only the mistakes that apply to that framework.",
+            f"{note} Each bar counts only the mistakes that apply to that framework.",
             f"[How we measured]({DETAILS_URL})",
             END_MARKER,
         ],
