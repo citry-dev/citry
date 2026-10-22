@@ -9,7 +9,9 @@ The chart is plain HTML and CSS built at docs-build time, with no script: the
 names and totals stay real text, so they stay readable on a phone, where a
 scaled-down SVG would shrink them, and the theme's colour tokens apply to them.
 A table with the same numbers sits under the chart for screen readers and for
-anyone who wants exact values.
+anyone who wants exact values. A page with less room, such as the landing
+page, can leave it out with ``c-show_table="False"``; the chart's label still reads
+every total to a screen reader.
 """
 
 from __future__ import annotations
@@ -163,15 +165,18 @@ class BenchmarkChartMarkup(Component):
     class Kwargs:
         title: str
         view: dict
+        show_table: bool = True
 
     class Slots:
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
-        return {"title": kwargs.title, **kwargs.view}
+        # The view goes first, so a key it gains later cannot replace an input.
+        return {**kwargs.view, "title": kwargs.title, "show_table": kwargs.show_table}
 
     # The bars are one role="img" element whose label lists every total; its
-    # inner parts are hidden from screen readers, which get the table instead.
+    # inner parts are hidden from screen readers, which get the table instead
+    # when the page shows it.
     template = """
       <figure class="bench-chart">
         <figcaption class="bench-chart__title">{{ title }}</figcaption>
@@ -235,7 +240,10 @@ class BenchmarkChartMarkup(Component):
             >{{ tick['label'] }}</span>
           </div>
         </div>
-        <details class="bench-chart__details">
+        <details
+          c-if="show_table"
+          class="bench-chart__details"
+        >
           <summary>Show the numbers as a table</summary>
           <div class="bench-chart__table-wrap">
             <table>
@@ -271,6 +279,8 @@ class BenchmarkChart(Component):
         load: str
         # The caption above the chart; the table repeats it.
         title: str
+        # Whether a collapsed table with every number follows the chart.
+        show_table: bool = True
 
     class Slots:
         pass
@@ -279,7 +289,8 @@ class BenchmarkChart(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         view = chart_view(_load_data(), str(kwargs.load))
-        markup = flatten_for_markdown(str(BenchmarkChartMarkup(title=str(kwargs.title), view=view)))
+        chart = BenchmarkChartMarkup(title=str(kwargs.title), view=view, show_table=kwargs.show_table)
+        markup = flatten_for_markdown(str(chart))
         # Blank lines around the block keep the Markdown pass from joining it
         # to a neighbouring paragraph.
         return {"chart": Markup(f"\n\n{markup}\n\n")}  # noqa: S704 - built in this module from checked-in data

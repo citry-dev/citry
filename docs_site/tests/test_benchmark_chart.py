@@ -8,7 +8,13 @@ from typing import Any
 import pytest
 from lxml import html
 
-from docs_site._internal.components.benchmark_chart import DATA_PATH, BenchmarkChartMarkup, axis_ticks, chart_view
+from docs_site._internal.components.benchmark_chart import (
+    DATA_PATH,
+    BenchmarkChart,
+    BenchmarkChartMarkup,
+    axis_ticks,
+    chart_view,
+)
 from docs_site.scripts.benchmark_data import GROUPS, embedded_report_data, extract
 
 
@@ -229,3 +235,15 @@ def test_checked_in_data_renders(load: str) -> None:
     view = chart_view(data, load)
     assert view["rows"]
     assert view["ticks"][-1]["label"].endswith(" ms")
+
+
+def test_chart_can_leave_out_the_table_but_keeps_its_label(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("docs_site._internal.components.benchmark_chart._load_data", _data)
+    with_table = html.fromstring(str(BenchmarkChart(load="first", title="First load")).strip())
+    without_table = html.fromstring(str(BenchmarkChart(load="first", title="First load", show_table=False)).strip())
+
+    assert with_table.xpath(".//table")
+    assert not without_table.xpath(".//table | .//details")
+    # The plot's label still gives screen readers every total.
+    label = without_table.xpath(".//*[@role='img']")[0].attrib["aria-label"]
+    assert label.endswith("Alpha 200 ms, Beta 300 ms, Gamma 100 ms.")

@@ -8,8 +8,9 @@ The chart gives each framework one bar, split by how the mistakes ended, from
 benchmark calls these five outcomes buckets. The number beside each bar and
 the dashed line count the mistakes reported before the app ran (static
 errors plus static warnings): the number for that framework, the line for
-the first framework (Citry). The table shows every mistake in
-every framework as the short code the benchmark report uses.
+the first framework (Citry). The bars follow the data file's order, or, with
+``sort="static"``, that number from highest to lowest. The table shows every
+mistake in every framework as the short code the benchmark report uses.
 
 The results come from ``docs_site/data/error_prevention.json``, which
 ``docs_site/scripts/error_benchmark_data.py`` writes from a benchmark report.
@@ -24,7 +25,7 @@ import json
 from collections import Counter
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from markupsafe import Markup
 
@@ -115,15 +116,26 @@ def _records(data: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
     return records
 
 
-def chart_view(data: dict[str, Any]) -> dict[str, Any]:
+# The row orders ``chart_view`` accepts: the data file's own order, or the
+# count of mistakes reported before the app ran, highest first.
+SORT_ORDERS = ("data", "static")
+
+
+def chart_view(data: dict[str, Any], sort: str = "data") -> dict[str, Any]:
     """
     Turn the benchmark data into what the chart template draws.
 
-    Each framework gets one bar in the data's order; the first framework (the
-    data file lists Citry first) gets a bold name. The bar's parts follow the
-    data's bucket order, then any extra parts, so a reader can compare the
-    green "error before running" part across bars from the same left edge.
+    Each framework gets one bar, in the data's order or, with ``sort="static"``,
+    from the most mistakes reported before the app ran to the fewest. Frameworks
+    with the same count keep the data's order. The first framework in the data
+    (the data file lists Citry first) gets a bold name, and the dashed line
+    marks its count. The bar's parts follow the data's bucket order, then
+    any extra parts, so a reader can compare the green "error before running"
+    part across bars from the same left edge.
     """
+    if sort not in SORT_ORDERS:
+        msg = f"Unknown error chart sort {sort!r}; use one of {list(SORT_ORDERS)}"
+        raise ValueError(msg)
     buckets = _checked_buckets(data)
     records = _records(data)
     if not data["frameworks"] or not data["mistakes"]:
@@ -154,11 +166,18 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
     # The number beside a bar counts what a tool reported before the app ran,
     # as an error or a warning: the outcome the page argues matters most.
     static = {key: count["static-error"] + count["static-warning"] for key, count in counts.items()}
+    # The reference is picked before sorting, so Citry keeps the bold name and
+    # the dashed line even when another framework's bar is drawn first.
     reference = data["frameworks"][0]
+    frameworks = list(data["frameworks"])
+    if sort == "static":
+        # Python's sort is stable, so equal counts keep the data's order and the
+        # chart does not reshuffle between builds.
+        frameworks.sort(key=lambda framework: -static[framework["key"]])
     rows = [
         {
             "name": framework["name"],
-            "is_reference": index == 0,
+            "is_reference": framework["key"] == reference["key"],
             "total": str(static[framework["key"]]),
             "segments": [
                 {
@@ -169,16 +188,16 @@ def chart_view(data: dict[str, Any]) -> dict[str, Any]:
                 if counts[framework["key"]][key]
             ],
         }
-        for index, framework in enumerate(data["frameworks"])
+        for framework in frameworks
     ]
     # The bar parts are hidden from screen readers, so the chart's label
-    # carries every count instead.
+    # carries every count instead, in the same order as the bars.
     totals = "; ".join(
         f"{framework['name']}: "
         + ", ".join(
             f"{label} {counts[framework['key']][key]}" for key, label, _ in parts if counts[framework["key"]][key]
         )
-        for framework in data["frameworks"]
+        for framework in frameworks
     )
     return {
         "legend": [{"label": label, "style": f"background: {color}"} for _, label, color in parts],
@@ -353,12 +372,15 @@ class ErrorBenchmarkChart(Component):
     class Kwargs:
         # The caption above the chart; the table repeats it.
         title: str
+        # "data" keeps the data file's order; "static" puts the framework that
+        # reported the most mistakes before the app ran first.
+        sort: Literal["data", "static"] = "data"
 
     class Slots:
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
-        view = chart_view(_load_data())
+        view = chart_view(_load_data(), sort=str(kwargs.sort))
         return {"chart": _as_block(str(ErrorBenchmarkChartMarkup(title=str(kwargs.title), view=view)))}
 
     template = """

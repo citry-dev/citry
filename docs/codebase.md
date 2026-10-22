@@ -1143,6 +1143,36 @@ A released description keeps loading its images from `main`. The READMEs of
 descriptions never change, so keep such an image on `main` even after the
 current README stops using it.
 
+#### Benchmark chart images in the README
+
+The root README (which PyPI shows as the `citry` description) carries the
+error benchmark chart as two PNGs, one for a light page and one for a dark
+page. They are screenshots of the same `<c-error-benchmark-chart>` the
+landing page draws from the data in `docs_site/data/error_prevention.json`. After that data changes, run:
+
+```bash
+uv run --no-sync python -m docs_site.scripts.benchmark_images
+```
+
+The script writes the images to `docs/assets/benchmarks/` and rewrites the
+README block between the `benchmark-chart:errors` comments: the image links
+and the alt text, which lists every framework's count. It needs Playwright and
+a Chromium binary, like `icons.py`. Do not edit the block by hand. Run it only
+after the data or the chart's style changes: fonts and Chromium render a
+little differently on each machine, so a run elsewhere draws new files even
+when nothing changed.
+
+Each file name holds the benchmark run and a hash of the image, for example
+`errors-20261021T182412Z-086a1b4d6cf6-light.png`. The script never
+overwrites a file: a new run or a redrawn chart gets a new name, and the old
+file stays on `main` for the released pages that load it. Commit the new
+files with the README change.
+
+The `readme_benchmark_charts` validator rebuilds the README block from the
+data and fails when the two differ, when a linked image is missing, or when an
+image no longer matches the hash in its name. It does not compare pixels, so
+after a style change to the chart, rerun the script yourself.
+
 #### Recording Marketplace demo GIFs
 
 The first VS Code release used this practical macOS workflow. It favors crisp,

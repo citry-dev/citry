@@ -28,6 +28,31 @@ applications.
 [Install the VS Code extension](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry) ·
 [Browse Citry UI](https://citry.dev/ui-library/)
 
+<!-- benchmark-chart:errors start -->
+<!-- Written by `python -m docs_site.scripts.benchmark_images` from
+     docs_site/data/error_prevention.json. Rerun it rather than editing
+     this block by hand. -->
+
+## Catch mistakes before the app runs
+
+We built the same app in 12 frameworks and made the same
+63 mistakes in each.
+
+<picture>
+  <source
+    media="(prefers-color-scheme: dark)"
+    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/errors-20261021T182412Z-269183c24098-dark.png"
+  >
+  <img
+    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/errors-20261021T182412Z-086a1b4d6cf6-light.png"
+    alt="Bar chart of how the 63 mistakes ended in each framework. Mistakes reported before the app runs: Citry 54, Next.js (TypeScript) 45, Nuxt (TypeScript) 39, Reflex 38, ReactPy 24, FastHTML 20, django-unicorn 12, Tetra 9, Django + HTMX + Alpine 6, Rusty + HTMX + Alpine 6, django-components + HTMX + Alpine 6, Jinja + HTMX + Alpine 5."
+    width="720"
+  >
+</picture>
+
+[How we measured](https://citry.dev/about/benchmarks/#errors-how-we-measured)
+<!-- benchmark-chart:errors end -->
+
 ## Watch the tutorial:
 
 <a href="https://www.youtube.com/watch?v=d3nPqvDdNB0">

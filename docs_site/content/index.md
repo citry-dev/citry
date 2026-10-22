@@ -55,6 +55,43 @@ hassle.
 </div>
 </section>
 
+<!-- Both charts read their numbers from docs_site/data/ through the components
+the Benchmarks page uses, so a new benchmark run redraws the bars on both pages.
+The counts in the card text (12 frameworks, 63 mistakes, 1,400 entries) are
+typed here, as on the Benchmarks page, so check them after a new run. -->
+<div class="landing-benchmarks" id="benchmarks" markdown="1">
+<section class="landing-benchmark-card" markdown="1">
+## Catch mistakes before the app runs
+
+<p class="landing-benchmark-card__lede">
+We built the same app in 12 frameworks and made the same 63 mistakes in each.
+</p>
+
+<c-error-benchmark-chart
+  title="How the 63 mistakes ended in each framework"
+  sort="static"
+/>
+
+<a class="landing-benchmark-card__link" href="/about/benchmarks/#errors-how-we-measured">How we measured</a>
+</section>
+
+<section class="landing-benchmark-card" markdown="1">
+## Page load time
+
+<p class="landing-benchmark-card__lede">
+Time until a page with 1,400 entries is usable, the second time the server builds it.
+</p>
+
+<c-benchmark-chart
+  load="second"
+  title="Second load: time until usable, 1,400 entries"
+  c-show_table="False"
+/>
+
+<a class="landing-benchmark-card__link" href="/about/benchmarks/#how-the-numbers-were-taken">How we measured</a>
+</section>
+</div>
+
 <!-- TODO: Add "Used by" belt -->
 
 <section class="landing-sponsor-belt" aria-labelledby="landing-sponsor-title">

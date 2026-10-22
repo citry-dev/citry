@@ -2070,6 +2070,7 @@ class LandingPage(Component):
       }
 
       .landing-hero,
+      .landing-benchmarks,
       .landing-section,
       .landing-final {
         width: min(76rem, calc(100% - 3rem));
@@ -2414,6 +2415,82 @@ class LandingPage(Component):
         display: block;
         width: auto;
         height: 3.5rem;
+      }
+
+      /* The benchmark results under the hero: two cards side by side, which
+         stack once the window is too narrow for two charts with readable
+         framework names. The charts themselves are the Benchmarks page's
+         components, styled by the bench-chart rules in site.css. */
+      .landing-benchmarks {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.5rem;
+        align-items: start;
+        padding-bottom: clamp(3rem, 6vw, 4.5rem);
+      }
+
+      .landing-benchmark-card {
+        min-width: 0;
+        padding: 1.6rem 1.6rem 1.25rem;
+        border: 1px solid var(--landing-line);
+        border-radius: 0.9rem;
+        background: var(--landing-panel);
+      }
+
+      .landing-content .landing-benchmark-card h2 {
+        margin: 0;
+        color: var(--landing-ink);
+        font-size: clamp(1.35rem, 2.2vw, 1.6rem);
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        text-wrap: balance;
+      }
+
+      .landing-benchmark-card__lede {
+        margin: 0.5rem 0 0;
+        color: var(--landing-muted);
+        font-size: 1rem;
+        line-height: 1.5;
+      }
+
+      /* The card's heading already names the chart, so the chart's own
+         caption is hidden visually but kept for screen readers, which also
+         hear it at the start of the chart's label. */
+      .landing-benchmark-card .bench-chart__title {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      .landing-benchmark-card .bench-chart {
+        margin: 1.25rem 0 0.75rem;
+      }
+
+      /* The thin gap between two parts of a bar is drawn in the page colour;
+         on the card it has to match the card instead. */
+      .landing-benchmark-card .bench-chart__segment + .bench-chart__segment {
+        box-shadow: inset 1px 0 0 var(--landing-panel);
+      }
+
+      .landing-content .landing-benchmark-card__link {
+        color: var(--landing-blue);
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .landing-content .landing-benchmark-card__link:hover,
+      .landing-content .landing-benchmark-card__link:focus-visible {
+        text-decoration: underline;
+      }
+
+      @media (max-width: 1100px) {
+        .landing-benchmarks {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
 
       .landing-section {
@@ -4052,10 +4129,15 @@ class LandingPage(Component):
         }
 
         .landing-hero,
+        .landing-benchmarks,
         .landing-section,
         .landing-final,
         .landing-footer {
           width: min(100% - 2rem, 76rem);
+        }
+
+        .landing-benchmark-card {
+          padding: 1.25rem 1rem 1rem;
         }
 
         .landing-hero {

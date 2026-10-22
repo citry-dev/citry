@@ -2531,7 +2531,10 @@ body.djc-drawer-open .djc-drawer-overlay {
   font-weight: 600;
 }
 
-.prose .bench-chart__legend {
+/* The legend is a list, so it is scoped like the page's own lists to win
+   over their bullets and spacing, in a docs page and on the landing page. */
+.prose .bench-chart__legend,
+.landing-content .bench-chart__legend {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 1.25rem;
@@ -2542,7 +2545,8 @@ body.djc-drawer-open .djc-drawer-overlay {
   list-style: none;
 }
 
-.prose .bench-chart__legend li {
+.prose .bench-chart__legend li,
+.landing-content .bench-chart__legend li {
   margin: 0;
 }
 

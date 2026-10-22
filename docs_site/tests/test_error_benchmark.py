@@ -11,6 +11,7 @@ from lxml import html
 
 from docs_site._internal.components.error_benchmark import (
     DATA_PATH,
+    ErrorBenchmarkChart,
     ErrorBenchmarkChartMarkup,
     ErrorBenchmarkTable,
     chart_view,
@@ -277,3 +278,55 @@ def test_extract_refuses_an_unscored_case_unless_a_preview_is_asked_for() -> Non
     with pytest.raises(ValueError, match="beta / m3: the case was not scored"):
         extract(_report())
     assert extract(_report(), allow_partial=True)["codes"] == [{"code": "E", "meaning": "reported in the editor"}]
+
+
+def _ranked(static: dict[str, int], mistakes: int = 3) -> dict[str, Any]:
+    # One framework per entry, in this order; each reports its first
+    # `static[key]` mistakes as static errors and misses the rest.
+    return {
+        "run": "synthetic-run",
+        "frameworks": [{"key": key, "name": key.title()} for key in static],
+        "categories": [{"id": "names", "heading": "Names"}],
+        "buckets": BUCKETS,
+        "codes": [],
+        "mistakes": [{"id": f"m{index}", "title": f"M{index}", "category": "names"} for index in range(mistakes)],
+        "results": [
+            _record(key, f"m{index}", "ported", "static-error" if index < count else "missed", "E")
+            for key, count in static.items()
+            for index in range(mistakes)
+        ],
+    }
+
+
+def test_chart_view_sorts_by_the_static_count_and_keeps_the_reference() -> None:
+    # The reference framework is listed first but reports the fewest, and
+    # beta and delta tie, so they must keep the data's order.
+    data = _ranked({"alpha": 1, "beta": 2, "gamma": 3, "delta": 2})
+    view = chart_view(data, sort="static")
+
+    assert [(row["name"], row["total"]) for row in view["rows"]] == [
+        ("Gamma", "3"),
+        ("Beta", "2"),
+        ("Delta", "2"),
+        ("Alpha", "1"),
+    ]
+    # The bold name and the dashed line stay with the data's first framework.
+    assert [row["is_reference"] for row in view["rows"]] == [False, False, False, True]
+    assert view["reference"]["label"] == "Alpha static/IDE: 1"
+    # Screen readers hear the counts in the order the bars are drawn.
+    assert view["summary"].index("Gamma:") < view["summary"].index("Beta:") < view["summary"].index("Alpha:")
+    # Without the option the data's order stays.
+    assert [row["name"] for row in chart_view(data)["rows"]] == ["Alpha", "Beta", "Gamma", "Delta"]
+
+
+def test_chart_view_rejects_an_unknown_sort() -> None:
+    with pytest.raises(ValueError, match="Unknown error chart sort 'total'"):
+        chart_view(_ranked({"alpha": 1}), sort="total")
+
+
+def test_chart_tag_passes_the_sort_to_the_view(monkeypatch: pytest.MonkeyPatch) -> None:
+    data = _ranked({"alpha": 1, "beta": 2})
+    monkeypatch.setattr("docs_site._internal.components.error_benchmark._load_data", lambda: data)
+    figure = html.fromstring(str(ErrorBenchmarkChart(title="Mistakes", sort="static")).strip())
+    names = figure.xpath(".//*[@class='bench-chart__name']/text()")
+    assert names == ["Beta", "Alpha"]
