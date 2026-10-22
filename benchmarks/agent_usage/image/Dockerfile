@@ -1,5 +1,7 @@
 # Immutable public base images keep the language runtimes stable between runs.
-FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS node
+# Node.js 22.23.4 is the first 22.x whose bundled certificates drop emSign ECC
+# Root CA - G3, so npm and Playwright downloads below no longer trust it.
+FROM node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS node
 FROM python:3.12-slim-bookworm@sha256:782412e85d0f0984994c290652577d4018aff08145c85b262bb63dc0c7522254
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -33,7 +35,7 @@ RUN python -m pip install --no-cache-dir \
 # an older pip that would reject it.
 RUN PIP_USE_DEPRECATED=legacy-certs python -m pip install --no-cache-dir -r /opt/agent-eval/requirements.lock \
     && python -m pip check \
-    && python -m playwright install --with-deps chromium \
+    && PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/node python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/* \
     && python -m pip freeze > /opt/agent-eval/requirements.freeze.txt
 

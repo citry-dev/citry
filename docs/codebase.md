@@ -2254,9 +2254,9 @@ Neither route reuses the PyPI trusted-publisher configuration.
    contributor and can publish; the separate public ownership claim controls
    whether the namespace is shown as verified and may remain pending.
 3. Store the token in the same `vscode-marketplaces` GitHub environment as
-   `OVSX_PAT`. The workflow invokes the exact command-level `ovsx@1.1.1`
-   version only in the publishing job, so routine workspace installs do not
-   carry the registry client.
+   `OVSX_PAT`. The publishing job runs the `ovsx` client that the extension's
+   devDependencies pin in `pnpm-lock.yaml`, so the client that receives the
+   token is the one the lockfile records.
 
 In that GitHub environment, choose **Selected branches and tags**, allow the
 `main` branch, and retain any desired reviewer gate. Promotion is a controlled

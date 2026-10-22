@@ -1,0 +1,27 @@
+name: Drop the emSign ECC Root CA - G3 from the system certificates
+description: >-
+  Make sure the runner's system certificate list no longer trusts the emSign
+  ECC Root CA - G3, whose intermediate keys can be recovered. Steps that point
+  Node.js at the system list (NODE_OPTIONS=--use-openssl-ca) then stop trusting
+  it, even when they run an older bundled Node.js such as Playwright's.
+
+runs:
+  using: composite
+  steps:
+    - name: Refresh ca-certificates when the system list still has the root
+      shell: bash
+      run: |
+        # The first base64 line of the G3 certificate; Ubuntu and certifi wrap
+        # PEM lines the same way, so this line is present only with the root.
+        g3=MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBrMQswCQYDVQQG
+        # Runner images built before Ubuntu's 2026-10-20 update still have it;
+        # newer images skip the apt round trip.
+        if grep -RqF "$g3" /etc/ssl/certs/; then
+          sudo apt-get update -qq
+          sudo apt-get install --only-upgrade -y -qq ca-certificates
+        fi
+        # Fail the job rather than download through a list that still trusts it.
+        if grep -RqF "$g3" /etc/ssl/certs/; then
+          echo "::error::the system certificate list still trusts emSign ECC Root CA - G3"
+          exit 1
+        fi
