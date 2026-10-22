@@ -1,0 +1,2014 @@
+{
+  "plain": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "empty_loop": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "template_data_raises": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame)"
+    ],
+    "error": {
+      "type": "ValueError",
+      "message": "An error occurred while rendering components RowPage > RowList > Row:\nrow a2 template_data failed",
+      "components": [
+        "RowPage",
+        "RowList",
+        "Row"
+      ],
+      "innermost": "row_event",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "kwargs_post_init_raises": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs"
+    ],
+    "error": {
+      "type": "ValueError",
+      "message": "An error occurred while rendering components RowPage > RowList > Row:\nrow a2 kwargs failed",
+      "components": [
+        "RowPage",
+        "RowList",
+        "Row"
+      ],
+      "innermost": "__post_init__",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "id_generator_raises": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id"
+    ],
+    "error": {
+      "type": "LookupError",
+      "message": "An error occurred while rendering components RowPage > RowList > Row:\nid generator failed",
+      "components": [
+        "RowPage",
+        "RowList",
+        "Row"
+      ],
+      "innermost": "make_id",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "id_invalid": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id"
+    ],
+    "error": {
+      "type": "ValueError",
+      "message": "An error occurred while rendering components RowPage > RowList > Row:\nCitry render ID 'not a valid id!' must use only lowercase ASCII letters, digits, hyphens, and underscores; render IDs are embedded in case-insensitive HTML attribute names.",
+      "components": [
+        "RowPage",
+        "RowList",
+        "Row"
+      ],
+      "innermost": "validate_render_id",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "keyboard_interrupt": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame)"
+    ],
+    "error": {
+      "type": "KeyboardInterrupt",
+      "message": "row a2 interrupted",
+      "components": null,
+      "innermost": "row_event",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "error_message_raises": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame)"
+    ],
+    "error": {
+      "type": "TypeError",
+      "message": "the message failed",
+      "components": null,
+      "innermost": "__str__",
+      "nesting_limit": null,
+      "chain": [
+        "context (hidden) KeyError: 'inner'",
+        "context ValueError: <str() raised TypeError>"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "too_deep": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension"
+    ],
+    "error": {
+      "type": "RecursionError",
+      "message": "Component Row is nested more than 2 components deep (RowPage > RowList > Row). This usually means a component keeps rendering itself, for example a tree node whose data lists the node among its own children. Make sure the recursion ends, or pass a larger max_component_depth to Citry() if the page really nests this deep.",
+      "components": null,
+      "innermost": "_settle_render",
+      "nesting_limit": true,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "row_lowers_depth_limit": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)"
+    ],
+    "error": {
+      "type": "RecursionError",
+      "message": "Component Row is nested more than 2 components deep (RowPage > RowList > Row). This usually means a component keeps rendering itself, for example a tree node whose data lists the node among its own children. Make sure the recursion ends, or pass a larger max_component_depth to Citry() if the page really nests this deep.",
+      "components": null,
+      "innermost": "_settle_render",
+      "nesting_limit": true,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "row_lowers_depth_limit_under_boundary": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "RowList: on_render before the yield (no frame)",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)"
+    ],
+    "error": {
+      "type": "RecursionError",
+      "message": "Component Row is nested more than 2 components deep (RowPage > RowList > Row). This usually means a component keeps rendering itself, for example a tree node whose data lists the node among its own children. Make sure the recursion ends, or pass a larger max_component_depth to Citry() if the page really nests this deep.",
+      "components": null,
+      "innermost": "_settle_render",
+      "nesting_limit": true,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "boundary_swallows_row_error": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "RowList: on_render before the yield (no frame)",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame)",
+      "RowList: on_render after the yield, error ValueError (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "parent_on_render": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "RowList: on_render before the yield (no frame)",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "RowList: on_render after the yield, error None (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "row_registers_component_with_messages": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame)",
+      "hook on_component_class_created Messages: CacheExtension, EventsExtension",
+      "hook on_component_registered Messages: I18nExtension",
+      "Row a1: js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_component_data Row: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_messages_loaded Messages: I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Row into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_component_data Row: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Row into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "ordinary_path_row_raises": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame)",
+      "hook on_component_class_created Messages: CacheExtension, EventsExtension",
+      "hook on_component_registered Messages: I18nExtension",
+      "Row a1: js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_component_data Row: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_messages_loaded Messages: I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Row into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a3: Kwargs, template_data (no frame)"
+    ],
+    "error": {
+      "type": "ValueError",
+      "message": "An error occurred while rendering components RowPage > RowList > Row:\nrow a3 failed on the ordinary path",
+      "components": [
+        "RowPage",
+        "RowList",
+        "Row"
+      ],
+      "innermost": "row_event",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "row_sets_id_generator": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id other",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id other",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id other",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "row_registers_dict_as_component_like": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "row_writes_plain_mixin_base": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "row_unregisters_class": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame)",
+      "hook on_component_unregistered Row: DependenciesExtension, I18nExtension",
+      "Row a1: js_data (no frame), css_data (no frame)"
+    ],
+    "error": {
+      "type": "KeyError",
+      "message": "\"An error occurred while rendering components RowPage > RowList > Row:\\nNo component class with class_id 'Row_<hash>' is registered with this Citry instance\"",
+      "components": [
+        "RowPage",
+        "RowList",
+        "Row"
+      ],
+      "innermost": "get_component_by_class_id",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "row_makes_class_transparent": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)"
+    ],
+    "error": {
+      "type": "TypeError",
+      "message": "An error occurred while rendering components RowPage > RowList > Row:\nComponent Row simple='vue' is unsupported: calls must be registered, nontransparent leaf components without slots, component-tag bindings, or instance effects.",
+      "components": [
+        "RowPage",
+        "RowList",
+        "Row"
+      ],
+      "innermost": "_reject_simple_vue",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "row_renders_another_page": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame)",
+      "id",
+      "hook on_component_data InnerPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled InnerPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row n0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row n1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into InnerPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_serialize: DependenciesExtension",
+      "hook on_dependencies: I18nExtension",
+      "nested render wrote 2 rows",
+      "Row a1: js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "row_changes_next_row": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row changed-key: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "class_swapped_mid_walk": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "swap class",
+      "hook on_component_registered Row: I18nExtension",
+      "hook on_component_unregistered Row: DependenciesExtension, I18nExtension",
+      "hook on_component_class_created OtherRow: CacheExtension, EventsExtension",
+      "hook on_component_registered OtherRow: I18nExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_template_compiled OtherRow: EventsExtension, I18nExtension",
+      "id",
+      "Row a2: Kwargs, template_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "key_str_logged": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "key str a0",
+      "key str a1",
+      "key str a2",
+      "key str a3",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "key str a0",
+      "Row a0: Kwargs",
+      "key str a0",
+      "Row a0: template_data (no frame)",
+      "key str a0",
+      "Row a0: js_data (no frame)",
+      "key str a0",
+      "Row a0: css_data (no frame)",
+      "id",
+      "key str a1",
+      "Row a1: Kwargs",
+      "key str a1",
+      "Row a1: template_data (no frame)",
+      "key str a1",
+      "Row a1: js_data (no frame)",
+      "key str a1",
+      "Row a1: css_data (no frame)",
+      "id",
+      "key str a2",
+      "Row a2: Kwargs",
+      "key str a2",
+      "Row a2: template_data (no frame)",
+      "key str a2",
+      "Row a2: js_data (no frame)",
+      "key str a2",
+      "Row a2: css_data (no frame)",
+      "id",
+      "key str a3",
+      "Row a3: Kwargs",
+      "key str a3",
+      "Row a3: template_data (no frame)",
+      "key str a3",
+      "Row a3: js_data (no frame)",
+      "key str a3",
+      "Row a3: css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "row_js_data": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "row_css_data": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "data_schemas": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame)",
+      "Row.TemplateData built for a 0",
+      "Row a0: js_data (no frame)",
+      "Row.JsData built",
+      "Row a0: css_data (no frame)",
+      "Row.CssData built",
+      "id",
+      "Row a1: Kwargs, template_data (no frame)",
+      "Row.TemplateData built for a 1",
+      "Row a1: js_data (no frame)",
+      "Row.JsData built",
+      "Row a1: css_data (no frame)",
+      "Row.CssData built",
+      "id",
+      "Row a2: Kwargs, template_data (no frame)",
+      "Row.TemplateData built for a 2",
+      "Row a2: js_data (no frame)",
+      "Row.JsData built",
+      "Row a2: css_data (no frame)",
+      "Row.CssData built",
+      "id",
+      "Row a3: Kwargs, template_data (no frame)",
+      "Row.TemplateData built for a 3",
+      "Row a3: js_data (no frame)",
+      "Row.JsData built",
+      "Row a3: css_data (no frame)",
+      "Row.CssData built",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "rows_call_child": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Leaf a 0: template_data (no frame)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Leaf: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Leaf a 1: template_data (no frame)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Leaf a 2: template_data (no frame)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Leaf a 3: template_data (no frame)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "child_of_row_raises": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Leaf a 0: template_data (no frame)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Leaf: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Leaf a 1: template_data (no frame)"
+    ],
+    "error": {
+      "type": "ValueError",
+      "message": "An error occurred while rendering components RowPage > RowList > Row > Leaf:\nthe child of row a1 failed",
+      "components": [
+        "RowPage",
+        "RowList",
+        "Row",
+        "Leaf"
+      ],
+      "innermost": "template_data",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "run_in_slot_fill": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "id",
+      "hook on_component_data Wrapper: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Wrapper: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "id",
+      "Row a1: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "id",
+      "Row a2: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "id",
+      "Row a3: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "hook on_render_context_merge RowList into Wrapper: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Wrapper into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "rows_in_two_fills": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "id",
+      "hook on_component_data Pair: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Pair: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "id",
+      "Row a1: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "hook on_render_context_merge RowList into Pair: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a2: Kwargs, template_data (frame 1), js_data (frame 1), css_data (frame 1)",
+      "id",
+      "Row a3: Kwargs, template_data (frame 1), js_data (frame 1), css_data (frame 1)",
+      "hook on_render_context_merge RowList into Pair: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Pair into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "hook on_component_data Wrapper: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Wrapper: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (frame 2), js_data (frame 2), css_data (frame 2)",
+      "hook on_render_context_merge RowList into Wrapper: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Wrapper into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "run_in_slot_fill_rows_call_child": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "id",
+      "hook on_component_data Wrapper: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Wrapper: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "id",
+      "Leaf a 0: template_data (frame 0)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Leaf: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a1: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "id",
+      "Leaf a 1: template_data (frame 0)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a2: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "id",
+      "Leaf a 2: template_data (frame 0)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a3: Kwargs, template_data (frame 0), js_data (frame 0), css_data (frame 0)",
+      "id",
+      "Leaf a 3: template_data (frame 0)",
+      "hook on_component_data Leaf: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Leaf into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into Wrapper: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Wrapper into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "nested_template_printed_twice": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension, EventsExtension, I18nExtension",
+      "id",
+      "hook on_component_data Card: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Card: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into Card: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)"
+    ],
+    "error": {
+      "type": "RuntimeError",
+      "message": "deferred part vanished from its .parts list before resolution",
+      "components": null,
+      "innermost": "_replace_in_parts",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "context_variables_left_changed": []
+  },
+  "two_runs_with_sibling": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Plain between: template_data (no frame)",
+      "hook on_component_data Plain: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Plain: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Plain into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "rows_in_root": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "traced": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "trace": [
+      "RENDER COMPONENT: 'RowPage' ID r0 PATH: RowPage",
+      "RENDER NODE PreparedSourceTextNode @0:1",
+      "RENDER NODE PreparedElementOpenNode @1:7",
+      "RENDER NODE PreparedElementOpenNode @7:13",
+      "RENDER NODE PreparedElementCloseNode @13:20",
+      "RENDER NODE PreparedElementOpenNode @20:26",
+      "RENDER NODE PreparedElementOpenNode @26:32",
+      "RENDER NODE ComponentNode @32:59",
+      "RENDER NODE PreparedElementCloseNode @59:66",
+      "RENDER NODE PreparedElementCloseNode @66:73",
+      "RENDER NODE PreparedElementCloseNode @73:80",
+      "RENDER NODE PreparedSourceTextNode @80:81",
+      "RENDER COMPONENT: 'RowList' ID r1 PATH: RowPage > RowList",
+      "RENDER NODE PreparedStaticRunNode",
+      "RENDER NODE ForNode",
+      "RENDER NODE ComponentNode @13:88",
+      "RENDER NODE ComponentNode @13:88",
+      "RENDER NODE ComponentNode @13:88",
+      "RENDER NODE ComponentNode @13:88",
+      "RENDER NODE PreparedStaticRunNode"
+    ],
+    "context_variables_left_changed": []
+  },
+  "traced_input_fault": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension"
+    ],
+    "error": {
+      "type": "KeyError",
+      "message": "'An error occurred while rendering components RowPage > RowList:\\nError in subscript: KeyError: \\'key\\'\\n\\n     1 | row[\\'key\\']\\n         ^^^^^^^^^^\\n\\nIn template of \\'RowList\\' (<this file>::RowList):\\n\\n     1 | \\n     2 | <section>\\n     3 |   <c-Row\\n           ^^^^^^\\n     4 |     c-for=\"row in rows\"\\n         ^^^^^^^^^^^^^^^^^^^^^^^\\n     5 |     #c-key=\"row[\\'key\\']\"\\n         ^^^^^^^^^^^^^^^^^^^^^^^\\n     6 |     c-row=\"row\"\\n         ^^^^^^^^^^^^^^^\\n     7 |   />\\n         ^^^^\\n     8 | </section>\\n     9 | '",
+      "components": [
+        "RowPage",
+        "RowList"
+      ],
+      "innermost": "subscript",
+      "nesting_limit": null,
+      "chain": []
+    },
+    "trace": [
+      "RENDER COMPONENT: 'RowPage' ID r0 PATH: RowPage",
+      "RENDER NODE PreparedSourceTextNode @0:1",
+      "RENDER NODE PreparedElementOpenNode @1:7",
+      "RENDER NODE PreparedElementOpenNode @7:13",
+      "RENDER NODE PreparedElementCloseNode @13:20",
+      "RENDER NODE PreparedElementOpenNode @20:26",
+      "RENDER NODE PreparedElementOpenNode @26:32",
+      "RENDER NODE ComponentNode @32:59",
+      "RENDER NODE PreparedElementCloseNode @59:66",
+      "RENDER NODE PreparedElementCloseNode @66:73",
+      "RENDER NODE PreparedElementCloseNode @73:80",
+      "RENDER NODE PreparedSourceTextNode @80:81",
+      "RENDER COMPONENT: 'RowList' ID r1 PATH: RowPage > RowList",
+      "RENDER NODE PreparedStaticRunNode",
+      "RENDER NODE ForNode",
+      "RENDER NODE ComponentNode @13:88",
+      "RENDER NODE ComponentNode @13:88",
+      "RENDER NODE ComponentNode @13:88"
+    ],
+    "context_variables_left_changed": []
+  },
+  "outputs": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "ssr_false": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "fragment": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "hydration_declined": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "csp": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "nested_runs": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "ssr_false": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "fragment": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "hydration_declined": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "csp": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "ordinary_run_beside_rows": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "id",
+      "Plain a 0: template_data (no frame)",
+      "hook on_component_data Plain: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Plain: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Plain into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Plain a 1: template_data (no frame)",
+      "hook on_component_data Plain: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Plain into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "ssr_false": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "fragment": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "hydration_declined": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "csp": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "leaf_components_beside_rows": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "id",
+      "Plain first: template_data (no frame)",
+      "hook on_component_data Plain: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Plain: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Plain into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "id",
+      "Plain second: template_data (no frame)",
+      "hook on_component_data Plain: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Plain: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Plain into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Plain third: template_data (no frame)",
+      "hook on_component_data Plain: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled Plain: EventsExtension, I18nExtension",
+      "hook on_render_context_merge Plain into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "ssr_false": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "fragment": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "hydration_declined": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "csp": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "rows_in_root_outputs": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "ssr_false": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "fragment": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "hydration_declined": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "csp": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "component_on_dependencies": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "RowList: on_dependencies with 1 scripts (no frame)",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": "custom-hooks"
+    },
+    "ssr_false": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "RowList: on_dependencies with 1 scripts (no frame)",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "RowList: on_dependencies with 1 scripts (no frame)",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "fragment": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "RowList: on_dependencies with 1 scripts (no frame)",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "hydration_declined": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "RowList: on_dependencies with 1 scripts (no frame)",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "csp": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "RowList: on_dependencies with 1 scripts (no frame)",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  },
+  "browser_hook_extension": {
+    "render": [
+      "id",
+      "RowPage: template_data (no frame)",
+      "hook on_component_data RowPage: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowPage: EventsExtension, I18nExtension",
+      "id",
+      "RowList: template_data (no frame)",
+      "hook on_component_data RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_template_compiled RowList: EventsExtension, I18nExtension",
+      "hook on_template_compiled Row: EventsExtension, I18nExtension",
+      "id",
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
+    ],
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension, BrowserHook",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": "compile-error"
+    },
+    "ssr_false": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension, BrowserHook",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
+    },
+    "fragment": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension, BrowserHook",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "hydration_declined": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension, BrowserHook",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "csp": {
+      "log": [
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension, BrowserHook",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ]
+    },
+    "context_variables_left_changed": []
+  }
+}
