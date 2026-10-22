@@ -37,7 +37,7 @@ from citry_core.template_parser import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from citry_core.template_parser import Template
+    from citry_core.template_parser import BrowserOptionsSection, Template
 
 
 BrowserExpressionMode = Literal["expression", "statement", "loop", "binding-pattern"]
@@ -302,11 +302,23 @@ class BrowserComponentMemberReference:
     name: str
     start_index: int
     end_index: int
+    # True when the code assigns to or updates the member itself, as in
+    # `this.open = false`; `this.open.count = 1` writes a field and is False.
+    written: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class BrowserEmitName:
     """One event name declared by a Vue Options `emits` section, with its authored span."""
+
+    name: str
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserDirectiveName:
+    """One custom directive name declared by a Vue Options `directives` section, spanning its key."""
 
     name: str
     start_index: int
@@ -328,6 +340,13 @@ class BrowserComponentSourceAnalysis:
     # instance members, so they stay out of `sections` and `public_names`.
     emits_sections: tuple[BrowserComponentSection, ...] = ()
     emit_names: tuple[BrowserEmitName, ...] = ()
+    # One `directives` state per `$component` call, kept apart from
+    # `sections` for the same reason as `emits`.
+    directives_sections: tuple[BrowserComponentSection, ...] = ()
+    directive_names: tuple[BrowserDirectiveName, ...] = ()
+    # One `inheritAttrs` value per `$component` call; `None` when the source
+    # does not prove it.
+    inherit_attrs: tuple[bool | None, ...] = ()
 
     @property
     def declared_events(self) -> tuple[BrowserEmitName, ...] | None:
@@ -341,6 +360,36 @@ class BrowserComponentSourceAnalysis:
         if not self.valid or len(self.emits_sections) != 1 or self.emits_sections[0].state != "complete":
             return None
         return self.emit_names
+
+    @property
+    def declared_directives(self) -> frozenset[str] | None:
+        """
+        Return the custom directive names the component's `directives` option registers.
+
+        An empty set means the option is absent. `None` means the names are
+        unknown: the source has no single `$component` call, or builds
+        `directives` in a way the analyzer cannot read, so any directive may
+        be registered.
+        """
+        if not self.valid or len(self.component_calls) != 1 or len(self.directives_sections) != 1:
+            return None
+        if self.directives_sections[0].state == "unknown":
+            return None
+        return frozenset(item.name for item in self.directive_names)
+
+    @property
+    def declared_inherit_attrs(self) -> bool | None:
+        """
+        Return the component's `inheritAttrs` when the source proves it.
+
+        `True` is also Vue's default when the option is absent. `None` means
+        the value is unknown: the source has no single `$component` call, or
+        computes the value, or a spread, mixin, or parent options object may
+        set it.
+        """
+        if not self.valid or len(self.component_calls) != 1 or len(self.inherit_attrs) != 1:
+            return None
+        return self.inherit_attrs[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -520,6 +569,23 @@ class BrowserFreeReference:
     name: str
     start_index: int
     end_index: int
+    # True when the code assigns to or updates the name at this place, as in
+    # `open = false` or `count++`; `open.count = 1` writes a field and is False.
+    written: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserSyntaxError:
+    """
+    The JavaScript parser's first error in one browser expression, with UTF-8 byte offsets into the template.
+
+    ``start_index`` may equal ``end_index``: an error at the end of the text,
+    such as an unfinished ``open &&``, is an empty range there.
+    """
+
+    message: str
+    start_index: int
+    end_index: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -528,6 +594,10 @@ class BrowserSourceAnalysis:
 
     valid: bool
     references: tuple[BrowserFreeReference, ...]
+    # The parser's first error when `valid` is false. It is `None` for a slot
+    # pattern or a `v-for` whose left side cannot be split, which this
+    # analysis checks without the parser's message.
+    error: BrowserSyntaxError | None = None
 
 
 _EXPRESSION_ATTRIBUTES = frozenset(
@@ -791,58 +861,97 @@ def _component_section_state(value: str) -> Literal["absent", "complete", "unkno
 
 def analyze_browser_component_source(source: str) -> BrowserComponentSourceAnalysis:
     """Return source-proven Vue Options facts for `$component`."""
-    (
-        valid,
-        references,
-        bindings,
-        calls,
-        public_names,
-        sections,
-        member_references,
-        emits_sections,
-        emit_names,
-    ) = analyze_component_source_rust(source)
-    encoded = source.encode("utf-8")
+    analysis = analyze_component_source_rust(source)
+    encoded_length = len(source.encode("utf-8"))
+    # PyO3 builds a new list on every read of a list field, so the code below
+    # reads each field only once.
+    calls = analysis.component_calls
     return BrowserComponentSourceAnalysis(
-        valid=valid,
+        valid=analysis.valid,
         references=tuple(
-            BrowserFreeReference(name, start, end)
-            for name, start, end in references
-            if 0 <= start < end <= len(encoded)
+            BrowserFreeReference(reference.name, reference.start, reference.end, written=reference.written)
+            for reference in analysis.references
+            if 0 <= reference.start < reference.end <= encoded_length
         ),
         bindings=tuple(
             BrowserComponentBinding(
-                name,
-                local_name,
-                start,
-                end,
+                binding.name,
+                binding.local_name,
+                binding.start,
+                binding.end,
                 tuple(
                     (reference_start, reference_end)
-                    for reference_start, reference_end in references
-                    if 0 <= reference_start < reference_end <= len(encoded)
+                    for reference_start, reference_end in binding.references
+                    if 0 <= reference_start < reference_end <= encoded_length
                 ),
             )
-            for name, local_name, start, end, references in bindings
-            if 0 <= start < end <= len(encoded)
+            for binding in analysis.bindings
+            if 0 <= binding.start < binding.end <= encoded_length
         ),
         component_calls=tuple(
-            BrowserComponentCall(*call)
+            BrowserComponentCall(
+                call.call_start,
+                call.call_end,
+                call.callee_start,
+                call.callee_end,
+                call.open_paren_end,
+                call.argument_start,
+                call.argument_end,
+            )
             for call in calls
-            if 0 <= call[0] < call[1] <= len(encoded) and 0 <= call[2] < call[3] <= call[4] <= len(encoded)
+            if 0 <= call.call_start < call.call_end <= encoded_length
+            and 0 <= call.callee_start < call.callee_end <= call.open_paren_end <= encoded_length
         ),
-        public_names=tuple(BrowserComponentPublicName(*name) for name in public_names),
-        sections=tuple(
-            BrowserComponentSection(name, _component_section_state(state), start, end, unknown_reason)
-            for name, state, start, end, unknown_reason in sections
+        public_names=tuple(
+            BrowserComponentPublicName(
+                name.authored_name,
+                name.exposed_name,
+                name.origin,
+                name.name_start,
+                name.name_end,
+                name.value_start,
+                name.value_end,
+                name.required,
+                name.has_default,
+                name.default_is_null,
+                name.type_source,
+            )
+            for name in analysis.public_names
         ),
-        member_references=tuple(BrowserComponentMemberReference(*reference) for reference in member_references),
-        emits_sections=tuple(
-            BrowserComponentSection(name, _component_section_state(state), start, end, unknown_reason)
-            for name, state, start, end, unknown_reason in emits_sections
+        sections=tuple(_component_section(section) for section in analysis.sections),
+        member_references=tuple(
+            BrowserComponentMemberReference(
+                reference.receiver,
+                reference.name,
+                reference.start,
+                reference.end,
+                written=reference.written,
+            )
+            for reference in analysis.member_references
         ),
+        emits_sections=tuple(_component_section(section) for section in analysis.emits_sections),
         emit_names=tuple(
-            BrowserEmitName(name, start, end) for name, start, end in emit_names if 0 <= start < end <= len(encoded)
+            BrowserEmitName(name.name, name.start, name.end)
+            for name in analysis.emit_names
+            if 0 <= name.start < name.end <= encoded_length
         ),
+        directives_sections=tuple(_component_section(section) for section in analysis.directives_sections),
+        directive_names=tuple(
+            BrowserDirectiveName(name.name, name.start, name.end)
+            for name in analysis.directive_names
+            if 0 <= name.start < name.end <= encoded_length
+        ),
+        inherit_attrs=tuple(analysis.inherit_attrs),
+    )
+
+
+def _component_section(section: BrowserOptionsSection) -> BrowserComponentSection:
+    return BrowserComponentSection(
+        section.name,
+        _component_section_state(section.state),
+        section.start,
+        section.end,
+        section.unknown_reason,
     )
 
 
@@ -943,17 +1052,25 @@ def analyze_browser_expression(expression: BrowserExpression) -> BrowserSourceAn
             relative_start += 1
         source = source[relative_start:]
         mode = "expression"
-    valid, raw_references = analyze_browser_source_rust(source, mode)
-    if not valid:
-        return BrowserSourceAnalysis(valid=False, references=())
+    analysis = analyze_browser_source_rust(source, mode)
+    # The analyzed text starts after a `v-for` left side, so its offsets move
+    # by that many bytes as well as by the expression's own start.
     base = expression.start_index + len(expression.source[:relative_start].encode("utf-8"))
+    error = analysis.error
+    if not analysis.valid:
+        return BrowserSourceAnalysis(
+            valid=False,
+            references=(),
+            error=None if error is None else BrowserSyntaxError(error.message, base + error.start, base + error.end),
+        )
     references = tuple(
         BrowserFreeReference(
-            name,
-            base + start,
-            base + end,
+            reference.name,
+            base + reference.start,
+            base + reference.end,
+            written=reference.written,
         )
-        for name, start, end in raw_references
+        for reference in analysis.references
     )
     return BrowserSourceAnalysis(valid=True, references=references)
 
@@ -3053,6 +3170,7 @@ __all__ = [
     "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
+    "BrowserDirectiveName",
     "BrowserEmitName",
     "BrowserExpression",
     "BrowserExpressionEvaluator",
@@ -3071,6 +3189,7 @@ __all__ = [
     "BrowserSourceAnalysis",
     "BrowserStateBinding",
     "BrowserStateBindingTargetError",
+    "BrowserSyntaxError",
     "MarkLiteralFinding",
     "analyze_browser_component_source",
     "analyze_browser_expression",

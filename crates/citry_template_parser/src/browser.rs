@@ -5,20 +5,27 @@
 //! unresolved identifier references back to authored UTF-8 byte offsets. The
 //! wrapper makes Vue statement contexts parseable without pretending that
 //! the template language is a complete JavaScript module.
+//!
+//! The result structs are also Python classes (`citry_core.template_parser`):
+//! each is a `#[pyclass(frozen, eq, hash)]` whose `#[pyo3(get)]` fields are what
+//! Python reads, so a field change here is a change to citry-core's Python
+//! surface and to the hand-written `_rust.pyi` stub.
 
 use std::str::FromStr;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrowFunctionBody, AssignmentExpression, AssignmentTarget, CallExpression,
-    Expression, FormalParameters, Function, ObjectExpression, ObjectPropertyKind, Statement,
-    VariableDeclarator,
+    Expression, FormalParameters, Function, ObjectExpression, ObjectPropertyKind, Program,
+    SimpleAssignmentTarget, Statement, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
-use oxc_parser::Parser;
+use oxc_diagnostics::OxcDiagnostic;
+use oxc_parser::{ParseOptions, Parser};
 use oxc_semantic::{Scoping, SemanticBuilder, SymbolId};
 use oxc_span::{GetSpan, SourceType};
 use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
+use pyo3::prelude::*;
 
 /// The grammar expected for one authored browser-expression host.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,23 +46,173 @@ impl FromStr for BrowserAnalysisMode {
     }
 }
 
+/// Write one field value the way Python's `repr()` would, so each record's
+/// `__repr__` reads like the Python object it is.
+trait PyRepr {
+    fn py_repr(&self) -> String;
+}
+
+impl PyRepr for bool {
+    fn py_repr(&self) -> String {
+        if *self { "True" } else { "False" }.to_string()
+    }
+}
+
+impl PyRepr for usize {
+    fn py_repr(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl PyRepr for String {
+    fn py_repr(&self) -> String {
+        // Python quotes with `'` unless the text holds a `'` and no `"`, and
+        // writes a backslash, the quote, and control characters as escapes.
+        // This matches Python's `repr()` for printable text; Python also
+        // escapes some invisible characters, such as U+2028, that this keeps.
+        let quote = if self.contains('\'') && !self.contains('"') {
+            '"'
+        } else {
+            '\''
+        };
+        let mut quoted = String::with_capacity(self.len() + 2);
+        quoted.push(quote);
+        for character in self.chars() {
+            match character {
+                '\\' => quoted.push_str("\\\\"),
+                '\n' => quoted.push_str("\\n"),
+                '\r' => quoted.push_str("\\r"),
+                '\t' => quoted.push_str("\\t"),
+                _ if character == quote => {
+                    quoted.push('\\');
+                    quoted.push(character);
+                }
+                // Every control character is below U+0100.
+                _ if character.is_control() => {
+                    quoted.push_str(&format!("\\x{:02x}", character as u32));
+                }
+                _ => quoted.push(character),
+            }
+        }
+        quoted.push(quote);
+        quoted
+    }
+}
+
+impl<T: PyRepr> PyRepr for Option<T> {
+    fn py_repr(&self) -> String {
+        self.as_ref()
+            .map_or_else(|| "None".to_string(), PyRepr::py_repr)
+    }
+}
+
+impl<T: PyRepr> PyRepr for Vec<T> {
+    fn py_repr(&self) -> String {
+        let items = self.iter().map(PyRepr::py_repr).collect::<Vec<_>>();
+        format!("[{}]", items.join(", "))
+    }
+}
+
+impl PyRepr for (usize, usize) {
+    fn py_repr(&self) -> String {
+        format!("({}, {})", self.0, self.1)
+    }
+}
+
+/// Give a record a Python `__repr__` listing the named fields, such as
+/// `BrowserReference(name="open", start=0, end=4, written=True)`.
+macro_rules! python_record_repr {
+    ($record:ident { $($field:ident),+ $(,)? }) => {
+        impl PyRepr for $record {
+            fn py_repr(&self) -> String {
+                let fields = [$(format!("{}={}", stringify!($field), self.$field.py_repr())),+];
+                format!("{}({})", stringify!($record), fields.join(", "))
+            }
+        }
+
+        #[pymethods]
+        impl $record {
+            fn __repr__(&self) -> String {
+                self.py_repr()
+            }
+        }
+    };
+}
+
 /// One free JavaScript identifier in authored source.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// `start` and `end` are UTF-8 byte offsets into the authored text.
+/// `written` is true when the code assigns to or updates the name at this
+/// place (`open = false`, `count += 1`, `count++`, `[open] = pair`,
+/// `for (open of list)`); `open.count = 1` writes a field and leaves it
+/// false. The slot-pattern analysis reuses this struct for the names a
+/// pattern declares, and there `written` is always false.
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserReference {
+    #[pyo3(get)]
     pub name: String,
+    #[pyo3(get)]
     pub start: usize,
+    #[pyo3(get)]
+    pub end: usize,
+    #[pyo3(get)]
+    pub written: bool,
+}
+
+python_record_repr!(BrowserReference {
+    name,
+    start,
+    end,
+    written
+});
+
+/// The JavaScript parser's first error in one authored expression or statement.
+///
+/// `message` is OXC's own wording, such as `Unexpected token`. `start` and
+/// `end` are UTF-8 byte offsets into the authored text with
+/// `start <= end <= len(text)`; an error at the end of the text, such as an
+/// unfinished `open &&`, has an empty range there.
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct BrowserSyntaxDiagnostic {
+    #[pyo3(get)]
+    pub message: String,
+    #[pyo3(get)]
+    pub start: usize,
+    #[pyo3(get)]
     pub end: usize,
 }
 
+python_record_repr!(BrowserSyntaxDiagnostic {
+    message,
+    start,
+    end
+});
+
 /// Parser and scope result with generated wrapper details removed.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// `error` is set exactly when `valid` is false, and `references` is empty
+/// then, so a caller never sees names from text that does not parse.
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserAnalysis {
+    #[pyo3(get)]
     pub valid: bool,
+    #[pyo3(get)]
+    pub error: Option<BrowserSyntaxDiagnostic>,
+    #[pyo3(get)]
     pub references: Vec<BrowserReference>,
 }
 
+python_record_repr!(BrowserAnalysis {
+    valid,
+    error,
+    references
+});
+
 /// One direct synchronous write to the `$component` callback's scope object.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserScopeWrite {
     pub name: String,
     pub name_start: usize,
@@ -140,10 +297,14 @@ pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAna
             let span = identifier.span();
             let start = span.start as usize;
             let end = span.end as usize;
-            (start >= source_start && end <= source_end && start < end).then(|| BrowserReference {
-                name: identifier.name.to_string(),
-                start: start - source_start,
-                end: end - source_start,
+            (start >= source_start && end <= source_end && start < end).then(|| {
+                BrowserReference {
+                    name: identifier.name.to_string(),
+                    start: start - source_start,
+                    end: end - source_start,
+                    // A declared name is not a write the template makes.
+                    written: false,
+                }
             })
         })
         .collect::<Vec<_>>();
@@ -164,6 +325,8 @@ pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAna
                     name: name.to_string(),
                     start: start - source_start,
                     end: end - source_start,
+                    // A default value in a slot pattern can only read.
+                    written: false,
                 });
             }
         }
@@ -179,52 +342,131 @@ pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAna
 }
 
 /// One name destructured from the `$component` initializer context.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// `name` is the context field, one of `COMPONENT_CONTEXT_NAMES`;
+/// `local_name` is the variable it is bound to; `references` are the byte
+/// ranges where the code reads that variable.
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentBinding {
+    #[pyo3(get)]
     pub name: String,
+    #[pyo3(get)]
     pub local_name: String,
+    #[pyo3(get)]
     pub start: usize,
+    #[pyo3(get)]
     pub end: usize,
+    #[pyo3(get)]
     pub references: Vec<(usize, usize)>,
 }
 
+python_record_repr!(BrowserComponentBinding {
+    name,
+    local_name,
+    start,
+    end,
+    references
+});
+
 /// One root-unresolved `$component` call authenticated by OXC semantics.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentCall {
+    #[pyo3(get)]
     pub call_start: usize,
+    #[pyo3(get)]
     pub call_end: usize,
+    #[pyo3(get)]
     pub callee_start: usize,
+    #[pyo3(get)]
     pub callee_end: usize,
+    #[pyo3(get)]
     pub open_paren_end: usize,
+    #[pyo3(get)]
     pub argument_start: Option<usize>,
+    #[pyo3(get)]
     pub argument_end: Option<usize>,
 }
 
+python_record_repr!(BrowserComponentCall {
+    call_start,
+    call_end,
+    callee_start,
+    callee_end,
+    open_paren_end,
+    argument_start,
+    argument_end
+});
+
 /// One statically named public binding declared by Vue Options.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserPublicName {
+    #[pyo3(get)]
     pub authored_name: String,
+    #[pyo3(get)]
     pub exposed_name: String,
+    #[pyo3(get)]
     pub origin: String,
+    #[pyo3(get)]
     pub name_start: usize,
+    #[pyo3(get)]
     pub name_end: usize,
+    #[pyo3(get)]
     pub value_start: Option<usize>,
+    #[pyo3(get)]
     pub value_end: Option<usize>,
+    #[pyo3(get)]
     pub required: Option<bool>,
+    #[pyo3(get)]
     pub has_default: Option<bool>,
+    #[pyo3(get)]
     pub default_is_null: Option<bool>,
+    #[pyo3(get)]
     pub type_source: Option<String>,
 }
 
+python_record_repr!(BrowserPublicName {
+    authored_name,
+    exposed_name,
+    origin,
+    name_start,
+    name_end,
+    value_start,
+    value_end,
+    required,
+    has_default,
+    default_is_null,
+    type_source
+});
+
 /// Conservative knowledge for one Vue Options namespace.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// `state` is `absent` (the options name nothing there), `complete` (every
+/// name is listed), or `unknown`, with `unknown_reason` saying why.
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserOptionsSection {
+    #[pyo3(get)]
     pub name: String,
+    #[pyo3(get)]
     pub state: String,
+    #[pyo3(get)]
     pub start: Option<usize>,
+    #[pyo3(get)]
     pub end: Option<usize>,
+    #[pyo3(get)]
     pub unknown_reason: Option<String>,
 }
+
+python_record_repr!(BrowserOptionsSection {
+    name,
+    state,
+    start,
+    end,
+    unknown_reason
+});
 
 /// One component-instance member reference with a proven receiver.
 ///
@@ -232,78 +474,231 @@ pub struct BrowserOptionsSection {
 /// `$i18n` member only, it may instead cover a read of a local variable that
 /// holds `receiver.$i18n` and is never reassigned, so a consumer that needs
 /// the identifier written at the call site reads it from the span.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// `written` is true when the code assigns to or updates the member itself,
+/// as in `this.open = false` or `this.count++`; `this.open.count = 1`
+/// writes a field of the member and leaves it false.
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentMemberReference {
+    #[pyo3(get)]
     pub receiver: String,
+    #[pyo3(get)]
     pub name: String,
+    #[pyo3(get)]
     pub start: usize,
+    #[pyo3(get)]
     pub end: usize,
+    #[pyo3(get)]
+    pub written: bool,
 }
+
+python_record_repr!(BrowserComponentMemberReference {
+    receiver,
+    name,
+    start,
+    end,
+    written
+});
 
 /// One event name declared by the Vue Options `emits` section.
 ///
 /// The span covers the string literal of an array entry or the key of an
 /// object entry, as authored.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserEmitName {
+    #[pyo3(get)]
     pub name: String,
+    #[pyo3(get)]
     pub start: usize,
+    #[pyo3(get)]
     pub end: usize,
 }
 
+python_record_repr!(BrowserEmitName { name, start, end });
+
+/// One custom directive name declared by the Vue Options `directives` section.
+///
+/// `name` is the key as Vue registers it (`iff`, `my-dir`, `myDir`), and the
+/// span covers the key as authored, quotes included.
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct BrowserDirectiveName {
+    #[pyo3(get)]
+    pub name: String,
+    #[pyo3(get)]
+    pub start: usize,
+    #[pyo3(get)]
+    pub end: usize,
+}
+
+python_record_repr!(BrowserDirectiveName { name, start, end });
+
 /// Source facts proven inside runtime `$component` initializers.
-#[derive(Clone, Debug, Eq, PartialEq)]
+///
+/// The lists that hold one entry per `$component` call (`sections` in
+/// groups of six, `emits_sections`, `directives_sections`, `inherit_attrs`)
+/// skip a call with no argument or a spread argument, so they can be
+/// shorter than `component_calls`.
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentAnalysis {
+    #[pyo3(get)]
     pub valid: bool,
+    #[pyo3(get)]
     pub references: Vec<BrowserReference>,
+    #[pyo3(get)]
     pub bindings: Vec<BrowserComponentBinding>,
+    /// Python reads these through `analyze_component_scope_writes()`, so the
+    /// record does not expose them.
     pub scope_writes: Vec<BrowserScopeWrite>,
+    #[pyo3(get)]
     pub component_calls: Vec<BrowserComponentCall>,
+    #[pyo3(get)]
     pub public_names: Vec<BrowserPublicName>,
+    #[pyo3(get)]
     pub sections: Vec<BrowserOptionsSection>,
+    #[pyo3(get)]
     pub member_references: Vec<BrowserComponentMemberReference>,
     /// What each `$component` call proves about its `emits` section, in call
     /// order. It is kept apart from `sections` because declared events are
     /// not instance members: an unreadable `emits` must not make every
     /// instance name unknown.
+    #[pyo3(get)]
     pub emits_sections: Vec<BrowserOptionsSection>,
     /// The event names of every `complete` emits section.
+    #[pyo3(get)]
     pub emit_names: Vec<BrowserEmitName>,
+    /// What each `$component` call proves about its `directives` section, in
+    /// call order. Like `emits`, directives are not instance members, so an
+    /// unreadable section leaves the instance names alone.
+    #[pyo3(get)]
+    pub directives_sections: Vec<BrowserOptionsSection>,
+    /// The directive names of every `complete` directives section.
+    #[pyo3(get)]
+    pub directive_names: Vec<BrowserDirectiveName>,
+    /// Each `$component` call's `inheritAttrs`, in call order: `Some(false)`
+    /// or `Some(true)` when the source proves the value Vue sees (an absent
+    /// key is Vue's default, `true`), and `None` when it cannot tell.
+    #[pyo3(get)]
+    pub inherit_attrs: Vec<Option<bool>>,
 }
 
+python_record_repr!(BrowserComponentAnalysis {
+    valid,
+    references,
+    bindings,
+    component_calls,
+    public_names,
+    sections,
+    member_references,
+    emits_sections,
+    emit_names,
+    directives_sections,
+    directive_names,
+    inherit_attrs
+});
+
+impl BrowserComponentAnalysis {
+    /// The result for source that does not parse: no facts at all, so a
+    /// consumer cannot mistake a partial read for a complete one.
+    fn invalid() -> Self {
+        Self {
+            valid: false,
+            references: Vec::new(),
+            bindings: Vec::new(),
+            scope_writes: Vec::new(),
+            component_calls: Vec::new(),
+            public_names: Vec::new(),
+            sections: Vec::new(),
+            member_references: Vec::new(),
+            emits_sections: Vec::new(),
+            emit_names: Vec::new(),
+            directives_sections: Vec::new(),
+            directive_names: Vec::new(),
+            inherit_attrs: Vec::new(),
+        }
+    }
+}
+
+/// The text Citry puts around an authored expression so OXC can resolve its
+/// names inside an async function, as Vue runs a listener.
+const EXPRESSION_PREFIX: &str = "async function __citry_browser_expression__() { return (\n";
+const EXPRESSION_SUFFIX: &str = "\n); }";
+/// The same for a listener's statements.
+const STATEMENT_PREFIX: &str = "async function __citry_browser_expression__() {\n";
+const STATEMENT_SUFFIX: &str = "\n}";
+
 /// Parse one browser expression/statement and return its exact free roots.
+///
+/// The free names come from parsing the authored text inside a generated
+/// async function. When that fails, the syntax error comes from a second
+/// parse of the authored text alone, because a mistake such as `open &&`
+/// fails inside the generated text after it, where neither the position nor
+/// the message describes what the author wrote.
 pub fn analyze_browser_source(source: &str, mode: BrowserAnalysisMode) -> BrowserAnalysis {
     let (prefix, suffix) = match mode {
-        BrowserAnalysisMode::Expression => (
-            "async function __citry_browser_expression__() { return (\n",
-            "\n); }",
-        ),
-        BrowserAnalysisMode::Statement => {
-            ("async function __citry_browser_expression__() {\n", "\n}")
-        }
+        BrowserAnalysisMode::Expression => (EXPRESSION_PREFIX, EXPRESSION_SUFFIX),
+        BrowserAnalysisMode::Statement => (STATEMENT_PREFIX, STATEMENT_SUFFIX),
     };
     let mut wrapped = String::with_capacity(prefix.len() + source.len() + suffix.len());
     wrapped.push_str(prefix);
     wrapped.push_str(source);
     wrapped.push_str(suffix);
+    let invalid = |error: BrowserSyntaxDiagnostic| BrowserAnalysis {
+        valid: false,
+        error: Some(error),
+        references: Vec::new(),
+    };
 
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, &wrapped, SourceType::default()).parse();
-    if !parsed.diagnostics.is_empty() {
-        return BrowserAnalysis {
-            valid: false,
-            references: Vec::new(),
+    if let Some(diagnostic) = parsed.diagnostics.first() {
+        let wrapped_error = syntax_diagnostic(diagnostic, prefix.len(), source.len());
+        let standalone_error = standalone_syntax_error(source, mode);
+        // The standalone parse runs at the top level, where some code the
+        // generated function allows is an error, such as `new.target`. The
+        // wrapped parse can get past an earlier standalone error in only two
+        // ways: the code there is valid inside a function, so the wrapped
+        // error is the author's mistake; or the text closes the generated
+        // function with a stray `)`, `]`, or `}`, so the standalone error on
+        // that bracket is the mistake and the wrapped one describes
+        // generated code.
+        let on_closing_bracket = |error: &BrowserSyntaxDiagnostic| {
+            source[error.start..]
+                .chars()
+                .next()
+                .is_some_and(|character| matches!(character, ')' | ']' | '}'))
         };
+        return invalid(match standalone_error {
+            Some(error) if error.start >= wrapped_error.start || on_closing_bracket(&error) => {
+                error
+            }
+            _ => wrapped_error,
+        });
+    }
+    // Text such as `a); (b` closes the generated function and opens another
+    // statement, so the wrapped parse succeeds while Vue's would not.
+    if !has_generated_shape(&parsed.program, mode, prefix, source.len()) {
+        return invalid(standalone_syntax_error(source, mode).unwrap_or_else(|| {
+            // Unreachable for any text found so far: escaping the function
+            // needs an unmatched closing token, which the standalone parse
+            // rejects. The whole text is the honest range if it ever happens.
+            BrowserSyntaxDiagnostic {
+                message: "Unexpected token".to_string(),
+                start: 0,
+                end: source.len(),
+            }
+        }));
     }
     let built = SemanticBuilder::new_compiler()
         .with_build_nodes(true)
         .with_check_syntax_error(true)
         .build(&parsed.program);
-    if !built.diagnostics.is_empty() {
-        return BrowserAnalysis {
-            valid: false,
-            references: Vec::new(),
-        };
+    // Scope errors, such as a name declared twice in a listener, appear only
+    // in this pass, and their ranges already sit inside the authored text.
+    if let Some(diagnostic) = built.diagnostics.first() {
+        return invalid(syntax_diagnostic(diagnostic, prefix.len(), source.len()));
     }
 
     let semantic = built.semantic;
@@ -323,6 +718,10 @@ pub fn analyze_browser_source(source: &str, mode: BrowserAnalysisMode) -> Browse
                 name: name.to_string(),
                 start: start - source_start,
                 end: end - source_start,
+                // OXC flags the name itself as the target of `=`, `+=`,
+                // `++`, destructuring, or `for ... of`; `open.count = 1`
+                // only reads `open`.
+                written: reference.is_write(),
             });
         }
     }
@@ -331,7 +730,175 @@ pub fn analyze_browser_source(source: &str, mode: BrowserAnalysisMode) -> Browse
     });
     BrowserAnalysis {
         valid: true,
+        error: None,
         references,
+    }
+}
+
+/// Return whether a parsed wrapper still has exactly the generated shape.
+///
+/// That shape is one top-level function spanning the whole wrapped text,
+/// whose body opens at the generated `{` and closes at the generated `}`;
+/// in expression mode the body is only the generated `return (...)`, with
+/// the parentheses at their generated places. Authored text that closes the
+/// function early, or splits the returned value, changes one of these spans.
+fn has_generated_shape(
+    program: &Program<'_>,
+    mode: BrowserAnalysisMode,
+    prefix: &str,
+    source_len: usize,
+) -> bool {
+    let suffix_len = match mode {
+        BrowserAnalysisMode::Expression => EXPRESSION_SUFFIX.len(),
+        BrowserAnalysisMode::Statement => STATEMENT_SUFFIX.len(),
+    };
+    let prefix_len = prefix.len();
+    let wrapped_len = prefix_len + source_len + suffix_len;
+    let [Statement::FunctionDeclaration(function)] = program.body.as_slice() else {
+        return false;
+    };
+    let Some(body) = &function.body else {
+        return false;
+    };
+    // The first `{` in either prefix opens the function body.
+    let Some(body_start) = prefix.find('{') else {
+        return false;
+    };
+    if function.span.start != 0
+        || function.span.end as usize != wrapped_len
+        || body.span.start as usize != body_start
+        || body.span.end as usize != wrapped_len
+    {
+        return false;
+    }
+    if mode == BrowserAnalysisMode::Statement {
+        return true;
+    }
+    let [Statement::ReturnStatement(statement)] = body.statements.as_slice() else {
+        return false;
+    };
+    let Some(Expression::ParenthesizedExpression(value)) = &statement.argument else {
+        return false;
+    };
+    // `return (` ends the prefix with `(` and a line break, and the suffix
+    // starts with a line break and `)`.
+    let source_end = prefix_len + source_len;
+    value.span.start as usize == prefix_len - 2 && value.span.end as usize == source_end + 2
+}
+
+/// Parse the authored text alone and return its first syntax error.
+///
+/// An expression is parsed as one expression, so trailing text such as the
+/// `)` in `a)` is an error at the place it appears. Statements are parsed as
+/// a module that allows `return` and top-level `await`, which is what the
+/// generated async function allows.
+fn standalone_syntax_error(
+    source: &str,
+    mode: BrowserAnalysisMode,
+) -> Option<BrowserSyntaxDiagnostic> {
+    let allocator = Allocator::default();
+    let options = ParseOptions {
+        allow_return_outside_function: true,
+        ..ParseOptions::default()
+    };
+    let parser = Parser::new(&allocator, source, SourceType::default()).with_options(options);
+    match mode {
+        BrowserAnalysisMode::Expression => match parser.parse_expression() {
+            Err(diagnostics) => diagnostics
+                .first()
+                .map(|diagnostic| syntax_diagnostic(diagnostic, 0, source.len())),
+            // OXC stops after the first complete expression without asking
+            // for the end of the text, so leftover text such as the `)` in
+            // `a)` is reported here, in OXC's wording for a stray token.
+            Ok(expression) => {
+                leftover_token(source, expression.span().end as usize).map(|(start, end)| {
+                    BrowserSyntaxDiagnostic {
+                        message: "Unexpected token".to_string(),
+                        start,
+                        end,
+                    }
+                })
+            }
+        },
+        BrowserAnalysisMode::Statement => parser
+            .parse()
+            .diagnostics
+            .first()
+            .map(|diagnostic| syntax_diagnostic(diagnostic, 0, source.len())),
+    }
+}
+
+/// Return the byte range of the first token at or after `from`, skipping
+/// whitespace and comments, or `None` when only those remain.
+///
+/// The range covers a run of identifier characters, or else one character,
+/// which is enough to underline a stray `)`, `;`, or name.
+fn leftover_token(source: &str, from: usize) -> Option<(usize, usize)> {
+    let is_line_end = |character: char| matches!(character, '\n' | '\r' | '\u{2028}' | '\u{2029}');
+    let mut position = from;
+    loop {
+        let rest = &source[position..];
+        let trimmed = rest.trim_start_matches(|character: char| {
+            character.is_whitespace() || character == '\u{feff}'
+        });
+        position += rest.len() - trimmed.len();
+        if trimmed.starts_with("//") {
+            position += trimmed.find(is_line_end).unwrap_or(trimmed.len());
+        } else if let Some(comment) = trimmed.strip_prefix("/*") {
+            // An unclosed comment ends the text; the parser has already
+            // stopped before it, so it is the stray token.
+            let Some(close) = comment.find("*/") else {
+                return Some((position, position + 2));
+            };
+            position += 2 + close + 2;
+        } else {
+            break;
+        }
+    }
+    let rest = &source[position..];
+    let first = rest.chars().next()?;
+    let is_name = |character: char| {
+        character.is_alphanumeric() || matches!(character, '_' | '$') || !character.is_ascii()
+    };
+    let length = if is_name(first) {
+        rest.find(|character: char| !is_name(character))
+            .unwrap_or(rest.len())
+    } else {
+        first.len_utf8()
+    };
+    Some((position, position + length))
+}
+
+/// Turn one OXC diagnostic into authored-text coordinates.
+///
+/// `shift` is the length of generated text in front of the authored text in
+/// the parsed input. The range is the label OXC marks as primary, else its
+/// last label (OXC lists context such as an earlier declaration first and
+/// the place of the mistake last), else the whole text. It is clamped into
+/// the authored text: a position past its end, such as OXC's "Unexpected
+/// end of file", becomes an empty range at the end.
+fn syntax_diagnostic(
+    diagnostic: &OxcDiagnostic,
+    shift: usize,
+    source_len: usize,
+) -> BrowserSyntaxDiagnostic {
+    let labels = &diagnostic.labels;
+    let label = labels
+        .iter()
+        .find(|label| label.primary())
+        .or_else(|| labels.last());
+    let (start, end) = label.map_or((0, source_len), |label| {
+        let offset = label.offset() as usize;
+        let start = offset.saturating_sub(shift).min(source_len);
+        let end = (offset + label.len() as usize)
+            .saturating_sub(shift)
+            .clamp(start, source_len);
+        (start, end)
+    });
+    BrowserSyntaxDiagnostic {
+        message: diagnostic.message.to_string(),
+        start,
+        end,
     }
 }
 
@@ -340,36 +907,14 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, source, SourceType::default()).parse();
     if !parsed.diagnostics.is_empty() {
-        return BrowserComponentAnalysis {
-            valid: false,
-            references: Vec::new(),
-            bindings: Vec::new(),
-            scope_writes: Vec::new(),
-            component_calls: Vec::new(),
-            public_names: Vec::new(),
-            sections: Vec::new(),
-            member_references: Vec::new(),
-            emits_sections: Vec::new(),
-            emit_names: Vec::new(),
-        };
+        return BrowserComponentAnalysis::invalid();
     }
     let built = SemanticBuilder::new_compiler()
         .with_build_nodes(true)
         .with_check_syntax_error(true)
         .build(&parsed.program);
     if !built.diagnostics.is_empty() {
-        return BrowserComponentAnalysis {
-            valid: false,
-            references: Vec::new(),
-            bindings: Vec::new(),
-            scope_writes: Vec::new(),
-            component_calls: Vec::new(),
-            public_names: Vec::new(),
-            sections: Vec::new(),
-            member_references: Vec::new(),
-            emits_sections: Vec::new(),
-            emit_names: Vec::new(),
-        };
+        return BrowserComponentAnalysis::invalid();
     }
     let semantic = built.semantic;
     let mut visitor = ComponentVisitor::new(source, semantic.scoping());
@@ -415,6 +960,8 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
                     name: "$i18n".to_string(),
                     start: span.start as usize,
                     end: span.end as usize,
+                    // Set for write targets once every reference is collected.
+                    written: false,
                 });
         }
     }
@@ -429,6 +976,16 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
         .member_references
         .sort_by_key(|reference| (reference.start, reference.end));
     visitor.member_references.dedup();
+    // The member visitors record a write target like any other member, so
+    // one pass over the write targets marks them. Marking after `dedup()`
+    // keeps one entry per range.
+    let mut write_targets = MemberWriteTargetVisitor::default();
+    write_targets.visit_program(&parsed.program);
+    for reference in &mut visitor.member_references {
+        reference.written = write_targets
+            .property_spans
+            .contains(&(reference.start, reference.end));
+    }
     let mut bindings = visitor
         .bindings
         .into_iter()
@@ -476,6 +1033,7 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
                 name: name.to_string(),
                 start,
                 end,
+                written: reference.is_write(),
             });
         }
     }
@@ -495,6 +1053,9 @@ pub fn analyze_component_source(source: &str) -> BrowserComponentAnalysis {
         member_references: visitor.member_references,
         emits_sections: visitor.emits_sections,
         emit_names: visitor.emit_names,
+        directives_sections: visitor.directives_sections,
+        directive_names: visitor.directive_names,
+        inherit_attrs: visitor.inherit_attrs,
     }
 }
 
@@ -515,6 +1076,9 @@ struct ComponentVisitor<'semantic> {
     member_references: Vec<BrowserComponentMemberReference>,
     emits_sections: Vec<BrowserOptionsSection>,
     emit_names: Vec<BrowserEmitName>,
+    directives_sections: Vec<BrowserOptionsSection>,
+    directive_names: Vec<BrowserDirectiveName>,
+    inherit_attrs: Vec<Option<bool>>,
 }
 
 impl<'a> Visit<'a> for ComponentVisitor<'_> {
@@ -584,6 +1148,9 @@ impl<'semantic> ComponentVisitor<'semantic> {
             member_references: Vec::new(),
             emits_sections: Vec::new(),
             emit_names: Vec::new(),
+            directives_sections: Vec::new(),
+            directive_names: Vec::new(),
+            inherit_attrs: Vec::new(),
         }
     }
 
@@ -690,6 +1257,8 @@ impl<'semantic> ComponentVisitor<'semantic> {
             }
         }
         self.collect_emits(options, inherits);
+        self.collect_directives(options, inherits);
+        self.collect_inherit_attrs(options, inherits);
         // Vue also calls lifecycle hooks, `provide()`, and `watch` handlers
         // with `this` set to the instance, so their member reads are proven
         // too. Any other option is read by code Vue does not know, which may
@@ -716,108 +1285,87 @@ impl<'semantic> ComponentVisitor<'semantic> {
     /// whose static keys name the events. Anything else leaves the declared
     /// events unknown, so a consumer must accept every event name.
     fn collect_emits(&mut self, options: &ObjectExpression<'_>, inherits: bool) {
-        let mut state = BrowserOptionsSection {
-            name: "emits".to_string(),
-            state: "absent".to_string(),
-            start: None,
-            end: None,
-            unknown_reason: None,
-        };
-        let mut names = Vec::new();
-        for item in &options.properties {
-            // A spread or a computed key may add or replace `emits`, as the
-            // other sections treat them, until a later explicit `emits`.
-            let Some(property) = item.as_property() else {
-                state.state = "unknown".to_string();
-                state.unknown_reason = Some("top-level-spread".to_string());
-                names.clear();
-                continue;
-            };
-            if property.computed {
-                state.state = "unknown".to_string();
-                state.unknown_reason = Some("computed-top-level-key".to_string());
-                names.clear();
-                continue;
-            }
-            if !property.key.is_specific_static_name("emits") {
-                continue;
-            }
-            // A later `emits` key replaces an earlier one in the object.
-            names.clear();
-            let span = property.span();
-            state.start = Some(span.start as usize);
-            state.end = Some(span.end as usize);
-            state.state = "complete".to_string();
-            state.unknown_reason = None;
-            match property.value.without_parentheses() {
-                Expression::ArrayExpression(array) => {
-                    for element in &array.elements {
-                        match element.as_expression().map(Expression::without_parentheses) {
-                            Some(Expression::StringLiteral(literal)) => {
-                                let span = literal.span();
-                                names.push(BrowserEmitName {
-                                    name: literal.value.to_string(),
-                                    start: span.start as usize,
-                                    end: span.end as usize,
-                                });
-                            }
-                            _ => {
-                                state.state = "unknown".to_string();
-                                state.unknown_reason = Some("non-literal-entry".to_string());
-                            }
-                        }
-                    }
-                }
-                Expression::ObjectExpression(object) => {
-                    for entry in &object.properties {
-                        let Some(entry) = entry.as_property() else {
-                            state.state = "unknown".to_string();
-                            state.unknown_reason = Some("object-spread".to_string());
-                            continue;
-                        };
-                        let name = if entry.computed {
-                            None
-                        } else {
-                            entry.key.static_name()
-                        };
-                        let Some(name) = name else {
-                            state.state = "unknown".to_string();
-                            state.unknown_reason = Some("computed-key".to_string());
-                            continue;
-                        };
-                        let span = entry.key.span();
-                        names.push(BrowserEmitName {
-                            name: name.into_owned(),
-                            start: span.start as usize,
-                            end: span.end as usize,
-                        });
-                    }
-                }
-                _ => {
-                    state.state = "unknown".to_string();
-                    state.unknown_reason = Some("non-literal-section".to_string());
-                }
-            }
-        }
-        // A mixin or parent options object may declare more events.
-        if inherits {
-            state.state = "unknown".to_string();
-            state.unknown_reason = Some("inherited-options".to_string());
-        }
+        let (state, names) = read_named_option(options, inherits, "emits", true);
         if state.state == "complete" {
-            self.emit_names.extend(names);
+            self.emit_names
+                .extend(names.into_iter().map(|(name, start, end)| BrowserEmitName {
+                    name,
+                    start,
+                    end,
+                }));
         }
         self.emits_sections.push(state);
     }
 
+    /// Read the `directives` section: an object whose static keys name the
+    /// custom directives Vue registers for this component. Anything else
+    /// leaves them unknown, so a consumer must accept every directive name.
+    fn collect_directives(&mut self, options: &ObjectExpression<'_>, inherits: bool) {
+        let (state, names) = read_named_option(options, inherits, "directives", false);
+        if state.state == "complete" {
+            self.directive_names.extend(
+                names
+                    .into_iter()
+                    .map(|(name, start, end)| BrowserDirectiveName { name, start, end }),
+            );
+        }
+        self.directives_sections.push(state);
+    }
+
+    /// Read `inheritAttrs` as Vue sees it after merging the options object.
+    ///
+    /// The last own key wins, as in a JavaScript object literal. A spread or
+    /// computed key after it may replace it, and with no own key a mixin or
+    /// parent options object may set it, so those give `None`. With no key
+    /// and nothing that could add one, Vue uses its default, `true`.
+    fn collect_inherit_attrs(&mut self, options: &ObjectExpression<'_>, inherits: bool) {
+        let mut value = Some(true);
+        let mut own_key = false;
+        for item in &options.properties {
+            let Some(property) = item.as_property() else {
+                value = None;
+                continue;
+            };
+            if property.computed {
+                value = None;
+                continue;
+            }
+            if !property.key.is_specific_static_name("inheritAttrs") {
+                continue;
+            }
+            own_key = true;
+            // Only a literal proves the value; `inheritAttrs: flag` may be
+            // either, so a consumer must allow both.
+            value = match property.value.without_parentheses() {
+                Expression::BooleanLiteral(literal) => Some(literal.value),
+                _ => None,
+            };
+        }
+        // Vue keeps a component's own `inheritAttrs` over a mixin's, so
+        // inheritance only hides the value when the source sets none.
+        if inherits && !own_key {
+            value = None;
+        }
+        self.inherit_attrs.push(value);
+    }
+
     fn collect_absent_options(&mut self) {
-        self.emits_sections.push(BrowserOptionsSection {
-            name: "emits".to_owned(),
-            state: "absent".to_owned(),
-            start: None,
-            end: None,
-            unknown_reason: None,
-        });
+        for name in ["emits", "directives"] {
+            let section = BrowserOptionsSection {
+                name: name.to_owned(),
+                state: "absent".to_owned(),
+                start: None,
+                end: None,
+                unknown_reason: None,
+            };
+            if name == "emits" {
+                self.emits_sections.push(section);
+            } else {
+                self.directives_sections.push(section);
+            }
+        }
+        // A callback literal sets no options, so Vue's default applies.
+        self.inherit_attrs.push(Some(true));
         for name in ["props", "methods", "computed", "inject", "data", "setup"] {
             self.sections.push(BrowserOptionsSection {
                 name: name.to_owned(),
@@ -830,21 +1378,18 @@ impl<'semantic> ComponentVisitor<'semantic> {
     }
 
     fn collect_unknown_options(&mut self, span: oxc_span::Span) {
-        self.emits_sections.push(BrowserOptionsSection {
-            name: "emits".to_owned(),
+        let unknown = |name: &str| BrowserOptionsSection {
+            name: name.to_owned(),
             state: "unknown".to_owned(),
             start: Some(span.start as usize),
             end: Some(span.end as usize),
             unknown_reason: Some("indirect-options".to_owned()),
-        });
+        };
+        self.emits_sections.push(unknown("emits"));
+        self.directives_sections.push(unknown("directives"));
+        self.inherit_attrs.push(None);
         for name in ["props", "methods", "computed", "inject", "data", "setup"] {
-            self.sections.push(BrowserOptionsSection {
-                name: name.to_owned(),
-                state: "unknown".to_owned(),
-                start: Some(span.start as usize),
-                end: Some(span.end as usize),
-                unknown_reason: Some("indirect-options".to_owned()),
-            });
+            self.sections.push(unknown(name));
         }
     }
 
@@ -1165,6 +1710,100 @@ impl<'a> Visit<'a> for ScopeWriteVisitor<'_, '_> {
     }
 }
 
+/// Read one options key whose value names things, such as `emits` or
+/// `directives`, the way Vue merges the options object.
+///
+/// Returns the section's state and, for each name, the name and the byte
+/// range of its key or string literal. A later key replaces an earlier one;
+/// a spread or computed key may add or replace it until the next explicit
+/// key; `mixins` or `extends` may add names. An object literal with static
+/// keys is complete, and so is an array of string literals when
+/// `accepts_array` is set. Any other value is unknown, with the reason.
+fn read_named_option(
+    options: &ObjectExpression<'_>,
+    inherits: bool,
+    key: &str,
+    accepts_array: bool,
+) -> (BrowserOptionsSection, Vec<(String, usize, usize)>) {
+    let mut state = BrowserOptionsSection {
+        name: key.to_string(),
+        state: "absent".to_string(),
+        start: None,
+        end: None,
+        unknown_reason: None,
+    };
+    let mut names = Vec::new();
+    let mark_unknown = |state: &mut BrowserOptionsSection, reason: &str| {
+        state.state = "unknown".to_string();
+        state.unknown_reason = Some(reason.to_string());
+    };
+    for item in &options.properties {
+        let Some(property) = item.as_property() else {
+            mark_unknown(&mut state, "top-level-spread");
+            names.clear();
+            continue;
+        };
+        if property.computed {
+            mark_unknown(&mut state, "computed-top-level-key");
+            names.clear();
+            continue;
+        }
+        if !property.key.is_specific_static_name(key) {
+            continue;
+        }
+        names.clear();
+        let span = property.span();
+        state.start = Some(span.start as usize);
+        state.end = Some(span.end as usize);
+        state.state = "complete".to_string();
+        state.unknown_reason = None;
+        match property.value.without_parentheses() {
+            Expression::ArrayExpression(array) if accepts_array => {
+                for element in &array.elements {
+                    match element.as_expression().map(Expression::without_parentheses) {
+                        Some(Expression::StringLiteral(literal)) => {
+                            let span = literal.span();
+                            names.push((
+                                literal.value.to_string(),
+                                span.start as usize,
+                                span.end as usize,
+                            ));
+                        }
+                        _ => mark_unknown(&mut state, "non-literal-entry"),
+                    }
+                }
+            }
+            Expression::ObjectExpression(object) => {
+                for entry in &object.properties {
+                    let Some(entry) = entry.as_property() else {
+                        mark_unknown(&mut state, "object-spread");
+                        continue;
+                    };
+                    let name = if entry.computed {
+                        None
+                    } else {
+                        entry.key.static_name()
+                    };
+                    let Some(name) = name else {
+                        mark_unknown(&mut state, "computed-key");
+                        continue;
+                    };
+                    let span = entry.key.span();
+                    names.push((name.into_owned(), span.start as usize, span.end as usize));
+                }
+            }
+            _ => mark_unknown(&mut state, "non-literal-section"),
+        }
+    }
+    if inherits {
+        mark_unknown(&mut state, "inherited-options");
+    }
+    if state.state != "complete" {
+        names.clear();
+    }
+    (state, names)
+}
+
 fn section_object<'a>(
     section: &str,
     value: &'a Expression<'a>,
@@ -1391,6 +2030,31 @@ fn bound_hook_members(name: &str, value: &Expression<'_>) -> Vec<BrowserComponen
     visitor.references
 }
 
+/// Collect the property ranges of static member expressions that the code
+/// writes, so the matching member references can be marked as writes.
+///
+/// OXC gives every write target the `SimpleAssignmentTarget` type: the left
+/// side of an assignment, each target inside a destructuring assignment, the
+/// operand of `++` or `--`, and the left side of `for ... in` or `for ... of`.
+/// So visiting that type, and nothing else, finds every write.
+#[derive(Default)]
+struct MemberWriteTargetVisitor {
+    property_spans: Vec<(usize, usize)>,
+}
+
+impl<'a> Visit<'a> for MemberWriteTargetVisitor {
+    fn visit_simple_assignment_target(&mut self, target: &SimpleAssignmentTarget<'a>) {
+        if let Some((span, _name)) = target
+            .as_member_expression()
+            .and_then(|member| member.static_property_info())
+        {
+            self.property_spans
+                .push((span.start as usize, span.end as usize));
+        }
+        walk::walk_simple_assignment_target(self, target);
+    }
+}
+
 #[derive(Default)]
 struct InstanceMemberVisitor {
     ordinary_function_depth: usize,
@@ -1420,6 +2084,8 @@ impl<'a> Visit<'a> for AliasMemberVisitor<'_, '_> {
                     name: member.property.name.to_string(),
                     start: span.start as usize,
                     end: span.end as usize,
+                    // Set for write targets once every reference is collected.
+                    written: false,
                 });
             }
         }
@@ -1508,6 +2174,8 @@ impl<'a> Visit<'a> for InstanceMemberVisitor {
                 name: member.property.name.to_string(),
                 start: span.start as usize,
                 end: span.end as usize,
+                // Set for write targets once every reference is collected.
+                written: false,
             });
         }
         walk::walk_static_member_expression(self, member);
@@ -1531,11 +2199,13 @@ mod tests {
                     name: "items".to_string(),
                     start: 0,
                     end: 5,
+                    written: false,
                 },
                 BrowserReference {
                     name: "suffix".to_string(),
                     start: 32,
                     end: 38,
+                    written: false,
                 },
             ]
         );
@@ -1562,7 +2232,145 @@ mod tests {
         let analysis = analyze_browser_source("value(", BrowserAnalysisMode::Expression);
 
         assert!(!analysis.valid);
+        assert!(analysis.error.is_some());
         assert!(analysis.references.is_empty());
+    }
+
+    fn syntax_error(source: &str, mode: BrowserAnalysisMode) -> (String, usize, usize) {
+        let analysis = analyze_browser_source(source, mode);
+        assert!(!analysis.valid, "{source:?} should be invalid");
+        assert!(analysis.references.is_empty());
+        let error = analysis.error.expect("an invalid source carries its error");
+        (error.message, error.start, error.end)
+    }
+
+    #[test]
+    fn syntax_errors_describe_the_authored_text() {
+        use BrowserAnalysisMode::{Expression, Statement};
+        // Observed from OXC 0.143.0 and locked; offsets are UTF-8 bytes in
+        // the authored text, and an error at its end is an empty range there.
+        let unexpected = "Unexpected token";
+        for (source, mode, message, start, end) in [
+            ("open &&", Expression, unexpected, 7, 7),
+            ("a +* b", Expression, unexpected, 3, 4),
+            ("foo(", Expression, "Expected `)` but found `EOF`", 4, 4),
+            ("{ a: }", Expression, unexpected, 5, 6),
+            ("x =", Expression, unexpected, 3, 3),
+            ("items.map(i =>", Expression, unexpected, 14, 14),
+            ("'unclosed", Expression, "Unterminated string", 0, 9),
+            ("a)", Expression, unexpected, 1, 2),
+            ("(a))", Expression, unexpected, 3, 4),
+            ("a\n)", Expression, unexpected, 2, 3),
+            ("a }", Statement, unexpected, 2, 3),
+            ("open &amp;&amp; ready", Expression, unexpected, 9, 10),
+            ("   ", Expression, unexpected, 3, 3),
+            ("function() {}", Statement, "Expected function name", 8, 9),
+            // `é` is two bytes, so the `*` after `café +` starts at byte 7.
+            ("café +* b", Expression, unexpected, 7, 8),
+            // The scope pass reports a second declaration at the second one.
+            (
+                "let a = 1; let a = 2",
+                Statement,
+                "Identifier `a` has already been declared",
+                15,
+                16,
+            ),
+        ] {
+            assert_eq!(
+                syntax_error(source, mode),
+                (message.to_string(), start, end),
+                "{source:?} in {mode:?} mode"
+            );
+        }
+    }
+
+    #[test]
+    fn text_that_closes_the_generated_function_is_invalid() {
+        use BrowserAnalysisMode::{Expression, Statement};
+        // Each of these parses inside the generated wrapper by closing it and
+        // opening another statement or argument, which Vue rejects.
+        for (source, mode, message, start, end) in [
+            ("a); (b", Expression, "Unexpected token", 1, 2),
+            (
+                "a); (b",
+                Statement,
+                "Expected a semicolon or an implicit semicolon after a statement, but found none",
+                1,
+                1,
+            ),
+            ("a), (b", Expression, "Unexpected token", 1, 2),
+            ("a } function g() {", Expression, "Unexpected token", 2, 3),
+            ("a } function g() {", Statement, "Unexpected token", 2, 3),
+        ] {
+            assert_eq!(
+                syntax_error(source, mode),
+                (message.to_string(), start, end),
+                "{source:?} in {mode:?} mode"
+            );
+        }
+        for (source, mode) in [
+            ("await load()", Expression),
+            ("await load()", Statement),
+            ("return 1", Statement),
+            ("() => go()", Statement),
+            ("", Statement),
+            ("value // trailing comment", Expression),
+        ] {
+            let analysis = analyze_browser_source(source, mode);
+            assert!(analysis.valid, "{source:?} in {mode:?} mode");
+            assert_eq!(analysis.error, None);
+        }
+    }
+
+    #[test]
+    fn free_references_report_whether_the_code_writes_the_name() {
+        let source = "open += 1; count++; --other; [a, b] = pair; ({c, d: e} = obj); \
+            for (f of list) {}; g.count = 1; h == 1; i = false";
+        let analysis = analyze_browser_source(source, BrowserAnalysisMode::Statement);
+        assert!(analysis.valid);
+        assert_eq!(
+            analysis
+                .references
+                .iter()
+                .map(|reference| (reference.name.as_str(), reference.written))
+                .collect::<Vec<_>>(),
+            [
+                ("open", true),
+                ("count", true),
+                ("other", true),
+                ("a", true),
+                ("b", true),
+                ("pair", false),
+                ("c", true),
+                ("e", true),
+                ("obj", false),
+                ("f", true),
+                ("list", false),
+                ("g", false),
+                ("h", false),
+                ("i", true),
+            ]
+        );
+        // A comment before `=` still writes the name, and `--count` on the
+        // next line updates `count`, not `open`.
+        for (source, expected) in [
+            ("open /* note */ = false", vec![("open", true)]),
+            ("open\n--count", vec![("open", false), ("count", true)]),
+        ] {
+            let analysis = analyze_browser_source(source, BrowserAnalysisMode::Statement);
+            assert_eq!(
+                analysis
+                    .references
+                    .iter()
+                    .map(|reference| (reference.name.as_str(), reference.written))
+                    .collect::<Vec<_>>(),
+                expected,
+                "{source:?}"
+            );
+        }
+        let expression = analyze_browser_source("open = false", BrowserAnalysisMode::Expression);
+        assert!(expression.valid);
+        assert!(expression.references[0].written);
     }
 
     #[test]
@@ -2241,5 +3049,226 @@ if (enabled) realComponent({});
                 .collect::<Vec<_>>(),
             ["$i18n"]
         );
+    }
+
+    #[test]
+    fn member_references_report_whether_the_code_writes_the_member() {
+        let source = "$component({ props: ['open'], methods: { m() { this.open = false; \
+            this.open.count = 1; this.open++; [this.open] = pair; ({ a: this.open } = obj); \
+            for (this.open of list) {} this.other == 1; } }, \
+            onServerRender({ component: c }) { c.open = 1; c.open.x = 2; c.read; } })";
+        let analysis = analyze_component_source(source);
+        assert!(analysis.valid);
+        assert_eq!(
+            analysis
+                .member_references
+                .iter()
+                .map(|reference| (
+                    reference.receiver.as_str(),
+                    reference.name.as_str(),
+                    reference.written
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("this", "open", true),
+                ("this", "open", false),
+                ("this", "open", true),
+                ("this", "open", true),
+                ("this", "open", true),
+                ("this", "open", true),
+                ("this", "other", false),
+                ("component", "open", true),
+                ("component", "open", false),
+                ("component", "read", false),
+            ]
+        );
+        // The free names the destructuring reads are not writes.
+        assert!(analysis
+            .references
+            .iter()
+            .all(|reference| !reference.written));
+    }
+
+    fn directives_facts(source: &str) -> (Vec<(String, Option<String>)>, Vec<String>) {
+        let analysis = analyze_component_source(source);
+        assert!(analysis.valid);
+        (
+            analysis
+                .directives_sections
+                .iter()
+                .map(|section| (section.state.clone(), section.unknown_reason.clone()))
+                .collect(),
+            analysis
+                .directive_names
+                .iter()
+                .map(|name| {
+                    assert!(source[name.start..name.end].contains(&name.name));
+                    name.name.clone()
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn directives_sections_report_declared_directive_names() {
+        let complete = |names: &[&str]| {
+            (
+                vec![("complete".to_string(), None)],
+                names
+                    .iter()
+                    .map(|name| (*name).to_string())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            directives_facts("$component({ directives: { iff: {}, 'my-dir': {}, focus } })"),
+            complete(&["iff", "my-dir", "focus"])
+        );
+        // A later key replaces an earlier one, and an explicit key after a
+        // spread is what Vue sees.
+        assert_eq!(
+            directives_facts("$component({ directives: { a: {} }, directives: { b: {} } })"),
+            complete(&["b"])
+        );
+        assert_eq!(
+            directives_facts("$component({ ...base, directives: { a: {} } })"),
+            complete(&["a"])
+        );
+        for (source, reason) in [
+            ("$component({ directives: { ...base } })", "object-spread"),
+            ("$component({ directives: { [k]: {} } })", "computed-key"),
+            ("$component({ directives: names })", "non-literal-section"),
+            ("$component({ directives: ['a'] })", "non-literal-section"),
+            (
+                "$component({ directives: { a: {} }, ...more })",
+                "top-level-spread",
+            ),
+            (
+                "$component({ directives: { a: {} }, [key]: value })",
+                "computed-top-level-key",
+            ),
+            (
+                "$component({ mixins: [m], directives: { a: {} } })",
+                "inherited-options",
+            ),
+            (
+                "$component({ extends: base, directives: { a: {} } })",
+                "inherited-options",
+            ),
+            ("$component(options)", "indirect-options"),
+        ] {
+            assert_eq!(
+                directives_facts(source),
+                (
+                    vec![("unknown".to_string(), Some(reason.to_string()))],
+                    Vec::new()
+                ),
+                "{source}"
+            );
+        }
+        for source in [
+            "$component({ data() { return {} } })",
+            "$component(() => {})",
+        ] {
+            assert_eq!(
+                directives_facts(source),
+                (vec![("absent".to_string(), None)], Vec::new()),
+                "{source}"
+            );
+        }
+        // A call with no options argument contributes no entry at all.
+        assert_eq!(directives_facts("$component()"), (Vec::new(), Vec::new()));
+    }
+
+    #[test]
+    fn inherit_attrs_is_known_only_when_the_source_proves_it() {
+        for (source, expected) in [
+            ("$component({ inheritAttrs: false })", vec![Some(false)]),
+            ("$component({ inheritAttrs: true })", vec![Some(true)]),
+            // Vue's default when nothing sets it.
+            ("$component({ data() { return {} } })", vec![Some(true)]),
+            ("$component(() => {})", vec![Some(true)]),
+            ("$component({ inheritAttrs: flag })", vec![None]),
+            ("$component({ inheritAttrs: false, ...more })", vec![None]),
+            (
+                "$component({ inheritAttrs: false, [key]: value })",
+                vec![None],
+            ),
+            (
+                "$component({ ...more, inheritAttrs: false })",
+                vec![Some(false)],
+            ),
+            (
+                "$component({ inheritAttrs: false, inheritAttrs: true })",
+                vec![Some(true)],
+            ),
+            // A component's own key wins over a mixin's; without one, a mixin
+            // or parent options object may set it.
+            (
+                "$component({ mixins: [m], inheritAttrs: false })",
+                vec![Some(false)],
+            ),
+            ("$component({ mixins: [m] })", vec![None]),
+            ("$component({ extends: base })", vec![None]),
+            ("$component(options)", vec![None]),
+            ("$component()", Vec::new()),
+            (
+                "$component({ inheritAttrs: false }); $component({})",
+                vec![Some(false), Some(true)],
+            ),
+        ] {
+            assert_eq!(
+                analyze_component_source(source).inherit_attrs,
+                expected,
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn records_repr_like_python_objects() {
+        let analysis = analyze_browser_source("open = 1", BrowserAnalysisMode::Statement);
+        assert_eq!(
+            analysis.py_repr(),
+            "BrowserAnalysis(valid=True, error=None, references=[BrowserReference(name='open', start=0, end=4, written=True)])"
+        );
+        let invalid = analyze_browser_source("a +* b", BrowserAnalysisMode::Expression);
+        assert_eq!(
+            invalid.error.unwrap().py_repr(),
+            "BrowserSyntaxDiagnostic(message='Unexpected token', start=3, end=4)"
+        );
+        // Python's own quoting: `"` around a text that holds `'`, and escapes.
+        for (text, expected) in [
+            ("it's", "\"it's\""),
+            ("a'b\"c", "'a\\'b\"c'"),
+            ("tab\there\\", "'tab\\there\\\\'"),
+            ("\u{1}", "'\\x01'"),
+        ] {
+            assert_eq!(text.to_string().py_repr(), expected, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn an_error_only_top_level_code_raises_does_not_hide_the_authored_mistake() {
+        use BrowserAnalysisMode::{Expression, Statement};
+        // `new.target` is valid inside the generated function but not at the
+        // top level, where the standalone parse runs; the mistake is later.
+        for (source, mode, message, start, end) in [
+            ("new.target; a +* b", Statement, "Unexpected token", 15, 16),
+            ("new.target; a &&", Statement, "Unexpected token", 16, 16),
+            // A stray closing bracket that closes the generated function is
+            // the mistake, even when the text goes on to fail later.
+            ("a))", Expression, "Unexpected token", 1, 2),
+            ("a) b", Expression, "Unexpected token", 1, 2),
+            ("a) +* b", Expression, "Unexpected token", 1, 2),
+            ("a } b c", Statement, "Unexpected token", 2, 3),
+            ("go() } x y", Statement, "Unexpected token", 5, 6),
+        ] {
+            assert_eq!(
+                syntax_error(source, mode),
+                (message.to_string(), start, end),
+                "{source:?} in {mode:?} mode"
+            );
+        }
     }
 }

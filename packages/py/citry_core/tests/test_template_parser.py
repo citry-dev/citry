@@ -8,12 +8,20 @@ lang parameter.
 
 # ruff: noqa: S102,ANN
 
+import ast
+from pathlib import Path
+
 import pytest
 
+from citry_core import _rust
 from citry_core.template_parser import (
     CITRY_DIRECTIVE_NAMES,
     RESERVED_TAG_NAMES,
     STRUCTURAL_TAG_ATTRIBUTE_NAMES,
+    BrowserAnalysis,
+    BrowserComponentAnalysis,
+    BrowserReference,
+    BrowserSyntaxDiagnostic,
     FillDataField,
     FillDataPattern,
     ForeignSourcePart,
@@ -105,10 +113,74 @@ def test_parser_owned_attribute_names_are_exposed_with_structural_context() -> N
 
 
 def test_browser_analysis_exposes_oxc_free_references() -> None:
-    valid, references = analyze_browser_source("known + local.value", "expression")
+    analysis = analyze_browser_source("known + local.value", "expression")
 
-    assert valid
-    assert [name for name, _start, _end in references] == ["known", "local"]
+    assert analysis.valid
+    assert analysis.error is None
+    assert [reference.name for reference in analysis.references] == ["known", "local"]
+    assert [reference.written for reference in analysis.references] == [False, False]
+    assert isinstance(analysis, BrowserAnalysis)
+    assert isinstance(analysis.references[0], BrowserReference)
+
+
+def test_browser_analysis_reports_writes_and_the_first_syntax_error() -> None:
+    written = analyze_browser_source("open = false; count.total++", "statement")
+    assert [(reference.name, reference.written) for reference in written.references] == [
+        ("open", True),
+        ("count", False),
+    ]
+
+    invalid = analyze_browser_source("café +* b", "expression")
+    assert not invalid.valid
+    assert invalid.references == []
+    assert isinstance(invalid.error, BrowserSyntaxDiagnostic)
+    # Offsets are UTF-8 bytes: `é` takes two, so the `*` starts at byte 7.
+    assert (invalid.error.message, invalid.error.start, invalid.error.end) == ("Unexpected token", 7, 8)
+    assert repr(invalid.error) == "BrowserSyntaxDiagnostic(message='Unexpected token', start=7, end=8)"
+    # Records compare and hash by value, so two analyses of the same text
+    # are equal and can share a set entry.
+    again = analyze_browser_source("café +* b", "expression")
+    assert invalid == again
+    assert len({invalid, again}) == 1
+
+
+_BROWSER_RECORDS = (
+    "BrowserAnalysis",
+    "BrowserSyntaxDiagnostic",
+    "BrowserReference",
+    "BrowserComponentAnalysis",
+    "BrowserComponentBinding",
+    "BrowserComponentCall",
+    "BrowserPublicName",
+    "BrowserOptionsSection",
+    "BrowserComponentMemberReference",
+    "BrowserEmitName",
+    "BrowserDirectiveName",
+)
+
+
+def test_browser_record_stubs_list_exactly_the_fields_python_reads() -> None:
+    # The stub is written by hand from the Rust structs; a field added to or
+    # removed from a struct's `#[pyo3(get)]` list must be added to or removed
+    # from the stub too.
+    stub = ast.parse((Path(_rust.__file__).parent / "_rust.pyi").read_text(encoding="utf-8"))
+    namespace = next(node for node in stub.body if isinstance(node, ast.ClassDef) and node.name == "template_parser")
+    stubbed = {
+        node.name: {
+            item.target.id
+            for item in node.body
+            if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
+        }
+        for node in namespace.body
+        if isinstance(node, ast.ClassDef) and node.name in _BROWSER_RECORDS
+    }
+    assert sorted(stubbed) == sorted(_BROWSER_RECORDS)
+    for name in _BROWSER_RECORDS:
+        record = getattr(_rust.template_parser, name)
+        fields = {
+            attribute for attribute, value in vars(record).items() if type(value).__name__ == "getset_descriptor"
+        }
+        assert fields == stubbed[name], name
 
 
 def test_component_source_analysis_exposes_only_runtime_initializer_facts() -> None:
@@ -120,32 +192,49 @@ $component({ onServerRender({ component, onEvent: listen }) {
 } });
 """
 
-    (
-        valid,
-        references,
-        bindings,
-        calls,
-        public_names,
-        sections,
-        member_references,
-        emits_sections,
-        declared_events,
-    ) = analyze_component_source(source)
+    analysis = analyze_component_source(source)
 
-    assert valid
-    assert [name for name, _start, _end in references] == ["console", "missingInside"]
-    assert [(name, local) for name, local, _start, _end, _references in bindings] == [
+    assert isinstance(analysis, BrowserComponentAnalysis)
+    assert analysis.valid
+    assert [reference.name for reference in analysis.references] == ["console", "missingInside"]
+    assert [(binding.name, binding.local_name) for binding in analysis.bindings] == [
         ("component", "component"),
         ("onEvent", "listen"),
     ]
-    assert all(references for _name, _local, _start, _end, references in bindings)
-    assert len(calls) == 1
-    assert public_names == []
-    assert all(section[1] == "absent" for section in sections)
-    assert member_references == []
-    # The callback form has no `emits` option.
-    assert emits_sections == [("emits", "absent", None, None, None)]
-    assert declared_events == []
+    assert all(binding.references for binding in analysis.bindings)
+    assert len(analysis.component_calls) == 1
+    assert analysis.public_names == []
+    assert all(section.state == "absent" for section in analysis.sections)
+    assert analysis.member_references == []
+    # The callback form sets no options, so `emits` and `directives` are
+    # absent and `inheritAttrs` keeps Vue's default.
+    assert [(section.name, section.state) for section in analysis.emits_sections] == [("emits", "absent")]
+    assert analysis.emit_names == []
+    assert [(section.name, section.state) for section in analysis.directives_sections] == [("directives", "absent")]
+    assert analysis.directive_names == []
+    assert analysis.inherit_attrs == [True]
+    assert not hasattr(analysis, "scope_writes")
+
+
+def test_component_source_analysis_reports_directives_inherit_attrs_and_member_writes() -> None:
+    analysis = analyze_component_source(
+        "$component({ props: ['open'], inheritAttrs: false, directives: { iff: {}, 'my-dir': {} },"
+        " methods: { close() { this.open = false; this.open.count = 1 } } })"
+    )
+
+    assert [name.name for name in analysis.directive_names] == ["iff", "my-dir"]
+    assert [section.state for section in analysis.directives_sections] == ["complete"]
+    assert analysis.inherit_attrs == [False]
+    assert [(member.name, member.written) for member in analysis.member_references] == [
+        ("open", True),
+        ("open", False),
+    ]
+    assert analyze_component_source("$component({ inheritAttrs: flag })").inherit_attrs == [None]
+
+    invalid = analyze_component_source("$component({")
+    assert not invalid.valid
+    assert invalid.component_calls == []
+    assert invalid.inherit_attrs == []
 
 
 # =========================================================================

@@ -48,7 +48,7 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # with their generated HTML and ARIA tables, the CSS checks, the
 # development-mode browser check (`_vue/dev_checks.min.js`), and the check of
 # `inject()` keys against the keys provided above a component. The wheel
-# measured 1,349,416 bytes, about 43 KB under this cap. A sizeable addition
+# measured 1,352,777 bytes, about 39 KB under this cap. A sizeable addition
 # should raise the cap on purpose rather than use up the headroom unnoticed.
 MAX_WHEEL_BYTES: Final = 1_360 * 1024
 EXPECTED_REQUIRES_DIST: Final = {

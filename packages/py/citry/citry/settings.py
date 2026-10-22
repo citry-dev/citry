@@ -112,11 +112,13 @@ def _is_vue_variable_name(name: object) -> bool:
     if type(name) is not str or not name:
         return False
     try:
-        valid, references = analyze_browser_source(name, "expression")
+        analysis = analyze_browser_source(name, "expression")
     except (TypeError, ValueError, UnicodeError):
         return False
     encoded_length = len(name.encode("utf-8"))
-    return valid and references == [(name, 0, encoded_length)]
+    # The whole text must be that one name, so `a.b` or `a + b` is rejected.
+    references = [(reference.name, reference.start, reference.end) for reference in analysis.references]
+    return analysis.valid and references == [(name, 0, encoded_length)]
 
 
 # Rule severities that LintSettings, a component's Lint class, and the
@@ -268,11 +270,10 @@ class LintSettings:
             check`` reports it only with your application loaded. The
             default is ``"error"``.
         rule_prop_assignment: Severity for a component that assigns to one
-            of its own Vue props, such as ``@click="open = false"``. Props
-            are read-only, so the value does not change. An assignment in the
-            component's JavaScript, such as ``this.open = false``, is at most
-            a warning. ``citry check`` reports it only with your application
-            loaded. The default is ``"error"``.
+            of its own Vue props, such as ``@click="open = false"`` or
+            ``this.open = false`` in its JavaScript. Props are read-only, so
+            the value does not change. ``citry check`` reports it only with
+            your application loaded. The default is ``"error"``.
         rule_unknown_server_event_field: Severity for an ``@c-*`` binding
             that sends a key the handler's data class does not declare, such
             as ``save({amont: 1})``. The server rejects the call. ``citry

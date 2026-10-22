@@ -42,7 +42,9 @@ pub use crate::ast::{
 pub use crate::browser::{
     analyze_browser_binding_pattern, analyze_browser_source, analyze_component_scope_writes,
     analyze_component_source, BrowserAnalysis, BrowserAnalysisMode, BrowserBindingPatternAnalysis,
-    BrowserComponentAnalysis, BrowserComponentBinding, BrowserReference, BrowserScopeWrite,
+    BrowserComponentAnalysis, BrowserComponentBinding, BrowserComponentCall,
+    BrowserComponentMemberReference, BrowserDirectiveName, BrowserEmitName, BrowserOptionsSection,
+    BrowserPublicName, BrowserReference, BrowserScopeWrite, BrowserSyntaxDiagnostic,
 };
 pub use crate::error::{ParseDiagnostic, ParseError};
 pub use crate::foreign::{ForeignSpan, ParseOptions};
