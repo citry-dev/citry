@@ -363,7 +363,7 @@ e2e = [
 
 [[package]]
 name = "citry-core"
-version = "1.8.0"
+version = "1.9.0"
 source = { editable = "packages/py/citry_core" }
 
 [package.dev-dependencies]

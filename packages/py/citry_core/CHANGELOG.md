@@ -1,5 +1,38 @@
 # Release notes
 
+## v1.9.0
+
+### Changed
+
+- **Breaking:** `template_parser.analyze_browser_source()` and
+  `template_parser.analyze_component_source()` return objects with named
+  fields, `BrowserAnalysis` and `BrowserComponentAnalysis`, instead of
+  tuples. Read the fields where you unpacked the tuple:
+
+  ```python
+  # before
+  valid, references = analyze_browser_source(text, "expression")
+  # after
+  analysis = analyze_browser_source(text, "expression")
+  analysis.valid, analysis.references
+  ```
+
+  Each reference is a `BrowserReference` with `name`, `start`, and `end`.
+- `analyze_browser_source()` now reports text such as `a); (b` as invalid.
+  It used to accept text that closes the function Citry wraps around it,
+  which Vue rejects.
+
+### Added
+
+- For text that does not parse, `analyze_browser_source()` returns the
+  JavaScript parser's first error in `error`, with its message and
+  position, and each reference's `written` says whether the code assigns
+  to or updates the name.
+- `analyze_component_source()` also reports the custom directives that a
+  `$component()` call registers in its `directives` option, whether it sets
+  `inheritAttrs`, and, on each member reference, whether the code writes
+  the member, as in `this.open = false`.
+
 ## v1.8.0
 
 ### Removed

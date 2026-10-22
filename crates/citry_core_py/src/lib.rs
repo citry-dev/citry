@@ -19,9 +19,12 @@ use citry_template_parser::constants::{
     CITRY_DIRECTIVE_NAMES, HTML_VOID_ELEMENTS, RESERVED_TAG_NAMES, STRUCTURAL_TAG_ATTRIBUTE_NAMES,
 };
 use citry_template_parser::{
-    Comment, Expr, FillDataField, FillDataPattern, ForeignSourcePart, ForeignSpan, HtmlAttr,
-    HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, ParseDiagnostic, ParseOptions, StaticNamedSlot,
-    TagRules, Template, TemplateElement, Text, Token,
+    BrowserAnalysis, BrowserComponentAnalysis, BrowserComponentBinding, BrowserComponentCall,
+    BrowserComponentMemberReference, BrowserDirectiveName, BrowserEmitName, BrowserOptionsSection,
+    BrowserPublicName, BrowserReference, BrowserSyntaxDiagnostic, Comment, Expr, FillDataField,
+    FillDataPattern, ForeignSourcePart, ForeignSpan, HtmlAttr, HtmlAttrKind, HtmlEndTag,
+    HtmlStartTag, Node, ParseDiagnostic, ParseOptions, StaticNamedSlot, TagRules, Template,
+    TemplateElement, Text, Token,
 };
 
 use crate::html_transform::{
@@ -153,6 +156,18 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         analyze_component_source,
         &template_parser_mod
     )?)?;
+    // Browser analysis records, returned by the `analyze_*` functions above
+    template_parser_mod.add_class::<BrowserAnalysis>()?;
+    template_parser_mod.add_class::<BrowserSyntaxDiagnostic>()?;
+    template_parser_mod.add_class::<BrowserReference>()?;
+    template_parser_mod.add_class::<BrowserComponentAnalysis>()?;
+    template_parser_mod.add_class::<BrowserComponentBinding>()?;
+    template_parser_mod.add_class::<BrowserComponentCall>()?;
+    template_parser_mod.add_class::<BrowserPublicName>()?;
+    template_parser_mod.add_class::<BrowserOptionsSection>()?;
+    template_parser_mod.add_class::<BrowserComponentMemberReference>()?;
+    template_parser_mod.add_class::<BrowserEmitName>()?;
+    template_parser_mod.add_class::<BrowserDirectiveName>()?;
     // AST classes
     template_parser_mod.add_class::<ParseDiagnostic>()?;
     template_parser_mod.add_class::<Token>()?;

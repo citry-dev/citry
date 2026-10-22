@@ -27,7 +27,7 @@ def main() -> None:
     compiled = compile_template(parsed)
     formatted = format_template("<main><p>Hello</p></main>")
     evaluated = safe_eval("value * 2")({"value": 21})
-    valid_browser_source, browser_references = analyze_browser_source("known + local.value", "expression")
+    browser_analysis = analyze_browser_source("known + local.value", "expression")
     embedded_plan = prepare_embedded_format(
         "<main><script>const  answer=41+1;</script><style>.card{color:red}</style></main>"
     )
@@ -65,8 +65,8 @@ def main() -> None:
         "placeholders": placeholders,
         "python": sys.version,
         "safe_eval": evaluated,
-        "browser_references": [name for name, _start, _end in browser_references],
-        "browser_source_valid": valid_browser_source,
+        "browser_references": [reference.name for reference in browser_analysis.references],
+        "browser_source_valid": browser_analysis.valid,
         "rich_slot_count": sum(segment["type"] == "slot" for segment in rich["segments"]),
         "rich_has_private_marker": "__CITRY_SLOT_" in json.dumps(rich),
         "text_direction": locale_direction("ar"),

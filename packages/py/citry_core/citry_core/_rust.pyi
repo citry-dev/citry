@@ -546,8 +546,8 @@ class template_parser:
     @staticmethod
     def analyze_browser_source(
         input: str,
-        mode: str,
-    ) -> tuple[bool, list[tuple[str, int, int]]]: ...
+        mode: Literal["expression", "statement"],
+    ) -> template_parser.BrowserAnalysis: ...
     @staticmethod
     def analyze_component_scope_writes(
         input: str,
@@ -555,27 +555,7 @@ class template_parser:
     @staticmethod
     def analyze_component_source(
         input: str,
-    ) -> tuple[
-        bool,
-        list[tuple[str, int, int]],
-        list[
-            tuple[
-                Literal["component", "revision", "onEvent"],
-                str,
-                int,
-                int,
-                list[tuple[int, int]],
-            ]
-        ],
-        list[tuple[int, int, int, int, int, int | None, int | None]],
-        list[
-            tuple[str, str, str, int, int, int | None, int | None, bool | None, bool | None, bool | None, str | None]
-        ],
-        list[tuple[str, str, int | None, int | None, str | None]],
-        list[tuple[str, str, int, int]],
-        list[tuple[str, str, int | None, int | None, str | None]],
-        list[tuple[str, int, int]],
-    ]: ...
+    ) -> template_parser.BrowserComponentAnalysis: ...
     # Functions
     @staticmethod
     def parse_template(
@@ -600,6 +580,125 @@ class template_parser:
     def format_date(self, locale: str, profile: str, year: int, month: int, day: int) -> str: ...
     def format_relative_time(self, locale: str, profile: str, value: str, unit: str) -> str: ...
     def format_list(self, locale: str, profile: str, values: list[str]) -> str: ...
+
+    # Browser analysis records. Offsets are UTF-8 byte offsets into the
+    # analyzed text. Each record compares equal by value.
+
+    class BrowserSyntaxDiagnostic:
+        """The JavaScript parser's first error, with `start <= end <= len(text)`."""
+
+        message: str
+        start: int
+        end: int
+
+    class BrowserReference:
+        """One free name; `written` is true when the code assigns to or updates it there."""
+
+        name: str
+        start: int
+        end: int
+        written: bool
+
+    class BrowserAnalysis:
+        """Result of `analyze_browser_source`; `error` is set exactly when `valid` is false."""
+
+        valid: bool
+        error: template_parser.BrowserSyntaxDiagnostic | None
+        references: list[template_parser.BrowserReference]
+
+    class BrowserComponentBinding:
+        """One `$component` context field destructured into a local variable."""
+
+        name: Literal[
+            "component",
+            "revision",
+            "onEvent",
+            "id",
+            "els",
+            "state",
+            "sendEvent",
+            "loading",
+            "error",
+            "i18n",
+        ]
+        local_name: str
+        start: int
+        end: int
+        references: list[tuple[int, int]]
+
+    class BrowserComponentCall:
+        """One `$component(...)` call and the range of its first argument."""
+
+        call_start: int
+        call_end: int
+        callee_start: int
+        callee_end: int
+        open_paren_end: int
+        argument_start: int | None
+        argument_end: int | None
+
+    class BrowserPublicName:
+        """One statically named instance member declared by a Vue options section."""
+
+        authored_name: str
+        exposed_name: str
+        origin: str
+        name_start: int
+        name_end: int
+        value_start: int | None
+        value_end: int | None
+        required: bool | None
+        has_default: bool | None
+        default_is_null: bool | None
+        type_source: str | None
+
+    class BrowserOptionsSection:
+        """What one `$component` call proves about one Vue options section."""
+
+        name: str
+        state: Literal["absent", "complete", "unknown"]
+        start: int | None
+        end: int | None
+        unknown_reason: str | None
+
+    class BrowserComponentMemberReference:
+        """One member read or written through a proven component receiver."""
+
+        receiver: str
+        name: str
+        start: int
+        end: int
+        written: bool
+
+    class BrowserEmitName:
+        """One event name declared by an `emits` section."""
+
+        name: str
+        start: int
+        end: int
+
+    class BrowserDirectiveName:
+        """One custom directive name declared by a `directives` section."""
+
+        name: str
+        start: int
+        end: int
+
+    class BrowserComponentAnalysis:
+        """Result of `analyze_component_source`; every list is empty when `valid` is false."""
+
+        valid: bool
+        references: list[template_parser.BrowserReference]
+        bindings: list[template_parser.BrowserComponentBinding]
+        component_calls: list[template_parser.BrowserComponentCall]
+        public_names: list[template_parser.BrowserPublicName]
+        sections: list[template_parser.BrowserOptionsSection]
+        member_references: list[template_parser.BrowserComponentMemberReference]
+        emits_sections: list[template_parser.BrowserOptionsSection]
+        emit_names: list[template_parser.BrowserEmitName]
+        directives_sections: list[template_parser.BrowserOptionsSection]
+        directive_names: list[template_parser.BrowserDirectiveName]
+        inherit_attrs: list[bool | None]
 
     # AST types
 

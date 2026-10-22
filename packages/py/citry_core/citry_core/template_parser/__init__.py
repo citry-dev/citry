@@ -45,6 +45,19 @@ analyze_browser_source = _rust.template_parser.analyze_browser_source
 analyze_component_scope_writes = _rust.template_parser.analyze_component_scope_writes
 analyze_component_source = _rust.template_parser.analyze_component_source
 
+# Browser analysis records (re-exported from Rust)
+BrowserAnalysis: TypeAlias = _rust.template_parser.BrowserAnalysis
+BrowserSyntaxDiagnostic: TypeAlias = _rust.template_parser.BrowserSyntaxDiagnostic
+BrowserReference: TypeAlias = _rust.template_parser.BrowserReference
+BrowserComponentAnalysis: TypeAlias = _rust.template_parser.BrowserComponentAnalysis
+BrowserComponentBinding: TypeAlias = _rust.template_parser.BrowserComponentBinding
+BrowserComponentCall: TypeAlias = _rust.template_parser.BrowserComponentCall
+BrowserPublicName: TypeAlias = _rust.template_parser.BrowserPublicName
+BrowserOptionsSection: TypeAlias = _rust.template_parser.BrowserOptionsSection
+BrowserComponentMemberReference: TypeAlias = _rust.template_parser.BrowserComponentMemberReference
+BrowserEmitName: TypeAlias = _rust.template_parser.BrowserEmitName
+BrowserDirectiveName: TypeAlias = _rust.template_parser.BrowserDirectiveName
+
 # AST types (re-exported from Rust)
 ParseDiagnostic: TypeAlias = _rust.template_parser.ParseDiagnostic
 Token: TypeAlias = _rust.template_parser.Token
@@ -87,6 +100,18 @@ __all__ = [
     "parse_template",
     "parse_diagnostic",
     "compile_template",
+    # Browser analysis records
+    "BrowserAnalysis",
+    "BrowserSyntaxDiagnostic",
+    "BrowserReference",
+    "BrowserComponentAnalysis",
+    "BrowserComponentBinding",
+    "BrowserComponentCall",
+    "BrowserPublicName",
+    "BrowserOptionsSection",
+    "BrowserComponentMemberReference",
+    "BrowserEmitName",
+    "BrowserDirectiveName",
     # AST types
     "ParseDiagnostic",
     "Token",

@@ -2927,11 +2927,12 @@ def _vue_expression_reads_instance(value: str, *, handler: bool, allowed_names: 
     # as a free name.
     if _THIS_KEYWORD.search(value):
         return True
-    valid, references = analyze_browser_source(value, "statement" if handler else "expression")
+    analysis = analyze_browser_source(value, "statement" if handler else "expression")
     # An expression the analyzer cannot parse cannot be shown to be safe.
-    if not valid:
+    if not analysis.valid:
         return True
-    for name, _start, _end in references:
+    for reference in analysis.references:
+        name = reference.name
         if name in _VUE_TEMPLATE_GLOBALS or name in allowed_names:
             continue
         # Vue gives an inline handler its event as `$event`, not from the instance.
