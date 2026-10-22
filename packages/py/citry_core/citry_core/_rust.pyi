@@ -577,8 +577,10 @@ class native_render:
             Returns None when the row is not plain data or is outside what Rust
             reproduces exactly; Python's evaluator then runs on the same
             variables and raises its own error when there is one. An error a
-            layout callback raises also gives None. A Rust panic raises
-            `RuntimeError`.
+            layout callback raises, or one raised while reading inside a
+            value, also gives None; an error raised while looking up a
+            variable itself (a key's ``__eq__``) propagates. A Rust panic
+            raises `RuntimeError`.
             """
 
     class _NativeRow:

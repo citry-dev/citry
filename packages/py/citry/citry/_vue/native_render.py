@@ -122,8 +122,15 @@ _decision = _decide(
     module=_module,
     env_value=os.environ.get(_ENV_NAME),
 )
-for _message in _decision.warnings:
-    warnings.warn(_message, RuntimeWarning, stacklevel=2)
+
+
+def _warn(decision: _Decision) -> None:
+    """Show each of the decision's warnings once, as a ``RuntimeWarning``."""
+    for message in decision.warnings:
+        warnings.warn(message, RuntimeWarning, stacklevel=3)
+
+
+_warn(_decision)
 
 SUPPORTED: bool = _decision.supported
 ACTIVE: bool = _decision.active

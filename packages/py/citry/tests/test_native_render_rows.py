@@ -246,6 +246,18 @@ def test_every_output_writes_the_same_bytes_on_both_paths(
     )
 
 
+@pytest.mark.qualification
+def test_a_board_of_1400_rows_writes_the_same_bytes_on_both_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The size the benchmark page measures; only the full profile runs it.
+    outputs = {label: OUTPUTS[label] for label in ("hydrated", "static")}
+    render_both(
+        lambda: serialize_all(build_board(make_rows(1400)), outputs),
+        monkeypatch,
+        rows_read=2800,
+        rows_rebuilt=1400,
+    )
+
+
 def test_one_render_serialized_twice_and_as_mixed_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
     def run() -> object:
         board = build_board(make_rows(14))
@@ -267,15 +279,15 @@ def test_one_render_serialized_twice_and_as_mixed_outputs(monkeypatch: pytest.Mo
 
 
 @pytest.mark.parametrize("in_root", [False, True], ids=["child_rows", "root_rows"])
-def test_development_mode_rebuilds_every_row(*, in_root: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_development_mode_keeps_rows_on_the_python_path(*, in_root: bool, monkeypatch: pytest.MonkeyPatch) -> None:
     # Development mode checks every element id the page writes, so the
-    # serializer writes the whole body, child components included, and
-    # needs every row's HTML even on a hydrated page.
+    # serializer needs every row's HTML even on a hydrated page. Reading
+    # the rows in Rust would only add work, so a development engine skips it.
     render_both(
         lambda: serialize_all(build_board(make_rows(14), in_root=in_root, mode="development"), {"hydrated": {}}),
         monkeypatch,
-        rows_read=14,
-        rows_rebuilt=14,
+        rows_read=0,
+        rows_rebuilt=0,
     )
 
 
@@ -755,6 +767,25 @@ def test_the_decision_covers_each_interpreter_and_setting(
     else:
         assert len(decision.warnings) == 1
         assert warns in decision.warnings[0]
+
+
+def test_each_decision_warning_is_shown_once() -> None:
+    decision = native_render._Decision(supported=False, active=False, warnings=("first", "second"))
+    with pytest.warns(RuntimeWarning) as caught:
+        native_render._warn(decision)
+    assert [str(item.message) for item in caught] == ["first", "second"]
+
+
+def test_a_description_rust_refuses_keeps_the_template_in_python(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A data key named "calls" would clash with the key assembly adds, so
+    # Rust refuses the plan and every row of the template stays in Python.
+    def refused(_node: LeafProgramNode) -> object:
+        return ((("text", "calls", ("c", "x")),), (), (), 32)
+
+    monkeypatch.setattr("citry._vue.leaf_program.native_row_plan_tuples", refused)
+    run = run_on_path(lambda: build_board(make_rows(3)).render().serialize(), monkeypatch, rust=True)
+    assert run.rows_read == 0
+    assert isinstance(run.result, str)
 
 
 def test_the_shipped_module_has_every_name_the_decision_checks() -> None:

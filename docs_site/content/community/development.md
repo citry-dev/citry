@@ -169,7 +169,8 @@ uv run pytest
 # Rust tests. List the crates with -p so cargo
 # skips Ruff's crates.
 cargo test -p citry_core_py -p citry_html_transform \
-           -p citry_i18n -p citry_template_formatter \
+           -p citry_i18n -p citry_native_render \
+           -p citry_template_formatter \
            -p citry_template_parser -p citry_vue_compiler \
            -p python_safe_eval
 

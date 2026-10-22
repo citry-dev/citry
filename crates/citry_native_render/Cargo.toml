@@ -10,9 +10,9 @@ license = { workspace = true }
 homepage = { workspace = true }
 documentation = { workspace = true }
 repository = { workspace = true }
-# The fixtures are only read by this crate's own tests, so the citry-core
-# source distribution leaves them out.
-exclude = ["tests/fixtures"]
+# Only this crate's own tests read the tests and their fixtures, so the
+# citry-core source distribution leaves them out.
+exclude = ["tests"]
 
 [lints]
 workspace = true

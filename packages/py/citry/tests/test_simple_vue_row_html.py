@@ -27,6 +27,10 @@ from citry._vue import leaf_program
 from citry._vue.serialization import hydration_admission
 from citry.citry_render import CitryRender, SimpleVueRecord
 
+# Every case runs on both render paths: the native (Rust) one and the Python
+# one that PyPy, Pyodide and free-threaded builds use.
+pytestmark = pytest.mark.usefixtures("render_path")
+
 # One row exercising the supported shapes: a c-bind spread on the root next
 # to an authored attribute, Python text and attribute values, c-if/c-else
 # and c-for inside the row, a raw-text element, and Vue-only bindings.

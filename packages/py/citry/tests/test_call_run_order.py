@@ -12,6 +12,8 @@ user callbacks and hooks, called the same number of times, in the same
 order, seeing the same execution frame, with the same error at the end. A
 change that reorders one row's callbacks, calls a hook once more, or loses
 part of an error chain fails here even when the HTML stays the same.
+Every case runs on both render paths (the ``render_path`` fixture): the
+native one, where Rust reads the rows, and the Python one.
 
 ``CASES`` names every case, says what it changes on the page, and gives a
 one-line summary of its record: the rows and child components whose data

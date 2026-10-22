@@ -15,6 +15,10 @@ import pytest
 from citry import Citry, Component, Extension, component_render
 from citry.component_like import ComponentLike
 
+# Every case runs on both render paths: the native (Rust) one and the Python
+# one that PyPy, Pyodide and free-threaded builds use.
+pytestmark = pytest.mark.usefixtures("render_path")
+
 
 def test_simple_vue_static_leaf_has_distinct_occurrences_and_component_js(monkeypatch: pytest.MonkeyPatch) -> None:
     app = Citry()

@@ -654,10 +654,17 @@ def _render_simple_vue_leaf(
         # same variables, raising today's error when there is one. Rows with
         # calls stay in Python because their children come from the Python
         # leaf; rows with js_data or css_data stay because assembly converts
-        # their browser data and root markers in Python.
+        # their browser data and root markers in Python. A development
+        # engine checks every element id the page writes, so its serializer
+        # needs every row's HTML and would rebuild each Rust-read row in
+        # Python; such rows stay on the Python path from the start.
         native = (
             leaf_node.read_native_row(variables)
-            if calls is None and not js_data and not css_data and _native_render.ACTIVE
+            if calls is None
+            and not js_data
+            and not css_data
+            and _native_render.ACTIVE
+            and component_class.citry.mode != "development"
             else None
         )
         leaf = (

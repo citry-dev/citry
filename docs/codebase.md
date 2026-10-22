@@ -26,6 +26,7 @@ citry/
 │   ├── citry_core_py/   # Main Rust crate exposed to Python
 │   ├── citry_html_transform/
 │   ├── citry_i18n/     # Language-neutral Fluent catalog runtime
+│   ├── citry_native_render/ # Rust half of the native render path
 │   ├── citry_vue_compiler/ # Native browser-template compilation
 │   ├── citry_template_formatter/
 │   ├── python_safe_eval/
@@ -221,7 +222,7 @@ pip install uv
    uv run pytest
 
    # Or run Rust tests first (scoped to our crates, see "Running tests" below)
-   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_native_render -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
    ```
 
 ## Common Development Tasks
@@ -306,10 +307,10 @@ would also run ruff's own test suite. CI scopes the run the same way
 uv run pytest
 
 # Rust tests (our crates only)
-cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_native_render -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval
 
 # Both (Rust first, then Python)
-cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_native_render -p citry_vue_compiler -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
 ```
 
 #### Browser end-to-end tests
@@ -476,6 +477,18 @@ Test fidelity comes first, but setup cost should match the boundary under test:
   when a cheaper test already covers the ordinary behavior. The fast profile
   omits that marker. The full profile runs it in a separate two-worker phase
   without coverage instrumentation, and the Python version matrix retains it.
+
+- Citry renders on two paths: the native (Rust) render path on standard
+  CPython and the Python path everywhere else
+  ([`native_render.md`](design/native_render.md)). Tests run on the native
+  path by default. A test of the Python evaluator's own internals asks for
+  the `python_render_path` fixture; a test that must hold on both paths
+  asks for `render_path`, or compares them with `render_both` from
+  `packages/py/citry/tests/_render_paths.py`. `pytest --python-render-path`
+  runs a whole session on the Python path, as the ubuntu / Python 3.10 CI
+  cell does; run it once locally before opening a pull request that
+  touches rendering. Set `CITRY_NATIVE_RENDER=0` to do the same outside
+  pytest.
 
 When a file becomes a load-balancing outlier under `--dist loadfile`, first
 remove avoidable waits and repeated setup. Split the file only when it still
@@ -1252,7 +1265,7 @@ only be uploaded through the web interface; there is no API for either.
 The top-level `Cargo.toml` defines a workspace that includes:
 
 - Core crates (`citry_core_py`, `citry_html_transform`, `citry_i18n`,
-  `citry_vue_compiler`,
+  `citry_native_render`, `citry_vue_compiler`,
   `citry_template_formatter`, `python_safe_eval`, `citry_template_parser`)
 - Shared dependencies and toolchain configuration
 - Unified linting, formatting, and testing

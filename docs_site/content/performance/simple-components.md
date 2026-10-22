@@ -238,6 +238,9 @@ applies, Citry renders `simple = "vue"` components the ordinary way:
 The page shows the same HTML and the data method still runs once per
 call; the component only loses its speed advantage.
 
+On standard CPython, Citry renders `simple = "vue"` rows faster still;
+see [Faster `simple = "vue"` rows on CPython](/performance/#faster-simple-vue-rows-on-cpython).
+
 ## Call other components
 
 A `simple = "vue"` template can call other components. Each child renders
