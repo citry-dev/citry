@@ -130,6 +130,12 @@
 - The render error for a component that `<c-for>` repeats without
   `#c-key`, or with a duplicate one, now names the tag, its template, and
   the line.
+- A server expression that reads a Vue `v-for` variable, such as
+  `c-name="member.name"` inside `<li v-for="member in members">`, now fails
+  with an error that names the tag, its template, and the line, says the
+  variable exists only in the browser, and shows the `<c-for>` that fixes
+  it, instead of a bare `KeyError`. It is still a `KeyError`, so an
+  existing `except KeyError` keeps catching it.
 - In `citry check --format json`, every finding's `range` now counts lines
   and columns from 0, with columns in UTF-16 code units, as the Language
   Server Protocol does. Syntax errors, unknown variables, unknown

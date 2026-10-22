@@ -63,6 +63,7 @@ from citry._vue.capture import (
     vue_render_active,
 )
 from citry._vue.direct import direct_render_scope
+from citry._vue_loop_errors import vue_loop_variable_error
 from citry.assets import _TEMPLATE_CACHE, load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement, _PreparedCallMetadata
@@ -2849,10 +2850,16 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
     The header names the lexical template class, which can be a simple class
     rendering under another component's ownership. Slot-fill content retains
     the source context of the component that wrote it.
+
+    One error is replaced rather than extended: a ``KeyError`` from a server
+    expression that reads a Vue ``v-for`` variable. This function then
+    raises a ``VueLoopVariableError`` that explains it, raised ``from err``,
+    so every caller's ``except`` block raises the clearer error. That check
+    also covers a ``<c-if>`` or ``<c-for>`` node, which has no ``position``
+    of its own and otherwise gets no snippet.
     """
     source = getattr(node, "source", None)
-    position = getattr(node, "position", None)
-    if not isinstance(source, str) or not isinstance(position, tuple) or len(position) != 2:
+    if not isinstance(source, str):
         return
     component = context.component
     component_name = type(component).__name__ if component is not None else None
@@ -2870,6 +2877,20 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
             template = None
         if template is not None:
             origin = template.origin
+    # A server expression that reads a Vue v-for variable fails as a bare
+    # missing key, so raise an error that says why and how to fix it. Only
+    # an error without a snippet yet is checked, so the innermost node that
+    # can explain it does, and the check itself confirms that the failed
+    # lookup is the name it blames.
+    if isinstance(err, KeyError) and not getattr(err, "_template_position", False):
+        found = vue_loop_variable_error(err, node, context.variables, origin)
+        if found is not None:
+            loop_error, loop_position = found
+            set_template_position_error_message(loop_error, source, loop_position, component_name, origin)
+            raise loop_error from err
+    position = getattr(node, "position", None)
+    if not isinstance(position, tuple) or len(position) != 2:
+        return
     set_template_position_error_message(err, source, position, component_name, origin)
 
 
