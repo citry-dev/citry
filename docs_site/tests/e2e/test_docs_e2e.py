@@ -558,7 +558,7 @@ def test_navigation_status_badges_and_review_hint_render(page: Any, docs_site_ur
     alpha_badge = page.locator('.djc-header__nav a[href="/ui-library/"] .djc-nav-badge')
     assert alpha_badge.inner_text() == "ALPHA"
 
-    review_link = page.locator('.djc-sidebar__link[aria-label*="final human review"]:visible').first
+    review_link = page.locator('.djc-sidebar__link[aria-label*="needs a final review"]:visible').first
     assert review_link.locator(".djc-sidebar__review-icon").inner_text() == "🚧"
     hint = review_link.locator(".djc-sidebar__review-hint")
     assert hint.evaluate("el => getComputedStyle(el).opacity") == "0"
@@ -593,7 +593,7 @@ def test_navigation_review_hint_stays_inside_resized_sidebar(page: Any, docs_sit
             el.style.height = '180px';
         }"""
     )
-    review_link = page.locator('.djc-sidebar__link[aria-label*="final human review"]:visible').first
+    review_link = page.locator('.djc-sidebar__link[aria-label*="needs a final review"]:visible').first
     hint = review_link.locator(".djc-sidebar__review-hint")
     review_link.hover()
     sidebar_scrollport = sidebar.evaluate(

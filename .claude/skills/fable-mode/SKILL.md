@@ -78,7 +78,7 @@ requires.
 
 ### Research / knowledge work
 - Gather sources before synthesizing; don't write as you search
-- For each claim that matters: what's the evidence? what would falsify it?
+- For each claim that matters: what's the evidence? what would disprove it?
 - Distinguish confirmed facts from inferences; flag the latter explicitly
 
 ### Data analysis

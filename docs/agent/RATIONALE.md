@@ -84,7 +84,7 @@ An exploration report reached a confident recommendation, including the claim
 that a certain mechanism "was not needed" because a fill's content "stays
 physically nested, so events bubble out natively." The final gate was a
 self-review: rereading the report as a skeptical reviewer would. It passed. It
-should not have. A common case falsifies the claim outright, and a separate
+should not have. A common case disproves the claim outright, and a separate
 agent briefed to break the report found it in one pass. The self-review missed
 it because the reviewer held the same assumption that produced the error;
 rereading cannot surface an assumption you never thought to question, while a
@@ -93,7 +93,8 @@ delegated to a separate agent, never self-administered, and a claim that a
 mechanism "is enough" or "is not needed" is a hypothesis until an edge case has
 tried to break it. The broader failure mode is the first one the industry
 notes below (stopping at the first plausible conclusion); an independent
-reviewer is the cheapest way to force the falsification that self-review skips.
+reviewer is the cheapest way to force a real attempt to disprove the claim,
+the step that self-review skips.
 
 ### A release watcher that waited for the slowest run
 
@@ -114,7 +115,7 @@ match the incidents above:
 - **Codebase exploration is the dominant failure mode.** Agents stop at the
   first plausible conclusion and design before fully verifying, especially near
   module or package boundaries. The prior-art header and plan-mode mechanisms
-  exist to force falsification before code lands.
+  exist to force an attempt to disprove the design before code lands.
 - **Agents reinvent conventions that are not written down.** When naming,
   layout, or contract rules live only in a maintainer's head, agents invent
   parallel vocabulary. Writing the conventions down (here and in

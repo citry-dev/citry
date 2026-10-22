@@ -95,8 +95,9 @@ is deterministic and side-effect-free for its template variables. Pure-body
 memoization lasts only for one root render and rebuilds fresh frames and IDs.
 It reuses safe strings and transparent control-flow structure while child,
 slot, component relationship, and i18n work remains live on every occurrence. The promise
-never inherits to a subclass. The contracts, keying, falsifiers, and measurements are in
-[`component_constness.md`](../design/component_constness.md) section 16.
+never inherits to a subclass. The contracts, the cache key, the experiment
+that enabled the cache on every benchmark component, and the measurements
+are in [`component_constness.md`](../design/component_constness.md) section 16.
 
 ### PyO3 binding contract
 
