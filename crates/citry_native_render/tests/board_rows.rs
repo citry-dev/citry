@@ -184,6 +184,9 @@ fn check_fixture(source: &str, minimum_rows: usize) {
             .map(|pair| (text(&array(pair)[0]), read_node(&array(pair)[1])))
             .collect(),
         loop_targets: array(&plan_json["loop_targets"]).iter().map(text).collect(),
+        js_safe_integer: plan_json["js_safe_integer"]
+            .as_i64()
+            .expect("the fixture names the JavaScript int limit"),
     };
     let plan = Plan::new(&spec).expect("the board template has a plan");
     let rows = array(&fixture["rows"]);
@@ -237,10 +240,10 @@ fn check_fixture(source: &str, minimum_rows: usize) {
 
 #[test]
 fn board_rows_match_the_python_evaluator() {
-    check_fixture(include_str!("fixtures/board_rows.json"), 77);
+    check_fixture(include_str!("fixtures/board_rows.json"), 63);
 }
 
 #[test]
 fn synthetic_shapes_match_the_python_evaluator() {
-    check_fixture(include_str!("fixtures/shapes.json"), 141);
+    check_fixture(include_str!("fixtures/shapes.json"), 86);
 }

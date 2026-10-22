@@ -114,6 +114,9 @@ class _BuiltInPreparationMetadata:
 
 @dataclass(frozen=True, slots=True)
 class _PreparedResult:
+    # The manifest. A row in ``native_rows`` holds only {"calls": {}} here
+    # until ``_manifest_json`` writes Rust's JSON for it, so serialize the
+    # payload with that function, never on its own.
     payload: dict[str, object]
     tags: dict[str, str] | None
     validate: Callable[[], None]

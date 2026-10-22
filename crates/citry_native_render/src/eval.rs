@@ -5,8 +5,9 @@
 //! `packages/py/citry/citry/_vue/leaf_program.py`):
 //! - a text is `str(value)`, and None shows as an empty text;
 //! - None and False leave an attribute out;
-//! - in an attribute, a float, or an int beyond plus or minus 2**53 - 1 (the
-//!   largest int JavaScript holds exactly), is sent as its Python text;
+//! - in an attribute, a float, or an int beyond the largest int JavaScript
+//!   holds exactly (which Python passes in, `PlanSpec::js_safe_integer`),
+//!   is sent as its Python text;
 //! - `c-if` stores the chosen branch's index, -1 when none matches;
 //! - `c-for` stores one record per item.
 
@@ -15,9 +16,6 @@ use std::fmt::Write as _;
 use crate::json::write_json_str;
 use crate::plan::{Base, Const, Expr, Op, PathRef, Plan, SpreadLayout, SpreadSource};
 use crate::value::Value;
-
-/// The largest int JavaScript reads exactly; Citry sends larger ints as text.
-const JS_SAFE_INTEGER: i64 = (1 << 53) - 1;
 
 /// A value evaluation met that the plan's checks should have excluded. It
 /// means the caller built a value tree that does not match the read set;
@@ -241,14 +239,19 @@ fn write_text(out: &mut String, value: Evaluated<'_, '_>) -> Result<(), EvalErro
 }
 
 /// Write a present attribute's value as Citry sends it to Vue: True, a str
-/// and a JavaScript-safe int unchanged, any other number as its text.
-fn write_attribute_value(out: &mut String, value: Evaluated<'_, '_>) -> Result<(), EvalError> {
+/// and an int JavaScript holds exactly (within `js_safe_integer`, which
+/// Python passes in) unchanged, any other number as its text.
+fn write_attribute_value(
+    out: &mut String,
+    value: Evaluated<'_, '_>,
+    js_safe_integer: i64,
+) -> Result<(), EvalError> {
     match value {
         Evaluated::Value(Value::Bool(true)) | Evaluated::Const(Const::Bool(true)) => {
             out.push_str("true");
         }
         Evaluated::Value(Value::Int(number))
-            if (-JS_SAFE_INTEGER..=JS_SAFE_INTEGER).contains(number) =>
+            if (-js_safe_integer..=js_safe_integer).contains(number) =>
         {
             write!(out, "{number}").expect("writing to a String cannot fail");
         }
@@ -279,7 +282,7 @@ fn write_entry(plan: &Plan, out: &mut String, entry: &Entry<'_, '_>) -> Result<(
                 }
                 write_json_str(out, name);
                 out.push(':');
-                write_attribute_value(out, *value)?;
+                write_attribute_value(out, *value, plan.js_safe_integer)?;
             }
             out.push('}');
         }
@@ -312,7 +315,7 @@ fn write_entry(plan: &Plan, out: &mut String, entry: &Entry<'_, '_>) -> Result<(
                 first = false;
                 write_json_str(out, name);
                 out.push(':');
-                write_attribute_value(out, value)?;
+                write_attribute_value(out, value, plan.js_safe_integer)?;
             }
             out.push('}');
         }

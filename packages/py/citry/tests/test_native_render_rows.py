@@ -37,6 +37,7 @@ from citry._vue.json_data import _copy_evaluated_json
 from citry._vue.leaf_program import LeafProgramNode, native_row_plan_tuples
 from citry._vue.serialization import _script_json
 from citry.citry_render import SimpleVueRecord
+from citry.component_like import ComponentLike
 from citry.component_render import _simple_vue_admission
 from citry.contrib.fastapi import mount
 from citry.secret import Secret
@@ -464,6 +465,7 @@ def _fault_data(name: str) -> Any:
             "int_beyond_i64": lambda: row.update(title=-(2**66), status=2**70),
             "int_past_digit_limit": lambda: row.update(title=10 ** (sys.get_int_max_str_digits() + 1)),
             "float_registered": lambda: row.update(title=1.5),
+            "float_registered_after_render": lambda: row.update(title=1.5),
             "onclick": lambda: attrs.update(onclick="alert(1)"),
             "style": lambda: attrs.update(style="color:red"),
             "case_collision": lambda: attrs.update(ID="upper"),
@@ -492,6 +494,10 @@ def fault_result(name: str) -> object:
         # which raises its shadowing error.
         board.engine.template_globals = {"dep": 1}
     rendered = board.render()
+    if name == "float_registered_after_render":
+        # Values the render accepted stay accepted when an output later
+        # rebuilds the rows, as Python's own leaf keeps them.
+        ComponentLike.register(float)
     if name == "mutated_after_render":
         # The output must keep the values each row had when it rendered.
         for row in rows:
@@ -580,7 +586,11 @@ def test_a_lone_surrogate_in_a_template_key_is_handed_back(monkeypatch: pytest.M
 
 # The cases that register a type with ComponentLike, which lasts for the
 # rest of the process, so each runs in a fresh interpreter.
-_OWN_PROCESS_FAULTS = {"component_like_str": "str", "component_like_float": "float"}
+_OWN_PROCESS_FAULTS = {
+    "component_like_str": "str",
+    "component_like_float": "float",
+    "component_like_float_after_render": "none",
+}
 
 
 def _fault_in_own_process(name: str, *, rust: bool) -> object:
@@ -592,13 +602,14 @@ from citry.component_like import ComponentLike
 from tests._render_paths import run_on_path
 from tests.test_native_render_rows import fault_or_error
 
-ComponentLike.register({"str": str, "float": float}[sys.argv[2]])
+if sys.argv[2] != "none":
+    ComponentLike.register({"str": str, "float": float}[sys.argv[2]])
 with pytest.MonkeyPatch.context() as patch:
     run = run_on_path(lambda: fault_or_error(sys.argv[1]), patch, rust=sys.argv[3] == "rust")
 print(json.dumps([run.result, run.rows_read]))
 """
     kind = _OWN_PROCESS_FAULTS[name]
-    fault = "float_registered" if kind == "float" else "plain"
+    fault = {"float": "float_registered", "none": "float_registered_after_render"}.get(kind, "plain")
     result = subprocess.run(
         # The last argument puts the repository root on the path, for `scripts`.
         [sys.executable, "-c", script, fault, kind, "rust" if rust else "python", str(Path(__file__).parents[4])],
@@ -622,7 +633,8 @@ def test_component_like_registration_gives_the_same_result_on_both_paths(name: s
     # A registered float makes row FAULT_ROW's float a component value:
     # Rust declines the row and Python's check fails the render there. A
     # registered str breaks the page before any row renders.
-    assert rust_rows == (FAULT_ROW if name == "component_like_float" else 0)
+    expected = {"component_like_float": FAULT_ROW, "component_like_float_after_render": 40}
+    assert rust_rows == expected.get(name, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -781,7 +793,7 @@ def test_a_description_rust_refuses_keeps_the_template_in_python(monkeypatch: py
     # A data key named "calls" would clash with the key assembly adds, so
     # Rust refuses the plan and every row of the template stays in Python.
     def refused(_node: LeafProgramNode) -> object:
-        return ((("text", "calls", ("c", "x")),), (), (), 32)
+        return ((("text", "calls", ("c", "x")),), (), (), 32, 2**53 - 1)
 
     monkeypatch.setattr("citry._vue.leaf_program.native_row_plan_tuples", refused)
     run = run_on_path(lambda: build_board(make_rows(3)).render().serialize(), monkeypatch, rust=True)

@@ -665,6 +665,7 @@ impl RowPlan {
         roots: &Bound<'_, PyAny>,
         loop_targets: &Bound<'_, PyAny>,
         spread_limit: usize,
+        js_safe_integer: i64,
     ) -> PyResult<Self> {
         let mut callbacks = Vec::new();
         let ops = lower_ops(ops, &mut callbacks)?;
@@ -677,6 +678,7 @@ impl RowPlan {
             ops,
             roots: root_specs,
             loop_targets: string_items(loop_targets)?,
+            js_safe_integer,
         };
         let plan = Plan::new(&spec).map_err(|error| plan_error(error.0))?;
         if plan.spread_count() != callbacks.len() {
@@ -721,8 +723,8 @@ impl RowPlan {
 #[pymethods]
 impl RowPlan {
     /// Build a plan from `native_row_plan_tuples(node)`: the operations, the
-    /// read set's roots, the loop targets, and how many root `c-bind` key
-    /// sets to keep.
+    /// read set's roots, the loop targets, how many root `c-bind` key sets
+    /// to keep, and the largest int an attribute sends as a number.
     ///
     /// **Raises**
     ///
@@ -735,10 +737,11 @@ impl RowPlan {
         roots: &Bound<'_, PyAny>,
         loop_targets: &Bound<'_, PyAny>,
         spread_limit: usize,
+        js_safe_integer: i64,
     ) -> PyResult<Self> {
         // A panic would otherwise raise PanicException, a BaseException that
         // escapes the caller's `except ValueError`.
-        without_panics(|| Self::build(py, ops, roots, loop_targets, spread_limit))
+        without_panics(|| Self::build(py, ops, roots, loop_targets, spread_limit, js_safe_integer))
     }
 
     /// Let Python's garbage collector see the layout callbacks. Each one
@@ -891,6 +894,9 @@ fn item_str<'a>(value: &'a Bound<'_, PyAny>, name: &str) -> PyResult<&'a str> {
         .cast::<PyString>()
         .map_err(|_| occurrence_error(&format!("{name} is not a str")))?
         .to_str()
+        // A lone surrogate has no UTF-8 form; report it like any other
+        // malformed item rather than as a UnicodeEncodeError.
+        .map_err(|_| occurrence_error(&format!("{name} has no UTF-8 form")))
 }
 
 fn is_empty_dict(value: &Bound<'_, PyAny>) -> bool {
@@ -1024,23 +1030,29 @@ pub struct RunDigests {
 #[pymethods]
 impl RunDigests {
     #[new]
-    fn new(placement_prefix_json: &str, child_prefix_json: &str) -> Self {
-        RunDigests {
-            placement: DigestPrefix::new(placement_prefix_json),
-            child: DigestPrefix::new(child_prefix_json),
-        }
+    fn new(placement_prefix_json: &str, child_prefix_json: &str) -> PyResult<Self> {
+        without_panics(|| {
+            Ok(RunDigests {
+                placement: DigestPrefix::new(placement_prefix_json),
+                child: DigestPrefix::new(child_prefix_json),
+            })
+        })
     }
 
     /// Return `(placement_key, child_id)` for a row with explicit key `key`,
     /// or None when the key has no UTF-8 form (a lone surrogate), which
     /// Python then hashes itself.
-    fn member_ids(&self, key: &Bound<'_, PyString>) -> Option<(String, String)> {
-        let key = key.to_str().ok()?;
-        let placement_digest = self.placement.explicit_key(key);
-        let placement_key = format!("citryPlacement{}", &placement_digest[..24]);
-        let child_digest = self.child.string(&placement_key);
-        let child_id = format!("citryOccurrence{}", &child_digest[..24]);
-        Some((placement_key, child_id))
+    fn member_ids(&self, key: &Bound<'_, PyString>) -> PyResult<Option<(String, String)>> {
+        without_panics(|| {
+            let Ok(key) = key.to_str() else {
+                return Ok(None);
+            };
+            let placement_digest = self.placement.explicit_key(key);
+            let placement_key = format!("citryPlacement{}", &placement_digest[..24]);
+            let child_digest = self.child.string(&placement_key);
+            let child_id = format!("citryOccurrence{}", &child_digest[..24]);
+            Ok(Some((placement_key, child_id)))
+        })
     }
 }
 

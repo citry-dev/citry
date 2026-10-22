@@ -80,14 +80,17 @@ ordinary components too, from the same leading JSON text Python's
 `_DigestPrefix` hashes. A key with no UTF-8 form (a lone surrogate) gets
 its ids from Python, inside a run whose other ids come from Rust.
 
-Python owns every rule. Rust receives the template's operations and the
-paths it reads as plain tuples built from the same structures the Python
-evaluator is built from (`native_row_plan_tuples` in
+Python owns every rule it can pass in. Rust receives the template's
+operations and the paths it reads as plain tuples built from the same
+structures the Python evaluator is built from (`native_row_plan_tuples` in
 `citry/_vue/leaf_program.py`), asks Python through a callback for the
 layout of each new root `c-bind` key set (how its keys merge with the
 element's own attributes), and is told the size of
-Python's layout cache. Nothing in the Rust crate copies a Python
-constant.
+Python's layout cache and the largest int an attribute sends as a number.
+The fixed text of the manifest format (the `"calls"` key, the
+`"explicit"` id tag) and the value rules (how a text or attribute value
+is written) are locked by fixtures that `scripts/native_render_fixtures.py`
+writes from Python.
 
 ## 2. When Rust runs
 
@@ -170,7 +173,14 @@ Accepted differences, none of which changes output:
   built-in tag callback, which gives the same answer for every row.
 - A Rust-read row's record and occurrence carry private fields
   (`native`, `_leaf_node`, `_native`) that are not part of their
-  equality.
+  equality. A record still compares its leaf, which a Rust-read record
+  builds on first read, so its equality to a copy can change then.
+  Nothing in Citry compares records.
+- The call-run tag lookup skipped for later rows also skips the built-in
+  metadata check that a component class was swapped in the middle of one
+  assembly; such a swap then fails on the registry identity check instead,
+  with a different message. Only another thread replacing a class during
+  serialize can cause it.
 
 ## 5. Where the code lives
 
@@ -198,7 +208,9 @@ Accepted differences, none of which changes output:
   internals. Both live in `packages/py/citry/tests/conftest.py`.
 - `pytest --python-render-path` runs a whole session on the Python path,
   except the tests that ask for `render_path` or call `render_both`,
-  which still run both.
+  which still run both. `packages/py/citry/tests/conftest.py` defines the
+  option, so the run must include that directory; a run from the
+  repository root does.
   The ubuntu / Python 3.10 cell of `py--tests.yml` uses it, because no CI
   job runs the suite on PyPy, Pyodide or free-threaded builds.
 - `tests/test_call_run_order.py` locks the order of user callbacks and

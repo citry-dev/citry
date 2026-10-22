@@ -56,7 +56,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from html import unescape
 from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
@@ -254,9 +254,11 @@ class SimpleVueRecord:
     # rebuild its Python leaf; both None for a row Python evaluated. A
     # hydrated or client-mounted page writes the row's data from ``native``
     # alone, unless the serializer also writes the HTML of the frame that
-    # holds the row (see ``docs/design/native_render.md``).
-    native: Any = None
-    _leaf_node: LeafProgramNode | None = None
+    # holds the row (see ``docs/design/native_render.md``). Neither takes
+    # part in equality or repr: they say how the row was evaluated, not what
+    # it holds.
+    native: Any = field(default=None, compare=False, repr=False)
+    _leaf_node: LeafProgramNode | None = field(default=None, compare=False, repr=False)
 
     @property
     def leaf(self) -> PreparedLeafProgram:

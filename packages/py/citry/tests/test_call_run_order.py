@@ -82,6 +82,7 @@ import pytest
 
 from citry import Citry, Component, ComponentLike
 from citry._vue import direct
+from citry._vue.leaf_program import LeafProgramNode
 from citry._vue.serialization import hydration_admission
 from citry.extension import Extension
 from citry.util.html import Markup
@@ -1176,10 +1177,41 @@ def test_every_case_has_a_locked_record() -> None:
     assert list(EXPECTED) == list(CASES)
 
 
+# Cases whose rows never reach the native row read: no rows, an error
+# before the first row, rows with browser data or a data schema Rust leaves
+# to Python, rows that call children, and a traced input fault.
+_NO_NATIVE_ROWS = {
+    "empty_loop",
+    "too_deep",
+    "data_schemas",
+    "rows_call_child",
+    "child_of_row_raises",
+    "run_in_slot_fill_rows_call_child",
+    "traced_input_fault",
+}
+
+
 @pytest.mark.parametrize("case", [case for case in CASES if case not in _OWN_PROCESS_CASES])
-def test_render_calls_user_code_and_hooks_in_the_locked_order(case: str, render_path: str) -> None:
-    del render_path  # the fixture switches the render path
+def test_render_calls_user_code_and_hooks_in_the_locked_order(
+    case: str, render_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Count the rows Rust reads, so the Rust case cannot pass by quietly
+    # taking the Python path.
+    read = LeafProgramNode.read_native_row
+    rows_read: list[object] = []
+
+    def counting_read(self: LeafProgramNode, variables: dict[str, object]) -> object:
+        row = read(self, variables)
+        if row is not None:
+            rows_read.append(row)
+        return row
+
+    monkeypatch.setattr(LeafProgramNode, "read_native_row", counting_read)
     _assert_matches(case, _run_case(case))
+    if render_path == "python" or case in _NO_NATIVE_ROWS:
+        assert rows_read == []
+    else:
+        assert rows_read
 
 
 @pytest.mark.parametrize("case", sorted(_OWN_PROCESS_CASES))

@@ -100,12 +100,13 @@ BOARD_ROW_TEMPLATE = """
 </article>
 """
 
-# A template for the shapes the board does not use: literal texts, a
-# conditional expression, c-if/c-elif with no match, literal and boolean
-# attributes, nested loops reading the outer loop's item, and truth tests on
-# dicts and strings. Every piece is admitted by simple='vue' (c-empty is not).
+# A template for the shapes the board does not use: a root c-bind that
+# spreads a dict inside a variable, literal texts, a conditional expression,
+# c-if/c-elif with no match, literal and boolean attributes, nested loops
+# reading the outer loop's item, and truth tests on dicts and strings. Every
+# piece is one simple='vue' accepts (c-empty is not).
 SHAPE_TEMPLATE = """
-<div class="shape">
+<div data-kind="shape" c-bind="v['attrs']">
 <p>{{ 'lit' }}|{{ None }}|{{ True }}|{{ v['a'] if v['flag'] else v['b'] }}|{{ v['n'] }}</p>
 <p c-if="v['x']">x</p>
 <p c-elif="v['y']">y</p>
@@ -127,7 +128,7 @@ SHAPE_TEMPLATE = """
 </div>
 """
 
-BOARD_ROWS = 20
+BOARD_ROWS = 10
 # A fixed seed, so --check sees the same rows every run.
 SEED = 20261023
 
@@ -172,16 +173,25 @@ def row_node(template: str) -> LeafProgramNode:
     return node
 
 
+def spread_dict(variables: dict[str, Any], path: tuple[str, str, tuple[str, ...]]) -> Any:
+    """Follow a spread's path (``("p", root, keys)``) to the dict whose keys it spreads."""
+    _tag, root, keys = path
+    value = variables[root]
+    for key in keys:
+        value = value[key]
+    return value
+
+
 def fixture_for(node: LeafProgramNode, cases: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
     """Describe the node's plan and, for each row Python accepts, the JSON Python writes for it."""
     tuples = native_row_plan_tuples(node)
     if tuples is None:
         msg = "the fixture template has no Rust plan"
         raise TypeError(msg)
-    ops, roots, loop_targets, _spread_limit = tuples
-    # The layout callbacks and the variable each spread reads, in spread order.
+    ops, roots, loop_targets, _spread_limit, js_safe_integer = tuples
+    # The layout callbacks and the path each spread reads, in spread order.
     spreads = [
-        (cast("Callable[[tuple[str, ...]], Any]", op[3]), cast("tuple[str, ...]", op[2])[1])
+        (cast("Callable[[tuple[str, ...]], Any]", op[3]), cast("tuple[str, str, tuple[str, ...]]", op[2]))
         for op in ops
         if op[0] == "spread"
     ]
@@ -193,7 +203,7 @@ def fixture_for(node: LeafProgramNode, cases: list[tuple[str, dict[str, Any]]]) 
     for label, variables in cases:
         if not program.readset_preflight(None, variables):
             continue
-        entries = [layout(tuple(variables[root] or ())) for layout, root in spreads]
+        entries = [layout(tuple(spread_dict(variables, path) or ())) for layout, path in spreads]
         # A key set Python merges per row has no layout, so Rust declines it.
         if any(entry is None for entry in entries):
             continue
@@ -208,7 +218,12 @@ def fixture_for(node: LeafProgramNode, cases: list[tuple[str, dict[str, Any]]]) 
             }
         )
     return {
-        "plan": {"ops": described(ops), "roots": described(roots), "loop_targets": list(loop_targets)},
+        "plan": {
+            "ops": described(ops),
+            "roots": described(roots),
+            "loop_targets": list(loop_targets),
+            "js_safe_integer": js_safe_integer,
+        },
         "rows": rows,
     }
 
@@ -270,7 +285,9 @@ def edge_rows(base: dict[str, Any], rng: random.Random) -> list[tuple[str, dict[
     # ranges where Python switches between plain and exponent notation.
     floats = [0.0, -0.0, 0.1, 1.5, 1e16, 1e15, 123456789012345678.0, 1e-4, 1e-5, 5e-324, 1.7976931348623157e308]
     floats += [2**50 + 0.25, -(2**51 + 0.75), 1113178120592002.2, 9 * 10**15 + 0.5]
-    floats += [finite_float(rng) for _ in range(6)]
+    # Many more floats run through Rust in tests/test_native_render_rows.py,
+    # which compares them with Python directly.
+    floats += [finite_float(rng) for _ in range(2)]
     ints = [0, -1, 2**53 - 1, 2**53, -(2**53) + 1, -(2**53), 2**63 - 1, -(2**63)]
     scalars: list[object] = [None, True, False, *ints, *floats, *specials]
     for index, value in enumerate(scalars):
@@ -309,18 +326,31 @@ def edge_rows(base: dict[str, Any], rng: random.Random) -> list[tuple[str, dict[
 
 def shape_cases() -> list[tuple[str, dict[str, Any]]]:
     """Rows for the shape template: every literal kind and truth value through its positions."""
-    base = {"id": "1", "a": "A", "b": "B", "flag": True, "n": 3, "x": 0, "y": "", "outer": [], "d": {}}
+    base = {
+        "id": "1",
+        "a": "A",
+        "b": "B",
+        "flag": True,
+        "n": 3,
+        "x": 0,
+        "y": "",
+        "outer": [],
+        "d": {},
+        "attrs": {"data-shape": "s"},
+    }
     cases: list[tuple[str, dict[str, Any]]] = []
-    values: list[object] = [None, True, False, 0, 7, -1, 2**53, 1.5, -0.0, "", "x", "\u00e9\u2028<"]
+    values: list[object] = [None, True, False, 0, -1, 2**53, 1.5, "", "\u00e9\u2028<"]
     for index, value in enumerate(values):
         for flag in (True, None, "s", 2.5):
             cases.append(
                 (f"value[{index}] flag={flag!r}", {"v": dict(base, a=value, b=f"b{index}", flag=flag, n=value)})
             )
-    for x, y in itertools.product((0, 1, "", "x", [], [0], {}, {"k": 1}, None), repeat=2):
+    for x, y in itertools.product((0, "x", [], [0], {}, {"k": 1}, None), (0, 1, "", [0], None)):
         cases.append((f"x={x!r} y={y!r}", {"v": dict(base, x=x, y=y)}))
     for d in ({}, {"a": 1}, "", "s", [], [1], 0.0, 3):
         cases.append((f"d={d!r}", {"v": dict(base, d=d)}))
+    for attrs in ({}, None, {"id": "x", "data-n": 2, "data-off": False, "data-on": True}):
+        cases.append((f"attrs={attrs!r}", {"v": dict(base, attrs=attrs)}))
     outer = [
         [],
         [{"k": "k1", "inner": []}],

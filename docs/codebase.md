@@ -486,9 +486,10 @@ Test fidelity comes first, but setup cost should match the boundary under test:
   `packages/py/citry/tests/_render_paths.py`. `pytest --python-render-path`
   runs a whole session on the Python path (tests that ask for
   `render_path` or call `render_both` still run both), as the ubuntu /
-  Python 3.10 CI cell does; run it once locally before opening a pull request that
-  touches rendering. Set `CITRY_NATIVE_RENDER=0` to do the same outside
-  pytest.
+  Python 3.10 CI cell does. Run it once locally before opening a pull
+  request that touches rendering. The option exists only when the run
+  includes `packages/py/citry/tests`, as a run from the repository root
+  does. Set `CITRY_NATIVE_RENDER=0` to do the same outside pytest.
 
 When a file becomes a load-balancing outlier under `--dist loadfile`, first
 remove avoidable waits and repeated setup. Split the file only when it still

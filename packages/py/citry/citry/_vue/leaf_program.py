@@ -2298,25 +2298,28 @@ def _native_row_read_node(node: _SimpleJsonReadNode) -> tuple[object, ...]:
 
 
 # What ``native_row_plan_tuples`` returns: the described operations, the
-# read set's roots, the loop targets and the spread limit, the four
-# arguments of ``_RowPlan``.
+# read set's roots, the loop targets, the spread limit and the largest int
+# an attribute sends as a number, the five arguments of ``_RowPlan``.
 NativeRowPlanTuples: TypeAlias = tuple[
     tuple[tuple[object, ...], ...],
     tuple[tuple[str, tuple[object, ...]], ...],
     tuple[str, ...],
+    int,
     int,
 ]
 
 
 def native_row_plan_tuples(node: LeafProgramNode) -> NativeRowPlanTuples | None:
     """
-    Return (operations, read-set roots, loop targets, spread limit) for Rust, or None when there is no plan.
+    Return the five arguments of Rust's ``_RowPlan``, or None when there is no plan.
 
     The operations and read set are built exactly as the generated evaluator
     builds its own (``_compute_static_instance_free_template_supported``), so
     Rust checks and evaluates what that evaluator would. The spread limit is
     read from ``_ROOT_SPREAD_PLAN_LIMIT`` when the plan is built, so Rust
-    keeps as many root ``c-bind`` key sets as Python's own cache does.
+    keeps as many root ``c-bind`` key sets as Python's own cache does, and
+    the int limit is ``_JS_SAFE_INTEGER``, the one Python's attribute values
+    use.
     """
     if node.fragment.calls or not node.static_instance_free_template_supported():
         return None
@@ -2328,7 +2331,7 @@ def native_row_plan_tuples(node: LeafProgramNode) -> NativeRowPlanTuples | None:
         return None
     read_set = _simple_json_read_set(simple_operations)
     roots = tuple((name, _native_row_read_node(child)) for name, child in read_set.roots)
-    return (described, roots, read_set.loop_targets, _ROOT_SPREAD_PLAN_LIMIT)
+    return (described, roots, read_set.loop_targets, _ROOT_SPREAD_PLAN_LIMIT, _JS_SAFE_INTEGER)
 
 
 class LeafProgramNode(Node):

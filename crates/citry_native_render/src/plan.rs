@@ -115,6 +115,9 @@ pub struct PlanSpec {
     /// Every loop target; a template variable with one of these names makes
     /// the row ineligible, as Python's check does.
     pub loop_targets: Vec<String>,
+    /// The largest int JavaScript holds exactly (Python's `_JS_SAFE_INTEGER`);
+    /// an attribute int beyond it, either way, is sent as text.
+    pub js_safe_integer: i64,
 }
 
 /// A description Rust cannot evaluate exactly, so the template keeps the
@@ -204,6 +207,8 @@ pub struct Plan {
     pub(crate) calls_rank: u32,
     /// The path each root `c-bind` spreads, in spread order.
     pub(crate) spreads: Vec<PathRef>,
+    /// See [`PlanSpec::js_safe_integer`].
+    pub(crate) js_safe_integer: i64,
 }
 
 /// The value-independent layout of one root `c-bind` key set.
@@ -550,6 +555,7 @@ impl Plan {
             keys,
             calls_rank,
             spreads,
+            js_safe_integer: spec.js_safe_integer,
         })
     }
 
@@ -575,6 +581,6 @@ impl Plan {
         values: &'v [crate::Value],
         index: usize,
     ) -> Option<&'v crate::Value> {
-        crate::eval::resolve_root(values, &self.spreads[index])
+        crate::eval::resolve_root(values, self.spreads.get(index)?)
     }
 }

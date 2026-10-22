@@ -563,6 +563,7 @@ class native_render:
             roots: tuple[tuple[str, tuple[object, ...]], ...],
             loop_targets: tuple[str, ...],
             spread_limit: int,
+            js_safe_integer: int,
         ) -> native_render._RowPlan:
             """
             Build a plan from ``native_row_plan_tuples(node)``.
