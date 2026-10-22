@@ -119,8 +119,8 @@ a React app, which sends each click to a Python backend.
 ### Where Citry stands { #errors-where-citry-stands }
 
 - **Before the app runs: 54 of 61** (47 errors, 7 warnings),
-  measured with Citry's code from after the 0.6.0 release. The 0.6.0
-  release itself catches 29 of 61 (see
+  measured with the code that ships as Citry 0.6.1, before its
+  release. Citry 0.6.0 catches 29 of 61 (see
   [How we measured](#errors-how-we-measured)). Two of the 63 mistakes
   don't apply to Citry. Next.js 45 of 57, Nuxt 39 of
   58, Reflex 38 of 54, ReactPy 24 of 56, FastHTML 20 of 48, django-unicorn 12 of 55,
@@ -186,8 +186,8 @@ a React app, which sends each click to a Python backend.
 - **Which Citry**: Citry and its language server, citry-lsp, built from
   the repository at commit
   [bf935bc](https://github.com/citry-dev/citry/tree/bf935bc77fc3e868cb7c3915035c32f0ab7147ff),
-  a commit made after the 0.6.0 release, with citry-core 1.8.0 from
-  PyPI. The run's report names a later commit that changed only the
+  the code that ships as Citry 0.6.1, measured before its release,
+  with citry-core 1.8.0 from PyPI. The run's report names a later commit that changed only the
   benchmark, so the Citry code is the same. Citry 0.6.0, the release
   before that commit, reports 29 of the 61.
 - **Citry**: a FastAPI app that adds Citry's routes with
