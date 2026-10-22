@@ -53,6 +53,7 @@ from citry.citry_render import (
     SerializedSecurity,
     SimpleVueRecord,
 )
+from citry.ext.dependencies.emission import SERIALIZATION_NOTE_KEYS
 from citry.settings import (
     SecurityCspMode,
     SecurityJavascriptMode,
@@ -517,6 +518,48 @@ def serialize_render_result(
     ssr: bool | None = None,
 ) -> SerializedRender:
     """Serialize a render tree and return its HTML and security metadata."""
+    # The Vue serialization step leaves notes in the root context's extra for
+    # the dependency emitter later in the same call. A CitryRender can be
+    # serialized more than once, so each call starts without them: a note
+    # left by an earlier interactive call would make a deps_strategy="simple"
+    # call leave out every script and stylesheet. An extension's on_serialize
+    # hook may also serialize the same render inside this call, so when this
+    # call finishes, restore the notes that were there when it started: an
+    # outer call is still reading them.
+    extra = root.context.extra
+    outer_notes = {key: extra.pop(key) for key in SERIALIZATION_NOTE_KEYS if key in extra}
+    try:
+        return _serialize_render_result(
+            root,
+            deps_strategy=deps_strategy,
+            deps_position=deps_position,
+            csp_nonce=csp_nonce,
+            security_csp=security_csp,
+            security_javascript=security_javascript,
+            security_script_integrity=security_script_integrity,
+            ssr=ssr,
+        )
+    finally:
+        for key in SERIALIZATION_NOTE_KEYS:
+            extra.pop(key, None)
+        extra.update(outer_notes)
+
+
+def _serialize_render_result(
+    root: CitryRender,
+    *,
+    deps_strategy: DepsStrategy,
+    deps_position: DepsPosition,
+    csp_nonce: str | None,
+    security_csp: SecurityCspMode | None,
+    security_javascript: SecurityJavascriptMode | None,
+    security_script_integrity: SecurityScriptIntegrityMode | None,
+    ssr: bool | None,
+) -> SerializedRender:
+    """
+    Serialize a render tree; ``serialize_render_result`` clears and restores
+    the per-call notes in ``extra`` around this body.
+    """
     if deps_strategy not in _DEPS_STRATEGIES:
         msg = f"Invalid deps_strategy {deps_strategy!r}; must be one of {_DEPS_STRATEGIES}"
         raise ValueError(msg)
