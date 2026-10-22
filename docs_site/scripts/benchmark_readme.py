@@ -1,18 +1,23 @@
 """
-Write and check the benchmark chart block in the repository README.
+Write and check the benchmark chart blocks in the repository README.
 
-The README shows the error benchmark chart as a PNG, because GitHub and PyPI
-show a README without the docs site's stylesheet, so the chart's HTML would
-not draw. ``docs_site/scripts/benchmark_images.py``
-takes the screenshots; this module decides what the README says around them:
-the heading, one sentence, the image links, and the alt text that lists every
-framework's count for readers who cannot see the image.
+The README shows two benchmark charts as PNGs, because GitHub and PyPI show a
+README without the docs site's stylesheet, so the charts' HTML would not draw:
+the error chart (how early each framework reports the same mistakes) and the
+speed chart (how long the same page takes to become usable).
+``docs_site/scripts/benchmark_images.py`` takes the screenshots; this module
+decides what the README says around them: the heading, the sentences from
+the landing page's card, the image links, and the alt text that lists every
+framework's number for readers who cannot see the image.
 
-Everything here is computed from ``docs_site/data/error_prevention.json``, so
-the README and the docs site's charts tell the same story. The
-``readme_benchmark_charts`` validator rebuilds the block with these functions
-and fails when the README no longer matches the data, for example after a new
-benchmark run, until someone reruns the image script.
+Everything here is computed from the two data files the docs site draws,
+``docs_site/data/error_prevention.json`` and
+``docs_site/data/benchmark_time_to_interactive.json``, so the README and the
+docs site's charts tell the same story. The landing page shows the same
+sentences through ``<c-benchmark-text>``, which calls the functions here. The
+``readme_benchmark_charts`` validator rebuilds each block with these
+functions and fails when the README no longer matches the data, for example
+after a new benchmark run, until someone reruns the image script.
 
 This module uses only the standard library, because the validator loads it
 by file path, where the ``docs_site`` package and the docs dependencies may
@@ -25,12 +30,16 @@ import hashlib
 import html
 import json
 import re
+import textwrap
 from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 README_PATH = REPO_ROOT / "README.md"
+# The landing page repeats each README heading; the validator checks it there.
+LANDING_PATH = REPO_ROOT / "docs_site" / "content" / "index.md"
 DATA_PATH = REPO_ROOT / "docs_site" / "data" / "error_prevention.json"
+SPEED_DATA_PATH = REPO_ROOT / "docs_site" / "data" / "benchmark_time_to_interactive.json"
 
 # The images live on `main` for good: a release's PyPI page keeps loading the
 # file it was published with, so a file here is never overwritten or deleted.
@@ -39,11 +48,17 @@ ASSET_DIR = REPO_ROOT / "docs" / "assets" / "benchmarks"
 # not resolve, so the README links each image by its absolute URL.
 ASSET_URL = "https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks"
 DETAILS_URL = "https://citry.dev/about/benchmarks/#errors-how-we-measured"
+SPEED_DETAILS_URL = "https://citry.dev/about/benchmarks/#how-the-numbers-were-taken"
 
-# The block sits between these two comments. Both renderers hide comments, so
-# readers see only the block itself.
-START_MARKER = "<!-- benchmark-chart:errors start -->"
-END_MARKER = "<!-- benchmark-chart:errors end -->"
+# The README carries one block per chart, in this order. The name appears in
+# the block's marker comments and starts each of its image file names.
+CHARTS = ("errors", "speed")
+
+# Each block's heading, which the landing page's section repeats word for word.
+HEADINGS = {
+    "errors": "Catch mistakes early",
+    "speed": "As fast as Next.js",
+}
 
 # The README asks for this display width; the image script draws the chart at
 # the same width, twice as many pixels, so the text stays sharp.
@@ -63,12 +78,27 @@ _STATUSES = frozenset({"ported", "not-applicable", "prevented", "missing"})
 # name every framework the same way.
 SHORT_NAMES = {"django-components": "django-components"}
 
+# One line above the error chart tells a first-time reader which way is good
+# before they decode the legend's five colours.
+ERRORS_HINT = "More green = earlier feedback = better"
+
 # Which Citry each error benchmark run measured, as the README says it under
 # the chart. A released 0.6.0 reports far fewer mistakes before the app runs
 # than this run's code, so the README must not show the count without the
-# version. The landing page's error card repeats the same sentence.
+# version.
 VERSION_NOTES = {
     "20261021T182412Z": "Citry 0.6.1, measured before its release.",
+}
+
+# The speed chart shows the second page load: the first one includes work a
+# server does once, such as loading templates, which a visitor rarely waits for.
+SPEED_LOAD = "second"
+
+# Which Citry each speed benchmark report measured, and how many times, keyed
+# by the report id. The data file records neither in a form the README can
+# quote, so each report's note lives here.
+SPEED_VERSION_NOTES = {
+    "composed-70d4a8802900": "Citry 0.6.0, one run per framework.",
 }
 
 # A file name records the chart, the benchmark run it shows, the first
@@ -78,15 +108,40 @@ VERSION_NOTES = {
 HASH_LENGTH = 12
 THEMES = ("light", "dark")
 # The run id may hold hyphens: the error runner adds "-2" to a second run that
-# starts in the same second. The fixed-length hash and the theme at the end
+# starts in the same second, and a speed report id looks like
+# "composed-70d4a8802900". The fixed-length hash and the theme at the end
 # keep the name unambiguous.
 _RUN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")
-_NAME_RE = re.compile(r"errors-(?P<run>[A-Za-z0-9][A-Za-z0-9-]*)-(?P<hash>[0-9a-f]{12})-(?P<theme>light|dark)\.png")
+_NAME_RE = re.compile(
+    r"(?P<chart>errors|speed)-(?P<run>[A-Za-z0-9][A-Za-z0-9-]*)-(?P<hash>[0-9a-f]{12})-(?P<theme>light|dark)\.png"
+)
+
+# The README wraps its sentences at this width, so a diff of the block stays
+# readable.
+_WRAP = 72
 
 
-def load_data() -> dict[str, Any]:
-    """Read the error benchmark data file the docs site draws."""
-    return json.loads(DATA_PATH.read_text(encoding="utf-8"))
+def markers(chart: str) -> tuple[str, str]:
+    """
+    Return the comments that start and end one chart's README block.
+
+    Both renderers hide comments, so readers see only the block itself.
+    """
+    if chart not in CHARTS:
+        msg = f"Unknown README chart {chart!r}; use one of {list(CHARTS)}"
+        raise ValueError(msg)
+    return f"<!-- benchmark-chart:{chart} start -->", f"<!-- benchmark-chart:{chart} end -->"
+
+
+def load_data(chart: str = "errors") -> dict[str, Any]:
+    """Read the benchmark data file the docs site draws the given chart from."""
+    path = DATA_PATH if chart == "errors" else SPEED_DATA_PATH
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def run_id(chart: str, data: dict[str, Any]) -> str:
+    """Return the id of the benchmark run a chart's data comes from; image names start with it."""
+    return str(data["run"] if chart == "errors" else data["source"]["report_id"])
 
 
 def static_shares(data: dict[str, Any], *, short_names: bool = False) -> list[tuple[str, int, int]]:
@@ -159,24 +214,89 @@ def static_shares(data: dict[str, Any], *, short_names: bool = False) -> list[tu
 
 def version_note(data: dict[str, Any]) -> str:
     """
-    Return the sentence that says which Citry the README's error chart measured.
+    Return the sentence that says which Citry the error chart measured.
 
     The data file does not record the version, so each run's note lives in
     ``VERSION_NOTES``. A run without one raises ``ValueError``, so a new run
-    cannot reach the README under an old run's version.
+    cannot reach the README or the landing page under an old run's version.
     """
     try:
         return VERSION_NOTES[data["run"]]
     except KeyError:
         msg = (
             f"No version note for error benchmark run {data['run']}; add one to VERSION_NOTES in "
-            "docs_site/scripts/benchmark_readme.py, and update the note on the landing page's error card"
+            "docs_site/scripts/benchmark_readme.py"
         )
         raise ValueError(msg) from None
 
 
-def image_name(run: str, png: bytes, theme: str) -> str:
-    """Return the file name for one theme's PNG of the given benchmark run."""
+def errors_intro(data: dict[str, Any]) -> str:
+    """Return the sentence that introduces the error chart, with the counts from the data."""
+    return (
+        f"We built the same app in {len(data['frameworks'])} frameworks and made the same "
+        f"{len(data['mistakes'])} mistakes in each."
+    )
+
+
+def errors_note(data: dict[str, Any]) -> str:
+    """Return the note under the error chart: the Citry version and what each bar counts."""
+    return f"{version_note(data)} Each bar counts only the mistakes that apply to that framework."
+
+
+def format_ms(value: float) -> str:
+    """Return a time as whole milliseconds with a thousands separator, as the speed chart prints it."""
+    return f"{value:,.0f} ms"
+
+
+def speed_totals(data: dict[str, Any]) -> list[tuple[str, float]]:
+    """
+    Return each framework's name and total time on the README's page load, fastest first.
+
+    This is the order of the speed chart drawn with ``sort="total"``, so the
+    alt text reads the bars from top to bottom; equal totals keep the data
+    file's order. Raises ``ValueError`` when the data has no such load or the
+    load has no frameworks, since the chart could not draw either.
+    """
+    loads = {entry["id"]: entry for entry in data["loads"]}
+    if SPEED_LOAD not in loads:
+        msg = f"Speed benchmark data has no {SPEED_LOAD!r} load; it has {sorted(loads)}"
+        raise ValueError(msg)
+    frameworks = loads[SPEED_LOAD]["frameworks"]
+    if not frameworks:
+        msg = f"Speed benchmark load {SPEED_LOAD!r} has no frameworks to draw"
+        raise ValueError(msg)
+    # Python's sort is stable, so equal totals keep the data's order.
+    return sorted(((row["name"], row["total_ms"]) for row in frameworks), key=lambda row: row[1])
+
+
+def speed_intro(data: dict[str, Any]) -> str:
+    """Return the sentence that introduces the speed chart, with the page size from the data."""
+    entries = data["source"]["outputs"]
+    return f"Time until a page with {entries:,} entries is usable, the second time the server builds it."
+
+
+def speed_note(data: dict[str, Any]) -> str:
+    """
+    Return the note under the speed chart: the Citry version, the number of runs, and how to read the bars.
+
+    A report without an entry in ``SPEED_VERSION_NOTES`` raises
+    ``ValueError``, so a new report cannot appear under an old one's version.
+    """
+    report = data["source"]["report_id"]
+    try:
+        note = SPEED_VERSION_NOTES[report]
+    except KeyError:
+        msg = (
+            f"No version note for speed benchmark report {report}; add one to SPEED_VERSION_NOTES in "
+            "docs_site/scripts/benchmark_readme.py"
+        )
+        raise ValueError(msg) from None
+    return f"{note} Shorter is faster."
+
+
+def image_name(chart: str, run: str, png: bytes, theme: str) -> str:
+    """Return the file name for one theme's PNG of a chart drawn from the given benchmark run."""
+    markers(chart)
     if theme not in THEMES:
         msg = f"Unknown image theme {theme!r}; use one of {list(THEMES)}"
         raise ValueError(msg)
@@ -185,89 +305,113 @@ def image_name(run: str, png: bytes, theme: str) -> str:
         msg = f"Benchmark run id {run!r} must contain only letters, digits, and hyphens"
         raise ValueError(msg)
     digest = hashlib.sha256(png).hexdigest()[:HASH_LENGTH]
-    return f"errors-{run}-{digest}-{theme}.png"
+    return f"{chart}-{run}-{digest}-{theme}.png"
 
 
 def parse_image_name(name: str) -> dict[str, str] | None:
-    """Split an image file name into its run, hash, and theme, or return None if it is not one."""
+    """Split an image file name into its chart, run, hash, and theme, or return None if it is not one."""
     match = _NAME_RE.fullmatch(name)
     return match.groupdict() if match else None
 
 
-def readme_block(data: dict[str, Any], light_name: str, dark_name: str) -> str:
+def readme_block(chart: str, data: dict[str, Any], light_name: str, dark_name: str) -> str:
     """
-    Return the README block, markers included, for the given data and image files.
+    Return one chart's README block, markers included, for the given data and image files.
 
-    GitHub picks the dark image for a reader in dark mode. PyPI may ignore the
-    ``<source>``; each image carries its own background, so either works.
+    The block holds the heading, the intro, the image in both themes, and the
+    note with a link to the method. GitHub picks the dark image for a reader
+    in dark mode. PyPI may ignore the ``<source>``; each image carries its own
+    background, so either works.
     """
-    frameworks = len(data["frameworks"])
-    mistakes = len(data["mistakes"])
-    shares = static_shares(data, short_names=True)
-    counts = ", ".join(f"{name} {count} of {applicable}" for name, count, applicable in shares)
-    note = version_note(data)
-    alt = (
-        "Bar chart of how the mistakes that apply to each framework ended. "
-        f"Mistakes reported before the app runs: {counts}."
-    )
-    return "\n".join(
-        [
-            START_MARKER,
-            "<!-- Written by `python -m docs_site.scripts.benchmark_images` from",
-            "     docs_site/data/error_prevention.json. Rerun it rather than editing",
-            "     this block by hand. -->",
-            "",
-            "## Catch mistakes early",
-            "",
-            f"We built the same app in {frameworks} frameworks and made the same",
-            f"{mistakes} mistakes in each.",
-            "",
-            "<picture>",
-            "  <source",
-            '    media="(prefers-color-scheme: dark)"',
-            f'    srcset="{ASSET_URL}/{dark_name}"',
-            "  >",
-            "  <img",
-            f'    src="{ASSET_URL}/{light_name}"',
-            # A framework name with a quote in it must not end the attribute.
-            f'    alt="{html.escape(alt)}"',
-            f'    width="{IMAGE_WIDTH}"',
-            "  >",
-            "</picture>",
-            "",
-            f"{note} Each bar counts only the mistakes that apply to that framework.",
-            f"[How we measured]({DETAILS_URL})",
-            END_MARKER,
-        ],
-    )
+    if chart == "errors":
+        shares = static_shares(data, short_names=True)
+        counts = ", ".join(f"{name} {count} of {applicable}" for name, count, applicable in shares)
+        alt = (
+            "Bar chart of how the mistakes that apply to each framework ended. "
+            f"Mistakes reported before the app runs: {counts}."
+        )
+        # The hint sits between the intro and the image, as on the landing card.
+        paragraphs = [errors_intro(data), ERRORS_HINT]
+        note, details, source = errors_note(data), DETAILS_URL, DATA_PATH
+    else:
+        totals = ", ".join(f"{name} {format_ms(total)}" for name, total in speed_totals(data))
+        alt = f"Bar chart of the time until the page is usable, fastest first: {totals}."
+        paragraphs = [speed_intro(data)]
+        note, details, source = speed_note(data), SPEED_DETAILS_URL, SPEED_DATA_PATH
+    start, end = markers(chart)
+    lines = [
+        start,
+        "<!-- Written by `python -m docs_site.scripts.benchmark_images` from",
+        f"     {source.relative_to(REPO_ROOT).as_posix()}. Rerun it rather than",
+        "     editing this block by hand. -->",
+        "",
+        f"## {HEADINGS[chart]}",
+        "",
+    ]
+    for paragraph in paragraphs:
+        lines += [textwrap.fill(paragraph, _WRAP), ""]
+    lines += [
+        "<picture>",
+        "  <source",
+        '    media="(prefers-color-scheme: dark)"',
+        f'    srcset="{ASSET_URL}/{dark_name}"',
+        "  >",
+        "  <img",
+        f'    src="{ASSET_URL}/{light_name}"',
+        # A framework name with a quote in it must not end the attribute.
+        f'    alt="{html.escape(alt)}"',
+        f'    width="{IMAGE_WIDTH}"',
+        "  >",
+        "</picture>",
+        "",
+        textwrap.fill(note, _WRAP),
+        f"[How we measured]({details})",
+        end,
+    ]
+    return "\n".join(lines)
 
 
-def find_block(readme: str) -> tuple[int, int]:
+def check_data(chart: str, data: dict[str, Any]) -> None:
+    """Raise ``ValueError`` when a chart's data cannot be drawn, before any image is taken."""
+    if chart == "errors":
+        static_shares(data)
+        version_note(data)
+    else:
+        speed_totals(data)
+        speed_note(data)
+    run_id_value = run_id(chart, data)
+    if not _RUN_RE.fullmatch(run_id_value):
+        msg = f"Benchmark run id {run_id_value!r} must contain only letters, digits, and hyphens"
+        raise ValueError(msg)
+
+
+def find_block(readme: str, chart: str) -> tuple[int, int]:
     """
-    Return where the block starts and ends in the README text.
+    Return where one chart's block starts and ends in the README text.
 
     The start is the offset of the start marker and the end is the offset just
     past the end marker. A README with no block, or with more than one, raises
     ``ValueError`` naming the line, since the script would not know which
     block to rewrite.
     """
-    starts = [match.start() for match in re.finditer(re.escape(START_MARKER), readme)]
-    ends = [match.end() for match in re.finditer(re.escape(END_MARKER), readme)]
+    start_marker, end_marker = markers(chart)
+    starts = [match.start() for match in re.finditer(re.escape(start_marker), readme)]
+    ends = [match.end() for match in re.finditer(re.escape(end_marker), readme)]
     if len(starts) != 1 or len(ends) != 1:
         lines = sorted(readme.count("\n", 0, offset) + 1 for offset in starts + ends)
         where = f" (markers on lines {lines})" if lines else ""
-        msg = f"README needs exactly one {START_MARKER} ... {END_MARKER} pair{where}"
+        msg = f"README needs exactly one {start_marker} ... {end_marker} pair{where}"
         raise ValueError(msg)
     if ends[0] < starts[0]:
         line = readme.count("\n", 0, ends[0]) + 1
-        msg = f"README has the benchmark chart end marker on line {line}, before its start marker"
+        msg = f"README has the {chart} benchmark chart end marker on line {line}, before its start marker"
         raise ValueError(msg)
     return starts[0], ends[0]
 
 
-def replace_block(readme: str, block: str) -> str:
-    """Return the README text with its benchmark chart block replaced by ``block``."""
-    start, end = find_block(readme)
+def replace_block(readme: str, chart: str, block: str) -> str:
+    """Return the README text with one chart's block replaced by ``block``."""
+    start, end = find_block(readme, chart)
     return readme[:start] + block + readme[end:]
 
 

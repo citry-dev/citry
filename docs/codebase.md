@@ -1147,34 +1147,54 @@ current README stops using it.
 
 #### Benchmark chart images in the README
 
-The root README (which PyPI shows as the `citry` description) carries the
-error benchmark chart as two PNGs, one for a light page and one for a dark
-page. They are screenshots of the same `<c-error-benchmark-chart>` the landing
-page draws from the data in `docs_site/data/error_prevention.json`. After that
-data changes, run:
+The root README (which PyPI shows as the `citry` description) repeats the
+landing page's two benchmark sections, each with its chart as two PNGs, one
+for a light page and one for a dark page:
+
+- `errors`, "Catch mistakes early": a screenshot of the same
+  `<c-error-benchmark-chart>` the landing page draws from
+  `docs_site/data/error_prevention.json`.
+- `speed`, "As fast as Next.js": a screenshot of the same
+  `<c-benchmark-chart>` the landing page draws from
+  `docs_site/data/benchmark_time_to_interactive.json`, with the landing
+  card's bar colours.
+
+After a benchmark's data changes, redraw its chart (name `errors`, `speed`,
+or both; with no name, the script redraws both):
 
 ```bash
-uv run --no-sync python -m docs_site.scripts.benchmark_images
+uv run --no-sync python -m docs_site.scripts.benchmark_images speed
 ```
 
 The script writes the images to `docs/assets/benchmarks/` and rewrites the
-README block between the `benchmark-chart:errors` comments: the image links
-and the alt text, which lists every framework's count. It needs Playwright and
-a Chromium binary, like `icons.py`. Do not edit the block by hand. Run it only
-after the data or the chart's style changes: fonts and Chromium render a
-little differently on each machine, so a run elsewhere draws new files even
-when nothing changed.
+chart's README block between its `benchmark-chart:<chart>` comments: the
+heading, the sentences around the image, the image links, and the alt text,
+which lists every framework's number. It needs Playwright and a Chromium
+binary, like `icons.py`. Do not edit the blocks by hand. Redraw a chart only
+after its data or style changes: fonts and Chromium render a little
+differently on each machine, so a run elsewhere draws new files even when
+nothing changed.
 
-Each file name holds the benchmark run and a hash of the image, for example
-`errors-20261021T182412Z-33f45034c4c4-light.png`. The script never
-overwrites a file: a new run or a redrawn chart gets a new name, and the old
-file stays on `main` for the released pages that load it. Commit the new
-files with the README change.
+The sentences around each chart, such as the intro, the hint above the error
+chart, and the note that names the Citry version, come from functions in
+`docs_site/scripts/benchmark_readme.py`. The landing page prints the same
+sentences with `<c-benchmark-text part="..." />`, so the two cannot drift.
+Add each new benchmark run's version note to `VERSION_NOTES` (errors) or
+`SPEED_VERSION_NOTES` (speed) in that file; until you do, the docs build and
+the validator fail.
 
-The `readme_benchmark_charts` validator rebuilds the README block from the
-data and fails when the two differ, when a linked image is missing, or when an
-image no longer matches the hash in its name. It does not compare pixels, so
-after a style change to the chart, rerun the script yourself.
+Each file name holds the chart, the benchmark run, and a hash of the image,
+for example `errors-20261021T182412Z-33f45034c4c4-light.png`. The script
+never overwrites a file: a new run or a redrawn chart gets a new name, and
+the old file stays on `main` for the released pages that load it. Commit the
+new files with the README change.
+
+The `readme_benchmark_charts` validator rebuilds each README block from its
+data and fails when the two differ, when a linked image is missing or belongs
+to the other chart, or when an image no longer matches the hash in its name.
+It also fails when the landing page loses a section heading the README
+repeats (`HEADINGS` in `benchmark_readme.py`). It does not compare pixels, so
+after a style change to a chart, rerun the script yourself.
 
 #### Recording Marketplace demo GIFs
 

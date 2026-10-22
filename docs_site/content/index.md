@@ -73,14 +73,16 @@ hassle.
 <!-- Both charts read their numbers from docs_site/data/ through the components
 the Benchmarks page uses, so a new benchmark run redraws the bars on both pages.
 Their options draw the shorter landing version; docs_site/scripts/benchmark_images.py
-draws the README image of the error chart with the same options.
-Some text here is typed by hand and nothing checks it, so recheck it after a
-new run of either benchmark. The intros type the counts (12 frameworks, 63
-mistakes, 1,400 entries), which the Benchmarks page also types. The card
-notes type the versions: "Citry 0.6.1, measured before its release." must
-match VERSION_NOTES in docs_site/scripts/benchmark_readme.py, and
-"Citry 0.6.0" names the speed run. The heading "As fast as Next.js" rests on
-a gap of under 2 ms between Citry and Next.js on the second load.
+draws the README images of both charts with the same options.
+The README repeats these two sections. Each <c-benchmark-text> prints a
+sentence from docs_site/scripts/benchmark_readme.py, which the README block
+uses too, so the counts and versions follow the data. The headings must match
+HEADINGS there; the readme_benchmark_charts check fails when they differ.
+The rest is typed by hand and nothing checks it, so recheck it after a new
+run of either benchmark: "Citry catches more errors than other Python
+frameworks" rests on the error counts, the speed chart's title types the
+1,400 entries, and the heading "As fast as Next.js" rests on a gap of under
+2 ms between Citry and Next.js on the second load.
 -->
 
 <div class="landing-benchmarks" id="benchmarks" markdown="1">
@@ -88,7 +90,7 @@ a gap of under 2 ms between Citry and Next.js on the second load.
 ## Catch mistakes early
 
 <p class="landing-section__intro">
-We built the same app in 12 frameworks and made the same 63 mistakes in each.
+<c-benchmark-text part="errors-intro" />
 </p>
 
 <p class="landing-section__intro">
@@ -97,7 +99,7 @@ Citry catches more errors than other Python frameworks and reports them earlier.
 
 <div class="landing-benchmark-card" markdown="1">
 
-<p class="landing-benchmark-card__hint">More green = earlier feedback = better</p>
+<p class="landing-benchmark-card__hint"><c-benchmark-text part="errors-hint" /></p>
 
 <c-error-benchmark-chart
   title="Mistakes reported before the app runs, out of those that apply"
@@ -108,8 +110,7 @@ Citry catches more errors than other Python frameworks and reports them earlier.
 />
 
 <p class="landing-benchmark-card__note">
-Citry 0.6.1, measured before its release. Each bar counts only the mistakes
-that apply to that framework.
+<c-benchmark-text part="errors-note" />
 <a href="/about/benchmarks/#errors-how-we-measured">How we measured</a>
 </p>
 </div>
@@ -119,7 +120,7 @@ that apply to that framework.
 ## As fast as Next.js
 
 <p class="landing-section__intro">
-Time until a page with 1,400 entries is usable, the second time the server builds it.
+<c-benchmark-text part="speed-intro" />
 </p>
 
 <div class="landing-benchmark-card" markdown="1">
@@ -134,7 +135,7 @@ Time until a page with 1,400 entries is usable, the second time the server build
 />
 
 <p class="landing-benchmark-card__note">
-Citry 0.6.0, one run per framework. Shorter is faster.
+<c-benchmark-text part="speed-note" />
 <a href="/about/benchmarks/#how-the-numbers-were-taken">How we measured</a>
 </p>
 </div>
@@ -145,6 +146,7 @@ Citry 0.6.0, one run per framework. Shorter is faster.
 -->
 
 <section class="landing-section landing-section--band" id="crash-course" markdown="1">
+## Watch the tutorial
 
 <c-youtube-video
   video_id="d3nPqvDdNB0"
