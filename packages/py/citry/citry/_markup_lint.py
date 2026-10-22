@@ -14,7 +14,13 @@ from dataclasses import dataclass, field, replace
 from difflib import get_close_matches
 from typing import TYPE_CHECKING, Literal
 
-from citry._browser_expressions import BrowserExpression, _ascii_lower, _nested_template, analyze_browser_expression
+from citry._browser_expressions import (
+    BrowserExpression,
+    BrowserSyntaxError,
+    _ascii_lower,
+    _nested_template,
+    analyze_browser_expression,
+)
 from citry._diagnostic_catalog import (
     BROWSER_INVALID_MODEL_TARGET,
     TEMPLATE_DUPLICATE_ID,
@@ -126,7 +132,14 @@ MARKUP_LINT_RULES = (
 
 @dataclass(frozen=True, slots=True)
 class MarkupLintFinding:
-    """Report one mistake in a template's HTML, spanning the name or value it is about."""
+    """
+    Report one mistake in a template's HTML, spanning the name or value it is about.
+
+    ``context_start_index`` and ``context_end_index`` are set when the finding
+    spans only part of a value, such as the token where a Vue expression stops
+    parsing: they span the whole expression, so a check that hides a second
+    report of the same mistake can still match it.
+    """
 
     name: str
     message: str
@@ -134,6 +147,8 @@ class MarkupLintFinding:
     severity: Literal["warning", "error"]
     start_index: int
     end_index: int
+    context_start_index: int | None = None
+    context_end_index: int | None = None
 
 
 def lint_markup(
@@ -224,8 +239,15 @@ def lint_invalid_vue_expressions(
         parse_nested: Parser for template-valued attributes, so nested
             templates use the same parse options as the outer one.
 
+    The finding names the parser's error and spans the place it points to,
+    such as the ``&&`` in ``open &&``. It spans the whole expression, with a
+    message that names no parser error, when the parser gives no position,
+    or when the expression holds a character reference that Vue decodes,
+    because positions in the decoded text do not match the template.
+
     Returns:
-        Findings in source order, each spanning the whole expression.
+        Findings in source order, each with ``context_start_index`` and
+        ``context_end_index`` spanning the whole expression.
 
     """
     severity = _active_severities(tuple(consumers) or (MarkupLintConsumer(),)).get("rule_invalid_vue_expression")
@@ -242,36 +264,85 @@ def lint_invalid_vue_expressions(
             continue
         if any(start <= expression.start_index < end for start, end in unchecked):
             continue
-        if _vue_expression_is_valid(expression):
+        valid, error = _vue_expression_error(expression)
+        if valid:
             continue
+        if error is None:
+            message = render_diagnostic(VUE_INVALID_EXPRESSION, attribute=expression.attribute)
+            start_index, end_index = expression.start_index, expression.end_index
+        else:
+            message = render_diagnostic(
+                VUE_INVALID_EXPRESSION,
+                variant="parser",
+                attribute=expression.attribute,
+                detail=error.message,
+            )
+            start_index, end_index = _visible_error_range(expression, error)
         found.append(
             MarkupLintFinding(
                 name=expression.attribute,
-                message=render_diagnostic(VUE_INVALID_EXPRESSION, attribute=expression.attribute),
+                message=message,
                 code=VUE_INVALID_EXPRESSION,
                 severity=severity,
-                start_index=expression.start_index,
-                end_index=expression.end_index,
+                start_index=start_index,
+                end_index=end_index,
+                context_start_index=expression.start_index,
+                context_end_index=expression.end_index,
             )
         )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
-def _vue_expression_is_valid(expression: BrowserExpression) -> bool:
-    """Return whether Vue can compile one expression, as written or after Vue decodes its character references."""
+def _vue_expression_error(expression: BrowserExpression) -> tuple[bool, BrowserSyntaxError | None]:
+    """
+    Return whether Vue can compile one expression, and when it cannot, the parser's error to report.
+
+    The expression is valid when it parses as written or after Vue decodes
+    its character references. The error is the one in the text as written,
+    so its position is a template position; for a listener it is the error
+    as statements. It is ``None`` when decoding changes the text, because the
+    as-written error may then point into a reference the author wrote
+    correctly, and when the analysis has no parser error to give.
+    """
     candidates = [expression]
+    decoded = decode_attribute_entities(expression.source) if "&" in expression.source else expression.source
     # Vue decodes `&gt;` and the like before it parses the expression, so a
     # template may write `a &gt; b` for `a > b`.
-    if "&" in expression.source:
-        candidates.append(replace(expression, source=decode_attribute_entities(expression.source)))
+    if decoded != expression.source:
+        candidates.append(replace(expression, source=decoded))
+    as_written = None
     for candidate in candidates:
-        if analyze_browser_expression(candidate).valid:
-            return True
+        analysis = analyze_browser_expression(candidate)
+        if analysis.valid:
+            return True, None
+        if as_written is None:
+            as_written = analysis
         # Vue also accepts a function expression or an arrow function as a
         # listener, which is not a statement on its own.
         if candidate.mode == "statement" and analyze_browser_expression(replace(candidate, mode="expression")).valid:
-            return True
-    return False
+            return True, None
+    if decoded != expression.source or as_written is None:
+        return False, None
+    return False, as_written.error
+
+
+def _visible_error_range(expression: BrowserExpression, error: BrowserSyntaxError) -> tuple[int, int]:
+    """
+    Return a non-empty template range for a parser error inside one expression.
+
+    An error at the end of the text, as in ``open &&``, has an empty range,
+    which an editor would not underline, so it moves back to the last
+    character the author wrote before it. A blank expression spans itself.
+    """
+    if error.start_index < error.end_index:
+        return error.start_index, error.end_index
+    encoded = expression.source.encode("utf-8")
+    # Parser offsets fall on character boundaries, so the prefix decodes.
+    written = encoded[: error.start_index - expression.start_index].decode("utf-8").rstrip()
+    if not written:
+        return expression.start_index, expression.end_index
+    end = expression.start_index + len(written.encode("utf-8"))
+    return end - len(written[-1].encode("utf-8")), end
 
 
 def _v_pre_ranges(

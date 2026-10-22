@@ -73,8 +73,9 @@ These rules need facts that only the loaded application gives, so
   component or the repeated one makes the page use Vue.
 - `rule_prop_assignment` (`citry.browser.prop-assignment`): a component's
   own template or JavaScript assigns to one of its props. The editor
-  reports it too once the application is loaded. A write in JavaScript is
-  at most a warning.
+  reports it too once the application is loaded. The JavaScript parser
+  marks each write, so a write in JavaScript follows the rule's severity
+  like one in the template.
 - `rule_unknown_server_event_field`, `rule_missing_server_event_field`,
   and `rule_incompatible_server_event_field`
   (`citry.browser.*-server-event-field`): the literal arguments of an

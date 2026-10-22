@@ -493,10 +493,38 @@ A name that is itself a word, such as `v-tex`, `v-mode`, or `v-one`, is
 not reported. Neither is a typo of `v-once` or `v-memo`, because Citry
 does not support those two directives.
 
-If you register your own directive whose name is one typing slip from a
-Vue directive, set `rule_misspelled_directive = "ignore"` in the `Lint` class
-of the components that use it. This also turns off the `c-` directive
-checks for those components.
+A custom directive whose name is one typing slip from a Vue directive
+passes when the component registers it in the `directives` option of
+`$component({...})`:
+
+```citry
+from citry import Component
+
+
+class Disclosure(Component):
+    template = """
+        {# Passes: this component registers v-iff #}
+        <p v-iff="open">Details</p>
+    """
+    js = """
+        $component({
+          props: ["open"],
+          directives: { iff: { mounted(el) {} } },
+        });
+    """
+```
+
+Vue finds `v-my-dir` under `my-dir`, `myDir`, or `MyDir`, and so does the
+check. When a template renders in several components, each of them must
+register the directive, because the page fails in the one that does not.
+Citry reports the name when it cannot read the option, such as
+`directives: shared`.
+
+A directive that a plugin registers for every component, with
+`Citry.vue.use(plugin)`, is invisible to the check. For such a directive,
+set `rule_misspelled_directive = "ignore"` in the `Lint` class of the
+components that use it. This also turns off the `c-` directive checks for
+those components.
 
 ## Misspelled HTML names { #find-misspelled-html-names }
 
@@ -620,7 +648,8 @@ elements nest there.
 
 ```citry-html
 {# Error: The Vue expression in 'v-if' is not valid
-   JavaScript, so Vue cannot compile this template. #}
+   JavaScript (Unexpected token), so Vue cannot compile
+   this template. #}
 <p v-if="open &&">Details</p>
 
 {# Right #}
@@ -632,6 +661,12 @@ Citry checks every Vue expression, such as the value of `v-if`, `:title`,
 `@c-click="rate({ stars: 5 })"`. It decodes character references first, as Vue
 does, so `a &amp;&amp; b` passes. A listener may hold statements, such as
 `@click="count++; save()"`, or a function.
+
+The message names the JavaScript parser's error, and the editor
+underlines the place it points to, such as the end of `open &&` or the
+stray `)` in `go())`. An expression that contains a character reference,
+such as `&amp;`, is underlined as a whole instead, with no parser error
+in the message.
 
 It does not check:
 
@@ -854,8 +889,28 @@ An `<img>` that is the template's only top-level element may get its
 tag to that element when the component has browser code. An `<img>`
 directly inside a single top-level `c-if`, `c-elif`, and `c-else` chain
 counts as that element too. Citry reports such an image only with your
-application loaded, and only for a component with no browser code (no
-`js`, `js_data()`, `State`, or event handlers).
+application loaded, and only when no parent's `alt` can reach it: the
+component has no browser code (no `js`, `js_data()`, `State`, or event
+handlers), or its JavaScript turns the passing off with
+`inheritAttrs: false`:
+
+```citry
+from citry import Component
+
+
+class Avatar(Component):
+    template = """
+        {# Warning: <img> has no alt text. #}
+        <img :src="src">
+    """
+    js = """
+        $component({ props: ["src"], inheritAttrs: false });
+    """
+```
+
+An `inheritAttrs` value that Citry cannot read, such as
+`inheritAttrs: settings.inherit`, counts as passing `alt` on, so the
+image is not reported.
 
 ## Loops without `#c-key` { #find-repeated-components-without-keys }
 
@@ -914,10 +969,10 @@ nothing:
 Citry reads the props from the component's `$component({ props })` and
 reports an assignment to one of them in the component's own template:
 `=`, `+=` and the other assignment operators, `++`, `--`, and
-`v-model="open"`. It reports `this.open = false` in the component's
-JavaScript too, but only as a warning, because it finds that assignment by
-reading the text. Changing a field of an object prop, such as
-`open.count = 1`, is allowed and not reported.
+`v-model="open"`. It reports `this.open = false`, `this.count++`, and
+the other writes through `this` or the `$component` context in the
+component's JavaScript too, with the same severity. Changing a field of
+an object prop, such as `open.count = 1`, is allowed and not reported.
 
 `citry --app ... check` reports this rule, and the editor reports it once
 it has loaded your application.

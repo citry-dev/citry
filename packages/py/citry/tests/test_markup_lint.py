@@ -434,13 +434,18 @@ def _invalid(source: str, consumers: tuple[MarkupLintConsumer, ...] = ()) -> lis
 
 def test_invalid_vue_expression_reports_the_benchmark_template():
     source = '<p v-if="open &&">Details are visible</p>'
-    assert _invalid(source) == [("open &&", "error")]
+    # The parser stops at the end of the text, so the finding moves back to
+    # the last character written before it.
+    assert _invalid(source) == [("&", "error")]
     template = parse_template(source)
     (finding,) = lint_invalid_vue_expressions(template, browser_expressions(template), ())
     assert finding.code == "citry.vue.invalid-expression"
     assert finding.message == (
-        "The Vue expression in 'v-if' is not valid JavaScript, so Vue cannot compile this template."
+        "The Vue expression in 'v-if' is not valid JavaScript (Unexpected token), so Vue cannot compile this template."
     )
+    # The whole expression stays on the finding for the duplicate filters.
+    expression = source.encode("utf-8").index(b"open &&")
+    assert (finding.context_start_index, finding.context_end_index) == (expression, expression + len("open &&"))
 
 
 def test_invalid_vue_expression_checks_bindings_listeners_loops_and_server_call_arguments():
@@ -448,8 +453,54 @@ def test_invalid_vue_expression_checks_bindings_listeners_loops_and_server_call_
         '<div :title="a +"></div><button @click="go(">x</button>'
         '<li v-for="x in [1,">y</li><button @c-click="save({a: })">s</button>'
     )
-    # A loop finding marks the whole `v-for` value.
-    assert [span for span, _severity in _invalid(source)] == ["a +", "go(", "x in [1,", "{a: }"]
+    # A loop finding points into the part after `in`, and the others at the
+    # token where the parser stopped.
+    assert [span for span, _severity in _invalid(source)] == ["+", "(", ",", "}"]
+
+
+@pytest.mark.parametrize(
+    ("source", "span", "detail"),
+    [
+        ('<b @click="go() }">x</b>', "}", "Unexpected token"),
+        ('<p :title="a +* b"></p>', "*", "Unexpected token"),
+        ('<p :title="foo("></p>', "(", "Expected `)` but found `EOF`"),
+        ("<p :title=\"'open\"></p>", "'open", "Unterminated string"),
+        # Text that closes the generated wrapper is still a mistake, at the
+        # token that closes it.
+        ('<p :title="a); (b"></p>', ")", "Unexpected token"),
+        ('<b @click="let a = 1; let a = 2">x</b>', "a", "Identifier `a` has already been declared"),
+        # Byte offsets before a multi-byte character map to the right place.
+        ('<p :title="café +* b"></p>', "*", "Unexpected token"),
+    ],
+)
+def test_invalid_vue_expression_names_the_parser_error_where_it_points(source, span, detail):
+    template = parse_template(source)
+    (finding,) = lint_invalid_vue_expressions(template, browser_expressions(template), ())
+    encoded = source.encode("utf-8")
+    assert encoded[finding.start_index : finding.end_index].decode("utf-8") == span
+    assert f"({detail})" in finding.message
+    # The second `a` is the one the duplicate declaration points to.
+    if "let a" in source:
+        assert finding.start_index == encoded.index(b"a = 2")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        # Positions in decoded text do not match the template, so a
+        # character reference keeps the whole expression and no parser text.
+        '<p v-if="open &amp;&amp;"></p>',
+        # A slot pattern is checked without the parser's message.
+        '<MyList><template v-slot:row="{ item:"></template></MyList>',
+    ],
+)
+def test_invalid_vue_expression_keeps_the_whole_range_without_a_parser_position(source):
+    template = parse_template(source)
+    findings = lint_invalid_vue_expressions(template, browser_expressions(template), ())
+    assert len(findings) == 1
+    (finding,) = findings
+    assert (finding.start_index, finding.end_index) == (finding.context_start_index, finding.context_end_index)
+    assert "(" not in finding.message.split("JavaScript", 1)[1].split(",", 1)[0]
 
 
 @pytest.mark.parametrize(
@@ -482,9 +533,9 @@ def test_invalid_vue_expression_reports_a_value_of_only_spaces():
 def test_invalid_vue_expression_follows_the_consumers_severity():
     source = '<p v-if="open &&"></p>'
     assert _invalid(source, (MarkupLintConsumer(rule_invalid_vue_expression="ignore"),)) == []
-    assert _invalid(source, (MarkupLintConsumer(rule_invalid_vue_expression="warning"),)) == [("open &&", "warning")]
+    assert _invalid(source, (MarkupLintConsumer(rule_invalid_vue_expression="warning"),)) == [("&", "warning")]
 
 
 def test_invalid_vue_expression_skips_v_pre_inside_a_nested_template():
     source = '<c-card c-header="<><i v-pre :x=\'a &&\'></i></>" /><p :y="b &&"></p>'
-    assert _invalid(source) == [("b &&", "error")]
+    assert _invalid(source) == [("&", "error")]

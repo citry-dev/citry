@@ -238,10 +238,11 @@ def test_a_template_assignment_to_an_own_prop_is_reported(tmp_path):
             "Prop 'open' is read-only, so this assignment does not change it. Emit an event to let the"
             " parent change it.",
         ),
-        # The method's `this.open = false` is a warning: the check reads text.
+        # The method's `this.open = false` follows the rule's severity too,
+        # because the parser marks the member as written.
         (
             _PROP,
-            "warning",
+            "error",
             "Prop 'open' is read-only, so this assignment does not change it. Emit an event to let the"
             " parent change it.",
         ),
@@ -272,6 +273,44 @@ def test_v_model_on_an_own_prop_is_reported(tmp_path):
 
 
 @pytest.mark.parametrize(
+    "expression",
+    [
+        # A comment between the name and `=` hides the write from a text scan.
+        "open /* close */ = false",
+        # Destructuring writes each target name.
+        "[open] = [false]",
+    ],
+)
+def test_writes_the_parser_sees_are_reported(tmp_path, expression):
+    engine = _prop_engine(f'<button @click="{expression}"></button>', js=_STATUS_JS.replace("this.open = false;", ""))
+
+    assert [severity for _code, severity, _message in _findings(engine, tmp_path, _PROP)] == ["error"]
+
+
+@pytest.mark.parametrize(
+    ("method", "expected"),
+    [
+        ("this.open = false;", ["error"]),
+        ("this.open++;", ["error"]),
+        ("[this.open] = [false];", ["error"]),
+        # A field of the prop may change, and comparing only reads it.
+        ("this.open.count = 1;", []),
+        ("if (this.open == false) this.local = 2;", []),
+    ],
+)
+def test_component_javascript_writes_follow_the_rule_severity(tmp_path, method, expected):
+    engine = _prop_engine("<p>status</p>", js=_STATUS_JS.replace("this.open = false;", method))
+
+    assert [severity for _code, severity, _message in _findings(engine, tmp_path, _PROP)] == expected
+
+
+def test_component_javascript_writes_use_a_warning_severity_when_set(tmp_path):
+    engine = _prop_engine("<p>status</p>", lint=LintSettings(rule_prop_assignment="warning"))
+
+    assert [severity for _code, severity, _message in _findings(engine, tmp_path, _PROP)] == ["warning"]
+
+
+@pytest.mark.parametrize(
     "template",
     [
         # Reading, comparing, and emitting are fine.
@@ -281,6 +320,8 @@ def test_v_model_on_an_own_prop_is_reported(tmp_path):
         '<button @click="open.count = 1; local = 2"></button>',
         # A loop variable with the prop's name is not the prop.
         '<li v-for="open in items" @click="open = 1"></li>',
+        # `--` on the next line updates `count`, not the `open` before it.
+        '<button @click="open\n--count"></button>',
     ],
 )
 def test_reads_and_other_names_are_not_reported(tmp_path, template):

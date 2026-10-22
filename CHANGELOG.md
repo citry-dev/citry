@@ -18,10 +18,13 @@
   text. The image check is a warning and the others are errors, so
   `citry check` may now fail on an existing project; each rule has a
   `rule_*` setting
-  ([details](https://citry.dev/ide/template-linting/)).
+  ([details](https://citry.dev/ide/template-linting/)). A component's only
+  top-level `<img>` is reported when the component sets
+  `inheritAttrs: false`, because no parent's `alt` can reach it then.
 - `citry check` and the editor now report Vue mistakes that would stop a
   component from rendering: an expression that is not valid JavaScript,
-  such as `v-if="open &&"` (`rule_invalid_vue_expression`), and `v-model`
+  such as `v-if="open &&"` (`rule_invalid_vue_expression`), with the
+  JavaScript parser's message at the place it points to, and `v-model`
   on an element that holds no value, such as `<form>`
   (`rule_invalid_model_target`). A misspelled DOM event in a listener,
   such as `@clik`, is a warning (`rule_misspelled_event`).
@@ -33,15 +36,16 @@
   ([details](https://citry.dev/ide/template-linting/#templates-vue-cannot-compile)).
 - The misspelled-directive check now also reports a typo in a Vue
   directive, such as `v-iff` or `v-elif`, which otherwise stops the page
-  with an error in the browser.
+  with an error in the browser. A custom directive that the component
+  registers in the `directives` option of `$component()` is not reported.
 - With your application loaded, `citry check` now reports more mistakes
   that fail only when the page runs
   ([details](https://citry.dev/ide/template-linting/)):
   - a component that `<c-for>` repeats without `#c-key` on a page that uses
     Vue (`rule_missing_component_key`);
   - a component that assigns to its own prop, such as
-    `@click="open = false"` (`rule_prop_assignment`), which the editor
-    reports too;
+    `@click="open = false"` in its template or `this.open = false` in its
+    JavaScript (`rule_prop_assignment`), which the editor reports too;
   - `@c-*` arguments the server would reject: an unknown key, a missing
     required field, or a literal of the wrong type, such as
     `save({amount: '1'})` for an `int` field

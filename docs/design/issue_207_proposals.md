@@ -33,8 +33,8 @@ Ordered by value to a Citry user. A "plain fix" is a bug fix you can approve wit
 | 6 | Links to routes and static files | m45, m61, m48 | Option 3 for files, Option 1 for routes | Option 3: yes/no. Option 1: yes/no |
 | 7 | Type prop values written as expressions | m27 (beyond literals) | Option 1 for props; defer payloads | Option 1 for props: yes/no |
 | 8 | Emit payload types and handler arguments | m30, m60 | Options 1 and 2 | yes/no |
-| 9 | Exact error text for Vue syntax errors; exact prop-write check | m19, m28 | Option 2 (new PyO3 function, existing ones unchanged) | PyO3 addition in the next citry-core release: yes/no |
-| 10 | Let the `v-iff` rule skip directives a component declares | m21 | Option 3 now, Option 1 with item 9 | Option 1 later: yes/no |
+| 9 | Exact error text for Vue syntax errors; exact prop-write check | m19, m28 | Option 2 (new PyO3 function, existing ones unchanged) | Decided: Option 1 (records), citry-core 1.9.0 |
+| 10 | Let the `v-iff` rule skip directives a component declares | m21 | Option 3 now, Option 1 with item 9 | Decided: Option 1 with item 9, plus `inheritAttrs` (m53) |
 | 11 | Secrets and server-only values sent to the browser | m42 | Option 2 (a marker type) + docs | New public `citry.Secret`: yes/no. Option 1 off by default: yes/no |
 | 12 | Clearer runtime errors and development-only checks | m51, m63, m14, m57 | Plain fixes for m51 and m63; Option 1 for m14; m57 your call | 12a, 12b, 12c: yes/no each. 12d: yes/no/defer |
 | 13 | Misspelled CSS class | m16 | Defer | Off-by-default rule now, or defer |
@@ -422,7 +422,7 @@ Both limits exist because `analyze_browser_source` (`crates/citry_core_py/src/te
 
 **Recommendation:** Option 2, in the next citry-core release, together with item 10.
 
-**Decision:** PyO3 addition in the next citry-core release: yes/no.
+**Decision:** Option 1, in citry-core 1.9.0. `analyze_browser_source` and `analyze_component_source` return records (Python objects with named fields) instead of tuples, so a later field does not break callers again. The syntax error comes from parsing the authored text alone, and text that closes the generated wrapper, such as `a); (b`, now counts as invalid. The rule spans the token the parser points to and names its message; an expression with a character reference keeps the whole range and the generic message.
 
 ## 10. Let the `v-iff` rule skip directives a component declares
 
@@ -440,7 +440,7 @@ No code reads `$component({directives})` today. The Rust analysis reads only pro
 
 **Recommendation:** Option 3 now; Option 1 when item 9 ships.
 
-**Decision:** Option 1 later: yes/no.
+**Decision:** Option 1, with item 9 in citry-core 1.9.0. A `v-*` name is skipped only when every component that renders the template registers it, under Vue's lookup (`my-dir`, `myDir`, `MyDir`). The same change reads `inheritAttrs` (m53, approved separately): `citry.template.missing-image-alt` reports a component's single root `<img>` when its JavaScript sets `inheritAttrs: false`.
 
 ## 11. Secrets and server-only values sent to the browser
 
