@@ -440,6 +440,62 @@ def test_render_provides_keys_imported_from_a_loaded_module_count(tmp_path, monk
         assert found == []
 
 
+@pytest.mark.parametrize(
+    "views",
+    [
+        pytest.param("from .keys import BOARD\n", id="relative-import"),
+        pytest.param("from shop import keys\n", id="module-from-a-package"),
+    ],
+)
+def test_render_provides_keys_imported_from_a_project_package_count(tmp_path, monkeypatch, views):
+    use = "BOARD" if "BOARD" in views else "keys.BOARD"
+    files = {
+        "shop/__init__.py": "",
+        "shop/keys.py": "BOARD = 'board'\n",
+        "shop/views.py": f"{views}\n\ndef page(board):\n    return Card().render(provides={{{use}: board}})\n",
+    }
+
+    assert _findings(tmp_path, monkeypatch, _card("board"), _page("Board", "<c-card />"), files=files) == []
+
+
+def test_a_project_inside_a_folder_named_tests_still_finds_placed_components(tmp_path, monkeypatch):
+    # Only folders inside the project mark test files, not the folders around it.
+    project = tmp_path / "tests" / "project"
+    project.mkdir(parents=True)
+    found = _findings(
+        project,
+        monkeypatch,
+        _card("board"),
+        _page("Layout", '<c-provide c-key="key_name" name="x"><c-slot /></c-provide>'),
+        files={"views.py": "def page():\n    return str(Layout(slots={'default': Card()}))\n"},
+    )
+
+    assert found == []
+
+
+def test_a_decorated_provide_call_without_source_still_counts(tmp_path, monkeypatch):
+    # The mixin sits in an `if` block, so Citry reads its compiled methods, through the decorator.
+    mixin = """
+import functools
+
+if True:
+    def logged(method):
+        @functools.wraps(method)
+        def wrapper(*args, **kwargs):
+            return method(*args, **kwargs)
+        return wrapper
+
+    class ProvidesBoard:
+        @logged
+        def template_data(self, kwargs, slots):
+            self.provide("board", name="x")
+            return {}
+"""
+    board = _page("Board", "<c-card />").replace("class Board(Component):", "class Board(ProvidesBoard, Component):")
+
+    assert _findings(tmp_path, monkeypatch, mixin, _card("board"), board) == []
+
+
 def test_a_project_package_named_like_a_standard_module_is_not_skipped(tmp_path, monkeypatch):
     # The class's file decides, so a project's own `profile` package is read.
     module = types.ModuleType("profile")

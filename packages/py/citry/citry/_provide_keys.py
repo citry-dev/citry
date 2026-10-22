@@ -698,11 +698,22 @@ class _SourceReader:
 def _compiled_methods_call(cls: type, name: str) -> bool:
     """Return whether any function stored on the class mentions the attribute ``name``, such as ``self.provide``."""
     pending: list[CodeType] = []
+    functions: list[object] = []
     for value in _static_class_dict(cls).values():
-        # `staticmethod` and `classmethod` keep the function under `__func__`.
-        function = getattr(value, "__func__", value)
-        if isinstance(function, FunctionType):
-            pending.append(function.__code__)
+        # `staticmethod` and `classmethod` keep the function under
+        # `__func__`, and a property its accessors.
+        functions.extend([getattr(value, "__func__", value), *(getattr(value, name, None) for name in _ACCESSORS)])
+    seen: set[int] = set()
+    while functions:
+        function = functions.pop()
+        if not isinstance(function, FunctionType) or id(function) in seen:
+            continue
+        seen.add(id(function))
+        pending.append(function.__code__)
+        # A decorator's wrapper hides the real method, which the wrapper
+        # keeps under `__wrapped__` or in its closure.
+        functions.append(getattr(function, "__wrapped__", None))
+        functions.extend(cell.cell_contents for cell in function.__closure__ or () if _filled(cell))
     while pending:
         code = pending.pop()
         if name in code.co_names:
@@ -710,6 +721,17 @@ def _compiled_methods_call(cls: type, name: str) -> bool:
         # Nested functions and comprehensions are separate code objects.
         pending.extend(constant for constant in code.co_consts if isinstance(constant, CodeType))
     return False
+
+
+_ACCESSORS = ("fget", "fset", "fdel")
+
+
+def _filled(cell: object) -> bool:
+    try:
+        cell.cell_contents  # type: ignore[attr-defined]  # noqa: B018 - reading an empty cell raises
+    except ValueError:
+        return False
+    return True
 
 
 def python_class_node(tree: ast.Module, qualname: str) -> ast.ClassDef | None:
@@ -809,10 +831,10 @@ def _read_project_python(
             tree = ast.parse(raw)
         except (SyntaxError, ValueError, RecursionError):
             continue
-        keys.update(provides_argument_keys(tree, modules=modules))
+        keys.update(provides_argument_keys(tree, modules=modules, package=_package_of(file, workspace)))
         # A test may place a component anywhere to try it out; that says
         # nothing about where the app renders it.
-        if not _is_test_file(file):
+        if not _is_test_file(file, workspace):
             visitor = _PythonPlacement(names)
             visitor.visit(tree)
             placed.update(visitor.placed)
@@ -823,14 +845,29 @@ def _installed(file: Path) -> bool:
     return any(part in {"site-packages", "dist-packages"} for part in file.parts)
 
 
-def _is_test_file(file: Path) -> bool:
+def _is_test_file(file: Path, workspace: Path | None) -> bool:
     name = file.name
-    return (
-        name.startswith("test_")
-        or name.endswith("_test.py")
-        or name == "conftest.py"
-        or any(part in {"tests", "test"} for part in file.parts[:-1])
-    )
+    if name.startswith("test_") or name.endswith("_test.py") or name == "conftest.py":
+        return True
+    # Only folders inside the project count: the project itself may live
+    # under a folder named `tests`.
+    relative = _relative_parts(file, workspace)
+    return relative is not None and any(part in {"tests", "test"} for part in relative[:-1])
+
+
+def _relative_parts(file: Path, workspace: Path | None) -> tuple[str, ...] | None:
+    if workspace is None:
+        return None
+    try:
+        return file.resolve().relative_to(workspace.resolve()).parts
+    except ValueError:
+        return None
+
+
+def _package_of(file: Path, workspace: Path | None) -> str | None:
+    """Return the dotted package a project file sits in, for its relative imports, or ``None`` outside the project."""
+    relative = _relative_parts(file, workspace)
+    return None if relative is None else ".".join(relative[:-1])
 
 
 def _class_names(classes: list[type[Component]]) -> set[str]:
@@ -849,10 +886,10 @@ class _ModuleConstants:
 
     def __init__(self, workspace: Path | None) -> None:
         self._workspace = workspace
-        self._read: dict[str, dict[str, str]] = {}
+        self._read: dict[str, dict[str, str] | None] = {}
 
-    def get(self, module: str) -> Mapping[str, object]:
-        """Return the module's top-level names, from the loaded module or from its file in the project."""
+    def get(self, module: str) -> Mapping[str, object] | None:
+        """Return the module's top-level names, from the loaded module or its file in the project, or ``None``."""
         loaded = sys.modules.get(module)
         if loaded is not None:
             return vars(loaded)
@@ -860,30 +897,33 @@ class _ModuleConstants:
             self._read[module] = self._from_file(module)
         return self._read[module]
 
-    def _from_file(self, module: str) -> dict[str, str]:
-        if self._workspace is None:
-            return {}
+    def _from_file(self, module: str) -> dict[str, str] | None:
+        if self._workspace is None or not module:
+            return None
         base = self._workspace.joinpath(*module.split("."))
         for file in (base.with_suffix(".py"), base / "__init__.py"):
             try:
                 tree = ast.parse(file.read_bytes())
             except (OSError, SyntaxError, ValueError, RecursionError):
                 continue
-            return _module_names(tree, None)[0]
-        return {}
+            return _module_names(tree, None, None)[0]
+        return None
 
 
-def provides_argument_keys(tree: ast.Module, *, modules: _ModuleConstants | None = None) -> Iterator[str]:
+def provides_argument_keys(
+    tree: ast.Module, *, modules: _ModuleConstants | None = None, package: str | None = None
+) -> Iterator[str]:
     """
     Yield the literal keys of each ``provides={...}`` or ``provides=dict(...)`` keyword argument.
 
     A key written as a module-level string constant counts as that string,
     also when the module imports it from a module the app has loaded or
-    the project folder holds, as in ``from app.keys import BOARD_KEY`` or
-    ``keys.BOARD_KEY``. A ``provides`` value built elsewhere, such as a
-    variable, adds nothing.
+    the project folder holds, as in ``from app.keys import BOARD_KEY``,
+    ``from .keys import BOARD_KEY`` or ``keys.BOARD_KEY``. ``package`` is the
+    dotted package the file sits in, for relative imports. A ``provides``
+    value built elsewhere, such as a variable, adds nothing.
     """
-    constants, imported = _module_names(tree, modules)
+    constants, imported = _module_names(tree, modules, package)
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -908,30 +948,39 @@ def provides_argument_keys(tree: ast.Module, *, modules: _ModuleConstants | None
 
 
 def _module_names(
-    tree: ast.Module, modules: _ModuleConstants | None
+    tree: ast.Module, modules: _ModuleConstants | None, package: str | None
 ) -> tuple[dict[str, str], dict[str, Mapping[str, object]]]:
     """
     Return the string constants a module's top level binds, and the modules it imports by name.
 
     A constant assigned in the module, such as ``BOARD_KEY = "board"``, is
     read from the source. One imported with ``from ... import`` is read from
-    the imported module, through ``modules``.
+    the imported module, through ``modules``; ``package`` resolves a
+    relative import such as ``from .keys import BOARD_KEY``.
     """
     constants: dict[str, str] = {}
     imported: dict[str, Mapping[str, object]] = {}
     for statement in tree.body:
-        if isinstance(statement, ast.ImportFrom) and statement.level == 0 and statement.module and modules:
-            names = modules.get(statement.module)
+        if isinstance(statement, ast.ImportFrom) and modules:
+            source = _imported_module_name(statement, package)
+            names = modules.get(source) if source is not None else None
             for alias in statement.names:
-                value = names.get(alias.name)
+                value = names.get(alias.name) if names is not None else None
                 if isinstance(value, str):
                     constants[alias.asname or alias.name] = value
+                    continue
+                # `from app import keys` imports a module, read as `keys.BOARD_KEY`.
+                submodule = modules.get(f"{source}.{alias.name}") if source else None
+                if submodule is not None:
+                    imported[alias.asname or alias.name] = submodule
             continue
         if isinstance(statement, ast.Import) and modules:
             for alias in statement.names:
                 # `import app.keys` binds `app`; only `import app.keys as keys` names the module itself.
                 if alias.asname is not None or "." not in alias.name:
-                    imported[alias.asname or alias.name] = modules.get(alias.name)
+                    found = modules.get(alias.name)
+                    if found is not None:
+                        imported[alias.asname or alias.name] = found
             continue
         target: ast.expr | None = None
         if isinstance(statement, ast.Assign) and len(statement.targets) == 1:
@@ -942,6 +991,20 @@ def _module_names(
         if isinstance(target, ast.Name) and isinstance(value, ast.Constant) and isinstance(value.value, str):
             constants[target.id] = value.value
     return constants, imported
+
+
+def _imported_module_name(statement: ast.ImportFrom, package: str | None) -> str | None:
+    """Return the dotted module a ``from ... import`` reads, resolving dots against ``package``."""
+    if statement.level == 0:
+        return statement.module
+    if package is None:
+        return None
+    parts = package.split(".") if package else []
+    # One dot is the file's own package; each further dot goes one package up.
+    if statement.level - 1 > len(parts):
+        return None
+    base = parts[: len(parts) - (statement.level - 1)]
+    return ".".join([*base, *([statement.module] if statement.module else [])])
 
 
 class _PythonPlacement(ast.NodeVisitor):
