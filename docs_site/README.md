@@ -98,7 +98,7 @@ stay open or opt into either presentation as their navigation requires.
 Adding an ordinary top-level area needs no Python or template change: add the
 area and its pages to `_nav.yml`.
 
-Set `needs_review: true` on an item that has not completed final human review.
+Set `needs_review: true` on an item that has not had its final review yet.
 The sidebar adds the `🚧` marker and an accessible explanation while keeping
 the plain `title` for breadcrumbs and previous/next links. Do not put the
 marker in `title`. An area can carry a short plain-text `badge`, such as the
