@@ -67,6 +67,7 @@ from citry.analysis import (
     BrowserComponentBinding,
     BrowserComponentPropContribution,
     BrowserComponentPropSite,
+    BrowserComponentSourceAnalysis,
     BrowserExpression,
     BrowserObjectProperty,
     BrowserProp,
@@ -829,11 +830,23 @@ def _html_attribute_lint_diagnostics(
                 lint = analysis.component_lint.get(owner.definition_id, analysis.lint)
                 consumers.append(AlpineAttributeLintConsumer(lint.rule_alpine_attribute, lint.rule_alpine_cloak))
                 value_consumers.append(AttributeValueLintConsumer(lint.rule_invalid_attribute_value))
-                directive_consumers.append(MisspelledDirectiveLintConsumer(lint.rule_misspelled_directive))
+                javascript = _owner_js_facts(owner, project, document, open_documents)
+                directive_consumers.append(
+                    MisspelledDirectiveLintConsumer(
+                        lint.rule_misspelled_directive,
+                        declared_directives=javascript.declared_directives,
+                    )
+                )
                 # Vue passes a parent's attributes to the root element only
-                # of a component with browser code.
+                # of a component with browser code, and not when its
+                # JavaScript sets `inheritAttrs: false`.
                 markup_consumers.append(
-                    _markup_lint_consumer(lint, root_may_receive_attributes=_may_have_browser_code(owner, project))
+                    _markup_lint_consumer(
+                        lint,
+                        root_may_receive_attributes=(
+                            _may_have_browser_code(owner, project) and javascript.declared_inherit_attrs is not False
+                        ),
+                    )
                 )
             if not consumers:
                 # No proven owner: the application policy still applies,
@@ -891,9 +904,37 @@ def _html_attribute_lint_diagnostics(
                     code=finding.code,
                     code_description=types.CodeDescription(diagnostic_documentation_url(finding.code)),
                     source="citry",
+                    data=_expression_range_data(region, finding),
                 )
             )
     return tuple(diagnostics)
+
+
+def _expression_range_data(
+    region: TemplateRegion,
+    finding: AlpineAttributeFinding | AttributeValueFinding | MisspelledDirectiveFinding | MarkupLintFinding,
+) -> dict[str, list[list[int]]] | None:
+    """
+    Return the whole expression's range for a finding that spans only part of it.
+
+    The TypeScript filter reads it to drop a TypeScript error elsewhere in the
+    same broken expression. It is plain JSON, ``[[line, character], [line,
+    character]]``, so it survives the trip to the editor and back.
+    """
+    if not isinstance(finding, MarkupLintFinding) or finding.context_start_index is None:
+        return None
+    if finding.context_end_index is None:
+        return None
+    try:
+        context = _range(region.source_map.map_range(finding.context_start_index, finding.context_end_index))
+    except ValueError:
+        return None
+    return {
+        EXPRESSION_RANGE_DATA_KEY: [
+            [context.start.line, context.start.character],
+            [context.end.line, context.end.character],
+        ]
+    }
 
 
 def _transparent_component_check(project: ProjectState) -> Callable[[str], bool | None] | None:
@@ -934,6 +975,51 @@ def _may_have_browser_code(owner: ComponentRecord, project: ProjectState) -> boo
     # only Component's own default sends nothing.
     overrides_js_data = not js_data or (js_data[-1].module, js_data[-1].qualname) != ("citry.component", "Component")
     return overrides_js_data or bool(state) or bool(handlers)
+
+
+# A Citry diagnostic that spans only part of an expression, such as the token
+# where a Vue expression stops parsing, carries the whole expression's range
+# under this key in `Diagnostic.data`, as `[[line, character], [line,
+# character]]`, so a TypeScript error elsewhere in it is still recognised as
+# the same mistake.
+EXPRESSION_RANGE_DATA_KEY = "expressionRange"
+
+
+@dataclass(frozen=True, slots=True)
+class _OwnerJsFacts:
+    """What one owner's JavaScript proves for the template rules; `None` means unknown."""
+
+    declared_directives: frozenset[str] | None
+    declared_inherit_attrs: bool | None
+
+
+def _owner_js_facts(
+    owner: ComponentRecord,
+    project: ProjectState,
+    document: DocumentState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> _OwnerJsFacts:
+    """Read the directives an owner registers and its `inheritAttrs` from its current JavaScript."""
+    resolved = _component_js_asset_source(owner, project, document, open_documents)
+    if resolved is False:
+        # No JavaScript: nothing is registered locally, and Vue's default
+        # `inheritAttrs: true` applies.
+        return _OwnerJsFacts(frozenset(), declared_inherit_attrs=True)
+    if resolved is None:
+        return _OwnerJsFacts(None, None)
+    analysis = _cached_component_source_analysis(resolved[0])
+    return _OwnerJsFacts(analysis.declared_directives, analysis.declared_inherit_attrs)
+
+
+@lru_cache(maxsize=64)
+def _cached_component_source_analysis(source: str) -> BrowserComponentSourceAnalysis:
+    """
+    Analyze one component's JavaScript once per text.
+
+    Each lint pass reads every owner's JavaScript again; keying on the text
+    reuses the result until an edit changes it.
+    """
+    return analyze_browser_component_source(source)
 
 
 def _markup_lint_consumer(lint: TemplateLintInfo, *, root_may_receive_attributes: bool) -> MarkupLintConsumer:

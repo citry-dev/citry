@@ -430,6 +430,36 @@ def test_a_citry_finding_on_the_same_text_wins():
     assert len(map_type_check_findings((projection,), (finding,), (unrelated,))) == 1
 
 
+def test_a_narrowed_citry_finding_still_hides_a_typescript_error_in_its_expression():
+    mapping = ProjectionSourceMapping(
+        types.Range(types.Position(0, 0), types.Position(0, 20)),
+        types.Range(types.Position(5, 0), types.Position(5, 20)),
+    )
+    projection = TypeCheckProjection("template:0", "", (mapping,))
+    # TypeScript's error sits at the start of the expression, and Citry's
+    # syntax finding only at the token where the parser stopped.
+    finding = TypeScriptFinding("template:0", types.Range(types.Position(5, 2), types.Position(5, 6)), 2322, "m")
+    narrowed = types.Diagnostic(
+        types.Range(types.Position(0, 12), types.Position(0, 13)),
+        "not valid JavaScript",
+        code="citry.vue.invalid-expression",
+    )
+    with_expression = types.Diagnostic(
+        narrowed.range,
+        narrowed.message,
+        code=narrowed.code,
+        data={"expressionRange": [[0, 1], [0, 14]]},
+    )
+    # A client that changes `data` only loses the wider match.
+    malformed = types.Diagnostic(
+        narrowed.range, narrowed.message, code=narrowed.code, data={"expressionRange": [[0, 1]]}
+    )
+
+    assert len(map_type_check_findings((projection,), (finding,), (narrowed,))) == 1
+    assert map_type_check_findings((projection,), (finding,), (with_expression,)) == ()
+    assert len(map_type_check_findings((projection,), (finding,), (malformed,))) == 1
+
+
 def test_tsc_output_is_read_with_chained_messages():
     source = "// @ts-check\nthis.clearDropTarget = true;\n"
     output = (
