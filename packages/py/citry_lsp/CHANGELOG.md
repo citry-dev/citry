@@ -67,9 +67,12 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
-- citry-lsp now requires Citry 0.6.1 or later. Upgrade the two together:
-  with an earlier citry-lsp, the editor can show a TypeScript error next to
-  Citry's message on a broken Vue expression.
+- citry-lsp now requires Citry 0.6.1 or later, which provides the
+  custom-directive, `inheritAttrs`, and parser-error checks listed above.
+  Installing this citry-lsp upgrades Citry when needed. An earlier
+  citry-lsp with Citry 0.6.1 can show a TypeScript error next to Citry's
+  message on some broken Vue expressions, such as a listener that declares
+  a name twice.
 - `citry check --types` no longer checks components installed in a `.venv`
   or `site-packages` folder inside your project; their authors check them.
 

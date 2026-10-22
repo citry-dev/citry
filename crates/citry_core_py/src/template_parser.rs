@@ -191,8 +191,8 @@ pub fn analyze_component_scope_writes(input: &str) -> Vec<(String, usize, usize,
         .collect()
 }
 
-/// Return source facts for runtime `$component` initializers as a
-/// `BrowserComponentAnalysis` record.
+/// Analyze the JavaScript of a component's `$component(...)` calls and return
+/// a `BrowserComponentAnalysis` record.
 #[pyfunction]
 pub fn analyze_component_source(input: &str) -> BrowserComponentAnalysis {
     analyze_component_source_rust(input)

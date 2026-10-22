@@ -1457,10 +1457,10 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                               'in $component({...}) stops Vue from passing it, so that image is '
                                               'reported. citry check without --static, and an editor that has loaded '
                                               'your application, report that image when the component has no browser '
-                                              'code. citry check --static and an editor that has not loaded your '
-                                              "application report the other images too, but never a component's only "
-                                              "top-level <img>, with the severity the component's own Lint class sets "
-                                              'as a plain string.'},
+                                              'code or sets inheritAttrs: false. citry check --static and an editor '
+                                              'that has not loaded your application report the other images too, but '
+                                              "never a component's only top-level <img>, with the severity the "
+                                              "component's own Lint class sets as a plain string."},
  'citry.template.misspelled-attribute': {'code': 'citry.template.misspelled-attribute',
                                          'configurableSeverity': True,
                                          'constant': 'TEMPLATE_MISSPELLED_ATTRIBUTE',
@@ -1561,13 +1561,15 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                                  'v-elseif. A custom directive whose name is one slip from a Vue '
                                                  'directive is not reported when every component that renders the '
                                                  'template registers it in the directives option of $component({...}), '
-                                                 'under the name as written or its camelCase form, such as directives: '
-                                                 '{ iff: {...} } for v-iff. It is still reported when Citry cannot '
-                                                 'read that option, and for a directive that a plugin registers with '
-                                                 'Citry.vue.use(plugin), which no check can see. citry check --static '
-                                                 'and an editor that has not loaded your application report it too, '
-                                                 "with the severity the component's own Lint class sets as a plain "
-                                                 'string.'},
+                                                 'under the name as written, its camelCase form, or that form with a '
+                                                 'capital first letter, such as directives: { iff: {...} } for v-iff '
+                                                 'or { myDir: {...} } for v-my-dir. Only citry check without --static '
+                                                 'and an editor that has loaded your application skip it. It is still '
+                                                 'reported when Citry cannot read that option, and for a directive '
+                                                 'that a plugin registers with Citry.vue.use(plugin), which no check '
+                                                 'can see. citry check --static and an editor that has not loaded your '
+                                                 "application report it too, with the severity the component's own "
+                                                 'Lint class sets as a plain string.'},
  'citry.template.misspelled-element': {'code': 'citry.template.misspelled-element',
                                        'configurableSeverity': True,
                                        'constant': 'TEMPLATE_MISSPELLED_ELEMENT',
@@ -1783,18 +1785,18 @@ DIAGNOSTICS: Final = {'citry.browser.incompatible-component-prop': {'code': 'cit
                                   'surfaces': ['check', 'lsp'],
                                   'title': 'Vue expression with a syntax error',
                                   'when': 'The expression does not parse as JavaScript, after character references '
-                                          'such as &amp;&amp; are decoded the way Vue decodes them. The message names '
-                                          "the parser's error and underlines the place it points to, such as the && in "
-                                          'open &&; for an expression that holds a character reference, it underlines '
-                                          'the whole expression instead. A listener may also hold statements or a '
-                                          'function expression. The arguments of a server call such as '
-                                          '@c-click="save({...})" are checked too. A valueless :title, which Vue reads '
-                                          'as :title="title", everything on or inside an element with v-pre, which Vue '
-                                          'does not compile, and custom directive values are not checked, although Vue '
-                                          'still fails on a custom directive value that is not valid JavaScript. citry '
-                                          'check --static and an editor that has not loaded your application report it '
-                                          "too, with the severity the component's own Lint class sets as a plain "
-                                          'string.'},
+                                          'such as &amp;&amp; are decoded the way Vue decodes them. Citry names the '
+                                          "parser's error in the message and underlines the place it points to, such "
+                                          'as the end of open &&. For an expression that holds a character reference, '
+                                          "it underlines the whole expression and leaves the parser's error out of the "
+                                          'message. A listener may also hold statements or a function expression. The '
+                                          'arguments of a server call such as @c-click="save({...})" are checked too. '
+                                          'A valueless :title, which Vue reads as :title="title", everything on or '
+                                          'inside an element with v-pre, which Vue does not compile, and custom '
+                                          'directive values are not checked, although Vue still fails on a custom '
+                                          'directive value that is not valid JavaScript. citry check --static and an '
+                                          'editor that has not loaded your application report it too, with the '
+                                          "severity the component's own Lint class sets as a plain string."},
  'citry.vue.misspelled-event': {'code': 'citry.vue.misspelled-event',
                                 'configurableSeverity': True,
                                 'constant': 'VUE_MISSPELLED_EVENT',

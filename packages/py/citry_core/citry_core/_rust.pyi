@@ -585,7 +585,7 @@ class template_parser:
     # analyzed text. Each record compares equal by value.
 
     class BrowserSyntaxDiagnostic:
-        """The JavaScript parser's first error, with `start <= end <= len(text)`."""
+        """The JavaScript parser's first error; `start <= end <=` the text's length in UTF-8 bytes."""
 
         message: str
         start: int
@@ -662,7 +662,7 @@ class template_parser:
         unknown_reason: str | None
 
     class BrowserComponentMemberReference:
-        """One member read or written through a proven component receiver."""
+        """One member the code reads or writes through `this` or the `$component` context, such as `this.open`."""
 
         receiver: str
         name: str

@@ -315,10 +315,11 @@ def test_template_expressions_are_checked_against_the_component(tmp_path, lane_p
 
 
 def test_a_broken_template_expression_gets_one_citry_diagnostic_and_no_typescript_error(tmp_path):
-    # `startDrag('a')` alone is a type error (TS2345), and `+*` makes the
-    # expression invalid. Citry reports the syntax error at `*`; TypeScript
-    # must not add a second report anywhere in the same expression.
-    html = "<button @click=\"startDrag('a') +* 1\">Go</button>"
+    # `startDrag('a')` is a type error (TS2345), and declaring `x` twice makes
+    # the listener invalid. TypeScript reports the type error on its own;
+    # Citry reports the second `x`, and the filter must drop TypeScript's
+    # report from the same expression even though the ranges do not touch.
+    html = "<button @click=\"startDrag('a');;let x = 1; let x = 2\">Go</button>"
     project, documents = _documents(
         tmp_path,
         {"lane.js": ("javascript", _LANE_JS), "lane.html": ("citry-html", html)},
@@ -330,8 +331,10 @@ def test_a_broken_template_expression_gets_one_citry_diagnostic_and_no_typescrip
     ]
 
     assert [(item.code, item.range.start.character, item.range.end.character) for item in citry] == [
-        ("citry.vue.invalid-expression", 32, 33)
+        ("citry.vue.invalid-expression", 47, 48)
     ]
+    alone = check_document_types(document, project, documents, _command(), ())
+    assert [(item.code, item.range.start.character) for item in alone] == [("citry.typescript.ts2345", 26)]
     assert check_document_types(document, project, documents, _command(), citry) == ()
 
 

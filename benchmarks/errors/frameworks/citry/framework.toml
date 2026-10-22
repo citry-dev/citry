@@ -11,7 +11,7 @@ do. citry and citry-lsp are not the PyPI releases: uv builds them from
 this repository's sources in packages/py/ and installs them the way it
 installs a release, so they include unreleased changes while still
 declaring versions 0.6.0 and 0.2.0. Each report names the commit. The
-rest comes from PyPI: citry-core 1.8.0, the version citry pins, fastapi
+rest comes from PyPI: citry-core 1.9.0, the version citry pins, fastapi
 0.141.1 with starlette 1.6.0 and pydantic 2.13.4 (the versions the
 starter's lockfile has), uvicorn 0.52.4, and ty 0.0.89, the Python type
 checker Citry runs on template expressions, which citry-lsp installs.

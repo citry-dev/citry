@@ -471,6 +471,11 @@ def test_invalid_vue_expression_checks_bindings_listeners_loops_and_server_call_
         ('<b @click="let a = 1; let a = 2">x</b>', "a", "Identifier `a` has already been declared"),
         # Byte offsets before a multi-byte character map to the right place.
         ('<p :title="café +* b"></p>', "*", "Unexpected token"),
+        # A function-expression listener is blamed for its own mistake, not
+        # for the name a function declaration would need.
+        ('<b @click="function () { a +* b }">x</b>', "*", "Unexpected token"),
+        # A trailing comment is skipped when the parser stops at the end.
+        ('<p :title="open && // note"></p>', "&", "Unexpected token"),
     ],
 )
 def test_invalid_vue_expression_names_the_parser_error_where_it_points(source, span, detail):

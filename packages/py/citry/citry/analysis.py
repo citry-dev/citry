@@ -31,6 +31,7 @@ from citry._browser_expressions import (
     BrowserComponentSection,
     BrowserComponentSourceAnalysis,
     BrowserDeclarativeEvent,
+    BrowserDirectiveName,
     BrowserEmitName,
     BrowserExpression,
     BrowserExpressionMode,
@@ -47,6 +48,7 @@ from citry._browser_expressions import (
     BrowserSourceAnalysis,
     BrowserStateBinding,
     BrowserStateBindingTargetError,
+    BrowserSyntaxError,
     MarkLiteralFinding,
     _ascii_lower,
     _nested_template,
@@ -1521,12 +1523,13 @@ def lint_misspelled_directives(
     and Citry's browser code stops with an error when none of that name is
     registered. Names on or inside an element with ``v-pre`` are skipped,
     because Vue leaves them as written, and no message suggests ``v-once``
-    or ``v-memo``, which Citry does not support. Such a name is not reported
-    when every consumer registers it in ``declared_directives``, under the
-    name as written, its camelCase form, or that form with a capital first
-    letter, which are the names Vue looks up. With no consumers, or any
-    consumer whose names are unknown, it is reported, because a template
-    that two components render fails in the one that does not register it.
+    or ``v-memo``, which Citry does not support. A consumer registers such a
+    name when its ``declared_directives`` holds the name as written, its
+    camelCase form, or that form with a capital first letter, which are the
+    names Vue looks up. The name is reported for the consumers that do not
+    register it and do not ignore the rule, with their severity, because a
+    template that two components render fails in the one that does not
+    register it. A consumer whose names are unknown never registers it.
 
     A finding is reported unless every consumer ignores the rule, and it is an
     error when any reporting consumer says ``"error"``. The check needs no
@@ -1552,14 +1555,6 @@ def lint_misspelled_directives(
     if not active:
         return ()
     severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
-    # Only a name every rendering component registers is safe to skip, so
-    # one consumer that does not show its directives keeps the rule on.
-    declared = [consumer.declared_directives for consumer in consumers]
-    registered = (
-        frozenset.intersection(*(names for names in declared if names is not None))
-        if declared and all(names is not None for names in declared)
-        else frozenset()
-    )
     found: list[MisspelledDirectiveFinding] = []
     _collect_misspelled_directives(
         template,
@@ -1567,7 +1562,7 @@ def lint_misspelled_directives(
         severity,
         parse_nested=parse_nested,
         base_index=0,
-        registered=registered,
+        consumers=effective,
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -1579,14 +1574,14 @@ def _collect_misspelled_directives(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-    registered: frozenset[str],
+    consumers: tuple[MisspelledDirectiveLintConsumer, ...],
     vue_skipped: bool = False,
 ) -> None:
     """
     Check each ``c-*`` and ``v-*`` attribute of each element in one template and its nested templates.
 
-    ``registered`` holds the custom directive names every consumer
-    registers. ``vue_skipped`` is true on and inside an element with
+    ``consumers`` decide, per ``v-*`` name, whether it is reported and how
+    severely. ``vue_skipped`` is true on and inside an element with
     ``v-pre``, which Vue leaves as written, so its ``v-*`` names are not
     directives.
     """
@@ -1607,9 +1602,7 @@ def _collect_misspelled_directives(
         for attr in node.start_tag.attrs:
             # Vue reads a `v-*` name as a directive on any tag, components
             # included, so its typos are checked everywhere Vue compiles.
-            vue_finding = (
-                None if inside_v_pre else _misspelled_vue_directive_finding(attr, severity, base_index, registered)
-            )
+            vue_finding = None if inside_v_pre else _misspelled_vue_directive_finding(attr, consumers, base_index)
             if vue_finding is not None:
                 found.append(vue_finding)
             if accepted is not None:
@@ -1635,7 +1628,7 @@ def _collect_misspelled_directives(
                         severity,
                         parse_nested=parse_nested,
                         base_index=base_index + inner.start_index + nested_start,
-                        registered=registered,
+                        consumers=consumers,
                         vue_skipped=inside_v_pre,
                     )
         body = getattr(node, "body", None)
@@ -1646,7 +1639,7 @@ def _collect_misspelled_directives(
                 severity,
                 parse_nested=parse_nested,
                 base_index=base_index,
-                registered=registered,
+                consumers=consumers,
                 vue_skipped=inside_v_pre,
             )
 
@@ -1769,9 +1762,8 @@ _SPELLED_OUT_VUE_ELSE_IF = frozenset({"elif", "elseif", "elsif", "else_if"})
 
 def _misspelled_vue_directive_finding(
     attr: HtmlAttr,
-    severity: Literal["warning", "error"],
+    consumers: tuple[MisspelledDirectiveLintConsumer, ...],
     base_index: int,
-    registered: frozenset[str] = frozenset(),
 ) -> MisspelledDirectiveFinding | None:
     """
     Return a finding for a ``v-*`` name that looks like a misspelled Vue directive.
@@ -1793,8 +1785,18 @@ def _misspelled_vue_directive_finding(
     # Vue looks a directive up by the name as written, then camelized, then
     # camelized with a capital first letter, so `v-my-dir` finds `myDir`.
     camel = _vue_camelize(directive)
-    if {directive, camel, camel[:1].upper() + camel[1:]} & registered:
+    lookup = {directive, camel, camel[:1].upper() + camel[1:]}
+    # The page fails only in a component that does not register the name,
+    # so those components alone decide whether and how it is reported.
+    failing = [
+        consumer.rule_misspelled_directive
+        for consumer in consumers
+        if consumer.rule_misspelled_directive != "ignore"
+        and (consumer.declared_directives is None or not lookup & consumer.declared_directives)
+    ]
+    if not failing:
         return None
+    severity: Literal["warning", "error"] = "error" if "error" in failing else "warning"
     if lowered in _SPELLED_OUT_VUE_ELSE_IF:
         suggestion = "else-if"
     else:
@@ -6220,6 +6222,7 @@ __all__ = [
     "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
+    "BrowserDirectiveName",
     "BrowserEmitName",
     "BrowserExpression",
     "BrowserExpressionMode",
@@ -6236,6 +6239,7 @@ __all__ = [
     "BrowserSourceAnalysis",
     "BrowserStateBinding",
     "BrowserStateBindingTargetError",
+    "BrowserSyntaxError",
     "ComponentJsLintConsumer",
     "ComponentJsLintFinding",
     "ComponentNameMatch",

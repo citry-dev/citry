@@ -428,7 +428,8 @@ def test_inherit_attrs_false_keeps_a_parents_alt_off_the_root_image(page: Any, s
     # `citry check` reports a component's single root `<img>` without alt when
     # the component sets `inheritAttrs: false`, because no parent's alt can
     # reach it. The control component shows the same parent alt does reach a
-    # root image otherwise, so the test exercises the passing it relies on.
+    # root image otherwise, so the test proves the attribute passing that the
+    # rule relies on.
     engine = Citry(autodiscover=False)
 
     class ClosedAvatar(Component):
@@ -457,7 +458,8 @@ $component({data(){return {label: "Ada"};}});"""
 
     html = Profile().render().serialize(ssr=use_ssr)
     # The server never writes the parent's alt on the closed image. Without
-    # server rendering it writes only the mount point, so there is no tag.
+    # server rendering, the server sends only the element Vue mounts into,
+    # so the HTML has no closed `<img>` yet.
     closed_tags = re.findall(r'<img[^>]*id="closed"[^>]*>', html)
     assert bool(closed_tags) == use_ssr, html[:500]
     assert all("alt=" not in tag for tag in closed_tags), closed_tags

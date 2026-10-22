@@ -136,9 +136,12 @@ def test_browser_analysis_reports_writes_and_the_first_syntax_error() -> None:
     assert isinstance(invalid.error, BrowserSyntaxDiagnostic)
     # Offsets are UTF-8 bytes: `é` takes two, so the `*` starts at byte 7.
     assert (invalid.error.message, invalid.error.start, invalid.error.end) == ("Unexpected token", 7, 8)
-    assert repr(invalid.error) == 'BrowserSyntaxDiagnostic(message="Unexpected token", start=7, end=8)'
-    # Records compare by value, so two analyses of the same text are equal.
-    assert invalid == analyze_browser_source("café +* b", "expression")
+    assert repr(invalid.error) == "BrowserSyntaxDiagnostic(message='Unexpected token', start=7, end=8)"
+    # Records compare and hash by value, so two analyses of the same text
+    # are equal and can share a set entry.
+    again = analyze_browser_source("café +* b", "expression")
+    assert invalid == again
+    assert len({invalid, again}) == 1
 
 
 _BROWSER_RECORDS = (
@@ -158,7 +161,8 @@ _BROWSER_RECORDS = (
 
 def test_browser_record_stubs_list_exactly_the_fields_python_reads() -> None:
     # The stub is written by hand from the Rust structs; a field added to or
-    # removed from a struct's `#[pyo3(get)]` list must move it too.
+    # removed from a struct's `#[pyo3(get)]` list must be added to or removed
+    # from the stub too.
     stub = ast.parse((Path(_rust.__file__).parent / "_rust.pyi").read_text(encoding="utf-8"))
     namespace = next(node for node in stub.body if isinstance(node, ast.ClassDef) and node.name == "template_parser")
     stubbed = {

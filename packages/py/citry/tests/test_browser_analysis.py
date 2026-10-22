@@ -1601,7 +1601,7 @@ def test_a_directive_every_consumer_registers_is_not_a_misspelling():
             MisspelledDirectiveLintConsumer(declared_directives=frozenset({"iff"})),
             MisspelledDirectiveLintConsumer(declared_directives=frozenset()),
         ),
-        # A consumer whose directives are unknown may not register it.
+        # A consumer whose directives are unknown might not register it.
         (
             MisspelledDirectiveLintConsumer(declared_directives=frozenset({"iff"})),
             MisspelledDirectiveLintConsumer(),
@@ -1614,6 +1614,19 @@ def test_a_directive_every_consumer_registers_is_not_a_misspelling():
 )
 def test_a_directive_not_every_consumer_registers_is_still_reported(consumers):
     assert _directives('<p v-iff="a"></p>', consumers) == [("v-iff", "v-if", "error")]
+
+
+def test_only_the_components_a_directive_fails_in_decide_its_report():
+    registers = MisspelledDirectiveLintConsumer("error", declared_directives=frozenset({"iff"}))
+    # A component that ignores the rule, as for a plugin directive, does not
+    # keep the name reported for the component that registers it.
+    for unknown in (frozenset(), None):
+        ignores = MisspelledDirectiveLintConsumer("ignore", declared_directives=unknown)
+        assert _directives('<p v-iff="a"></p>', (registers, ignores)) == []
+    # The page fails only in the component that does not register `iff`, so
+    # that component's severity is the finding's.
+    warns = MisspelledDirectiveLintConsumer("warning", declared_directives=frozenset())
+    assert _directives('<p v-iff="a"></p>', (registers, warns)) == [("v-iff", "v-if", "warning")]
 
 
 def test_declared_directives_must_be_a_frozenset_of_names():

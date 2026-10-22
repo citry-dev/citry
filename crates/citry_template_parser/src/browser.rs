@@ -7,7 +7,7 @@
 //! the template language is a complete JavaScript module.
 //!
 //! The result structs are also Python classes (`citry_core.template_parser`):
-//! each is a `#[pyclass(frozen, eq)]` whose `#[pyo3(get)]` fields are what
+//! each is a `#[pyclass(frozen, eq, hash)]` whose `#[pyo3(get)]` fields are what
 //! Python reads, so a field change here is a change to citry-core's Python
 //! surface and to the hand-written `_rust.pyi` stub.
 
@@ -66,9 +66,36 @@ impl PyRepr for usize {
 
 impl PyRepr for String {
     fn py_repr(&self) -> String {
-        // Rust's debug quoting matches Python's for the identifiers, option
-        // names, and parser messages these records hold.
-        format!("{self:?}")
+        // Python quotes with `'` unless the text holds a `'` and no `"`, and
+        // writes a backslash, the quote, and control characters as escapes.
+        let quote = if self.contains('\'') && !self.contains('"') {
+            '"'
+        } else {
+            '\''
+        };
+        let mut quoted = String::with_capacity(self.len() + 2);
+        quoted.push(quote);
+        for character in self.chars() {
+            match character {
+                '\\' => quoted.push_str("\\\\"),
+                '\n' => quoted.push_str("\\n"),
+                '\r' => quoted.push_str("\\r"),
+                '\t' => quoted.push_str("\\t"),
+                _ if character == quote => {
+                    quoted.push('\\');
+                    quoted.push(character);
+                }
+                _ if character.is_control() && (character as u32) < 0x100 => {
+                    quoted.push_str(&format!("\\x{:02x}", character as u32));
+                }
+                _ if character.is_control() => {
+                    quoted.push_str(&format!("\\u{:04x}", character as u32));
+                }
+                _ => quoted.push(character),
+            }
+        }
+        quoted.push(quote);
+        quoted
     }
 }
 
@@ -120,8 +147,8 @@ macro_rules! python_record_repr {
 /// `for (open of list)`); `open.count = 1` writes a field and leaves it
 /// false. The slot-pattern analysis reuses this struct for the names a
 /// pattern declares, and there `written` is always false.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserReference {
     #[pyo3(get)]
     pub name: String,
@@ -146,8 +173,8 @@ python_record_repr!(BrowserReference {
 /// `end` are UTF-8 byte offsets into the authored text with
 /// `start <= end <= len(text)`; an error at the end of the text, such as an
 /// unfinished `open &&`, has an empty range there.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserSyntaxDiagnostic {
     #[pyo3(get)]
     pub message: String,
@@ -167,8 +194,8 @@ python_record_repr!(BrowserSyntaxDiagnostic {
 ///
 /// `error` is set exactly when `valid` is false, and `references` is empty
 /// then, so a caller never sees names from text that does not parse.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserAnalysis {
     #[pyo3(get)]
     pub valid: bool,
@@ -185,7 +212,7 @@ python_record_repr!(BrowserAnalysis {
 });
 
 /// One direct synchronous write to the `$component` callback's scope object.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserScopeWrite {
     pub name: String,
     pub name_start: usize,
@@ -319,8 +346,8 @@ pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAna
 /// `name` is the context field, one of `COMPONENT_CONTEXT_NAMES`;
 /// `local_name` is the variable it is bound to; `references` are the byte
 /// ranges where the code reads that variable.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentBinding {
     #[pyo3(get)]
     pub name: String,
@@ -343,8 +370,8 @@ python_record_repr!(BrowserComponentBinding {
 });
 
 /// One root-unresolved `$component` call authenticated by OXC semantics.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentCall {
     #[pyo3(get)]
     pub call_start: usize,
@@ -373,8 +400,8 @@ python_record_repr!(BrowserComponentCall {
 });
 
 /// One statically named public binding declared by Vue Options.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserPublicName {
     #[pyo3(get)]
     pub authored_name: String,
@@ -418,8 +445,8 @@ python_record_repr!(BrowserPublicName {
 ///
 /// `state` is `absent` (the options name nothing there), `complete` (every
 /// name is listed), or `unknown`, with `unknown_reason` saying why.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserOptionsSection {
     #[pyo3(get)]
     pub name: String,
@@ -450,8 +477,8 @@ python_record_repr!(BrowserOptionsSection {
 /// `written` is true when the code assigns to or updates the member itself,
 /// as in `this.open = false` or `this.count++`; `this.open.count = 1`
 /// writes a field of the member and leaves it false.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentMemberReference {
     #[pyo3(get)]
     pub receiver: String,
@@ -477,8 +504,8 @@ python_record_repr!(BrowserComponentMemberReference {
 ///
 /// The span covers the string literal of an array entry or the key of an
 /// object entry, as authored.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserEmitName {
     #[pyo3(get)]
     pub name: String,
@@ -494,8 +521,8 @@ python_record_repr!(BrowserEmitName { name, start, end });
 ///
 /// `name` is the key as Vue registers it (`iff`, `my-dir`, `myDir`), and the
 /// span covers the key as authored, quotes included.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserDirectiveName {
     #[pyo3(get)]
     pub name: String,
@@ -513,8 +540,8 @@ python_record_repr!(BrowserDirectiveName { name, start, end });
 /// groups of six, `emits_sections`, `directives_sections`, `inherit_attrs`)
 /// skip a call with no argument or a spread argument, so they can be
 /// shorter than `component_calls`.
-#[pyclass(frozen, eq)]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[pyclass(frozen, eq, hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentAnalysis {
     #[pyo3(get)]
     pub valid: bool,
@@ -522,8 +549,8 @@ pub struct BrowserComponentAnalysis {
     pub references: Vec<BrowserReference>,
     #[pyo3(get)]
     pub bindings: Vec<BrowserComponentBinding>,
-    /// Read through `analyze_component_scope_writes`, so it stays off the
-    /// Python record.
+    /// Python reads these through `analyze_component_scope_writes()`, so the
+    /// record does not expose them.
     pub scope_writes: Vec<BrowserScopeWrite>,
     #[pyo3(get)]
     pub component_calls: Vec<BrowserComponentCall>,
@@ -627,12 +654,20 @@ pub fn analyze_browser_source(source: &str, mode: BrowserAnalysisMode) -> Browse
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, &wrapped, SourceType::default()).parse();
     if let Some(diagnostic) = parsed.diagnostics.first() {
-        // The standalone parse is expected to fail too; if it does not, the
-        // wrapped error is still a real one, moved back into authored text.
-        return invalid(
-            standalone_syntax_error(source, mode)
-                .unwrap_or_else(|| syntax_diagnostic(diagnostic, prefix.len(), source.len())),
-        );
+        let wrapped_error = syntax_diagnostic(diagnostic, prefix.len(), source.len());
+        let standalone_error = standalone_syntax_error(source, mode);
+        // The standalone parse runs at the top level, where some code the
+        // generated function allows is an error, such as `new.target`. An
+        // error it finds before the place the wrapped parse stopped inside
+        // the authored text is such a context error, so the wrapped one is
+        // the author's mistake. When the wrapped parse stopped in the
+        // generated text after it, only the standalone error describes the
+        // authored text.
+        let wrapped_stopped_inside = wrapped_error.start < source.len();
+        return invalid(match standalone_error {
+            Some(error) if !(wrapped_stopped_inside && error.start < wrapped_error.start) => error,
+            _ => wrapped_error,
+        });
     }
     // Text such as `a); (b` closes the generated function and opens another
     // statement, so the wrapped parse succeeds while Vue's would not.
@@ -831,9 +866,9 @@ fn leftover_token(source: &str, from: usize) -> Option<(usize, usize)> {
 /// `shift` is the length of generated text in front of the authored text in
 /// the parsed input. The range is the label OXC marks as primary, else its
 /// last label (OXC lists context such as an earlier declaration first and
-/// the place of the mistake last), else the whole text, and it is clamped into the authored
-/// text: a position past its end, such as OXC's "Unexpected end of file",
-/// becomes an empty range at the end.
+/// the place of the mistake last), else the whole text. It is clamped into
+/// the authored text: a position past its end, such as OXC's "Unexpected
+/// end of file", becomes an empty range at the end.
 fn syntax_diagnostic(
     diagnostic: &OxcDiagnostic,
     shift: usize,
@@ -3187,12 +3222,31 @@ if (enabled) realComponent({});
         let analysis = analyze_browser_source("open = 1", BrowserAnalysisMode::Statement);
         assert_eq!(
             analysis.py_repr(),
-            "BrowserAnalysis(valid=True, error=None, references=[BrowserReference(name=\"open\", start=0, end=4, written=True)])"
+            "BrowserAnalysis(valid=True, error=None, references=[BrowserReference(name='open', start=0, end=4, written=True)])"
         );
         let invalid = analyze_browser_source("a +* b", BrowserAnalysisMode::Expression);
         assert_eq!(
             invalid.error.unwrap().py_repr(),
-            "BrowserSyntaxDiagnostic(message=\"Unexpected token\", start=3, end=4)"
+            "BrowserSyntaxDiagnostic(message='Unexpected token', start=3, end=4)"
+        );
+        // Python's own quoting: `"` around a text that holds `'`, and escapes.
+        for (text, expected) in [
+            ("it's", "\"it's\""),
+            ("a'b\"c", "'a\\'b\"c'"),
+            ("tab\there\\", "'tab\\there\\\\'"),
+            ("\u{1}", "'\\x01'"),
+        ] {
+            assert_eq!(text.to_string().py_repr(), expected, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn an_error_only_top_level_code_raises_does_not_hide_the_authored_mistake() {
+        // `new.target` is valid inside the generated function but not at the
+        // top level, where the standalone parse runs; the mistake is the `*`.
+        assert_eq!(
+            syntax_error("new.target; a +* b", BrowserAnalysisMode::Statement),
+            ("Unexpected token".to_string(), 15, 16)
         );
     }
 }

@@ -19,6 +19,7 @@ from citry._browser_expressions import (
     BrowserSyntaxError,
     _ascii_lower,
     _nested_template,
+    _tokens,
     analyze_browser_expression,
 )
 from citry._diagnostic_catalog import (
@@ -85,9 +86,10 @@ class MarkupLintConsumer:
             template, such as a ``<div>`` directly inside a ``<table>``.
         root_may_receive_attributes: Whether a parent's attributes may reach
             the component's single root element. Vue passes them there for a
-            component with browser code, so an ``<img>`` root may get its
-            ``alt`` from the parent. The default, ``True``, is for a check
-            that cannot tell whether the component has browser code.
+            component with browser code, unless its JavaScript sets
+            ``inheritAttrs: false``, so an ``<img>`` root may get its ``alt``
+            from the parent. The default, ``True``, is for a check that
+            cannot tell.
 
     """
 
@@ -240,7 +242,7 @@ def lint_invalid_vue_expressions(
             templates use the same parse options as the outer one.
 
     The finding names the parser's error and spans the place it points to,
-    such as the ``&&`` in ``open &&``. It spans the whole expression, with a
+    such as the end of ``open &&``. It spans the whole expression, with a
     message that names no parser error, when the parser gives no position,
     or when the expression holds a character reference that Vue decodes,
     because positions in the decoded text do not match the template.
@@ -299,8 +301,11 @@ def _vue_expression_error(expression: BrowserExpression) -> tuple[bool, BrowserS
 
     The expression is valid when it parses as written or after Vue decodes
     its character references. The error is the one in the text as written,
-    so its position is a template position; for a listener it is the error
-    as statements. It is ``None`` when decoding changes the text, because the
+    so its position is a template position. A listener is parsed both as
+    statements and as an expression, and the error from the parse that got
+    further is reported, so a broken ``function () {...}`` listener is not
+    blamed for a missing function name. The error is ``None`` when decoding
+    changes the text, because the
     as-written error may then point into a reference the author wrote
     correctly, and when the analysis has no parser error to give.
     """
@@ -310,20 +315,26 @@ def _vue_expression_error(expression: BrowserExpression) -> tuple[bool, BrowserS
     # template may write `a &gt; b` for `a > b`.
     if decoded != expression.source:
         candidates.append(replace(expression, source=decoded))
-    as_written = None
+    as_written: BrowserSyntaxError | None = None
     for candidate in candidates:
         analysis = analyze_browser_expression(candidate)
         if analysis.valid:
             return True, None
-        if as_written is None:
-            as_written = analysis
+        errors = [analysis.error]
         # Vue also accepts a function expression or an arrow function as a
         # listener, which is not a statement on its own.
-        if candidate.mode == "statement" and analyze_browser_expression(replace(candidate, mode="expression")).valid:
-            return True, None
-    if decoded != expression.source or as_written is None:
+        if candidate.mode == "statement":
+            as_expression = analyze_browser_expression(replace(candidate, mode="expression"))
+            if as_expression.valid:
+                return True, None
+            errors.append(as_expression.error)
+        if candidate is expression:
+            # The parse that got further read more of what the author meant.
+            found = [error for error in errors if error is not None]
+            as_written = max(found, key=lambda error: error.start_index, default=None)
+    if decoded != expression.source:
         return False, None
-    return False, as_written.error
+    return False, as_written
 
 
 def _visible_error_range(expression: BrowserExpression, error: BrowserSyntaxError) -> tuple[int, int]:
@@ -331,18 +342,22 @@ def _visible_error_range(expression: BrowserExpression, error: BrowserSyntaxErro
     Return a non-empty template range for a parser error inside one expression.
 
     An error at the end of the text, as in ``open &&``, has an empty range,
-    which an editor would not underline, so it moves back to the last
-    character the author wrote before it. A blank expression spans itself.
+    which an editor would not underline, so it moves back to the last token
+    the author wrote before it, skipping spaces and comments; a punctuation
+    token is one character, so ``open &&`` underlines its last ``&``. An
+    expression with no token spans itself.
     """
     if error.start_index < error.end_index:
         return error.start_index, error.end_index
     encoded = expression.source.encode("utf-8")
     # Parser offsets fall on character boundaries, so the prefix decodes.
-    written = encoded[: error.start_index - expression.start_index].decode("utf-8").rstrip()
-    if not written:
+    written = encoded[: error.start_index - expression.start_index].decode("utf-8")
+    tokens = _tokens(written)
+    if not tokens:
         return expression.start_index, expression.end_index
-    end = expression.start_index + len(written.encode("utf-8"))
-    return end - len(written[-1].encode("utf-8")), end
+    last = tokens[-1]
+    start = expression.start_index + len(written[: last.start].encode("utf-8"))
+    return start, start + len(last.source.encode("utf-8"))
 
 
 def _v_pre_ranges(

@@ -980,7 +980,7 @@ def _may_have_browser_code(owner: ComponentRecord, project: ProjectState) -> boo
 # A Citry diagnostic that spans only part of an expression, such as the token
 # where a Vue expression stops parsing, carries the whole expression's range
 # under this key in `Diagnostic.data`, as `[[line, character], [line,
-# character]]`, so a TypeScript error elsewhere in it is still recognised as
+# character]]`, so a TypeScript error elsewhere in it is still recognized as
 # the same mistake.
 EXPRESSION_RANGE_DATA_KEY = "expressionRange"
 

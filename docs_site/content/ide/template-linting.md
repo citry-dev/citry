@@ -493,9 +493,10 @@ A name that is itself a word, such as `v-tex`, `v-mode`, or `v-one`, is
 not reported. Neither is a typo of `v-once` or `v-memo`, because Citry
 does not support those two directives.
 
-A custom directive whose name is one typing slip from a Vue directive
-passes when the component registers it in the `directives` option of
-`$component({...})`:
+With your application loaded, a custom directive whose name is one typing
+slip from a Vue directive passes when the component registers it in the
+`directives` option of `$component({...})`. `citry check --static`, and
+an editor that has not loaded your application, still report it:
 
 ```citry
 from citry import Component
@@ -515,8 +516,9 @@ class Disclosure(Component):
 ```
 
 Vue finds `v-my-dir` under `my-dir`, `myDir`, or `MyDir`, and so does the
-check. When a template renders in several components, each of them must
-register the directive, because the page fails in the one that does not.
+check. When several components share one template, such as subclasses
+that inherit it, each of them must register the directive, because the
+page fails in the one that does not.
 Citry reports the name when it cannot read the option, such as
 `directives: shared`.
 
@@ -891,7 +893,7 @@ directly inside a single top-level `c-if`, `c-elif`, and `c-else` chain
 counts as that element too. Citry reports such an image only with your
 application loaded, and only when no parent's `alt` can reach it: the
 component has no browser code (no `js`, `js_data()`, `State`, or event
-handlers), or its JavaScript turns the passing off with
+handlers), or its JavaScript stops Vue from passing attributes on with
 `inheritAttrs: false`:
 
 ```citry
@@ -970,8 +972,9 @@ Citry reads the props from the component's `$component({ props })` and
 reports an assignment to one of them in the component's own template:
 `=`, `+=` and the other assignment operators, `++`, `--`, and
 `v-model="open"`. It reports `this.open = false`, `this.count++`, and
-the other writes through `this` or the `$component` context in the
-component's JavaScript too, with the same severity. Changing a field of
+the other writes through `this`, or through the `component` object that
+`$component` gives its callback, in the component's JavaScript too, at the
+severity `rule_prop_assignment` sets. Changing a field of
 an object prop, such as `open.count = 1`, is allowed and not reported.
 
 `citry --app ... check` reports this rule, and the editor reports it once

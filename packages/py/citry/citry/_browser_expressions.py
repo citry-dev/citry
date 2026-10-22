@@ -577,7 +577,7 @@ class BrowserFreeReference:
 @dataclass(frozen=True, slots=True)
 class BrowserSyntaxError:
     """
-    The JavaScript parser's first error in one browser expression, in template positions.
+    The JavaScript parser's first error in one browser expression, with UTF-8 byte offsets into the template.
 
     ``start_index`` may equal ``end_index``: an error at the end of the text,
     such as an unfinished ``open &&``, is an empty range there.
@@ -863,7 +863,8 @@ def analyze_browser_component_source(source: str) -> BrowserComponentSourceAnaly
     """Return source-proven Vue Options facts for `$component`."""
     analysis = analyze_component_source_rust(source)
     encoded_length = len(source.encode("utf-8"))
-    # Each read of a list field builds new Python objects, so read each once.
+    # PyO3 builds a new list on every read of a list field, so the code below
+    # reads each field only once.
     calls = analysis.component_calls
     return BrowserComponentSourceAnalysis(
         valid=analysis.valid,
@@ -3169,6 +3170,7 @@ __all__ = [
     "BrowserComponentSection",
     "BrowserComponentSourceAnalysis",
     "BrowserDeclarativeEvent",
+    "BrowserDirectiveName",
     "BrowserEmitName",
     "BrowserExpression",
     "BrowserExpressionEvaluator",
@@ -3187,6 +3189,7 @@ __all__ = [
     "BrowserSourceAnalysis",
     "BrowserStateBinding",
     "BrowserStateBindingTargetError",
+    "BrowserSyntaxError",
     "MarkLiteralFinding",
     "analyze_browser_component_source",
     "analyze_browser_expression",

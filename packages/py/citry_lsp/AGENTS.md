@@ -58,3 +58,21 @@ version. A `ty` update must change these together:
 `TY_VERSION` and the two package pins disagree. Dependabot changes only the
 `pyproject.toml` pins, so its `ty` pull requests need the other updates by
 hand.
+
+## Raising the required Citry version
+
+The editor refuses to analyze a project whose installed Citry is older than
+`MINIMUM_CITRY_VERSION` (`citry_lsp/protocol.py`), and that includes this
+repository's own workspace Citry. So the floor moves only in the change
+that also sets `version` in `packages/py/citry/pyproject.toml` to that
+release, usually the release pull request, and these change together:
+
+- the `citry>=` requirement in this package's `pyproject.toml`;
+- `MINIMUM_CITRY_VERSION` in `citry_lsp/protocol.py`;
+- the expected `citry>=` entry in `scripts/verify_citry_lsp_distribution.py`.
+
+`test_runtime_compatibility_matches_the_declared_dependency_floor` fails when
+the constant and the installed requirement disagree. When citry-lsp starts
+using a Citry field or argument that only a newer Citry has, raise the floor
+before citry-lsp is released: with the older floor, an install that keeps
+the older Citry fails at run time.
