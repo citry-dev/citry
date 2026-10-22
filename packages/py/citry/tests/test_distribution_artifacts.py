@@ -228,3 +228,15 @@ def test_selector_accepts_the_citry_specific_qualification_name() -> None:
         )
         == artifact
     )
+
+
+def test_expected_citry_core_pin_follows_the_built_release() -> None:
+    # Citry ships pinned to the citry-core built from the same commit; a stale
+    # copy of that pin in the verifier fails every wheel check in CI.
+    tomllib = pytest.importorskip("tomllib")
+    core = tomllib.loads((ROOT / "packages/py/citry_core/pyproject.toml").read_text())["project"]["version"]
+    citry_dependencies = tomllib.loads((ROOT / "packages/py/citry/pyproject.toml").read_text())["project"][
+        "dependencies"
+    ]
+    assert f"citry-core=={core}" in distribution_verifier.EXPECTED_REQUIRES_DIST
+    assert f"citry-core=={core}" in citry_dependencies

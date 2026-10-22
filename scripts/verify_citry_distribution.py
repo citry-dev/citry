@@ -51,10 +51,25 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # measured 1,352,777 bytes, about 39 KB under this cap. A sizeable addition
 # should raise the cap on purpose rather than use up the headroom unnoticed.
 MAX_WHEEL_BYTES: Final = 1_360 * 1024
+
+
+def _citry_core_version() -> str:
+    """Read the citry-core release this checkout builds, from its own manifest."""
+    manifest = (REPO_ROOT / "packages" / "py" / "citry_core" / "pyproject.toml").read_text(encoding="utf-8")
+    # A plain match keeps this working on the Python 3.10 runner, which has no tomllib.
+    project = manifest.split("[project]", 1)[1].split("\n[", 1)[0]
+    match = re.search(r'^version = "([^"]+)"$', project, re.MULTILINE)
+    if match is None:
+        raise RuntimeError("packages/py/citry_core/pyproject.toml has no [project] version")
+    return match.group(1)
+
+
+# Citry pins the citry-core release built from the same commit, so the expected
+# pin follows citry-core's own version instead of repeating it here.
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
     'playwright>=1.62.0; extra == "ext-preview"',
-    "citry-core==1.8.0",
+    f"citry-core=={_citry_core_version()}",
     "wrapt>=1.16",
     "markupsafe>=2.1",
     "typing-extensions>=4.10",
