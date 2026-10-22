@@ -55,6 +55,22 @@ hassle.
 </div>
 </section>
 
+<!-- TODO: Add "Used by" belt -->
+
+<section class="landing-sponsor-belt" aria-labelledby="landing-sponsor-title">
+  <h2 id="landing-sponsor-title">Development sponsored by</h2>
+  <ul>
+    <li>
+      <a href="https://www.ohne-makler.net/" target="_blank" rel="noopener">
+        <img
+          src="/static/img/sponsors/ohne-makler.svg"
+          alt="Ohne Makler"
+        />
+      </a>
+    </li>
+  </ul>
+</section>
+
 <!-- Both charts read their numbers from docs_site/data/ through the components
 the Benchmarks page uses, so a new benchmark run redraws the bars on both pages.
 Their options draw the shorter landing version; docs_site/scripts/benchmark_images.py
@@ -112,22 +128,6 @@ Citry 0.6.0, one run per framework. Shorter is faster.
 </div>
 </section>
 </div>
-
-<!-- TODO: Add "Used by" belt -->
-
-<section class="landing-sponsor-belt" aria-labelledby="landing-sponsor-title">
-  <h2 id="landing-sponsor-title">Development sponsored by</h2>
-  <ul>
-    <li>
-      <a href="https://www.ohne-makler.net/" target="_blank" rel="noopener">
-        <img
-          src="/static/img/sponsors/ohne-makler.svg"
-          alt="Ohne Makler"
-        />
-      </a>
-    </li>
-  </ul>
-</section>
 
 <!-- TODO: Overview video how it all works (incl VSCode, UI Lib, etc)
 -->

@@ -2417,7 +2417,7 @@ class LandingPage(Component):
         height: 3.5rem;
       }
 
-      /* The benchmark results under the hero: two sections side by side,
+      /* The benchmark results under the sponsor belt: two sections side by side,
          each with a heading like the page's other sections and a card that
          holds its chart. They stack once the window is too narrow for two
          charts with readable framework names. The charts are the Benchmarks
@@ -2427,7 +2427,9 @@ class LandingPage(Component):
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: clamp(2.5rem, 5vw, 3.5rem) 2rem;
-        padding: 1rem 0 clamp(4rem, 8vw, 6rem);
+        /* The sponsor belt's rule sits just above, so the headings get the
+           same room above them as the space left before the video below. */
+        padding: clamp(4rem, 8vw, 6rem) 0;
       }
 
       .landing-benchmark {
