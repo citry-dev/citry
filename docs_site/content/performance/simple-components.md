@@ -354,7 +354,7 @@ For a component tag, the data method runs at the same point in the
 render as an ordinary component's. For a value inserted from Python, it
 runs when the expression that inserts it runs.
 
-### Rendering it alone
+### Whole-page renders
 
 Rendering a `simple = True` component as the whole page still costs the
 setup that every page render has. The saving comes from many calls

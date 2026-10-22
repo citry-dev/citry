@@ -311,7 +311,7 @@ class Cart(Component):
 
 See [Expressions](/syntax/expressions/) for more.
 
-### What it does not stop { #what-the-sandbox-does-not-protect }
+### What the sandbox misses { #what-the-sandbox-does-not-protect }
 
 The sandbox checks names. It does not know what your code does, and it is
 not guaranteed to block every way out:
