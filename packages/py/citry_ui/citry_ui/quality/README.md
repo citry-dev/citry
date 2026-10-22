@@ -8,11 +8,12 @@ workflows live here.
 ## Evidence budget
 
 Each profile states the decision it protects and uses the smallest scenario
-sample that can falsify that decision. Pull requests run deterministic Python
-checks, the ready Chromium profile, docs projection, asset budgets, and wheel
-inventory. Scheduled or release-candidate workflows own broader browser,
-visual, host, Lighthouse, and scaling work. A local exploratory profile stops
-within five minutes unless a concrete failure needs a narrower follow-up.
+sample that can show that decision is wrong. Pull requests run deterministic
+Python checks, the ready Chromium profile, docs projection, asset budgets,
+and wheel inventory. Scheduled or release-candidate workflows own broader
+browser, visual, host, Lighthouse, and scaling work. A local exploratory
+profile stops within five minutes unless a concrete failure needs a narrower
+follow-up.
 
 ## Tool ownership
 

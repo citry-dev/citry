@@ -178,7 +178,7 @@ _PREVIEW_REQUIRED_FRAGMENTS: dict[str, dict[str, tuple[tuple[str, str], ...]]] =
         "image-lifecycle": (
             ('@c-click="retain"', "include signed server lifecycle controls"),
             ('#c-key="image_key"', "include retained and replaced identity"),
-            ("Insert an unowned clone", "include the clone ownership falsifier"),
+            ("Insert an unowned clone", "include the unowned clone that tests root ownership"),
             ("hostile status fail-closed", "include hostile reflection invalidation"),
         ),
     },
