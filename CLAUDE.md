@@ -317,6 +317,15 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   the VS Code Marketplace render these files on their own domain, where a
   repo-relative link or image 404s while looking fine on GitHub. The
   `published_readme_links` validator fails the gate on one.
+- **Text that outlives a commit links to a commit or tag, never to `main`.**
+  A published package README, a blog post, a release note, a changelog entry,
+  or an archived docs version keeps its links forever, while `main` keeps
+  changing. A link such as `raw.githubusercontent.com/citry-dev/citry/main/...`
+  breaks as soon as the file moves or is deleted, so the repository could
+  never be cleaned up without breaking old pages. Point these links at a
+  commit SHA or at a release tag (such as `citry@0.6.1`) that exists when the
+  text is published. Links in the live docs site and in files read only on
+  GitHub may follow `main`.
 
 ## Code conventions
 

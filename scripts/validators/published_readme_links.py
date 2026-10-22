@@ -2,7 +2,7 @@
 A README that ships outside the repository must not link to it by relative path.
 
 PyPI and the VS Code Marketplace render these files on their own domains, where
-`docs/assets/benchmark.png` or `./LICENSE` resolves against *their* site and
+`docs/assets/citry-wordmark.png` or `./LICENSE` resolves against *their* site and
 404s. GitHub resolves the same path fine, so a broken link is invisible until
 someone opens the package page.
 
