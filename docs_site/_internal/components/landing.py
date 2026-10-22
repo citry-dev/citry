@@ -2417,16 +2417,17 @@ class LandingPage(Component):
         height: 3.5rem;
       }
 
-      /* The benchmark results under the sponsor belt: two sections side by side,
-         each with a heading like the page's other sections and a card that
-         holds its chart. They stack once the window is too narrow for two
-         charts with readable framework names. The charts are the Benchmarks
+      /* The benchmark results under the sponsor belt: two sections, one
+         above the other, each with a heading like the page's other sections
+         and a card that holds its chart. The cards span the same 76rem
+         column as the page's other blocks, which also keeps the bars from
+         stretching across a wide window. The charts are the Benchmarks
          page's components with their compact option, styled by the
          bench-chart rules in site.css. */
       .landing-benchmarks {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: clamp(2.5rem, 5vw, 3.5rem) 2rem;
+        grid-template-columns: minmax(0, 1fr);
+        gap: clamp(4rem, 8vw, 6rem);
         /* The sponsor belt's rule sits just above, so the headings get the
            same room above them as the space left before the video below. */
         padding: clamp(4rem, 8vw, 6rem) 0;
@@ -2495,12 +2496,6 @@ class LandingPage(Component):
       .landing-content .landing-benchmark-card__note a:hover,
       .landing-content .landing-benchmark-card__note a:focus-visible {
         text-decoration: underline;
-      }
-
-      @media (max-width: 1100px) {
-        .landing-benchmarks {
-          grid-template-columns: minmax(0, 1fr);
-        }
       }
 
       .landing-section {
