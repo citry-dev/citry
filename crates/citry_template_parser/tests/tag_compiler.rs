@@ -763,6 +763,37 @@ mod tests {
         );
     }
 
+    // Python refuses source code that contains a NUL character, so a NUL in
+    // the template must reach the generated code as the escape `\x00`.
+
+    #[test]
+    fn test_text_with_nul_is_escaped() {
+        assert_compile("a\0b", r#"["""a\x00b""",]"#);
+    }
+
+    #[test]
+    fn test_text_with_nul_before_a_digit_is_escaped() {
+        // `\0` followed by `1` would read as the octal escape `\01`, so the
+        // escape always spells out both hex digits.
+        assert_compile("\x001", r#"["""\x001""",]"#);
+    }
+
+    #[test]
+    fn test_html_attr_value_with_nul_is_escaped() {
+        assert_compile(
+            "<div title=\"a\0b\">x</div>",
+            r#"["""<div title=\"a\x00b\">x</div>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_expression_with_nul_is_escaped() {
+        assert_compile(
+            "{{ 'a\0' }}",
+            r#"[ExprNode(source, (0, 10,), """'a\x00' """, ()),]"#,
+        );
+    }
+
     #[test]
     fn test_component_kwarg_with_carriage_return_is_escaped() {
         assert_compile(

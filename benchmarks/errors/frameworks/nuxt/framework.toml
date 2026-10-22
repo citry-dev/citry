@@ -85,8 +85,8 @@ other frameworks here have the same kind of check, so nuxt.config.ts sets two:
   `.nuxt/tsconfig.app.json` that vue-tsc reads. In vue-tsc 3.3.13 it turns on
   `checkUnknownProps`, `checkUnknownEvents`, `checkUnknownComponents`, `checkUnknownDirectives`
   and `strictVModel`, so vue-tsc reports an unknown component, element, attribute, directive or
-  component event, the same kinds of names Next.js's tsc checks (Citry checks component names
-  before the app runs). It moves m01, m10,
+  component event, the same kinds of names Next.js's tsc checks (Citry also checks these
+  names before the app runs, and only warns about an unknown component event). It moves m01, m10,
   m11, m21 and m29 to the editor. A misspelled event on a plain element (m31) is still not
   reported, because vue-tsc lets a plain element take any listener name, and Vue's slot types
   accept any slot name, so m05 and m35 are not reported either.

@@ -110,6 +110,15 @@ fn rejects_targets_and_sources_without_a_prepared_contract() {
 }
 
 #[test]
+fn prepared_text_escapes_nul() {
+    // Python refuses source code that contains a NUL character.
+    let template = parse_template("<p>a\0b</p>", None, None).unwrap();
+    let output = compile_prepared_template(template, None).unwrap();
+    assert!(output.contains(r#"""a\x00b""""#), "{output}");
+    assert!(!output.contains('\0'));
+}
+
+#[test]
 fn raw_compiles_to_distinct_opaque_html_data() {
     let raw = parse_template("<c-raw><b>{{ x }}</b></c-raw>", None, None).unwrap();
     let output = compile_prepared_template(raw, None).unwrap();

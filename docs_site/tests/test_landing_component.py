@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import ast
 import base64
+import importlib.util
 import json
 import re
+import sys
 from html import unescape
 from pathlib import Path
 
@@ -522,16 +524,13 @@ def test_editor_demo_pairs_symbols_hovers_notes_and_definitions() -> None:
         "member-chip-use": "member-chip",
         "member-chip-name-use": "member-chip-name",
         "member-chip-status-use": "member-chip-status",
-        "member-name-use": "member-name",
+        "member-chip-online-use": "member-chip-online",
         "nested-title-use": "template-title",
-        "client-props": "member-chip-online",
-        "member-online-use": "member-online",
+        "client-props": "member-chip-compact",
         "event-name": "event-invite",
         "email-use": "email-state",
         "inviting-use": "js-inviting",
-        "visible-members-use": "visible-members",
-        "data-members-slice-use": "js-members",
-        "data-members-fallback-use": "js-members",
+        "members-use": "template-members",
     }
     assert {mark_id: symbols[mark_id].get("data-editor-target") for mark_id in expected_targets} == expected_targets
 
@@ -559,6 +558,61 @@ def test_the_editor_demo_source_is_valid_python() -> None:
     assert source.index("class InvitePanel(Component):") < source.index("class MemberChip(Component):")
     assert 'c-status="<>\n' in source
     assert "<small c-title='title'>" in source
+
+
+def test_the_editor_demo_renders_apart_from_its_marked_template_mistake(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The demo is real Citry code: once the unknown template variable it flags exists, it renders through Vue."""
+    tree = ast.parse(_EDITOR_PATH.read_text(encoding="utf-8"))
+    # The page shows the components before the types they use, which Python
+    # cannot import, so define the types first. Both components register on
+    # a test-only engine, not the shared default one.
+    types_first = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and any(ast.unparse(base) == "TypedDict" for base in node.bases)
+    ]
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef) and any(ast.unparse(base) == "Component" for base in node.bases):
+            node.body.insert(0, ast.parse("citry = demo_engine").body[0])
+    imports = [node for node in tree.body if isinstance(node, ast.ImportFrom | ast.Import)]
+    rest = [node for node in tree.body if node not in types_first and node not in imports]
+    preamble = ast.parse(
+        "from citry import Citry\n"
+        "demo_engine = Citry(autodiscover=False)\n"
+        "demo_engine.set_mounted_prefix('/citry')\n"
+        "def send_invite(email): ...\n"
+    ).body
+    tree.body = [*imports, *preamble, *types_first, *rest]
+    # Citry reads the event payload's field annotations from the module's
+    # source file, which it finds through `sys.modules`.
+    module_path = tmp_path / "editor_demo_module.py"
+    module_path.write_text(ast.unparse(tree), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("editor_demo_module", module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, module)
+    spec.loader.exec_module(module)
+
+    # Supply only what the demo marks as an unknown template variable. The
+    # other marked mistakes live in browser code and do not stop a render.
+    missing = {
+        mark["symbol"]: "Summary" for mark in _EDITOR_MARKS if mark.get("code") == "citry.template.unknown-variable"
+    }
+    assert missing
+
+    class Corrected(module.InvitePanel):
+        def template_data(self, kwargs, slots):
+            return {**super().template_data(kwargs, slots), **missing}
+
+    members = [{"name": "Ada", "online": True}, {"name": "Bo", "online": False}]
+    html = Corrected(title="Team", members=members).render().serialize()
+
+    document = lxml_html.fragment_fromstring(html, create_parent="div")
+    chips = document.xpath('.//span[contains(@class, "member-chip")]')
+    assert [chip.text.strip() for chip in chips] == ["Ada", "Bo"]
 
 
 def test_injected_component_markup_survives_the_markdown_pass() -> None:

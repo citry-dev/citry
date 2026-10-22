@@ -1,5 +1,6 @@
 //! Citry-owned facade over the pinned native Vue template compiler.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use oxc_allocator::Allocator as OxcAllocator;
@@ -10,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use vize_atelier_core::{
     ElementNode, ExpressionNode, PropNode, RootNode, TemplateChildNode,
+    errors::CompilerError,
     options::{CodegenOptions, CustomElementMatcher, ParserOptions, TemplateSyntaxMode},
     parser::parse_with_options_and_template_syntax,
 };
@@ -272,14 +274,81 @@ struct Edit {
     replacement: String,
 }
 
+thread_local! {
+    /// The tags Citry wrote for the component calls of the template being
+    /// parsed on this thread. The parser asks a plain `fn` pointer whether a
+    /// tag is an HTML element, and a `fn` pointer cannot carry this request's
+    /// tags, so `parse_generated_template` puts the tags here for one parse.
+    static COMPONENT_CALL_TAGS: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
+
+/// Empties `COMPONENT_CALL_TAGS` when the parse ends, even if it panics, so
+/// one request's tags never reach the next parse on the same thread.
+struct ClearComponentCallTags;
+
+impl Drop for ClearComponentCallTags {
+    fn drop(&mut self) {
+        COMPONENT_CALL_TAGS.with(|tags| tags.borrow_mut().clear());
+    }
+}
+
+/// Parse a template Citry wrote, reading its component calls as Vue components.
+///
+/// Citry writes each component call as a tag such as `<citry-row-1a2b>` (or a
+/// `<component>` loop for a run of calls). The parser applies the browser's
+/// HTML rules to elements, so it would move such a tag out of a `<table>`
+/// that may only hold rows and cells. The tag never reaches the browser:
+/// Vue's own compiler reads it as a component, and Vue renders the child's
+/// HTML in its place. Marking these tags as components keeps them where
+/// the template put them, while every other tag except `<component>` keeps
+/// the parser's usual reading, so a `<div>` the author put directly in a `<table>` is still
+/// reported. The element walk and the hydration plan both parse through this
+/// function, so their trees line up.
+fn parse_generated_template<'a>(
+    allocator: &'a Allocator,
+    template: &'a str,
+    component_call_tags: &HashSet<String>,
+) -> (RootNode<'a>, Vec<CompilerError>) {
+    COMPONENT_CALL_TAGS.with(|tags| tags.borrow_mut().clone_from(component_call_tags));
+    let _clear = ClearComponentCallTags;
+    parse_with_options_and_template_syntax(
+        allocator,
+        template,
+        ParserOptions {
+            is_native_tag: Some(is_element_tag),
+            ..ParserOptions::default()
+        },
+        TemplateSyntaxMode::Standard,
+    )
+}
+
+/// Says whether the parser should read `tag` as an element rather than a component.
+fn is_element_tag(tag: &str) -> bool {
+    // Without this function the parser reads a capitalized tag as a component
+    // and every other tag as an element; keep that for everything Citry did
+    // not write for a component call.
+    if tag.chars().next().is_some_and(|c| c.is_uppercase()) {
+        return false;
+    }
+    // Vue's own compiler reads every `<component>` as its built-in dynamic
+    // component. Citry writes one for a run of calls; the element walk
+    // rejects an authored `<component :is>`.
+    tag != "component" && !COMPONENT_CALL_TAGS.with(|tags| tags.borrow().contains(tag))
+}
+
+/// The tags Citry wrote for this request's component calls.
+fn component_call_tags(request: &CompileRequest) -> HashSet<String> {
+    request
+        .local_calls
+        .iter()
+        .map(|call| call.component_tag.clone())
+        .collect()
+}
+
 pub fn compile(request: CompileRequest) -> CompileArtifact {
     let allocator = Allocator::new();
-    let (root, parse_errors) = parse_with_options_and_template_syntax(
-        &allocator,
-        &request.template,
-        ParserOptions::default(),
-        TemplateSyntaxMode::Standard,
-    );
+    let call_tags = component_call_tags(&request);
+    let (root, parse_errors) = parse_generated_template(&allocator, &request.template, &call_tags);
     let mut diagnostics = parse_errors
         .into_iter()
         .map(|error| Diagnostic {
@@ -2856,6 +2925,94 @@ mod tests {
             parsed.diagnostics,
             javascript
         );
+    }
+
+    const LOCAL_CALL: &str = "<citry-child :citry-id=\"$citryPrepared.calls.citryCallA.id\" :key=\"$citryPrepared.calls.citryCallA.key\"></citry-child>";
+
+    /// A request for `LOCAL_CALL` written between `before` and `after`.
+    fn local_call_request(before: &str, after: &str) -> CompileRequest {
+        let template = format!("{before}{LOCAL_CALL}{after}");
+        let source_start = before.len();
+        let source_end = source_start + LOCAL_CALL.find('>').unwrap() + 1;
+        CompileRequest {
+            template,
+            local_calls: vec![LocalCall {
+                local_id: "citryCallA".to_owned(),
+                type_key: "Child".to_owned(),
+                component_tag: "citry-child".to_owned(),
+                source_start: source_start as u32,
+                source_end: source_end as u32,
+                bindings: vec![],
+            }],
+            local_call_runs: vec![],
+            element_bindings: vec![],
+            dynamic_elements: vec![],
+        }
+    }
+
+    // A table section may hold only rows, and a row only cells, so the HTML
+    // rules move any other element out of the table. The tag Citry writes for
+    // a component call never reaches the browser, so it must stay put.
+    const TABLE_CONTEXTS: [(&str, &str); 6] = [
+        ("<table>", "</table>"),
+        ("<table><tbody>", "</tbody></table>"),
+        ("<table><thead>", "</thead></table>"),
+        ("<table><tfoot>", "</tfoot></table>"),
+        ("<table><tbody><tr>", "</tr></tbody></table>"),
+        ("<table><colgroup>", "</colgroup></table>"),
+    ];
+
+    #[test]
+    fn keeps_a_local_call_inside_every_table_context() {
+        for (before, after) in TABLE_CONTEXTS {
+            let artifact = compile(local_call_request(before, after));
+            assert!(
+                artifact.diagnostics.is_empty(),
+                "{before}: {:?}",
+                artifact.diagnostics
+            );
+            // The table is the first element, and the call is still inside it.
+            assert_eq!(artifact.elements[0].tag, "table", "{before}");
+            assert_eq!(
+                artifact.elements[0].local_descendants,
+                ["citryCallA"],
+                "{before}"
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_a_local_call_run_inside_a_table_section() {
+        let template = format!("<table><tbody>{CALL_RUN}</tbody></table>");
+        let artifact = compile(call_run_request(&template));
+        assert!(
+            artifact.diagnostics.is_empty(),
+            "{:?}",
+            artifact.diagnostics
+        );
+        assert_eq!(artifact.elements[0].tag, "table");
+        assert_eq!(artifact.elements[0].local_descendant_runs, ["citryRun0"]);
+    }
+
+    #[test]
+    fn still_reports_an_authored_element_the_browser_moves_out_of_a_table() {
+        // Only the tags declared for this request's calls are read as
+        // components: an undeclared custom element is a real element in the
+        // browser, so it is reported like a `<div>`.
+        for authored in ["<div>row</div>", "<citry-other></citry-other>"] {
+            let artifact = compile(local_call_request(
+                &format!("<table><tbody>{authored}"),
+                "</tbody></table>",
+            ));
+            assert!(
+                artifact
+                    .diagnostics
+                    .iter()
+                    .any(|item| item.message.starts_with("Foster parenting")),
+                "{authored}: {:?}",
+                artifact.diagnostics
+            );
+        }
     }
 
     #[test]

@@ -631,6 +631,20 @@ class TestRoundTrip:
         body = self._exec_template("<div>hi</div>")
         assert body == ["<div>hi</div>"]
 
+    # Every control character, the characters that end or escape a Python
+    # string, and a few Unicode line and format characters. Python refuses
+    # source that holds a NUL, and rewrites a raw carriage return.
+    TRICKY_TEXT = "".join(chr(code) for code in range(0x20)) + '\\ " """ \x7f \x85 \u2028 \u2029 \ufeff \x001'
+
+    def test_text_keeps_every_character(self):
+        body = self._exec_template(self.TRICKY_TEXT)
+        assert body == [self.TRICKY_TEXT]
+
+    def test_static_attribute_keeps_every_character(self):
+        value = self.TRICKY_TEXT.replace('"', "'")
+        body = self._exec_template(f'<c-Card title="{value}" />')
+        assert body[0].attrs[0].value == value
+
     def test_raw(self):
         # <c-raw> is a verbatim block: it compiles to a literal text part, not a
         # component. The inner {{ ... }} is kept as literal text, not parsed.

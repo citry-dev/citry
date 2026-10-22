@@ -5,10 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
 
 
 class ToolUnavailable(RuntimeError):
@@ -79,6 +76,10 @@ def citry_json(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Fin
 
 
 _ORIGIN_WITH_LINE = re.compile(r"^(?P<file>.+?):(?P<line>\d+)(?::\d+)?$")
+# A finding about a component class, or one of its members, that Citry
+# read from the class's file, such as
+# `/work/app/board_page.py (app.board_page.BoardPage.js_data)`.
+_ORIGIN_WITH_MEMBER = re.compile(r"^(?P<file>.+?) \((?P<member>[^()]+)\)$")
 
 
 def _citry_location(origin: str, span: dict, work: Path) -> tuple[str | None, int | None]:
@@ -87,7 +88,14 @@ def _citry_location(origin: str, span: dict, work: Path) -> tuple[str | None, in
     A finding in a template file or a Python file names `path:line:col`. A
     finding in a template written inside a Python class names the attribute
     instead, `package.module.Class.template`, with lines counted inside the
-    template, so the class is looked up to turn that into a file line.
+    template, so the class is looked up to turn that into a file line. A
+    field of a `JsData` class names `package.module.Class.JsData.field`, and
+    a value `js_data()` returns or an i18n call in Python names the file
+    with the class or member in brackets, `path (package.module.Class.js_data)`
+    or `path (package.module.Class)`; these count lines of the file from 0.
+    When the app could not be loaded, `citry check` reads a template from
+    the file alone and names it `path (Class.template)`, with lines counted
+    inside the template.
     """
     if not origin:
         return None, None
@@ -95,28 +103,45 @@ def _citry_location(origin: str, span: dict, work: Path) -> tuple[str | None, in
     if match:
         return relative(match["file"], work), int(match["line"])
     template_line = (span.get("start") or {}).get("line")
+    match = _ORIGIN_WITH_MEMBER.match(origin)
+    if match:
+        path = Path(match["file"])
+        if match["member"].endswith(".template"):
+            class_name = match["member"].split(".")[-2]
+            return relative(str(path), work), _inline_template_line(path, class_name, "template", template_line)
+        return relative(str(path), work), None if template_line is None else int(template_line) + 1
     parts = origin.split(".")
     for split in range(len(parts) - 2, 0, -1):
         path = work.joinpath(*parts[:split]).with_suffix(".py")
         if not path.is_file():
             continue
         class_name, attribute = parts[split], parts[split + 1] if split + 1 < len(parts) else ""
-        lines = path.read_text(encoding="utf-8").splitlines()
-        start = next((i for i, text in enumerate(lines) if re.match(rf"\s*class {class_name}\b", text)), None)
-        if start is None:
-            return relative(str(path), work), None
-        assign = next(
-            (i for i in range(start, len(lines)) if re.match(rf"\s*{re.escape(attribute)}\s*[:=]", lines[i])),
-            None,
-        )
-        if assign is None or template_line is None:
-            return relative(str(path), work), None
-        # The literal starts on the assignment line (number `assign + 1`), and
-        # template line 1 is the rest of that line. Template syntax errors and
-        # the unknown-variable rule count from 1, the other template rules
-        # from 0; the one-line difference stays within `window`.
-        return relative(str(path), work), assign + int(template_line)
+        if attribute == "JsData":
+            # A JsData field's range already counts lines of the file, from 0.
+            return relative(str(path), work), None if template_line is None else int(template_line) + 1
+        return relative(str(path), work), _inline_template_line(path, class_name, attribute, template_line)
     return origin, None
+
+
+def _inline_template_line(path: Path, class_name: str, attribute: str, template_line: int | None) -> int | None:
+    """Turn a line counted inside a template written as a class attribute into a line of the file."""
+    if not path.is_file():
+        return None
+    lines = path.read_text(encoding="utf-8").splitlines()
+    start = next((i for i, text in enumerate(lines) if re.match(rf"\s*class {class_name}\b", text)), None)
+    if start is None:
+        return None
+    assign = next(
+        (i for i in range(start, len(lines)) if re.match(rf"\s*{re.escape(attribute)}\s*[:=]", lines[i])),
+        None,
+    )
+    if assign is None or template_line is None:
+        return None
+    # The literal starts on the assignment line (number `assign + 1`), and
+    # template line 1 is the rest of that line. Template syntax errors and
+    # the unknown-variable rule count from 1, the other template rules
+    # from 0; the one-line difference stays within `window`.
+    return assign + int(template_line)
 
 
 def pyright_json(stdout: str, stderr: str, exit_code: int, work: Path) -> list[Finding]:

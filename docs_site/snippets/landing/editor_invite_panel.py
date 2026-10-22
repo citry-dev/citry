@@ -7,17 +7,19 @@ class InvitePanel(Component):
       <section class="invite-panel">
         <h2>{{ title }}</h2>
 
-        <template v-for="member in visibleMembers">
+        <c-for each="member in members">
           <c-MemberChip
-            c-name="member.name"
+            #c-key="member['name']"
+            c-name="member['name']"
+            c-online="member['online']"
             c-status="<>
               <small c-title='title'>
                 Available now
               </small>
             </>"
-            :online="member.online"
+            :compact="compact"
           />
-        </template>
+        </c-for>
 
         <p>{{ missing_summary }}</p>
 
@@ -42,13 +44,6 @@ class InvitePanel(Component):
         data() {
           return { email: "" };
         },
-        computed: {
-          visibleMembers() {
-            return this.compact
-              ? this.members.slice(0, 3)
-              : this.members;
-          },
-        },
       });
     """
 
@@ -61,30 +56,34 @@ class InvitePanel(Component):
             send_invite(data["email"])
 
     def template_data(self, kwargs, slots):
-        return {"title": kwargs.title}
+        return {
+            "title": kwargs.title,
+            "members": kwargs.members,
+        }
 
     def js_data(self, kwargs, slots):
-        return {
-            "members": kwargs.members,
-            "inviting": False,
-        }
+        return {"inviting": False}
 
 
 class MemberChip(Component):
     class Kwargs:
         name: str
+        online: bool
         status: CitryRender
 
     template = """
-      <span class="member-chip">
+      <span
+        class="member-chip"
+        :class="{ 'member-chip--compact': compact }"
+      >
         {{ name }}
-        {{ status }}
+        <c-if cond="online">{{ status }}</c-if>
       </span>
     """
 
     js = """
       $component({
-        props: { online: { type: Boolean } },
+        props: { compact: { type: Boolean } },
       });
     """
 

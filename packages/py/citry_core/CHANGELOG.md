@@ -33,6 +33,12 @@
   `inheritAttrs`, and, on each member reference, whether the code writes
   the member, as in `this.open = false`.
 
+### Fixes
+
+- A template that contains a NUL character now compiles to Python code that
+  runs. `template_parser.compile_template()` used to write the raw NUL, which
+  Python refuses in source code.
+
 ## v1.8.0
 
 ### Removed

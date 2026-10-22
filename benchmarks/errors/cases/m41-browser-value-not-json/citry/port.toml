@@ -3,6 +3,10 @@
 status = "ported"
 mistake = { file = "app/data.py", contains = 'API_BASE = PurePosixPath("/api")' }
 
+[indirect]
+reason = "Citry's check reports the path object at the `apiBase` key that `js_data()` returns in app/components/board_page.py, where the value is sent to the browser, not at the line of app/data.py that creates it."
+codes = ["citry.js-data.unsupported-type"]
+
 [[edits]]
 file = "app/data.py"
 old = "from dataclasses import dataclass\n"
