@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 from .config import BENCH_ROOT, ConfigError
 from .execute import StageOutput
 from .runtime import Observation
-from .work import _IGNORED_NAMES
+from .work import _IGNORED_NAMES, installed_local_digest
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -95,19 +95,30 @@ def framework_digest(framework: Framework, env: Path) -> str:
     Hash every file of a framework's folder, and what its environment `env` has installed.
 
     The folder holds the clean app, its lockfiles, helper scripts and
-    framework.toml. framework.toml is read and hashed without the keys in
-    `_UNUSED_KEYS`, so rewording its notes keeps the stored results; comments
-    are dropped by the same reading. When a command names a file by its
-    absolute path in the checkout (`{framework}` or `{repo}`), that path is
-    printed in the output, so the folder's location is hashed too; otherwise
-    two checkouts sharing one cache folder can reuse each other's output.
+    framework.toml. For a package the app installs from disk, such as Citry
+    from this repository, the files the environment installed are hashed
+    too. framework.toml is read and hashed without the keys in
+    `_UNUSED_KEYS`, so rewording its notes keeps the stored results;
+    comments are dropped by the same reading. When a stage or server
+    command names a file by its absolute path in the checkout (`{framework}`
+    or `{repo}`), that path is printed in the output, so the folder's
+    location is hashed too; otherwise two checkouts sharing one cache
+    folder can reuse each other's output.
     """
-    definition = (framework.root / "framework.toml").read_text(encoding="utf-8")
-    names_checkout = "{framework}" in definition or "{repo}" in definition
+    definition = tomllib.loads((framework.root / "framework.toml").read_text(encoding="utf-8"))
+    # A path that only the setup step names, such as the Citry app's folder
+    # that uv runs in, never reaches a stage's output, so it does not tie
+    # the results to this checkout; nor does one in the prose notes.
+    commands = json.dumps({key: value for key, value in definition.items() if key not in {"setup", *_UNUSED_KEYS}})
+    names_checkout = "{framework}" in commands or "{repo}" in commands
     digest = hashlib.sha256(f"{framework.root if names_checkout else ''}\0".encode())
     for name in _INSTALL_RECORDS:
         record = env / name
         digest.update(name.encode() + b"\0" + (record.read_bytes() if record.is_file() else b"<none>") + b"\0")
+    # A package installed from its sources in this repository, such as the
+    # Citry app's citry, changes what the tools print without changing any
+    # file of the framework's folder or the install records above.
+    digest.update(f"installed from disk {installed_local_digest(framework, env)}\0".encode())
     for path in sorted(framework.root.rglob("*")):
         relative = path.relative_to(framework.root)
         # Build output and installed packages never reach a working copy.

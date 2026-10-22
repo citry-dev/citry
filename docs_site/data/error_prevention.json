@@ -1,6 +1,6 @@
 {
   "generated_by": "docs_site/scripts/error_benchmark_data.py",
-  "run": "20261021T155859Z",
+  "run": "20261021T182412Z",
   "frameworks": [
     {
       "key": "citry",
@@ -569,8 +569,8 @@
       "framework": "citry",
       "mistake": "m09-attribute-value",
       "status": "ported",
-      "bucket": "static-warning",
-      "cell": "Ew",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
         "Citry language server (citry check --types): citry.template.invalid-attribute-value 'sumbit' is not a valid value for 'type' on <button>. Did you mean 'submit'? Valid values: 'submit', 'reset', 'button'.",
@@ -581,19 +581,25 @@
       "framework": "citry",
       "mistake": "m10-attribute-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.misspelled-attribute 'titel' is not an attribute of <div>, so the browser ignores it. Did you mean 'title'?",
+        "citry check: citry.template.misspelled-attribute 'titel' is not an attribute of <div>, so the browser ignores it. Did you mean 'title'?"
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m11-element-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.misspelled-element <dvi> is not an HTML element. Did you mean <div>?",
+        "citry check: citry.template.misspelled-element <dvi> is not an HTML element. Did you mean <div>?"
+      ]
     },
     {
       "framework": "citry",
@@ -664,24 +670,26 @@
       "framework": "citry",
       "mistake": "m18-payload-field",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.missing-server-event-field Server event 'save' requires field 'amount', which this call does not send, so the server rejects it.",
+        "Citry language server (citry check --types): citry.browser.unknown-server-event-field Server event 'save' has no field 'amont', so the server rejects this call. Did you mean 'amount'?",
+        "citry check: citry.browser.missing-server-event-field Server event 'save' requires field 'amount', which this call does not send, so the server rejects it.",
+        "citry check: citry.browser.unknown-server-event-field Server event 'save' has no field 'amont', so the server rejects this call. Did you mean 'amount'?"
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m19-client-expression-syntax",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
-        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+        "Citry language server (citry check --types): citry.vue.invalid-expression The Vue expression in 'v-if' is not valid JavaScript, so Vue cannot compile this template.",
+        "citry check: citry.vue.invalid-expression The Vue expression in 'v-if' is not valid JavaScript, so Vue cannot compile this template."
       ]
     },
     {
@@ -699,15 +707,12 @@
       "framework": "citry",
       "mistake": "m21-directive-name",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
-        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+        "Citry language server (citry check --types): citry.template.misspelled-directive 'v-iff' is not a Vue directive, so Vue looks for a custom directive of that name and the page fails in the browser. Did you mean 'v-if'?",
+        "citry check: citry.template.misspelled-directive 'v-iff' is not a Vue directive, so Vue looks for a custom directive of that name and the page fails in the browser. Did you mean 'v-if'?"
       ]
     },
     {
@@ -773,28 +778,37 @@
       "framework": "citry",
       "mistake": "m27-browser-input-type",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.incompatible-component-prop Vue prop 'open' expects boolean, but this binding is \"closed\".",
+        "citry check: citry.browser.incompatible-component-prop Vue prop 'open' expects boolean, but this binding is \"closed\"."
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m28-input-written-by-child",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.prop-assignment Prop 'open' is read-only, so this assignment does not change it. Emit an event to let the parent change it.",
+        "citry check: citry.browser.prop-assignment Prop 'open' is read-only, so this assignment does not change it. Emit an event to let the parent change it."
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m29-listener-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-warning",
+      "cell": "Ew",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.undeclared-component-event Component 'c-card' does not declare event 'hdie' in its emits option. Did you mean 'hide'?",
+        "citry check: citry.browser.undeclared-component-event Component 'c-card' does not declare event 'hdie' in its emits option. Did you mean 'hide'?"
+      ]
     },
     {
       "framework": "citry",
@@ -809,28 +823,37 @@
       "framework": "citry",
       "mistake": "m31-dom-event-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-warning",
+      "cell": "Ew",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.vue.misspelled-event 'clik' is not a DOM event, so this listener never runs. Did you mean 'click'?",
+        "citry check: citry.vue.misspelled-event 'clik' is not a DOM event, so this listener never runs. Did you mean 'click'?"
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m32-payload-type",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.incompatible-server-event-field Server event 'save' rejects this value for field 'amount': Expected int, got str.",
+        "citry check: citry.browser.incompatible-server-event-field Server event 'save' rejects this value for field 'amount': Expected int, got str."
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m33-payload-missing-field",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.missing-server-event-field Server event 'save' requires field 'amount', which this call does not send, so the server rejects it.",
+        "citry check: citry.browser.missing-server-event-field Server event 'save' requires field 'amount', which this call does not send, so the server rejects it."
+      ]
     },
     {
       "framework": "citry",
@@ -857,30 +880,22 @@
       "framework": "citry",
       "mistake": "m36-slot-data-name",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
-        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+        "Citry language server (citry check --types): citry.python.unresolved-attribute Object of type `FooterData` has no attribute `titel`"
       ]
     },
     {
       "framework": "citry",
       "mistake": "m37-slot-data-type",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
-        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+        "Citry language server (citry check --types): citry.python.unsupported-operator Operator `+` is not supported between objects of type `int` and `Literal[\" tasks\"]`"
       ]
     },
     {
@@ -921,10 +936,12 @@
       "framework": "citry",
       "mistake": "m41-browser-value-not-json",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-warning",
+      "cell": "Ew\u00b0",
       "reason": null,
       "evidence": [
+        "Citry language server (citry check --types): citry.js-data.unsupported-type JsData field 'apiBase' is not a clean JSON value: API_BASE holds a value of type PurePosixPath, which cannot be sent to the browser as JSON. Browser tooling will treat its type as unknown.",
+        "citry check: citry.js-data.unsupported-type JsData field 'apiBase' is not a clean JSON value: API_BASE holds a value of type PurePosixPath, which cannot be sent to the browser as JSON. Browser tooling will treat its type as unknown.",
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
@@ -945,28 +962,36 @@
       "framework": "citry",
       "mistake": "m43-css-variable-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-warning",
+      "cell": "Ew",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.css.misspelled-variable Nothing sets --acent, so the browser ignores this declaration. Did you mean --accent, from css_data()?",
+        "citry check: citry.css.misspelled-variable Nothing sets --acent, so the browser ignores this declaration. Did you mean --accent, from css_data()?"
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m44-form-field-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.browser.unknown-form-field The form sends field 'qeury', which server event 'search' does not declare, so the server rejects the submit.",
+        "citry check: citry.browser.unknown-form-field The form sends field 'qeury', which server event 'search' does not declare, so the server rejects the submit."
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m45-link-route-name",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-warning",
+      "cell": "Ew",
       "reason": null,
       "evidence": [
+        "Citry language server (citry check --types): citry.template.unknown-url Your app has no route or static file for '/abuot', so the browser gets a 404 Not Found. Did you mean '/about'?",
+        "citry check: citry.template.unknown-url Your app has no route or static file for '/abuot', so the browser gets a 404 Not Found. Did you mean '/about'?",
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: 404 http://127.0.0.1:<port>/abuot"
       ]
@@ -996,10 +1021,12 @@
       "framework": "citry",
       "mistake": "m48-asset-path",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-warning",
+      "cell": "Ew",
       "reason": null,
       "evidence": [
+        "Citry language server (citry check --types): citry.template.unknown-url Your app has no route or static file for '/static/avtar.svg', so the browser gets a 404 Not Found. Did you mean '/static/avatar.svg'?",
+        "citry check: citry.template.unknown-url Your app has no route or static file for '/static/avtar.svg', so the browser gets a 404 Not Found. Did you mean '/static/avatar.svg'?",
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
         "error: Failed to load resource: the server responded with a status of 404 (Not Found)",
@@ -1037,49 +1064,49 @@
       "framework": "citry",
       "mistake": "m51-list-key-missing",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
-        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+        "Citry language server (citry check --types): citry.browser.missing-component-key <c-Card> repeats inside <c-for> but has no #c-key. This page uses Vue, and the render fails when the loop has two items.",
+        "citry check: citry.browser.missing-component-key <c-Card> repeats inside <c-for> but has no #c-key. This page uses Vue, and the render fails when the loop has two items."
       ]
     },
     {
       "framework": "citry",
       "mistake": "m52-invalid-nesting",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
-        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+        "Citry language server (citry check --types): citry.template.invalid-nesting <div> cannot be inside <p>. The browser closes the <p> before it, so the page structure differs from the template.",
+        "citry check: citry.template.invalid-nesting <div> cannot be inside <p>. The browser closes the <p> before it, so the page structure differs from the template."
       ]
     },
     {
       "framework": "citry",
       "mistake": "m53-image-alt",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-warning",
+      "cell": "Ew",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.missing-image-alt <img> has no alt text. Describe the image in alt, or write alt=\"\" for an image that only decorates the page.",
+        "citry check: citry.template.missing-image-alt <img> has no alt text. Describe the image in alt, or write alt=\"\" for an image that only decorates the page."
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m54-aria-name",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.unknown-aria-attribute ':aria-expandd' is not an ARIA attribute, so browsers and screen readers ignore it. Did you mean 'aria-expanded'?",
+        "citry check: citry.template.unknown-aria-attribute ':aria-expandd' is not an ARIA attribute, so browsers and screen readers ignore it. Did you mean 'aria-expanded'?"
+      ]
     },
     {
       "framework": "citry",
@@ -1108,10 +1135,13 @@
       "framework": "citry",
       "mistake": "m57-duplicate-id",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.duplicate-id Another element in this template already has id 'board'. An id must be unique in the page.",
+        "citry check: citry.template.duplicate-id Another element in this template already has id 'board'. An id must be unique in the page."
+      ]
     },
     {
       "framework": "citry",
@@ -1161,24 +1191,24 @@
       "framework": "citry",
       "mistake": "m62-boolean-attribute-string",
       "status": "ported",
-      "bucket": "missed",
-      "cell": "M",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
-      "evidence": []
+      "evidence": [
+        "Citry language server (citry check --types): citry.template.invalid-attribute-value 'disabled' on <button> is on whenever it is present, so 'false' still turns it on. Write it with no value to turn it on, and leave it out to turn it off.",
+        "citry check: citry.template.invalid-attribute-value 'disabled' on <button> is on whenever it is present, so 'false' still turns it on. Write it with no value to turn it on, and leave it out to turn it off."
+      ]
     },
     {
       "framework": "citry",
       "mistake": "m63-binding-on-non-input",
       "status": "ported",
-      "bucket": "runtime-error",
-      "cell": "R",
+      "bucket": "static-error",
+      "cell": "E",
       "reason": null,
       "evidence": [
-        "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (status): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (search): TimeoutError: Locator.fill: Timeout 5000ms exceeded.",
-        "interaction (about): TimeoutError: Locator.click: Timeout 5000ms exceeded.",
-        "interaction (project): TimeoutError: Locator.click: Timeout 5000ms exceeded."
+        "Citry language server (citry check --types): citry.browser.invalid-model-target v-model does not work on <form>, which holds no value. Put it on an <input>, <textarea>, or <select>, or on a component.",
+        "citry check: citry.browser.invalid-model-target v-model does not work on <form>, which holds no value. Put it on an <input>, <textarea>, or <select>, or on a component."
       ]
     },
     {
@@ -5138,7 +5168,7 @@
         "interaction: TimeoutError: Locator.click: Timeout 5000ms exceeded.",
         "error: Internal Server Error: /",
         "error: Traceback (most recent call last):",
-        "error: [21/Oct/2026 16:09:04] \"GET / HTTP/1.1\" 500 320907"
+        "error: [21/Oct/2026 18:25:34] \"GET / HTTP/1.1\" 500 320907"
       ]
     },
     {
@@ -6555,11 +6585,11 @@
       "cell": "Rw",
       "reason": null,
       "evidence": [
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c34d0, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x107667f60>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c3530, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x1077f40e0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1076c3590, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x1077f4220>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1077f88f0, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x1077f5da0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
-        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(1077f8650, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x1077f62a0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10af4b470, title='Alpha', count=3, tone='accent', footer=<function Page.<locals>.<lambda> at 0x10aeefec0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide ...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10af4b4d0, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b078040>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10af4b530, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b078180>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b07c890, title='Beta', count=5, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b07a160>, on_hide=<function Page.<locals>.make_hide.<locals>.hide at...",
+        "warning: .benchmarks/errors/envs/reactpy/work/m51-list-key-missing/main.py:132: UserWarning: Key not specified for child in list Card(10b07c830, title='Gamma', count=8, tone='plain', footer=<function Page.<locals>.<lambda> at 0x10b07a5c0>, on_hide=<function Page.<locals>.make_hide.<locals>.hide a..."
       ]
     },
     {
@@ -6999,7 +7029,7 @@
       "reason": null,
       "evidence": [
         "ruff 0.15.5 (default rules): F841 Local variable `open` is assigned to but never used",
-        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x109db6020> -> None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ..."
+        "reflex compile --dry (Reflex 0.9.10.post2): EventHandlerValueError reflex_base.utils.exceptions.EventHandlerValueError: Invalid event chain for on_click: <function status.<locals>.close at 0x10a092020> -> None: A lambda inside an EventChain list must return `EventSpec | EventHandler | EventChain ..."
       ]
     },
     {
