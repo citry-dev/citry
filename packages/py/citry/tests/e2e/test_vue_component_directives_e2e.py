@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -386,3 +387,85 @@ $component({
     page.wait_for_function(f'JSON.stringify(({marks})()) === \'["call","element"]\'')
     assert faults == [], faults
     assert warnings == [], warnings
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("use_ssr", [False, True], ids=["mounted", "hydrated"])
+def test_a_registered_directive_named_like_a_typo_renders(page: Any, serve_live: Any, use_ssr: bool) -> None:
+    # `citry check` skips `v-iff` and `v-my-dir` in a component that registers
+    # `iff` and `myDir`; the page must then render without the runtime error
+    # for an unregistered directive, or the skip would hide a real failure.
+    engine = Citry(autodiscover=False)
+
+    class Disclosure(Component):
+        citry = engine
+        template = """\
+<section>
+  <p id="iff" v-iff="open">details</p>
+  <p id="camel" v-my-dir="open">more</p>
+</section>"""
+        js = """\
+$component({
+  data(){return {open: true};},
+  directives: {
+    iff: {mounted(el, binding){ el.dataset.seen = String(binding.value); }},
+    myDir: {mounted(el, binding){ el.dataset.seen = String(binding.value); }},
+  },
+});"""
+
+    rendered = Disclosure().render()
+    faults, warnings = _open(page, serve_live, engine, rendered.serialize(ssr=use_ssr), hydrated=False)
+
+    seen = page.evaluate("[...document.querySelectorAll('section p')].map(p => p.dataset.seen)")
+    assert seen == ["true", "true"]
+    assert faults == [], faults
+    assert warnings == [], warnings
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("use_ssr", [False, True], ids=["mounted", "hydrated"])
+def test_inherit_attrs_false_keeps_a_parents_alt_off_the_root_image(page: Any, serve_live: Any, use_ssr: bool) -> None:
+    # `citry check` reports a component's single root `<img>` without alt when
+    # the component sets `inheritAttrs: false`, because no parent's alt can
+    # reach it. The control component shows the same parent alt does reach a
+    # root image otherwise, so the test exercises the passing it relies on.
+    engine = Citry(autodiscover=False)
+
+    class ClosedAvatar(Component):
+        citry = engine
+        template = """\
+<img id="closed" src="/static/avatar.svg">"""
+        js = """\
+$component({inheritAttrs: false});"""
+
+    class OpenAvatar(Component):
+        citry = engine
+        template = """\
+<img id="open" src="/static/avatar.svg">"""
+        js = """\
+$component({});"""
+
+    class Profile(Component):
+        citry = engine
+        template = """\
+<main>
+  <c-closed-avatar :alt="label" />
+  <c-open-avatar :alt="label" />
+</main>"""
+        js = """\
+$component({data(){return {label: "Ada"};}});"""
+
+    html = Profile().render().serialize(ssr=use_ssr)
+    # The server never writes the parent's alt on the closed image. Without
+    # server rendering it writes only the mount point, so there is no tag.
+    closed_tags = re.findall(r'<img[^>]*id="closed"[^>]*>', html)
+    assert bool(closed_tags) == use_ssr, html[:500]
+    assert all("alt=" not in tag for tag in closed_tags), closed_tags
+    faults, _warnings = _open(page, serve_live, engine, html, hydrated=False)
+
+    alts = page.evaluate(
+        """() => ({closed: document.querySelector('#closed')?.getAttribute('alt'),
+          open: document.querySelector('#open')?.getAttribute('alt')})"""
+    )
+    assert alts == {"closed": None, "open": "Ada"}
+    assert faults == [], faults

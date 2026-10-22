@@ -464,7 +464,7 @@ def test_invalid_vue_expression_checks_bindings_listeners_loops_and_server_call_
         ('<b @click="go() }">x</b>', "}", "Unexpected token"),
         ('<p :title="a +* b"></p>', "*", "Unexpected token"),
         ('<p :title="foo("></p>', "(", "Expected `)` but found `EOF`"),
-        ("<p :title=\"'open\"></p>", "'open", "Unterminated string"),
+        ('<p :title="\'open"></p>', "'open", "Unterminated string"),
         # Text that closes the generated wrapper is still a mistake, at the
         # token that closes it.
         ('<p :title="a); (b"></p>', ")", "Unexpected token"),
