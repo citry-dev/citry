@@ -1296,15 +1296,32 @@
       "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
       "hook on_render_context_merge RowList into Card: DependenciesExtension, EventsExtension, I18nExtension",
       "id",
-      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)"
+      "Row a0: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a1: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a2: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "id",
+      "Row a3: Kwargs, template_data (no frame), js_data (no frame), css_data (no frame)",
+      "hook on_render_context_merge RowList into Card: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge Card into RowList: DependenciesExtension, EventsExtension, I18nExtension",
+      "hook on_render_context_merge RowList into RowPage: DependenciesExtension, EventsExtension, I18nExtension"
     ],
-    "error": {
-      "type": "RuntimeError",
-      "message": "deferred part vanished from its .parts list before resolution",
-      "components": null,
-      "innermost": "_replace_in_parts",
-      "nesting_limit": null,
-      "chain": []
+    "hydrated": {
+      "log": [
+        "id",
+        "hook browser_plugin: I18nExtension",
+        "hook prepare_browser_render: I18nExtension",
+        "hook on_dependencies: I18nExtension",
+        "hook on_serialize: DependenciesExtension"
+      ],
+      "declined": null
+    },
+    "static": {
+      "log": [
+        "hook on_serialize: DependenciesExtension",
+        "hook on_dependencies: I18nExtension"
+      ]
     },
     "context_variables_left_changed": []
   },

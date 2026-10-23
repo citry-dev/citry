@@ -77,7 +77,13 @@ class Card(Component):
 ```
 
 The input is not a slot. The component decides where, and whether, to
-render it.
+render it. It can also insert it more than once. Each `{{ ... }}`
+gets its own render of the markup, as a `<c-slot />` used twice does:
+the components inside render once for each place, and the markup's
+expressions run once for each place. The first place uses the markup as
+it rendered when the attribute was read; each later place reads the
+expressions again when it is inserted, so it shows any value that
+changed in between.
 
 ## Skip the `<>` markers { #when-the-fragment-markers-are-optional }
 

@@ -225,6 +225,14 @@
   `<tbody>`, `<thead>`, `<tfoot>`, `<tr>`, or `<colgroup>` now renders.
   It used to fail with "Foster parenting moved this element before the
   nearest open table".
+- A component can now insert markup it received in a `c-*` attribute
+  more than once, such as `<div>{{ body }}</div><aside>{{ body }}</aside>`.
+  Each place gets its own render of the markup, as a `<c-slot />` used
+  twice does, so the components inside render once for each place. It
+  used to fail with "deferred part vanished from its .parts list before
+  resolution". A slot called once in `template_data()` whose result the
+  template prints twice now fails with an error that names the component,
+  before any component inside it renders.
 - An Events data class field annotated as `Literal[...]` now accepts the
   values it lists. Every call used to fail with "Unsupported annotation".
 - An Events `State` field annotated as a tuple is a tuple again in event

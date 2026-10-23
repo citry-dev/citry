@@ -830,6 +830,7 @@ def test_direct_projection_validates_session_and_source_contract() -> None:
     assert (
         wrap_nested_template(
             selected,
+            render_again=lambda: selected,
             lexical_render_id="x",
             public_name="x",
             source="x",
@@ -875,6 +876,7 @@ def test_direct_projection_validates_session_and_source_contract() -> None:
             bind_nested_template(
                 wrap_nested_template(
                     selected,
+                    render_again=lambda: selected,
                     lexical_render_id="x",
                     public_name="x",
                     source="x",
@@ -1855,6 +1857,7 @@ def test_direct_relationship_helpers_cover_session_and_slot_execution_boundaries
 
         wrapped = wrap_nested_template(
             plain,
+            render_again=lambda: plain,
             lexical_render_id="render",
             public_name="body",
             source="<c-fill>",
@@ -1910,7 +1913,13 @@ def test_direct_relationship_helpers_cover_session_and_slot_execution_boundaries
         assert isinstance(nested_capture, DirectSlotRender)
 
         assert wrap_nested_template(
-            plain, lexical_render_id="x", public_name="x", source="x", span=(0, 1), origin=None
+            plain,
+            render_again=lambda: plain,
+            lexical_render_id="x",
+            public_name="x",
+            source="x",
+            span=(0, 1),
+            origin=None,
         )
 
     with pytest.raises(RuntimeError, match="different"):

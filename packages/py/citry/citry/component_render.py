@@ -1584,6 +1584,10 @@ def _scan_deferred_parts(
     stack: list[tuple[Iterator[tuple[int, RenderPart]], list[RenderPart], CitryContext, int]] = [
         (iter(enumerate(parts)), parts, parent_context, initial_count)
     ]
+    # The parts lists this scan has entered. One render printed in two places
+    # reaches its list twice; queueing its components twice would render each
+    # of them twice, and the second render would find its place taken.
+    walked = {id(parts)}
     while stack:
         entries, current_parts, context, task_count = stack[-1]
         try:
@@ -1628,8 +1632,34 @@ def _scan_deferred_parts(
         else:
             unwrapped = part
             if isinstance(unwrapped, CitryRender):
+                if id(unwrapped.parts) in walked:
+                    # A finished render printed twice gives the queue nothing
+                    # to render, so only a render whose components are still
+                    # waiting is an error.
+                    if _contains_deferred(unwrapped):
+                        error = RuntimeError(_SHARED_UNRENDERED_MESSAGE)
+                        # Name the component whose output prints it, as a
+                        # render error from that component would.
+                        set_component_error_message(error, _component_path(parent_context.component))
+                        # Raised while a component's output is queued, this
+                        # error skips on_render error handling, as the
+                        # nesting-depth error does: it is a mistake in the
+                        # code, and a fallback would hide it. (Raised from an
+                        # on_render replacement, it goes to that component's
+                        # own hook or extensions first, then to its
+                        # ancestors, like any error in that output.)
+                        raise error
+                    continue
+                walked.add(id(unwrapped.parts))
                 stack.append((iter(enumerate(unwrapped.parts)), unwrapped.parts, unwrapped.context, len(tasks)))
     return len(tasks) > initial_count
+
+
+_SHARED_UNRENDERED_MESSAGE = (
+    "This content is printed in more than one place, but the components inside it have not rendered yet, "
+    "so each would render twice. Print it in one place, or make it once for each place: for a slot, call "
+    "the slot once for each place you print its result."
+)
 
 
 def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _ContextMergeTask | _RunTask]:
@@ -1653,6 +1683,16 @@ def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _Conte
     deferred sits in: that is the lexical owner (for fill content, the
     component whose template wrote it), which is where the child's
     dependencies belong (see docs/design/component_slots.md section 8).
+
+    One render can appear in ``render`` more than once, for example a slot's
+    result that the template prints twice. The scan enters each parts list
+    once. When it reaches a list a second time and every component in it has
+    rendered, it skips the list; when the list still holds components waiting
+    to render, it raises ``RuntimeError``, because queueing them again would
+    render each one twice. The scan compares lists by identity and remembers
+    them only for one call, so a copy of a list that holds the same
+    placeholders, or one list reached from the outputs of two components, is
+    not caught here.
     """
     tasks: list[_RenderTask | _ContextMergeTask | _RunTask] = []
     _scan_deferred_parts(render.parts, render.context, tasks, depth)

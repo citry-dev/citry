@@ -931,13 +931,30 @@ class TemplateHtmlAttr(HtmlAttr):
         parts = _render_body(generator(), context)
         selected = CitryRender(parts=parts, context=context)
         if prepared:
-            from citry._vue.direct import wrap_nested_template  # noqa: PLC0415
+            from citry._vue.direct import (  # noqa: PLC0415
+                active_execution,
+                direct_execution_scope,
+                wrap_nested_template,
+            )
 
             component = context.component
             if component is not None and component.id is not None:
                 active_template = context.template_record
+                # A component that prints the value more than once renders it
+                # again for each later print, as a slot is rendered for each
+                # outlet. Each later render runs inside the same slot fill call
+                # as this one (when the attribute sits in a fill), so the
+                # browser data places its components in that same fill, as it
+                # does for the first render.
+                execution = active_execution()
+
+                def render_again() -> CitryRender:
+                    with direct_execution_scope(execution):
+                        return CitryRender(parts=_render_body(generator(), context), context=context)
+
                 return wrap_nested_template(
                     selected,
+                    render_again=render_again,
                     lexical_render_id=component.id,
                     public_name=self.key,
                     source=self.source,
