@@ -2476,9 +2476,6 @@ impl<'a> Writer<'a> {
     /// node.
     fn text_token(&mut self, text: &str) {
         if !text.is_empty() {
-            if text.chars().any(tokenizer_reports) {
-                self.needs_full_parse = true;
-            }
             self.tokens.push(NestingToken::Text {
                 whitespace: is_whitespace(text),
                 starts_with_newline: text.starts_with('\n'),
@@ -2900,7 +2897,6 @@ impl<'a> Writer<'a> {
             if !plain_name
                 || name == "data-allow-mismatch"
                 || value.contains(['\0', '\r'])
-                || value.chars().any(tokenizer_reports)
                 || attributes[..index]
                     .iter()
                     .any(|(earlier, _)| earlier == name)
@@ -3597,17 +3593,6 @@ fn static_text(output: &mut String, text: &str) {
             other => output.push(other),
         }
     }
-}
-
-/// Whether the tokenizer of the full parse reports this character as an
-/// error (a control character other than whitespace and NUL, or a Unicode
-/// noncharacter). The browser keeps such text, but the full parse rejects
-/// the page, so the token check leaves that decision to it.
-fn tokenizer_reports(character: char) -> bool {
-    let code = u32::from(character);
-    matches!(code, 0x01..=0x08 | 0x0B | 0x0E..=0x1F | 0x7F..=0x9F)
-        || (0xFDD0..=0xFDEF).contains(&code)
-        || (code & 0xFFFE) == 0xFFFE
 }
 
 /// Whether text is only HTML whitespace, which the parser keeps in place
@@ -4684,15 +4669,30 @@ mod tests {
     }
 
     #[test]
-    fn text_the_full_parse_reports_is_left_to_it() {
-        // Control characters and noncharacters are kept by the browser but
-        // reported by the full parse's tokenizer, so the page is decided by
-        // the full parse (the shared helper compares both checks).
-        for text in ["a\u{1}b", "a\u{7f}b", "a\u{fffe}b"] {
+    fn control_characters_and_noncharacters_are_written_as_they_are() {
+        // The browser keeps these characters in the text and the attribute
+        // value that hold them, so the page hydrates with them written as
+        // they are (the shared helper also runs the full parse and compares).
+        for text in [
+            "a\u{1}b",
+            "a\u{b}b",
+            "a\u{1c}b",
+            "a\u{7f}b",
+            "a\u{85}b",
+            "a\u{80}b",
+            "a\u{9f}b",
+            "a\u{fdd0}b",
+            "a\u{fffe}b",
+            "a\u{10ffff}b",
+        ] {
             let result = root("<p>{{ $citryPrepared.t }}</p>", json!({"t": text}));
-            assert_eq!(result.reason, Some("browser-structure"), "{text:?}");
+            assert_eq!(html(&result), format!("<p>{text}</p>"), "{text:?}");
             let result = root(r#"<p :title="$citryPrepared.t">x</p>"#, json!({"t": text}));
-            assert_eq!(result.reason, Some("browser-structure"), "{text:?}");
+            assert_eq!(
+                html(&result),
+                format!(r#"<p title="{text}">x</p>"#),
+                "{text:?}"
+            );
         }
     }
     #[test]

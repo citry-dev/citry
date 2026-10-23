@@ -132,12 +132,11 @@ The writer checks per request what the stored answers do not cover: every
 attribute name is lowercase letters, digits, `-`, `_` or `:` and appears
 once, no text or value holds a carriage return or NUL, only a shell carries
 `data-allow-mismatch`, and a void element such as `br` has no children
-(its parent becomes the shell). A text or value holding a control
-character or a Unicode noncharacter, which the full parse's tokenizer
-reports as an error, sends the page to the full parse. The writer declines
-a `pre`, `textarea` or `listing` whose text starts with a newline, and the
-token check rejects such a text too, because the parser drops that
-newline.
+(its parent becomes the shell). Any other control character, and any
+Unicode noncharacter, needs no check: the parser keeps it in the text or
+value that holds it. The writer declines a `pre`, `textarea` or `listing`
+whose text starts with a newline, and the token check rejects such a text
+too, because the parser drops that newline.
 
 When the token check cannot show the page is kept as written, the page is
 written a second time with the full list of nodes it meant to write, and
