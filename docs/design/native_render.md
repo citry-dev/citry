@@ -39,10 +39,12 @@ Terms used below:
   the page (`precompile_selected_tree_for_serialization` in
   `citry/_vue/events.py`).
 
-The research that measured these levels is on the branch
-`research/rust-render-stage0` (tag `research/rust-render-stage2-done`),
-including its notes in `docs/design/rust_rendering_exploration.md` and its
-timing harness. Nothing here depends on it.
+The research that measured prototypes of these levels, and the options
+it tried and rejected, is recorded in
+[`rust_rendering_exploration.md`](rust_rendering_exploration.md). Its
+section [How the research measured](rust_rendering_exploration.md#how-the-research-measured)
+describes the timing method the levels are judged by. Nothing here
+depends on it.
 
 ## 1. What happens to one row
 
