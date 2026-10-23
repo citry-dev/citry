@@ -1,6 +1,9 @@
 import itertools
+import os
 
 import pytest
+
+from citry._vue import native_render
 
 collect_ignore_glob: list[str] = []
 
@@ -21,6 +24,48 @@ try:
     import jinja2  # noqa: F401
 except ImportError:
     collect_ignore_glob += ["test_benchmark_jinja2*"]
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--python-render-path",
+        action="store_true",
+        default=False,
+        help=(
+            "Render with Citry's Python render path for the whole session, as PyPy, Pyodide and "
+            "free-threaded builds do. Tests that ask for `render_path` still run both paths."
+        ),
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if config.getoption("--python-render-path"):
+        # The flag is read at every use, so setting it once here switches
+        # every render in this process; the variable carries the choice
+        # into the interpreters some tests start.
+        native_render.ACTIVE = False
+        os.environ["CITRY_NATIVE_RENDER"] = "0"
+
+
+@pytest.fixture(params=["rust", "python"])
+def render_path(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> str:
+    """
+    Run the test once on the native (Rust) render path and once on the Python one.
+
+    Returns the path's name. The Rust case is skipped where the interpreter
+    cannot run it (``native_render.SUPPORTED`` is False). A test that starts
+    another interpreter passes ``CITRY_NATIVE_RENDER`` for the path itself.
+    """
+    if request.param == "rust" and not native_render.SUPPORTED:
+        pytest.skip("this interpreter takes the Python render path")
+    monkeypatch.setattr(native_render, "ACTIVE", request.param == "rust")
+    return str(request.param)
+
+
+@pytest.fixture
+def python_render_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Render with the Python path, for a test that checks the Python evaluator's own internals."""
+    monkeypatch.setattr(native_render, "ACTIVE", False)
 
 
 @pytest.fixture(autouse=True)

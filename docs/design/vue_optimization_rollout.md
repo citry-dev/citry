@@ -249,6 +249,8 @@ to `simple="vue"` rows.
   component.
 - `_vue/leaf_program.py::LeafProgramNode` holds the generated JSON evaluator
   (`_SimpleJsonCodegen`) and the row HTML writer (`_RowHtmlWriterCodegen`).
+  On standard CPython, Rust reads most rows instead of that evaluator and
+  writes their manifest data; see [`native_render.md`](native_render.md).
 - `_vue/serialization.py::prepare_vue_serialization` decides whether a page
   hydrates and writes the host HTML with `vue._render_for_hydration`;
   `_vue/client.js` adopts it with `createSSRApp`.

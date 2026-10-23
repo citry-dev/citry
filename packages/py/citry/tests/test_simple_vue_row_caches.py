@@ -17,6 +17,10 @@ each matches the per-row result:
 
 Each cached result lives with the object it describes (the serialization pass
 or the compiled template), so a template reload builds a fresh one.
+
+These caches belong to the Python evaluator. On the native render path
+Rust reads most rows instead (``tests/test_native_render_rows.py``), so the
+tests that look inside the caches ask for ``python_render_path``.
 """
 
 from __future__ import annotations
@@ -156,6 +160,7 @@ def _assert_same_json(left: object, right: object) -> None:
         assert left == right or (type(left) is float and math.isnan(left) and math.isnan(right))  # type: ignore[arg-type]
 
 
+@pytest.mark.usefixtures("python_render_path")
 def test_evaluated_leaf_data_is_plain_and_copied_by_assembly(monkeypatch: pytest.MonkeyPatch) -> None:
     assemblies = _capture_assemblies(monkeypatch)
     _row, page = _build(simple="vue")
@@ -186,6 +191,7 @@ def test_evaluated_leaf_data_is_plain_and_copied_by_assembly(monkeypatch: pytest
         assert json.dumps(leaf.prepared_data, sort_keys=True) == before
 
 
+@pytest.mark.usefixtures("python_render_path")
 def test_only_evaluated_leaf_data_skips_the_checking_conversion(monkeypatch: pytest.MonkeyPatch) -> None:
     copied: list[object] = []
 
@@ -232,6 +238,7 @@ ERROR_CASES: list[dict[str, object]] = [
 ]
 
 
+@pytest.mark.usefixtures("python_render_path")
 @pytest.mark.parametrize("case", range(len(SPREAD_CASES)))
 @pytest.mark.parametrize("deps_strategy", ["document", "simple"])
 @pytest.mark.parametrize("ssr", [True, False])

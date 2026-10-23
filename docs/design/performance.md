@@ -533,6 +533,9 @@ prioritize the prototype above over more piecewise Python tuning.
 
 ### 6.9 Postscript: the full engine was built, measured, and archived (2026-06-25)
 
+> The Rust code that did ship reads `simple = "vue"` rows rather than walking
+> the template body; see [`native_render.md`](native_render.md).
+
 The binary decision in 6.7 was taken: the prototype was built out into a full
 production body engine and measured, to settle "roughly parity, not a beat" with a
 real implementation rather than the isolated-walk estimate.

@@ -81,6 +81,33 @@ cached component or region. Once a cached entry exists, Citry reuses it
 and skips everything inside, including nested caches. Give an outer
 entry an expiry no longer than any content inside it can tolerate.
 
+## Faster on CPython { #faster-simple-vue-rows-on-cpython }
+
+On standard CPython (the usual build, not the free-threaded one), Citry
+renders
+[`simple = "vue"`](/performance/simple-components/#give-a-simple-component-its-own-vue-state)
+components faster without any setting. The gain is largest on a page
+that repeats one such component many times in a `c-for` loop, such as
+the rows of a table. Citry does part of the work for each copy in
+compiled code, and the page's HTML and data are the same as without it.
+
+These cases render at the speed `simple = "vue"` has without this
+speed-up, with the same output:
+
+- PyPy, Pyodide, and free-threaded CPython builds.
+- A `Citry` instance created with `mode="development"`.
+- A component whose `js_data()` or `css_data()` returns values, or
+  whose template calls other components.
+
+Some pages still build each copy's HTML in Python, so they may gain
+nothing. These include static output (`deps_strategy="simple"`),
+fragments, a root template that is not a full `<html>` document, any
+CSP setting or nonce, and a `deps_position` other than `"smart"`.
+
+If a page renders differently or fails only on standard CPython, set
+`CITRY_NATIVE_RENDER=0` in the server's environment before it starts,
+and [report the bug](https://github.com/citry-dev/citry/issues).
+
 ## Garbage collection
 
 A Python setting outside Citry can take a few milliseconds off each

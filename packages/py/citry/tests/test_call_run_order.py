@@ -12,6 +12,8 @@ user callbacks and hooks, called the same number of times, in the same
 order, seeing the same execution frame, with the same error at the end. A
 change that reorders one row's callbacks, calls a hook once more, or loses
 part of an error chain fails here even when the HTML stays the same.
+Every case runs on both render paths (the ``render_path`` fixture): the
+native one, where Rust reads the rows, and the Python one.
 
 ``CASES`` names every case, says what it changes on the page, and gives a
 one-line summary of its record: the rows and child components whose data
@@ -64,6 +66,7 @@ import inspect
 import itertools
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -79,6 +82,7 @@ import pytest
 
 from citry import Citry, Component, ComponentLike
 from citry._vue import direct
+from citry._vue.leaf_program import LeafProgramNode
 from citry._vue.serialization import hydration_admission
 from citry.extension import Extension
 from citry.util.html import Markup
@@ -1149,7 +1153,7 @@ def _assert_matches(case: str, record: dict[str, Any]) -> None:
         assert record[part] == value, f"{case}: {part}"
 
 
-def _record_in_own_process(case: str) -> dict[str, Any]:
+def _record_in_own_process(case: str, render_path: str = "rust") -> dict[str, Any]:
     """Run one case in a fresh interpreter, for a change that would outlive the test."""
     script = """
 import json, sys
@@ -1162,6 +1166,8 @@ print(json.dumps(_run_case(sys.argv[1])))
         capture_output=True,
         text=True,
         check=False,
+        # The new interpreter decides its render path from this variable.
+        env={**os.environ, "CITRY_NATIVE_RENDER": "1" if render_path == "rust" else "0"},
     )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout.splitlines()[-1])
@@ -1171,14 +1177,46 @@ def test_every_case_has_a_locked_record() -> None:
     assert list(EXPECTED) == list(CASES)
 
 
+# Cases whose rows never reach the native row read: no rows, an error
+# before the first row, rows whose js_data() returns values, rows that call
+# children, and a loop that fails on a missing key before any row is read.
+_NO_NATIVE_ROWS = {
+    "empty_loop",
+    "too_deep",
+    "data_schemas",
+    "rows_call_child",
+    "child_of_row_raises",
+    "run_in_slot_fill_rows_call_child",
+    "traced_input_fault",
+}
+
+
 @pytest.mark.parametrize("case", [case for case in CASES if case not in _OWN_PROCESS_CASES])
-def test_render_calls_user_code_and_hooks_in_the_locked_order(case: str) -> None:
+def test_render_calls_user_code_and_hooks_in_the_locked_order(
+    case: str, render_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Count the rows Rust reads, so the Rust case cannot pass by quietly
+    # taking the Python path.
+    read = LeafProgramNode.read_native_row
+    rows_read: list[object] = []
+
+    def counting_read(self: LeafProgramNode, variables: dict[str, object]) -> object:
+        row = read(self, variables)
+        if row is not None:
+            rows_read.append(row)
+        return row
+
+    monkeypatch.setattr(LeafProgramNode, "read_native_row", counting_read)
     _assert_matches(case, _run_case(case))
+    if render_path == "python" or case in _NO_NATIVE_ROWS:
+        assert rows_read == []
+    else:
+        assert rows_read
 
 
 @pytest.mark.parametrize("case", sorted(_OWN_PROCESS_CASES))
-def test_process_wide_change_keeps_the_locked_order(case: str) -> None:
-    _assert_matches(case, _record_in_own_process(case))
+def test_process_wide_change_keeps_the_locked_order(case: str, render_path: str) -> None:
+    _assert_matches(case, _record_in_own_process(case, render_path))
 
 
 def _render_in_two_threads(render_once: Callable[[], dict[str, str]]) -> tuple[list[dict[str, str]], bool]:
@@ -1212,7 +1250,7 @@ def _render_in_two_threads(render_once: Callable[[], dict[str, str]]) -> tuple[l
     return outputs, overlapped
 
 
-def test_two_threads_rendering_together_write_the_same_html() -> None:
+def test_two_threads_rendering_together_write_the_same_html(render_path: str) -> None:
     """
     Two threads render the page at the same time and get the bytes one render gets alone.
 
@@ -1221,6 +1259,7 @@ def test_two_threads_rendering_together_write_the_same_html() -> None:
     counter shared by both threads could not do. The test also checks that
     the threads' renders really overlapped in time.
     """
+    del render_path  # the fixture switches the render path
     recorder = _Recorder()
     case = _build("plain", recorder)
 

@@ -8,8 +8,9 @@ import math
 import re
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
+from functools import partial
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, overload
 
 import citry.citry_render as render_module
 from citry.attrs import (
@@ -40,8 +41,9 @@ from citry.nodes import (
     _validate_introduced_variables,
 )
 from citry.util import html as _html_module
-from citry.util.html import escape_to_str
+from citry.util.html import escape_to_str, script_json
 
+from . import native_render as _native_render
 from .capture import (
     PreparedAttribute,
     PreparedElementClose,
@@ -2159,6 +2161,179 @@ def _evaluation_only_operations(operations: tuple[object, ...]) -> tuple[object,
     return tuple(selected)
 
 
+# --- The plan the native render path's Rust row reader runs. ---------------
+#
+# The Rust reader (``citry_core._rust.native_render._RowPlan``) evaluates the
+# same operations the generated simple JSON evaluator runs, over the same
+# read set, so no template rule is written twice. These functions turn that
+# description into plain tuples Rust can read. Each shape the generated
+# evaluator supports maps to one tuple; anything else means "no plan", and
+# the template keeps the Python evaluator.
+
+
+def _native_row_expr(expression: _SimpleJsonExpr) -> tuple[object, ...] | None:
+    """Describe one expression as ("c", value), ("p", root, keys) or ("i", test, body, otherwise)."""
+    if expression.kind == "constant":
+        value = expression.value
+        # The expression subset only admits these literals (plus True for a
+        # boolean attribute), so any other value means the subset grew and
+        # Rust must not guess its text.
+        if value is None or type(value) in {str, bool}:
+            return ("c", value)
+        return None
+    if expression.kind == "path":
+        return ("p", expression.root, expression.keys)
+    if expression.kind == "if":
+        test = _native_row_expr(cast("_SimpleJsonExpr", expression.test))
+        body = _native_row_expr(cast("_SimpleJsonExpr", expression.body))
+        otherwise = _native_row_expr(cast("_SimpleJsonExpr", expression.otherwise))
+        if test is None or body is None or otherwise is None:
+            return None
+        return ("i", test, body, otherwise)
+    return None
+
+
+def _native_root_spread_entries(
+    node: PreparedElementOpenNode,
+    keys: tuple[str, ...],
+) -> tuple[tuple[str, bool, str | None], ...] | None:
+    """
+    Describe one root ``c-bind`` key set for Rust, or return None to make Rust decline the row.
+
+    Rust calls this once per new key set. The layout comes from the same
+    ``_root_spread_plan`` the generated evaluator uses, so the name checks and
+    merge rules stay in Python. Each entry is ``(name, is_static, json)``:
+    a static entry carries the JSON text of its fixed value (None when it
+    writes nothing), and a row entry takes its value from the row's dict.
+    """
+    plan = _root_spread_plan(node, keys)
+    if plan is None:
+        return None
+    entries: list[tuple[str, bool, str | None]] = []
+    for entry in plan:
+        if not entry.is_static:
+            entries.append((entry.name, False, None))
+            continue
+        if not entry.has_projected:
+            entries.append((entry.name, True, None))
+            continue
+        try:
+            # The generated evaluator stores this value unchanged, so its
+            # text is exactly what script_json writes for it.
+            encoded = script_json(entry.projected, sort_keys=True)
+        except (TypeError, ValueError):
+            return None
+        entries.append((entry.name, True, encoded))
+    return tuple(entries)
+
+
+def _native_row_operations(
+    operations: tuple[_SimpleJsonOperation, ...],
+) -> tuple[tuple[object, ...], ...] | None:
+    """Describe one scope of simple JSON operations, or return None for a shape Rust does not run."""
+    described: list[tuple[object, ...]] = []
+    for simple in operations:
+        operation = simple.operation
+        if simple.kind == "skip":
+            continue
+        if simple.kind == "text":
+            expression = _native_row_expr(cast("_SimpleJsonExpr", simple.expression))
+            if expression is None:
+                return None
+            described.append(("text", cast("_Text", operation).key, expression))
+        elif simple.kind == "open":
+            attributes: list[tuple[str, tuple[object, ...]]] = []
+            for name, attribute_expression in simple.attributes:
+                attribute = _native_row_expr(attribute_expression)
+                if attribute is None:
+                    return None
+                attributes.append((name, attribute))
+            described.append(("open", cast("_Open", operation).attrs_key, tuple(attributes)))
+        elif simple.kind == "generic":
+            # The generated evaluator runs a root c-bind as a "generic"
+            # operation; Rust supports it only when it spreads a plain path.
+            expression = _native_row_expr(cast("_SimpleJsonExpr", simple.expression))
+            if expression is None or expression[0] != "p":
+                return None
+            open_operation = cast("_Open", operation)
+            described.append(
+                (
+                    "spread",
+                    open_operation.attrs_key,
+                    expression,
+                    # Rust asks for a key set's layout through this callable.
+                    partial(_native_root_spread_entries, open_operation.node),
+                )
+            )
+        elif simple.kind == "if":
+            branches: list[tuple[tuple[object, ...] | None, tuple[tuple[object, ...], ...]]] = []
+            for condition, body in simple.branches:
+                described_condition = None if condition is None else _native_row_expr(condition)
+                described_body = _native_row_operations(body)
+                if (condition is not None and described_condition is None) or described_body is None:
+                    return None
+                branches.append((described_condition, described_body))
+            described.append(("if", cast("_If", operation).key, tuple(branches)))
+        elif simple.kind == "for":
+            iterable = _native_row_expr(cast("_SimpleJsonExpr", simple.iterable))
+            loop_body = _native_row_operations(simple.body)
+            loop_empty = _native_row_operations(simple.empty)
+            if iterable is None or loop_body is None or loop_empty is None:
+                return None
+            described.append(("for", cast("_For", operation).key, simple.target, iterable, loop_body, loop_empty))
+        else:
+            # A child call (or any later kind) keeps the Python evaluator,
+            # which also records the call for the render loop.
+            return None
+    return tuple(described)
+
+
+def _native_row_read_node(node: _SimpleJsonReadNode) -> tuple[object, ...]:
+    """Describe one read-set node as (kinds, children, items)."""
+    return (
+        tuple(sorted(node.kinds)),
+        tuple((key, _native_row_read_node(child)) for key, child in node.children),
+        None if node.items is None else _native_row_read_node(node.items),
+    )
+
+
+# What ``native_row_plan_tuples`` returns: the described operations, the
+# read set's roots, the loop targets, the spread limit and the largest int
+# an attribute sends as a number, the five arguments of ``_RowPlan``.
+NativeRowPlanTuples: TypeAlias = tuple[
+    tuple[tuple[object, ...], ...],
+    tuple[tuple[str, tuple[object, ...]], ...],
+    tuple[str, ...],
+    int,
+    int,
+]
+
+
+def native_row_plan_tuples(node: LeafProgramNode) -> NativeRowPlanTuples | None:
+    """
+    Return the five arguments of Rust's ``_RowPlan``, or None when there is no plan.
+
+    The operations and read set are built exactly as the generated evaluator
+    builds its own (``_compute_static_instance_free_template_supported``), so
+    Rust checks and evaluates what that evaluator would. The spread limit is
+    read from ``_ROOT_SPREAD_PLAN_LIMIT`` when the plan is built, so Rust
+    keeps as many root ``c-bind`` key sets as Python's own cache does, and
+    the int limit is ``_JS_SAFE_INTEGER``, the one Python's attribute values
+    use.
+    """
+    if node.fragment.calls or not node.static_instance_free_template_supported():
+        return None
+    simple_operations = _compile_simple_json_operations(node.evaluation_operations, allow_instance_free_spread=True)
+    if simple_operations is None:
+        return None
+    described = _native_row_operations(simple_operations)
+    if described is None:
+        return None
+    read_set = _simple_json_read_set(simple_operations)
+    roots = tuple((name, _native_row_read_node(child)) for name, child in read_set.roots)
+    return (described, roots, read_set.loop_targets, _ROOT_SPREAD_PLAN_LIMIT, _JS_SAFE_INTEGER)
+
+
 class LeafProgramNode(Node):
     """Evaluate a cached leaf program once into occurrence data or typed fallback output."""
 
@@ -2192,6 +2367,56 @@ class LeafProgramNode(Node):
         self._row_html_writer: _RowHtmlWrite | None = None
         self._row_html_writer_attempted = False
         self._write_row_html_method = self._write_row_html
+        # The Rust row plan (`native_row_plan`), built on first use. The node
+        # is immutable and the admission key rebuilds it when anything it
+        # depends on changes, so the plan cannot go stale.
+        self._native_row_plan: Any = None
+        self._native_row_plan_attempted = False
+
+    @property
+    def native_row_plan(self) -> Any:
+        """
+        Return the Rust ``_RowPlan`` for this template, or None when Rust cannot run it.
+
+        Whether to build it depends only on ``native_render.SUPPORTED``,
+        which never changes, and not on ``ACTIVE``: a test that runs the
+        Python path first must not leave "no plan" cached for a later run
+        on the Rust path.
+        """
+        if not self._native_row_plan_attempted:
+            plan = None
+            native = _native_render.native
+            if native is not None:
+                tuples = native_row_plan_tuples(self)
+                if tuples is not None:
+                    # Any error other than ValueError is a Citry bug. It
+                    # propagates and leaves nothing cached, so every render
+                    # fails loudly instead of quietly taking the slower path.
+                    try:
+                        plan = native._RowPlan(*tuples)
+                    except ValueError:
+                        # Rust refuses a shape it cannot evaluate exactly;
+                        # those rows keep the Python evaluator.
+                        plan = None
+            # Publish the plan before the flag, so a concurrent render sees
+            # either nothing yet (and builds it too) or the final value.
+            self._native_row_plan = plan
+            self._native_row_plan_attempted = True
+        return self._native_row_plan
+
+    def read_native_row(self, variables: dict[str, object]) -> Any:
+        """
+        Ask Rust to check, copy and evaluate one row; return its ``_NativeRow``, or None.
+
+        None means Rust declined the row (or this template has no Rust plan),
+        and the caller evaluates the row in Python. The scalar set
+        is read again for every row, as Python's own check reads it, so a
+        type registered with ``ComponentLike`` affects the next row.
+        """
+        plan = self.native_row_plan
+        if plan is None:
+            return None
+        return plan.read(variables, _simple_json_plain_scalar_types())
 
     def supports_static_instance_free(self, component_class: type[Any]) -> bool:
         """Whether this leaf is a static, context-free Vue definition candidate."""
@@ -2362,6 +2587,32 @@ class LeafProgramNode(Node):
             raise TypeError("simple='vue' leaf is not eligible for the context-free evaluator")
         if not program.readset_preflight(None, variables):
             raise TypeError("simple='vue' template data is not safe for the context-free evaluator")
+        return self._evaluate_instance_free(program, variables, component_name=component_name, calls=calls)
+
+    def render_native_snapshot(self, variables: dict[str, object], *, component_name: str) -> PreparedLeafProgram:
+        """
+        Build the leaf of a row Rust read, from ``_NativeRow.snapshot()``.
+
+        This is ``render_static_instance_free`` without the read-set check:
+        Rust ran the same check when it read the row during the render. Run
+        again here, at serialize time, it could give a different answer
+        (a type registered with ``ComponentLike`` in between) for values
+        that were already accepted.
+        """
+        program = self._simple_json_program
+        if program is None:  # pragma: no cover - a Rust plan exists only for a template this evaluator runs
+            raise AssertionError("a Rust-read simple='vue' row has no Python evaluator")
+        return self._evaluate_instance_free(program, variables, component_name=component_name, calls=None)
+
+    def _evaluate_instance_free(
+        self,
+        program: _SimpleJsonProgram,
+        variables: dict[str, object],
+        *,
+        component_name: str,
+        calls: dict[tuple[int, str], tuple[_Call, dict[str, object], str | None]] | None,
+    ) -> PreparedLeafProgram:
+        """Evaluate checked row variables into this template's leaf."""
         data: dict[str, object] = {}
         resolved_opens: dict[tuple[int, int], PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen] = {}
         token = _SIMPLE_VUE_ERROR_COMPONENT.set(component_name)

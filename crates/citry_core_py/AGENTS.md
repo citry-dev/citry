@@ -23,6 +23,11 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   render programs the server runs to write HTML Vue hydrates
   (`ServerRenderProgram`, `_read_server_render_program`,
   `_render_for_hydration`).
+- `src/native_render/` - wraps `citry_native_render` for the native render
+  path (`docs/design/native_render.md`): `rows.rs` holds `_RowPlan`,
+  `_NativeRow`, `_RunDigests` and `_encode_occurrences`, the code that reads
+  Python values through the C API, and `without_panics`; `mod.rs` registers
+  them. Every name is private; `citry/_vue/native_render.py` decides whether Citry calls them.
 - `src/template_parser.rs` - wraps `citry_template_parser`: `parse_template`
   / `compile_template`, the V3 AST classes, `TagRules`, and the browser
   analysis functions. `analyze_browser_source` and

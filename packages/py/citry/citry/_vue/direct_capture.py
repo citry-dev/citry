@@ -38,6 +38,7 @@ from citry.components.mark import repeated_mark_name_error, validate_mark_name
 from citry.util.html import Markup, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
+from . import native_render as _native_render
 from .capture import (
     PreparedAttribute,
     PreparedDynamicElementClose,
@@ -236,7 +237,9 @@ def _run_eligible_component(value: object) -> TypeGuard[CitryRender | SimpleVueR
         return bool(
             value.component_class.simple == "vue"
             and value.component_class.class_id == value.class_id
-            and type(value.leaf) is PreparedLeafProgram
+            # A row Rust read has no leaf until an output asks for one, and
+            # needs none to be a run member.
+            and (value.native is not None or type(value.leaf) is PreparedLeafProgram)
             and type(metadata) is _PreparedCallMetadata
             and metadata.slot_free_body is True
             and type(metadata.source) is str
@@ -426,8 +429,19 @@ def assemble_typed_render(
     root_occurrence_id: str | None = None,
     template_context_names: tuple[str, ...] = (),
     expected_citry: object | None = None,
+    native_rows: bool = False,
 ) -> Assembly:
-    """Assemble the final view, render map, and native compiler inputs together."""
+    """
+    Assemble the final view, render map, and native compiler inputs together.
+
+    With ``native_rows``, a ``simple='vue'`` row that Rust read keeps Rust's
+    JSON as its prepared data (on the occurrence's private ``_native``)
+    instead of a Python copy, and the manifest encoder writes that JSON in.
+    Only ``precompile_selected_tree_for_serialization`` passes it, because
+    that path runs only when no browser hook can read or change the view's
+    prepared data. Every other caller gets each row's values back through
+    the record's Python leaf.
+    """
     from citry._simple_runtime import SimpleRender  # noqa: PLC0415
 
     if render.render_target != "prepared":
@@ -513,6 +527,12 @@ def assemble_typed_render(
     # class, template and the element text written for each call.
     leaf_call_artifacts: dict[tuple[str, int, tuple[str, ...]], _LeafDefinitionArtifact] = {}
     markers: list[PreparedMarker] = []
+    # Occurrence id -> the _NativeRow whose JSON the manifest encoder writes
+    # as that occurrence's prepared data (only with ``native_rows``).
+    native_occurrences: dict[str, object] = {}
+    # Class id -> component tag, for the rows of call runs that Rust read,
+    # looked up once per class per assembly (see register_native_member).
+    native_member_tags: dict[str, str] = {}
 
     context_binding_attrs = "".join(f' :{name}="{name}"' for name in template_context_names)
     context_binding_pattern = "" if not template_context_names else '="{ ' + ", ".join(template_context_names) + ' }"'
@@ -736,15 +756,26 @@ def assemble_typed_render(
             current = parent
         return tuple(reversed(path))
 
-    def transform_component(
+    def start_occurrence(
         value: CitryRender | SimpleVueRecord,
         parent_id: str | None,
         occurrence_id: str,
-        placement_key: str | None = None,
-        inherited_root_markers: tuple[tuple[str, object], ...] = (),
-        physical_parent_stack: tuple[str, ...] = (),
-        marker_owner_id: str | None = None,
-    ) -> str:
+        placement_key: str | None,
+        marker_owner_id: str | None,
+        *,
+        native_row: object | None = None,
+        look_up_tag: bool = True,
+    ) -> tuple[str, dict[str, object], int]:
+        """
+        Check one component occurrence and record it; return its type key, prepared values and index.
+
+        ``transform_component`` and ``register_native_member`` both start
+        here, so a check added for one occurrence applies to rows Rust read
+        too. ``native_row`` is the row's ``_NativeRow`` when assembly keeps
+        Rust's JSON for it. ``look_up_tag`` is False only for a later row of
+        a class whose tag ``register_native_member`` already looked up in
+        this assembly.
+        """
         # A simple='vue' record is its own frame. The type checker
         # forbids subclasses of the final SimpleVueRecord, so isinstance acts
         # like an exact type check and narrows
@@ -774,7 +805,9 @@ def assemble_typed_render(
         if raw_frame_data is None:
             raise UnsupportedPreparedView("component occurrence has no captured js_data")
         try:
-            frame_data = _json_plain(raw_frame_data)
+            # A row Rust read exists only when js_data() returned nothing,
+            # so its browser data is an empty object with nothing to check.
+            frame_data = {} if native_row is not None and not raw_frame_data else _json_plain(raw_frame_data)
         except _SecretInBrowserDataError as error:
             # The author wrapped this value to keep it on the server, so say
             # exactly which key holds it rather than only that a type is wrong.
@@ -795,7 +828,8 @@ def assemble_typed_render(
             component_class = citry.get_component_by_class_id(type_key)
         except KeyError as error:
             raise UnsupportedPreparedView("component occurrence has no current registered class") from error
-        component_tag(type_key, component_class)
+        if look_up_tag:
+            component_tag(type_key, component_class)
         live_component = None if isinstance(value, SimpleVueRecord) else value.context.component
         live_identity = (
             value.component_class is component_class and component_class.citry is citry
@@ -826,6 +860,93 @@ def assemble_typed_render(
         occurrence_fields.append((occurrence_id, type_key, parent_id, placement_key, frame_data, prepared_values))
         occurrence_definition_ids.append(None)
         render_to_occurrence[frame.render_id] = occurrence_id
+        return type_key, prepared_values, occurrence_index
+
+    def native_definition(type_key: str, fragment: LeafProgramFragment) -> str:
+        """
+        Register and return the definition of a row Rust read.
+
+        The definition comes from the template's fragment alone, exactly as
+        the leaf path in ``transform_component`` builds it for a row with no
+        root markers, so every row of the template shares it.
+        """
+        artifact = leaf_artifacts.get((type_key, id(fragment)))
+        if artifact is None:
+            compile_input = DefinitionCompileInput(
+                fragment.template,
+                (),
+                tuple(dict(item) for item in fragment.element_bindings),
+                (),
+                (),
+                template_context_names,
+                (),
+                tuple(dict(item) for item in fragment.runtime_event_sites),
+            )
+            artifact = _LeafDefinitionArtifact(_definition_id(type_key, compile_input), compile_input)
+            leaf_artifacts[(type_key, id(fragment))] = artifact
+        definition_id = artifact.definition_id
+        existing = definitions.get(definition_id)
+        if existing is not None:
+            if existing.type_key != type_key or compile_inputs.get(definition_id) != artifact.compile_input:
+                raise AssertionError("prepared definition hash collision")
+        else:
+            definitions[definition_id] = _AssembledDefinition(definition_id, type_key)
+            compile_inputs[definition_id] = artifact.compile_input
+        return definition_id
+
+    def register_native_member(
+        member: SimpleVueRecord,
+        parent_id: str,
+        occurrence_id: str,
+        placement_key: str,
+        marker_owner_id: str,
+    ) -> str:
+        """
+        Record one row of a call run that Rust read and that has no root markers; return its component tag.
+
+        It writes the same maps as ``transform_component`` through the same
+        start, so every row is checked against the registry as before. The
+        two component tag lookups the ordinary path makes for every row run
+        once per class per assembly: the precompile path accepts only the
+        built-in tag callback, which answers the same for every row.
+        """
+        member_tag = native_member_tags.get(member.class_id)
+        type_key, _prepared_values, occurrence_index = start_occurrence(
+            member,
+            parent_id,
+            occurrence_id,
+            placement_key,
+            marker_owner_id,
+            native_row=member.native,
+            look_up_tag=member_tag is None,
+        )
+        if member_tag is None:
+            member_tag = component_tag(type_key)
+            native_member_tags[type_key] = member_tag
+        occurrence_definition_ids[occurrence_index] = native_definition(type_key, member.fragment)
+        native_occurrences[occurrence_id] = member.native
+        return member_tag
+
+    def transform_component(
+        value: CitryRender | SimpleVueRecord,
+        parent_id: str | None,
+        occurrence_id: str,
+        placement_key: str | None = None,
+        inherited_root_markers: tuple[tuple[str, object], ...] = (),
+        physical_parent_stack: tuple[str, ...] = (),
+        marker_owner_id: str | None = None,
+    ) -> str:
+        # A simple='vue' record is its own frame. The type checker
+        # forbids subclasses of the final SimpleVueRecord, so isinstance acts
+        # like an exact type check and narrows
+        # ``value`` for the checker at each branch below.
+        frame: SimpleVueRecord | RenderFrame = value if isinstance(value, SimpleVueRecord) else value.frame
+        # On the precompile path a row Rust read keeps Rust's JSON as its
+        # prepared data; every other caller rebuilds the row's leaf in Python.
+        native_row = value.native if native_rows and isinstance(value, SimpleVueRecord) and not value.js_data else None
+        type_key, prepared_values, occurrence_index = start_occurrence(
+            value, parent_id, occurrence_id, placement_key, marker_owner_id, native_row=native_row
+        )
         own_root_markers = (
             _prepared_root_markers(value.root_markers)
             if isinstance(value, SimpleVueRecord)
@@ -844,10 +965,21 @@ def assemble_typed_render(
                     marker_identities.add(identity)
             root_markers = tuple(root_marker_values.items())
 
+        if native_row is not None and not root_markers:
+            # A row Rust read. Its prepared data stays {"calls": {}} here and
+            # the manifest encoder writes Rust's JSON for the rest, so its
+            # leaf is never built. A row with root markers needs its element
+            # openings rewritten, so it takes the leaf path below.
+            occurrence_definition_ids[occurrence_index] = native_definition(
+                type_key, cast("SimpleVueRecord", value).fragment
+            )
+            native_occurrences[occurrence_id] = native_row
+            return occurrence_id
+
         value_parts = [value.leaf] if isinstance(value, SimpleVueRecord) else value.parts
         if (
             isinstance(value, SimpleVueRecord)
-            and value.leaf.call_children is not None
+            and value.call_children is not None
             and (root_markers or not value.leaf.fragment.calls_unconditional)
         ):
             # Which calls a row makes depends on its c-if branches and c-for
@@ -1613,8 +1745,14 @@ def assemble_typed_render(
                         run_id = f"citryRun{len(run_values)}"
                         members: list[tuple[str, str, str, tuple[_FillFragment, ...]]] = []
                         run_component_tag: str | None = None
+                        # On the native render path Rust computes both ids of
+                        # every row (ordinary components too), from the same
+                        # leading JSON text Python would hash. The Python
+                        # prefixes are then built only for a key Rust cannot
+                        # hash (one with no UTF-8 form).
+                        native_module = _native_render.native if _native_render.ACTIVE else None
                         # Every row's child id starts with this occurrence's id.
-                        child_id_prefix = _DigestPrefix(occurrence_id)
+                        child_id_prefix = None if native_module is not None else _DigestPrefix(occurrence_id)
                         # Rows of one run normally share their call site: the same
                         # source and span objects from one template node, and the
                         # same class id. Their placement digests then differ only
@@ -1622,6 +1760,8 @@ def assemble_typed_render(
                         # row does not share them, the checks below start a new
                         # prefix from that row.
                         placement_prefix: _DigestPrefix | None = None
+                        run_digests: Any = None
+                        prefix_ready = False
                         prefix_source: object = None
                         prefix_span: object = None
                         prefix_type: str | None = None
@@ -1651,28 +1791,61 @@ def assemble_typed_render(
                             # JSON text, so the cached prefix hashes what
                             # `_digest(member_base, placement_route, ...)` would.
                             if (
-                                placement_prefix is None
+                                not prefix_ready
                                 or member_metadata.source is not prefix_source
                                 or member_metadata.source_span is not prefix_span
                                 or type(member_type) is not str
                                 or member_type != prefix_type
                             ):
-                                placement_prefix = _DigestPrefix(member_base, placement_route)
+                                prefix_ready = True
                                 prefix_source = member_metadata.source
                                 prefix_span = member_metadata.source_span
                                 prefix_type = member_type if type(member_type) is str else None
-                            member_placement_digest = placement_prefix.digest(("explicit", member_key))
-                            member_placement_key = f"citryPlacement{member_placement_digest[:24]}"
-                            member_child_id = f"citryOccurrence{child_id_prefix.digest(member_placement_key)[:24]}"
-                            transform_component(
-                                member,
-                                occurrence_id,
-                                member_child_id,
-                                member_placement_key,
-                                physical_parent_stack=tuple(element_stack),
-                                marker_owner_id=data_owner_id,
-                            )
-                            member_tag = component_tag(member_type)
+                                if native_module is None:
+                                    placement_prefix = _DigestPrefix(member_base, placement_route)
+                                else:
+                                    # The same leading text _DigestPrefix hashes
+                                    # for these values, without the closing "]".
+                                    placement_prefix = None
+                                    run_digests = native_module._RunDigests(
+                                        _DIGEST_JSON.encode((member_base, placement_route))[:-1],
+                                        _DIGEST_JSON.encode((occurrence_id,))[:-1],
+                                    )
+                            member_ids = None if run_digests is None else run_digests.member_ids(member_key)
+                            if member_ids is not None:
+                                member_placement_key, member_child_id = member_ids
+                            else:
+                                if placement_prefix is None:
+                                    placement_prefix = _DigestPrefix(member_base, placement_route)
+                                if child_id_prefix is None:
+                                    child_id_prefix = _DigestPrefix(occurrence_id)
+                                member_placement_digest = placement_prefix.digest(("explicit", member_key))
+                                member_placement_key = f"citryPlacement{member_placement_digest[:24]}"
+                                member_child_id = f"citryOccurrence{child_id_prefix.digest(member_placement_key)[:24]}"
+                            if (
+                                native_rows
+                                and type(member) is SimpleVueRecord
+                                and member.native is not None
+                                and not member.root_markers
+                                and not member.js_data
+                            ):
+                                # A row Rust read needs only its occurrence
+                                # records (ids, parent, definition); a row with
+                                # root markers or js_data takes
+                                # transform_component, which converts them.
+                                member_tag = register_native_member(
+                                    member, occurrence_id, member_child_id, member_placement_key, data_owner_id
+                                )
+                            else:
+                                transform_component(
+                                    member,
+                                    occurrence_id,
+                                    member_child_id,
+                                    member_placement_key,
+                                    physical_parent_stack=tuple(element_stack),
+                                    marker_owner_id=data_owner_id,
+                                )
+                                member_tag = component_tag(member_type)
                             if run_component_tag is None:
                                 run_component_tag = member_tag
                             elif member_tag != run_component_tag:
@@ -2600,7 +2773,7 @@ def assemble_typed_render(
             active_projected_data_containers.pop()
             return output
 
-        if isinstance(value, SimpleVueRecord) and value.leaf.call_children is not None and value_parts == [value.leaf]:
+        if isinstance(value, SimpleVueRecord) and value.call_children is not None and value_parts == [value.leaf]:
             # Every row of this template makes the same calls at the same
             # places, so all its rows share one definition: the compiled
             # template with each child's component element written at its
@@ -2757,6 +2930,7 @@ def assemble_typed_render(
             prepared_values,
             parent_id,
             placement_key,
+            native=native_occurrences.get(occurrence_id),
         )
         for (occurrence_id, type_key, parent_id, placement_key, frame_data, prepared_values), definition_id in zip(
             occurrence_fields, occurrence_definition_ids, strict=True

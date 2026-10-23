@@ -498,10 +498,11 @@ def test_initial_preparation_honors_instance_override() -> None:
         return {"source": "instance"}
 
     producer.prepare_from_render = instance_prepare
-    manifest, tags, validate = _prepare_initial_result(producer, object(), object(), "app")
-    assert manifest == {"source": "instance"}
-    assert tags is None
-    validate()
+    prepared = _prepare_initial_result(producer, object(), object(), "app")
+    assert prepared.payload == {"source": "instance"}
+    assert prepared.tags is None
+    assert prepared.native_rows == {}
+    prepared.validate()
 
 
 def test_direct_events_producer_uses_selected_credentials_and_one_bundle() -> None:

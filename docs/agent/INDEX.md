@@ -28,6 +28,7 @@ each entry to one paragraph and link to longer docs rather than copying them.
 | Internationalization runtime: checked Fluent catalogs | [`crates/citry_i18n/AGENTS.md`](../../crates/citry_i18n/AGENTS.md) |
 | Sandboxed Python expression transform | [`crates/python_safe_eval/AGENTS.md`](../../crates/python_safe_eval/AGENTS.md) |
 | HTML attribute transformer | [`crates/citry_html_transform/AGENTS.md`](../../crates/citry_html_transform/AGENTS.md) |
+| Native render path: Rust reads `simple = "vue"` rows; when Citry uses it; tests that run both paths | [`docs/design/native_render.md`](../design/native_render.md), [`crates/citry_native_render/AGENTS.md`](../../crates/citry_native_render/AGENTS.md) |
 | Python package surface (`citry_core` on PyPI) | [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md) |
 | Monorepo dev / build / release conventions | [`docs/codebase.md`](../codebase.md) |
 | Vue rendering, native slots, component identity, server revisions, and cutover status | [`docs/design/vue.md`](../design/vue.md) |
@@ -111,8 +112,8 @@ and wrapped by Python modules under
 [`packages/py/citry_core/citry_core/`](../../packages/py/citry_core/citry_core/).
 These four must stay in sync (see CLAUDE.md Mechanism 4). The
 `template_parser` module is registered in `lib.rs` (`parse_template`,
-`compile_template`, and the AST classes), alongside `vue`, `html_transform`,
-`i18n`, `safe_eval`, and `template_formatter`. The `i18n` submodule exposes
+`compile_template`, and the AST classes), alongside `vue`, `native_render`,
+`html_transform`, `i18n`, `safe_eval`, and `template_formatter`. The `i18n` submodule exposes
 ICU4X locale canonicalization and direction lookup plus the checked Fluent
 catalog runtime. The language-neutral message code lives in `citry_i18n`;
 `citry_core_py` only wraps it for Python.

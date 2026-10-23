@@ -20,6 +20,10 @@ from citry import Citry, Component
 from citry._vue.serialization import hydration_admission
 from citry.component import Component as ComponentBase
 
+# Every case runs on both render paths: the native (Rust) one and the Python
+# one that PyPy, Pyodide and free-threaded builds use.
+pytestmark = pytest.mark.usefixtures("render_path")
+
 ROWS = [
     {"id": "a", "title": "Alpha", "tags": ["x", "y"], "done": True},
     {"id": "b", "title": "Beta <b>", "tags": [], "done": False},

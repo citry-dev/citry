@@ -101,10 +101,10 @@ def reject_repeated_mark_names(owner: Component, render: CitryRender) -> None:
                 if type(name) is str and seen.setdefault(name, component) is not component:
                     raise repeated_mark_name_error(type(owner).__name__, name)
             pending.extend(part.parts)
-        elif type(part) is SimpleVueRecord and part.leaf.call_children is not None:
+        elif type(part) is SimpleVueRecord and part.call_children is not None:
             # A simple='vue' occurrence keeps the components it called in a
             # separate render of its own instead of in `parts`.
-            pending.extend(part.leaf.call_children.parts)
+            pending.extend(part.call_children.parts)
 
 
 def make_mark_component(citry_instance: Citry) -> type[Component]:

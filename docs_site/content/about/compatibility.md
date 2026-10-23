@@ -47,6 +47,10 @@ These wheels cover regular CPython 3.10 to 3.14. Free-threaded CPython
 The exact list is in the
 [files on PyPI](https://pypi.org/project/citry-core/#files){: target="_blank" rel="noopener"}.
 
+Citry writes the same pages on every interpreter. On standard CPython it
+renders [`simple = "vue"` components faster](/performance/#faster-simple-vue-rows-on-cpython)
+than on PyPy, Pyodide, or free-threaded builds.
+
 ## Build from source { #building-from-source }
 
 When PyPI has no wheel for your platform, pip downloads the source of

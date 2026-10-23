@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -49,6 +50,36 @@ def main() -> None:
     }
     catalog = CatalogCompiler().compile(json.dumps(compile_request))
     rich = json.loads(catalog.resolve_rich_json("en-US", "rich", "{}", '["link"]'))
+    # The native render module ships in every wheel, including the ones
+    # whose interpreter takes the Python path, so check it imports and that
+    # its hashing gives Python's answer.
+    native_ids = _rust.native_render._RunDigests('["site"', '["parent"').member_ids("key")
+    native_placement = "citryPlacement" + hashlib.sha256(b'["site",["explicit","key"]]').hexdigest()[:24]
+    native_child = "citryOccurrence" + hashlib.sha256(f'["parent","{native_placement}"]'.encode()).hexdigest()[:24]
+    # Read one row through the C API (its float goes through CPython's own
+    # formatter) and write it with the occurrence writer, as citry calls them.
+    native = _rust.native_render
+    plan = native._RowPlan(
+        (("text", "citryText0", ("p", "v", ())), ("open", "citryAttrs0", (("data-n", ("p", "n", ())),))),
+        (("v", (("scalar",), (), None)), ("n", (("scalar",), (), None))),
+        (),
+        32,
+        2**53 - 1,
+    )
+    native_row = plan.read({"v": 0.1, "n": 2**60}, frozenset({str, int, bool, float}))
+    native_item: dict[str, object] = {
+        "definitionId": "d",
+        "id": "o",
+        "parentId": None,
+        "placementKey": None,
+        "preparedData": {"calls": {}},
+        "renderId": "r",
+        "serverData": {},
+        "typeKey": "t",
+    }
+    if native_row is None:
+        raise RuntimeError("the native render module declined a plain row")
+    native_occurrences = native._encode_occurrences([native_item], {"o": native_row}, json.dumps)
     segments, placeholders = mark_html(
         "<main><p>Hello</p></main>",
         ["data-citry"],
@@ -62,6 +93,9 @@ def main() -> None:
         "formatted": formatted,
         "locale": canonicalize_locale("en-us"),
         "marked": segments[0],
+        "native_render_ids": native_ids == (native_placement, native_child),
+        "native_render_row": native_row.prepared_json,
+        "native_render_occurrences": native_occurrences,
         "placeholders": placeholders,
         "python": sys.version,
         "safe_eval": evaluated,
@@ -78,6 +112,13 @@ def main() -> None:
         "embedded_languages": ["javascript", "css"],
         "locale": "en-US",
         "marked": '<main data-citry=""><p>Hello</p></main>',
+        "native_render_ids": True,
+        "native_render_row": '{"calls":{},"citryAttrs0":{"data-n":"1152921504606846976"},"citryText0":"0.1"}',
+        "native_render_occurrences": (
+            '[{"definitionId":"d","id":"o","parentId":null,"placementKey":null,'
+            '"preparedData":{"calls":{},"citryAttrs0":{"data-n":"1152921504606846976"},"citryText0":"0.1"},'
+            '"renderId":"r","serverData":{},"typeKey":"t"}]'
+        ),
         "placeholders": [],
         "safe_eval": 42,
         "browser_references": ["known", "local"],

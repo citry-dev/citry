@@ -1434,13 +1434,15 @@ def _validate_prepared_render(render: CitryRender) -> None:
             elif isinstance(part, leaf_types):
                 continue
             elif type(part) is SimpleVueRecord:
-                if type(part.leaf) is not PreparedLeafProgram:
+                # A row Rust read has no leaf until an output asks for one;
+                # its native record stands in for it.
+                if part.native is None and type(part.leaf) is not PreparedLeafProgram:
                     raise TypeError("simple='vue' rendering contains an invalid instance-free leaf record")
-                if part.leaf.call_children is None:
+                if part.call_children is None:
                     continue
                 for called in simple_vue_called_components(part):
                     if type(called) is SimpleVueRecord:
-                        if type(called.leaf) is not PreparedLeafProgram:
+                        if called.native is None and type(called.leaf) is not PreparedLeafProgram:
                             raise TypeError("simple='vue' rendering contains an invalid instance-free leaf record")
                     elif isinstance(called, CitryRender):
                         pending.append(called)
