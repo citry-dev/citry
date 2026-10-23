@@ -35,7 +35,8 @@ pub struct OutputTag {
     pub attributes: Vec<OutputAttribute>,
 }
 
-/// Receives each start tag's facts as soon as the tag closes, with the index
+/// Receives each start tag's facts as soon as the start tag ends at its `>`,
+/// with the index
 /// the tag keeps in the returned facts when it is a `script` or `style`.
 pub(crate) type StartTagObserver<'a> = dyn FnMut(&OutputTag, Option<usize>) + 'a;
 
@@ -459,7 +460,7 @@ pub fn scan_output_html(input: &str) -> Vec<OutputTag> {
 }
 
 /// Scan `input` like [`scan_output_html`], but hand each start tag to
-/// `observer` as it closes instead of keeping it.
+/// `observer` when it ends at its `>`, instead of keeping it.
 ///
 /// The result holds only the `script` and `style` tags, in document order,
 /// with their element ends filled in. The observer receives each of those

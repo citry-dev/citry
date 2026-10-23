@@ -337,6 +337,10 @@ fn javascript_mode(value: Option<&str>) -> PyResult<Option<JavascriptMode>> {
 ///
 /// `cleaned_html` is the page with every omit marker removed, or `None`
 /// when there was none. Offsets are UTF-8 byte offsets.
+///
+/// Raises `ValueError` for an unknown `javascript` mode, and
+/// `ValueError("citry output check failed: ...")` if the check panics.
+/// A string with a lone surrogate raises `UnicodeEncodeError`.
 #[pyfunction(name = "_check_output_html")]
 #[pyo3(signature = (html, *, pre_extension, csp, javascript, marker_prefix, trusted_tag_starts, omit_handler_marker))]
 pub fn check_output_html(

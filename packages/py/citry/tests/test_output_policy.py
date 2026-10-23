@@ -60,7 +60,8 @@ def test_strict_csp_reports_handlers_urls_and_raw_elements_in_page_order() -> No
 def test_csp_warning_reports_a_raw_element_once_across_both_checks() -> None:
     validator = _CspRenderValidator("warn")
     validator.validate_pre_extension_html("<p><script>a()</script></p>", component_classes={})
-    # The first identical script is the one reported before the hooks ran.
+    # The settled page's first script matches the one remembered before the
+    # hooks ran, so only the second is reported again.
     validator.validate_settled_html(
         "<p><script>a()</script></p><script>a()</script>",
         marker_prefix="data-t",
@@ -304,3 +305,17 @@ def test_an_internal_error_in_the_output_check_reports_the_page_as_unreadable(
         html = rendered.serialize(deps_strategy="simple", csp_nonce="cmVxdWVzdE5vbmNl")
     assert "<p" in html
     assert "kept</p>" in html
+
+
+def test_a_caller_error_is_raised_not_reported_as_an_unreadable_page() -> None:
+    with pytest.raises(ValueError, match="unknown security_javascript mode"):
+        _output_policy.check_output_html("<p>x</p>", javascript="sometimes")  # type: ignore[arg-type]
+    # Any collection of trusted starts works.
+    check = _output_policy.check_output_html(
+        "<style>a{}</style>",
+        csp=True,
+        marker_prefix=None,
+        trusted_tag_starts=[0],  # type: ignore[arg-type]
+    )
+    assert check.error is None
+    assert [event[6] for event in check.events] == [True]

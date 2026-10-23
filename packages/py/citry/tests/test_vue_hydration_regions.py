@@ -793,7 +793,7 @@ def test_csp_page_carries_server_html_and_keeps_every_script_nonced() -> None:
 
 
 @pytest.mark.parametrize("style", ["<style>p{color:red}</style>", '<style media="print">p{color:red}</style>'])
-# The page's own CSP inventory of the raw style is expected here.
+# The page's own CSP check warns about the raw style, as expected.
 @pytest.mark.filterwarnings("ignore:Citry found 1 strict-CSP:RuntimeWarning")
 def test_csp_body_with_a_raw_style_element_keeps_an_empty_host(style: str) -> None:
     engine = Citry(autodiscover=False, security_csp="warn")

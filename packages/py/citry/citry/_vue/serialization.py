@@ -1042,8 +1042,8 @@ def _server_contents_pass_policies(
         return False
     if security_csp == "off":
         return True
-    # The check only answers here; the page's own validator reports what the
-    # served page holds later.
+    # This call only answers yes or no and reports nothing. The page's own CSP
+    # validator reports any finding when it checks the served page.
     return _output_policy.server_copy_passes_csp(contents, security_csp)
 
 

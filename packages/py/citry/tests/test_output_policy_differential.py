@@ -50,6 +50,7 @@ COMPONENT_CLASSES = {"known": "Known", "other": "Other", "": "Empty"}
 _TAGS = [
     "a", "iframe", "object", "embed", "form", "button", "input", "select", "textarea", "div", "span",
     "section", "svg", "math", "title", "noscript", "template", "table", "p", "script", "style", "link",
+    "x-\u00e9l\u00e9ment", "D\u0130V",
 ]  # fmt: skip
 _SCRIPT_TYPES = [
     None, "", "module", "Module ;x", "module;x", " text/javascript ", "TEXT/JavaScript", "application/json",
@@ -61,7 +62,21 @@ _ACTIVATION = [
     "v-bind:href", ":href.prop", ":action", ":formaction", ":src", ":value", ":title", "@click",
     "@click.prevent", "v-on", "v-on:click", "v-model", "V-IF", "v-", "@", ":",
 ]  # fmt: skip
-_PLAIN = ["hidden", "form", "value", "name", "title", "id", "class", "type", "media", "rel"]
+# Names with letters outside ASCII keep their case and are reported as written.
+_PLAIN = [
+    "hidden",
+    "form",
+    "value",
+    "name",
+    "title",
+    "id",
+    "class",
+    "type",
+    "media",
+    "rel",
+    "\u00e9t\u00e9",
+    "\u0130d",
+]
 _EVENTS = ["onclick", "ONLOAD", "on", "onx", "On", "oncommand", "onscrollsnapchange", "o", "onclick\u017f"]
 _URL_NAMES = ["href", "src", "action", "formaction", "xlink:href", "data", "HREF"]
 _CIDS = ["data-cid-known", "data-cid-other", "data-cid-unknown", "data-cid-", "DATA-CID-KNOWN"]
@@ -104,13 +119,20 @@ def _document(rng: random.Random, depth: int) -> str:
     elif roll < 0.4:
         pieces.append('<a onclick="x()">a</a>')
     elif roll < 0.55:
-        pieces.append(f'<a href="{_javascript_text(rng)}">a</a>')
+        tag, name = rng.choice([("a", "href"), ("form", "action"), ("button", "formaction"), ("svg", "xlink:href"),
+                                ("object", "data"), ("iframe", "src")])  # fmt: skip
+        pieces.append(f'<{tag} {name}="{_javascript_text(rng)}">a</{tag}>')
     elif roll < 0.75 and depth < 6:
         nested = _document(rng, depth + 1)
-        if rng.random() < 0.5:
+        roll = rng.random()
+        if roll < 0.4:
             pieces.append(f'<iframe srcdoc="{_escape(nested, rng)}"></iframe>')
-        else:
+        elif roll < 0.6:
             pieces.append(f'<iframe src="{_data_url(rng, nested)}"></iframe>')
+        elif roll < 0.8:
+            pieces.append(f"<object data='{_data_url(rng, nested)}'></object>")
+        else:
+            pieces.append(f'<embed src="{_data_url(rng, nested)}">')
     elif roll < 0.8:
         pieces.append("<title><script>inert()</script></title>")
     return "".join(pieces)
@@ -271,6 +293,10 @@ def _fallback_control(rng: random.Random) -> str:
         f'<input @click="go()" type="{value}button">',
         f'<section :href="u" href="{value}">s</section>',
         f'<form :action="u" action="{value}"></form>',
+        # Only the first of two same-named attributes counts.
+        f'<a @click="go()" href="{value}" href="/next">a</a>',
+        f'<button @click="go()" type="{value}" type="button">b</button>',
+        f'<section :hidden="h" HIDDEN hidden="{value}">s</section>',
     ])  # fmt: skip
 
 
@@ -319,18 +345,35 @@ def _tag_starts(html: str) -> list[int]:
         return []
 
 
+def _raw_starts(html: str) -> list[int]:
+    try:
+        return [
+            node.start_tag.token.start_index
+            for node in scan_output_html(html).elements
+            if node.start_tag.name.content in {"script", "style"}
+        ]
+    except Exception:  # noqa: BLE001 - an unreadable page has no tags to trust
+        return []
+
+
 def _scenario_results(html: str, rng: random.Random, *, second: str | None = None) -> list[tuple[object, ...]]:
     """Run every mode on `html` on both sides and return pairs of outcomes."""
     results: list[tuple[object, ...]] = []
     starts = _tag_starts(html)
     marker_prefix = rng.choice([None, "", TRUST_PREFIX, "data-cid-"])
-    # Only the Vue body check trusts no tag by its attributes.
+    # Only the Vue body check passes no prefix, and it runs only the CSP
+    # rules, so the JavaScript policy always gets one.
     js_prefix = TRUST_PREFIX if marker_prefix is None else marker_prefix
     # The settled page: after the hooks, possibly a different page that
     # repeats some raw elements of the one before them.
     settled = html if second is None else second
     settled_starts = starts if second is None else _tag_starts(second)
-    settled_trusted = frozenset(rng.sample(settled_starts, k=min(len(settled_starts), rng.randint(0, 2))))
+    chosen = set(rng.sample(settled_starts, k=min(len(settled_starts), rng.randint(0, 2))))
+    # Trust matters most on raw elements, so often one of them is trusted.
+    raw_starts = _raw_starts(settled)
+    if raw_starts and rng.random() < 0.5:
+        chosen.add(rng.choice(raw_starts))
+    settled_trusted = frozenset(chosen)
 
     for mode in ("warn", "strict"):
         for remember in (False, True):
@@ -376,7 +419,9 @@ def _scenario_results(html: str, rng: random.Random, *, second: str | None = Non
 
     # One Rust read serves both validators, as serialize() shares it.
     for js_mode in ("warn", "omit", "forbid"):
-        results.append(("shared", js_mode, *_shared_results(settled, js_mode, js_prefix, settled_trusted)))
+        # Only warn mode remembers the page before the hooks.
+        pre_html = html if js_mode == "warn" and second is not None else None
+        results.append(("shared", js_mode, *_shared_results(pre_html, settled, js_mode, js_prefix, settled_trusted)))
 
     results.append(
         (
@@ -389,15 +434,22 @@ def _scenario_results(html: str, rng: random.Random, *, second: str | None = Non
 
 
 def _shared_results(
-    settled: str, js_mode: str, js_prefix: str, settled_trusted: frozenset[int]
+    pre_html: str | None, settled: str, js_mode: str, js_prefix: str, settled_trusted: frozenset[int]
 ) -> tuple[tuple[object, ...], tuple[object, ...]]:
-    """Check one page for both validators with one Rust read, and each Python copy on its own."""
-    csp_real = _CspRenderValidator("warn")
-    js_real = _JavascriptPolicy(js_mode)  # type: ignore[arg-type]
-    csp_copy = ReferenceCspValidator("warn")
-    js_copy = ReferenceJavascriptPolicy(js_mode)  # type: ignore[arg-type]
+    """Check pages for both validators with one Rust read each, as serialize() does, and each Python copy alone."""
+
+    def cleaned_trusted(cleaned: str) -> frozenset[int]:
+        # Removing omit markers moves the tags after them, so the trusted
+        # starts are taken again from the cleaned page, as serialize() does.
+        return frozenset(_tag_starts(cleaned)[: len(settled_trusted)])
 
     def shared() -> object:
+        csp = _CspRenderValidator("warn")
+        policy = _JavascriptPolicy(js_mode)  # type: ignore[arg-type]
+        if pre_html is not None:
+            pre_check = _output_policy.check_output_html(pre_html, pre_extension=True)
+            policy.validate_pre_extension_html(pre_html, component_classes=COMPONENT_CLASSES, check=pre_check)
+            csp.validate_pre_extension_html(pre_html, component_classes=COMPONENT_CLASSES, check=pre_check)
         check = _output_policy.check_output_html(
             settled,
             csp=True,
@@ -406,7 +458,7 @@ def _shared_results(
             trusted_tag_starts=settled_trusted,
             omit_handler_marker=MARKER,
         )
-        cleaned = js_real.validate_settled_html(
+        cleaned = policy.validate_settled_html(
             settled,
             marker_prefix=js_prefix,
             trusted_tag_starts=settled_trusted,
@@ -414,32 +466,36 @@ def _shared_results(
             omit_handler_marker=MARKER,
             check=check,
         )
-        if cleaned is settled:
-            csp_real.validate_settled_html(
-                settled,
-                marker_prefix=js_prefix,
-                trusted_tag_starts=settled_trusted,
-                component_classes=COMPONENT_CLASSES,
-                check=check,
-            )
-        return cleaned is settled, list(js_real._findings), list(csp_real._findings)
+        shares = cleaned is settled
+        csp.validate_settled_html(
+            cleaned,
+            marker_prefix=js_prefix,
+            trusted_tag_starts=settled_trusted if shares else cleaned_trusted(cleaned),
+            component_classes=COMPONENT_CLASSES,
+            check=check if shares else None,
+        )
+        return cleaned, list(policy._findings), list(csp._findings)
 
     def separate() -> object:
-        cleaned = js_copy.validate_settled_html(
+        csp = ReferenceCspValidator("warn")
+        policy = ReferenceJavascriptPolicy(js_mode)  # type: ignore[arg-type]
+        if pre_html is not None:
+            policy.validate_pre_extension_html(pre_html, component_classes=COMPONENT_CLASSES)
+            csp.validate_pre_extension_html(pre_html, component_classes=COMPONENT_CLASSES)
+        cleaned = policy.validate_settled_html(
             settled,
             marker_prefix=js_prefix,
             trusted_tag_starts=settled_trusted,
             component_classes=COMPONENT_CLASSES,
             omit_handler_marker=MARKER,
         )
-        if cleaned == settled:
-            csp_copy.validate_settled_html(
-                settled,
-                marker_prefix=js_prefix,
-                trusted_tag_starts=settled_trusted,
-                component_classes=COMPONENT_CLASSES,
-            )
-        return cleaned == settled, list(js_copy._findings), list(csp_copy._findings)
+        csp.validate_settled_html(
+            cleaned,
+            marker_prefix=js_prefix,
+            trusted_tag_starts=settled_trusted if cleaned == settled else cleaned_trusted(cleaned),
+            component_classes=COMPONENT_CLASSES,
+        )
+        return cleaned, list(policy._findings), list(csp._findings)
 
     return _outcome(shared), _outcome(separate)
 

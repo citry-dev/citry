@@ -29,11 +29,14 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   compares it with the full parse.
 - `src/output_policy.rs` - runs the strict-CSP and JavaScript-policy rules
   over the HTML `serialize()` returns and reports only what they find; the
-  Python validators (`citry/_csp_validation.py`,
-  `citry/_javascript_policy.py`) word and report it. Its character-reference
-  decoding and letter matching copy Python's on purpose, and
+  Python validators (`packages/py/citry/citry/_csp_validation.py`,
+  `packages/py/citry/citry/_javascript_policy.py`) write the messages and
+  decide whether to warn or raise. Its character-reference decoding and
+  letter matching copy Python's on purpose.
   `packages/py/citry/tests/_output_policy_reference.py` keeps the Python
-  rules that `test_output_policy_differential.py` compares it with.
+  rules, `packages/py/citry/tests/test_output_policy_differential.py`
+  compares the two on generated pages, and running any test suite with
+  `CITRY_OUTPUT_POLICY_DIFFERENTIAL=1` compares them in every check.
 - `src/output_scanner.rs` - reads HTML the way the browser's parser does
   (html5gum with html5ever's tree builder choosing the tokenizer state) and
   returns each start tag's facts; `scan_output_html_with` hands them to a

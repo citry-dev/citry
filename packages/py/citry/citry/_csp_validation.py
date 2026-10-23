@@ -64,7 +64,9 @@ class _CspRenderValidator:
             check = _output_policy.check_output_html(
                 html, csp=True, marker_prefix=marker_prefix, trusted_tag_starts=trusted_tag_starts
             )
-        check.require(html, pre_extension=False, csp=True, javascript=None)
+        check.require_settled(
+            html, csp=True, javascript=None, marker_prefix=marker_prefix, trusted_tag_starts=trusted_tag_starts
+        )
         if check.error is not None:
             self._add(
                 f"the settled HTML could not be parsed for CSP validation ({check.error})",
@@ -91,7 +93,7 @@ class _CspRenderValidator:
             return
         if check is None:
             check = _output_policy.check_output_html(html, pre_extension=True)
-        check.require(html, pre_extension=True, csp=False, javascript=None)
+        check.require_pre_extension(html)
         # The settled pass reports malformed output.
         if check.error is not None:
             return
@@ -150,9 +152,13 @@ class _CspRenderValidator:
         if rule == "csp-native-event":
             detail = f"the native inline event attribute {attribute!r}; use a Vue handler or Component.js"
             signature: tuple[object, ...] = (component, "native-event", name)
-        else:
+        elif rule == "csp-javascript-url":
             detail = f"a javascript: URL in {attribute!r}; use a normal URL or a Vue handler"
             signature = (component, "javascript-url", tag, name)
+        else:
+            # A rule Rust reports without wording here would be lost.
+            msg = f"unknown CSP output rule {rule!r}"
+            raise AssertionError(msg)
         self._add(
             detail,
             component,

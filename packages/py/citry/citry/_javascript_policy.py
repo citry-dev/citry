@@ -197,7 +197,7 @@ class _JavascriptPolicy:
         check: _output_policy.OutputCheck | None = None,
     ) -> str:
         """
-        Inventory active behavior after every string-level extension hook.
+        Report the browser behavior in the page after every `on_serialize` hook has run.
 
         Returns ``html`` with every ``omit_handler_marker`` attribute removed.
         A caller that already checked ``html`` with these options passes that
@@ -211,7 +211,14 @@ class _JavascriptPolicy:
                 trusted_tag_starts=trusted_tag_starts,
                 omit_handler_marker=omit_handler_marker,
             )
-        check.require(html, pre_extension=False, csp=False, javascript=self._mode)
+        check.require_settled(
+            html,
+            csp=False,
+            javascript=self._mode,
+            marker_prefix=marker_prefix,
+            trusted_tag_starts=trusted_tag_starts,
+            omit_handler_marker=omit_handler_marker,
+        )
         if check.error is not None:
             if omit_handler_marker is not None and omit_handler_marker.lower() in html.lower():
                 msg = "Citry omission handler metadata remained in unparseable settled HTML"
@@ -247,7 +254,7 @@ class _JavascriptPolicy:
             return
         if check is None:
             check = _output_policy.check_output_html(html, pre_extension=True)
-        check.require(html, pre_extension=True, csp=False, javascript=None)
+        check.require_pre_extension(html)
         # The settled pass reports malformed output.
         if check.error is not None:
             return
@@ -350,10 +357,14 @@ class _JavascriptPolicy:
             finding = "embedded-document"
             detail = f"{attribute!r} contains an embedded HTML document with executable browser code"
             signature = ("embedded-document", tag, name, start)
-        else:
+        elif rule == "js-handler-only-control":
             finding = "handler-only-control"
             detail = "this control has a browser handler but no native navigation or submission fallback"
             signature = ("handler-only", tag, token_start)
+        else:
+            # A rule Rust reports without wording here would be lost.
+            msg = f"unknown JavaScript-policy output rule {rule!r}"
+            raise AssertionError(msg)
         self._add(
             finding,
             detail,
@@ -449,8 +460,9 @@ def _script_executable_for_policy(script: Script) -> tuple[bool, str | None]:
         return True, str(error)
 
 
-# Both validator classes exist now, so an opt-in comparison with the
-# frozen Python rules can wrap them (see _output_policy).
+# This runs after both validator classes are defined, so the opt-in
+# comparison with the frozen Python rules (see _output_policy) can wrap
+# their methods.
 _output_policy.install_differential_checks()
 
 __all__ = ["_JavascriptPolicy"]

@@ -4,9 +4,10 @@
 //! `citry.serialize()` checks the page it is about to return when
 //! `security_csp` or `security_javascript` is set. This module runs the
 //! rules of those checks over the page and returns only what they found:
-//! the attributes and elements a rule reports, and every `script` and
-//! `style` element, because Python remembers some of those between two
-//! checks of one page. Python keeps the wording of each message, the
+//! the attributes and elements a rule reports, and the `script` and
+//! `style` elements the selected rules look at (only scripts when only the
+//! JavaScript policy runs), because Python remembers some of those between
+//! two checks of one page. Python keeps the wording of each message, the
 //! bookkeeping that drops repeated findings, and the decision to warn or
 //! raise, so an ordinary tag never becomes a Python object.
 //!
@@ -28,8 +29,9 @@ use crate::output_scanner::{scan_output_html, scan_output_html_with, OutputTag};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PolicyPass {
     /// The page before the `on_serialize` extension hooks run. Only its
-    /// `script` and `style` elements matter, so that the later check does
-    /// not report one a second time.
+    /// `script` and `style` elements matter: warn mode reports and
+    /// remembers them here, so the later check does not report the same
+    /// element again.
     PreExtension,
     /// The page after every hook has run, which is what the browser gets.
     Settled,
@@ -101,15 +103,15 @@ pub struct RawElement {
     /// Byte span of the tag name in the start tag.
     pub name_start: usize,
     pub name_end: usize,
-    /// Byte offset just past the element: its end tag, the end of the input
-    /// when it never closes, or its start tag when nothing closes it.
+    /// Byte offset just past the element: past its end tag, or the end of
+    /// the input when no end tag closes it.
     pub element_end: usize,
     /// Citry wrote this tag (see [`OutputPolicyOptions::marker_prefix`]).
     pub trusted: bool,
     /// The element is a `script` the browser would run.
     pub executable: bool,
     /// An attribute name starts with `data-citry`, which marks one of
-    /// Citry's browser manifests.
+    /// Citry's browser manifests (the data its browser manager reads).
     pub has_manager_attribute: bool,
     /// The suffixes of the element's `data-cid-*` attributes, in attribute
     /// order. Python names the first one it knows as the component.
@@ -1100,8 +1102,9 @@ mod tests {
         })
     }
 
-    // The expected values below are what Citry's Python decoder returned
-    // for the same inputs (`_decode_html_attribute` before the rules moved).
+    // The expected values below are what Citry's Python decoder returns
+    // for the same inputs (`_decode_html_attribute` in
+    // `packages/py/citry/tests/_output_policy_reference.py`).
     #[test]
     fn attribute_values_decode_like_python_html_unescape() {
         let cases = [

@@ -83,7 +83,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     html_transform_mod.add_function(wrap_pyfunction!(mark_html, &html_transform_mod)?)?;
     html_transform_mod.add_function(wrap_pyfunction!(scan_output_html, &html_transform_mod)?)?;
     // The strict-CSP and JavaScript-policy checks; private, because only
-    // `citry/_output_policy.py` and the validators call them.
+    // the `citry` package calls them.
     html_transform_mod.add_function(wrap_pyfunction!(
         html_transform::check_output_html,
         &html_transform_mod

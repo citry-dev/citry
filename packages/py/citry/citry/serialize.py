@@ -966,12 +966,14 @@ def _serialize_render_result(
         html = html.replace(placeholder_html, "")
     script_security = session._script_security
     marker_prefix = script_security.marker_prefix if script_security is not None else ""
-    trusted_tag_starts = script_security.trusted_tag_starts(html) if script_security is not None else frozenset()
+    trusted_tag_starts: frozenset[int] = frozenset()
     # Both validators check the same final page, so one read of it serves
     # them. The CSP check reads the page again only when the JavaScript
     # policy removed omit markers from it.
     settled_check = None
     if javascript_policy is not None or csp_validator is not None:
+        if script_security is not None:
+            trusted_tag_starts = script_security.trusted_tag_starts(html)
         settled_check = _output_policy.check_output_html(
             html,
             csp=csp_validator is not None,

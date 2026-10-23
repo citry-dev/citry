@@ -14,9 +14,11 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   can import. It also sets `BUILD_PROFILE` (`"release"` or `"debug"`), which the
   benchmark runners read to refuse an unoptimized build.
 - `src/html_transform.rs` - wraps `citry_html_transform`, including the
-  private output checks (`_check_output_html` and the predicates `citry`
-  shares with it), which only `citry/_output_policy.py` and the validators
-  call.
+  private output checks: `_check_output_html`, plus
+  `_script_type_is_executable`, `_classify_dependency_attribute`,
+  `_is_javascript_url` and `_JAVASCRIPT_MIME_TYPES`, which `citry` also uses
+  on structured `Script` and `Style` values. Only the `citry` package calls
+  them.
 - `src/i18n.rs` - exposes ICU4X locale canonicalization and direction lookup,
   and wraps the language-neutral `citry_i18n` catalog runtime.
 - `src/safe_eval.rs` - wraps `python_safe_eval`.

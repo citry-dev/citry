@@ -87,8 +87,8 @@ def _script_type_should_wrap(attrs: dict[str, str | bool]) -> bool:
         return True
 
     type_str = str(type_val).strip().lower()
-    # These are the JavaScript MIME types that mean "classic script"; the
-    # check of finished HTML uses the same list.
+    # `_JAVASCRIPT_MIME_TYPES` (from citry_core, shared with the check of
+    # finished HTML) lists the types that mean "classic script".
     # See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types#textjavascript
     return type_str == "" or type_str in _JAVASCRIPT_MIME_TYPES
 

@@ -10,8 +10,9 @@ tokenizer, because only the rules moved, and it keeps its own copy of
 every helper the rules use, so the comparison never checks Rust against
 itself.
 
-Keep this file unchanged while the two must agree. A deliberate change to
-a rule changes both, or retires this copy.
+Do not edit this copy to match a Rust bug. When a rule changes on
+purpose, change both copies the same way, or delete this copy and its
+comparison test.
 """
 
 from __future__ import annotations
@@ -606,7 +607,7 @@ def _decode_html_attribute(source: str) -> str:
 
 
 def _bounded_decimal_reference(raw: str) -> str:
-    """Shorten a long decimal reference to one that names the same code point, or one past the last."""
+    """Shorten a long decimal reference to one that names the same code point, or U+110000 when it is larger."""
     # Python refuses to turn more than about 4,300 digits into an int, so a
     # long reference would raise from html.unescape. Leading zeros do not
     # change the code point, and any value with more than seven digits is

@@ -264,7 +264,9 @@ class html_transform:
         every omit marker removed, or `None` when there was none. Offsets are
         UTF-8 byte offsets.
 
-        Raises `ValueError` for an unknown `javascript` mode.
+        Raises `ValueError` for an unknown `javascript` mode, and when the
+        check fails inside Rust (the message starts with
+        `citry output check failed:`).
         """
     @staticmethod
     def _script_type_is_executable(value: str) -> bool:
