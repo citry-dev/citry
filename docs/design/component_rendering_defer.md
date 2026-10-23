@@ -233,6 +233,16 @@ caps the depth. Checking the remembered index first and otherwise scanning the
 list keeps the position correct even if user code or an extension edited `.parts`
 in between.
 
+When a `<c-for>` loop places a `simple = "vue"` component (a component that
+renders without a Python object; each occurrence is a row) and qualifies as a
+call run, the loop records its rows in one `_DeferredRun`. The scan pushes one run task for rows that sit
+next to each other, where one `Render` per row would otherwise go, and the run
+task renders them in the same order. When a row calls child components, or
+must render as an ordinary component, the run task stops and the drive loop
+handles that row: it pushes a new run task for the remaining rows, then the
+row's own work on top of it. [`native_render.md`](native_render.md) section 3
+describes it.
+
 The stack has no natural end when a component renders itself forever, for
 example a tree node given data that lists the node among its own children. So
 each `Render` and `Finalize` item carries its component's nesting depth (the

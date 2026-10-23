@@ -75,6 +75,7 @@ from citry.citry_render import (
     RenderFrame,
     SimpleVueRecord,
     _after_render_hooks_scope,
+    _DeferredRunRow,
     _render_slot_value,
 )
 from citry.citry_template import CitryTemplate, DeclaredSlot
@@ -132,7 +133,7 @@ if TYPE_CHECKING:
     from citry._vue.direct import DirectExecutionFrame
     from citry._vue.leaf_program import LeafCallChildren, LeafProgramNode, PreparedLeafProgram
     from citry.assets import HasHtml
-    from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement
+    from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement, _DeferredRun
     from citry.component import Component
     from citry.nodes import BodyItem, Node
     from citry_core.template_parser import TagRules
@@ -539,6 +540,16 @@ def _simple_vue_renders_ordinarily(component_class: type[Component]) -> bool:
     return admission.rejection is None and admission.renders_ordinarily
 
 
+# The rejection reasons that both _render_simple_vue_leaf and a call run's
+# task (_run_row) give, so the two raise the same text.
+_CALL_SHAPE_REASON = (
+    "calls must be registered, nontransparent leaf components without slots, component-tag bindings, "
+    "or instance effects"
+)
+_REGISTRY_REASON = "the component must remain registered in its owning Citry instance"
+_ROOT_CALL_REASON = "a direct root call cannot carry child-call metadata"
+
+
 def _render_simple_vue_leaf(
     element: CitryElement,
     parent_context: CitryContext,
@@ -569,15 +580,11 @@ def _render_simple_vue_leaf(
             or element.component_tag_client_bindings
             or element.element_morph_metadata is not None
         ):
-            _reject_simple_vue(
-                component_class,
-                "calls must be registered, nontransparent leaf components without slots, component-tag bindings, "
-                "or instance effects",
-            )
+            _reject_simple_vue(component_class, _CALL_SHAPE_REASON)
         # Registration can change between calls without touching any key the
         # admission record watches, so identity is checked every time.
         if component_class.citry.get_component_by_class_id(component_class.class_id) is not component_class:
-            _reject_simple_vue(component_class, "the component must remain registered in its owning Citry instance")
+            _reject_simple_vue(component_class, _REGISTRY_REASON)
 
         admission = _simple_vue_admission(component_class)
         if admission.rejection is not None:
@@ -593,138 +600,270 @@ def _render_simple_vue_leaf(
         elif parent_context.component is None and not metadata.simple_vue_callers:
             # With no component around it, a template call can only come
             # from a simple='vue' template, which names its callers.
-            _reject_simple_vue(component_class, "a direct root call cannot carry child-call metadata")
+            _reject_simple_vue(component_class, _ROOT_CALL_REASON)
 
         # Engine state needs the ordinary path. Nothing observable has run
         # yet, so the caller renders this call as a regular component.
         if admission.renders_ordinarily:
             return None
-        leaf_node = cast("LeafProgramNode", admission.leaf_node)
-
-        # Match Component.__init__: allocate and validate the render ID before
-        # the typed schema can reject this occurrence.
-        # The built-in generator only makes valid ids; a custom one is checked.
-        id_generator = component_class.citry.id_generator
-        render_id = gen_render_id() if id_generator is None else validate_render_id(id_generator())
-        kwargs, _kwargs_const = _construct_data_schema(
-            element.kwargs,
-            component_class.Kwargs,
-            provenance_only=True,
-        )
-        if component_class.Kwargs is not None:
-            _check_input_types(kwargs, component_class.Kwargs, component_class, "Kwargs")
-        # Callbacks run in the ordinary order: template_data, js_data, css_data.
-        template_data_callback = admission.template_data_callback
-        template_data = kwargs if template_data_callback is None else template_data_callback(kwargs, {})
-        template_data = _normalize_data(
-            template_data,
-            component_class.TemplateData,
-            checked_for=(component_class, "TemplateData"),
-        )
-        js_data_callback = admission.js_data_callback
-        js_data = _normalize_data(
-            None if js_data_callback is None else js_data_callback(kwargs, {}),
-            component_class.JsData,
-            checked_for=(component_class, "JsData"),
-        )
-        # This path skips on_component_data, so the callback's own keys are
-        # the final ones the browser will receive.
-        _check_js_data_keys(component_class, js_data)
-        css_data_callback = admission.css_data_callback
-        css_data = _normalize_data(
-            None if css_data_callback is None else css_data_callback(kwargs, {}),
-            component_class.CssData,
-            checked_for=(component_class, "CssData"),
-        )
-        instance_globals = component_class.citry.template_globals
-        render_globals = _render_globals.get()
-        if instance_globals or render_globals:
-            template_data = _merge_const_mappings(
-                _const_mapping(instance_globals),
-                _const_mapping(render_globals or {}),
-                template_data,
-            )
-        variables = dict(template_data)
-        calls: dict[tuple[int, str], tuple[Any, dict[str, object], str | None]] | None = (
-            {} if leaf_node.fragment.calls else None
-        )
-        # Every callback has run, so on the native render path Rust can read
-        # the row now. It declines (returns None) anything it does not
-        # reproduce exactly, and the Python evaluator below then runs on the
-        # same variables, raising the error Python raises for it. Rows with
-        # calls stay in Python because their children come from the Python
-        # leaf; rows with js_data or css_data stay because assembly converts
-        # their browser data and root markers in Python. A `Citry` instance
-        # in development mode checks every element id the page writes, so its
-        # serializer needs every row's HTML and would rebuild each Rust-read
-        # row in Python; such rows stay on the Python path from the start.
-        native = (
-            leaf_node.read_native_row(variables)
-            if calls is None
-            and not js_data
-            and not css_data
-            and _native_render.ACTIVE
-            and component_class.citry.mode != "development"
-            else None
-        )
-        leaf = (
-            leaf_node.render_static_instance_free(
-                variables,
-                component_name=component_class.__name__,
-                calls=calls,
-            )
-            if native is None
-            else None
-        )
-        if calls is not None:
-            _defer_simple_vue_calls(
-                component_class,
-                # A template with calls never asks Rust, so its leaf exists.
-                cast("PreparedLeafProgram", leaf),
-                calls,
-                parent_context,
-                metadata,
-                admission,
-            )
-
-        css_capture = None
-        if css_data:
-            from citry.ext.dependencies.scripts import _cache_component_css_vars_capture  # noqa: PLC0415
-
-            css_capture = _cache_component_css_vars_capture(component_class, css_data)
-        css_vars_hash = None if css_capture is None else css_capture.variables_hash
-        has_js_asset = has_component_asset("js", component_class)
-        has_css_asset = has_component_asset("css", component_class)
-        # The parent owns the dependency set, so this record goes in at the
-        # position where an ordinary child render would have merged it.
-        if has_js_asset or has_css_asset or admission.has_dependencies:
-            records = parent_context.extra.setdefault(EXTRA_KEY, {})
-            if type(records) is not dict:
-                _reject_simple_vue(component_class, "dependency records changed type during instance-free rendering")
-            records[
-                DependencyRecord(
-                    class_id=component_class.class_id,
-                    component_id=render_id,
-                    css_vars_hash=css_vars_hash,
-                    component_class=component_class,
-                )
-            ] = _DependencyCacheCapture(css=css_capture)
-
-        return SimpleVueRecord(
-            component_class=component_class,
-            class_id=component_class.class_id,
-            render_id=render_id,
-            call_metadata=metadata,
-            js_data=dict(js_data),
-            _leaf=leaf,
-            css_vars_hash=css_vars_hash,
-            root_markers=() if css_vars_hash is None else (f"data-ccss-{css_vars_hash}",),
-            native=native,
-            _leaf_node=None if native is None else leaf_node,
-        )
+        return _simple_vue_record(component_class, admission, element.kwargs, metadata, parent_context)
     except Exception as error:
         call_metadata = element.prepared_call_metadata
         callers = call_metadata.simple_vue_callers if type(call_metadata) is _PreparedCallMetadata else ()
+        set_component_error_message(
+            error, [*_component_path(parent_context.component), *callers, component_class.__name__]
+        )
+        raise
+
+
+def _simple_vue_record(
+    component_class: type[Component],
+    admission: _SimpleVueAdmission,
+    element_kwargs: dict[str, Any],
+    metadata: _PreparedCallMetadata | None,
+    parent_context: CitryContext,
+) -> SimpleVueRecord:
+    """
+    Run an admitted ``simple='vue'`` occurrence's callbacks and build its record.
+
+    The second half of ``_render_simple_vue_leaf``, shared with a call run's
+    task (``_run_row``): both callers have made their admission checks and
+    chosen this path, so every step from here on is the same for both, in
+    the same order. Errors propagate; each caller adds the component path.
+    """
+    leaf_node = cast("LeafProgramNode", admission.leaf_node)
+
+    # Match Component.__init__: allocate and validate the render ID before
+    # the typed schema can reject this occurrence.
+    # The built-in generator only makes valid ids; a custom one is checked.
+    id_generator = component_class.citry.id_generator
+    render_id = gen_render_id() if id_generator is None else validate_render_id(id_generator())
+    kwargs, _kwargs_const = _construct_data_schema(
+        element_kwargs,
+        component_class.Kwargs,
+        provenance_only=True,
+    )
+    if component_class.Kwargs is not None:
+        _check_input_types(kwargs, component_class.Kwargs, component_class, "Kwargs")
+    # Callbacks run in the ordinary order: template_data, js_data, css_data.
+    template_data_callback = admission.template_data_callback
+    template_data = kwargs if template_data_callback is None else template_data_callback(kwargs, {})
+    template_data = _normalize_data(
+        template_data,
+        component_class.TemplateData,
+        checked_for=(component_class, "TemplateData"),
+    )
+    js_data_callback = admission.js_data_callback
+    js_data = _normalize_data(
+        None if js_data_callback is None else js_data_callback(kwargs, {}),
+        component_class.JsData,
+        checked_for=(component_class, "JsData"),
+    )
+    # This path skips on_component_data, so the callback's own keys are
+    # the final ones the browser will receive.
+    _check_js_data_keys(component_class, js_data)
+    css_data_callback = admission.css_data_callback
+    css_data = _normalize_data(
+        None if css_data_callback is None else css_data_callback(kwargs, {}),
+        component_class.CssData,
+        checked_for=(component_class, "CssData"),
+    )
+    instance_globals = component_class.citry.template_globals
+    render_globals = _render_globals.get()
+    if instance_globals or render_globals:
+        template_data = _merge_const_mappings(
+            _const_mapping(instance_globals),
+            _const_mapping(render_globals or {}),
+            template_data,
+        )
+    variables = dict(template_data)
+    calls: dict[tuple[int, str], tuple[Any, dict[str, object], str | None]] | None = (
+        {} if leaf_node.fragment.calls else None
+    )
+    # Every callback has run, so on the native render path Rust can read
+    # the row now. It declines (returns None) anything it does not
+    # reproduce exactly, and the Python evaluator below then runs on the
+    # same variables, raising the error Python raises for it. Rows with
+    # calls stay in Python because their children come from the Python
+    # leaf; rows with js_data or css_data stay because assembly converts
+    # their browser data and root markers in Python. A `Citry` instance
+    # in development mode checks every element id the page writes, so its
+    # serializer needs every row's HTML and would rebuild each Rust-read
+    # row in Python; such rows stay on the Python path from the start.
+    native = (
+        leaf_node.read_native_row(variables)
+        if calls is None
+        and not js_data
+        and not css_data
+        and _native_render.ACTIVE
+        and component_class.citry.mode != "development"
+        else None
+    )
+    leaf = (
+        leaf_node.render_static_instance_free(
+            variables,
+            component_name=component_class.__name__,
+            calls=calls,
+        )
+        if native is None
+        else None
+    )
+    if calls is not None:
+        _defer_simple_vue_calls(
+            component_class,
+            # A template with calls never asks Rust, so its leaf exists.
+            cast("PreparedLeafProgram", leaf),
+            calls,
+            parent_context,
+            metadata,
+            admission,
+        )
+
+    css_capture = None
+    if css_data:
+        from citry.ext.dependencies.scripts import _cache_component_css_vars_capture  # noqa: PLC0415
+
+        css_capture = _cache_component_css_vars_capture(component_class, css_data)
+    css_vars_hash = None if css_capture is None else css_capture.variables_hash
+    has_js_asset = has_component_asset("js", component_class)
+    has_css_asset = has_component_asset("css", component_class)
+    # The parent owns the dependency set, so this record goes in at the
+    # position where an ordinary child render would have merged it.
+    if has_js_asset or has_css_asset or admission.has_dependencies:
+        records = parent_context.extra.setdefault(EXTRA_KEY, {})
+        if type(records) is not dict:
+            _reject_simple_vue(component_class, "dependency records changed type during instance-free rendering")
+        records[
+            DependencyRecord(
+                class_id=component_class.class_id,
+                component_id=render_id,
+                css_vars_hash=css_vars_hash,
+                component_class=component_class,
+            )
+        ] = _DependencyCacheCapture(css=css_capture)
+
+    return SimpleVueRecord(
+        component_class=component_class,
+        class_id=component_class.class_id,
+        render_id=render_id,
+        call_metadata=metadata,
+        js_data=dict(js_data),
+        _leaf=leaf,
+        css_vars_hash=css_vars_hash,
+        root_markers=() if css_vars_hash is None else (f"data-ccss-{css_vars_hash}",),
+        native=native,
+        _leaf_node=None if native is None else leaf_node,
+    )
+
+
+# How a call run's task (_RunTask) stops before its last row. For the
+# ordinary-path and child-call exits the settle loop handles the row itself,
+# with a task for the later rows under that row's work; the depth and
+# position-gone exits end the render with an error.
+# Row k sits deeper than max_component_depth (checked before its callbacks).
+_RUN_EXIT_DEPTH = 0
+# Row k needs the ordinary component path; nothing observable ran for it yet.
+_RUN_EXIT_ORDINARY = 1
+# Row k is placed and called child components, which render before row k+1.
+_RUN_EXIT_CALLS = 2
+# Row k's record is ready, but its position is gone from the parts list. A
+# row's own task raises _replace_in_parts's RuntimeError there, past every
+# on_render boundary, so the settle loop raises it the same way.
+_RUN_EXIT_POSITION_GONE = 3
+
+
+def _run_rows(task: _RunTask) -> tuple[int, int, SimpleVueRecord | None] | None:
+    """
+    Render a run task's rows from ``task.start`` on, putting each row's record at its position.
+
+    A call run is the rows one ``<c-for>`` places at one component call
+    site (``_DeferredRun``). For each row this makes the checks the settle
+    loop makes for a row's own task, then ``_render_simple_vue_leaf``'s
+    steps, in the same order. The call's element-shape and metadata checks
+    hold for every row the loop recorded, so they are not repeated; reads of
+    class attributes and of Citry's own frozen records therefore differ in
+    count from one task per row.
+
+    Returns None when every row is placed, or ``(exit, k, record)`` for the
+    task's row ``k`` that the settle loop must handle itself (one of the
+    ``_RUN_EXIT_*`` values). An ``Exception`` from a row's callbacks carries
+    the row's component path, as from a row's own task. The execution scope
+    is reset after every row, on an error too.
+    """
+    run = task.run
+    component_class = run.component_class
+    parts = task.parts
+    rows = task.rows
+    positions = task.positions
+    parent_context = task.parent_context
+    depth = task.depth
+    execution = run.execution
+    for k in range(task.start, len(rows)):
+        row = rows[k]
+        # A row's own task checks the depth first, before any work for it.
+        if depth > component_class.citry.settings.max_component_depth:
+            return (_RUN_EXIT_DEPTH, k, None)
+        with direct_execution_scope(execution):
+            record = _run_row(component_class, run.kwargs[row.index], run.metadata[row.index], parent_context)
+        if record is None:
+            return (_RUN_EXIT_ORDINARY, k, None)
+        if not _place_run_part(parts, positions[k], row, record):
+            return (_RUN_EXIT_POSITION_GONE, k, record)
+        if record.call_children is not None:
+            return (_RUN_EXIT_CALLS, k, record)
+    return None
+
+
+def _place_run_part(parts: list[RenderPart], index: int, row: _DeferredRunRow, new: RenderPart) -> bool:
+    """
+    Put ``new`` where ``row`` is in ``parts``, as ``_replace_in_parts`` does; return False where that would raise.
+
+    The run task needs the failure as a value: a row's own task raises it
+    after the row's callbacks, outside the settle loop's error handling, so
+    the settle loop raises it there (``_RUN_EXIT_POSITION_GONE``).
+    """
+    if 0 <= index < len(parts) and parts[index] is row:
+        parts[index] = new
+        return True
+    # The list changed since the scan; find the row by identity, as
+    # _replace_in_parts finds a deferred component.
+    for position, part in enumerate(parts):
+        if part is row:
+            parts[position] = new
+            return True
+    return False
+
+
+def _run_row(
+    component_class: type[Component],
+    element_kwargs: dict[str, Any],
+    metadata: _PreparedCallMetadata,
+    parent_context: CitryContext,
+) -> SimpleVueRecord | None:
+    """``_render_simple_vue_leaf`` for one row of a call run, which has no element."""
+    if component_class.simple != "vue":
+        return None
+    try:
+        # The element's own shape (an exact CitryElement with no slots,
+        # bindings or element metadata) holds for every row the loop
+        # recorded; the class's flags can change between rows.
+        if component_class.transparent or component_class._citry_dynamic_selector:
+            _reject_simple_vue(component_class, _CALL_SHAPE_REASON)
+        if component_class.citry.get_component_by_class_id(component_class.class_id) is not component_class:
+            _reject_simple_vue(component_class, _REGISTRY_REASON)
+        admission = _simple_vue_admission(component_class)
+        if admission.rejection is not None:
+            _reject_simple_vue(component_class, admission.rejection)
+        # The loop builds exact, slot-free metadata that names no callers,
+        # so of the leaf's metadata checks only the root one can fail.
+        if parent_context.component is None:
+            _reject_simple_vue(component_class, _ROOT_CALL_REASON)
+        if admission.renders_ordinarily:
+            return None
+        return _simple_vue_record(component_class, admission, element_kwargs, metadata, parent_context)
+    except Exception as error:
+        # As in the leaf function, the callers are read before the path is built.
+        callers = metadata.simple_vue_callers
         set_component_error_message(
             error, [*_component_path(parent_context.component), *callers, component_class.__name__]
         )
@@ -987,7 +1126,7 @@ def _settle_render(
     paths non-recursive and preserves child hooks, error boundaries, and
     dependency merging.
     """
-    # We keep a stack of two kinds of work:
+    # We keep a stack of work items; the two main kinds are:
     #   - _RenderTask: render one deferred child, and put its result where the
     #     DeferredComponent was.
     #   - _FinalizeTask: run that child's after-render hooks and copy its
@@ -997,6 +1136,12 @@ def _settle_render(
     # everything inside it finish before we run the parent's _FinalizeTask. (This
     # is the approach django-components uses, but on objects instead of HTML
     # strings.)
+    #
+    # The rows of a <c-for> loop of simple='vue' components that sit next to
+    # each other get one _RunTask in place of one _RenderTask per row. It
+    # renders the rows in the order their own tasks would. A row whose
+    # children render first, or that takes the ordinary path, goes back to
+    # this loop, with a new _RunTask for the remaining rows under its work.
     #
     # Each task also carries its component's nesting depth (the root is 1), so
     # data that contains itself, which would nest forever, stops at
@@ -1008,7 +1153,7 @@ def _settle_render(
     # nest forever. Without a root component here, the components directly
     # inside root_render start at depth 1.
     child_depth = 2 if finalize_root else 1
-    stack: list[_RenderTask | _FinalizeTask | _ContextMergeTask] = []
+    stack: list[_RenderTask | _FinalizeTask | _ContextMergeTask | _RunTask] = []
     if finalize_root:
         stack.append(
             _FinalizeTask(
@@ -1209,6 +1354,32 @@ def _settle_render(
             return
         raise error
 
+    def place_child(
+        deferred: DeferredComponent,
+        position: _DeferredComponentPosition,
+        child: _InitialRender,
+        depth: int,
+    ) -> None:
+        # An ordinary child rendered once: put its output where the deferred
+        # component was, then queue its finalize under its own children.
+        if child.cache_hit:
+            # A stored subtree is finished; its depth is not counted
+            # (see the comment at the top of this function).
+            _replace_in_parts(position.parts, position.idx, deferred, child.render)
+            _merge_dependencies(position.parent_context, child.render.context)
+            return
+        _replace_in_parts(position.parts, position.idx, deferred, child.render)
+        stack.append(
+            _FinalizeTask(
+                child.render,
+                position,
+                child.generator,
+                direct_parent_execution=deferred.direct_parent_execution,
+                depth=depth,
+            )
+        )
+        stack.extend(reversed(_scan_deferred(child.render, depth + 1)))
+
     while stack:
         task = stack.pop()
         # Case: A foreign-context interior render has now had every deferred
@@ -1254,23 +1425,61 @@ def _settle_render(
                 continue
             if child is None:
                 raise AssertionError("ordinary deferred rendering did not produce a result")
-            if child.cache_hit:
-                # A stored subtree is finished; its depth is not counted
-                # (see the comment at the top of this function).
-                _replace_in_parts(task.position.parts, task.position.idx, task.deferred, child.render)
-                _merge_dependencies(task.position.parent_context, child.render.context)
+            place_child(task.deferred, task.position, child, task.depth)
+        # Case: Render the rows of one call run, in order
+        elif isinstance(task, _RunTask):
+            try:
+                run_exit = _run_rows(task)
+                # Raised here, as a row's own task raises it, so bubble()
+                # ends the render with it at once.
+                if run_exit is not None and run_exit[0] == _RUN_EXIT_DEPTH:
+                    raise _nesting_depth_error_for(
+                        task.run.component_class,
+                        task.run.metadata[task.rows[run_exit[1]].index],
+                        task.run.parent,
+                    )
+            except Exception as error:  # noqa: BLE001
+                bubble(error)
                 continue
-            _replace_in_parts(task.position.parts, task.position.idx, task.deferred, child.render)
-            stack.append(
-                _FinalizeTask(
-                    child.render,
-                    task.position,
-                    child.generator,
-                    direct_parent_execution=task.deferred.direct_parent_execution,
-                    depth=task.depth,
+            if run_exit is None:
+                continue
+            exit_kind, k, exit_record = run_exit
+            row = task.rows[k]
+            if exit_kind == _RUN_EXIT_POSITION_GONE:
+                # A row's own task raises this RuntimeError from its replace,
+                # outside its error handling; this raises the same error from
+                # the same function. It always raises, because the row's
+                # position is gone.
+                _replace_in_parts(task.parts, task.positions[k], row, cast("RenderPart", exit_record))
+                raise AssertionError("a call-run row's position was found again after it was gone")
+            # The remaining rows wait under this row's own work, so the row's
+            # subtree finishes before the next row starts.
+            if k + 1 < len(task.rows):
+                stack.append(task._replace(start=k + 1))
+            if exit_kind == _RUN_EXIT_CALLS:
+                stack.extend(
+                    reversed(
+                        _simple_vue_child_tasks(
+                            cast("SimpleVueRecord", exit_record), task.parent_context, task.depth + 1
+                        )
+                    )
                 )
-            )
-            stack.extend(reversed(_scan_deferred(child.render, task.depth + 1)))
+                continue
+            # _RUN_EXIT_ORDINARY: the row's checks chose the ordinary
+            # component path, so it renders as its own task would after them.
+            deferred = row.deferred()
+            position = _DeferredComponentPosition(task.parts, task.positions[k], task.parent_context)
+            # A row's own task has its deferred component in the list here.
+            # When the row's position is gone, the replace after the render
+            # raises, as that task's replace does.
+            _place_run_part(task.parts, position.idx, row, deferred)
+            try:
+                with direct_execution_scope(deferred.direct_parent_execution):
+                    child = _render_one_traced(deferred.element, deferred.parent, deferred.provides)
+            except Exception as error:  # noqa: BLE001
+                bubble(error)
+                continue
+            place_child(deferred, position, child, task.depth)
         # Case: Finalize nested component
         else:
             try:
@@ -1323,6 +1532,29 @@ class _ContextMergeTask(NamedTuple):
     child_context: CitryContext
 
 
+class _RunTask(NamedTuple):
+    """
+    Render adjacent rows of one call run (``_DeferredRun``), in list order, from ``start`` on.
+
+    A call run is the rows one ``<c-for>`` places at one component call
+    site. The task stands for the tasks its rows would each get, which
+    would sit next to each other on the stack, so it renders them in the
+    same order. A row that is too deep, or whose position is gone, ends the
+    render with an error. A row that takes the ordinary component path, or
+    calls child components, ends the task; a new task for the remaining
+    rows then goes under that row's own work, so the row's subtree still
+    finishes before the next row starts.
+    """
+
+    run: _DeferredRun
+    parts: list[RenderPart]  # the list the rows sit in
+    rows: tuple[_DeferredRunRow, ...]  # the rows, in list order
+    positions: tuple[int, ...]  # where the scan found each row in ``parts``
+    start: int  # the first of ``rows`` this task renders
+    parent_context: CitryContext  # where the rows' dependencies go, as for a _RenderTask
+    depth: int
+
+
 class _InitialRender(NamedTuple):
     """The first render result plus its render-local cache decision."""
 
@@ -1334,7 +1566,7 @@ class _InitialRender(NamedTuple):
 def _scan_deferred_parts(
     parts: list[RenderPart],
     parent_context: CitryContext,
-    tasks: list[_RenderTask | _ContextMergeTask],
+    tasks: list[_RenderTask | _ContextMergeTask | _RunTask],
     depth: int,
 ) -> bool:
     """Append child work in source order at ``depth``, merging contexts after their children."""
@@ -1357,6 +1589,26 @@ def _scan_deferred_parts(
             continue
         if isinstance(part, DeferredComponent):
             tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context), depth))
+        elif type(part) is _DeferredRunRow:
+            # Rows of one run next to each other would each get a task, one
+            # after another; they get one task, in the same order. A row
+            # whose neighbour belongs to another run, or is anything else,
+            # starts a new task, so edits to the list keep their effect.
+            run = part.run
+            rows = [part]
+            positions = [i]
+            end = i + 1
+            while end < len(current_parts):
+                following = current_parts[end]
+                if type(following) is not _DeferredRunRow or following.run is not run:
+                    break
+                rows.append(following)
+                positions.append(end)
+                end += 1
+            # Skip the rows just taken, so the walk resumes after them.
+            for _ in range(end - i - 1):
+                next(entries)
+            tasks.append(_RunTask(run, current_parts, tuple(rows), tuple(positions), 0, context, depth))
         elif type(part) is SimpleVueRecord:
             # A root simple='vue' render holds its called children in its
             # leaf; they share the enclosing context. The record is already
@@ -1370,14 +1622,15 @@ def _scan_deferred_parts(
     return len(tasks) > initial_count
 
 
-def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _ContextMergeTask]:
+def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _ContextMergeTask | _RunTask]:
     """
     Find the child components inside ``render`` that still need rendering.
 
     ``depth`` is the nesting depth the found children render at, one more
     than the depth of the component that owns ``render``.
 
-    Returns one ``_RenderTask`` per ``DeferredComponent``, descending into
+    Returns one ``_RenderTask`` per ``DeferredComponent`` and one ``_RunTask``
+    per group of a call run's rows that sit next to each other, descending into
     every nested ``CitryRender``. Most nested renders share this component's
     context (``<c-if>``/``<c-for>`` blocks, nested templates), but slot-fill
     content invoked during this render carries the context of the component
@@ -1391,7 +1644,7 @@ def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _Conte
     component whose template wrote it), which is where the child's
     dependencies belong (see docs/design/component_slots.md section 8).
     """
-    tasks: list[_RenderTask | _ContextMergeTask] = []
+    tasks: list[_RenderTask | _ContextMergeTask | _RunTask] = []
     _scan_deferred_parts(render.parts, render.context, tasks, depth)
     return tasks
 
@@ -1409,7 +1662,7 @@ def _contains_deferred(render: CitryRender) -> bool:
         for part in current.parts:
             if type(part) is str:
                 continue
-            if isinstance(part, DeferredComponent):
+            if isinstance(part, DeferredComponent) or type(part) is _DeferredRunRow:
                 return True
             unwrapped = part
             if isinstance(unwrapped, CitryRender):
@@ -1574,15 +1827,23 @@ def _nesting_depth_error(task: _RenderTask) -> RecursionError:
     repeat, and the full chain can be thousands of names long.
     """
     element = task.deferred.element
-    limit = element.comp_cls.citry.settings.max_component_depth
-    metadata = element.prepared_call_metadata
+    return _nesting_depth_error_for(element.comp_cls, element.prepared_call_metadata, task.deferred.parent)
+
+
+def _nesting_depth_error_for(
+    comp_cls: type[Component],
+    metadata: _PreparedCallMetadata | None,
+    parent: Component | None,
+) -> RecursionError:
+    """Build ``_nesting_depth_error``'s error from a call's class, metadata and parent, for call-run rows too."""
+    limit = comp_cls.citry.settings.max_component_depth
     callers = metadata.simple_vue_callers if type(metadata) is _PreparedCallMetadata else ()
-    names = [*_component_path(task.deferred.parent), *callers, element.comp_cls.__name__]
+    names = [*_component_path(parent), *callers, comp_cls.__name__]
     if len(names) > 6:
         names = [*names[:2], "...", *names[-3:]]
     chain = " > ".join(names)
     msg = (
-        f"Component {element.comp_cls.__name__} is nested more than {limit} components deep "
+        f"Component {comp_cls.__name__} is nested more than {limit} components deep "
         f"({chain}). This usually means a component keeps rendering itself, for example a tree "
         "node whose data lists the node among its own children. Make sure the recursion ends, "
         "or pass a larger max_component_depth to Citry() if the page really nests this deep."

@@ -91,8 +91,11 @@ from citry.attrs import (
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement, _ElementMorphMetadata, _PreparedCallMetadata
 from citry.citry_render import (
+    _VALUE_CONTEXT,
     CitryRender,
     DeferredComponent,
+    _DeferredRun,
+    _DeferredRunRow,
     _render_slot_value,
     _render_value,
 )
@@ -122,12 +125,13 @@ from citry.constness import (
 from citry.slots import Slot, SlotData, normalize_slot_fills
 from citry.util.exception import add_slot_to_error_message
 from citry.util.html import escape
-from citry.util.logger import trace_component_msg
+from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
 from citry_core.safe_eval import compile_expr
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
+    from citry._vue.direct import DirectExecutionFrame
     from citry.citry_render import RenderPart
     from citry.citry_template import CitryTemplate
     from citry.component import Component
@@ -1424,6 +1428,10 @@ class _ResolvedComponentInputs:
     element_bindings: tuple[ComponentTagClientBinding, ...] = ()
 
 
+# ComponentNode._finish_render's default for "the key is not evaluated yet",
+# distinct from None, which is an evaluated key that opts out.
+_KEY_NOT_EVALUATED = object()
+
 ComponentNodeMetadataEntry: TypeAlias = (
     tuple[Literal["key"], ExprHtmlAttr] | tuple[Literal["morph"], Literal["ignore"]]
 )
@@ -1596,6 +1604,26 @@ class ComponentNode(Node):
 
         resolved = self._resolve_inputs(context)
         child_cls = component.citry.get(self.name)
+        return self._finish_render(context, component, resolved, child_cls)
+
+    def _finish_render(
+        self,
+        context: CitryContext,
+        component: Component,
+        resolved: _ResolvedComponentInputs,
+        child_cls: type[Component],
+        *,
+        evaluated_key: str | None | object = _KEY_NOT_EVALUATED,
+    ) -> DeferredComponent:
+        """
+        Finish ``render`` once the inputs are resolved and the class is looked up.
+
+        A call-run row whose class no longer fits its run
+        (``_render_run_row``) ends here, so it finishes exactly as
+        ``render`` would without resolving its inputs or looking up its
+        class a second time. ``evaluated_key`` is the key such a row already
+        evaluated, so the key expression still runs once.
+        """
         if child_cls.simple is True:
             from citry._simple_runtime import simple_deferred  # noqa: PLC0415
 
@@ -1613,10 +1641,12 @@ class ComponentNode(Node):
         slots = self._collect_slots(context)
         # The key expression evaluates once in the parent's scope. Exactly
         # None opts out; every other value, including falsey values, is a key.
-        evaluated_key: str | None = None
-        if self.key is not None:
-            key_value = const_value(self.key.resolve(context))
-            evaluated_key = None if key_value is None else str(key_value)
+        if evaluated_key is _KEY_NOT_EVALUATED:
+            evaluated_key = None
+            if self.key is not None:
+                key_value = const_value(self.key.resolve(context))
+                evaluated_key = None if key_value is None else str(key_value)
+        evaluated_key = cast("str | None", evaluated_key)
         element_key_target = self._metadata_locus == "element" or self.name == "element"
         element_morph_metadata = None
         if element_key_target and (
@@ -1678,6 +1708,64 @@ class ComponentNode(Node):
             context.provides,
             direct_parent_execution=direct_parent_execution,
         )
+
+    def _render_run_row(
+        self,
+        context: CitryContext,
+        run: _DeferredRun | None,
+        run_class: type[Component],
+    ) -> DeferredComponent | tuple[dict[str, Any], _PreparedCallMetadata, DirectExecutionFrame | None]:
+        """
+        Run ``render`` for one row of a call run, returning the row's data instead of its element.
+
+        A call run is the rows one ``<c-for>`` places at one component call
+        site. ``ForNode._call_run_class`` accepted this call as a run (no
+        body, a key, plain inputs, no element locus), so this makes
+        ``render``'s steps in the same order: the inputs, the registry
+        lookup, the ``simple`` read, the key and the selector read. It
+        returns the row's kwargs, call metadata and execution frame for the
+        run to hold.
+
+        When the looked-up class no longer fits the run, or the execution
+        frame differs from the run's, the row is finished as ``render``
+        would finish it and its ``DeferredComponent`` is returned, which
+        ends the run. For a row that stays in the run, ``render`` reads the
+        class's ``_citry_dynamic_selector`` twice and this reads it once. It
+        is a plain class attribute, and ``ComponentMeta`` defines no read
+        hook for it.
+        """
+        component = cast("Component", context.component)
+        resolved = self._resolve_inputs(context)
+        child_cls = component.citry.get(self.name)
+        # A class registered under the name since the loop started takes
+        # render's own path, as in a loop that is not a run. The simple read
+        # keeps render's read order; the metaclass keeps it fixed per class.
+        if child_cls is not run_class or child_cls.simple is True:
+            return self._finish_render(context, component, resolved, child_cls)
+        # render collects the slots here, which gives {} for the empty body
+        # every admitted call has, so that step has nothing to do.
+        key_value = const_value(cast("ExprHtmlAttr", self.key).resolve(context))
+        evaluated_key = None if key_value is None else str(key_value)
+        # render reads the selector flag after the key, to pick the element
+        # type; a class that became a selector also leaves the run.
+        if child_cls._citry_dynamic_selector:
+            return self._finish_render(context, component, resolved, child_cls, evaluated_key=evaluated_key)
+        metadata = _PreparedCallMetadata(
+            self.source,
+            self.position,
+            evaluated_key,
+            context.template_record.origin if context.template_record is not None else None,
+            slot_free_body=True,
+        )
+        from citry._vue.direct import active_execution  # noqa: PLC0415
+
+        execution = active_execution()
+        # The run holds one execution frame for every row, so a row that sees
+        # another frame keeps its own deferred component.
+        if run is not None and execution is not run.execution:
+            element = CitryElement(child_cls, resolved.kwargs, {}, prepared_call_metadata=metadata)
+            return DeferredComponent(element, component, context.provides, direct_parent_execution=execution)
+        return resolved.kwargs, metadata, execution
 
     def _resolve_inputs(self, context: CitryContext) -> _ResolvedComponentInputs:
         """
@@ -2243,9 +2331,15 @@ class ForNode(Node):
             _validate_introduced_variables("c-for", targets, context)
             return CitryRender(parts=list(self._precomputed_parts), context=context)
 
-        parts: list[RenderPart] = []
-        for body, body_context in self.iter_bodies(context):
-            parts.extend(_render_body(body, body_context))
+        # A loop that places simple='vue' rows records them in one run, which
+        # the render queue then renders in a single task.
+        run_class = self._call_run_class(context)
+        if run_class is not None:
+            parts = self._render_call_run(context, run_class)
+        else:
+            parts = []
+            for body, body_context in self.iter_bodies(context):
+                parts.extend(_render_body(body, body_context))
         selected = CitryRender(parts=parts, context=context)
         from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
 
@@ -2285,6 +2379,117 @@ class ForNode(Node):
         from citry._vue.direct import DirectCallRunRender  # noqa: PLC0415
 
         return DirectCallRunRender(selected, call_node=call_node, child_type_key=child_cls.class_id)
+
+    def _call_run_class(self, context: CitryContext) -> type[Component] | None:
+        """
+        Return the class whose rows this loop records as one call run, or None.
+
+        A call run is the rows one ``<c-for>`` places at one component call
+        site. A loop qualifies when ``render`` would wrap its result as a
+        call run (the checks ``render`` makes after its loop, made here
+        before it) and, in addition, the call's class is ``simple = "vue"``,
+        the call's inputs are plain, it has no browser bindings, and its
+        metadata does not target an element. The registry can change while
+        the loop runs, so each row looks its class up again, and the checks
+        after the loop still run unchanged and decide whether the loop's
+        output is marked as a call run (``DirectCallRunRender``).
+        """
+        from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
+
+        if not direct_prepared_render_active() or len(self.branches) != 1:
+            return None
+        body = self.branches[0][2]
+        if len(body) != 1 or type(body[0]) is not ComponentNode:
+            return None
+        call_node = body[0]
+        if (
+            call_node.body
+            or call_node.key is None
+            or call_node.name == "element"
+            or call_node._metadata_locus == "element"
+            or not call_node._has_plain_component_inputs
+            or context.component is None
+        ):
+            return None
+        try:
+            has_browser_binding = any(
+                classify_component_tag_client_binding_key(
+                    attr.key.removeprefix("c-"), tag_name=f"c-{call_node.name}", component_boundary=True
+                )
+                is not None
+                for attr in call_node.attrs
+            )
+        except Exception:  # noqa: BLE001 - the same check after the loop raises it, as in a loop that is not a run
+            return None
+        if has_browser_binding or any(_is_special_component_input_key(attr.key) for attr in call_node.attrs):
+            return None
+        registry = context.component.citry
+        if not registry._registry_ready():
+            return None
+        child_cls = registry._registry._name_to_cls.get(call_node.name)
+        if (
+            child_cls is None
+            or child_cls.simple != "vue"
+            or child_cls.transparent
+            or child_cls._citry_dynamic_selector
+        ):
+            return None
+        return child_cls
+
+    def _render_call_run(self, context: CitryContext, run_class: type[Component]) -> list[RenderPart]:
+        """
+        Walk the loop, recording its rows in one ``_DeferredRun`` and one ``_DeferredRunRow`` per row.
+
+        Each row makes the steps ``_render_body`` and ``ComponentNode.render``
+        make for it, in the same order: the row's value context, the trace
+        line, the inputs, the registry lookup, the key, the call metadata,
+        and the template position on an error. Only the row's element and
+        deferred component are not built; the run's task builds them later
+        if the row needs the ordinary component path. When a row's class no
+        longer fits the run or its execution frame differs, that row is
+        finished as ``render`` would finish it and every later row renders
+        through ``_render_body``. ``ComponentNode._render_run_row`` names
+        the difference in reads.
+        """
+        from citry.component_render import _attach_template_position, _render_body  # noqa: PLC0415
+
+        call_node = cast("ComponentNode", self.branches[0][2][0])
+        parts: list[RenderPart] = []
+        run: _DeferredRun | None = None
+        batching = True
+        for body, body_context in self.iter_bodies(context):
+            if not batching:
+                parts.extend(_render_body(body, body_context))
+                continue
+            # _render_body's effects for this one-node body: the value
+            # context, the trace line and the template position on an error.
+            value_token = _VALUE_CONTEXT.set(body_context)
+            try:
+                if is_tracing():
+                    trace_node_msg("RENDER", "ComponentNode", call_node.position)
+                try:
+                    row = call_node._render_run_row(body_context, run, run_class)
+                except Exception as err:
+                    _attach_template_position(err, call_node, body_context)
+                    raise
+            finally:
+                _VALUE_CONTEXT.reset(value_token)
+            if type(row) is DeferredComponent:
+                # This row left the run; it and every later row render as
+                # they do in a loop that is not a run, so the run keeps only
+                # earlier rows.
+                parts.append(row)
+                batching = False
+                continue
+            kwargs, metadata, execution = cast(
+                "tuple[dict[str, Any], _PreparedCallMetadata, DirectExecutionFrame | None]", row
+            )
+            if run is None:
+                run = _DeferredRun(run_class, cast("Component", context.component), body_context.provides, execution)
+            parts.append(_DeferredRunRow(run, len(run)))
+            run.kwargs.append(kwargs)
+            run.metadata.append(metadata)
+        return parts
 
     @override
     def collect_fills(self, context: CitryContext, sink: FillSink) -> None:

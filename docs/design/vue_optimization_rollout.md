@@ -246,7 +246,10 @@ to `simple="vue"` rows.
   accepted paths, rejected attempts, measurements and remaining limits.
 - `component_render.py::_render_simple_vue_leaf` renders a `simple = "vue"`
   call into a `SimpleVueRecord` (`citry_render.py`) without a Python
-  component.
+  component. Rows from a `<c-for>` loop that qualifies as a call run render
+  through `_run_rows`, in one render-queue task; both share
+  `_simple_vue_record`
+  ([`native_render.md`](native_render.md) section 3).
 - `_vue/leaf_program.py::LeafProgramNode` holds the generated JSON evaluator
   (`_SimpleJsonCodegen`) and the row HTML writer (`_RowHtmlWriterCodegen`).
   On standard CPython, Rust reads most rows instead of that evaluator and

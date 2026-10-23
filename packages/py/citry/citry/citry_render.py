@@ -133,7 +133,9 @@ PreparedRenderPart: TypeAlias = (
     "PreparedElementOpen | PreparedElementClose | PreparedDynamicElementOpen | PreparedDynamicElementClose | "
     "PreparedStaticRun | PreparedLeafProgram"
 )
-RenderPart: TypeAlias = "str | CitryRender | DeferredComponent | Placeholder | PreparedRenderPart | SimpleVueRecord"
+RenderPart: TypeAlias = (
+    "str | CitryRender | DeferredComponent | _DeferredRunRow | Placeholder | PreparedRenderPart | SimpleVueRecord"
+)
 
 # How collected JS/CSS dependencies are handled when serializing (see
 # CitryRender.serialize and docs/design/dependencies.md section 7.1).
@@ -717,6 +719,95 @@ class DeferredComponent:
 
     def __repr__(self) -> str:
         return f"DeferredComponent({self.element!r})"
+
+
+@final
+class _DeferredRun:
+    """
+    The rows of one call run, recorded by the loop and not rendered yet.
+
+    A call run is the rows one ``<c-for>`` places at one component call
+    site. When the call's class is ``simple = "vue"``, ``ForNode.render``
+    records each row's kwargs and call metadata here instead of building a
+    ``CitryElement`` and a ``DeferredComponent`` for it, and puts one
+    ``_DeferredRunRow`` at the row's position in the parts list. The render
+    queue gives adjacent rows of one run one task (``_RunTask`` in
+    ``citry/component_render.py``), which renders them in order and puts
+    each row's record at its position. A row that needs the ordinary
+    component path gets its ``DeferredComponent`` then, built from the same
+    data (``_DeferredRunRow.deferred``).
+
+    The class, parent, provided values and execution frame are the same for
+    every row, so the run holds them once. ``ForNode.render`` ends the run
+    early when a row's looked-up class no longer fits the run or its
+    execution frame differs; the parent and provided values come from the
+    loop's own context.
+    """
+
+    __slots__ = ("component_class", "execution", "kwargs", "metadata", "parent", "provides")
+
+    def __init__(
+        self,
+        component_class: type[Component],
+        parent: Component,
+        provides: dict[str, Any],
+        execution: DirectExecutionFrame | None,
+    ) -> None:
+        self.component_class = component_class
+        self.parent = parent
+        self.provides = provides
+        self.execution = execution
+        # One entry per row, in loop order: the kwargs ComponentNode resolved
+        # and the call metadata it built for the row.
+        self.kwargs: list[dict[str, Any]] = []
+        self.metadata: list[_PreparedCallMetadata] = []
+
+    def __len__(self) -> int:
+        return len(self.kwargs)
+
+    def __repr__(self) -> str:
+        # The class's own name, read past any metaclass hook, so a repr in a
+        # debugger or an error message never runs user code.
+        return f"_DeferredRun({type.__getattribute__(self.component_class, '__name__')}, rows={len(self)})"
+
+
+@final
+class _DeferredRunRow:
+    """
+    One row of a ``_DeferredRun``, at the row's position in a parts list.
+
+    Each row has its own object, as a row outside a run has its own
+    ``DeferredComponent``, so the render queue finds a row's position by
+    identity even when an extension hook or user code reorders, removes or
+    repeats entries of the list before the row is placed.
+    """
+
+    __slots__ = ("_deferred", "index", "run")
+
+    def __init__(self, run: _DeferredRun, index: int) -> None:
+        self.run = run
+        self.index = index
+        self._deferred: DeferredComponent | None = None
+
+    def deferred(self) -> DeferredComponent:
+        """Return the row's element and deferred component, as ``ComponentNode.render`` would have built them."""
+        # Built once, so a row the queue meets twice keeps one element, as
+        # one deferred component per row would.
+        deferred = self._deferred
+        if deferred is None:
+            run = self.run
+            element = CitryElement(
+                run.component_class,
+                run.kwargs[self.index],
+                {},
+                prepared_call_metadata=run.metadata[self.index],
+            )
+            deferred = DeferredComponent(element, run.parent, run.provides, direct_parent_execution=run.execution)
+            self._deferred = deferred
+        return deferred
+
+    def __repr__(self) -> str:
+        return f"_DeferredRunRow({self.run!r}, index={self.index})"
 
 
 # The imported identities come from their defining modules; the local classes

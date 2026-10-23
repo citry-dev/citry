@@ -364,6 +364,16 @@ component-id markers) is specified separately in
 limit) with a heap-bound queue over the `parts` tree, and the
 `_merge_dependencies` call site lives in that queue.
 
+A `<c-for>` loop that places a `simple = "vue"` component (a component
+that renders without a Python object; each occurrence is a row) and
+qualifies as a call run records its rows in one `_DeferredRun`, and the queue renders adjacent rows in one
+run task (`_RunTask`), in the order one task per row would. A row that
+calls child components or must render as an ordinary component stops the
+task: the queue renders that row's work first, and a new run task for the
+remaining rows waits under that work on the queue's stack. This runs on
+every interpreter; [`native_render.md`](native_render.md) section 3 says
+how the task stops early, and section 6 lists its error modes.
+
 When an embedded or Slot-produced render has a different context and still
 contains deferred children, its context merge is queued after those children.
 This preserves the same inner-to-outer merge order as an ordinary component

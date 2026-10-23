@@ -1398,7 +1398,7 @@ def _resolve_element_metadata(
 
 def _validate_prepared_render(render: CitryRender) -> None:
     from citry._vue.leaf_program import PreparedLeafProgram  # noqa: PLC0415
-    from citry.citry_render import DeferredComponent, Placeholder  # noqa: PLC0415
+    from citry.citry_render import DeferredComponent, Placeholder, _DeferredRunRow  # noqa: PLC0415
 
     pending = [render]
     seen: set[int] = set()
@@ -1457,7 +1457,9 @@ def _validate_prepared_render(render: CitryRender) -> None:
                 # the event renderer's perspective rather than unresolved
                 # runtime output.
                 continue
-            elif isinstance(part, (DeferredComponent, Placeholder)):
+            # A call run's row (``_DeferredRunRow``) left in the list is an
+            # unresolved part too, with the same message.
+            elif isinstance(part, (DeferredComponent, Placeholder, _DeferredRunRow)):
                 raise TypeError("prepared Vue rendering contains an unresolved runtime part")
             else:
                 raise TypeError(f"prepared Vue rendering received unsupported raw output: {type(part).__name__}")
