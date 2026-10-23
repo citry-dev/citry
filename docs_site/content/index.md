@@ -81,8 +81,9 @@ HEADINGS there; the readme_benchmark_charts check fails when they differ.
 The rest is typed by hand and nothing checks it, so recheck it after a new
 run of either benchmark: "Citry catches more errors than other Python
 frameworks" rests on the error counts, the speed chart's title types the
-1,400 entries, and the heading "As fast as Next.js" rests on Citry's
-second load being no slower than Next.js's.
+1,400 entries, and the heading "Python at JavaScript speed" rests on
+Citry's first and second load both landing among Next.js's and Nuxt's
+(faster than Next.js on both, behind Nuxt only on the second load).
 -->
 
 <div class="landing-benchmarks" id="benchmarks" markdown="1">
@@ -117,7 +118,7 @@ Citry catches more errors than other Python frameworks and reports them earlier.
 </section>
 
 <section class="landing-benchmark" markdown="1">
-## As fast as Next.js
+## Python at JavaScript speed
 
 <p class="landing-section__intro">
 <c-benchmark-text part="speed-intro" />

@@ -57,7 +57,7 @@ CHARTS = ("errors", "speed")
 # Each block's heading, which the landing page's section repeats word for word.
 HEADINGS = {
     "errors": "Catch mistakes early",
-    "speed": "As fast as Next.js",
+    "speed": "Python at JavaScript speed",
 }
 
 # The README asks for this display width; the image script draws the chart at

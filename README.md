@@ -62,7 +62,7 @@ mistakes that apply to that framework.
      docs_site/data/benchmark_time_to_interactive.json. Rerun it rather than
      editing this block by hand. -->
 
-## As fast as Next.js
+## Python at JavaScript speed
 
 Time until a page with 1,400 entries is usable, the second time the
 server builds it.
