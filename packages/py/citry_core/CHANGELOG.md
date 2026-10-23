@@ -38,6 +38,11 @@
 - A template that contains a NUL character now compiles to Python code that
   runs. `template_parser.compile_template()` used to write the raw NUL, which
   Python refuses in source code.
+- `html_transform.validate_html_fragment_boundary()` and
+  `html_transform.browser_fragment_matches_nodes()` now accept HTML that
+  holds a control character such as DEL (U+007F) or a Unicode noncharacter
+  such as U+FDD0. The browser keeps these characters as written, but both
+  functions used to reject the HTML.
 
 ## v1.8.0
 

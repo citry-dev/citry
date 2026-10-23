@@ -256,6 +256,12 @@
 - Defining a subclass of a component's `State` class after that component
   has rendered no longer fails with "'_citry_input_type_checks' is not a
   recognized State meta attribute".
+- A Vue page whose text or attribute values hold a control character such
+  as DEL (U+007F) or U+0001, or a Unicode noncharacter such as U+FDD0, now
+  hydrates, so Vue no longer builds it again in the browser. A `<c-raw>`
+  block or `Markup` value holding one of these characters in an
+  interactive component now renders. It used to fail with "is not a
+  complete HTML fragment".
 
 ### Performance
 

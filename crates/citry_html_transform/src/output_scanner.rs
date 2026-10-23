@@ -9,7 +9,7 @@ use html5ever::tree_builder::create_element;
 use html5ever::tree_builder::TreeBuilder;
 use html5ever::{namespace_url, ns, Attribute, LocalName, ParseOpts, QualName};
 use html5gum::emitters::callback::{Callback, CallbackEmitter, CallbackEvent};
-use html5gum::{Emitter, ForwardingEmitter, Span, State, Tokenizer};
+use html5gum::{Emitter, Error, ForwardingEmitter, Span, State, Tokenizer};
 use markup5ever_rcdom::{Handle, RcDom};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -357,17 +357,51 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                 }));
             }
             CallbackEvent::Error(error) => {
-                if let Some(tracker) = self.lexical_text.as_deref_mut() {
-                    tracker.valid = false;
+                // These two errors leave the browser's tree exactly as
+                // written, so they do not fail the parse; every other error
+                // still does.
+                if !error_keeps_input_as_written(error) {
+                    if let Some(tracker) = self.lexical_text.as_deref_mut() {
+                        tracker.valid = false;
+                    }
+                    if let Some(boundary) = self.boundary.as_deref_mut() {
+                        boundary.invalid = true;
+                    }
                 }
-                if let Some(boundary) = self.boundary.as_deref_mut() {
-                    boundary.invalid = true;
-                }
-                self.sink_token(Token::ParseError(error.as_str().into()));
+                // Tokenizer errors stop here, as in the browser, whose tree
+                // builder never sees them. html5ever's tree builder would
+                // count an error as the token after `<pre>`, `<listing>` or
+                // `<textarea>`, and html5gum reports a character's error
+                // before the text holding it, so forwarding the error would
+                // keep the newline after those tags that the browser drops.
             }
         }
         None
     }
+}
+
+/// Whether the browser keeps the input exactly as written despite this
+/// tokenizer error, so the full page parse
+/// ([`parse_div_fragment_with_lexical_text`]) and
+/// [`validate_html_fragment_boundary`] let it pass.
+///
+/// The HTML standard reports a control character (other than ASCII
+/// whitespace and NUL) and a Unicode noncharacter in the input as parse
+/// errors, but parses those characters "as-is": they reach the DOM
+/// unchanged wherever they appear (text, attribute value, comment or name),
+/// and the tree is the same as without the error. They are also the only
+/// errors the server's escaped text and attribute values can hold, because
+/// the server writes these characters as they are and rejects NUL and
+/// carriage returns. Every other error keeps failing both checks, which
+/// accept only explicit, correctly nested markup; some of those errors
+/// also change what the browser builds (a NUL is dropped, a tag left open
+/// at the end is lost). html5gum never reports `surrogate-in-input-stream`
+/// for a Rust string.
+fn error_keeps_input_as_written(error: Error) -> bool {
+    matches!(
+        error,
+        Error::ControlCharacterInInputStream | Error::NoncharacterInInputStream
+    )
 }
 
 struct ScannerEmitter<'a, S: ScannerSink> {
@@ -485,10 +519,12 @@ pub(crate) fn parse_div_fragment_with_lexical_text(
 /// Validate one strict, independently parseable HTML fragment boundary.
 ///
 /// The accepted subset requires explicit, correctly nested tags and rejects
-/// tokenizer errors. It also uses html5ever's processed-token diagnostic to
-/// reject non-void HTML self-closing syntax while retaining SVG/MathML
-/// self-closing elements in their foreign-content namespaces. Other browser
-/// recovery behavior is not promised by this validator.
+/// every tokenizer error except a control character (other than NUL and
+/// whitespace) or a noncharacter in the input, which the browser keeps as
+/// written. It also uses html5ever's processed-token diagnostic to reject
+/// non-void HTML self-closing syntax while retaining SVG/MathML self-closing
+/// elements in their foreign-content namespaces. Other browser recovery
+/// behavior is not promised by this validator.
 pub fn validate_html_fragment_boundary(input: &str) -> Result<(), &'static str> {
     let dom = RcDom::default();
     let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
@@ -585,8 +621,18 @@ mod tests {
             "<table><tbody><tr><td>x</td></tr></tbody></table>",
             "<svg><path d='x'/><g><circle/></g></svg>",
             "<math><mi>x</mi><mspace/></math>",
+            // The browser keeps control characters and noncharacters as
+            // written, so the tokenizer's report of them does not count.
+            "<b>a\u{7f}b</b>",
+            "<b title='a\u{1}b'>a\u{80}b</b>",
+            "<b>a\u{fdd0}b\u{10ffff}</b>",
+            "<!--a\u{7f}b--><b>x</b>",
         ] {
-            assert_eq!(validate_html_fragment_boundary(source), Ok(()), "{source}");
+            assert_eq!(
+                validate_html_fragment_boundary(source),
+                Ok(()),
+                "{source:?}"
+            );
         }
     }
 
@@ -603,6 +649,8 @@ mod tests {
             "<!-- unfinished",
             "<script>unfinished",
             "<div><span></div></span>",
+            // The browser drops a NUL from text, so that error still counts.
+            "<b>a\u{0}b</b>",
         ] {
             assert!(validate_html_fragment_boundary(source).is_err(), "{source}");
         }
