@@ -115,7 +115,11 @@ _POLL: Final = "poll"
 
 
 # A modifier time segment: a whole number of milliseconds or seconds.
-_TIME_RE: Final = re.compile(r"^(?P<n>\d+)(?P<unit>ms|s)$")
+_TIME_RE: Final = re.compile(r"^(?P<n>[0-9]+)(?P<unit>ms|s)$")
+# How many digits the largest JavaScript safe integer (2**53 - 1) has, and a
+# value past it, which the timing checks refuse with their own message.
+_SAFE_INTEGER_DIGITS: Final = len(str(2**53 - 1))
+_PAST_SAFE_INTEGER: Final = 2**53
 
 
 def _citry_tag_identity(tag_name: str) -> str | None:
@@ -131,7 +135,13 @@ def _time_to_ms(segment: str) -> int:
     if match is None:  # pragma: no cover - callers pre-check with _TIME_RE
         msg = f"not a time segment: {segment!r}"
         raise ValueError(msg)
-    value = int(match.group("n"))
+    digits = match.group("n").lstrip("0") or "0"
+    # A number with more digits than the largest JavaScript safe integer
+    # (2**53 - 1 has 16) is past it, and the callers report that limit. It is
+    # not converted, because Python refuses more than 4,300 digits.
+    if len(digits) > _SAFE_INTEGER_DIGITS:
+        return _PAST_SAFE_INTEGER
+    value = int(digits)
     return value if match.group("unit") == "ms" else value * 1000
 
 

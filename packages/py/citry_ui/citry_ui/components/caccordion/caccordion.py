@@ -6,10 +6,10 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha256
-from html.parser import HTMLParser
 from typing import Any, Literal, TypedDict
 
 from citry import CitryRender, LibraryComponent, SlotInput, const_value
+from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._direct_output import feed_typed_direct_output
@@ -366,7 +366,7 @@ _VOID_ELEMENTS = frozenset(
 )
 
 
-class _DirectItemParser(HTMLParser):
+class _DirectItemParser(LongReferenceSafeParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.depth = 0

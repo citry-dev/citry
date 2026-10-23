@@ -5,10 +5,10 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from html.parser import HTMLParser
 from typing import Any, ClassVar, Literal, cast
 
 from citry import LibraryComponent, SlotInput, const_value, merge_attrs
+from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import (
     CClassValue,
     CStyleValue,
@@ -128,7 +128,7 @@ class _CImageVisualSlotData:
     pass
 
 
-class _CImageVisualParser(HTMLParser):
+class _CImageVisualParser(LongReferenceSafeParser):
     _VOID: ClassVar[set[str]] = {
         "area",
         "base",

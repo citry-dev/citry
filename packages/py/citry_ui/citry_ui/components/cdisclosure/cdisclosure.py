@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from html.parser import HTMLParser
 from typing import Any, ClassVar, Literal, TypedDict
 
 from citry import CitryRender, LibraryComponent, SlotInput, const_value
+from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
@@ -389,7 +389,7 @@ def _title_attribute_problem(tag: str, attrs: list[tuple[str, str | None]]) -> s
     return None
 
 
-class _TitleOutputParser(HTMLParser):
+class _TitleOutputParser(LongReferenceSafeParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.stack: list[tuple[str, bool]] = []
@@ -421,7 +421,7 @@ class _TitleOutputParser(HTMLParser):
             self.text.append(data)
 
 
-class _ContentOutputParser(HTMLParser):
+class _ContentOutputParser(LongReferenceSafeParser):
     def __init__(self, *, actions: bool) -> None:
         super().__init__(convert_charrefs=True)
         self.actions = actions

@@ -307,6 +307,16 @@
   body, or a plain base class it inherits from, holds an annotation such as
   `start: int = 3`. It used to fail with "instance member
   __annotate_func__ is not supported".
+- A numeric character reference with thousands of digits, such as `&#`
+  followed by 5,000 zeros and `106;`, now reads as the browser reads it
+  (here `j`) instead of raising `ValueError` ("Exceeds the limit (4300
+  digits) for integer string conversion"). This covers `citry check`,
+  `Markup` values in text and in `c-` attributes such as `c-href`, and
+  any attribute of a page with a `<textarea>` that serializes without
+  JavaScript. An Events timing with
+  that many digits, such as `.debounce.<5,000 digits>ms`, now fails with
+  the JavaScript safe-integer error, and one written with digits other
+  than ASCII `0`-`9` is now an unknown modifier.
 
 ### Performance
 

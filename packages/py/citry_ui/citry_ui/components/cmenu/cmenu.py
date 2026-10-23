@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha256
-from html.parser import HTMLParser
 from typing import Any, ClassVar, Literal, TypedDict, cast
 
 from citry import CitryElement, CitryRender, ComponentLike, LibraryComponent, SlotInput, const_value
+from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
@@ -495,7 +495,7 @@ _VOID_ELEMENTS = frozenset(
 )
 
 
-class _DirectMenuParser(HTMLParser):
+class _DirectMenuParser(LongReferenceSafeParser):
     def __init__(self, expected: Mapping[str, str]) -> None:
         super().__init__(convert_charrefs=True)
         self.expected = expected

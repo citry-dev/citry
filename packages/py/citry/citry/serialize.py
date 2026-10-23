@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from html.parser import HTMLParser
 from secrets import token_hex
 from typing import TYPE_CHECKING, get_args
 
@@ -63,7 +62,7 @@ from citry.settings import (
     _validate_security_javascript,
     _validate_security_script_integrity,
 )
-from citry.util.html import escape_to_str
+from citry.util.html import LongReferenceSafeParser, escape_to_str
 from citry_core.html_transform import mark_html
 
 if TYPE_CHECKING:
@@ -103,7 +102,7 @@ class _PreparedElementState:
     has_content: bool = False
 
 
-class _PreparedMarkupTracker(HTMLParser):
+class _PreparedMarkupTracker(LongReferenceSafeParser):
     """
     Track prepared HTML nesting while materializing a static fallback.
 

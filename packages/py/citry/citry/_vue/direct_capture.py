@@ -9,7 +9,7 @@ import re
 from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from html import escape, unescape
+from html import escape
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeGuard, TypeVar, cast
 
@@ -35,7 +35,7 @@ from citry.citry_render import (
 from citry.citry_template import CitryTemplate
 from citry.client_directives import ComponentTagClientBindingKind
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
-from citry.util.html import Markup, escape_to_str
+from citry.util.html import Markup, decode_character_references, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
 from . import native_leaf_json as _native_leaf_json
@@ -2544,7 +2544,7 @@ def assemble_typed_render(
                             " string instead."
                         )
                     if "<" not in serialized:
-                        value = unescape(serialized)
+                        value = decode_character_references(serialized)
                         if parent_tag == "textarea" and serialized.startswith("\n"):
                             value = value[1:]
                         key = data_key("Text", serialized, (0, len(serialized.encode())), data_owner_id)
@@ -3630,7 +3630,7 @@ def _source_attribute_reads_instance(name: str, text: str, allowed_names: Sequen
     # The parser keeps the attribute exactly as written, quoted or not.
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
         raw = raw[1:-1]
-    return _vue_binding_reads_instance(name, unescape(raw), allowed_names)
+    return _vue_binding_reads_instance(name, decode_character_references(raw), allowed_names)
 
 
 def _unsafe_dynamic_dom_property(name: str) -> bool:
@@ -3653,7 +3653,7 @@ def _prepared_root_markers(markers: tuple[str, ...]) -> tuple[tuple[str, object]
         name = validate_html_attr_name(match["name"], where="prepared component root marker")
         if not name.casefold().startswith("data-") or _unsafe_dynamic_dom_property(name):
             raise UnsupportedPreparedView(f"prepared root marker {name!r} is unsafe")
-        marker_value: object = True if match["value"] is None else unescape(match["value"])
+        marker_value: object = True if match["value"] is None else decode_character_references(match["value"])
         identity = _html_attr_identity(name)
         if identity not in identities:
             values[name] = marker_value

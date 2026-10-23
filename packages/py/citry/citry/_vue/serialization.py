@@ -9,7 +9,6 @@ import re
 from dataclasses import dataclass, replace
 from functools import cache
 from html import escape
-from html.parser import HTMLParser
 from pathlib import Path
 from secrets import token_hex
 from typing import TYPE_CHECKING, Any, cast
@@ -25,7 +24,7 @@ from citry.citry_render import CitryRender, SimpleVueRecord, simple_vue_called_c
 from citry.ext.dependencies.extension import DependenciesExtension
 from citry.ext.dependencies.scripts import has_component_asset
 from citry.ext.dependencies.types import DependencyRecord, Script, Style
-from citry.util.html import script_json
+from citry.util.html import LongReferenceSafeParser, script_json
 from citry.util.id import validate_render_id
 from citry_core import _rust
 
@@ -99,7 +98,7 @@ _PRELOAD_HEAD_SCAN_LIMIT = 65_536
 _PRELOAD_HEAD_CHUNK_SIZE = 1_024
 
 
-class _PreloadHeadLocator(HTMLParser):
+class _PreloadHeadLocator(LongReferenceSafeParser):
     """Locate one physical head without matching tag-like text inside scripts."""
 
     def __init__(self) -> None:
@@ -500,7 +499,7 @@ def _exact_builtin_dependencies_hook(citry: Any) -> tuple[object, object, object
     return extension, on_serialize, internal
 
 
-class _HostValidator(HTMLParser):
+class _HostValidator(LongReferenceSafeParser):
     def __init__(self, host_id: str) -> None:
         super().__init__(convert_charrefs=False)
         self.host_id = host_id

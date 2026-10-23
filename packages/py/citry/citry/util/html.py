@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from html import unescape
 from html.entities import html5
+from html.parser import HTMLParser
 from types import BuiltinFunctionType
 from typing import TYPE_CHECKING, Any
 
@@ -83,13 +85,63 @@ def escape_to_str(value: Any) -> str:
 # One character reference, the same pattern Python's html.unescape uses.
 _CHARREF = re.compile(r"&(#[0-9]+;?|#[xX][0-9a-fA-F]+;?|[^\t\n\f <&#;]{1,32};?)")
 
+# The most digits, not counting leading zeros, that a numeric reference can
+# have and still name a code point at or below U+10FFFF: 1114111 has seven
+# decimal digits and 10FFFF six hex digits.
+_MAX_DECIMAL_DIGITS = 7
+_MAX_HEX_DIGITS = 6
+
+
+def _short_numeric_reference(name: str) -> str | None:
+    """
+    Return the reference for ``name`` (``#106`` or ``#x6A``, with or without ``;``) as ``&#...`` without leading zeros.
+
+    None means the number has too many digits to be at or below U+10FFFF,
+    which the browser reads as U+FFFD without converting the digits. Python's ``html.unescape`` converts them
+    with ``int()``, which refuses more than 4,300 digits, so the reference it
+    is given must stay short; dropping leading zeros keeps its value.
+    """
+    is_hex = name[1:2] in {"x", "X"}
+    prefix = name[:2] if is_hex else name[:1]
+    digits = name[len(prefix) :]
+    semicolon = ";" if digits.endswith(";") else ""
+    significant = digits.rstrip(";").lstrip("0")
+    if len(significant) > (_MAX_HEX_DIGITS if is_hex else _MAX_DECIMAL_DIGITS):
+        return None
+    return f"&{prefix}{significant or '0'}{semicolon}"
+
+
+def _decode_text_charref(match: re.Match[str]) -> str:
+    """Decode one character reference as ``html.unescape`` does, reading a long number as the browser does."""
+    name = match.group(1)
+    if name[0] != "#":
+        return unescape(match.group(0))
+    reference = _short_numeric_reference(name)
+    return "\ufffd" if reference is None else unescape(reference)
+
+
+def decode_character_references(html: str) -> str:
+    """
+    Decode the character references in ``html`` as Python's ``html.unescape`` does, without its limit on digits.
+
+    A numeric reference with more digits than Python converts to an ``int``
+    (such as ``&#`` followed by 5,000 zeros and ``106;``) decodes as the
+    browser reads it instead of raising ``ValueError``. Callers that read an
+    attribute value with these rules get what ``html.unescape`` gave them;
+    ``decode_attribute_entities`` adds the attribute-only rule for legacy
+    names.
+    """
+    if "&" not in html:
+        return html
+    return _CHARREF.sub(_decode_text_charref, html)
+
 
 def _decode_attribute_charref(match: re.Match[str]) -> str:
     """Decode one character reference the way a browser does inside an attribute value."""
     name = match.group(1)
     # Numeric references, and names that match exactly, decode as in text.
     if name[0] == "#" or name in html5:
-        return unescape(match.group(0))
+        return _decode_text_charref(match)
     # A legacy name without ";" (such as "&copy") decodes from its longest
     # known prefix. Inside an attribute value a browser leaves it as typed
     # when "=" or a letter or digit follows, so "?a=1&copy=2" stays a URL.
@@ -101,6 +153,116 @@ def _decode_attribute_charref(match: re.Match[str]) -> str:
                 return match.group(0)
             return html5[prefix] + name[end:]
     return match.group(0)
+
+
+# A reference that decodes to nothing in ``html.unescape`` (U+0001 is one of
+# the code points it drops), used to pad a shortened reference back to the
+# original length. A browser keeps U+0001, so the padded text is only parsed,
+# never written out.
+_EMPTY_REFERENCE = "&#1;"
+# The reference ``html.unescape`` reads as U+FFFD, for a value past U+10FFFF.
+_PAST_UNICODE_REFERENCE = "&#1114112;"
+# Compiled patterns that find a decimal reference longer than Python's digit
+# limit, one per limit, because a program can change the limit with
+# ``sys.set_int_max_str_digits``.
+_LONG_DECIMAL_REFERENCE_PATTERNS: dict[int, re.Pattern[str]] = {}
+# A reference that may still be unfinished at the end of a chunk: ``&#`` and
+# any digits after it, with no ``;`` yet.
+_UNFINISHED_DECIMAL_REFERENCE = re.compile(r"&#[0-9]*\Z")
+
+
+def _int_digit_limit() -> int:
+    """Return how many decimal digits Python converts to an ``int``, or 0 for no limit."""
+    # Python 3.10.0 to 3.10.6 have no limit and no function to read it.
+    read_limit = getattr(sys, "get_int_max_str_digits", None)
+    return 0 if read_limit is None else int(read_limit())
+
+
+def _long_decimal_reference_pattern(limit: int) -> re.Pattern[str]:
+    """Return the pattern for a decimal reference with more than ``limit`` digits."""
+    pattern = _LONG_DECIMAL_REFERENCE_PATTERNS.get(limit)
+    if pattern is None:
+        pattern = re.compile(rf"&#([0-9]{{{limit + 1},}})(;?)")
+        _LONG_DECIMAL_REFERENCE_PATTERNS[limit] = pattern
+    return pattern
+
+
+def _same_length_reference(match: re.Match[str]) -> str:
+    """Rewrite one long decimal reference as text of the same length that ``html.unescape`` decodes alike."""
+    significant = match.group(1).lstrip("0")
+    reference = _short_numeric_reference(f"#{significant or '0'};") or _PAST_UNICODE_REFERENCE
+    padding = len(match.group(0)) - len(reference)
+    # Pad with references that decode to nothing; the first carries the
+    # leftover length as leading zeros. The padding is never below 4: the
+    # smallest digit limit Python allows is 640.
+    pieces, extra = divmod(padding, len(_EMPTY_REFERENCE))
+    return reference + "&#" + "0" * extra + "1;" + _EMPTY_REFERENCE * (pieces - 1)
+
+
+def bound_long_decimal_references(html: str) -> str:
+    """
+    Rewrite decimal references too long for Python's ``int()`` so ``html.unescape`` can read them.
+
+    Each reference with more digits than Python converts becomes a string of
+    the same length that ``html.unescape`` decodes to the same text: the
+    short reference followed by references that decode to nothing (a
+    browser would keep those, so use this only on text you parse). Positions
+    in ``html`` stay valid, and text without such a reference is returned
+    unchanged. A reference at the very end of ``html`` without ``;`` is read
+    as complete.
+    """
+    limit = _int_digit_limit()
+    # A limit of 0 means Python converts any number of digits.
+    if limit == 0 or "&#" not in html:
+        return html
+    return _long_decimal_reference_pattern(limit).sub(_same_length_reference, html)
+
+
+class LongReferenceSafeParser(HTMLParser):
+    """
+    An ``HTMLParser`` that reads decimal references of any length.
+
+    ``HTMLParser`` decodes attribute values (and text, with
+    ``convert_charrefs=True``) with ``html.unescape``, which raises
+    ``ValueError`` for a decimal reference with more than 4,300 digits.
+    This parser rewrites such a reference before parsing, as
+    ``bound_long_decimal_references`` describes, so the decoded attribute
+    values and text are what an unlimited ``html.unescape`` gives. Text the
+    parser does not decode, such as ``<script>`` content, comments and
+    ``get_starttag_text()``, shows the rewritten form of such a reference,
+    and with ``convert_charrefs=False`` ``handle_charref`` receives its
+    pieces. Input without one parses exactly as with ``HTMLParser``.
+    """
+
+    def __init__(self, *, convert_charrefs: bool = True) -> None:
+        super().__init__(convert_charrefs=convert_charrefs)
+        # The end of the last chunk when it may be the start of a reference
+        # whose digits continue in the next chunk.
+        self._held_reference = ""
+
+    def reset(self) -> None:
+        super().reset()
+        self._held_reference = ""
+
+    def feed(self, data: str) -> None:
+        # Hold back a possibly unfinished reference, so the rewrite always
+        # sees whole references, and let HTMLParser.feed do the rest.
+        text = self._held_reference + data
+        held = _UNFINISHED_DECIMAL_REFERENCE.search(text)
+        if held is None:
+            self._held_reference = ""
+        else:
+            self._held_reference = text[held.start() :]
+            text = text[: held.start()]
+        if text:
+            super().feed(bound_long_decimal_references(text))
+
+    def close(self) -> None:
+        # At the end of the input, a held reference without ";" is complete.
+        held, self._held_reference = self._held_reference, ""
+        if held:
+            super().feed(bound_long_decimal_references(held))
+        super().close()
 
 
 def decode_attribute_entities(html: str) -> str:
