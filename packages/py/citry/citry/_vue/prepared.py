@@ -200,8 +200,12 @@ class PreparedOccurrence:
     placement_key: str | None
     # The _NativeRow (citry._vue.native_render) whose JSON is this
     # occurrence's prepared data; ``prepared_data`` then holds only
-    # {"calls": {}}, and the manifest encoder writes Rust's JSON in. Assembly
-    # sets it only on the precompile path. It is not part of equality.
+    # {"calls": {}}, and the manifest encoder writes Rust's JSON in. For an
+    # ordinary occurrence it can be the _LeafJson holding the JSON of its leaf
+    # data; ``prepared_data`` then holds a placeholder at each of those keys
+    # (citry._vue.native_leaf_json). Assembly sets it only on the precompile
+    # path. It is not part of equality, so two such occurrences whose leaf
+    # values differ compare equal; nothing compares them.
     _native: object = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -246,8 +250,9 @@ class PreparedOccurrence:
         object.__setattr__(value, "id", occurrence_id)
         object.__setattr__(value, "type_key", type_key)
         object.__setattr__(value, "definition_id", definition_id)
-        # A Rust-read row's server data is an empty dict assembly made
-        # itself, so the JSON round trip that detaches it would copy nothing.
+        # Assembly builds every occurrence's server data as a new dict. For an
+        # occurrence with Rust-written data, an empty one skips the JSON round
+        # trip that detaches it, which would copy nothing.
         if native is not None and type(server_data) is dict and not server_data:
             object.__setattr__(value, "server_data", {})
         else:

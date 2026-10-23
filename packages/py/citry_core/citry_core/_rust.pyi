@@ -556,6 +556,9 @@ class native_render:
     ``_NativeRun``, and the view holds one ``_NativeOccurrence`` per row.
     ``_CallRunWalkPlan`` reads every row of a call run's loop in one call,
     when the loop's iterable, the call's inputs and its key are plain paths.
+    ``_leaf_values_json`` writes the JSON of an ordinary component's leaf
+    data (the values its template, compiled into one leaf program, sends to
+    the browser) into a ``_LeafJson``.
     """
 
     class _RowPlan:
@@ -766,26 +769,63 @@ class native_render:
             key looked up.
             """
 
+    class _LeafJson:
+        """
+        The JSON Rust wrote for each value of one occurrence's leaf data.
+
+        The cyclic garbage collector does not track it: it holds Rust
+        strings and the placeholder, which never refers to a ``_LeafJson``.
+        """
+
+        def __len__(self) -> int:
+            """The number of leaf values Rust wrote."""
+
+    @staticmethod
+    def _leaf_values_json(values: object, placeholder: object) -> native_render._LeafJson | str:
+        """
+        Write the JSON of each value of one leaf's data, as ``_script_json(_json_plain(value))`` writes it.
+
+        Returns a ``_LeafJson``; Python then stores ``placeholder`` under
+        each key of ``values``. Otherwise it returns why Rust declines:
+        ``not_plain`` (a value whose type is not exactly ``None``, ``bool``,
+        ``int``, ``float``, ``str``, ``list``, ``tuple`` or ``dict``, a key
+        that is not exactly ``str``, or ``values`` not exactly a dict),
+        ``non_finite``, ``big_int`` (outside 64 bits), ``not_utf8`` (a lone
+        surrogate in a str or key), ``cycle`` or ``too_deep`` (nesting
+        deeper than 200). Python then converts the leaf itself.
+        ``placeholder`` must never refer to a ``_LeafJson``: the collector
+        does not track a ``_LeafJson``, so such a cycle would never be
+        freed. Citry passes ``native_leaf_json.PLACEHOLDER``. A Rust panic
+        raises `RuntimeError`.
+        """
+
     @staticmethod
     def _encode_occurrences(
         occurrences: list[object],
-        natives: dict[str, native_render._NativeRow],
+        natives: dict[str, native_render._NativeRow | native_render._LeafJson],
         fallback: Callable[[dict[str, object]], str],
         definition_ids: dict[str, str] | None = None,
     ) -> str:
         """
-        Write a manifest's occurrence array, with each Rust-read row's prepared data written in.
+        Write a manifest's occurrence array, with the prepared data Rust wrote in place.
 
-        A ``_NativeRun`` item stands for all its rows, in order. Rust writes
-        each row with the run's compiled definition id, which it looks up in
-        ``definition_ids`` (logical id to compiled id). Every other item
-        whose id is not in ``natives`` is written by ``fallback(item)``.
-        Raises `ValueError` when an item is neither a dict nor a
-        ``_NativeRun``, a Rust-read row's item does not have the exact shape
-        assembly gives it, a run comes without ``definition_ids`` or its
-        definition has no compiled id there or that id is not a str, or
-        ``fallback`` returns something other than a str. A Rust panic raises
-        `RuntimeError`.
+        An item whose id maps to a ``_NativeRow`` gets that row's prepared
+        data. An item whose id maps to a ``_LeafJson`` gets that leaf's JSON
+        at each placeholder in its ``preparedData``, and its other values as
+        ``fallback`` writes them. A ``_NativeRun`` item stands for all its
+        rows, in order. Rust writes each row with the run's compiled
+        definition id, which it looks up in ``definition_ids`` (logical id to
+        compiled id). Every other item whose id is not in ``natives`` is
+        written by ``fallback(item)``. Raises `ValueError` when an item is
+        neither a dict nor a ``_NativeRun``, ``natives`` maps an item to
+        anything else, a Rust-read row's item does not have the exact shape
+        assembly gives it, a leaf occurrence's ``preparedData`` is not an
+        exact dict, holds a placeholder whose key has no JSON or lacks a
+        placeholder for a value Rust wrote, a leaf occurrence's item has a
+        key that is not a str or loses a key while ``fallback`` runs, a run comes
+        without ``definition_ids`` or its definition has no compiled id there
+        or that id is not a str, or ``fallback`` returns something other than
+        a str. A Rust panic raises `RuntimeError`.
         """
 
 ########################################################

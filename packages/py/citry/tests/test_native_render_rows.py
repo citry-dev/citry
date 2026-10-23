@@ -766,6 +766,8 @@ _RUST_NAMES = (
     "_NativeRun",
     "_NativeOccurrence",
     "_CallRunWalkPlan",
+    "_LeafJson",
+    "_leaf_values_json",
 )
 
 
@@ -773,7 +775,7 @@ class _FullModule:
     """Stands for a native module that has every name the native path calls."""
 
     _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = _NativeRun = _NativeOccurrence = None
-    _CallRunWalkPlan = None
+    _CallRunWalkPlan = _LeafJson = _leaf_values_json = None
 
 
 class _OlderModule:
@@ -794,6 +796,13 @@ class _LevelB1Module:
     _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = _NativeRun = _NativeOccurrence = None
 
 
+class _LevelC2Module:
+    """Stands for a native module that has the names of levels A, B1 and C2 but not level B2's ``_LeafJson``."""
+
+    _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = _NativeRun = _NativeOccurrence = None
+    _CallRunWalkPlan = None
+
+
 @pytest.mark.parametrize(
     ("implementation", "platform", "gil_disabled", "module", "env_value", "supported", "active", "warns"),
     [
@@ -809,6 +818,7 @@ class _LevelB1Module:
         ("cpython", "darwin", 0, _OlderModule, None, False, False, "native_render._RunDigests is missing"),
         ("cpython", "linux", 0, _LevelAModule, None, False, False, "native_render._NativeRun is missing"),
         ("cpython", "linux", 0, _LevelB1Module, None, False, False, "native_render._CallRunWalkPlan is missing"),
+        ("cpython", "linux", 0, _LevelC2Module, None, False, False, "native_render._LeafJson is missing"),
         ("cpython", "win32", 0, None, "0", False, False, "native_render is missing"),
     ],
 )

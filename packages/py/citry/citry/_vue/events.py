@@ -117,15 +117,18 @@ class _BuiltInPreparationMetadata:
 @dataclass(frozen=True, slots=True)
 class _PreparedResult:
     # The manifest. A row in ``native_rows`` holds only {"calls": {}} here
-    # until ``_manifest_json`` writes Rust's JSON for it, and a call run that
-    # one run object recorded is that object (a ``_NativeRun``), not a dict
-    # per row, so serialize the payload with that function, never on its own.
+    # until ``_manifest_json`` writes Rust's JSON for it. An ordinary
+    # occurrence in ``native_rows`` holds a placeholder at each leaf key Rust
+    # wrote. A call run that one run object recorded is that ``_NativeRun``,
+    # not a dict per row. So serialize the payload with ``_manifest_json``,
+    # never on its own.
     payload: dict[str, object]
     tags: dict[str, str] | None
     validate: Callable[[], None]
     extensions: tuple[PreparedBrowserExtension, ...] = ()
     # Occurrence id -> the _NativeRow (citry._vue.native_render) whose JSON
-    # the manifest encoder writes as that payload occurrence's prepared data.
+    # the manifest encoder writes as that payload occurrence's prepared data,
+    # or the _LeafJson whose JSON it writes at that occurrence's leaf keys.
     # Only the precompile path's assembly produces any.
     native_rows: dict[str, object] = field(default_factory=dict)
     # Logical -> compiled definition ids, set only when the payload's
@@ -1133,7 +1136,8 @@ class DirectVueEventsProducer:
             else None
         )
         # The rows a run object holds are written from the run, so only the
-        # other Rust-read rows are looked up by id.
+        # other Rust-read rows, and the occurrences whose leaf data Rust
+        # wrote, are looked up by id.
         native_occurrence = _native_render.NativeOccurrence
         native_rows = {
             item.id: item._native
