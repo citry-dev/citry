@@ -281,6 +281,19 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                 if let Some(mut tag) = self.current_tag.take() {
                     tag.self_closing = self_closing;
                     self.sink_token(Token::TagToken(tag));
+                    // The tree builder asks the tokenizer to change state
+                    // after a start tag only when it will read that
+                    // element's contents as text (`<iframe>`, `<textarea>`,
+                    // `<script>` and the like). The browser ignores the `/`
+                    // on such a tag and reads the rest of the input as its
+                    // text, so the fragment does not end where it seems to.
+                    // html5ever logs no unacknowledged self-closing error
+                    // here, because it returns before it checks the flag.
+                    if self_closing && self.next_state.is_some() {
+                        if let Some(boundary) = self.boundary.as_deref_mut() {
+                            boundary.invalid = true;
+                        }
+                    }
                 }
                 if let Some(mut fact) = self.current_fact.take() {
                     fact.end = span.end;
@@ -571,10 +584,13 @@ pub(crate) fn parse_div_fragment_with_lexical_text(
 /// The accepted subset requires explicit, correctly nested tags and rejects
 /// every tokenizer error except a control character (other than NUL and
 /// whitespace) or a noncharacter in the input, which the browser keeps as
-/// written. It also uses html5ever's processed-token diagnostic to reject
-/// non-void HTML self-closing syntax while retaining SVG/MathML self-closing
-/// elements in their foreign-content namespaces. Other browser recovery
-/// behavior is not promised by this validator.
+/// written. It rejects a self-closed non-void HTML element such as
+/// `<div/>` or `<iframe/>`, because the browser ignores the `/` there.
+/// html5ever logs most of these as an unacknowledged self-closing tag; it
+/// logs nothing for a tag whose contents the parser reads as text, so the
+/// validator also checks for that state change. Self-closed SVG and MathML
+/// elements are allowed. Other browser recovery behavior is not promised by
+/// this validator.
 pub fn validate_html_fragment_boundary(input: &str) -> Result<(), &'static str> {
     let dom = RcDom::default();
     let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
@@ -672,6 +688,10 @@ mod tests {
             "<table><tbody><tr><td>x</td></tr></tbody></table>",
             "<svg><path d='x'/><g><circle/></g></svg>",
             "<math><mi>x</mi><mspace/></math>",
+            // In SVG and MathML, a self-closed `style` or `script` is an
+            // empty element.
+            "<svg><style/><script/></svg>",
+            "<math><style/></math>",
             // The browser keeps control characters and noncharacters as
             // written, so the tokenizer's report of them does not count.
             "<b>a\u{7f}b</b>",
@@ -700,6 +720,19 @@ mod tests {
             "<!-- unfinished",
             "<script>unfinished",
             "<div><span></div></span>",
+            // The parser ignores the `/` on these and reads the rest of the
+            // input as their text.
+            "<iframe/><p>x</p>",
+            "<textarea/>a",
+            "<title/>",
+            "<xmp/>",
+            "<noscript/>",
+            "<noembed/>",
+            "<noframes/>",
+            "<style/>",
+            "<script/>",
+            "<plaintext/>",
+            "<p>x</p><iframe/>",
             // The browser drops a NUL from text, so that error still counts.
             "<b>a\u{0}b</b>",
         ] {
