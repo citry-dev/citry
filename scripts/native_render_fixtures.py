@@ -12,6 +12,11 @@ answers:
   Python gives its key set, and the prepared-data JSON Citry's Python
   evaluator and assembly write;
 - ``run_digests.json``: call-run row ids computed by Python's ``_DigestPrefix``;
+- ``walk_rows.json``: loops over JSON data, as a template writes them (the
+  loop clause, the call's inputs and its ``#c-key``), with the paths
+  ``citry._vue.native_walk`` lowers them to, and the values Python's
+  sandboxed evaluator reads for each row (or the error it raises), and, for
+  a case where the Rust walk must decline, the reason it gives;
 - ``run_items.json``: whole call runs (the rows one ``c-for`` places), with
   each row's ids from ``_DigestPrefix``, each row's manifest item as
   ``_script_json`` writes a dict with the keys ``prepared_manifest`` and
@@ -47,8 +52,11 @@ from citry import Citry, Component
 from citry._vue.direct_capture import _DIGEST_JSON, _DigestPrefix
 from citry._vue.json_data import _copy_evaluated_json
 from citry._vue.leaf_program import LeafProgramNode, native_row_plan_tuples
+from citry._vue.native_walk import lower_loop, lower_path
 from citry._vue.serialization import _script_json
 from citry.component_render import _simple_vue_admission
+from citry.constness import _ConstMapping, _overlay_const_mapping, const_value
+from citry_core.safe_eval import compile_expr
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -485,6 +493,137 @@ def run_cases() -> dict[str, Any]:
     }
 
 
+def _walk_rows(count: int) -> list[dict[str, Any]]:
+    return [{"id": f"r{index}", "n": index, "title": f"row {index}", "tags": ["a", "b"]} for index in range(count)]
+
+
+# Each loop case: (name, scope, loop clause, inputs as (kwarg name,
+# expression), key expression, the reason Rust must decline or None).
+WALK_CASES: list[tuple[str, dict[str, Any], str, list[tuple[str, str]], str, str | None]] = [
+    ("board", {"phase": {"outputs": _walk_rows(4)}}, "row in phase['outputs']", [("row", "row")], "row['id']", None),
+    ("int_keys", {"rows": _walk_rows(3)}, "row in rows", [("row", "row")], "row['n']", None),
+    (
+        "int_edges",
+        {"rows": [{"n": 0}, {"n": -5}, {"n": 2**63 - 1}, {"n": -(2**63)}]},
+        "row in rows",
+        [("row", "row")],
+        "row['n']",
+        None,
+    ),
+    ("int_beyond_i64", {"rows": [{"n": 2**63}]}, "row in rows", [("row", "row")], "row['n']", "key_type"),
+    ("bool_key", {"rows": [{"k": True}]}, "row in rows", [("row", "row")], "row['k']", "key_type"),
+    ("none_key", {"rows": [{"k": None}]}, "row in rows", [("row", "row")], "row['k']", "key_type"),
+    ("float_key", {"rows": [{"k": 1.5}]}, "row in rows", [("row", "row")], "row['k']", "key_type"),
+    ("dict_key", {"rows": [{"k": {"x": 1}}]}, "row in rows", [("row", "row")], "row['k']", "key_type"),
+    (
+        "missing_key_row2",
+        {"rows": [*_walk_rows(2), {"title": "no id"}, *_walk_rows(1)]},
+        "row in rows",
+        [("row", "row")],
+        "row['id']",
+        "missing",
+    ),
+    ("iterable_dict", {"rows": {"a": 1, "b": 2}}, "row in rows", [("row", "row")], "row", "iterable"),
+    ("iterable_str", {"rows": "abc"}, "row in rows", [("row", "row")], "row", "iterable"),
+    ("iterable_missing", {"other": []}, "row in rows", [("row", "row")], "row", "missing"),
+    (
+        "nested_index",
+        {"groups": [_walk_rows(1), _walk_rows(3)]},
+        "row in groups[1]",
+        [("row", "row")],
+        "row['id']",
+        None,
+    ),
+    ("index_past_end", {"groups": [_walk_rows(1)]}, "row in groups[5]", [("row", "row")], "row['id']", "missing"),
+    ("list_by_str", {"rows": [["x"], ["y"]]}, "row in rows", [("row", "row")], "row['id']", "not_plain"),
+    ("str_by_str", {"rows": _walk_rows(2)}, "row in rows", [("v", "row['id']['x']")], "row['id']", "not_plain"),
+    ("str_by_int", {"rows": _walk_rows(2)}, "row in rows", [("v", "row['id'][0]")], "row['id']", "not_plain"),
+    (
+        "scope_input",
+        {"phase": {"name": "p", "outputs": _walk_rows(2)}},
+        "row in phase['outputs']",
+        [("row", "row"), ("phase", "phase"), ("label", "phase['name']")],
+        "row['id']",
+        None,
+    ),
+    ("empty", {"rows": []}, "row in rows", [("row", "row")], "row['id']", None),
+    ("list_rows", {"rows": [["k0", 1], ["k1", 2]]}, "row in rows", [("count", "row[1]")], "row[0]", None),
+    (
+        "deep",
+        {"a": {"b": [{"c": _walk_rows(2)}]}},
+        "row in a['b'][0]['c']",
+        [("tags", "row['tags']")],
+        "row['id']",
+        None,
+    ),
+    ("str_rows", {"rows": ["x", "y", "x2"]}, "row in rows", [("label", "row")], "row", None),
+    ("missing_scope_input", {"rows": _walk_rows(2)}, "row in rows", [("p", "page")], "row['id']", "missing"),
+    ("no_inputs", {"rows": _walk_rows(2)}, "row in rows", [], "row['id']", None),
+]
+
+
+def _walk_path(expr: str) -> dict[str, Any]:
+    """Lower one expression as ``ForNode`` does, written as the fixture spells a path."""
+    lowered = lower_path(expr)
+    if lowered is None:
+        raise SystemExit(f"the lowering refused {expr!r}")
+    return _walk_path_json(lowered)
+
+
+def _walk_path_json(lowered: tuple[str, tuple[str | int, ...]]) -> dict[str, Any]:
+    name, steps = lowered
+    return {"name": name, "steps": [{"str": step} if type(step) is str else {"int": step} for step in steps]}
+
+
+def _python_walk(scope: dict[str, Any], target: str, clause: str, inputs: list[tuple[str, str]], key: str) -> Any:
+    """Evaluate the loop as Python's walk does; return each row's values, or the error's type name."""
+    variables = _ConstMapping(scope)
+    try:
+        # The iterable once, then per row each input and the key, each over
+        # the row's own scope (the loop variable added to a copy).
+        items = list(compile_expr(f"(({target},) for {clause})", sandboxed=True)(variables))
+        rows = []
+        for (item,) in items:
+            row_scope = _overlay_const_mapping(variables, {target: item})
+            values = [compile_expr(expr, sandboxed=True)(row_scope) for _name, expr in inputs]
+            # The key as ComponentNode turns it into the call's key: None
+            # stays None, anything else becomes its str().
+            key_value = const_value(compile_expr(key, sandboxed=True)(row_scope))
+            rows.append({"kwargs": values, "key": None if key_value is None else str(key_value)})
+    except Exception as error:  # noqa: BLE001 - the failure is the recorded result
+        return type(error).__name__
+    return rows
+
+
+def walk_cases() -> dict[str, Any]:
+    """The loop cases for the Rust walk test, evaluated by Python's sandboxed evaluator."""
+    cases = []
+    for name, scope, clause, inputs, key, decline in WALK_CASES:
+        target = clause.split(" in ", 1)[0].strip()
+        loop = lower_loop((target,), clause)
+        if loop is None:
+            raise SystemExit(f"the lowering refused the loop {clause!r}")
+        python = _python_walk(scope, target, clause, inputs, key)
+        # A case that expects Rust to read the rows must be one Python reads.
+        if decline is None and not isinstance(python, list):
+            raise SystemExit(f"{name}: Python raised {python}, but the case expects Rust to read the rows")
+        cases.append(
+            {
+                "name": name,
+                "scope": scope,
+                "spec": {
+                    "target": loop[0],
+                    "iterable": _walk_path_json(loop[1]),
+                    "kwargs": [_walk_path(expr) for _name, expr in inputs],
+                    "key": _walk_path(key),
+                },
+                "decline": decline,
+                "python": python,
+            }
+        )
+    return {"cases": cases}
+
+
 def encoded(fixture: dict[str, Any]) -> str:
     """Write a fixture as JSON with one row or case per line, so a change reads as a short diff."""
     entries_key = "rows" if "rows" in fixture else "cases"
@@ -510,6 +649,7 @@ def fixtures() -> dict[str, str]:
         "shapes.json": encoded(fixture_for(row_node(SHAPE_TEMPLATE), shape_cases())),
         "run_digests.json": encoded(digest_cases()),
         "run_items.json": encoded(run_cases()),
+        "walk_rows.json": encoded(walk_cases()),
     }
 
 

@@ -47,6 +47,7 @@ _REQUIRED_NAMES = (
     "_encode_occurrences",
     "_NativeRun",
     "_NativeOccurrence",
+    "_CallRunWalkPlan",
 )
 
 

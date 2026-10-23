@@ -608,8 +608,12 @@ def test_a_lone_surrogate_in_a_template_key_is_handed_back(monkeypatch: pytest.M
         <p>{{ row['\\ud800'] }}</p>
     """
     rows = [{"id": "a", "key": "a", "\ud800": "x"}, {"id": "b", "key": "b", "\ud800": "y"}]
+    # The row plan (`_RowPlan`) cannot hold a lone surrogate key, so no row
+    # is read in Rust.
     render_both(
-        lambda: serialize_all(build_board(rows, template=template), {"static": OUTPUTS["static"]}), monkeypatch
+        lambda: serialize_all(build_board(rows, template=template), {"static": OUTPUTS["static"]}),
+        monkeypatch,
+        rows_read=0,
     )
 
 
@@ -754,13 +758,22 @@ def test_switching_the_flag_between_render_and_serialize_keeps_the_bytes(
     assert switched.rows_read == (14 if render_on_rust else 0)
 
 
-_RUST_NAMES = ("_RowPlan", "_NativeRow", "_RunDigests", "_encode_occurrences", "_NativeRun", "_NativeOccurrence")
+_RUST_NAMES = (
+    "_RowPlan",
+    "_NativeRow",
+    "_RunDigests",
+    "_encode_occurrences",
+    "_NativeRun",
+    "_NativeOccurrence",
+    "_CallRunWalkPlan",
+)
 
 
 class _FullModule:
     """Stands for a native module that has every name the native path calls."""
 
     _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = _NativeRun = _NativeOccurrence = None
+    _CallRunWalkPlan = None
 
 
 class _OlderModule:
@@ -773,6 +786,12 @@ class _LevelAModule:
     """Stands for a native module that has level A's names but not ``_NativeRun`` or ``_NativeOccurrence``."""
 
     _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = None
+
+
+class _LevelB1Module:
+    """Stands for a native module that has the names of levels A and B1 but not ``_CallRunWalkPlan``."""
+
+    _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = _NativeRun = _NativeOccurrence = None
 
 
 @pytest.mark.parametrize(
@@ -789,6 +808,7 @@ class _LevelAModule:
         ("cpython", "linux", 0, None, None, False, False, "native_render is missing"),
         ("cpython", "darwin", 0, _OlderModule, None, False, False, "native_render._RunDigests is missing"),
         ("cpython", "linux", 0, _LevelAModule, None, False, False, "native_render._NativeRun is missing"),
+        ("cpython", "linux", 0, _LevelB1Module, None, False, False, "native_render._CallRunWalkPlan is missing"),
         ("cpython", "win32", 0, None, "0", False, False, "native_render is missing"),
     ],
 )

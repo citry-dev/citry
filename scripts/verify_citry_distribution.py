@@ -52,10 +52,13 @@ SDIST_ONLY_SOURCES: Final = frozenset(
 # reusable browser programs in `_vue/leaf_program.py`, the template checks
 # with their generated HTML and ARIA tables, the CSS checks, the
 # development-mode browser check (`_vue/dev_checks.min.js`), and the check of
-# `inject()` keys against the keys provided above a component. The wheel
-# measured 1,352,777 bytes, about 39 KB under this cap. A sizeable addition
-# should raise the cap on purpose rather than use up the headroom unnoticed.
-MAX_WHEEL_BYTES: Final = 1_360 * 1024
+# `inject()` keys against the keys provided above a component, and the Python
+# side of the native render levels (`_vue/native_render.py`,
+# `_vue/native_walk.py`). The wheel measured 1,392,994 bytes, about 16 KB
+# under this cap.
+# A sizeable addition should raise the cap on purpose rather than use up the
+# headroom unnoticed.
+MAX_WHEEL_BYTES: Final = 1_376 * 1024
 
 
 def _citry_core_version() -> str:
