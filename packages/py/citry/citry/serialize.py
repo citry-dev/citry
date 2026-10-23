@@ -1219,7 +1219,8 @@ def _append_frame_parts(
             if isinstance(part, PreparedElementClose):
                 out.append(f"</{part.tag}>")
                 continue
-            # A DeferredComponent here means render() never resolved it.
+            # A DeferredComponent or a call run's row (_DeferredRunRow) here
+            # means render() never resolved it; both raise the same error.
             msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
             raise RuntimeError(msg)
 
@@ -1451,7 +1452,8 @@ def _append_frame_parts_with_fallback_tracking(
                 if tracker is not None:
                     tracker.pop_prepared(part.tag)
                 continue
-            # A DeferredComponent here means render() never resolved it.
+            # A DeferredComponent or a call run's row (_DeferredRunRow) here
+            # means render() never resolved it; both raise the same error.
             msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
             raise RuntimeError(msg)
 

@@ -10,10 +10,11 @@ uses it, and what happens when it meets an input it cannot handle.
 The work ships in levels, one pull request each. This document describes
 the levels that have shipped:
 
-| Level | What Rust does |
+| Level | What it does |
 |---|---|
-| A | Reads each `simple = "vue"` row, checks its values and writes its prepared data as JSON; computes the two ids of every row of a call run |
-| B1 | When Rust read every row of a call run, records the whole run during serialize with one object, and writes its rows' manifest items |
+| A | Rust reads each `simple = "vue"` row, checks its values and writes its prepared data as JSON; it also computes the two ids of every row of a call run |
+| B1 | When Rust read every row of a call run, one Rust object records the whole run during serialize and writes its rows' manifest items |
+| C1 | The render queue renders the rows of a `<c-for>` loop in one task, in the order one task per row would. This level is Python only and runs on every interpreter, with or without Rust |
 
 Terms used below:
 
@@ -41,6 +42,17 @@ Terms used below:
   `citry/_vue/events.py`).
 - **Run object**: one Rust object (`_NativeRun`) that records every row of
   a call run in assembly, in place of one Python record per row (level B1).
+- **Render queue**: the loop in `_settle_render`
+  (`citry/component_render.py`) that renders each deferred child
+  component after its parent's template has run. It keeps its tasks on a
+  stack and always runs the top one next, so a task pushed under another
+  runs after it (see
+  [`component_rendering_defer.md`](component_rendering_defer.md)).
+- **Parts list**: the `parts` of a `CitryRender`, the list of pieces a
+  template rendered. A loop's parts list holds one entry per row until
+  the render queue puts each row's record in its place.
+- **Run task**: the one render-queue task (`_RunTask`) that renders the
+  rows of a call run in order (level C1).
 
 The research that measured these levels is on the branch
 `research/rust-render-stage0` (tag `research/rust-render-stage2-done`),
@@ -161,7 +173,67 @@ serialize reads a run's `type_key` for its component tags. A
 its `server_data` and `prepared_data` are read-only mappings shared by
 every row, so a reader that tried to change them would fail at once.
 
-## 3. When Rust runs
+## 3. One task per call run
+
+Each deferred component normally gets its own render-queue task. A loop
+of hundreds of `simple = "vue"` rows then builds a `CitryElement` and a
+`DeferredComponent` per row while the parent's template runs, and the
+queue later pops one task per row. Each task checks the depth, sets the
+row's execution frame (the slot fill or nested template Citry was
+rendering when it reached the row; Citry uses it to link any slot the
+row's callbacks call), runs the admission checks (the per-class checks
+that decide whether a row can render without a component object) and the
+row's callbacks (`_render_simple_vue_leaf`), and puts the row's record in
+its place. Level C1 gives the loop's rows one task instead, which does
+the same work for every row, in the same order:
+
+1. Before the loop runs, `ForNode._call_run_class` checks that the loop
+   can record its rows as one run. These are the checks `ForNode.render`
+   makes after the loop to treat it as a call run (the render is a Vue
+   render, the loop has no `<c-empty>` branch, its body is one keyed
+   component call with no body, no browser bindings and no special input
+   keys, and the class is registered, not transparent and not a dynamic
+   selector),
+   plus three more: the class is `simple = "vue"`, the call's inputs are
+   plain, and its metadata does not target an element. The checks after
+   the loop still run and decide whether the loop's output is marked as a
+   call run.
+2. The loop walk (`ForNode._render_call_run`) makes each row's template
+   steps in their usual order and records the row's kwargs and call
+   metadata in one `_DeferredRun`, without building its element. Each
+   row's position in the parts list gets its own small `_DeferredRunRow`,
+   so code that sees the list still finds one object per row. A row whose
+   looked-up class no longer fits the run (another class under the name,
+   or one that became a dynamic selector) or whose execution frame
+   differs gets its own
+   deferred component and its own task, as in a loop that is not a run,
+   and so does every later row of the loop.
+3. When the queue scans a parts list (`_scan_deferred_parts`), rows of
+   one run that sit next to each other get one `_RunTask`. One task per
+   row would put their tasks next to each other on the stack, so one task
+   that renders them in list order does the same. If an extension hook
+   or user code reordered, dropped or repeated entries, the scan sees that
+   list, so the same rows render in the same order. A list scanned again
+   later gets tasks only for the rows still in it.
+4. `_run_rows` renders the task's rows in order. For each row it makes the
+   depth check a row's own task makes, sets the row's execution frame,
+   repeats the admission checks that can change between rows
+   (`_run_row`), and then runs the same steps as `_render_simple_vue_leaf`
+   (both call `_simple_vue_record`, where level A's row read happens). It
+   puts each record at its row's position.
+5. Four things stop the task early at row k:
+
+| The task stops at row k when | The queue then |
+|---|---|
+| Row k sits deeper than `max_component_depth` | Raises the nesting-depth error, which no `on_render` boundary can catch |
+| Row k's checks choose the ordinary component path (for example the i18n extension needs it) | Builds row k's `DeferredComponent`, renders it as an ordinary component, and pushes a run task for the remaining rows under it |
+| Row k called child components | Pushes a run task for the remaining rows, with the children's tasks on top, so they render before row k+1 |
+| Row k's position is gone from the parts list | Raises the `RuntimeError` a row's own task raises then. Row k's callbacks have already run, and no `on_render` boundary can catch it |
+
+The order of every user callback and extension hook is the same as with
+one task per row. `tests/test_call_run_order.py` locks it on both paths.
+
+## 4. When Rust runs
 
 `citry/_vue/native_render.py` decides once, when it is first imported:
 
@@ -191,7 +263,11 @@ records the run's Rust-read rows as level A does. The Rust module stays
 declared as needing the GIL (`#[pymodule(gil_used = true)]` in
 `crates/citry_core_py/src/lib.rs`).
 
-## 4. Rows rebuilt in Python
+Level C1 does not read these flags. It runs on every interpreter; on the
+Python path its run task runs the Python evaluator for each row, as a
+row's own task does. So every interpreter has one render queue to test.
+
+## 5. Rows rebuilt in Python
 
 A page Vue hydrates, or one it mounts in the browser (`ssr=False`),
 writes a Rust-read row from its JSON alone, as long as the serializer
@@ -219,7 +295,7 @@ row's values from its leaf.
 A row's leaf is built at most once per render, so serializing the same
 render as several outputs rebuilds each row once.
 
-## 5. Error modes
+## 6. Error modes
 
 | Input or event | What happens |
 |---|---|
@@ -265,7 +341,49 @@ Accepted differences, none of which changes output:
   instead of once per row when the built-in metadata has no tag for it. The
   answer is the same for every row, so no output can show it.
 
-## 6. Where the code lives
+Level C1 adds these error modes. Every error a row raises is the one its
+own task raises, with the same message, component path and chain of
+causes:
+
+| Input or event | What happens |
+|---|---|
+| A row's callback, `Kwargs` construction or id generator raises, or the id is invalid | The run task stops at that row; the error carries the row's component path and reaches the nearest `on_render` boundary, and later rows do not run, as with one task per row. |
+| `KeyboardInterrupt` or another `BaseException` in a row | It propagates unchanged, with no component path; the row's execution frame is reset first. |
+| A row sits deeper than `max_component_depth`, including after an earlier row lowered the limit | The nesting-depth error ends the render; no `on_render` boundary can swallow it. |
+| A row's callback changes what later rows do (registers a component with messages, makes the class transparent or makes it fail admission, unregisters it, replaces the id generator) | Each row repeats the admission checks that can change, so later rows take the ordinary path or raise the rejection they raise with one task per row. |
+| A row's class is replaced under its name, or becomes a dynamic selector, while the loop walks | That row and every later row get their own deferred components and tasks. Rows already in the run raise the call-shape rejection when they render, before their callbacks, as their own tasks would. |
+| An extension hook or user code reorders, drops or repeats a loop's unplaced rows | The same rows render in the same order as with one task per row. |
+| An extension hook or user code removes a row's position after the scan | The `RuntimeError` a row's own task raises in that case. |
+| A list of rows is printed again after some rows were placed | The later scan gives the rows still unplaced their own task, which renders them. The earlier task then renders its next row again and raises the position-gone `RuntimeError`, as with one task per row. |
+
+Accepted differences, none of which changes output:
+
+- A row in a run shows `_run_rows` and `_run_row` in its traceback; a row
+  with its own task shows `_render_simple_vue_leaf`. The innermost frame,
+  where user code raised, is the same.
+- Reads of class attributes and of Citry's own frozen records (the
+  admission record, the call metadata) differ in count, and some in
+  timing: the call's shape is checked once for the loop instead of once
+  per row, and `ForNode._call_run_class` reads the class's `simple`,
+  `transparent` and selector flags before the loop runs. None of these
+  has a read hook on Citry's own classes; only a user metaclass with a
+  read hook could see the difference.
+- `ComponentNode.render` makes one more method call (`_finish_render`)
+  for every component call, and `_render_simple_vue_leaf` one more
+  (`_simple_vue_record`), run or not.
+- `CitryRender.parts` (public) can hold a `_DeferredRunRow` at each row's
+  position until the render queue places the rows. Neither it nor
+  `DeferredComponent` is exported from `citry`.
+- Three public routes hand user code such a render before the queue
+  reaches it: calling a template-defined slot (from `template_data` or
+  another callback), the `on_slot_rendered` extension hook, and a nested
+  template passed as a kwarg. In each, the list has one object per row,
+  and `str()` raises the error an unplaced deferred component raises.
+  The `on_render` generator and `on_component_rendered` see a render
+  only after its rows are placed. `tests/test_call_run_tasks.py` checks
+  the three routes.
+
+## 7. Where the code lives
 
 | Piece | File |
 |---|---|
@@ -276,13 +394,16 @@ Accepted differences, none of which changes output:
 | Their type stub | `class native_render` in `packages/py/citry_core/citry_core/_rust.pyi` |
 | The decision | `citry/_vue/native_render.py` |
 | The plan tuples, the row read and the rebuild | `citry/_vue/leaf_program.py` |
-| The row read's call site | `_render_simple_vue_leaf` in `citry/component_render.py` |
+| The row read's call site | `_simple_vue_record` in `citry/component_render.py` |
+| The call run's walk (level C1) | `ForNode._call_run_class` and `ForNode._render_call_run`, and `ComponentNode._render_run_row` and `_finish_render`, in `citry/nodes/__init__.py` |
+| The rows a loop recorded, and their places in the parts list (level C1) | `_DeferredRun` and `_DeferredRunRow` in `citry/citry_render.py` |
+| The run task (level C1) | `_RunTask`, `_run_rows`, `_run_row` and the run branch of `_settle_render` in `citry/component_render.py` |
 | The record properties | `SimpleVueRecord` in `citry/citry_render.py` |
 | Assembly (`start_occurrence`, `native_definition`, `register_native_member`, the call-run ids, `take_native_run`, `run_members`) | `citry/_vue/direct_capture.py` |
 | The manifest's occurrence list with run objects | `_occurrence_items_with_runs` in `citry/_vue/protocol.py` |
 | The manifest writer | `_manifest_json` in `citry/_vue/serialization.py` |
 
-## 7. Testing both paths
+## 8. Testing both paths
 
 - `tests/_render_paths.py` has `render_both(run)`, which calls `run` on
   each path in one process, pins render ids, the Vue app id and the
@@ -302,6 +423,18 @@ Accepted differences, none of which changes output:
   job runs the suite on PyPy, Pyodide or free-threaded builds.
 - `tests/test_call_run_order.py` locks the order of user callbacks and
   extension hooks, and runs on both paths.
+- `tests/test_call_run_tasks.py` covers level C1, on both paths: run
+  tasks place every row of a 140-row board (one task per loop, no row in
+  a task of its own); both ways a row's position can be gone; a hook that
+  reorders, drops or repeats the unplaced rows; a rows list printed again
+  after its first row; rows that change what later rows do; a parts list
+  edited before its rows are placed; and the three public routes that can
+  see a render whose rows are not placed yet. Citry has no switch for run
+  tasks, so the cases that compare with one task per row render the page
+  again in the same process with no loop qualifying for a run
+  (`ForNode._call_run_class` returns None). One more check, which does
+  not depend on the path, gives a leftover row in a prepared render the
+  unresolved-part error.
 - `tests/test_native_render_runs.py` covers level B1: page cases with the
   run objects each must build and write, a check that every call run of a
   140-row board reaches a run object, a field-by-field comparison of the
@@ -311,7 +444,7 @@ Accepted differences, none of which changes output:
   `scripts/native_render_fixtures.py` writes from the Python code;
   `--check` (run by a Python test) fails when a fixture no longer matches.
 
-## 8. Adding a level
+## 9. Adding a level
 
 A new level follows the same rules:
 

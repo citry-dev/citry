@@ -315,8 +315,13 @@ component's pending subtree work**. (When a `_RenderTask` runs, the child's
 `_FinalizeTask` is pushed first and the child's own deferred tasks above it;
 nothing else gets between them.)
 
-So when a task raises (a `_RenderTask`, i.e. `_render_one` of a child, or a
-finalize step):
+A `_RunTask` renders the `simple = "vue"` rows of one `<c-for>` loop in
+order ([`native_render.md`](native_render.md) section 3). It keeps this
+invariant: the task for its remaining rows sits under the current row's work,
+inside the parent's subtree work.
+
+So when a task raises (a `_RenderTask`, i.e. `_render_one` of a child, a
+`_RunTask`, or a finalize step):
 
 1. Pop and discard stack entries until the nearest `_FinalizeTask`. The
    discarded entries are precisely the pending work of the enclosing
