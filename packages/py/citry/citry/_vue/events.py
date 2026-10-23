@@ -66,6 +66,9 @@ _ASSET_LABELS = {"definition": "definition bundle", "style": "stylesheet asset"}
 # so one lock keeps an eviction from removing an entry mid-update.
 _LOCAL_ASSETS_LOCK = Lock()
 _PRODUCERS: WeakKeyDictionary[Citry, DirectVueEventsProducer] = WeakKeyDictionary()
+# Several threads can build a producer for one engine during its first
+# renders; this lock lets only the first one be stored.
+_PRODUCERS_LOCK = Lock()
 
 
 class _DependencyOptions(TypedDict, total=False):
@@ -426,8 +429,12 @@ def default_events_producer(citry: Citry) -> DirectVueEventsProducer:
         _builtin_citry_ref=engine,
         _builtin_tag_callback=tag_for_type,
     )
-    _PRODUCERS[citry] = producer
-    return producer
+    # serialize() compiles a page with one producer, prepares it with the one
+    # this function returns later, and rejects the page when their callbacks
+    # differ, so every thread must get the producer stored first, not the one
+    # it just built.
+    with _PRODUCERS_LOCK:
+        return _PRODUCERS.setdefault(citry, producer)
 
 
 def precompile_selected_tree_for_serialization(

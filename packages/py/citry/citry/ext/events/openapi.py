@@ -34,6 +34,7 @@ from types import UnionType
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Union, cast, get_args, get_origin, get_type_hints
 from uuid import UUID
 
+from citry._class_introspection import _static_class_namespace_copy
 from citry._protocol.events import PROTOCOL, openapi_error_envelope_schema, openapi_error_schema
 from citry.command import CommandArg, style_success
 from citry.ext.events.csrf import X_CITRY_EVENTS_HEADER
@@ -351,7 +352,11 @@ def _return_annotation(comp_cls: type, func: Callable[..., Any]) -> Any:
     localns: dict[str, Any] = {}
     for klass in reversed(comp_cls.__mro__):
         localns[klass.__name__] = klass
-        localns.update({name: nested for name, nested in vars(klass).items() if isinstance(nested, type)})
+        # A live server can build this document while its threads render
+        # these classes and store computed results on them, so the loop
+        # walks a copy.
+        namespace = _static_class_namespace_copy(klass)
+        localns.update({name: nested for name, nested in namespace.items() if isinstance(nested, type)})
 
     def probe() -> None: ...
 

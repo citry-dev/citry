@@ -6,6 +6,8 @@ import gc
 import itertools
 import json
 import re
+import sys
+import threading
 import weakref
 from pathlib import Path
 from typing import Any
@@ -899,6 +901,72 @@ def test_simple_vue_admission_does_not_keep_a_cleared_class_alive() -> None:
     app.clear()
     gc.collect()
     assert leaf_ref() is None
+
+
+def test_simple_vue_admission_survives_a_class_write_during_its_member_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    leaf, page = _keyed_rows_app()
+    stored: list[str] = []
+    read_mro = component_render._static_class_mro
+
+    # Another thread rendering Leaf for the first time can store a result on
+    # the class (its loaded template, say) while this thread's admission check
+    # walks Leaf's members. The check reads the type of each data member, so
+    # the first read of a string member's type stands in for that thread's
+    # write landing in the middle of the walk.
+    def read_mro_then_store(cls: type) -> tuple[type, ...]:
+        if cls is str and not stored:
+            type.__setattr__(leaf, "_citry_stored_by_another_thread", object())
+            stored.append(leaf.__name__)
+        return read_mro(cls)
+
+    monkeypatch.setattr(component_render, "_static_class_mro", read_mro_then_store)
+    html = page(items=["a", "b"]).render().serialize(deps_strategy="ignore")
+
+    # Without the write the test would pass without exercising anything.
+    assert stored == ["Leaf"]
+    assert html.count("<span") == 2
+
+
+def _render_on_threads(page: type[Component], thread_count: int) -> list[BaseException]:
+    """Render ``page`` once on each of ``thread_count`` threads started together; return their errors."""
+    # The timeouts turn a deadlock into a failure instead of a hung test run.
+    barrier = threading.Barrier(thread_count, timeout=10)
+    errors: list[BaseException] = []
+
+    def render() -> None:
+        barrier.wait()
+        try:
+            page(items=[f"row-{index}" for index in range(20)]).render().serialize()
+        except BaseException as error:  # noqa: BLE001
+            errors.append(error)
+
+    threads = [threading.Thread(target=render) for _ in range(thread_count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    assert not any(thread.is_alive() for thread in threads)
+    return errors
+
+
+def test_simple_vue_first_renders_on_several_threads_succeed() -> None:
+    # Python switches threads every 5 ms by default, which a first render of
+    # this small page rarely spans. Switching every microsecond makes the
+    # threads' first renders overlap, which is when they store results on
+    # the same classes.
+    switch_interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        # Each attempt starts from new classes on a new engine, so every
+        # thread's render is a first render.
+        for _attempt in range(3):
+            _leaf, page = _keyed_rows_app()
+            page.citry.initialize()
+            assert _render_on_threads(page, 8) == []
+    finally:
+        sys.setswitchinterval(switch_interval)
 
 
 def _observe_leaf_instances(monkeypatch: pytest.MonkeyPatch) -> list[object]:

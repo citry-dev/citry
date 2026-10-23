@@ -247,6 +247,21 @@
   interactive `"document"` or `"fragment"` serialization of it, now writes
   its scripts and stylesheets like a fresh render instead of leaving them
   out.
+- When several threads render their first pages at the same time, as a
+  server's workers do right after it starts, those renders no longer fail
+  with "dictionary changed size during iteration" on a page with
+  `simple = "vue"` components, or, on any page serialized for Vue, with
+  "early selected-tree compilation does not match the current render
+  preparation".
+- Defining a subclass of a component's `State` class after that component
+  has rendered no longer fails with "'_citry_input_type_checks' is not a
+  recognized State meta attribute".
+- A Vue page whose text or attribute values hold a control character such
+  as DEL (U+007F) or U+0001, or a Unicode noncharacter such as U+FDD0, now
+  hydrates, so Vue no longer builds it again in the browser. A `<c-raw>`
+  block or `Markup` value holding one of these characters in an
+  interactive component now renders. It used to fail with "is not a
+  complete HTML fragment".
 
 ### Performance
 
