@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import sys
+import sysconfig
 from importlib.metadata import version
 
 from citry_core import _rust
@@ -58,28 +59,40 @@ def main() -> None:
     native_child = "citryOccurrence" + hashlib.sha256(f'["parent","{native_placement}"]'.encode()).hexdigest()[:24]
     # Read one row through the C API (its float goes through CPython's own
     # formatter) and write it with the occurrence writer, as citry calls them.
-    native = _rust.native_render
-    plan = native._RowPlan(
-        (("text", "citryText0", ("p", "v", ())), ("open", "citryAttrs0", (("data-n", ("p", "n", ())),))),
-        (("v", (("scalar",), (), None)), ("n", (("scalar",), (), None))),
-        (),
-        32,
-        2**53 - 1,
+    # Only the interpreters citry runs this code on do it: PyPy, Pyodide and
+    # free-threaded builds take citry's Python path, so a row read there would
+    # test code no user runs.
+    reads_rows = (
+        sys.implementation.name == "cpython"
+        and sys.platform != "emscripten"
+        and not sysconfig.get_config_var("Py_GIL_DISABLED")
     )
-    native_row = plan.read({"v": 0.1, "n": 2**60}, frozenset({str, int, bool, float}))
-    native_item: dict[str, object] = {
-        "definitionId": "d",
-        "id": "o",
-        "parentId": None,
-        "placementKey": None,
-        "preparedData": {"calls": {}},
-        "renderId": "r",
-        "serverData": {},
-        "typeKey": "t",
-    }
-    if native_row is None:
-        raise RuntimeError("the native render module declined a plain row")
-    native_occurrences = native._encode_occurrences([native_item], {"o": native_row}, json.dumps)
+    native_row_json: str | None = None
+    native_occurrences: str | None = None
+    if reads_rows:
+        native = _rust.native_render
+        plan = native._RowPlan(
+            (("text", "citryText0", ("p", "v", ())), ("open", "citryAttrs0", (("data-n", ("p", "n", ())),))),
+            (("v", (("scalar",), (), None)), ("n", (("scalar",), (), None))),
+            (),
+            32,
+            2**53 - 1,
+        )
+        native_row = plan.read({"v": 0.1, "n": 2**60}, frozenset({str, int, bool, float}))
+        native_item: dict[str, object] = {
+            "definitionId": "d",
+            "id": "o",
+            "parentId": None,
+            "placementKey": None,
+            "preparedData": {"calls": {}},
+            "renderId": "r",
+            "serverData": {},
+            "typeKey": "t",
+        }
+        if native_row is None:
+            raise RuntimeError("the native render module declined a plain row")
+        native_row_json = native_row.prepared_json
+        native_occurrences = native._encode_occurrences([native_item], {"o": native_row}, json.dumps)
     segments, placeholders = mark_html(
         "<main><p>Hello</p></main>",
         ["data-citry"],
@@ -94,7 +107,7 @@ def main() -> None:
         "locale": canonicalize_locale("en-us"),
         "marked": segments[0],
         "native_render_ids": native_ids == (native_placement, native_child),
-        "native_render_row": native_row.prepared_json,
+        "native_render_row": native_row_json,
         "native_render_occurrences": native_occurrences,
         "placeholders": placeholders,
         "python": sys.version,
@@ -113,12 +126,6 @@ def main() -> None:
         "locale": "en-US",
         "marked": '<main data-citry=""><p>Hello</p></main>',
         "native_render_ids": True,
-        "native_render_row": '{"calls":{},"citryAttrs0":{"data-n":"1152921504606846976"},"citryText0":"0.1"}',
-        "native_render_occurrences": (
-            '[{"definitionId":"d","id":"o","parentId":null,"placementKey":null,'
-            '"preparedData":{"calls":{},"citryAttrs0":{"data-n":"1152921504606846976"},"citryText0":"0.1"},'
-            '"renderId":"r","serverData":{},"typeKey":"t"}]'
-        ),
         "placeholders": [],
         "safe_eval": 42,
         "browser_references": ["known", "local"],
@@ -128,6 +135,15 @@ def main() -> None:
         "text_direction": "rtl",
         "used_variables": ["title"],
     }
+    if reads_rows:
+        expected["native_render_row"] = (
+            '{"calls":{},"citryAttrs0":{"data-n":"1152921504606846976"},"citryText0":"0.1"}'
+        )
+        expected["native_render_occurrences"] = (
+            '[{"definitionId":"d","id":"o","parentId":null,"placementKey":null,'
+            '"preparedData":{"calls":{},"citryAttrs0":{"data-n":"1152921504606846976"},"citryText0":"0.1"},'
+            '"renderId":"r","serverData":{},"typeKey":"t"}]'
+        )
     for name, value in expected.items():
         if checks[name] != value:
             raise RuntimeError(f"citry-core smoke check {name!r} returned {checks[name]!r}, expected {value!r}")
