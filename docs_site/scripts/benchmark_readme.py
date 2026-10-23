@@ -95,10 +95,12 @@ VERSION_NOTES = {
 SPEED_LOAD = "second"
 
 # Which Citry each speed benchmark report measured, and how many times, keyed
-# by the report id. The data file records neither in a form the README can
-# quote, so each report's note lives here.
+# by the id of the report Citry's numbers come from (``citry_report_id`` in
+# the data file's source). The data file records neither in a form the README
+# can quote, so each report's note lives here.
 SPEED_VERSION_NOTES = {
     "composed-70d4a8802900": "Citry 0.6.0, one run per framework.",
+    "composed-be3f44cc4b6e": "Citry 0.6.1, measured before its release, one run per framework.",
 }
 
 # A file name records the chart, the benchmark run it shows, the first
@@ -279,10 +281,14 @@ def speed_note(data: dict[str, Any]) -> str:
     """
     Return the note under the speed chart: the Citry version, the number of runs, and how to read the bars.
 
-    A report without an entry in ``SPEED_VERSION_NOTES`` raises
-    ``ValueError``, so a new report cannot appear under an old one's version.
+    The note belongs to the report Citry's numbers come from, which can be
+    older than the data's newest report when the other frameworks were
+    measured again. A data file without ``citry_report_id`` took every number
+    from its one report. A report without an entry in
+    ``SPEED_VERSION_NOTES`` raises ``ValueError``, so a new report cannot
+    appear under an old one's version.
     """
-    report = data["source"]["report_id"]
+    report = data["source"].get("citry_report_id", data["source"]["report_id"])
     try:
         note = SPEED_VERSION_NOTES[report]
     except KeyError:

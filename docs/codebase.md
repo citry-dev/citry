@@ -1196,8 +1196,8 @@ chart, and the note that names the Citry version, come from functions in
 `docs_site/scripts/benchmark_readme.py`. The landing page prints the same
 sentences with `<c-benchmark-text part="..." />`, so the two cannot drift.
 Add each new benchmark run's version note to `VERSION_NOTES` (errors) or
-`SPEED_VERSION_NOTES` (speed) in that file; until you do, the docs build and
-the validator fail.
+`SPEED_VERSION_NOTES` (speed, keyed by the report Citry's numbers come from)
+in that file; until you do, the docs build and the validator fail.
 
 Each file name holds the chart, the benchmark run, and a hash of the image,
 for example `errors-20261021T182412Z-33f45034c4c4-light.png`. The script

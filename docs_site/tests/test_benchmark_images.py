@@ -216,6 +216,15 @@ def test_speed_block_needs_a_version_note_for_the_report(monkeypatch: pytest.Mon
         benchmark_readme.readme_block("speed", _speed(), light_name="light.png", dark_name="dark.png")
 
 
+def test_speed_note_names_the_citry_of_the_report_citry_came_from(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Other frameworks measured again in a newer report must not relabel
+    # Citry's older numbers with the newer report's Citry version.
+    monkeypatch.setattr(benchmark_readme, "SPEED_VERSION_NOTES", {"older": "Citry 1.0.0.", "newer": "Citry 2.0.0."})
+    data = _speed()
+    data["source"].update(report_id="newer", citry_report_id="older")
+    assert benchmark_readme.speed_note(data).startswith("Citry 1.0.0.")
+
+
 @pytest.mark.parametrize(
     ("change", "message"),
     [
