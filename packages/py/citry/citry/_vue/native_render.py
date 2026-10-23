@@ -2,8 +2,9 @@
 Decide once, at import, whether Citry renders with its native (Rust) path.
 
 The native render path does some of the work of rendering ``simple = "vue"``
-rows in Rust (``citry_core._rust.native_render``), with output identical to
-the Python path. ``docs/design/native_render.md`` describes each part and its
+rows, and of writing ordinary components' browser data, in Rust
+(``citry_core._rust.native_render``), with output identical to the Python
+path. ``docs/design/native_render.md`` describes each part and its
 error modes. This module holds the one decision every part reads:
 
 - ``SUPPORTED``: whether this interpreter can run the Rust code at all. It
@@ -48,6 +49,8 @@ _REQUIRED_NAMES = (
     "_NativeRun",
     "_NativeOccurrence",
     "_CallRunWalkPlan",
+    "_LeafJson",
+    "_leaf_values_json",
 )
 
 

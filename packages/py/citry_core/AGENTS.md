@@ -15,7 +15,8 @@ facts see [`/docs/agent/INDEX.md`](../../../docs/agent/INDEX.md).
 - The native `_rust.vue` submodule compiles browser-facing templates through
   `crates/citry_vue_compiler`; its Python consumer is `citry._vue.compiler`.
 - The native `_rust.native_render` submodule reads `simple = "vue"` rows,
-  and walks the loops that place them, in Rust through
+  walks the loops that place them, and writes the JSON of ordinary
+  components' leaf data, in Rust through
   `crates/citry_native_render`; its Python consumer is
   `citry._vue.native_render` (see `docs/design/native_render.md`). Like
   `_rust.vue` it has no wrapper module here.

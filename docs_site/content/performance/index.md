@@ -104,6 +104,12 @@ nothing. These include static output (`deps_strategy="simple"`),
 fragments, a root template that is not a full `<html>` document, any
 CSP setting or nonce, and a `deps_position` other than `"smart"`.
 
+Citry also prepares, in compiled code, the browser data of components
+that are not `simple = "vue"`, when their template calls no other
+components and has no slots. This gain is smaller and grows with how
+much data those components send. It applies in development mode and to
+components with `js_data()` too.
+
 If a page renders differently or fails only on standard CPython, set
 `CITRY_NATIVE_RENDER=0` in the server's environment before it starts,
 and [report the bug](https://github.com/citry-dev/citry/issues).

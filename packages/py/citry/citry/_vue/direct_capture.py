@@ -38,6 +38,7 @@ from citry.components.mark import repeated_mark_name_error, validate_mark_name
 from citry.util.html import Markup, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
+from . import native_leaf_json as _native_leaf_json
 from . import native_render as _native_render
 from .capture import (
     PreparedAttribute,
@@ -444,7 +445,8 @@ def assemble_typed_render(
     Only ``precompile_selected_tree_for_serialization`` passes it, because
     that path runs only when no browser hook can read or change the view's
     prepared data. Every other caller gets each row's values back through
-    the record's Python leaf.
+    the record's Python leaf. It also lets Rust write an ordinary
+    occurrence's leaf data as JSON (level B2, see ``attach_leaf_data``).
     """
     from citry._simple_runtime import SimpleRender  # noqa: PLC0415
 
@@ -538,8 +540,15 @@ def assemble_typed_render(
     leaf_call_artifacts: dict[tuple[str, int, tuple[str, ...]], _LeafDefinitionArtifact] = {}
     markers: list[PreparedMarker] = []
     # Occurrence id -> the _NativeRow whose JSON the manifest encoder writes
-    # as that occurrence's prepared data (only with ``native_rows``).
+    # as that occurrence's prepared data (only with ``native_rows``), or the
+    # _LeafJson holding the JSON of an ordinary occurrence's leaf data, which
+    # the encoder writes in place of its placeholders (level B2).
     native_occurrences: dict[str, object] = {}
+    # The occurrences whose prepared data holds leaf JSON placeholders. Both
+    # places that attach such data finish the occurrence without assembling
+    # a body, so none can become an owner whose values assembly reads or
+    # merges; owner_values checks that.
+    leaf_json_occurrences: set[str] = set()
     # Class id -> component tag, for the rows of call runs that Rust read,
     # looked up once per class per assembly (see register_native_member).
     native_member_tags: dict[str, str] = {}
@@ -550,17 +559,59 @@ def assemble_typed_render(
     context_binding_attrs = "".join(f' :{name}="{name}"' for name in template_context_names)
     context_binding_pattern = "" if not template_context_names else '="{ ' + ", ".join(template_context_names) + ' }"'
 
+    def owner_values(owner_id: str) -> dict[str, object]:
+        """Return ``prepared_by_occurrence[owner_id]`` for an owner whose values assembly reads or merges."""
+        values = prepared_by_occurrence[owner_id]
+        # A placeholder is not a value: merging it into another dict would
+        # copy it where no _LeafJson fills it, or where another leaf's JSON
+        # does, so such an owner is a Citry bug.
+        if leaf_json_occurrences and owner_id in leaf_json_occurrences:
+            raise AssertionError("an occurrence holding leaf JSON placeholders became a prepared data owner")
+        return values
+
     def attach_leaf_data(
         part: PreparedLeafProgram,
         data_values: dict[str, object],
         projected_data_keys: set[str] | None = None,
+        *,
+        occurrence_id: str | None = None,
     ) -> None:
+        """
+        Copy a leaf program's prepared data into ``data_values``.
+
+        ``occurrence_id`` is given only where an occurrence attaches its own
+        single leaf: an ordinary component's, or a ``simple='vue'`` row's that
+        Rust did not read. There, on the precompile path with the Rust path
+        active, Rust writes each value's JSON instead (level B2), and the
+        dict gets one placeholder per key; a leaf Rust declines is copied as
+        without Rust.
+        """
         if part.vue_errors:
             # A stored Vue-code error keeps its own type, so a caller catches
             # VueCodeError on every path that rejects the same mistake.
             if is_vue_code_message(part.vue_errors[0]):
                 raise VueCodeError(part.vue_errors[0])
             raise UnsupportedPreparedView(part.vue_errors[0])
+        # Only the precompile path passes native_rows, because no browser hook
+        # can read or change its prepared data. An empty leaf has nothing to
+        # write, so it keeps the loop below and the encoder's plain path.
+        if occurrence_id is not None and native_rows and part.prepared_data and _native_render.ACTIVE:
+            # Both callers that pass occurrence_id pass no projected keys, so
+            # returning early skips nothing; anything else is a Citry bug.
+            if projected_data_keys is not None:
+                raise AssertionError("leaf JSON was requested together with projected keys")
+            written = _native_leaf_json.take(part.prepared_data)
+            if type(written) is not str:
+                # The keys are the ones the copy would have, so the duplicate
+                # check and every reader of the dict's keys see no change.
+                for key in part.prepared_data:
+                    if key in data_values:
+                        raise UnsupportedPreparedView("duplicate prepared leaf-program binding key")
+                    data_values[key] = _native_leaf_json.PLACEHOLDER
+                # The manifest encoder finds the JSON by the occurrence id.
+                native_occurrences[occurrence_id] = written
+                leaf_json_occurrences.add(occurrence_id)
+                return
         # The generated evaluator writes only strict JSON (see
         # _copy_evaluated_json), so its data only needs a copy. Other leaf
         # data is still checked and converted value by value.
@@ -1265,7 +1316,7 @@ def assemble_typed_render(
                 if candidate_artifact is not None:
                     existing_definition = definitions.get(candidate_artifact.definition_id)
                     if existing_definition is not None:
-                        attach_leaf_data(candidate_leaf, prepared_values)
+                        attach_leaf_data(candidate_leaf, prepared_values, occurrence_id=occurrence_id)
                         existing_input = compile_inputs.get(candidate_artifact.definition_id)
                         # Both normally hold the same object, so test identity
                         # before comparing every field.
@@ -1302,6 +1353,8 @@ def assemble_typed_render(
             projected = (
                 owner_id != occurrence_id and active_projected_data_keys and active_projected_data_keys[-1] is not None
             )
+            # Only this dict's keys are read here, so an occurrence holding
+            # leaf JSON placeholders needs no owner_values check.
             physical_values = prepared_by_occurrence[occurrence_id]
             reserved_keys = projected_data_keys_by_occurrence[occurrence_id]
             if owner_id == occurrence_id:
@@ -1437,7 +1490,7 @@ def assemble_typed_render(
                 raise AssertionError("prepared element keys must follow the element stack")
             inherited_element_depth = len(element_stack)
             dom_depth = 0
-            data_values = prepared_by_occurrence[data_owner_id]
+            data_values = owner_values(data_owner_id)
             projected_keys: set[str] | None = set() if projected_data and data_owner_id != occurrence_id else None
             projected_containers: set[str] | None = (
                 set() if projected_data and data_owner_id != occurrence_id else None
@@ -1449,7 +1502,7 @@ def assemble_typed_render(
             # definition that receives the body.  These owners coincide for an
             # ordinary component body and diverge only while a transparent
             # projection is being folded into another definition.
-            call_values = prepared_by_occurrence[call_owner_id]
+            call_values = owner_values(call_owner_id)
 
             run_first: dict[int, list[CitryRender | SimpleVueRecord]] = {}
             run_followers: set[int] = set()
@@ -1668,7 +1721,7 @@ def assemble_typed_render(
                     # receiver still owns the eventual outlet predicate.
                     if not nested_template and not flattened_transparent_receiver:
                         selection_owner = receiver_owner if receiver_owner != occurrence_id else data_owner_id
-                        selection_data = prepared_by_occurrence[selection_owner]
+                        selection_data = owner_values(selection_owner)
                         selected_slots = selection_data.setdefault("selectedSlots", {})
                         if type(selected_slots) is not dict:
                             raise AssertionError("prepared selectedSlots container changed type")
@@ -2945,7 +2998,7 @@ def assemble_typed_render(
             if projected_keys is not None and projected_containers is not None:
                 merge_projected_data(
                     data_values,
-                    prepared_by_occurrence[occurrence_id],
+                    owner_values(occurrence_id),
                     projected_keys,
                     projected_containers,
                     occurrence_id,
@@ -3026,7 +3079,7 @@ def assemble_typed_render(
                 leaf = None
                 artifact = None
         if isinstance(leaf, PreparedLeafProgram):
-            attach_leaf_data(leaf, prepared_by_occurrence[occurrence_id])
+            attach_leaf_data(leaf, prepared_by_occurrence[occurrence_id], occurrence_id=occurrence_id)
         if artifact is None:
             if isinstance(leaf, PreparedLeafProgram):
                 compile_input = DefinitionCompileInput(

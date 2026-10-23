@@ -1094,30 +1094,34 @@ def _manifest_json(
     manifest: dict[str, Any], native_rows: Mapping[str, object], run_definition_ids: dict[str, str] | None = None
 ) -> str:
     """
-    Serialize the manifest, writing in the prepared data of the rows Rust read.
+    Serialize the manifest, writing in the prepared data Rust wrote.
 
-    With no such rows this is ``_script_json(manifest)``. Otherwise one Rust
+    With no such data this is ``_script_json(manifest)``. Otherwise one Rust
     call writes the occurrence array: each Rust-read row's item with Rust's
-    prepared-data JSON, the rows of each run object (``_NativeRun``) from the
-    run, with their compiled definition ids taken from
-    ``run_definition_ids``, and every other item through ``_script_json``.
-    The other manifest entries are written by ``_script_json`` around it. With sorted keys and
-    compact separators, ``json.dumps`` writes a dict as its sorted
-    ``"key":value`` texts joined by commas, and a list as its items' texts
-    joined by commas, so the bytes equal ``_script_json(manifest)`` had each
-    row been its own item with its data there.
+    prepared-data JSON, each ordinary occurrence whose leaf data Rust wrote
+    (a ``_LeafJson`` in ``native_rows``) with that JSON at its keys, the rows
+    of each run object (``_NativeRun``) from the run, with their compiled
+    definition ids taken from ``run_definition_ids``, and every other item
+    through ``_script_json``. The other manifest entries are written by
+    ``_script_json`` around it. With sorted keys and compact separators,
+    ``json.dumps`` writes a dict as its sorted ``"key":value`` texts joined
+    by commas, and a list as its items' texts joined by commas, so the bytes
+    equal ``_script_json(manifest)`` had each row been its own item with its
+    data there. The entries are written in that same sorted order, so a
+    value that cannot be written raises the error ``_script_json(manifest)``
+    would raise first.
     """
     if not native_rows and run_definition_ids is None:
         return _script_json(manifest)
-    # Rust-read rows exist only when the native module is loaded.
+    # Rust-written data exists only when the native module is loaded.
     native = cast("type[_rust.native_render]", _native_render.native)
+    before = _script_json({key: value for key, value in manifest.items() if key < "occurrences"})
     occurrences = native._encode_occurrences(
         manifest["occurrences"],
-        cast("dict[str, _rust.native_render._NativeRow]", dict(native_rows)),
+        cast("dict[str, _rust.native_render._NativeRow | _rust.native_render._LeafJson]", dict(native_rows)),
         _script_json,
         run_definition_ids,
     )
-    before = _script_json({key: value for key, value in manifest.items() if key < "occurrences"})
     after = _script_json({key: value for key, value in manifest.items() if key > "occurrences"})
     entries = [before[1:-1], f'"occurrences":{occurrences}', after[1:-1]]
     return "{" + ",".join(entry for entry in entries if entry) + "}"

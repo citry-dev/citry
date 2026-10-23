@@ -15,8 +15,10 @@ stand-in for the Rust module and a spy on the manifest builder, it counts
 the run objects ``_NativeRun.try_new`` built, the call runs it declined,
 and the run objects the page manifests held. Through a spy on
 ``ForNode._walk_call_run``, it records each loop Rust walked and each reason
-it gave for leaving a loop to Python's walk. The caller states how many it
-expects.
+it gave for leaving a loop to Python's walk. Through a spy on
+``native_leaf_json.take``, it counts the ordinary components' leaves whose
+JSON Rust wrote and records the reason of each leaf it left to Python. The
+caller states how many it expects.
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
-from citry._vue import events, native_render
+from citry._vue import events, native_leaf_json, native_render
 from citry._vue.leaf_program import LeafProgramNode
 from citry.nodes import ForNode
 
@@ -64,6 +66,11 @@ class PathRun:
     # the reason of each loop it left to Python's walk, in render order.
     walks: int = 0
     walk_declines: tuple[str, ...] = ()
+    # Ordinary components' leaves whose JSON Rust wrote
+    # (``native_leaf_json.take`` returned a ``_LeafJson``), and the reason of each
+    # leaf it left to Python's conversion, in assembly order.
+    leaves_written: int = 0
+    leaf_declines: tuple[str, ...] = ()
 
 
 class _CountingModule:
@@ -126,8 +133,10 @@ def _pin_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def run_on_path(run: Callable[[], object], monkeypatch: pytest.MonkeyPatch, *, rust: bool) -> PathRun:
     """Call ``run`` on one render path and count how much of the Rust path it used."""
-    counts = {"read": 0, "rebuilt": 0, "walks": 0}
+    counts = {"read": 0, "rebuilt": 0, "walks": 0, "leaves": 0}
     walk_declines: list[str] = []
+    leaf_declines: list[str] = []
+    take_leaf_json = native_leaf_json.take
     walk_call_run = ForNode._walk_call_run
     run_counts = {"built": 0, "declined": 0, "written": 0, "run_rows": 0}
     read_native_row = LeafProgramNode.read_native_row
@@ -158,6 +167,14 @@ def run_on_path(run: Callable[[], object], monkeypatch: pytest.MonkeyPatch, *, r
             counts["walks"] += 1
         return walked
 
+    def counting_take(values: dict[str, object]) -> Any:
+        written = take_leaf_json(values)
+        if type(written) is str:
+            leaf_declines.append(written)
+        else:
+            counts["leaves"] += 1
+        return written
+
     def counting_rebuild(self: LeafProgramNode, variables: dict[str, object], *, component_name: str) -> Any:
         counts["rebuilt"] += 1
         return render_native_snapshot(self, variables, component_name=component_name)
@@ -168,6 +185,7 @@ def run_on_path(run: Callable[[], object], monkeypatch: pytest.MonkeyPatch, *, r
         patch.setattr(LeafProgramNode, "render_native_snapshot", counting_rebuild)
         patch.setattr(events, "prepared_manifest", counting_manifest)
         patch.setattr(ForNode, "_walk_call_run", counting_walk)
+        patch.setattr(native_leaf_json, "take", counting_take)
         if native_render.native is not None:
             patch.setattr(native_render, "native", _CountingModule(native_render.native, run_counts))
         _pin_inputs(patch)
@@ -185,6 +203,8 @@ def run_on_path(run: Callable[[], object], monkeypatch: pytest.MonkeyPatch, *, r
         runs_built=run_counts["built"],
         walks=counts["walks"],
         walk_declines=tuple(walk_declines),
+        leaves_written=counts["leaves"],
+        leaf_declines=tuple(leaf_declines),
     )
 
 
@@ -196,6 +216,7 @@ def render_both(
     rows_rebuilt: int | None = None,
     runs: tuple[int, int, int] | None = None,
     walks: tuple[int, tuple[str, ...]] | None = None,
+    leaves: tuple[int, tuple[str, ...]] | None = None,
 ) -> tuple[PathRun, PathRun]:
     """
     Run ``run`` on the Rust path and on the Python path, and check they agree.
@@ -206,8 +227,10 @@ def render_both(
     run objects the page manifests held)``; a built run object reaches no
     manifest when its ``commit`` refused it or the assembly failed later.
     ``walks``, when given, is ``(loops Rust walked, the reasons of the loops
-    it left to Python's walk)``. The Python run must never read a row, make a
-    run object or walk a loop in Rust. Returns both runs.
+    it left to Python's walk)``. ``leaves``, when given, is ``(leaves whose
+    JSON Rust wrote, the reasons of the leaves it left to Python)``. The
+    Python run must never read a row, make a run object, walk a loop or
+    write a leaf in Rust. Returns both runs.
     """
     if not native_render.SUPPORTED:
         pytest.skip("this interpreter takes the Python render path")
@@ -218,6 +241,7 @@ def render_both(
     assert python.rows_rebuilt == 0
     assert (python.runs_built, python.runs_declined, python.runs_written) == (0, 0, 0)
     assert (python.walks, python.walk_declines) == (0, ())
+    assert (python.leaves_written, python.leaf_declines) == (0, ())
     if rows_read is not None:
         assert rust.rows_read == rows_read
     if rows_rebuilt is not None:
@@ -226,4 +250,6 @@ def render_both(
         assert (rust.runs_built, rust.runs_declined, rust.runs_written) == runs
     if walks is not None:
         assert (rust.walks, rust.walk_declines) == walks
+    if leaves is not None:
+        assert (rust.leaves_written, rust.leaf_declines) == leaves
     return rust, python

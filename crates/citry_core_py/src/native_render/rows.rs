@@ -25,7 +25,10 @@
 //! over them later.
 //! `_encode_occurrences` writes a manifest's occurrence array, putting each
 //! native row's JSON in place of its prepared data, and writes every row of
-//! a `_NativeRun` (level B1, `runs.rs`) from Rust. `_RunDigests` computes
+//! a `_NativeRun` (level B1, `runs.rs`) from Rust, and each ordinary
+//! occurrence whose leaf data Rust wrote (level B2, `leaf_json.rs`) with that
+//! JSON in place of the placeholder object Python stored under each leaf
+//! key. `_RunDigests` computes
 //! the ids of each row of a repeated component call, as Python's
 //! `_DigestPrefix` does.
 
@@ -44,6 +47,7 @@ use citry_native_render::{
     SpreadLayout, Value, write_json_str,
 };
 
+use super::leaf_json::{LeafJson, write_leaf_occurrence};
 use super::runs::{NativeRun, write_run};
 
 // ---------------------------------------------------------------------------
@@ -360,7 +364,7 @@ fn exact_type(value: &Bound<'_, PyAny>) -> ExactType {
 /// This is the function `float.__repr__` calls, so the digits and the
 /// placement of the decimal point match Python's on every value, including
 /// the cases where two shortest texts are equally close to the value.
-fn python_float_repr(py: Python<'_>, number: f64) -> PyResult<String> {
+pub(super) fn python_float_repr(py: Python<'_>, number: f64) -> PyResult<String> {
     // SAFETY: PyOS_double_to_string only reads its arguments and returns a
     // NUL-terminated buffer from PyMem_Malloc, or NULL with an exception set.
     #[allow(unsafe_code)]
@@ -961,19 +965,28 @@ fn write_native_occurrence(
 /// sort_keys=True)` would, with each native row's prepared data spliced in.
 ///
 /// `natives` maps an occurrence id to its `_NativeRow`; a dict item whose id
-/// it holds is written by Rust. A `_NativeRun` item stands for all its rows,
-/// in order. Rust writes each row with the run's compiled definition id,
-/// which it looks up in `definition_ids` (logical id to compiled id). Every
-/// other item is written by calling `fallback(item)`, which must return that
-/// item's JSON. `json.dumps` of a list is `"[" + ",".join(dumps(item)) + "]"`
-/// with compact separators, so the result is byte-identical.
+/// it holds is written by Rust. It can also map another occurrence to a
+/// `_LeafJson` (level B2, `leaf_json.rs`): that item is written with each
+/// leaf value's JSON in place of its placeholder in `preparedData`, and its
+/// other values as `fallback` writes them. A `_NativeRun` item stands for
+/// all its rows, in order. Rust writes each row with the run's compiled
+/// definition id, which it looks up in `definition_ids` (logical id to
+/// compiled id). Every other item is written by calling `fallback(item)`,
+/// which must return that item's JSON. `json.dumps` of a list is
+/// `"[" + ",".join(dumps(item)) + "]"` with compact separators, so the
+/// result is byte-identical.
 ///
 /// **Raises**
 ///
-/// ValueError: If an item is neither a dict nor a `_NativeRun`, a native
-/// row's item does not have the exact shape assembly gives it, a run comes
-/// without `definition_ids` or its definition has no compiled id there or
-/// that id is not a str, or `fallback` does not return a str.
+/// ValueError: If an item is neither a dict nor a `_NativeRun`, `natives`
+/// maps an item to anything but a `_NativeRow` or `_LeafJson`, a native
+/// row's item does not have the exact shape assembly gives it, a leaf
+/// occurrence's `preparedData` is not an exact dict, holds a placeholder
+/// whose key has no JSON or lacks a placeholder for a value Rust wrote, a
+/// leaf occurrence's item has a key that is not a str or loses a key while
+/// `fallback` runs, a run comes without `definition_ids` or its definition
+/// has no compiled id there or that id is not a str, or `fallback` does not
+/// return a str.
 #[pyfunction(name = "_encode_occurrences", signature = (occurrences, natives, fallback, definition_ids=None))]
 pub fn encode_occurrences(
     occurrences: &Bound<'_, PyList>,
@@ -1004,10 +1017,17 @@ pub fn encode_occurrences(
             };
             match native {
                 Some(native) => {
-                    let row = native.cast_exact::<NativeRow>().map_err(|_| {
-                        occurrence_error("maps to an object that is not a _NativeRow")
-                    })?;
-                    write_native_occurrence(&mut out, dict, row.get())?;
+                    if let Ok(row) = native.cast_exact::<NativeRow>() {
+                        write_native_occurrence(&mut out, dict, row.get())?;
+                    } else if let Ok(leaf) = native.cast_exact::<LeafJson>() {
+                        // An occurrence whose leaf data Rust wrote
+                        // in assembly (level B2, `leaf_json.rs`).
+                        write_leaf_occurrence(&mut out, dict, leaf.get(), fallback)?;
+                    } else {
+                        return Err(occurrence_error(
+                            "maps to an object that is not a _NativeRow or _LeafJson",
+                        ));
+                    }
                 }
                 None => {
                     let encoded = fallback.call1((dict,))?;

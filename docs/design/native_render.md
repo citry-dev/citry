@@ -2,7 +2,8 @@
 
 Citry renders a page with a lot of `simple = "vue"` rows (one component
 placed hundreds of times by a `<c-for>` loop) faster on standard CPython
-by doing part of each row's work in Rust. The output is the same, byte
+by doing part of each row's work in Rust, and by writing the browser data
+of ordinary components in Rust. The output is the same, byte
 for byte, and the user's callbacks run in the same order and the same
 number of times. This document says what the Rust code does, when Citry
 uses it, and what happens when it meets an input it cannot handle.
@@ -16,6 +17,7 @@ the levels that have shipped:
 | B1 | When Rust read every row of a call run, one Rust object records the whole run during serialize and writes its rows' manifest items |
 | C1 | The render queue renders the rows of a `<c-for>` loop in one task, in the order one task per row would. This level is Python only and runs on every interpreter, with or without Rust |
 | C2 | When a loop's iterable, the call's inputs and its key are plain paths (a name and constant subscripts), Rust walks the loop: it reads every row's inputs and key, and builds the records level C1's task renders |
+| B2 | Rust writes the JSON of ordinary components' leaf data (and of `simple = "vue"` rows Rust did not read), which Python would otherwise copy in assembly and write in serialize |
 
 Terms used below:
 
@@ -61,6 +63,14 @@ Terms used below:
   lets Rust do it.
 - **Plain path**: an expression that is a name followed by constant
   subscripts, such as `row`, `row['id']` or `groups[0]`.
+- **Leaf program**: a component template compiled into one reusable
+  program because it has no component or slot nodes. An ordinary
+  component (not `simple = "vue"`) whose template is a leaf program
+  records its browser values in one `PreparedLeafProgram`, and so does a
+  `simple = "vue"` row that Rust did not read.
+- **Leaf data**: those browser values (`PreparedLeafProgram.prepared_data`),
+  which the leaf program has already turned into text, ints, bools, and
+  lists and dicts of them.
 
 The research that measured prototypes of these levels, and the options
 it tried and rejected, is recorded in
@@ -300,7 +310,78 @@ again, and, for a decline at a row's `get`, the `get` calls of the rows
 before it. Python's walk also repeats the checks made before Rust ran: the
 loop variable's name check and the constant-name lookups.
 
-## 5. When Rust runs
+## 5. Rust writes ordinary components' leaf data
+
+Without Rust, assembly copies each value of an ordinary component's leaf
+data into the occurrence's prepared data (`attach_leaf_data` in
+`citry/_vue/direct_capture.py`, with `_json_plain`, or
+`_copy_evaluated_json` for data the generated evaluator wrote), and the
+manifest writer later turns that copy into JSON. A `simple = "vue"` row
+that Rust did not read (level A declined it) has such a leaf too, and is
+handled the same way. On the benchmark board, four ordinary leaves (a
+project information panel and three note tabs) hold lists that grow with
+the page.
+
+With level B2, on the precompile path and only when `ACTIVE` is true:
+
+1. At the two places where assembly attaches an occurrence's own single
+   leaf (where it builds the occurrence's definition, and where it reuses
+   a definition already built), `attach_leaf_data` asks
+   `native_leaf_json.take` first. Assembly skips Rust for a leaf with no
+   values, since there is nothing to write. A leaf whose data has a key that other code reads values from
+   (`opaqueHtml` or `calls`) stays in Python too, though no page reaches
+   this: leaf programs write only `citry`-prefixed keys.
+2. Rust (`_leaf_values_json`) writes each value's JSON, byte for byte what
+   `_script_json(_json_plain(value))` writes, and returns a `_LeafJson`
+   holding it. No Python code runs while it writes.
+3. Assembly stores one shared placeholder object
+   (`native_leaf_json.PLACEHOLDER`) under each leaf key instead of a copy,
+   keeps the duplicate-key check, and maps the occurrence id to the
+   `_LeafJson` in `native_occurrences`, the same dict that carries level
+   A's rows to the manifest writer through `PreparedOccurrence._native`.
+4. `_encode_occurrences` writes that occurrence's item with its keys in
+   sorted order and each placeholder's JSON in its place. Every other
+   value (`serverData`, the Events extension's `eventContext`) is written
+   as `_script_json` writes it: Rust writes `None`, an exact `str` with a
+   UTF-8 form and an empty dict itself, and calls `_script_json` for the
+   rest.
+
+When Rust returns a reason instead, assembly copies the leaf as it does
+without Rust, so any error is Python's own, with its message. The other
+two places that attach leaf data (a leaf that is one part of a larger
+body, such as a slot fill, and a `simple = "vue"` row's own child calls)
+always copy in Python.
+
+The placeholder is a Python object, not a string, so no user value can
+take its place: assembly copies every other value into plain JSON types,
+which never include it. JSON encoding refuses it, so a writer that skipped
+Rust's JSON would raise instead of sending the browser a wrong value.
+Copying or pickling it gives back the same object, which the encoder
+recognizes by identity.
+
+Between assembly and the manifest writer, other code reads an
+occurrence's prepared data in three ways:
+
+- Some checks read only its keys: the duplicate-key check, the collision
+  checks of `data_key` and the key-type check in
+  `PreparedOccurrence._from_assembly`. The keys are the same as without
+  Rust.
+- Some code reads the values of two keys: `opaqueHtml` (the Events
+  preparation and the protocol's opaque HTML checks) and `calls` (the
+  prepared view's call references). A leaf with either key stays in
+  Python.
+- While assembly builds a body, it reads and merges the values of the
+  occurrence that owns the body's data, calls or slot selection. Both
+  places that attach Rust's JSON finish the occurrence without building a
+  body, so such an occurrence never owns anything; `owner_values` raises
+  `AssertionError` if one ever did.
+
+`_manifest_json` runs Rust's writer whenever a page has Rust rows or such
+leaves. It writes the manifest's entries in sorted key order,
+the order `_script_json(manifest)` writes them in, so a value that cannot
+be written raises the error that call would raise first.
+
+## 6. When Rust runs
 
 `citry/_vue/native_render.py` decides once, when it is first imported:
 
@@ -334,11 +415,15 @@ Level C2 reads `ACTIVE` each time a loop qualifies for a run, and builds a
 loop's plan only where `SUPPORTED` holds; a plan is never built or used on
 the Python path.
 
+Level B2 reads `ACTIVE` at each leaf it attaches; a `_LeafJson`, once
+made, carries its leaf to the manifest writer whatever the flag says by
+then. It runs in development mode too, because leaf JSON changes no HTML.
+
 Level C1 does not read these flags. It runs on every interpreter; on the
 Python path its run task runs the Python evaluator for each row, as a
 row's own task does. So every interpreter has one render queue to test.
 
-## 6. Rows rebuilt in Python
+## 7. Rows rebuilt in Python
 
 A page Vue hydrates, or one it mounts in the browser (`ssr=False`),
 writes a Rust-read row from its JSON alone, as long as the serializer
@@ -366,7 +451,7 @@ row's values from its leaf.
 A row's leaf is built at most once per render, so serializing the same
 render as several outputs rebuilds each row once.
 
-## 7. Error modes
+## 8. Error modes
 
 | Input or event | What happens |
 |---|---|
@@ -515,7 +600,37 @@ named below has side effects:
 - The per-row value context (`_VALUE_CONTEXT`) is not set during the walk,
   because nothing the walk runs reads it.
 
-## 8. Where the code lives
+Level B2 adds these error modes. The reason names are the strings
+`native_leaf_json.take` returns; in each case assembly then copies the
+leaf in Python as it does without Rust. Leaf programs turn their data into
+text, ints and bools first, so a page reaches only `not_utf8` and
+`big_int`; the other cases are checked by calling Rust directly:
+
+| Input or event | What happens |
+|---|---|
+| A value that is not exact plain data: a subclass of `str`, `int`, `float`, `dict` or `list`, a `Const` marker, translated text, `Markup`, a `Secret`, a set, or a dict key that is not an exact `str` | `not_plain`; Python's conversion turns it into plain data or raises its own error, such as its refusal of a `Secret` with its message. |
+| NaN or infinity | `non_finite`; Python raises its error. |
+| An int outside the 64-bit range | `big_int`; Python writes it, under its own digit limit. A page reaches it through an attribute whose value is an int with more digits than that limit, which the leaf program keeps as an int; Python's JSON writer then raises its `ValueError`, as without Rust. |
+| A str or dict key with a lone surrogate | `not_utf8`; Python writes it as JSON escapes. An output that writes HTML then fails on the same character, as without Rust. A page reaches it through text such as `'\ud800'`. |
+| A container that holds itself, or nesting deeper than 200 | `cycle` or `too_deep`; Python raises its error for the cycle, and writes the deep data unless the recursion limit stops it. |
+| Leaf data with an `opaqueHtml` or `calls` key | `value_read_key`, decided in Python before Rust runs. No page reaches it. |
+| A placeholder with no JSON for its key, a value Rust wrote with no placeholder in the item, a leaf occurrence whose `preparedData` is not an exact dict, an item key that is not a str, or a `natives` entry that is neither a `_NativeRow` nor a `_LeafJson` | `ValueError` from `_encode_occurrences`; a Citry bug, never user input. |
+| An item holding a placeholder written without Rust's JSON | `TypeError` from JSON encoding, which refuses the placeholder. |
+| An occurrence holding placeholders becomes an owner whose values assembly reads or merges | `AssertionError` from `owner_values`; a Citry bug. |
+| A Rust panic | `RuntimeError` through `without_panics`, as for level A. |
+
+Accepted differences, none of which changes output:
+
+- With a very low recursion limit, Rust writes data up to 200 levels
+  deep that Python's conversion would refuse with `RecursionError`.
+- `PreparedOccurrence` equality includes `prepared_data`, and every
+  placeholder is the same object, so two such occurrences whose leaf values
+  differ would compare equal. Nothing compares them on this path.
+- The encoder calls `_script_json` once for each value Rust does not write
+  itself (a non-empty `serverData`, an `eventContext`), instead of once for
+  the whole item.
+
+## 9. Where the code lives
 
 | Piece | File |
 |---|---|
@@ -538,16 +653,20 @@ named below has side effects:
 | Assembly (`start_occurrence`, `native_definition`, `register_native_member`, the call-run ids, `take_native_run`, `run_members`) | `citry/_vue/direct_capture.py` |
 | The manifest's occurrence list with run objects | `_occurrence_items_with_runs` in `citry/_vue/protocol.py` |
 | The manifest writer | `_manifest_json` in `citry/_vue/serialization.py` |
+| The leaf JSON writer (`_leaf_values_json`, `_LeafJson`) and the item writer the encoder calls for it (level B2) | `crates/citry_core_py/src/native_render/leaf_json.rs` |
+| The placeholder and `take` (level B2) | `citry/_vue/native_leaf_json.py` |
+| Where assembly asks for leaf JSON (`attach_leaf_data`, `owner_values`, level B2) | `citry/_vue/direct_capture.py` |
 
-## 9. Testing both paths
+## 10. Testing both paths
 
 - `tests/_render_paths.py` has `render_both(run)`, which calls `run` on
   each path in one process, pins render ids, the Vue app id and the
   Events token clock, compares the results, and counts the rows Rust read,
   the rows Python rebuilt, the run objects Rust built, the call runs it
-  declined, the run objects the page manifests held, and the loops Rust
-  walked with the reason of each loop it left to Python's walk, so a case
-  cannot pass because both runs took the Python path.
+  declined, the run objects the page manifests held, the loops Rust
+  walked with the reason of each loop it left to Python's walk, and the
+  leaves whose JSON Rust wrote with the reason of each leaf it left to
+  Python, so a case cannot pass because both runs took the Python path.
 - The `render_path` fixture runs a test once per path; `python_render_path`
   forces the Python path for a test that checks the Python evaluator's own
   internals. Both live in `packages/py/citry/tests/conftest.py`.
@@ -584,11 +703,18 @@ named below has side effects:
   turning expressions into paths (`citry/_vue/native_walk.py`); and the plan called directly for the reads and failures no
   page reaches (colliding keys compared as often as Python's reads compare
   them, a list changed during the reads, a panic, a failing row build).
+- `tests/test_native_render_leaf_json.py` covers level B2: page cases with
+  the leaves Rust must write and the reasons it must give (a lone
+  surrogate and an int past Python's digit limit are the declines a page
+  reaches), the 140-row board, where Rust writes all four ordinary leaves,
+  Rust's JSON compared byte for byte with Python's for hand-written values
+  and a seeded random set through the manifest encoder, and each decline
+  and encoder refusal called directly.
 - The Rust crate's tests compare against fixtures that
   `scripts/native_render_fixtures.py` writes from the Python code;
   `--check` (run by a Python test) fails when a fixture no longer matches.
 
-## 10. Adding a level
+## 11. Adding a level
 
 A new level follows the same rules:
 
