@@ -554,6 +554,8 @@ class native_render:
     components one ``c-for`` places), for ordinary components too. When
     Rust read every row of a call run, serialize records the run with one
     ``_NativeRun``, and the view holds one ``_NativeOccurrence`` per row.
+    ``_CallRunWalkPlan`` reads every row of a call run's loop in one call,
+    when the loop's iterable, the call's inputs and its key are plain paths.
     """
 
     class _RowPlan:
@@ -713,6 +715,56 @@ class native_render:
         def run(self) -> native_render._NativeRun: ...
         @property
         def index(self) -> int: ...
+
+    class _CallRunWalkPlan:
+        """
+        The Rust loop walk of one ``c-for`` call run.
+
+        A call run is the rows one ``c-for`` places at one component call
+        site. ``ForNode`` builds one plan per loop node from the paths that
+        ``citry._vue.native_walk`` makes from the loop's iterable, the call's
+        inputs and its key. Each path is ``(name, steps)``: a name, then
+        constant subscripts (``str`` or non-negative ``int``).
+        """
+
+        def __new__(
+            cls,
+            target: str,
+            iterable: tuple[str, tuple[str | int, ...]],
+            kwargs: list[tuple[str, tuple[str | int, ...]]],
+            key: tuple[str, tuple[str | int, ...]],
+            kwarg_names: list[str],
+            name: str,
+            source: object,
+            position: object,
+            metadata_class: type,
+            scope_type: type,
+            marker_type: type,
+        ) -> native_render._CallRunWalkPlan:
+            """
+            Check the paths and build the plan.
+
+            Raises `ValueError` for a ``_`` name, a negative index or another
+            malformed argument, and `RuntimeError` for a Rust panic.
+            """
+        def walk(
+            self, variables: object, get: Callable[[str], type], run_class: type, origin: str | None
+        ) -> tuple[list[dict[str, object]], list[object]] | str:
+            """
+            Read every row of the loop, then look each row's class up with ``get``.
+
+            Returns each row's kwargs dict and ``_PreparedCallMetadata``, in
+            loop order, or a ``str`` naming why it declined: ``scope`` (the
+            variables are neither an exact ``dict`` nor ``scope_type``),
+            ``iterable``, ``missing``, ``not_plain``, ``marker``,
+            ``key_type``, ``read_raised``, ``get_raised``, ``class_changed``,
+            ``build_raised`` or ``panic``. Anything the walk calls that raises
+            an ``Exception`` makes it decline; any other ``BaseException``
+            propagates, except PyO3's ``PanicException``, which declines as
+            ``panic``. The reads run no template or user code, except that a
+            dict lookup runs ``__eq__`` on a stored key whose hash equals the
+            key looked up.
+            """
 
     @staticmethod
     def _encode_occurrences(

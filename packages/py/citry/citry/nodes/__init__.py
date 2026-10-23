@@ -67,6 +67,7 @@ from difflib import get_close_matches
 from enum import Enum
 from keyword import iskeyword
 from threading import RLock
+from types import MethodType
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
 from unicodedata import normalize
 from weakref import ReferenceType, ref
@@ -74,6 +75,8 @@ from weakref import ReferenceType, ref
 from typing_extensions import Unpack, override
 
 from citry._i18n_directives import looks_like_i18n_binding
+from citry._vue import native_render as _native_render
+from citry._vue import native_walk as _native_walk
 from citry.attrs import (
     TEMPLATE_EMPTY_VALUE,
     _format_resolved_attrs_to_str,
@@ -88,6 +91,7 @@ from citry.attrs import (
     validate_html_attr_name,
     vue_code_error,
 )
+from citry.citry import Citry
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement, _ElementMorphMetadata, _PreparedCallMetadata
 from citry.citry_render import (
@@ -118,6 +122,7 @@ from citry.constness import (
     Const,
     _const_mapping,
     _ConstMapping,
+    _ConstProxy,
     _mapping_value_is_const,
     _overlay_const_mapping,
     const_value,
@@ -1428,6 +1433,10 @@ class _ResolvedComponentInputs:
     element_bindings: tuple[ComponentTagClientBinding, ...] = ()
 
 
+# The registry lookup the Rust loop walk may call in place of Python's walk
+# (ForNode._walk_call_run); a loop whose engine overrides it keeps Python's walk.
+_CITRY_GET = Citry.get
+
 # ComponentNode._finish_render's default for "the key is not evaluated yet",
 # distinct from None, which is an evaluated key that opts out.
 _KEY_NOT_EVALUATED = object()
@@ -2248,6 +2257,10 @@ class ForNode(Node):
         # lazily on first render and reused afterwards (the node is cached across
         # renders, so this compiles once).
         self._iter_eval: Callable[[Any], Any] | None = None
+        # The Rust loop walk's plan for this loop and the scope names its
+        # inputs read (level C2 of the native render path), built on the
+        # loop's first walk; a str names why the loop has none.
+        self._walk_plan: tuple[Any, tuple[str, ...]] | str | None = None
 
     def _with_precomputed_text(self, text: str) -> ForNode:
         """Return a fresh runtime guard for text produced by const unrolling."""
@@ -2335,7 +2348,11 @@ class ForNode(Node):
         # the render queue then renders in a single task.
         run_class = self._call_run_class(context)
         if run_class is not None:
-            parts = self._render_call_run(context, run_class)
+            # On the native render path, Rust reads the rows when every path
+            # the loop reads is plain; a str says why it did not, and
+            # Python's walk then runs the loop from the start.
+            walked = self._walk_call_run(context, run_class) if _native_render.ACTIVE else None
+            parts = walked if type(walked) is list else self._render_call_run(context, run_class)
         else:
             parts = []
             for body, body_context in self.iter_bodies(context):
@@ -2490,6 +2507,153 @@ class ForNode(Node):
             run.kwargs.append(kwargs)
             run.metadata.append(metadata)
         return parts
+
+    def _build_walk_plan(self) -> tuple[Any, tuple[str, ...]] | str:
+        """
+        Return this loop's Rust walk plan and the scope names its inputs read, or why there is none.
+
+        Called once per node, for a loop ``_call_run_class`` accepted. The
+        plan exists only when the loop is ``<target> in <plain path>``, the
+        key and every input are plain paths (a name and constant subscripts;
+        see ``citry._vue.native_walk``), and each input's ``used_vars`` is
+        exactly its path's name, so ``_kwarg_is_const``, which decides
+        constness from ``used_vars``, looks at exactly the name the path
+        reads. Any error while the plan is built means no plan, so the
+        error, if it matters, is raised by Python's walk.
+        """
+        try:
+            return self._lower_walk_plan()
+        except Exception:  # noqa: BLE001 - no plan; Python's walk raises whatever the loop raises
+            return "no_plan_error"
+
+    def _lower_walk_plan(self) -> tuple[Any, tuple[str, ...]] | str:
+        """Build the plan for ``_build_walk_plan``, or return why there is none."""
+        native = _native_render.native
+        # Plans follow SUPPORTED, never ACTIVE, so a Python-path render cannot
+        # cache "no plan" for a later render on the native path.
+        if native is None:
+            return "no_plan_unsupported"
+        for_branch = self.branches[0]
+        call_node = cast("ComponentNode", for_branch[2][0])
+        each_attr = _find_attr(for_branch[1], "each")
+        if type(each_attr) is not ExprHtmlAttr or not isinstance(each_attr.expr, str):
+            return "no_plan_loop"
+        loop = _native_walk.lower_loop(for_branch[3], each_attr.expr)
+        if loop is None:
+            return "no_plan_loop"
+        target, iterable = loop
+        key_attr = call_node.key
+        if type(key_attr) is not ExprHtmlAttr or not isinstance(key_attr.expr, str):
+            return "no_plan_key"
+        key = _native_walk.lower_path(key_attr.expr)
+        if key is None:
+            return "no_plan_key"
+        # An input holding Vue code raises in _resolve_inputs; that error is Python's walk's to raise.
+        if call_node._vue_code_attr_key is not None:
+            return "no_plan_input"
+        paths: list[tuple[str, tuple[str | int, ...]]] = []
+        names: list[str] = []
+        for attr in call_node.attrs:
+            # Only expression inputs can be walked: a static input is always
+            # constant, which Rust does not mark, and other kinds are not paths.
+            if type(attr) is not ExprHtmlAttr or not isinstance(attr.expr, str):
+                return "no_plan_input"
+            path = _native_walk.lower_path(attr.expr)
+            if path is None or tuple(attr.used_vars) != (path[0],):
+                return "no_plan_input"
+            paths.append(path)
+            names.append(attr.key.removeprefix("c-"))
+        plan = native._CallRunWalkPlan(
+            target,
+            iterable,
+            paths,
+            key,
+            names,
+            call_node.name,
+            call_node.source,
+            call_node.position,
+            _PreparedCallMetadata,
+            _ConstMapping,
+            _ConstProxy,
+        )
+        # An input that reads a scope name is constant when that name is, so
+        # the walk declines then. One that reads the loop variable never is:
+        # _overlay_const_mapping clears the loop variable's constant mark,
+        # and a row whose item is a marker, which would set it, declines.
+        scope_roots = tuple(dict.fromkeys(path[0] for path in paths if path[0] != target))
+        return plan, scope_roots
+
+    def _walk_call_run(self, context: CitryContext, run_class: type[Component]) -> list[RenderPart] | str:
+        """
+        Walk this call run's loop in Rust, or return why Python's walk must run it.
+
+        A call run is the rows one ``<c-for>`` places at one component call
+        site. Rust (``native_render._CallRunWalkPlan``) reads every row
+        first, running no template or user code (a dict lookup can run a
+        colliding key's ``__eq__``, as Python's read does), then looks each
+        row's class up with the registry's ``get``, as
+        ``ComponentNode._render_run_row`` does per row, and builds each row's kwargs dict and call metadata.
+        The result is the parts ``_render_call_run`` would return: one
+        ``_DeferredRunRow`` per row of one ``_DeferredRun``.
+
+        It returns a reason instead, and ``render`` runs ``_render_call_run``
+        from the start, when the loop has no plan; when tracing is on (the
+        trace lines are Python's); when the variables are not exactly
+        ``_ConstMapping``; when an input would be marked constant, which Rust
+        does not do; when the engine's ``get`` is not Citry's own; or when
+        Rust meets a value or failure it does not read
+        as Python would. ``docs/design/native_render.md`` lists the reasons.
+
+        Two of ``_render_body``'s per-row effects are not made: the value
+        context (``_VALUE_CONTEXT``) is not set per row, because nothing that
+        runs during the walk reads it, and the template position is never
+        needed, because a failing read declines. ``active_execution()`` and
+        ``component.citry.get`` are read once per walk; reading them for each
+        row would give another answer only for a ``Citry`` subclass or a
+        class with a custom attribute lookup.
+        """
+        plan = self._walk_plan
+        if plan is None:
+            plan = self._walk_plan = self._build_walk_plan()
+        if type(plan) is str:
+            return plan
+        if is_tracing():
+            return "tracing"
+        variables = context.variables
+        # Python's walk copies the scope for each row. A _ConstMapping copy
+        # reuses the stored hashes; any other mapping would have Python run
+        # each non-str key's __hash__ once per row, which Rust never does. Checked
+        # before the binding check, so a user mapping's __contains__ runs
+        # only in Python's walk.
+        if type(variables) is not _ConstMapping:
+            return "scope"
+        # The loop's binding check runs first, as in iter_bodies.
+        _validate_introduced_variables("c-for", self.branches[0][3], context)
+        walk_plan, scope_roots = cast("tuple[Any, tuple[str, ...]]", plan)
+        for name in scope_roots:
+            if _mapping_value_is_const(variables, name):
+                return "const_input"
+        component = cast("Component", context.component)
+        get = component.citry.get
+        # A get that is not Citry's own is user code, which Python's walk
+        # calls between each row's inputs and its key and Rust would call
+        # only after every read, so such a loop keeps Python's walk.
+        if type(get) is not MethodType or get.__func__ is not _CITRY_GET:
+            return "custom_get"
+        origin = context.template_record.origin if context.template_record is not None else None
+        result = walk_plan.walk(variables, get, run_class, origin)
+        if type(result) is str:
+            return cast("str", result)
+        kwargs, metadata = cast("tuple[list[dict[str, Any]], list[_PreparedCallMetadata]]", result)
+        if not kwargs:
+            return []
+        from citry._vue.direct import active_execution  # noqa: PLC0415 - citry._vue.direct imports this module
+
+        run = _DeferredRun(run_class, component, context.provides, active_execution())
+        run.kwargs = kwargs
+        run.metadata = metadata
+        # One object per row position, as _render_call_run places them.
+        return [_DeferredRunRow(run, index) for index in range(len(kwargs))]
 
     @override
     def collect_fills(self, context: CitryContext, sink: FillSink) -> None:

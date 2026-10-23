@@ -3,8 +3,10 @@
 The pure-Rust half of Citry's native render path: it evaluates one
 `simple = "vue"` row template over values copied out of Python, writes the
 row's prepared data as JSON, hashes the ids of each row of a call run
-(the components one `c-for` places), and writes a whole run's manifest
-items when one object records the run. The PyO3 half, which reads the Python
+(the components one `c-for` places), writes a whole run's manifest
+items when one object records the run, and reads every row of such a
+run's loop when the loop reads only plain paths (a name and constant
+subscripts). The PyO3 half, which reads the Python
 values and exposes the classes to Python, is
 [`crates/citry_core_py/src/native_render/`](../citry_core_py/src/native_render/).
 The design, when Citry uses this code and every error mode are in
@@ -27,6 +29,10 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
 - `src/run.rs` - `RunIds` (both ids of a run's rows, used by levels A and
   B1), and for level B1 `first_repeat` (the repeat checks) and
   `write_occurrence_item` (one row's manifest item).
+- `src/walk.rs` - `WalkPlan` (level C2): checks the paths Python built
+  from a loop's expressions (`citry/_vue/native_walk.py`) and reads every row through the
+  `Tree` trait, which the PyO3 layer implements over Python objects, in the
+  order Python's walk reads them, or names why it declines.
 - `tests/` - fixture tests. `scripts/native_render_fixtures.py` writes the
   fixtures from Python's own output; rerun it after a change to the Python
   evaluator, and `--check` tells you whether it is needed.

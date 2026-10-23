@@ -2396,7 +2396,10 @@ class LeafProgramNode(Node):
                         plan = native._RowPlan(*tuples)
                     except ValueError:
                         # Rust refuses a shape it cannot evaluate exactly;
-                        # those rows keep the Python evaluator.
+                        # those rows keep the Python evaluator. A key with
+                        # no UTF-8 form (a lone surrogate escape, which the
+                        # sandbox and Python's parser read differently)
+                        # raises UnicodeEncodeError, a ValueError, here.
                         plan = None
             # Publish the plan before the flag, so a concurrent render sees
             # either nothing yet (and builds it too) or the final value.

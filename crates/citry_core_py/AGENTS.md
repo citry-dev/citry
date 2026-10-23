@@ -29,7 +29,8 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   Python values through the C API, and `without_panics`; `runs.rs` holds
   `_NativeRun`, the object that records a whole call run of Rust-read rows
   during serialize, and `_NativeOccurrence`, one row of it in the view;
-  `mod.rs` registers them. Every name is private;
+  `walk.rs` holds `_CallRunWalkPlan`, which walks a call run's loop and
+  reads each row's inputs (level C2); `mod.rs` registers them. Every name is private;
   `citry/_vue/native_render.py` decides whether Citry calls them.
 - `src/template_parser.rs` - wraps `citry_template_parser`: `parse_template`
   / `compile_template`, the V3 AST classes, `TagRules`, and the browser

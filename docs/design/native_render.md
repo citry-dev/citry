@@ -15,6 +15,7 @@ the levels that have shipped:
 | A | Rust reads each `simple = "vue"` row, checks its values and writes its prepared data as JSON; it also computes the two ids of every row of a call run |
 | B1 | When Rust read every row of a call run, one Rust object records the whole run during serialize and writes its rows' manifest items |
 | C1 | The render queue renders the rows of a `<c-for>` loop in one task, in the order one task per row would. This level is Python only and runs on every interpreter, with or without Rust |
+| C2 | When a loop's iterable, the call's inputs and its key are plain paths (a name and constant subscripts), Rust walks the loop: it reads every row's inputs and key, and builds the records level C1's task renders |
 
 Terms used below:
 
@@ -31,8 +32,9 @@ Terms used below:
   page's manifest (the JSON block the browser reads).
 - **Leaf**: the Python object (`PreparedLeafProgram`) that holds a row's
   recorded template values.
-- **Decline**: Rust returns `None` instead of a result, and Python then
-  handles that row or call run the way it always has.
+- **Decline**: Rust returns `None` instead of a result (for the loop walk,
+  Rust or `ForNode._walk_call_run` returns a reason string), and Python then
+  handles that row, call run or loop the way it always has.
 - **Rebuild**: Python builds a Rust-read row's leaf by running its
   evaluator over a copy of the values Rust read, when an output needs the
   row's HTML or a Python copy of its data.
@@ -53,6 +55,12 @@ Terms used below:
   the render queue puts each row's record in its place.
 - **Run task**: the one render-queue task (`_RunTask`) that renders the
   rows of a call run in order (level C1).
+- **Loop walk**: the part of `ForNode.render` that evaluates a call run's
+  loop and records each row's kwargs and call metadata, before any row
+  renders. Python's walk is `ForNode._render_call_run` (level C1); level C2
+  lets Rust do it.
+- **Plain path**: an expression that is a name followed by constant
+  subscripts, such as `row`, `row['id']` or `groups[0]`.
 
 The research that measured these levels is on the branch
 `research/rust-render-stage0` (tag `research/rust-render-stage2-done`),
@@ -233,7 +241,64 @@ the same work for every row, in the same order:
 The order of every user callback and extension hook is the same as with
 one task per row. `tests/test_call_run_order.py` locks it on both paths.
 
-## 4. When Rust runs
+## 4. Rust walks a call run's loop
+
+Python's walk (step 2 of section 3) evaluates the loop's iterable once. Then, for
+each row, it copies the template's variables and adds the loop variable,
+evaluates each input, looks the class up with the registry's `get`,
+evaluates the key and builds the call metadata. When the iterable, every
+input and the key are plain paths, and every container they pass through
+is an exact `dict`, `list` or `tuple`, none of these steps runs template or
+user code, with two exceptions: a dict lookup calls `__eq__` on a stored key
+whose hash equals the key looked up, and the engine may override `get`. So
+Rust can make the same reads, and leaves a loop whose `get` is not Citry's
+own to Python's walk.
+
+With level C2, on the Rust path only:
+
+1. The first time a loop that level C1 accepts runs on the Rust path,
+   `ForNode._build_walk_plan` turns the loop clause, the key and each input
+   into paths (`citry/_vue/native_walk.py`). An expression reaches two
+   evaluators: Python's own parser reads it when the expression sandbox is
+   off, and the sandbox's rewriter reads it when it is on. They read some
+   literals differently (the rewriter turns a lone surrogate escape such as
+   `'\ud800'` into U+FFFD). So each expression is turned into a path twice,
+   from Python's parse of the text and from the Python code the sandbox
+   generated for it, and the loop gets no plan unless both give the same
+   path. Each input's `used_vars` (the names Citry records that the
+   expression reads) must be exactly its path's first name, because Citry
+   decides whether an input is constant from `used_vars`, and Rust must
+   check the same name. The node keeps the plan (`_CallRunWalkPlan`), or the
+   reason it has none, for every later render.
+2. On each render, `ForNode._walk_call_run` leaves the loop to Python's walk
+   when tracing is on (the trace lines are Python's) or when the variables
+   are not exactly Citry's `_ConstMapping`. It then checks, as `iter_bodies`
+   does, that the loop variable's name is not already in scope
+   (`_validate_introduced_variables`), and leaves the loop to Python's walk
+   when an input reads a scope name marked constant (Rust does not mark
+   inputs `Const`).
+3. Rust reads every row: the iterable once, then for each row each input in
+   attribute order, then the key, checking the exact type of every container
+   on a path and of the key; the input values themselves may be anything. It
+   follows a list's current length before every item, as Python's list
+   iterator does. The values it keeps are the objects it read, never copies.
+4. Only when every read succeeded, Rust calls `get` for each row, checks that
+   it returned the run's class, and builds the row's kwargs dict and its
+   `_PreparedCallMetadata`. An exact `str` key is used as it is, as Python's
+   `str()` returns it; an int key gets its decimal text.
+5. Rust returns a list of kwargs dicts and a list of call metadata. Python
+   puts them in one `_DeferredRun` with one `_DeferredRunRow` per row,
+   exactly what Python's walk records. Level C1's run task then
+   renders the rows.
+
+When Rust returns a reason instead (a decline), Python's walk runs the loop
+from the start, so any error is Python's own, raised with its template
+position. A decline repeats the reads, so a colliding key's `__eq__` runs
+again, and, for a decline at a row's `get`, the `get` calls of the rows
+before it. Python's walk also repeats the checks made before Rust ran: the
+loop variable's name check and the constant-name lookups.
+
+## 5. When Rust runs
 
 `citry/_vue/native_render.py` decides once, when it is first imported:
 
@@ -263,11 +328,15 @@ records the run's Rust-read rows as level A does. The Rust module stays
 declared as needing the GIL (`#[pymodule(gil_used = true)]` in
 `crates/citry_core_py/src/lib.rs`).
 
+Level C2 reads `ACTIVE` each time a loop qualifies for a run, and builds a
+loop's plan only where `SUPPORTED` holds; a plan is never built or used on
+the Python path.
+
 Level C1 does not read these flags. It runs on every interpreter; on the
 Python path its run task runs the Python evaluator for each row, as a
 row's own task does. So every interpreter has one render queue to test.
 
-## 5. Rows rebuilt in Python
+## 6. Rows rebuilt in Python
 
 A page Vue hydrates, or one it mounts in the browser (`ssr=False`),
 writes a Rust-read row from its JSON alone, as long as the serializer
@@ -295,7 +364,7 @@ row's values from its leaf.
 A row's leaf is built at most once per render, so serializing the same
 render as several outputs rebuilds each row once.
 
-## 6. Error modes
+## 7. Error modes
 
 | Input or event | What happens |
 |---|---|
@@ -309,7 +378,7 @@ render as several outputs rebuilds each row once.
 | A `str` subclass render id | Written from its text, as `json.dumps` does. |
 | `ComponentLike.register(...)` or a lower `sys.set_int_max_str_digits` between render and serialize | A rebuild skips the read-set check and Rust only copies ints inside the 64-bit range, so values the render accepted stay accepted. |
 | A row's dicts changed after the render | The output keeps the values each row had when Rust read it, as the Python leaf does. |
-| A Rust panic | `RuntimeError` through `without_panics`; a panic during the row read fails the render with Citry's component path in the message. Rust's panic hook also prints the message to stderr. |
+| A Rust panic | `RuntimeError` through `without_panics`; a panic during the row read fails the render with Citry's component path in the message. Rust's panic hook also prints the message to stderr. Level C2's walk is the one exception (below). |
 | The occurrence list holds an item assembly never makes for a Rust row | `ValueError` from `_encode_occurrences`; this is a Citry bug, never user input. |
 | A call run holds an ordinary component or a row Python evaluated, a row with `js_data` or root markers, another class, class id, fragment, source or span, a key or render id that is not an exact `str` with a UTF-8 form, or a repeated key, render id or child id | `try_new` declines before assembly changes; the per-row loop records the run and raises its own error for any of these that Python refuses. |
 | A row's render id or occurrence id was already seen, its key was already used at this call site under the same owner (another run of the same loop), or fills are addressed to it | `commit` refuses and writes nothing. The per-row loop then records the run: it raises the same `UnsupportedPreparedView` for an id or key already used, and writes one call per row when fills are addressed to a row. |
@@ -383,7 +452,68 @@ Accepted differences, none of which changes output:
   only after its rows are placed. `tests/test_call_run_tasks.py` checks
   the three routes.
 
-## 7. Where the code lives
+Level C2 adds these error modes. The reason names are the strings
+`ForNode._walk_call_run` returns; in every case but the last row, Python's
+walk then runs the loop from the start and produces Python's own output or
+error:
+
+| Input or event | What happens |
+|---|---|
+| A loop clause with `if`, several targets or several `for` clauses, or an iterable that is not a plain path | No plan (`no_plan_loop`). |
+| A key or input that is not a plain path, a static input (always constant), an input written in Vue syntax, which `_resolve_inputs` rejects (`_vue_code_attr_key`), or an input whose `used_vars` is not its path's name | No plan (`no_plan_key`, `no_plan_input`). |
+| A name or string key that starts with `_`, a name that is not an ASCII identifier, a negative, bool or above-i64 index, a surrogate in a string key, or any path the sandbox's code reads differently from Python's parse | No plan (`no_plan_loop`, `no_plan_key` or `no_plan_input`, for the expression that holds it). With the sandbox on, a `_` name or key raises the sandbox's `SecurityError` in Python's walk. |
+| Any error while the plan is built (a Rust panic in the constructor raises `RuntimeError`) | No plan (`no_plan_error`); the reason is kept, so the plan is not built again. |
+| The Rust module is not used (`SUPPORTED` is false) | No plan (`no_plan_unsupported`). The walk is reached only on the Rust path, so this guards a direct call. |
+| Tracing is on; the variables are not exactly `_ConstMapping` (an extension replaced them with a plain dict); an input reads a scope name marked constant; the engine's `get` is not `Citry.get` (a `Citry` subclass overrides it) | Declined before Rust runs (`tracing`, `scope`, `const_input`, `custom_get`). |
+| The iterable is not an exact list or tuple, such as a generator (declined before it is iterated) or a dict | `iterable`. |
+| A missing name, key or index | `missing`; Python's walk raises its `KeyError` or `IndexError` with the template position. |
+| A container of another type on a path (a dict subclass, a list read by a str key, a str read by an index) | `not_plain`. |
+| A row's item is a `Const` marker | `marker`. Python's walk replaces it with the plain value it wraps. |
+| A key that is not an exact str or an int within i64 (a bool, `None`, a float, a str subclass, a larger int) | `key_type`. |
+| A colliding key's `__eq__` raises an `Exception` during the reads | `read_raised`; Python's walk raises the same error. |
+| `get` raises an `Exception`, or returns another class | `get_raised`, `class_changed`; Python's walk raises the same error, or ends the run at that row. |
+| Building a row's dict or metadata raises (an error such as `MemoryError` or `RecursionError`) | `build_raised`. |
+| A Rust panic during the walk | `panic`: nothing the walk built is kept, so it declines instead of raising. Rust's panic hook prints the message to stderr. A `PanicException` raised by Python code the walk calls (another Rust extension's panic in a colliding `__eq__`) declines the same way, after PyO3 prints it through `sys.excepthook`. |
+| A `BaseException` that is not an `Exception`, such as `KeyboardInterrupt`, from `get` or a colliding `__eq__` | Propagates unchanged. |
+
+Accepted differences, none of which changes output unless the user code
+named below has side effects:
+
+- A hash-colliding key's `__eq__` runs again after a decline, because
+  Python's walk reads the rows again. On a walked loop, a key among the
+  template's variables whose hash equals the loop variable's name, or a
+  constant name, is compared fewer times, because Python's walk adds the
+  loop variable to each row's copy of the variables and looks the constant
+  names up for each row. A colliding key inside a row, or one matching
+  another scope name, is compared as often as in Python's walk: Rust looks
+  each scope name up as often as Python's evaluator does. A `__eq__` that
+  changes the rows it is read from (it grows a list, say) sees those changes
+  repeated after a decline.
+- A colliding key's `__eq__` that rebinds a template variable during row k's
+  reads is seen by row k's later reads in Rust, which reads the variables
+  themselves; Python's walk reads row k's copy, so only row k+1 sees it.
+- When `get` raises or returns another class at row k, the `get` calls of
+  rows 0 to k-1 run twice. If another thread changes the registry while the
+  loop is walked, which rows see the change depends on timing, as it does
+  in Python's walk.
+- `component.citry.get` and the execution frame (`active_execution()`) are
+  read once per walk, not once per row. Reading them for each row would
+  give another answer only for a component class with a custom attribute
+  lookup.
+- The class's `simple` and dynamic-selector flags are read before the loop
+  (`ForNode._call_run_class`), not again for each row. A change that another
+  thread makes during the walk shows when the rows render, where the run
+  task's per-row checks handle it as one task per row would.
+- Another thread can run while `get` is called. If it changes a row in
+  place, the walk does not see the change: the rows hold the values Rust
+  read just before.
+- With the sandbox off, Python's evaluator writes and removes `__builtins__`
+  in the variables while it evaluates the iterable, which clears the constant
+  mark of an existing `__builtins__` entry. Rust writes nothing.
+- The per-row value context (`_VALUE_CONTEXT`) is not set during the walk,
+  because nothing the walk runs reads it.
+
+## 8. Where the code lives
 
 | Piece | File |
 |---|---|
@@ -396,6 +526,10 @@ Accepted differences, none of which changes output:
 | The plan tuples, the row read and the rebuild | `citry/_vue/leaf_program.py` |
 | The row read's call site | `_simple_vue_record` in `citry/component_render.py` |
 | The call run's walk (level C1) | `ForNode._call_run_class` and `ForNode._render_call_run`, and `ComponentNode._render_run_row` and `_finish_render`, in `citry/nodes/__init__.py` |
+| The Rust loop walk's reads (level C2) | `crates/citry_native_render/src/walk.rs` |
+| The walk plan (`_CallRunWalkPlan`, level C2) | `crates/citry_core_py/src/native_render/walk.rs` |
+| Turning expressions into paths (level C2) | `citry/_vue/native_walk.py` |
+| The walk's call site (level C2) | `ForNode._build_walk_plan` and `ForNode._walk_call_run` in `citry/nodes/__init__.py` |
 | The rows a loop recorded, and their places in the parts list (level C1) | `_DeferredRun` and `_DeferredRunRow` in `citry/citry_render.py` |
 | The run task (level C1) | `_RunTask`, `_run_rows`, `_run_row` and the run branch of `_settle_render` in `citry/component_render.py` |
 | The record properties | `SimpleVueRecord` in `citry/citry_render.py` |
@@ -403,14 +537,15 @@ Accepted differences, none of which changes output:
 | The manifest's occurrence list with run objects | `_occurrence_items_with_runs` in `citry/_vue/protocol.py` |
 | The manifest writer | `_manifest_json` in `citry/_vue/serialization.py` |
 
-## 8. Testing both paths
+## 9. Testing both paths
 
 - `tests/_render_paths.py` has `render_both(run)`, which calls `run` on
   each path in one process, pins render ids, the Vue app id and the
   Events token clock, compares the results, and counts the rows Rust read,
   the rows Python rebuilt, the run objects Rust built, the call runs it
-  declined, and the run objects the page manifests held, so a case cannot
-  pass because both runs took the Python path.
+  declined, the run objects the page manifests held, and the loops Rust
+  walked with the reason of each loop it left to Python's walk, so a case
+  cannot pass because both runs took the Python path.
 - The `render_path` fixture runs a test once per path; `python_render_path`
   forces the Python path for a test that checks the Python evaluator's own
   internals. Both live in `packages/py/citry/tests/conftest.py`.
@@ -440,11 +575,18 @@ Accepted differences, none of which changes output:
   140-row board reaches a run object, a field-by-field comparison of the
   run object's assembly with the per-row loop's, and the binding's
   refusals against synthetic maps, which pages cannot reach.
+- `tests/test_native_render_walk.py` covers level C2: a page case for each
+  decline reason a page can reach and for each kind of value the walk reads;
+  the 140-row board, where Rust walks all five loops and records the same
+  objects as Python's walk; order cases and two threads through the walk;
+  turning expressions into paths (`citry/_vue/native_walk.py`); and the plan called directly for the reads and failures no
+  page reaches (colliding keys compared as often as Python's reads compare
+  them, a list changed during the reads, a panic, a failing row build).
 - The Rust crate's tests compare against fixtures that
   `scripts/native_render_fixtures.py` writes from the Python code;
   `--check` (run by a Python test) fails when a fixture no longer matches.
 
-## 9. Adding a level
+## 10. Adding a level
 
 A new level follows the same rules:
 

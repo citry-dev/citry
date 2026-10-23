@@ -24,7 +24,10 @@
 //! computes both ids of a run's rows, for `_RunDigests` and for the run
 //! object. When Rust read every row of such a call, [`first_repeat`] and
 //! [`write_occurrence_item`] let the PyO3 layer record the whole run with one
-//! object and write its rows' manifest items; see `run.rs`.
+//! object and write its rows' manifest items; see `run.rs`. [`WalkPlan`]
+//! reads every row of such a call's loop in one call, when the loop's
+//! iterable, the call's inputs and its key are plain paths (a name and
+//! constant subscripts); see `walk.rs`.
 //!
 //! The crate has no Python dependency, so the evaluation, the JSON writer,
 //! the digests and the run items are tested with fixtures observed from Python
@@ -36,6 +39,7 @@ mod json;
 mod plan;
 mod run;
 mod value;
+mod walk;
 
 pub use digest::DigestPrefix;
 pub use eval::EvalError;
@@ -46,3 +50,6 @@ pub use plan::{
 };
 pub use run::{OccurrenceItem, RunIds, first_repeat, write_occurrence_item};
 pub use value::{Attrs, Value};
+pub use walk::{
+    Decline, PathSpec, RowKey, Rows, Shape, Step, StepKey, Tree, WalkPlan, WalkPlanError, WalkSpec,
+};
