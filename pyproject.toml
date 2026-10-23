@@ -518,13 +518,19 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 88.5 # temporary ratchet below 88.51%; raise as coverage recovers
+# The full profile's total on macOS for #277 was 88.8976%; this is that
+# figure rounded down. Raise it as coverage grows, and lower it only as a
+# stated decision.
+fail_under = 88.89
 precision = 2
 show_missing = true
 skip_covered = true
+# Stub bodies written as `...` never run, and coverage.py's defaults,
+# which `exclude_also` keeps, already exclude them (7.10.0 and later, which
+# pytest-cov 7.1.0 requires). Those defaults match `...` only as a whole
+# body, so a function annotated `tuple[str, ...]` is still measured.
 exclude_also = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
     "@(abc\\.)?abstractmethod",
-    "\\.\\.\\.",
 ]

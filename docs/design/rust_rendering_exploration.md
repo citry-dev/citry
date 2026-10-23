@@ -1446,12 +1446,9 @@ the board's own data.
   definition ids that serialize writes. A level that changes how the
   manifest is written must update it too, or the parity check records
   pages without their data and reports no error.
-- **Coverage does not count some assembly code.** The `"\\.\\.\\."` entry
-  in `exclude_also` (root `pyproject.toml`) drops any function whose
-  signature contains `...`, such as `assemble_typed_render`
-  (`tuple[str, ...]`). The Python-path CI cell does not count toward
-  coverage either, so lines only the Python path runs need a
-  `render_both` or `python_render_path` test.
+- **Coverage does not count the Python-path CI cell.** Lines that only
+  the Python render path runs need a `render_both` or
+  `python_render_path` test to count toward coverage.
 - **Build plans whenever the native path is supported, not only when it
   is on.** Plans are cached on template nodes, so a node first rendered
   while the native path is off (as when tests switch paths in one
