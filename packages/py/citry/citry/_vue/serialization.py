@@ -1043,9 +1043,11 @@ def _server_contents_pass_policies(
     if security_csp == "off":
         return True
     # A private validator of the same mode collects findings without
-    # reporting them, so the page's own validator is unaffected.
+    # reporting them, so the page's own validator is unaffected. Citry adds
+    # its own trusted dependency tags only after this point, so every raw
+    # <script> or <style> in the copy counts, whatever attributes it has.
     checker = _CspRenderValidator(security_csp)
-    checker.validate_settled_html(contents, marker_prefix="", trusted_tag_starts=frozenset(), component_classes={})
+    checker.validate_settled_html(contents, marker_prefix=None, trusted_tag_starts=frozenset(), component_classes={})
     return not checker._findings
 
 

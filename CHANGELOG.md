@@ -237,6 +237,10 @@
   a line inside Citry. A warning from an Events response points at the
   web framework code that called Citry, because your handler has already
   returned.
+- With `security_csp="warn"`, a Vue page that cannot hydrate and whose
+  body holds a raw `<style>` element with an attribute, such as
+  `<style media="print">`, now keeps its body out of the served page until
+  Vue mounts, as it already did for a `<style>` without attributes.
 - A Vue page whose body text contains `</body>`, for example inside a
   comment, now serializes instead of raising `ValueError`; until Vue
   mounts, its body is empty.

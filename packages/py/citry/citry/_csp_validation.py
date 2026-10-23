@@ -52,11 +52,17 @@ class _CspRenderValidator:
         self,
         html: str,
         *,
-        marker_prefix: str,
+        marker_prefix: str | None,
         trusted_tag_starts: frozenset[int],
         component_classes: dict[str, str],
     ) -> None:
-        """Check the final hook output while structured dependency markers still exist."""
+        """
+        Check the final hook output while structured dependency markers still exist.
+
+        A tag is trusted when it starts at one of ``trusted_tag_starts`` or
+        carries an attribute whose name starts with ``marker_prefix``. With
+        ``marker_prefix=None``, no attribute makes a tag trusted.
+        """
         try:
             template = scan_output_html(html)
         except Exception as error:  # noqa: BLE001 - strict mode must fail closed on ambiguous output
@@ -114,7 +120,7 @@ class _CspRenderValidator:
         self,
         html: str,
         template: OutputTemplate,
-        marker_prefix: str,
+        marker_prefix: str | None,
         trusted_tag_starts: frozenset[int],
         component_classes: dict[str, str],
         *,
@@ -135,8 +141,9 @@ class _CspRenderValidator:
                 inherited_instance,
             )
             component = component_classes.get(own_instance or "", inherited_component or "settled render output")
-            trusted = node.start_tag.token.start_index in trusted_tag_starts or any(
-                attr.key.content.translate(_ASCII_LOWER).startswith(marker_prefix) for attr in attrs
+            trusted = node.start_tag.token.start_index in trusted_tag_starts or (
+                marker_prefix is not None
+                and any(attr.key.content.translate(_ASCII_LOWER).startswith(marker_prefix) for attr in attrs)
             )
             if tag in {"script", "style"} and not trusted:
                 fingerprint = (tag, _node_html(html, node))
