@@ -30,6 +30,7 @@ import sys
 import sysconfig
 import warnings
 from dataclasses import dataclass
+from typing import cast
 
 from citry_core import _rust
 
@@ -39,7 +40,14 @@ _module: type[_rust.native_render] | None = getattr(_rust, "native_render", None
 _ENV_NAME = "CITRY_NATIVE_RENDER"
 # Every name the native path calls. A module that lacks one is older than
 # this citry, so using part of it would fail in the middle of a render.
-_REQUIRED_NAMES = ("_RowPlan", "_NativeRow", "_RunDigests", "_encode_occurrences")
+_REQUIRED_NAMES = (
+    "_RowPlan",
+    "_NativeRow",
+    "_RunDigests",
+    "_encode_occurrences",
+    "_NativeRun",
+    "_NativeOccurrence",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,3 +145,19 @@ ACTIVE: bool = _decision.active
 # The Rust module, or None when the interpreter cannot use it. Code that
 # holds a Rust object already knows the module exists.
 native: type[_rust.native_render] | None = _module if SUPPORTED else None
+
+
+class _NeverBuilt:
+    """Stands in for a Rust class where the module is not used; no object is ever one."""
+
+
+# The classes of level B1's run object and its rows, for the `type(item) is`
+# checks of the code that reads a view or a manifest. They are fixed at
+# import like ``native``; where the module is not used they are a class no
+# object belongs to, so those checks stay one comparison on every path.
+NativeRun: type[_rust.native_render._NativeRun] = cast(
+    "type[_rust.native_render._NativeRun]", _NeverBuilt if native is None else native._NativeRun
+)
+NativeOccurrence: type[_rust.native_render._NativeOccurrence] = cast(
+    "type[_rust.native_render._NativeOccurrence]", _NeverBuilt if native is None else native._NativeOccurrence
+)

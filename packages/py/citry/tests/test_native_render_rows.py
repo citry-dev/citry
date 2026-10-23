@@ -119,13 +119,15 @@ def build_board(
     in_root: bool = False,
     template_data: Any = None,
     template: str = ROW_TEMPLATE,
+    phase_size: int = 10,
     **engine_options: Any,
 ) -> Board:
     """
     Build the page: rows inside child components (``Phase``), or written in the page's own template.
 
     ``template_data(row, index)``, when given, returns the row's variables,
-    so a case can hand one row a value Rust declines.
+    so a case can hand one row a value Rust declines. Each ``Phase`` places
+    up to ``phase_size`` rows, one call run per phase.
     """
     engine = Citry(autodiscover=False, secret="native-render-test-secret", **engine_options)  # noqa: S106
     # The hydrated document links the page's scripts under the engine's URL prefix.
@@ -195,10 +197,10 @@ def build_board(
             rows: list
 
         def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
-            # Rows go to phases of up to ten, so one page has several call runs.
+            # Rows go to phases of up to phase_size, so one page has several call runs.
             phases = [
-                {"id": f"phase-{start}", "rows": kwargs.rows[start : start + 10]}
-                for start in range(0, len(kwargs.rows), 10)
+                {"id": f"phase-{start}", "rows": kwargs.rows[start : start + phase_size]}
+                for start in range(0, len(kwargs.rows), phase_size)
             ]
             return {"rows": kwargs.rows, "phases": phases}
 
@@ -547,9 +549,36 @@ FAULT_ROWS_READ = {
 }
 
 
+# What level B1's run object does with each fault page's four call runs of
+# ten rows: (run objects built, runs declined, run objects written), from the
+# hydrated output (static HTML writes no manifest). A run holding a row
+# Python evaluated, a key with no UTF-8 form or a str subclass render id
+# goes to the per-row loop; a render that fails reaches no assembly.
+FAULT_RUNS = {
+    "case_collision": (3, 1, 3),
+    "dict_subclass": (0, 0, 0),
+    "int_beyond_i64": (3, 1, 3),
+    "int_past_digit_limit": (0, 0, 0),
+    "lone_surrogate": (3, 1, 3),
+    "markup": (0, 0, 0),
+    "missing_key": (0, 0, 0),
+    "mutated_after_render": (4, 0, 4),
+    "nan": (0, 0, 0),
+    "onclick": (0, 0, 0),
+    "reused_dict": (4, 0, 4),
+    "secret": (0, 0, 0),
+    "shadowing_global": (0, 0, 0),
+    "spread_limit": (3, 1, 3),
+    "str_subclass_render_id": (0, 4, 0),
+    "style": (3, 1, 3),
+    "surrogate_key": (3, 1, 3),
+    "tuple": (0, 0, 0),
+}
+
+
 @pytest.mark.parametrize("name", sorted(FAULT_ROWS_READ))
 def test_faults_raise_or_render_the_same_on_both_paths(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    render_both(lambda: fault_or_error(name), monkeypatch, rows_read=FAULT_ROWS_READ[name])
+    render_both(lambda: fault_or_error(name), monkeypatch, rows_read=FAULT_ROWS_READ[name], runs=FAULT_RUNS[name])
 
 
 def test_a_lowered_digit_limit_after_render_changes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -725,19 +754,25 @@ def test_switching_the_flag_between_render_and_serialize_keeps_the_bytes(
     assert switched.rows_read == (14 if render_on_rust else 0)
 
 
-_RUST_NAMES = ("_RowPlan", "_NativeRow", "_RunDigests", "_encode_occurrences")
+_RUST_NAMES = ("_RowPlan", "_NativeRow", "_RunDigests", "_encode_occurrences", "_NativeRun", "_NativeOccurrence")
 
 
 class _FullModule:
     """Stands for a native module that has every name the native path calls."""
 
-    _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = None
+    _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = _NativeRun = _NativeOccurrence = None
 
 
 class _OlderModule:
     """Stands for a native module from before ``_RunDigests`` existed."""
 
     _RowPlan = _NativeRow = _encode_occurrences = None
+
+
+class _LevelAModule:
+    """Stands for a native module that has level A's names but not ``_NativeRun`` or ``_NativeOccurrence``."""
+
+    _RowPlan = _NativeRow = _RunDigests = _encode_occurrences = None
 
 
 @pytest.mark.parametrize(
@@ -753,6 +788,7 @@ class _OlderModule:
         ("pypy", "linux", 0, None, "off", False, False, "is not '0' or '1'"),
         ("cpython", "linux", 0, None, None, False, False, "native_render is missing"),
         ("cpython", "darwin", 0, _OlderModule, None, False, False, "native_render._RunDigests is missing"),
+        ("cpython", "linux", 0, _LevelAModule, None, False, False, "native_render._NativeRun is missing"),
         ("cpython", "win32", 0, None, "0", False, False, "native_render is missing"),
     ],
 )

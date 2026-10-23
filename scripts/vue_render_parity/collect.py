@@ -100,18 +100,21 @@ class _Recorder:
             recorder.pending.tree = kwargs.get("early_selected_tree")
             prepared = recorder.original_prepare(*args, **kwargs)
             # Rows Rust read keep their data outside the manifest dict until
-            # it is serialized, so the recorder needs them to write the JSON
-            # the page embeds.
+            # it is serialized, and a run object stands for its rows there,
+            # so the recorder needs both to write the JSON the page embeds.
             recorder.pending.native_rows = prepared.native_rows
+            recorder.pending.run_definition_ids = prepared.run_definition_ids
             return prepared
 
         def tags(producer: Any, manifest: dict[str, Any], cached_tags: dict[str, str] | None) -> dict[str, str]:
             result = recorder.original_tags(producer, manifest, cached_tags)
             tree = getattr(recorder.pending, "tree", None)
             native_rows = getattr(recorder.pending, "native_rows", None) or {}
+            run_definition_ids = getattr(recorder.pending, "run_definition_ids", None)
             recorder.pending.tree = None
             recorder.pending.native_rows = None
-            recorder.record(manifest, result, tree, native_rows)
+            recorder.pending.run_definition_ids = None
+            recorder.record(manifest, result, tree, native_rows, run_definition_ids)
             return result
 
         self.serialization._prepare_initial_result = prepare
@@ -121,18 +124,27 @@ class _Recorder:
         self.serialization._prepare_initial_result = self.original_prepare
         self.serialization._component_tags_for_manifest = self.original_tags
 
-    def record(self, manifest: dict[str, Any], tags: dict[str, str], tree: Any, native_rows: dict[str, Any]) -> None:
+    def record(
+        self,
+        manifest: dict[str, Any],
+        tags: dict[str, str],
+        tree: Any,
+        native_rows: dict[str, Any],
+        run_definition_ids: dict[str, str] | None,
+    ) -> None:
         # Some unit tests pass hand-made manifest fragments through the tag
         # helper; only a manifest with a root is a page the server renders.
         if "rootId" not in manifest:
             return
         # The same JSON the page embeds and the hydration renderer reads.
-        manifest_json = self.serialization._manifest_json(manifest, native_rows)
+        manifest_json = self.serialization._manifest_json(manifest, native_rows, run_definition_ids)
         compiled = getattr(tree, "compiled_by_definition", None) or {}
         by_id = {item.id: item for item in compiled.values()}
         definitions: dict[str, dict[str, Any]] = {}
         missing = []
-        for occurrence in manifest.get("occurrences", ()):
+        # Read the occurrences back from the written JSON: a run object in the
+        # manifest stands for many rows and is not a dict.
+        for occurrence in json.loads(manifest_json).get("occurrences", ()):
             definition_id = occurrence.get("definitionId")
             if definition_id in definitions:
                 continue

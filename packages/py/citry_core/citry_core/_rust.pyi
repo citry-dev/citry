@@ -24,8 +24,8 @@
 # - Functions without `self` are treated as module-level functions.
 #   This matches how typeshed defines modules.
 
-from collections.abc import Callable, Mapping
-from typing import Literal
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any, Literal
 
 # Whether this extension was compiled without optimizations ("debug", the
 # plain `maturin develop` build) or with them ("release", `--release` and
@@ -551,7 +551,9 @@ class native_render:
     evaluator can run without a component instance, from
     ``citry._vue.leaf_program.native_row_plan_tuples`` and asks it for each
     row; ``_RunDigests`` computes the ids of each row of a call run (the
-    components one ``c-for`` places), for ordinary components too.
+    components one ``c-for`` places), for ordinary components too. When
+    Rust read every row of a call run, serialize records the run with one
+    ``_NativeRun``, and the view holds one ``_NativeOccurrence`` per row.
     """
 
     class _RowPlan:
@@ -602,20 +604,136 @@ class native_render:
         def member_ids(self, key: str) -> tuple[str, str] | None:
             """Return ``(placement_key, child_id)``, or None for a key with no UTF-8 form."""
 
+    class _NativeRun:
+        """One call run whose rows Rust read, recorded with one object instead of one record per row."""
+
+        @staticmethod
+        def try_new(
+            members: list[object],
+            record_type: type,
+            component_class: object,
+            fragment: object,
+            source: object,
+            source_span: object,
+            placement_prefix_json: str,
+            child_prefix_json: str,
+            parent_id: str,
+            type_key: str,
+            definition_id: str,
+        ) -> native_render._NativeRun | None:
+            """
+            Read and check a run's members and compute their ids, changing no assembly state.
+
+            Returns None when any member is not an exact ``record_type`` with
+            a ``_NativeRow``, has ``js_data`` or root markers, holds a
+            different class, fragment, source or span object from the ones
+            given, has a class id other than ``type_key``, or has a key or
+            render id that is not an exact str with a UTF-8 form; when a key,
+            render id or child id repeats; when ``members`` or ``type_key`` is
+            empty; or when ``parent_id``, ``type_key`` or ``definition_id`` is
+            not an exact str with a UTF-8 form. Returns None too when reading
+            a member raises an `Exception`; any other exception, such as
+            `KeyboardInterrupt`, propagates. A Rust panic raises
+            `RuntimeError`.
+            """
+        def commit(
+            self,
+            seen_render_ids: set[str],
+            seen_occurrence_ids: set[str],
+            local_identity_keys: set[tuple[tuple[object, ...], tuple[str, ...], object]],
+            member_base: tuple[object, ...],
+            placement_route: tuple[str, ...],
+            supplied_fills: dict[str, Any],
+            occurrence_to_render: dict[str, str],
+            render_to_occurrence: dict[str, str],
+            occurrence_types: dict[str, str],
+            occurrence_parents: dict[str, str | None],
+            occurrence_placement_keys: dict[str, str | None],
+        ) -> bool:
+            """
+            Check every row against assembly's live state, then write the rows' entries in row order.
+
+            Returns False, having written nothing, when a row's render id or
+            child id is already seen, its identity is in
+            ``local_identity_keys``, or ``supplied_fills`` has an entry for it.
+            A Rust panic raises `RuntimeError`.
+            """
+        def check_invariants(
+            self, reference_parents: dict[str, list[str]], placements: set[tuple[str, str]]
+        ) -> tuple[int, int] | None:
+            """
+            Make assembly's final per-occurrence checks for the rows, in row order.
+
+            Returns ``(row index, check)`` for the first row that fails: check
+            0 when another call references it, check 1 when its parent and
+            placement key are already in ``placements``. Adds each row's pair
+            to ``placements`` otherwise. A Rust panic raises `RuntimeError`.
+            """
+        def member_ids(self) -> list[str]:
+            """Return the rows' child occurrence ids, in row order."""
+        def occurrences(self) -> list[native_render._NativeOccurrence]:
+            """Return one ``_NativeOccurrence`` per row, in row order."""
+        def holds_any(self, ids: Iterable[object]) -> bool:
+            """Return whether any of ``ids`` is one of the rows' child occurrence ids."""
+        @property
+        def parent_id(self) -> str: ...
+        @property
+        def type_key(self) -> str: ...
+        @property
+        def definition_id(self) -> str: ...
+        def __len__(self) -> int: ...
+
+    class _NativeOccurrence:
+        """
+        One row of a ``_NativeRun``, as the view's occurrence list holds it.
+
+        ``server_data`` and ``prepared_data`` are read-only mappings shared by
+        every row: an empty one, and ``{"calls": {}}``.
+        """
+
+        @property
+        def id(self) -> str: ...
+        @property
+        def type_key(self) -> str: ...
+        @property
+        def definition_id(self) -> str: ...
+        @property
+        def parent_id(self) -> str: ...
+        @property
+        def placement_key(self) -> str: ...
+        @property
+        def render_id(self) -> str: ...
+        @property
+        def _native(self) -> native_render._NativeRow: ...
+        @property
+        def server_data(self) -> Mapping[str, object]: ...
+        @property
+        def prepared_data(self) -> Mapping[str, object]: ...
+        @property
+        def run(self) -> native_render._NativeRun: ...
+        @property
+        def index(self) -> int: ...
+
     @staticmethod
     def _encode_occurrences(
-        occurrences: list[dict[str, object]],
+        occurrences: list[object],
         natives: dict[str, native_render._NativeRow],
         fallback: Callable[[dict[str, object]], str],
+        definition_ids: dict[str, str] | None = None,
     ) -> str:
         """
         Write a manifest's occurrence array, with each Rust-read row's prepared data written in.
 
-        Every item whose id is not in ``natives`` is written by
-        ``fallback(item)``. Raises `ValueError` when an item is not a dict, a
-        Rust-read row's item does not have the exact shape assembly gives it,
-        or ``fallback`` returns something other than a str. A Rust panic
-        raises `RuntimeError`.
+        A ``_NativeRun`` item stands for all its rows, in order. Rust writes
+        each row with the run's compiled definition id, which it looks up in
+        ``definition_ids`` (logical id to compiled id). Every other item
+        whose id is not in ``natives`` is written by ``fallback(item)``.
+        Raises `ValueError` when an item is neither a dict nor a
+        ``_NativeRun``, a Rust-read row's item does not have the exact shape
+        assembly gives it, a run comes without ``definition_ids`` or its
+        definition has no compiled id there or that id is not a str, or
+        ``fallback`` returns something other than a str. A Rust panic raises
+        `RuntimeError`.
         """
 
 ########################################################

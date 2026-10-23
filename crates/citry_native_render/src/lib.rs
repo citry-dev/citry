@@ -20,16 +20,21 @@
 //!    `script_json({"calls": {}, **data}, sort_keys=True)` writes.
 //!
 //! [`DigestPrefix`] hashes the ids Citry gives each row of a repeated
-//! component call (a `c-for` over a component); see `digest.rs`.
+//! component call (a `c-for` over a component); see `digest.rs`. [`RunIds`]
+//! computes both ids of a run's rows, for `_RunDigests` and for the run
+//! object. When Rust read every row of such a call, [`first_repeat`] and
+//! [`write_occurrence_item`] let the PyO3 layer record the whole run with one
+//! object and write its rows' manifest items; see `run.rs`.
 //!
-//! The crate has no Python dependency, so the evaluation, the JSON writer and
-//! the digests are tested with fixtures observed from Python
+//! The crate has no Python dependency, so the evaluation, the JSON writer,
+//! the digests and the run items are tested with fixtures observed from Python
 //! (`scripts/native_render_fixtures.py` writes them).
 
 mod digest;
 mod eval;
 mod json;
 mod plan;
+mod run;
 mod value;
 
 pub use digest::DigestPrefix;
@@ -39,4 +44,5 @@ pub use plan::{
     Const, ExprSpec, Kinds, OpSpec, Plan, PlanError, PlanSpec, ReadNode, ReadNodeSpec,
     SpreadLayout, SpreadLayoutError,
 };
+pub use run::{OccurrenceItem, RunIds, first_repeat, write_occurrence_item};
 pub use value::{Attrs, Value};

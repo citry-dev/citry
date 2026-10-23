@@ -1,6 +1,6 @@
 [package]
 name = "citry_native_render"
-description = "Evaluate one simple='vue' row template over copied values, write its prepared data as JSON, and compute the ids of repeated component calls"
+description = "Evaluate one simple='vue' row template over copied values, write its prepared data as JSON, compute the ids of repeated component calls, and write their manifest items"
 version = "0.1.0"
 edition = "2024"
 publish = false

@@ -13,6 +13,7 @@ the levels that have shipped:
 | Level | What Rust does |
 |---|---|
 | A | Reads each `simple = "vue"` row, checks its values and writes its prepared data as JSON; computes the two ids of every row of a call run |
+| B1 | When Rust read every row of a call run, records the whole run during serialize with one object, and writes its rows' manifest items |
 
 Terms used below:
 
@@ -30,7 +31,7 @@ Terms used below:
 - **Leaf**: the Python object (`PreparedLeafProgram`) that holds a row's
   recorded template values.
 - **Decline**: Rust returns `None` instead of a result, and Python then
-  handles that row the way it always has.
+  handles that row or call run the way it always has.
 - **Rebuild**: Python builds a Rust-read row's leaf by running its
   evaluator over a copy of the values Rust read, when an output needs the
   row's HTML or a Python copy of its data.
@@ -38,6 +39,8 @@ Terms used below:
   the page sends to the browser, serialize runs assembly before writing
   the page (`precompile_selected_tree_for_serialization` in
   `citry/_vue/events.py`).
+- **Run object**: one Rust object (`_NativeRun`) that records every row of
+  a call run in assembly, in place of one Python record per row (level B1).
 
 The research that measured these levels is on the branch
 `research/rust-render-stage0` (tag `research/rust-render-stage2-done`),
@@ -93,7 +96,72 @@ The fixed text of the manifest format (the `"calls"` key, the
 is written) are locked by fixtures that `scripts/native_render_fixtures.py`
 writes from Python.
 
-## 2. When Rust runs
+## 2. What happens to one call run
+
+Assembly names and records each row of a call run in a Python loop
+(`run_members` in `citry/_vue/direct_capture.py`, "the per-row loop"
+below): it computes the row's two ids, checks them against what assembly
+has already seen, writes the row into about a dozen sets and maps, and
+records one occurrence. For a run of rows Rust read, that work is the
+same for every row.
+
+With level B1, on the precompile path only:
+
+1. Before the per-row loop, `take_native_run` checks what depends only on
+   the class, once per run: the registry lookup, the component tag, and
+   that the class is the one registered for this engine and not the
+   built-in `mark` component. It then asks Rust for a run object
+   (`_NativeRun.try_new`). Rust reads every row's record, checks that level
+   A would record each row through `register_native_member` (a Rust-read
+   row with no `js_data` and no root markers) and that every row shares the
+   first row's class, template fragment and call site, and computes both
+   ids of each row. It changes nothing in assembly.
+2. `commit` checks every row against assembly's live state (the render ids
+   and occurrence ids already seen, the keys already used at this call
+   site, fills addressed to a row), and only when every row passes writes
+   the rows into the maps, in row order.
+3. Assembly then registers the rows' definition, at the point where the
+   per-row loop would first register it, and adds the run's rows to the
+   call site's count in one step (a later ordinary call at the same call
+   site under the same owner reads that count). The order in which
+   definitions are first registered is the order the manifest lists them
+   in, so assembly registers the definition only once the run object has
+   committed.
+4. One entry in assembly's occurrence list stands for every row of the
+   run. After the whole tree, `check_invariants` makes the run's share of
+   the final checks: no other call references a row, and no other
+   occurrence shares a row's parent and placement key. The view then lists
+   one `_NativeOccurrence` per row, where the per-row loop would have put
+   each row's occurrence.
+5. The manifest's occurrence list holds the run object once, at its first
+   row's place, and `_encode_occurrences` writes each of its rows' items
+   from Rust, with the compiled definition id serialize passes in
+   (`_PreparedResult.run_definition_ids`).
+
+If `try_new` declines or `commit` refuses, the per-row loop records the
+whole run, exactly as it does without level B1, and raises any error at
+the row it belongs to. So every error message stays Python's.
+
+Between them, `commit` and `take_native_run` write every entry the per-row
+loop writes, except in three maps. `reference_parents` is covered by
+`check_invariants`. `native_occurrences` is not needed, because each
+`_NativeOccurrence` carries its `_NativeRow`. `prepared_by_occurrence` is
+read only for the occurrence `transform_component` is building and for
+occurrences that own calls, fills or markers, and a run row is none of
+these; it is a plain dict, so a reader that looked one up would raise
+`KeyError` rather than read a wrong value.
+
+Code that reads the view or the manifest handles the run objects:
+`prepared_manifest` checks each run's definition once for opaque HTML
+(a row Rust read writes none), the Events preparation skips run objects in
+its opaque HTML and `renderId` loops (no Events instance can be a
+`simple = "vue"` row; one that matched would raise `AssertionError`), and
+serialize reads a run's `type_key` for its component tags. A
+`_NativeOccurrence` has the attributes an occurrence's readers use, and
+its `server_data` and `prepared_data` are read-only mappings shared by
+every row, so a reader that tried to change them would fail at once.
+
+## 3. When Rust runs
 
 `citry/_vue/native_render.py` decides once, when it is first imported:
 
@@ -115,12 +183,15 @@ writes from Python.
 | The component's `Citry` instance has `mode="development"` | Rows are not read in Rust. A development page checks every element id it writes, so the serializer needs every row's HTML, and reading the row in Rust first would only add work. The check runs at the row read, because mode belongs to each `Citry` instance. Call-run ids still come from Rust; they need no rebuild. |
 
 Every step after a Rust object exists follows that object (`record.native`,
-`PreparedOccurrence._native`), not the flag, so a render serializes
-correctly even if the flag changed in between. The Rust module stays
+`PreparedOccurrence._native`, a `_NativeRun` in the manifest), not the
+flag, so a render serializes correctly even if the flag changed in
+between. Level B1 reads the flag once per call run, when assembly decides
+whether to ask for a run object; with the flag off, the per-row loop
+records the run's Rust-read rows as level A does. The Rust module stays
 declared as needing the GIL (`#[pymodule(gil_used = true)]` in
 `crates/citry_core_py/src/lib.rs`).
 
-## 3. Rows rebuilt in Python
+## 4. Rows rebuilt in Python
 
 A page Vue hydrates, or one it mounts in the browser (`ssr=False`),
 writes a Rust-read row from its JSON alone, as long as the serializer
@@ -148,7 +219,7 @@ row's values from its leaf.
 A row's leaf is built at most once per render, so serializing the same
 render as several outputs rebuilds each row once.
 
-## 4. Error modes
+## 5. Error modes
 
 | Input or event | What happens |
 |---|---|
@@ -164,6 +235,12 @@ render as several outputs rebuilds each row once.
 | A row's dicts changed after the render | The output keeps the values each row had when Rust read it, as the Python leaf does. |
 | A Rust panic | `RuntimeError` through `without_panics`; a panic during the row read fails the render with Citry's component path in the message. Rust's panic hook also prints the message to stderr. |
 | The occurrence list holds an item assembly never makes for a Rust row | `ValueError` from `_encode_occurrences`; this is a Citry bug, never user input. |
+| A call run holds an ordinary component or a row Python evaluated, a row with `js_data` or root markers, another class, class id, fragment, source or span, a key or render id that is not an exact `str` with a UTF-8 form, or a repeated key, render id or child id | `try_new` declines before assembly changes; the per-row loop records the run and raises its own error for any of these that Python refuses. |
+| A row's render id or occurrence id was already seen, its key was already used at this call site under the same owner (another run of the same loop), or fills are addressed to it | `commit` refuses and writes nothing. The per-row loop then records the run: it raises the same `UnsupportedPreparedView` for an id or key already used, and writes one call per row when fills are addressed to a row. |
+| The final check fails for a run row | `check_invariants` names the row and the check; assembly raises the message the per-row check raises. Reaching it from a page needs two ids whose SHA-256 digests share their first 24 hex digits. |
+| The registry lookup or the tag lookup raises | The run is declined; the per-row loop makes the same lookup and raises there. |
+| A manifest with a run object reaches `_encode_occurrences` without the compiled definition ids, or a run's rows are not next to each other in the view | `ValueError` or `AssertionError`; both are Citry bugs, never user input. |
+| Events updates, pages kept off the precompile path, and development mode | No run object; the per-row loop records every run, as for level A's rows. Development mode reads no row in Rust, so its runs never qualify. |
 
 Accepted differences, none of which changes output:
 
@@ -182,28 +259,37 @@ Accepted differences, none of which changes output:
   another thread replaces the class while serialize runs, the later check
   that the class is still registered fails instead, with a different
   message.
+- With a run object, the registry lookup that checks a row's class runs
+  once per run instead of once per row, with the same thread consequence.
+- Serialize asks the component tag callback for a run's class once per run
+  instead of once per row when the built-in metadata has no tag for it. The
+  answer is the same for every row, so no output can show it.
 
-## 5. Where the code lives
+## 6. Where the code lives
 
 | Piece | File |
 |---|---|
 | The pure-Rust plan, value copy, evaluation, JSON writer and digests | `crates/citry_native_render/` |
-| The PyO3 classes `_RowPlan`, `_NativeRow`, `_RunDigests` and `_encode_occurrences` | `crates/citry_core_py/src/native_render/` |
+| A call run's ids (levels A and B1), repeat checks and manifest items (level B1) | `crates/citry_native_render/src/run.rs` |
+| The PyO3 classes `_RowPlan`, `_NativeRow` and `_RunDigests`, and `_encode_occurrences` | `crates/citry_core_py/src/native_render/rows.rs` |
+| The run object (`_NativeRun`) and its rows (`_NativeOccurrence`) | `crates/citry_core_py/src/native_render/runs.rs` |
 | Their type stub | `class native_render` in `packages/py/citry_core/citry_core/_rust.pyi` |
 | The decision | `citry/_vue/native_render.py` |
 | The plan tuples, the row read and the rebuild | `citry/_vue/leaf_program.py` |
 | The row read's call site | `_render_simple_vue_leaf` in `citry/component_render.py` |
 | The record properties | `SimpleVueRecord` in `citry/citry_render.py` |
-| Assembly (`start_occurrence`, `native_definition`, `register_native_member`, the call-run ids) | `citry/_vue/direct_capture.py` |
+| Assembly (`start_occurrence`, `native_definition`, `register_native_member`, the call-run ids, `take_native_run`, `run_members`) | `citry/_vue/direct_capture.py` |
+| The manifest's occurrence list with run objects | `_occurrence_items_with_runs` in `citry/_vue/protocol.py` |
 | The manifest writer | `_manifest_json` in `citry/_vue/serialization.py` |
 
-## 6. Testing both paths
+## 7. Testing both paths
 
 - `tests/_render_paths.py` has `render_both(run)`, which calls `run` on
   each path in one process, pins render ids, the Vue app id and the
-  Events token clock, compares the results, and counts the rows Rust read
-  and the rows Python rebuilt, so a case cannot pass because both
-  runs took the Python path.
+  Events token clock, compares the results, and counts the rows Rust read,
+  the rows Python rebuilt, the run objects Rust built, the call runs it
+  declined, and the run objects the page manifests held, so a case cannot
+  pass because both runs took the Python path.
 - The `render_path` fixture runs a test once per path; `python_render_path`
   forces the Python path for a test that checks the Python evaluator's own
   internals. Both live in `packages/py/citry/tests/conftest.py`.
@@ -216,11 +302,16 @@ Accepted differences, none of which changes output:
   job runs the suite on PyPy, Pyodide or free-threaded builds.
 - `tests/test_call_run_order.py` locks the order of user callbacks and
   extension hooks, and runs on both paths.
+- `tests/test_native_render_runs.py` covers level B1: page cases with the
+  run objects each must build and write, a check that every call run of a
+  140-row board reaches a run object, a field-by-field comparison of the
+  run object's assembly with the per-row loop's, and the binding's
+  refusals against synthetic maps, which pages cannot reach.
 - The Rust crate's tests compare against fixtures that
   `scripts/native_render_fixtures.py` writes from the Python code;
   `--check` (run by a Python test) fails when a fixture no longer matches.
 
-## 7. Adding a level
+## 8. Adding a level
 
 A new level follows the same rules:
 

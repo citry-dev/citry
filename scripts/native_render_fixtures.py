@@ -1,16 +1,23 @@
 """
 Write the test fixtures of ``crates/citry_native_render`` from Citry's own Python code.
 
-The Rust crate evaluates ``simple = "vue"`` row templates and hashes call-run
-ids without any Python, so its tests compare it with answers observed from
-Python. This script produces those answers:
+The Rust crate evaluates ``simple = "vue"`` row templates, hashes call-run
+ids and writes call-run manifest items without any Python, so its tests
+compare it with answers observed from Python. This script produces those
+answers:
 
 - ``board_rows.json`` and ``shapes.json``: a template's plan (the tuples
   ``native_row_plan_tuples`` passes to Rust), and for each row its variables
   (with each value's Python type spelled out), the root ``c-bind`` layout
   Python gives its key set, and the prepared-data JSON Citry's Python
   evaluator and assembly write;
-- ``run_digests.json``: call-run row ids computed by Python's ``_DigestPrefix``.
+- ``run_digests.json``: call-run row ids computed by Python's ``_DigestPrefix``;
+- ``run_items.json``: whole call runs (the rows one ``c-for`` places), with
+  each row's ids from ``_DigestPrefix``, each row's manifest item as
+  ``_script_json`` writes a dict with the keys ``prepared_manifest`` and
+  ``_prepare_holding_assets`` give a run row, and the first repeated key.
+  The item's key set is copied here by hand; the page tests in
+  ``test_native_render_runs.py`` check its whole shape.
 
 The expected bytes always come from Python, never from Rust, so the cargo
 tests lock observed behavior. Run from the repository root:
@@ -362,6 +369,11 @@ def shape_cases() -> list[tuple[str, dict[str, Any]]]:
     return cases
 
 
+# Call-run keys that stress the JSON string writer and the digests: quotes,
+# backslashes, `<`, control characters, non-ASCII and astral text.
+EDGE_KEYS = ["", "output-1", 'q"uote\\back', "tags <b>&", "ctl \x00\x1f\x7f", "caf\u00e9", "\u2028", "\U0001f600"]
+
+
 def digest_cases() -> dict[str, Any]:
     """Call-run row ids observed from Python's ``_DigestPrefix``, for the Rust digest test."""
     sites = [
@@ -369,12 +381,11 @@ def digest_cases() -> dict[str, Any]:
         (('<c-Row c-for="r in rows" />\n\u00e9 \U0001f600 <b>', 0, 9, "x"), ()),
     ]
     occurrence = "citryOccurrence0123456789abcdef01234567"
-    keys = ["", "output-1", 'q"uote\\back', "tags <b>&", "ctl \x00\x1f\x7f", "caf\u00e9", "\u2028", "\U0001f600"]
     cases = []
     child = _DigestPrefix(occurrence)
     for member_base, route in sites:
         placement = _DigestPrefix(member_base, route)
-        for key in keys:
+        for key in EDGE_KEYS:
             placement_key = f"citryPlacement{placement.digest(('explicit', key))[:24]}"
             cases.append(
                 {
@@ -386,6 +397,92 @@ def digest_cases() -> dict[str, Any]:
                 }
             )
     return {"cases": cases}
+
+
+def run_case(
+    member_base: tuple[object, ...],
+    route: tuple[object, ...],
+    type_key: str,
+    definition_id: str,
+    rows: list[tuple[str, str, dict[str, Any]]],
+) -> dict[str, Any]:
+    """One call run's rows and what Python makes of them, for the Rust run test."""
+    parent_id = "citryOccurrence0123456789abcdef01234567"
+    placement = _DigestPrefix(member_base, route)
+    child = _DigestPrefix(parent_id)
+    expected_ids = []
+    expected_items = []
+    first_repeat = None
+    seen: set[str] = set()
+    for index, (key, render_id, prepared) in enumerate(rows):
+        if key in seen and first_repeat is None:
+            first_repeat = index
+        seen.add(key)
+        placement_key = f"citryPlacement{placement.digest(('explicit', key))[:24]}"
+        child_id = f"citryOccurrence{child.digest(placement_key)[:24]}"
+        expected_ids.append([placement_key, child_id])
+        # The item prepared_manifest builds, plus the renderId that
+        # _prepare_holding_assets adds to every occurrence.
+        item = {
+            "id": child_id,
+            "typeKey": type_key,
+            "definitionId": definition_id,
+            "serverData": {},
+            "preparedData": prepared,
+            "parentId": parent_id,
+            "placementKey": placement_key,
+            "renderId": render_id,
+        }
+        expected_items.append(_script_json(item))
+    return {
+        "placement_prefix": _DIGEST_JSON.encode((member_base, route))[:-1],
+        "child_prefix": _DIGEST_JSON.encode((parent_id,))[:-1],
+        "parent_id": parent_id,
+        "type_key": type_key,
+        "definition_id": definition_id,
+        "keys": [key for key, _, _ in rows],
+        "render_ids": [render_id for _, render_id, _ in rows],
+        "prepared_json": [_script_json(prepared) for _, _, prepared in rows],
+        "expected_ids": expected_ids,
+        "expected_items": expected_items,
+        "first_repeat": first_repeat,
+    }
+
+
+def run_cases() -> dict[str, Any]:
+    """Whole call runs observed from Python, for the Rust run test."""
+    return {
+        "cases": [
+            # The board's shape: one call site, ordinary keys and data.
+            run_case(
+                (BOARD_ROW_TEMPLATE, 120, 260, "app.ProjectOutput_1a2b3c"),
+                (),
+                "app.ProjectOutput_1a2b3c",
+                "citryDefinitiona1b2c3",
+                [
+                    (f"output-{index}", f"r{index}", {"calls": {}, "row": {"id": index, "title": f"T {index}"}})
+                    for index in range(6)
+                ],
+            ),
+            # Keys, render ids, type keys and data that need escapes,
+            # including non-ASCII and astral text and `<`.
+            run_case(
+                ('<c-Row c-for="r in rows" />\n\u00e9 \U0001f600 <b>', 0, 9, "x"),
+                ("citryRoute", 3),
+                "x.Row_\u00e9",
+                "citryDefinition<\u2028>",
+                [(key, f"id {key}", {"calls": {}, "t": key, "n": None, "b": True, "f": 1.5}) for key in EDGE_KEYS],
+            ),
+            # A repeated key at index 3.
+            run_case(
+                ("<c-Row />", 1, 2, "t"),
+                (),
+                "t",
+                "d",
+                [(key, f"r{index}", {"calls": {}}) for index, key in enumerate(["a", "b", "c", "a", "b"])],
+            ),
+        ]
+    }
 
 
 def encoded(fixture: dict[str, Any]) -> str:
@@ -412,6 +509,7 @@ def fixtures() -> dict[str, str]:
         "board_rows.json": encoded(fixture_for(row_node(BOARD_ROW_TEMPLATE), board + edge_rows(base, rng))),
         "shapes.json": encoded(fixture_for(row_node(SHAPE_TEMPLATE), shape_cases())),
         "run_digests.json": encoded(digest_cases()),
+        "run_items.json": encoded(run_cases()),
     }
 
 
