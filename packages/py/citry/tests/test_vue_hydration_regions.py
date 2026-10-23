@@ -423,6 +423,81 @@ def test_entities_and_void_elements_are_written_as_vue_renders_them() -> None:
     assert admission.element_count == 6
 
 
+@pytest.mark.parametrize(
+    "character", ["\x01", "\x0b", "\x1c", "\x7f", "\x80", "\x85", "\x9f", "\ufdd0", "\ufffe", "\U0010ffff"]
+)
+def test_control_characters_and_noncharacters_are_written_as_they_are(character: str) -> None:
+    # The HTML standard calls these characters parse errors, but the browser
+    # keeps them in the DOM, so the page still hydrates with them in its HTML.
+    engine = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = engine
+
+        def template_data(self, kwargs, slots):
+            return {"text": f"a{character}b"}
+
+        template = """
+<main><p>{{ text }}</p></main>
+"""
+        js = """
+$component({});
+"""
+
+    host, admission = _hydrated_host(Page)
+    assert host == f"<main><p>a{character}b</p></main>"
+    assert admission.declines == ()
+
+
+def test_attribute_and_raw_html_holding_a_control_character_hydrate() -> None:
+    # The `<c-raw>` block is complete HTML, and the browser keeps the DEL in
+    # it and in the attribute value, so the render succeeds and the page
+    # hydrates with no declines.
+    engine = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = engine
+
+        def template_data(self, kwargs, slots):
+            return {"label": "x"}
+
+        template = """
+<main>
+  <p title="a\x7fb">{{ label }}</p>
+  <c-raw><b title="a\x7fb">a\x7fb</b></c-raw>
+</main>
+"""
+        js = """
+$component({});
+"""
+
+    host, admission = _hydrated_host(Page)
+    assert host == '<main><p title="a\x7fb">x</p><!--[--><b title="a\x7fb">a\x7fb</b><!--]--></main>'
+    assert admission.declines == ()
+
+
+def test_markup_value_holding_a_control_character_hydrates() -> None:
+    # A Markup value goes through the same complete-HTML check as `<c-raw>`.
+    engine = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = engine
+
+        def template_data(self, kwargs, slots):
+            return {"html": Markup("<b>a\x7fb</b>")}
+
+        template = """
+<main><p>{{ html }}</p></main>
+"""
+        js = """
+$component({});
+"""
+
+    host, admission = _hydrated_host(Page)
+    assert host == "<main><p><!--[--><b>a\x7fb</b><!--]--></p></main>"
+    assert admission.declines == ()
+
+
 def test_spread_attributes_vary_per_row_and_follow_vue_value_rules() -> None:
     engine = Citry(autodiscover=False)
 

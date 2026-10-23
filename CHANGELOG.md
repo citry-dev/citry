@@ -225,6 +225,14 @@
   `<tbody>`, `<thead>`, `<tfoot>`, `<tr>`, or `<colgroup>` now renders.
   It used to fail with "Foster parenting moved this element before the
   nearest open table".
+- A component can now insert markup it received in a `c-*` attribute
+  more than once, such as `<div>{{ body }}</div><aside>{{ body }}</aside>`.
+  Each place gets its own render of the markup, as a `<c-slot />` used
+  twice does, so the components inside render once for each place. It
+  used to fail with "deferred part vanished from its .parts list before
+  resolution". A slot called once in `template_data()` whose result the
+  template prints twice now fails with an error that names the component,
+  before any component inside it renders.
 - An Events data class field annotated as `Literal[...]` now accepts the
   values it lists. Every call used to fail with "Unsupported annotation".
 - An Events `State` field annotated as a tuple is a tuple again in event
@@ -255,6 +263,21 @@
   template expression now behaves as in Python: `f'{{a}}'` gives `{a}`
   instead of raising `KeyError`, `'x' f'{y}'` keeps its `'x'`, and
   `f'{x=}'` shows `x=` before the value.
+- When several threads render their first pages at the same time, as a
+  server's workers do right after it starts, those renders no longer fail
+  with "dictionary changed size during iteration" on a page with
+  `simple = "vue"` components, or, on any page serialized for Vue, with
+  "early selected-tree compilation does not match the current render
+  preparation".
+- Defining a subclass of a component's `State` class after that component
+  has rendered no longer fails with "'_citry_input_type_checks' is not a
+  recognized State meta attribute".
+- A Vue page whose text or attribute values hold a control character such
+  as DEL (U+007F) or U+0001, or a Unicode noncharacter such as U+FDD0, now
+  hydrates, so Vue no longer builds it again in the browser. A `<c-raw>`
+  block or `Markup` value holding one of these characters in an
+  interactive component now renders. It used to fail with "is not a
+  complete HTML fragment".
 
 ### Performance
 

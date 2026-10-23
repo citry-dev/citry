@@ -258,8 +258,8 @@ test-migration and transport hardening work raised the ratchet to 93% on
    code remains covered separately by `cargo test`.
 3. the `full` `scripts/check.py` profile runs non-E2E pytest through xdist with
    `--cov --cov-report=term-missing:skip-covered`;
-   pytest-cov reads the source list, `fail_under = 93`, and `precision = 2`
-   from root config.
+   pytest-cov reads the source list, the `fail_under` threshold, and
+   `precision = 2` from root config.
 4. Raise `fail_under` as migration tests lift measured coverage; record each
    change in the implementation log. The historical two-package baseline is
    recorded below and must not be presented as a fresh four-package measure.

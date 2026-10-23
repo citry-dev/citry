@@ -233,6 +233,33 @@ caps the depth. Checking the remembered index first and otherwise scanning the
 list keeps the position correct even if user code or an extension edited `.parts`
 in between.
 
+One render can sit in a parent's parts more than once, for example when a
+template prints a slot's result twice. `scan` enters each parts list once per
+call. When it reaches a list again, it skips it if every component in it has
+rendered. If the list still holds a `DeferredComponent` or a call-run row
+(described below), it raises a `RuntimeError` that names the component,
+because a second `Render` for the same `DeferredComponent` would render the
+component twice and then find its place taken.
+
+Where that error goes depends on whose output holds the shared render:
+
+- In a component's own output (the root's or a child's), the error is raised
+  while that output's components are queued, outside the `try` that sends a
+  render error to the enclosing components. Like the nesting-depth error
+  (described below), it reaches no `on_render` error handling; a fallback
+  would only hide a mistake in the code.
+- In output that an `on_render` hook yielded or returned in place of the
+  component's own, the error is raised while that component settles. It
+  then takes the route of any error in that output: to the component's own
+  hook (if it yielded) or its extensions first, then to its ancestors.
+
+Markup passed in a `c-*` attribute (a nested template) that a component
+prints twice does not hit this error, because each print after the first
+renders the template again. The check compares lists by identity, so it
+does not catch a copy of a parts list that holds the same
+`DeferredComponent`s, or one list reached from the outputs of two
+components; those still fail when the second render finds its place taken.
+
 When a `<c-for>` loop places a `simple = "vue"` component (a component that
 renders without a Python object; each occurrence is a row) and qualifies as a
 call run, the loop records its rows in one `_DeferredRun`. The scan pushes one run task for rows that sit

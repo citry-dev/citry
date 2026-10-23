@@ -43,6 +43,11 @@
   f-string's doubled braces (`f'{{a}}'`) now give one brace instead of
   raising `KeyError`, a plain literal joined to an f-string (`'x' f'{y}'`)
   is no longer dropped, and `f'{x=}'` shows `x=` before the value.
+- `html_transform.validate_html_fragment_boundary()` and
+  `html_transform.browser_fragment_matches_nodes()` now accept HTML that
+  holds a control character such as DEL (U+007F) or a Unicode noncharacter
+  such as U+FDD0. The browser keeps these characters as written, but both
+  functions used to reject the HTML.
 
 ## v1.8.0
 

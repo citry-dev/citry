@@ -24,6 +24,7 @@ from string import Formatter
 from types import FunctionType
 from typing import Any, TypeVar, get_type_hints, overload
 
+from citry._class_introspection import _static_class_namespace_copy
 from citry.ext.events.config import Events
 
 # The fixed name vocabulary handler parameters come from (design 3.3). A
@@ -553,7 +554,10 @@ def resolve_data_schema(comp_cls: type, method_name: str, func: FunctionType) ->
     localns: dict[str, Any] = {}
     for klass in reversed(comp_cls.__mro__):
         localns[klass.__name__] = klass
-        localns.update({name: nested for name, nested in vars(klass).items() if isinstance(nested, type)})
+        # A parent component can be rendering on another thread, which stores
+        # computed results on its class, so the loop walks a copy.
+        namespace = _static_class_namespace_copy(klass)
+        localns.update({name: nested for name, nested in namespace.items() if isinstance(nested, type)})
     localns.update(_annotation_closure_locals(func))
 
     # A throwaway function carrying only the ``data`` annotation, so
