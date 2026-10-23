@@ -8,6 +8,7 @@
 pub mod hydration_nesting;
 pub mod hydration_structure;
 pub mod marker;
+pub mod output_policy;
 pub mod output_scanner;
 pub mod static_html;
 pub mod transformer;
@@ -19,6 +20,12 @@ pub use hydration_structure::{
     ExpectedNodeEvent,
 };
 pub use marker::{mark_html, MarkedHtml, MarkedPlaceholder};
+pub use output_policy::{
+    check_output_html, decode_html_attribute, is_activation_attribute, is_javascript_url,
+    is_native_event_attribute, is_url_attribute, script_type_is_executable, Finding,
+    JavascriptMode, OutputPolicyOptions, OutputPolicyReport, PolicyEvent, PolicyPass, RawElement,
+    Rule, JAVASCRIPT_MIME_TYPES,
+};
 pub use output_scanner::{
     scan_output_html, validate_html_fragment_boundary, OutputAttribute, OutputTag,
 };

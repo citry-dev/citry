@@ -35,10 +35,17 @@ pub struct OutputTag {
     pub attributes: Vec<OutputAttribute>,
 }
 
+/// Receives each start tag's facts as soon as the tag closes, with the index
+/// the tag keeps in the returned facts when it is a `script` or `style`.
+pub(crate) type StartTagObserver<'a> = dyn FnMut(&OutputTag, Option<usize>) + 'a;
+
 struct ScannerCallback<'a, S> {
     sink: &'a mut S,
     facts: &'a mut Vec<OutputTag>,
     collect_facts: bool,
+    // With an observer, only `script` and `style` facts are kept, because
+    // their element end arrives later; the observer has seen every other tag.
+    observer: Option<&'a mut StartTagObserver<'a>>,
     input: &'a [u8],
     current_tag: Option<Tag>,
     current_fact: Option<OutputTag>,
@@ -277,11 +284,17 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                 if let Some(mut fact) = self.current_fact.take() {
                     fact.end = span.end;
                     repair_attribute_value_spans(self.input, &mut fact);
-                    self.facts.push(fact);
-                    let index = self.facts.len() - 1;
-                    let name = &self.facts[index].name;
-                    if matches!(name.as_str(), "script" | "style") {
-                        self.raw_stack.push((name.clone(), index));
+                    let raw = matches!(fact.name.as_str(), "script" | "style");
+                    let keep = raw || self.observer.is_none();
+                    if let Some(observer) = self.observer.as_deref_mut() {
+                        observer(&fact, raw.then_some(self.facts.len()));
+                    }
+                    if keep {
+                        self.facts.push(fact);
+                        let index = self.facts.len() - 1;
+                        if raw {
+                            self.raw_stack.push((self.facts[index].name.clone(), index));
+                        }
                     }
                 }
             }
@@ -429,6 +442,41 @@ pub fn scan_output_html(input: &str) -> Vec<OutputTag> {
             sink: &mut builder,
             facts: &mut facts,
             collect_facts: true,
+            observer: None,
+            input: input.as_bytes(),
+            current_tag: None,
+            current_fact: None,
+            next_state: None,
+            raw_stack: Vec::new(),
+            boundary: None,
+            lexical_text: None,
+        }),
+    };
+    Tokenizer::new_with_emitter(input, emitter)
+        .finish()
+        .expect("string input is infallible");
+    facts
+}
+
+/// Scan `input` like [`scan_output_html`], but hand each start tag to
+/// `observer` as it closes instead of keeping it.
+///
+/// The result holds only the `script` and `style` tags, in document order,
+/// with their element ends filled in. The observer receives each of those
+/// tags with its index in the result, and every other tag with `None`.
+pub(crate) fn scan_output_html_with(
+    input: &str,
+    observer: &mut StartTagObserver<'_>,
+) -> Vec<OutputTag> {
+    let dom = RcDom::default();
+    let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
+    let mut facts = Vec::new();
+    let emitter = ScannerEmitter {
+        inner: CallbackEmitter::new(ScannerCallback {
+            sink: &mut builder,
+            facts: &mut facts,
+            collect_facts: true,
+            observer: Some(observer),
             input: input.as_bytes(),
             current_tag: None,
             current_fact: None,
@@ -464,6 +512,7 @@ pub(crate) fn parse_div_fragment_with_lexical_text(
             sink: &mut builder,
             facts: &mut facts,
             collect_facts: false,
+            observer: None,
             input: input.as_bytes(),
             current_tag: None,
             current_fact: None,
@@ -499,6 +548,7 @@ pub fn validate_html_fragment_boundary(input: &str) -> Result<(), &'static str> 
             sink: &mut builder,
             facts: &mut facts,
             collect_facts: true,
+            observer: None,
             input: input.as_bytes(),
             current_tag: None,
             current_fact: None,

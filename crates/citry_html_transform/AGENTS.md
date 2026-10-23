@@ -14,7 +14,8 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
 ## Where to look
 
 - `src/lib.rs` - re-exports `mark_html`, `transform_html`, the hydration
-  structure and nesting checks, the output scanner, and their types.
+  structure and nesting checks, the output scanner and output checks, and
+  their types.
 - `src/marker.rs` - the root-marking scan.
 - `src/transformer.rs` - the every-element rewrite.
 - `src/hydration_structure.rs` - checks that the browser builds the nodes Vue
@@ -26,6 +27,17 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   page is only parsed in full when the stored answers cannot cover it. The
   module docs list what a stored answer relies on; the random-tree test
   compares it with the full parse.
+- `src/output_policy.rs` - runs the strict-CSP and JavaScript-policy rules
+  over the HTML `serialize()` returns and reports only what they find; the
+  Python validators (`citry/_csp_validation.py`,
+  `citry/_javascript_policy.py`) word and report it. Its character-reference
+  decoding and letter matching copy Python's on purpose, and
+  `packages/py/citry/tests/_output_policy_reference.py` keeps the Python
+  rules that `test_output_policy_differential.py` compares it with.
+- `src/output_scanner.rs` - reads HTML the way the browser's parser does
+  (html5gum with html5ever's tree builder choosing the tokenizer state) and
+  returns each start tag's facts; `scan_output_html_with` hands them to a
+  callback instead of keeping them.
 - `src/static_html.rs` - checks that a finished piece of HTML (a `<c-raw>`
   block, or the HTML the server writes inside a shell) keeps its own
   `<template>` parse where the page puts it, and counts the top-level nodes
