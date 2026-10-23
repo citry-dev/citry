@@ -271,6 +271,9 @@
 
 - Pages that repeat a component many times render up to about 9% faster
   on the server.
+- `serialize()` with `security_csp` or `security_javascript` set is much
+  faster on large pages. On a page with 1,400 table rows, a strict-CSP
+  serialize takes about 100 ms instead of about 560 ms.
 
 ## v0.6.0
 
