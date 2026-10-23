@@ -792,6 +792,40 @@ def test_csp_page_carries_server_html_and_keeps_every_script_nonced() -> None:
     assert (admission.reason, admission.server_html) == ("security-policy", True)
 
 
+@pytest.mark.parametrize("style", ["<style>p{color:red}</style>", '<style media="print">p{color:red}</style>'])
+# The page's own CSP inventory of the raw style is expected here.
+@pytest.mark.filterwarnings("ignore:Citry found 1 strict-CSP:RuntimeWarning")
+def test_csp_body_with_a_raw_style_element(style: str) -> None:
+    engine = Citry(autodiscover=False, security_csp="warn")
+
+    class Page(Component):
+        citry = engine
+        template = """
+<!doctype html>
+<html>
+  <head><title>T</title></head>
+  <body><main>{{ widget }}<p>kept</p></main></body>
+</html>
+"""
+        js = "$component({});"
+
+        def template_data(self, kwargs: object, slots: object) -> dict[str, object]:
+            return {"widget": Markup(style)}
+
+    rendered = Page().render()
+    html = rendered.serialize(csp_nonce="cmVxdWVzdE5vbmNl")
+    if "media" not in style:
+        # The served copy would add a raw <style> the CSP check reports, so
+        # the host stays empty.
+        assert re.search(r'<div id="citry-vue-[^"]+"></div>', html)
+        assert _admission(rendered).server_html is False
+        return
+    # The check of the served copy trusts any tag that has an attribute, so
+    # the host carries the style.
+    assert '<main><style media="print">' in _host_between(html)
+    assert _admission(rendered).server_html is True
+
+
 def test_body_with_a_script_element_keeps_an_empty_host() -> None:
     engine = Citry(autodiscover=False)
 
