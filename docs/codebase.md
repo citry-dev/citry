@@ -1170,7 +1170,7 @@ for a light page and one for a dark page:
 - `errors`, "Catch mistakes early": a screenshot of the same
   `<c-error-benchmark-chart>` the landing page draws from
   `docs_site/data/error_prevention.json`.
-- `speed`, "As fast as Next.js": a screenshot of the same
+- `speed`, "Python at JavaScript speed": a screenshot of the same
   `<c-benchmark-chart>` the landing page draws from
   `docs_site/data/benchmark_time_to_interactive.json`, with the landing
   card's bar colours.
