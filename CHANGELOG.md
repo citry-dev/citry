@@ -241,6 +241,11 @@
   body holds a raw `<style>` element with an attribute, such as
   `<style media="print">`, now keeps its body out of the served page until
   Vue mounts, as it already did for a `<style>` without attributes.
+- With `security_csp` or `security_javascript` set, `serialize()` no
+  longer fails with "Exceeds the limit (4300 digits) for integer string
+  conversion" when an attribute value holds a very long decimal character
+  reference such as `&#0000…0106;`. The check reads it as the character it
+  names, here `j`.
 - A Vue page whose body text contains `</body>`, for example inside a
   comment, now serializes instead of raising `ValueError`; until Vue
   mounts, its body is empty.

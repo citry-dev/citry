@@ -1022,6 +1022,30 @@ class TestCspSerializationModes:
         with pytest.raises(ValueError, match="javascript: URL"):
             Card().render().serialize(deps_strategy="simple")
 
+    @pytest.mark.parametrize(
+        ("reference", "message"),
+        [
+            # Leading zeros do not change the code point, so this is `j`.
+            ("&#" + "0" * 5000 + "106;", "javascript: URL"),
+            # Past U+10FFFF, the reference decodes to U+FFFD.
+            ("&#" + "9" * 5000 + ";", None),
+        ],
+    )
+    def test_csp_decodes_a_decimal_reference_of_any_length(self, reference, message):
+        c = Citry(security_csp="strict")
+
+        class Card(Component):
+            citry = c
+
+        Card.template = f'<a href="{reference}avascript:save()">Save</a>'
+
+        rendered = Card().render()
+        if message is None:
+            rendered.serialize(deps_strategy="simple")
+            return
+        with pytest.raises(ValueError, match=message):
+            rendered.serialize(deps_strategy="simple")
+
     def test_native_vue_entity_expression_is_compiled_out_of_html(self):
         c = Citry()
 

@@ -17,6 +17,9 @@ _JAVASCRIPT_URL_RE = re.compile(
     re.IGNORECASE,
 )
 _URL_ATTRIBUTES = frozenset({"action", "formaction", "href", "src", "xlink:href"})
+# A decimal reference this short converts to an int directly: `&#` plus
+# twelve digits plus `;`.
+_MAX_PLAIN_DECIMAL_REFERENCE = 15
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,7 +308,7 @@ def _decode_html_attribute(source: str) -> str:
     while position < len(source):
         match = _ENTITY_RE.match(source, position)
         raw = match.group(0) if match is not None else source[position]
-        value = html_module.unescape(raw)
+        value = html_module.unescape(_bounded_decimal_reference(raw))
         # An unknown reference such as `&bogus;` stays literal, so step past
         # only its `&` and keep scanning the rest as ordinary text.
         if value == raw and match is not None:
@@ -314,6 +317,21 @@ def _decode_html_attribute(source: str) -> str:
         decoded.append(value)
         position += len(raw)
     return "".join(decoded)
+
+
+def _bounded_decimal_reference(raw: str) -> str:
+    """Shorten a long decimal reference to one that names the same code point, or one past the last."""
+    # Python refuses to turn more than about 4,300 digits into an int, so a
+    # long reference would raise from html.unescape. Leading zeros do not
+    # change the code point, and any value with more than seven digits is
+    # already past U+10FFFF, which decodes to U+FFFD like 1114112 does.
+    if len(raw) <= _MAX_PLAIN_DECIMAL_REFERENCE or not raw.startswith("&#") or raw[2] in "xX":
+        return raw
+    semicolon = ";" if raw.endswith(";") else ""
+    digits = raw[2 : len(raw) - len(semicolon)].lstrip("0") or "0"
+    if len(digits) > 7:
+        digits = "1114112"
+    return f"&#{digits}{semicolon}"
 
 
 def _javascript_url(value: str) -> bool:
