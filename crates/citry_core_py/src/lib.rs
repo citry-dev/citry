@@ -8,6 +8,7 @@
 pub mod html_transform;
 pub mod i18n;
 mod native_render;
+mod panics;
 pub mod safe_eval;
 pub mod template_formatter;
 pub mod template_parser;

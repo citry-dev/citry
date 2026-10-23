@@ -33,7 +33,6 @@
 //! `_DigestPrefix` does.
 
 use std::collections::HashMap;
-use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -42,6 +41,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 use pyo3::{PyTraverseError, PyTypeInfo, intern};
 
+use crate::panics::catch_panic;
 use citry_native_render::{
     Attrs, Const, ExprSpec, Kinds, OpSpec, Plan, PlanSpec, ReadNode, ReadNodeSpec, RunIds,
     SpreadLayout, Value, write_json_str,
@@ -649,19 +649,11 @@ impl RowPlan {
 /// Run `body`, turning a Rust panic into RuntimeError so Python's error
 /// handling (which adds the component path) sees an ordinary exception.
 pub(super) fn without_panics<T>(body: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
-    match catch_unwind(AssertUnwindSafe(body)) {
-        Ok(result) => result,
-        Err(payload) => {
-            let detail = payload
-                .downcast_ref::<&str>()
-                .map(|text| (*text).to_owned())
-                .or_else(|| payload.downcast_ref::<String>().cloned())
-                .unwrap_or_else(|| "unknown panic".to_owned());
-            Err(PyRuntimeError::new_err(format!(
-                "citry native_render failed: {detail}"
-            )))
-        }
-    }
+    catch_panic(body).unwrap_or_else(|detail| {
+        Err(PyRuntimeError::new_err(format!(
+            "citry native_render failed: {detail}"
+        )))
+    })
 }
 
 impl RowPlan {

@@ -5,6 +5,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PyString, PyTuple};
 
+use crate::panics::catch_panic;
+
 use citry_html_transform::{
     ExpectedElementEvent, ExpectedNodeEvent, HtmlTransformerConfig,
     browser_fragment_matches_elements as browser_fragment_matches_elements_rust,
@@ -359,7 +361,11 @@ pub fn check_output_html(
         trusted_tag_starts: &trusted_tag_starts,
         omit_handler_marker,
     };
-    let report = check_output_html_rust(html, &options);
+    // A panic becomes an ordinary ValueError, so the validators report the
+    // page as unreadable (and warn modes still serve it) instead of
+    // `serialize()` aborting with PyO3's BaseException-derived error.
+    let report = catch_panic(|| check_output_html_rust(html, &options))
+        .map_err(|detail| PyValueError::new_err(format!("citry output check failed: {detail}")))?;
     let events = PyList::empty(py);
     for event in report.events {
         let item = match event {

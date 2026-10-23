@@ -45,6 +45,9 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   `analyze_component_source` return the `#[pyclass]` record structs from
   `citry_template_parser::browser` directly, so their fields are defined
   once, in that crate, and `lib.rs` registers each record class.
+- `src/panics.rs` - `catch_panic`, which turns a Rust panic into an
+  error message, so a binding can raise an ordinary Python exception
+  instead of PyO3's `PanicException` (a `BaseException`).
 - `Cargo.toml` - depends on the sibling crates by path; `crate-type =
   ["cdylib"]`.
 

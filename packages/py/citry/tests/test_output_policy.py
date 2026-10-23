@@ -9,6 +9,7 @@ run in Rust (`citry/_output_policy.py`).
 
 from __future__ import annotations
 
+import re
 import warnings
 
 import pytest
@@ -272,3 +273,34 @@ def test_strict_serialize_of_a_large_page_builds_no_python_tag_objects(monkeypat
     check = _output_policy.check_output_html(html, csp=True, marker_prefix="data-t")
     assert check.error is None
     assert all(event[0] == "element" and event[1] in {"script", "style"} for event in check.events)
+
+
+@pytest.mark.parametrize("mode", ["warn", "strict"])
+def test_an_internal_error_in_the_output_check_reports_the_page_as_unreadable(
+    mode: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = Citry(autodiscover=False, security_csp=mode)  # type: ignore[arg-type]
+
+    class Card(Component):
+        citry = engine
+        template = """
+<p>kept</p>
+"""
+
+    def broken(html: str, **options: object) -> object:
+        # What the Rust binding raises when the check panics.
+        msg = "citry output check failed: boom"
+        raise ValueError(msg)
+
+    rendered = Card().render()
+    monkeypatch.setattr(_output_policy, "_check_output_html", broken)
+    message = "the settled HTML could not be parsed for CSP validation (citry output check failed: boom)"
+    if mode == "strict":
+        with pytest.raises(ValueError, match=re.escape(message)):
+            rendered.serialize(deps_strategy="simple", csp_nonce="cmVxdWVzdE5vbmNl")
+        return
+    # A warn mode still serves the page.
+    with pytest.warns(RuntimeWarning, match=re.escape(message)):
+        html = rendered.serialize(deps_strategy="simple", csp_nonce="cmVxdWVzdE5vbmNl")
+    assert "<p" in html
+    assert "kept</p>" in html

@@ -250,6 +250,12 @@
   `<iframe>`, `<object>`, or `<embed>` whose `data:text/html;base64,` URL
   has padding that is not valid base64, such as a stray `=` after a
   complete group, as it already did on Python 3.12 and later.
+- If the check of the finished page itself fails with an internal error,
+  `serialize()` now reports that it could not read the page: with
+  `security_csp="warn"` or `security_javascript="warn"` or `"omit"` it
+  warns and returns the page, and with `"strict"` or `"forbid"` it raises
+  `ValueError`. It used to stop with an error that `except Exception`
+  does not catch.
 - A Vue page whose body text contains `</body>`, for example inside a
   comment, now serializes instead of raising `ValueError`; until Vue
   mounts, its body is empty.
