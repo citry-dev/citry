@@ -365,8 +365,8 @@ _LIST_TEMPLATES = {
         </section>
     """,
     # The inner loop is an attribute value inside single quotes, so its tag
-    # stays on one line. Keying by the whole row dict reproduces today's
-    # RuntimeError, which this case locks.
+    # stays on one line. Card prints the nested template twice, so its rows
+    # render once for each print.
     "nested_template_printed_twice": """
         <section>
           <c-Card c-body='<c-Row c-for="row in rows" #c-key="row" c-row="row" />' />
@@ -1057,8 +1057,8 @@ CASES: dict[str, tuple[str, str]] = {
         "Row a0, Leaf a 0, Row a1, Leaf a 1, Row a2, Leaf a 2, Row a3, Leaf a 3 -> rendered",
     ),
     "nested_template_printed_twice": (
-        "the loop sits in a nested template that Card prints twice (today this ends in an internal RuntimeError)",
-        "Row a0, Row a1, Row a2, Row a3, Row a0 -> RuntimeError",
+        "the loop sits in a nested template that Card prints twice; each print renders the rows again",
+        "Row a0, Row a1, Row a2, Row a3, Row a0, Row a1, Row a2, Row a3 -> rendered",
     ),
     "two_runs_with_sibling": (
         "two loops of Row with a Plain component between them",

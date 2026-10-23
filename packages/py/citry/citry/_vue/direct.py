@@ -148,17 +148,39 @@ class DirectNestedTemplateRender(DirectProjectionRender):
 
 
 class UnboundNestedTemplateRender(CitryRender):
-    """Nested template value awaiting one concrete component insertion."""
+    """
+    A nested template value as the receiving component gets it, before each print binds it.
 
-    __slots__ = ("fill_source", "public_name", "selected", "source", "span")
+    The template was rendered once, where its attribute was evaluated, and
+    the components inside it are still waiting to render. Each place the
+    receiving component prints it renders separately, as each outlet of a
+    slot does: the first print takes the render made at the attribute, and
+    every later print calls ``render_again``, so the components inside
+    render once per print.
+    """
 
-    def __init__(self, selected: CitryRender, *, fill_source: DirectFillSource) -> None:
+    __slots__ = ("fill_source", "printed", "public_name", "render_again", "selected", "source", "span")
+
+    def __init__(
+        self,
+        selected: CitryRender,
+        *,
+        fill_source: DirectFillSource,
+        render_again: Callable[[], CitryRender],
+    ) -> None:
         super().__init__(parts=list(selected.parts), context=selected.context, frame=selected.frame)
         self.fill_source = fill_source
         self.public_name = fill_source.public_name
         self.selected = selected
         self.source = fill_source.source
         self.span = fill_source.span
+        # Renders the template again in the scope its attribute was written
+        # in, for each print after the first.
+        self.render_again = render_again
+        # Whether a print has taken ``selected``. The render queue replaces
+        # the placeholders in its parts as their components render, so a
+        # second print of the same parts would render each component twice.
+        self.printed = False
 
 
 class AuthoredCallAnchor(Protocol):
@@ -370,6 +392,7 @@ def wrap_slot_result(
 def wrap_nested_template(
     selected: CitryRender,
     *,
+    render_again: Callable[[], CitryRender],
     lexical_render_id: str,
     public_name: str,
     source: object,
@@ -381,6 +404,7 @@ def wrap_nested_template(
         return selected
     return UnboundNestedTemplateRender(
         selected,
+        render_again=render_again,
         fill_source=DirectFillSource(
             session=session,
             lexical_render_id=lexical_render_id,
@@ -404,9 +428,17 @@ def bind_nested_template(value: object, context: CitryContext) -> object:
         raise RuntimeError("prepared nested template belongs to a different or closed direct render session")
     if component is None or component.id is None:
         raise TypeError("prepared nested template has no receiving component context")
+    # The first print takes the render made at the attribute, which keeps
+    # the order its components render in when the value is printed once.
+    # Each later print gets a render of its own.
+    if value.printed:
+        selected = value.render_again()
+    else:
+        value.printed = True
+        selected = value.selected
     execution = session.next_execution()
     return DirectNestedTemplateRender(
-        value.selected,
+        selected,
         execution_index=execution,
         fill_source=fill,
         parent_execution=active_execution(),

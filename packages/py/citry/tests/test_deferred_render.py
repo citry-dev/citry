@@ -354,6 +354,43 @@ class TestSerializeGuard:
             rendered.serialize()
 
 
+class TestUnrenderedContentPrintedTwice:
+    def test_slot_result_printed_twice_raises_before_its_components_render(self, render_path):
+        del render_path  # the fixture switches the render path
+        c = Citry()
+        row_renders: list[str] = []
+
+        class Row(Component):
+            citry = c
+            template = "<span>row</span>"
+
+            def template_data(self, kwargs, slots):
+                row_renders.append("Row")
+                return {}
+
+        class Twice(Component):
+            citry = c
+            template = """
+              <div>{{ body }}</div>
+              <aside>{{ body }}</aside>
+            """
+
+            # Calling the slot here renders its markup once, with Row still
+            # waiting to render, and the template prints that one result twice.
+            def template_data(self, kwargs, slots):
+                return {"body": slots["default"]()}
+
+        class Page(Component):
+            citry = c
+            template = "<c-Twice><c-Row /></c-Twice>"
+
+        with pytest.raises(RuntimeError, match=r"Page > Twice:\nThis content is printed in more than one place"):
+            Page().render()
+        # The error comes before Row renders, so its data method never runs
+        # twice for one call.
+        assert row_renders == []
+
+
 class TestNestedRenderedHook:
     def test_string_replace_through_nested_tree(self):
         # on_component_rendered returning a string replaces a *nested* child's

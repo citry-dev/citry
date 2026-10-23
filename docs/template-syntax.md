@@ -443,7 +443,10 @@ Text, expressions, and comments may appear between adjacent root tags.
 
 The nested template renders in the context of the component that wrote the
 attribute. A `<c-slot>` inside it is consequently that writer component's slot,
-and a closed `Slots` declaration must include its static name.
+and a closed `Slots` declaration must include its static name. When the
+receiving component prints the value more than once, each print after the
+first renders the template again in that same context, so its expressions run
+and its components render once for each print, as with a `<c-slot>` used twice.
 
 ## Attribute spreading
 
