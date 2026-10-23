@@ -67,7 +67,6 @@ from difflib import get_close_matches
 from enum import Enum
 from keyword import iskeyword
 from threading import RLock
-from types import MethodType
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
 from unicodedata import normalize
 from weakref import ReferenceType, ref
@@ -91,7 +90,6 @@ from citry.attrs import (
     validate_html_attr_name,
     vue_code_error,
 )
-from citry.citry import Citry
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement, _ElementMorphMetadata, _PreparedCallMetadata
 from citry.citry_render import (
@@ -1433,10 +1431,6 @@ class _ResolvedComponentInputs:
     element_bindings: tuple[ComponentTagClientBinding, ...] = ()
 
 
-# The registry lookup the Rust loop walk may call in place of Python's walk
-# (ForNode._walk_call_run); a loop whose engine overrides it keeps Python's walk.
-_CITRY_GET = Citry.get
-
 # ComponentNode._finish_render's default for "the key is not evaluated yet",
 # distinct from None, which is an evaluated key that opts out.
 _KEY_NOT_EVALUATED = object()
@@ -2634,12 +2628,9 @@ class ForNode(Node):
             if _mapping_value_is_const(variables, name):
                 return "const_input"
         component = cast("Component", context.component)
+        # The registry lookup only returns each row's class, so when Rust
+        # calls it, after every read, does not change what the loop renders.
         get = component.citry.get
-        # A get that is not Citry's own is user code, which Python's walk
-        # calls between each row's inputs and its key and Rust would call
-        # only after every read, so such a loop keeps Python's walk.
-        if type(get) is not MethodType or get.__func__ is not _CITRY_GET:
-            return "custom_get"
         origin = context.template_record.origin if context.template_record is not None else None
         result = walk_plan.walk(variables, get, run_class, origin)
         if type(result) is str:
