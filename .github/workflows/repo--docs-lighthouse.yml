@@ -4,10 +4,11 @@
 # and accessibility regressions that the post-build guards (repo--docs-check)
 # do not look for.
 #
-# Config and thresholds live in .github/lighthouserc.json. SEO and
-# best-practices are hard gates (score must be 1.0). Accessibility gates at
-# 0.95 or above. Performance is a "warn" only, because the score varies from
-# one CI run to the next.
+# Config and thresholds live in .github/lighthouserc.json. SEO is a hard gate
+# (score must be 1.0). Accessibility and best-practices gate at 0.95 or above;
+# best-practices allows 0.95 so a small legibility finding (such as a short
+# note in a smaller font) does not fail every docs PR. Performance is a "warn"
+# only, because the score varies from one CI run to the next.
 #
 # Runs on pull requests that touch the docs and on demand. It is not wired into
 # branch protection: make it a required check only once the thresholds are
