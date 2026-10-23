@@ -12,7 +12,9 @@
 //! raise, so an ordinary tag never becomes a Python object.
 //!
 //! The rules copy the Python checks they replace exactly, including how
-//! they decode character references (Python's `html.unescape`) and how
+//! they decode character references in attribute values (the browser's
+//! attribute-value rule, with Python's `html.unescape` handling numeric
+//! references) and how
 //! they compare letters in `javascript:` (Python's case-insensitive
 //! regular expression). `packages/py/citry/tests/_output_policy_reference.py`
 //! keeps the Python version, and a test compares the two on generated pages.
@@ -972,17 +974,19 @@ fn decode_strict_base64(input: &[u8]) -> Option<Vec<u8>> {
 // Character references in attribute values
 // ---------------------------------------------------------------------------
 
-/// Decode the character references in an attribute value, so the rules see
-/// roughly what the browser sees.
+/// Decode the character references in an attribute value the way the
+/// browser does when it reads the value from an attribute.
 ///
-/// This copies Citry's Python decoder: each reference that matches
-/// `&(#[xX]hex+|#digits+|letter alnum+);?` is decoded by the rules of
-/// Python's `html.unescape`, and a reference it does not know stays
-/// literal. Those rules differ from the browser's in places: a legacy name
-/// without `;` decodes by its longest known prefix (`&ampx` becomes `&x`),
-/// only the first 32 characters of a name are looked up, `&#128;` to
-/// `&#159;` map to Windows-1252, and some control and noncharacter code
-/// points are removed.
+/// Each reference that matches `&(#[xX]hex+|#digits+|letter alnum+);?` is
+/// decoded. A numeric reference decodes as in text, with the changes
+/// Python's `html.unescape` makes: `&#128;` to `&#159;` map to
+/// Windows-1252, surrogates and values past U+10FFFF become U+FFFD, and
+/// some control and noncharacter code points are removed. A named
+/// reference decodes when it ends with `;` and names an entity. A legacy
+/// name without `;` (such as `&copy`) decodes only when the next source
+/// character is not `=` or an ASCII letter or digit; otherwise the browser
+/// keeps it as typed, so `?a=1&copy=2` stays a URL. A reference the browser
+/// does not know stays literal.
 pub fn decode_html_attribute(source: &str) -> Cow<'_, str> {
     let Some(first) = source.find('&') else {
         return Cow::Borrowed(source);
@@ -1002,7 +1006,10 @@ pub fn decode_html_attribute(source: &str) -> Cow<'_, str> {
         }
         if let Some(length) = reference_length(&bytes[position..]) {
             let raw = &source[position..position + length];
-            let value = unescape_reference(raw);
+            // The browser's attribute rule looks at the character right
+            // after the reference to decide a legacy name without `;`.
+            let next = source[position + length..].chars().next();
+            let value = unescape_reference(raw, next);
             // An unknown reference such as `&bogus;` stays literal, so step
             // past only its `&` and keep reading the rest as text.
             if value != raw {
@@ -1047,8 +1054,10 @@ fn reference_length(input: &[u8]) -> Option<usize> {
     Some(body + usize::from(input.get(body) == Some(&b';')))
 }
 
-/// Decode one reference the way Python's `html.unescape` decodes it.
-fn unescape_reference(raw: &str) -> Cow<'_, str> {
+/// Decode one reference, with `next` the source character right after it.
+///
+/// Returns `raw` unchanged to mean "the browser keeps this literal".
+fn unescape_reference(raw: &str, next: Option<char>) -> Cow<'_, str> {
     let body = &raw[1..];
     if let Some(number) = body.strip_prefix('#') {
         let number = number.strip_suffix(';').unwrap_or(number);
@@ -1058,21 +1067,25 @@ fn unescape_reference(raw: &str) -> Cow<'_, str> {
         };
         return Cow::Owned(numeric_reference(code_point));
     }
-    // Python reads at most 32 characters of a name, and `;` belongs to the
-    // reference only when it follows within them.
-    const MAX_NAME: usize = 32;
-    let name_length = body.strip_suffix(';').unwrap_or(body).len();
-    let (looked_up, rest) = if name_length <= MAX_NAME {
-        (body, "")
-    } else {
-        body.split_at(MAX_NAME)
-    };
-    let mut value = match named_reference(looked_up) {
-        Some(value) => value,
-        None => return Cow::Borrowed(raw),
-    };
-    value.push_str(rest);
-    Cow::Owned(value)
+    // A reference that ends with `;` and names an entity decodes in full.
+    if body.ends_with(';') {
+        if let Some(value) = entity(body) {
+            return Cow::Owned(value);
+        }
+    }
+    // A legacy name without `;`. The browser decodes it only when the next
+    // source character does not continue a name or begin an assignment.
+    let name = body.strip_suffix(';').unwrap_or(body);
+    if let Some(value) = entity(name) {
+        if next.is_some_and(|c| c == '=' || c.is_ascii_alphanumeric()) {
+            return Cow::Borrowed(raw);
+        }
+        return Cow::Owned(value);
+    }
+    // The name is not an entity. Any known prefix of it is followed by
+    // another name character, so in an attribute value the browser keeps the
+    // whole reference as typed.
+    Cow::Borrowed(raw)
 }
 
 /// The code point a run of digits names, or `0x110000` for any number past
@@ -1108,21 +1121,6 @@ fn numeric_reference(code_point: u32) -> String {
         _ if code_point & 0xFFFE == 0xFFFE => String::new(),
         _ => char::from_u32(code_point).map_or_else(String::new, String::from),
     }
-}
-
-/// Decode a named reference (without its `&`), falling back to the longest
-/// known prefix as Python does, or return `None` when nothing matches.
-fn named_reference(name: &str) -> Option<String> {
-    if let Some(value) = entity(name) {
-        return Some(value);
-    }
-    // Python tries every prefix from one character shorter down to two.
-    (2..name.len()).rev().find_map(|length| {
-        entity(&name[..length]).map(|mut value| {
-            value.push_str(&name[length..]);
-            value
-        })
-    })
 }
 
 fn entity(name: &str) -> Option<String> {
@@ -1207,20 +1205,33 @@ mod tests {
         })
     }
 
-    // The expected values below are what Citry's Python decoder returns
-    // for the same inputs (`_decode_html_attribute` in
-    // `packages/py/citry/tests/_output_policy_reference.py`).
+    // The expected values are what a browser reads from a quoted attribute
+    // value. `packages/py/citry/tests/_output_policy_reference.py` keeps the
+    // Python copy of this decoder, and the differential test compares them.
     #[test]
-    fn attribute_values_decode_like_python_html_unescape() {
+    fn attribute_values_decode_the_way_a_browser_reads_them() {
         let cases = [
             ("plain", "plain"),
             ("&amp;", "&"),
+            // A legacy name at the end of the value decodes.
             ("&amp", "&"),
-            ("&ampx;", "&x;"),
+            // A legacy name the next character continues stays literal.
+            ("&ampx;", "&ampx;"),
             ("&AMP;x", "&x"),
-            ("&notit;", "\u{ac}it;"),
+            ("&notit;", "&notit;"),
             ("&notin;", "\u{2209}"),
             ("&bogus;", "&bogus;"),
+            // A legacy name followed by `=` or an ASCII letter or digit stays
+            // literal, so a query string is not rewritten.
+            ("?a=1&copy=2", "?a=1&copy=2"),
+            ("&copya", "&copya"),
+            ("&copy9", "&copy9"),
+            // A legacy name followed by any other character decodes.
+            ("&copy.", "\u{a9}."),
+            ("&copy", "\u{a9}"),
+            ("&lta b", "&lta b"),
+            ("&lt;", "<"),
+            ("&lt", "<"),
             ("&#128;", "\u{20ac}"),
             ("&#129;", "\u{81}"),
             ("&#xD800;", "\u{fffd}"),
@@ -1242,7 +1253,7 @@ mod tests {
             ),
             (
                 "&ampxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;",
-                "&xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;",
+                "&ampxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;",
             ),
             ("&#00000000000000000000106;", "j"),
             ("&#x0000006A;", "j"),
@@ -1512,6 +1523,22 @@ mod tests {
         );
     }
 
+    /// Whether the check reports an embedded document in `html`.
+    fn embedded_document_reported(html: &str) -> bool {
+        let report = check(
+            html,
+            PolicyPass::Settled,
+            false,
+            Some(JavascriptMode::Forbid),
+            None,
+            &[],
+            None,
+        );
+        report.events.iter().any(|event| {
+            matches!(event, PolicyEvent::Finding(finding) if finding.rule == Rule::JsEmbeddedDocument)
+        })
+    }
+
     #[test]
     fn embedded_documents_are_read_like_the_browser_would_load_them() {
         let html = concat!(
@@ -1553,6 +1580,41 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn embedded_documents_with_a_script_are_reported() {
+        // A document with no script is not reported.
+        assert!(!embedded_document_reported(
+            "<iframe srcdoc=\"&lt;p&gt;hi&lt;/p&gt;\"></iframe>"
+        ));
+        assert!(!embedded_document_reported(
+            "<iframe src=\"data:text/html,%3Cp%3Ehi%3C/p%3E\"></iframe>"
+        ));
+        // A script in the document is reported, through srcdoc and a data URL.
+        for html in [
+            "<iframe srcdoc=\"&lt;script&gt;run()&lt;/script&gt;\"></iframe>",
+            "<iframe src=\"data:text/html,%3Cscript%3Erun()%3C/script%3E\"></iframe>",
+            "<object data=\"data:text/html;base64,PHNjcmlwdD54PC9zY3JpcHQ+\"></object>",
+            "<embed src=\"data:text/html,%3Cbody onload=x%3E\">",
+        ] {
+            assert!(embedded_document_reported(html), "{html}");
+        }
+    }
+
+    #[test]
+    fn a_legacy_reference_followed_by_a_letter_stays_literal_in_a_document() {
+        // The browser keeps `&lta` as typed, so the document is the text
+        // `&lta` followed by a `<script>` element, and the check must report
+        // it.
+        for html in [
+            "<iframe srcdoc=\"&lta&lt;script&gt;run()&lt;/script&gt;\"></iframe>",
+            "<iframe src=\"data:text/html,&lta%3Cscript%3Erun()%3C/script%3E\"></iframe>",
+            "<object data=\"data:text/html,&lta%3Cscript%3Erun()%3C/script%3E\"></object>",
+            "<embed src=\"data:text/html,&lta%3Cscript%3Erun()%3C/script%3E\">",
+        ] {
+            assert!(embedded_document_reported(html), "{html}");
+        }
     }
 
     #[test]

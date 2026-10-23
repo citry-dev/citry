@@ -1722,3 +1722,79 @@ class TestJavascriptDeliveryPolicy:
             return
         with pytest.raises(ValueError, match="embedded HTML document"):
             rendered.serialize(deps_strategy="ignore")
+
+    # Embedded documents whose script the browser runs, written with
+    # character references the check must decode the way the browser does.
+    _SRCDOC_SCRIPT = "&lta&lt;script&gt;run()&lt;/script&gt;"
+    _DATA_SCRIPT = "data:text/html,&lta%3Cscript%3Erun()%3C/script%3E"
+    _EMBEDDED_WITH_SCRIPT = [
+        f'<iframe srcdoc="{_SRCDOC_SCRIPT}"></iframe>',
+        f'<iframe src="{_DATA_SCRIPT}"></iframe>',
+        f'<object data="{_DATA_SCRIPT}"></object>',
+        f'<embed src="{_DATA_SCRIPT}">',
+        # A plain script is reported.
+        '<iframe srcdoc="&lt;script&gt;run()&lt;/script&gt;"></iframe>',
+    ]
+
+    @pytest.mark.parametrize("markup", _EMBEDDED_WITH_SCRIPT)
+    def test_forbid_rejects_an_embedded_document_whose_script_runs(self, markup):
+        c = Citry(security_javascript="forbid")
+
+        class Card(Component):
+            citry = c
+            template = "{{ body }}"
+
+            def template_data(self, kwargs, slots):
+                return {"body": Markup(markup)}  # noqa: S704 - the test writes fixed markup
+
+        with pytest.raises(ValueError, match="embedded HTML document"):
+            Card().render().serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize("markup", _EMBEDDED_WITH_SCRIPT)
+    def test_warn_reports_an_embedded_document_whose_script_runs(self, markup):
+        c = Citry(security_javascript="warn")
+
+        class Card(Component):
+            citry = c
+            template = "{{ body }}"
+
+            def template_data(self, kwargs, slots):
+                return {"body": Markup(markup)}  # noqa: S704 - the test writes fixed markup
+
+        with pytest.warns(RuntimeWarning, match="embedded HTML document"):
+            Card().render().serialize(deps_strategy="ignore")
+
+    def test_forbid_still_passes_an_inert_embedded_document(self):
+        c = Citry(security_javascript="forbid")
+
+        class Card(Component):
+            citry = c
+            template = "{{ body }}"
+
+            def template_data(self, kwargs, slots):
+                return {"body": Markup('<iframe srcdoc="&lt;p&gt;hi&lt;/p&gt;"></iframe>')}
+
+        # A well-formed document with no executable content is allowed.
+        Card().render().serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            # A legacy entity an `=` or an alphanumeric follows stays literal,
+            # so the check reads these as the plain URLs they are.
+            "/search?a=1&copy=2",
+            "/path?x=1&notin=y",
+        ],
+    )
+    def test_a_query_string_with_a_legacy_entity_name_passes_forbid(self, value):
+        c = Citry(security_javascript="forbid")
+
+        class Card(Component):
+            citry = c
+            template = "{{ body }}"
+
+            def template_data(self, kwargs, slots):
+                return {"body": Markup(f'<a href="{value}">x</a>')}  # noqa: S704 - fixed markup
+
+        # No finding, so forbid serializes without raising.
+        Card().render().serialize(deps_strategy="ignore")

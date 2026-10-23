@@ -151,8 +151,8 @@ def _deep_document(rng: random.Random) -> str:
 
 
 def _escape(text: str, rng: random.Random | None = None) -> str:
-    # A legacy reference without `;`, such as `&lt` or `&ltscript`, still
-    # decodes, by its longest known prefix.
+    # Write `<` in several forms, including a legacy reference without `;`
+    # (`&lt`), so the generator exercises how the decoder reads each one.
     less_than = "&lt;" if rng is None else rng.choice(["&lt;", "&lt;", "&lt", "&LT", "&#60", "&#x3c;"])
     return text.replace("&", "&amp;").replace('"', "&quot;").replace("<", less_than)
 

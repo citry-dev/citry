@@ -24,6 +24,7 @@ import re
 import traceback
 from base64 import b64decode
 from binascii import Error as BinasciiError
+from html.entities import html5 as _html5_entities
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote_to_bytes
 
@@ -591,21 +592,50 @@ def _node_html(html: str, node: Any) -> str:
 
 
 def _decode_html_attribute(source: str) -> str:
-    """Decode HTML character references in an attribute value so the checks see roughly what the browser sees."""
+    """Decode HTML character references in an attribute value the way a browser reads a quoted value."""
     decoded: list[str] = []
     position = 0
     while position < len(source):
         match = _ENTITY_RE.match(source, position)
-        raw = match.group(0) if match is not None else source[position]
-        value = html_module.unescape(_bounded_decimal_reference(raw))
-        # An unknown reference such as `&bogus;` stays literal, so step past
-        # only its `&` and keep scanning the rest as ordinary text.
-        if value == raw and match is not None:
-            raw = source[position]
-            value = raw
+        if match is None:
+            decoded.append(source[position])
+            position += 1
+            continue
+        raw = match.group(0)
+        # The browser's attribute rule looks at the character after the
+        # reference to decide a legacy name without ";".
+        following = source[match.end()] if match.end() < len(source) else ""
+        value = _decode_reference(raw, following)
+        if value is None:
+            # Keep the reference as typed; step past only its "&" and read
+            # the rest as ordinary text.
+            decoded.append("&")
+            position += 1
+            continue
         decoded.append(value)
         position += len(raw)
     return "".join(decoded)
+
+
+def _decode_reference(raw: str, following: str) -> str | None:
+    """Decode one reference, or return None when the browser keeps it as typed."""
+    body = raw[1:]
+    if body.startswith("#"):
+        return html_module.unescape(_bounded_decimal_reference(raw))
+    # A reference that ends with ";" and names an entity decodes in full.
+    if body.endswith(";") and body in _html5_entities:
+        return _html5_entities[body]
+    # A legacy name without ";" decodes only when the next source character
+    # is not "=" or an ASCII letter or digit, so "?a=1&copy=2" stays a URL.
+    name = body.removesuffix(";")
+    if name in _html5_entities:
+        if following == "=" or (following.isascii() and following.isalnum()):
+            return None
+        return _html5_entities[name]
+    # The name is not an entity. Any known prefix of it is followed by
+    # another name character, so in an attribute value the browser keeps
+    # the whole reference as typed.
+    return None
 
 
 def _bounded_decimal_reference(raw: str) -> str:
