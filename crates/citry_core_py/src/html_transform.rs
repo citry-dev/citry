@@ -1,7 +1,11 @@
 /// Python interface for the citry_html_transform crate.
+use std::collections::HashSet;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString, PyTuple};
+use pyo3::types::{PyDict, PyFrozenSet, PyList, PyString, PyTuple};
+
+use crate::panics::catch_panic;
 
 use citry_html_transform::{
     ExpectedElementEvent, ExpectedNodeEvent, HtmlTransformerConfig,
@@ -10,6 +14,12 @@ use citry_html_transform::{
     mark_html as mark_html_rust, scan_output_html as scan_output_html_rust,
     static_html_node_count as static_html_node_count_rust, transform_html as transform_html_rust,
     validate_html_fragment_boundary as validate_html_fragment_boundary_rust,
+};
+use citry_html_transform::{
+    JAVASCRIPT_MIME_TYPES, JavascriptMode, OutputPolicyOptions, PolicyEvent, PolicyPass,
+    check_output_html as check_output_html_rust, is_activation_attribute, is_javascript_url,
+    is_native_event_attribute, is_url_attribute,
+    script_type_is_executable as script_type_is_executable_rust,
 };
 
 #[pyfunction]
@@ -298,4 +308,152 @@ pub fn transform_html(
         }
         Err(e) => Err(PyValueError::new_err(e.to_string())),
     }
+}
+
+/// The `security_javascript` mode named by `value`, or `ValueError`.
+fn javascript_mode(value: Option<&str>) -> PyResult<Option<JavascriptMode>> {
+    match value {
+        None => Ok(None),
+        Some("warn") => Ok(Some(JavascriptMode::Warn)),
+        Some("omit") => Ok(Some(JavascriptMode::Omit)),
+        Some("forbid") => Ok(Some(JavascriptMode::Forbid)),
+        Some(other) => Err(PyValueError::new_err(format!(
+            "unknown security_javascript mode {other:?}"
+        ))),
+    }
+}
+
+/// Run the strict-CSP and JavaScript-policy rules over finished HTML and
+/// return what they found, for `citry/_output_policy.py`.
+///
+/// Returns `(events, cleaned_html)`. Each event is a tuple, in the order
+/// the start tags appear:
+///
+/// - `("element", tag, token_start, name_start, name_end, element_end,
+///   trusted, executable, has_manager_attribute, cids)` for every `script`
+///   or `style` element a selected rule looks at;
+/// - `(rule, tag, attribute, start, end, token_start, cids)` for each
+///   attribute or element a rule reports.
+///
+/// `cleaned_html` is the page with every omit marker removed, or `None`
+/// when there was none. Offsets are UTF-8 byte offsets.
+///
+/// Raises `ValueError` for an unknown `javascript` mode, and
+/// `ValueError("citry output check failed: ...")` if the check panics.
+/// A string with a lone surrogate raises `UnicodeEncodeError`.
+#[pyfunction(name = "_check_output_html")]
+#[pyo3(signature = (html, *, pre_extension, csp, javascript, marker_prefix, trusted_tag_starts, omit_handler_marker))]
+pub fn check_output_html(
+    py: Python<'_>,
+    html: &str,
+    pre_extension: bool,
+    csp: bool,
+    javascript: Option<&str>,
+    marker_prefix: Option<&str>,
+    trusted_tag_starts: HashSet<usize>,
+    omit_handler_marker: Option<&str>,
+) -> PyResult<(Py<PyList>, Option<String>)> {
+    let options = OutputPolicyOptions {
+        pass: if pre_extension {
+            PolicyPass::PreExtension
+        } else {
+            PolicyPass::Settled
+        },
+        csp,
+        javascript: javascript_mode(javascript)?,
+        marker_prefix,
+        trusted_tag_starts: &trusted_tag_starts,
+        omit_handler_marker,
+    };
+    // A panic becomes an ordinary ValueError, so the validators report the
+    // page as unreadable (and warn modes still serve it) instead of
+    // `serialize()` aborting with PyO3's BaseException-derived error.
+    let report = catch_panic(|| check_output_html_rust(html, &options))
+        .map_err(|detail| PyValueError::new_err(format!("citry output check failed: {detail}")))?;
+    let events = PyList::empty(py);
+    for event in report.events {
+        let item = match event {
+            PolicyEvent::RawElement(element) => (
+                "element",
+                element.tag,
+                element.token_start,
+                element.name_start,
+                element.name_end,
+                element.element_end,
+                element.trusted,
+                element.executable,
+                element.has_manager_attribute,
+                PyTuple::new(py, element.cids)?,
+            )
+                .into_pyobject(py)?,
+            PolicyEvent::Finding(finding) => (
+                finding.rule.code(),
+                finding.tag,
+                finding.attribute,
+                finding.start,
+                finding.end,
+                finding.token_start,
+                PyTuple::new(py, finding.cids)?,
+            )
+                .into_pyobject(py)?,
+        };
+        events.append(item)?;
+    }
+    Ok((events.unbind(), report.cleaned_html))
+}
+
+/// Whether a `<script>` with this `type` value runs in the browser.
+///
+/// A lone surrogate in `value` reads as U+FFFD, which no MIME type
+/// contains, so the answer is the one Python's string checks give.
+#[pyfunction(name = "_script_type_is_executable")]
+pub fn script_type_is_executable(value: &Bound<'_, PyString>) -> bool {
+    script_type_is_executable_rust(&value.to_string_lossy())
+}
+
+// Bits of `_classify_dependency_attribute`'s answer.
+const ACTIVATION_ATTRIBUTE: u8 = 1;
+const NATIVE_EVENT_ATTRIBUTE: u8 = 2;
+const JAVASCRIPT_URL: u8 = 4;
+
+/// Classify one attribute of a structured `Script` or `Style` (a Python
+/// value, not HTML, so it is not entity-decoded).
+///
+/// Returns bit flags: 1 for a Vue activation attribute (`v-`, `@`, `:`),
+/// 2 for a native inline event attribute (`on*`), and 4 for a
+/// `javascript:` URL in a URL attribute. `value` is `None` when the value
+/// is not a string.
+#[pyfunction(name = "_classify_dependency_attribute")]
+#[pyo3(signature = (tag, name, value))]
+pub fn classify_dependency_attribute(
+    tag: &Bound<'_, PyString>,
+    name: &Bound<'_, PyString>,
+    value: Option<&Bound<'_, PyString>>,
+) -> u8 {
+    let tag = tag.to_string_lossy().to_ascii_lowercase();
+    let name = name.to_string_lossy().to_ascii_lowercase();
+    let mut flags = 0;
+    if is_activation_attribute(&name) {
+        flags |= ACTIVATION_ATTRIBUTE;
+    }
+    if is_native_event_attribute(&name) {
+        flags |= NATIVE_EVENT_ATTRIBUTE;
+    }
+    if value.is_some_and(|value| {
+        is_url_attribute(&tag, &name) && is_javascript_url(&value.to_string_lossy())
+    }) {
+        flags |= JAVASCRIPT_URL;
+    }
+    flags
+}
+
+/// Whether a URL starts with `javascript:`, read without entity decoding.
+#[pyfunction(name = "_is_javascript_url")]
+pub fn is_javascript_url_py(value: &Bound<'_, PyString>) -> bool {
+    is_javascript_url(&value.to_string_lossy())
+}
+
+/// The MIME types that make a `<script>` a classic script.
+pub fn javascript_mime_types(py: Python<'_>) -> PyResult<Bound<'_, PyFrozenSet>> {
+    PyFrozenSet::new(py, JAVASCRIPT_MIME_TYPES)
 }

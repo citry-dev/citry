@@ -245,6 +245,24 @@
   a line inside Citry. A warning from an Events response points at the
   web framework code that called Citry, because your handler has already
   returned.
+- With `security_csp="warn"`, a Vue page that cannot hydrate and whose
+  body holds a raw `<style>` element with an attribute, such as
+  `<style media="print">`, now keeps its body out of the served page until
+  Vue mounts, as it already did for a `<style>` without attributes.
+- With `security_csp` or `security_javascript` set, `serialize()` no
+  longer fails with "Exceeds the limit (4300 digits) for integer string
+  conversion" when an attribute value holds a very long decimal character
+  reference, such as `&#` followed by 5,000 zeros and `106;`. The check
+  reads it as the character it names, here `j`.
+- On Python 3.10 and 3.11, `security_javascript` now reports an
+  `<iframe>`, `<object>`, or `<embed>` whose `data:text/html;base64,` URL
+  has padding that is not valid base64, such as a stray `=` after a
+  complete group, as it already did on Python 3.12 and later.
+- If Citry's `security_csp` or `security_javascript` check of the finished
+  page hits an internal bug, `serialize()` now reports the page as one it
+  could not read, as it already does for a page it cannot parse, so
+  `security_csp="warn"` warns and returns the page. It used to raise an
+  error that `except Exception` does not catch.
 - A Vue page whose body text contains `</body>`, for example inside a
   comment, now serializes instead of raising `ValueError`; until Vue
   mounts, its body is empty.
@@ -283,6 +301,10 @@
 
 - Pages that repeat a component many times render up to about 9% faster
   on the server.
+- `serialize()` with `security_csp` or `security_javascript` set is much
+  faster on large pages. On a page with 1,400 table rows,
+  `serialize(security_csp="strict")` takes about 100 ms instead of about
+  560 ms.
 
 ## v0.6.0
 

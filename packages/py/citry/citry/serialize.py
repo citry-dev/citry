@@ -36,6 +36,7 @@ from html.parser import HTMLParser
 from secrets import token_hex
 from typing import TYPE_CHECKING, get_args
 
+from citry import _output_policy
 from citry._csp_validation import _CspRenderValidator
 from citry._javascript_policy import _JavascriptPolicy
 from citry._page_ids import PageIdCheck
@@ -890,10 +891,20 @@ def _serialize_render_result(
     if id_check is not None:
         id_check.report()
 
+    # Only warn modes remember the page before the hooks; when both
+    # validators do, one read of the page serves them.
+    pre_extension_check = (
+        _output_policy.check_output_html(html, pre_extension=True)
+        if (javascript_policy is not None and javascript_policy.mode == "warn")
+        or (csp_validator is not None and session.security_csp == "warn")
+        else None
+    )
     if javascript_policy is not None:
-        javascript_policy.validate_pre_extension_html(html, component_classes=component_classes)
+        javascript_policy.validate_pre_extension_html(
+            html, component_classes=component_classes, check=pre_extension_check
+        )
     if csp_validator is not None:
-        csp_validator.validate_pre_extension_html(html, component_classes=component_classes)
+        csp_validator.validate_pre_extension_html(html, component_classes=component_classes, check=pre_extension_check)
 
     root_component = root.context.component
     root_citry = (
@@ -953,33 +964,51 @@ def _serialize_render_result(
     # install the producing extension.
     for placeholder_html in placeholder_map.values():
         html = html.replace(placeholder_html, "")
+    script_security = session._script_security
+    marker_prefix = script_security.marker_prefix if script_security is not None else ""
+    trusted_tag_starts: frozenset[int] = frozenset()
+    # Both validators check the same final page, so one read of it serves
+    # them. The CSP check reads the page again only when the JavaScript
+    # policy removed omit markers from it.
+    settled_check = None
+    if javascript_policy is not None or csp_validator is not None:
+        if script_security is not None:
+            trusted_tag_starts = script_security.trusted_tag_starts(html)
+        settled_check = _output_policy.check_output_html(
+            html,
+            csp=csp_validator is not None,
+            javascript=javascript_policy.mode if javascript_policy is not None else None,
+            marker_prefix=marker_prefix,
+            trusted_tag_starts=trusted_tag_starts,
+            omit_handler_marker=omit_handler_marker if javascript_policy is not None else None,
+        )
     if javascript_policy is not None:
         html = javascript_policy.validate_settled_html(
             html,
-            marker_prefix=session._script_security.marker_prefix if session._script_security is not None else "",
-            trusted_tag_starts=(
-                session._script_security.trusted_tag_starts(html)
-                if session._script_security is not None
-                else frozenset()
-            ),
+            marker_prefix=marker_prefix,
+            trusted_tag_starts=trusted_tag_starts,
             component_classes=component_classes,
             omit_handler_marker=omit_handler_marker,
+            check=settled_check,
         )
         javascript_policy.report()
-    if session._script_security is not None:
-        session._script_security.require_strict_nonce(deps_strategy=deps_strategy)
+    if script_security is not None:
+        script_security.require_strict_nonce(deps_strategy=deps_strategy)
     if csp_validator is not None:
-        if session._script_security is not None:
-            csp_validator.add_dependency_findings(session._script_security.csp_findings)
+        if script_security is not None:
+            csp_validator.add_dependency_findings(script_security.csp_findings)
+        if settled_check is None or settled_check.html is not html:
+            # The omit markers are gone, which moves every tag after them.
+            settled_check = None
+            trusted_tag_starts = (
+                script_security.trusted_tag_starts(html) if script_security is not None else frozenset()
+            )
         csp_validator.validate_settled_html(
             html,
-            marker_prefix=session._script_security.marker_prefix if session._script_security is not None else "",
-            trusted_tag_starts=(
-                session._script_security.trusted_tag_starts(html)
-                if session._script_security is not None
-                else frozenset()
-            ),
+            marker_prefix=marker_prefix,
+            trusted_tag_starts=trusted_tag_starts,
             component_classes=component_classes,
+            check=settled_check,
         )
         csp_validator.report()
     if session._script_security is not None:

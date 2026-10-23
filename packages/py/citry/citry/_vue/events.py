@@ -12,6 +12,7 @@ from threading import Lock
 from typing import TYPE_CHECKING, TypedDict, cast
 from weakref import WeakKeyDictionary, ref
 
+from citry import _output_policy
 from citry._browser_expressions import _nested_template
 from citry._markup_lint import find_invalid_model_targets
 from citry._vue import native_render as _native_render
@@ -712,15 +713,24 @@ class DirectVueEventsProducer:
                 raise AssertionError("prepared opaque HTML record changed type")
             opaque_html = cast("list[str]", opaque_html_values)
             component_classes: dict[str, str] = {}
+            # Only warn modes look at a block before the hooks run; when both
+            # validators do, one read of each block serves them.
+            pre_extension_checks: list[_output_policy.OutputCheck | None] = (
+                [_output_policy.check_output_html(html, pre_extension=True) for html in opaque_html]
+                if citry.settings.security_javascript == "warn" or citry.settings.security_csp == "warn"
+                else [None] * len(opaque_html)
+            )
             if citry.settings.security_javascript != "allow":
                 pre_extension_policy = _JavascriptPolicy(citry.settings.security_javascript)
-                for html in opaque_html:
-                    pre_extension_policy.validate_pre_extension_html(html, component_classes=component_classes)
+                for html, check in zip(opaque_html, pre_extension_checks, strict=True):
+                    pre_extension_policy.validate_pre_extension_html(
+                        html, component_classes=component_classes, check=check
+                    )
                 pre_extension_policy.report()
             if citry.settings.security_csp != "off":
                 csp = _CspRenderValidator(citry.settings.security_csp)
-                for html in opaque_html:
-                    csp.validate_pre_extension_html(html, component_classes=component_classes)
+                for html, check in zip(opaque_html, pre_extension_checks, strict=True):
+                    csp.validate_pre_extension_html(html, component_classes=component_classes, check=check)
                 csp.report()
         view = assembly.view
         occurrence_for_render = dict(assembly.render_to_occurrence)
@@ -832,12 +842,20 @@ class DirectVueEventsProducer:
                     for type_key in {item.type_key for item in view.definitions}
                 }
                 for html in opaque_records:
+                    # One read of each block serves both validators.
+                    check = _output_policy.check_output_html(
+                        html,
+                        csp=csp_validator is not None,
+                        javascript=javascript_validator.mode if javascript_validator is not None else None,
+                        marker_prefix="data-cid-",
+                    )
                     if javascript_validator is not None:
                         javascript_validator.validate_settled_html(
                             html,
                             marker_prefix="data-cid-",
                             trusted_tag_starts=frozenset(),
                             component_classes=component_classes,
+                            check=check,
                         )
                     if csp_validator is not None:
                         csp_validator.validate_settled_html(
@@ -845,6 +863,7 @@ class DirectVueEventsProducer:
                             marker_prefix="data-cid-",
                             trusted_tag_starts=frozenset(),
                             component_classes=component_classes,
+                            check=check,
                         )
             if supplied_policy is None and javascript_validator is not None:
                 javascript_validator.report()

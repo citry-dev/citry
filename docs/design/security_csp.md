@@ -391,6 +391,24 @@ It also remembers raw active tags before dependency insertion, so a later
 identical structured tag cannot authenticate authored raw markup; this can
 conservatively warn even when a later hook removes that original raw tag.
 
+Rust reads the final HTML and applies these rules
+(`crates/citry_html_transform/src/output_policy.rs`). It returns only what a
+rule reports, plus every `<script>` and `<style>` element, because warning
+mode compares those with the ones it remembered. The validators in
+`citry/_csp_validation.py` and `citry/_javascript_policy.py` write each
+message and decide whether to warn or raise; `citry/_output_policy.py`
+makes the Rust call. When a `security_javascript` policy also checks the
+page, one Rust call serves both checks, unless the policy removed omit
+markers from the page: removing them moves the tags after them, so the CSP
+check reads the cleaned page again.
+
+If Rust cannot read the page (a lone surrogate in the string, or a panic,
+which the binding turns into `ValueError`), each validator reports the page
+as unparseable: warning mode warns and returns the HTML, and strict mode
+raises. In `security_javascript="omit"` mode, a page that still holds
+Citry's omit marker raises `ValueError` instead, because the marker could
+not be removed.
+
 ### 6.2 Fragments
 
 A nonce belongs to the loaded document's policy. A later fragment response

@@ -13,7 +13,12 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   its functions / classes. This is the registration point for everything Python
   can import. It also sets `BUILD_PROFILE` (`"release"` or `"debug"`), which the
   benchmark runners read to refuse an unoptimized build.
-- `src/html_transform.rs` - wraps `citry_html_transform`.
+- `src/html_transform.rs` - wraps `citry_html_transform`, including the
+  private output checks: `_check_output_html`, plus
+  `_script_type_is_executable`, `_classify_dependency_attribute`,
+  `_is_javascript_url` and `_JAVASCRIPT_MIME_TYPES`, which `citry` also uses
+  on structured `Script` and `Style` values. Only the `citry` package calls
+  them.
 - `src/i18n.rs` - exposes ICU4X locale canonicalization and direction lookup,
   and wraps the language-neutral `citry_i18n` catalog runtime.
 - `src/safe_eval.rs` - wraps `python_safe_eval`.
@@ -42,6 +47,9 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   `analyze_component_source` return the `#[pyclass]` record structs from
   `citry_template_parser::browser` directly, so their fields are defined
   once, in that crate, and `lib.rs` registers each record class.
+- `src/panics.rs` - `catch_panic`, which turns a Rust panic into an
+  error message, so a binding can raise an ordinary Python exception
+  instead of PyO3's `PanicException` (a `BaseException`).
 - `Cargo.toml` - depends on the sibling crates by path; `crate-type =
   ["cdylib"]`.
 

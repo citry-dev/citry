@@ -4,6 +4,11 @@
 import pytest
 
 from citry_core.html_transform import (
+    _JAVASCRIPT_MIME_TYPES,
+    _check_output_html,
+    _classify_dependency_attribute,
+    _is_javascript_url,
+    _script_type_is_executable,
     browser_fragment_matches_nodes,
     mark_html,
     transform_html,
@@ -239,3 +244,41 @@ def test_mark_html_no_attributes_no_placeholders():
     segments, placeholders = mark_html("hello", [], "c-render-id")
     assert segments == ["hello"]
     assert placeholders == []
+
+
+def test_check_output_html_returns_only_what_the_rules_report() -> None:
+    events, cleaned = _check_output_html(
+        '<p data-cid-a1 onclick="go()">x</p><script type="module">run()</script><b data-m>y</b>',
+        pre_extension=False,
+        csp=True,
+        javascript="omit",
+        marker_prefix=None,
+        trusted_tag_starts=frozenset(),
+        omit_handler_marker="data-m",
+    )
+    assert events == [
+        ("csp-native-event", "p", "onclick", 15, 22, 0, ("a1",)),
+        ("js-native-handler", "p", "onclick", 15, 22, 0, ("a1",)),
+        ("element", "script", 35, 36, 42, 71, False, True, False, ()),
+    ]
+    assert cleaned == '<p data-cid-a1 onclick="go()">x</p><script type="module">run()</script><b>y</b>'
+    with pytest.raises(ValueError, match="unknown security_javascript mode"):
+        _check_output_html(
+            "",
+            pre_extension=False,
+            csp=False,
+            javascript="allow",  # type: ignore[arg-type]
+            marker_prefix=None,
+            trusted_tag_starts=frozenset(),
+            omit_handler_marker=None,
+        )
+
+
+def test_the_shared_output_predicates() -> None:
+    assert _script_type_is_executable(" Text/JavaScript ;x")
+    assert not _script_type_is_executable("module;x")
+    assert _classify_dependency_attribute("script", "@load", None) == 1
+    assert _classify_dependency_attribute("link", "ONLOAD", "x") == 2
+    assert _classify_dependency_attribute("link", "href", " java\tscript:x") == 4
+    assert _is_javascript_url("\x00JAVA\u017fCRIPT:x")
+    assert "text/javascript" in _JAVASCRIPT_MIME_TYPES

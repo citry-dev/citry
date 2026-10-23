@@ -242,6 +242,48 @@ class html_transform:
     @staticmethod
     def scan_output_html(html: str) -> list[dict[str, object]]: ...
     @staticmethod
+    def _check_output_html(
+        html: str,
+        *,
+        pre_extension: bool,
+        csp: bool,
+        javascript: Literal["warn", "omit", "forbid"] | None,
+        marker_prefix: str | None,
+        trusted_tag_starts: frozenset[int],
+        omit_handler_marker: str | None,
+    ) -> tuple[list[tuple[Any, ...]], str | None]:
+        """
+        Run the strict-CSP and JavaScript-policy rules over finished HTML.
+
+        Private to `citry`. Returns `(events, cleaned_html)`. Each event is a
+        tuple in start-tag order: `("element", tag, token_start, name_start,
+        name_end, element_end, trusted, executable, has_manager_attribute,
+        cids)` for a `script` or `style` element a selected rule looks at, or
+        `(rule, tag, attribute, start, end, token_start, cids)` for one
+        attribute or element a rule reports. `cleaned_html` is the page with
+        every omit marker removed, or `None` when there was none. Offsets are
+        UTF-8 byte offsets.
+
+        Raises `ValueError` for an unknown `javascript` mode, and when the
+        check fails inside Rust (the message starts with
+        `citry output check failed:`).
+        """
+    @staticmethod
+    def _script_type_is_executable(value: str) -> bool:
+        """Whether a `<script>` with this `type` value runs in the browser. Private to `citry`."""
+    @staticmethod
+    def _classify_dependency_attribute(tag: str, name: str, value: str | None) -> int:
+        """
+        Classify one attribute of a structured `Script` or `Style`. Private to `citry`.
+
+        Returns bit flags: 1 for a Vue activation attribute, 2 for a native
+        inline event attribute, 4 for a `javascript:` URL in a URL attribute.
+        """
+    @staticmethod
+    def _is_javascript_url(value: str) -> bool:
+        """Whether a URL starts with `javascript:`, read without entity decoding. Private to `citry`."""
+    _JAVASCRIPT_MIME_TYPES: frozenset[str]
+    @staticmethod
     def mark_html(
         html: str,
         root_attributes: list[str],

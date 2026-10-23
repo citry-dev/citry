@@ -15,6 +15,7 @@ from citry._owned_resource import OWNED_ASSET_CROSSORIGIN
 from citry.attrs import format_attrs
 from citry.citry_render import SerializedScriptSecurity
 from citry.ext.dependencies.types import _JAVASCRIPT_MIME_TYPES, Dependency, Script, Style
+from citry_core.html_transform import _script_type_is_executable
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -611,8 +612,5 @@ def _is_executable(attrs: Mapping[str, object]) -> bool:
         return True
     if type(value) is not str:
         raise ValueError("A Script type attribute must be a string or boolean.")
-    normalized = value.strip(" \t\n\r\f").translate(_ASCII_LOWER)
-    essence = normalized.partition(";")[0].rstrip(" \t\n\r\f")
-    if essence in {"module", "importmap", "speculationrules"}:
-        return ";" not in normalized
-    return essence == "" or essence in _JAVASCRIPT_MIME_TYPES
+    # The rule for a type string is shared with the check of finished HTML.
+    return _script_type_is_executable(value)

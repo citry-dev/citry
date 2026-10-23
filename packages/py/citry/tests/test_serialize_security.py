@@ -1022,6 +1022,30 @@ class TestCspSerializationModes:
         with pytest.raises(ValueError, match="javascript: URL"):
             Card().render().serialize(deps_strategy="simple")
 
+    @pytest.mark.parametrize(
+        ("reference", "message"),
+        [
+            # Leading zeros do not change the code point, so this is `j`.
+            ("&#" + "0" * 5000 + "106;", "javascript: URL"),
+            # Past U+10FFFF, the reference decodes to U+FFFD.
+            ("&#" + "9" * 5000 + ";", None),
+        ],
+    )
+    def test_csp_decodes_a_decimal_reference_of_any_length(self, reference, message):
+        c = Citry(security_csp="strict")
+
+        class Card(Component):
+            citry = c
+
+        Card.template = f'<a href="{reference}avascript:save()">Save</a>'
+
+        rendered = Card().render()
+        if message is None:
+            rendered.serialize(deps_strategy="simple")
+            return
+        with pytest.raises(ValueError, match=message):
+            rendered.serialize(deps_strategy="simple")
+
     def test_native_vue_entity_expression_is_compiled_out_of_html(self):
         c = Citry()
 
@@ -1672,3 +1696,29 @@ class TestJavascriptDeliveryPolicy:
         Card.template = template
         with pytest.raises(ValueError, match="embedded HTML document"):
             Card().render().serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize(
+        ("payload", "reported"),
+        [
+            # `<p>hi</p>` in canonical base64 holds no script.
+            ("PHA+aGk8L3A+", False),
+            # Padding after a complete group, or padding alone, is not valid
+            # base64, so the check cannot read the document and reports it.
+            ("PHA+aGk8L3A+=", True),
+            ("PHA+aGk8L3A+==", True),
+            ("=", True),
+        ],
+    )
+    def test_forbid_reads_base64_documents_the_same_on_every_python(self, payload, reported):
+        c = Citry(security_javascript="forbid")
+
+        class Card(Component):
+            citry = c
+
+        Card.template = f'<iframe src="data:text/html;base64,{payload}"></iframe>'
+        rendered = Card().render()
+        if not reported:
+            rendered.serialize(deps_strategy="ignore")
+            return
+        with pytest.raises(ValueError, match="embedded HTML document"):
+            rendered.serialize(deps_strategy="ignore")
