@@ -43,7 +43,12 @@ from difflib import get_close_matches
 from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
 
-from citry._class_introspection import _component_declaration_generation, _static_class_dict, _static_class_mro
+from citry._class_introspection import (
+    _component_declaration_generation,
+    _static_class_dict,
+    _static_class_mro,
+    _static_class_namespace_copy,
+)
 from citry._input_types import _check_input_types
 from citry._pure import (
     PureBodyPlan,
@@ -249,7 +254,7 @@ def _simple_vue_admission(component_class: type[Component]) -> _SimpleVueAdmissi
 
 def _plain_base_snapshot(base: type) -> tuple[tuple[str, object], ...]:
     """Record a plain base's namespace so a later write to it can be detected."""
-    return tuple(_static_class_dict(base).items())
+    return tuple(_static_class_namespace_copy(base).items())
 
 
 def _plain_bases_unchanged(plain_bases: tuple[tuple[type, tuple[tuple[str, object], ...]], ...]) -> bool:
@@ -346,7 +351,12 @@ def _compute_simple_vue_admission(
     for base in _static_class_mro(component_class):
         if base is ComponentBase:
             break
-        for member, value in _static_class_dict(base).items():
+        # Other threads rendering this class for the first time can store
+        # results on it (the loaded template, resolved assets) while this
+        # loop runs, so the loop walks a copy. The stored results are plain
+        # data, so the admission result is the same whether the copy has
+        # them or not.
+        for member, value in _static_class_namespace_copy(base).items():
             if member in class_metadata:
                 continue
             if member in unsupported_instance_members or member.startswith("on_"):

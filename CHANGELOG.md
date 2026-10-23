@@ -247,6 +247,15 @@
   interactive `"document"` or `"fragment"` serialization of it, now writes
   its scripts and stylesheets like a fresh render instead of leaving them
   out.
+- When several threads render their first pages at the same time, as a
+  server's workers do right after it starts, those renders no longer fail
+  with "dictionary changed size during iteration" on a page with
+  `simple = "vue"` components, or, on any page serialized for Vue, with
+  "early selected-tree compilation does not match the current render
+  preparation".
+- Defining a subclass of a component's `State` class after that component
+  has rendered no longer fails with "'_citry_input_type_checks' is not a
+  recognized State meta attribute".
 
 ### Performance
 
