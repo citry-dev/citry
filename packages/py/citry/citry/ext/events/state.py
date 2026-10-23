@@ -19,7 +19,8 @@ from datetime import timedelta
 from typing import Any, cast
 
 from citry._annotation_introspection import _own_annotations
-from citry._class_introspection import _safe_class_text
+from citry._class_introspection import _safe_class_text, _static_class_namespace_copy
+from citry._input_types import _CHECKS_ATTR
 from citry._nested_declarations import (
     _CONST_SCHEMA_DEFAULTS_ATTR,
     _SYNTHESIZED_DECLARATION_ATTR,
@@ -44,8 +45,11 @@ _DEFAULT_MAX_BYTES = 8192
 # underscore name: State may carry private helpers just like it carries the
 # recommended ``render()`` method. Plain values are what must be meta names.
 _DEF_LIKE = (staticmethod, classmethod, property)
+# Names Citry writes on a State class itself: the generated schema's
+# construction metadata, and the input type checks a render stores on it the
+# first time it checks a State value.
 _SYNTHESIZED_STATE_NAMES = frozenset(
-    {_SYNTHESIZED_DECLARATION_ATTR, _SYNTHESIZED_FIELD_OWNERS_ATTR, _CONST_SCHEMA_DEFAULTS_ATTR}
+    {_SYNTHESIZED_DECLARATION_ATTR, _SYNTHESIZED_FIELD_OWNERS_ATTR, _CONST_SCHEMA_DEFAULTS_ATTR, _CHECKS_ATTR}
 )
 
 
@@ -119,11 +123,16 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
     for klass in user_cls.__mro__:
         if klass is object:
             continue
-        for name, value in vars(klass).items():
+        # A render on another thread can be checking a value of a parent's
+        # State and store its input checks on that class while this loop
+        # runs, so the loop walks a copy. The stored checks are skipped by
+        # name below.
+        for name, value in _static_class_namespace_copy(klass).items():
             if _is_dunder(name) or not name.startswith("_"):
                 continue
-            # Citry's generated schema carries private construction metadata;
-            # only author-written underscore values belong to the State meta.
+            # Citry's generated schema carries private construction metadata,
+            # and a render stores its input checks on the class; only
+            # author-written underscore values belong to the State meta.
             if name in _SYNTHESIZED_STATE_NAMES:
                 continue
             if inspect.isfunction(value) or isinstance(value, _DEF_LIKE):

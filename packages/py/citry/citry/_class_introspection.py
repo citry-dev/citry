@@ -48,6 +48,27 @@ def _static_class_dict(cls: type) -> Mapping[str, object]:
     return {}
 
 
+def _static_class_namespace_copy(cls: type) -> dict[str, object]:
+    """
+    Return a copy of a class namespace without invoking its metaclass.
+
+    Citry stores computed results on component and State classes the first
+    time they are needed (the loaded template, resolved assets, the record of
+    whether a ``simple='vue'`` class can render without an instance), and any
+    render thread can store one at any moment. Python raises
+    ``RuntimeError`` when a dict gains or loses a key while a loop is walking
+    it, so a caller that loops over the members of such a class loops over
+    this copy rather than over ``_static_class_dict``.
+    """
+    value = _static_class_attribute(cls, "__dict__")
+    if type(value) is MappingProxyType:
+        # The proxy forwards copy() to the class's own dict, whose copy() runs
+        # in C without stopping partway, so another thread cannot change the
+        # dict mid-copy, with or without the GIL.
+        return value.copy()
+    return {}
+
+
 def _static_class_mro(cls: type) -> tuple[type, ...]:
     """Return a class MRO without invoking its metaclass."""
     value = _static_class_attribute(cls, "__mro__")

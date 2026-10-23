@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import threading
 
 import pytest
 
@@ -61,6 +62,32 @@ def test_default_producer_reuses_ordinary_component_metadata_per_preparation(mon
     assert set(tags) == {Root.class_id, Child.class_id}
     assert calls.count(Root.class_id) == 2
     assert calls.count(Child.class_id) == 2
+
+
+def test_default_producer_is_one_object_when_threads_build_it_at_once(monkeypatch) -> None:
+    registry = Citry(autodiscover=False)
+    # Each thread waits inside the producer's construction until the other
+    # one has started building too, as the first renders of a server's
+    # worker threads can.
+    both_building = threading.Barrier(2, timeout=10)
+    build_compile_view = vue_events.native_compile_view
+
+    def wait_then_build(compiler):
+        both_building.wait()
+        return build_compile_view(compiler)
+
+    monkeypatch.setattr(vue_events, "native_compile_view", wait_then_build)
+    producers: list[DirectVueEventsProducer] = []
+    threads = [threading.Thread(target=lambda: producers.append(default_events_producer(registry))) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    # serialize() compiles a page with one producer and prepares it with the
+    # one this function returns later, so both threads must get the same one.
+    assert len(producers) == 2
+    assert producers[0] is producers[1] is default_events_producer(registry)
 
 
 def test_default_producer_rejects_name_change_during_preparation() -> None:

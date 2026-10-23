@@ -549,6 +549,35 @@ class TestStateCapture:
         info = _events_ext(app).resolve(Comp)
         assert info.state_cls(n=4).render() == "n=4"
 
+    def test_state_subclass_defined_after_the_parent_rendered(self):
+        app = _Citry(secret="x" * 32)
+
+        class Parent(Component):
+            citry = app
+            template = """
+              <p>parent</p>
+            """
+
+            class State:
+                parent: str = "p"
+
+            class Events:
+                def go(self, state):
+                    return None
+
+        # The render builds and checks a Parent.State value, and stores the
+        # checks it prepared on that class, which a subclass then inherits.
+        Parent().render()
+
+        class Child(Parent):
+            citry = app
+
+            class State(Parent.State):
+                child: str = "c"
+
+        info = _events_ext(app).resolve(Child)
+        assert info.state_cls().child == "c"
+
 
 class TestStateMeta:
     def test_meta_defaults(self):
