@@ -769,8 +769,11 @@ def _component_tags_for_manifest(
 ) -> dict[str, str]:
     tags = {} if cached_tags is None else cached_tags
     cached_type_keys = frozenset(tags)
+    native_run = _native_render.NativeRun
     for item in manifest["occurrences"]:
-        type_key = item["typeKey"]
+        # A run object (``_NativeRun``) stands for rows of one type, so a
+        # missing tag is asked for once per run rather than once per row.
+        type_key = item.type_key if type(item) is native_run else item["typeKey"]
         if type_key not in cached_type_keys:
             tags[type_key] = producer.component_tag(type_key)
     return tags
@@ -1087,24 +1090,32 @@ def _script_json(value: object) -> str:
     return script_json(value, sort_keys=True)
 
 
-def _manifest_json(manifest: dict[str, Any], native_rows: Mapping[str, object]) -> str:
+def _manifest_json(
+    manifest: dict[str, Any], native_rows: Mapping[str, object], run_definition_ids: dict[str, str] | None = None
+) -> str:
     """
     Serialize the manifest, writing in the prepared data of the rows Rust read.
 
     With no such rows this is ``_script_json(manifest)``. Otherwise one Rust
     call writes the occurrence array: each Rust-read row's item with Rust's
-    prepared-data JSON, every other item through ``_script_json``. The other
-    manifest entries are written by ``_script_json`` around it. With sorted
-    keys and compact separators, ``json.dumps`` writes a dict as its sorted
-    ``"key":value`` texts joined by commas, so the bytes equal
-    ``_script_json(manifest)`` had the rows' data been there.
+    prepared-data JSON, the rows of each run object (``_NativeRun``) from the
+    run, with their compiled definition ids taken from
+    ``run_definition_ids``, and every other item through ``_script_json``.
+    The other manifest entries are written by ``_script_json`` around it. With sorted keys and
+    compact separators, ``json.dumps`` writes a dict as its sorted
+    ``"key":value`` texts joined by commas, and a list as its items' texts
+    joined by commas, so the bytes equal ``_script_json(manifest)`` had each
+    row been its own item with its data there.
     """
-    if not native_rows:
+    if not native_rows and run_definition_ids is None:
         return _script_json(manifest)
     # Rust-read rows exist only when the native module is loaded.
     native = cast("type[_rust.native_render]", _native_render.native)
     occurrences = native._encode_occurrences(
-        manifest["occurrences"], cast("dict[str, _rust.native_render._NativeRow]", dict(native_rows)), _script_json
+        manifest["occurrences"],
+        cast("dict[str, _rust.native_render._NativeRow]", dict(native_rows)),
+        _script_json,
+        run_definition_ids,
     )
     before = _script_json({key: value for key, value in manifest.items() if key < "occurrences"})
     after = _script_json({key: value for key, value in manifest.items() if key > "occurrences"})
@@ -1166,7 +1177,15 @@ def prepare_vue_serialization(
     browser_plugins = {item.name: item.plugin for item in prepared.extensions}
     if any(plugin is None for plugin in browser_plugins.values()):
         raise TypeError("A prepared browser extension has no registered plugin descriptor.")
-    has_events = any("eventContext" in item for item in manifest["occurrences"])
+    # A run object is not a dict, and no Events instance is one of its rows.
+    # ``run_definition_ids`` is set exactly when the manifest holds a run
+    # object, so only such a manifest pays the extra type test per item.
+    native_run = _native_render.NativeRun
+    has_events = (
+        any("eventContext" in item for item in manifest["occurrences"])
+        if prepared.run_definition_ids is None
+        else any(type(item) is not native_run and "eventContext" in item for item in manifest["occurrences"])
+    )
     if has_events and (
         security_javascript != ctx.citry.settings.security_javascript
         or _security_csp != ctx.citry.settings.security_csp
@@ -1181,7 +1200,7 @@ def prepare_vue_serialization(
     tags = _component_tags_for_manifest(producer, manifest, tags)
     # The manifest is serialized once. The hydration renderer reads the same
     # JSON the configuration data block carries, so it sees exactly the browser's data.
-    manifest_json = _manifest_json(manifest, prepared.native_rows)
+    manifest_json = _manifest_json(manifest, prepared.native_rows, prepared.run_definition_ids)
     hydration_html = None
     if (
         hydration_candidate

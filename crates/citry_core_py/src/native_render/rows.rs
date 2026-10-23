@@ -24,7 +24,8 @@
 //! pages that keep their body, Events updates) can run the Python evaluator
 //! over them later.
 //! `_encode_occurrences` writes a manifest's occurrence array, putting each
-//! native row's JSON in place of its prepared data. `_RunDigests` computes
+//! native row's JSON in place of its prepared data, and writes every row of
+//! a `_NativeRun` (level B1, `runs.rs`) from Rust. `_RunDigests` computes
 //! the ids of each row of a repeated component call, as Python's
 //! `_DigestPrefix` does.
 
@@ -39,9 +40,11 @@ use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 use pyo3::{PyTraverseError, PyTypeInfo, intern};
 
 use citry_native_render::{
-    Attrs, Const, DigestPrefix, ExprSpec, Kinds, OpSpec, Plan, PlanSpec, ReadNode, ReadNodeSpec,
+    Attrs, Const, ExprSpec, Kinds, OpSpec, Plan, PlanSpec, ReadNode, ReadNodeSpec, RunIds,
     SpreadLayout, Value, write_json_str,
 };
+
+use super::runs::{NativeRun, write_run};
 
 // ---------------------------------------------------------------------------
 // Why a row goes back to Python.
@@ -641,7 +644,7 @@ impl RowPlan {
 
 /// Run `body`, turning a Rust panic into RuntimeError so Python's error
 /// handling (which adds the component path) sees an ordinary exception.
-fn without_panics<T>(body: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
+pub(super) fn without_panics<T>(body: impl FnOnce() -> PyResult<T>) -> PyResult<T> {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(result) => result,
         Err(payload) => {
@@ -782,7 +785,8 @@ impl RowPlan {
 pub struct NativeRow {
     shared: Arc<Shared>,
     values: Vec<Value>,
-    json: String,
+    // `runs.rs` writes it into each run row's manifest item.
+    pub(super) json: String,
 }
 
 /// Rebuild one copied value as a fresh Python object.
@@ -956,20 +960,26 @@ fn write_native_occurrence(
 /// Write a manifest's `occurrences` list as `script_json(list,
 /// sort_keys=True)` would, with each native row's prepared data spliced in.
 ///
-/// `natives` maps an occurrence id to its `_NativeRow`; every other item is
-/// written by calling `fallback(item)`, which must return that item's JSON.
-/// `json.dumps` of a list is `"[" + ",".join(dumps(item)) + "]"` with
-/// compact separators, so the result is byte-identical.
+/// `natives` maps an occurrence id to its `_NativeRow`; a dict item whose id
+/// it holds is written by Rust. A `_NativeRun` item stands for all its rows,
+/// in order. Rust writes each row with the run's compiled definition id,
+/// which it looks up in `definition_ids` (logical id to compiled id). Every
+/// other item is written by calling `fallback(item)`, which must return that
+/// item's JSON. `json.dumps` of a list is `"[" + ",".join(dumps(item)) + "]"`
+/// with compact separators, so the result is byte-identical.
 ///
 /// **Raises**
 ///
-/// ValueError: If a native row's item does not have the exact shape
-/// assembly gives it, or `fallback` does not return a str.
-#[pyfunction(name = "_encode_occurrences")]
+/// ValueError: If an item is neither a dict nor a `_NativeRun`, a native
+/// row's item does not have the exact shape assembly gives it, a run comes
+/// without `definition_ids` or its definition has no compiled id there or
+/// that id is not a str, or `fallback` does not return a str.
+#[pyfunction(name = "_encode_occurrences", signature = (occurrences, natives, fallback, definition_ids=None))]
 pub fn encode_occurrences(
     occurrences: &Bound<'_, PyList>,
     natives: &Bound<'_, PyDict>,
     fallback: &Bound<'_, PyAny>,
+    definition_ids: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<String> {
     let py = occurrences.py();
     without_panics(|| {
@@ -978,6 +988,12 @@ pub fn encode_occurrences(
         for (index, item) in occurrences.iter().enumerate() {
             if index > 0 {
                 out.push(',');
+            }
+            // A run writes all its rows here, separated by commas, which is
+            // what the list would hold had each row been its own item.
+            if let Ok(run) = item.cast_exact::<NativeRun>() {
+                write_run(&mut out, run.get(), definition_ids)?;
+                continue;
             }
             let dict = item
                 .cast_exact::<PyDict>()
@@ -1023,8 +1039,7 @@ pub fn encode_occurrences(
     module = "citry_core._rust.native_render"
 )]
 pub struct RunDigests {
-    placement: DigestPrefix,
-    child: DigestPrefix,
+    ids: RunIds,
 }
 
 #[pymethods]
@@ -1033,8 +1048,7 @@ impl RunDigests {
     fn new(placement_prefix_json: &str, child_prefix_json: &str) -> PyResult<Self> {
         without_panics(|| {
             Ok(RunDigests {
-                placement: DigestPrefix::new(placement_prefix_json),
-                child: DigestPrefix::new(child_prefix_json),
+                ids: RunIds::new(placement_prefix_json, child_prefix_json),
             })
         })
     }
@@ -1047,11 +1061,7 @@ impl RunDigests {
             let Ok(key) = key.to_str() else {
                 return Ok(None);
             };
-            let placement_digest = self.placement.explicit_key(key);
-            let placement_key = format!("citryPlacement{}", &placement_digest[..24]);
-            let child_digest = self.child.string(&placement_key);
-            let child_id = format!("citryOccurrence{}", &child_digest[..24]);
-            Ok(Some((placement_key, child_id)))
+            Ok(Some(self.ids.member_ids(key)))
         })
     }
 }

@@ -14,6 +14,7 @@ from weakref import WeakKeyDictionary, ref
 
 from citry._browser_expressions import _nested_template
 from citry._markup_lint import find_invalid_model_targets
+from citry._vue import native_render as _native_render
 from citry._vue.capture import render_prepared_direct, render_prepared_marker_replacement
 from citry._vue.compiler import HELPER_CONTRACT, CompiledRender, NativeCompiler, VueCompilerDiagnosticsError
 from citry._vue.direct_capture import Assembly, assemble_typed_render
@@ -42,6 +43,7 @@ if TYPE_CHECKING:
     from citry.ext.events.renderers import _VueMarkerTarget
     from citry.ext.events.results import RenderEncodingContext
     from citry.settings import SecurityCspMode, SecurityJavascriptMode
+    from citry_core import _rust
     from citry_core.template_parser import Template
 
 # The lookup as Citry defines it, taken at import time, so a later replacement
@@ -115,8 +117,9 @@ class _BuiltInPreparationMetadata:
 @dataclass(frozen=True, slots=True)
 class _PreparedResult:
     # The manifest. A row in ``native_rows`` holds only {"calls": {}} here
-    # until ``_manifest_json`` writes Rust's JSON for it, so serialize the
-    # payload with that function, never on its own.
+    # until ``_manifest_json`` writes Rust's JSON for it, and a call run that
+    # one run object recorded is that object (a ``_NativeRun``), not a dict
+    # per row, so serialize the payload with that function, never on its own.
     payload: dict[str, object]
     tags: dict[str, str] | None
     validate: Callable[[], None]
@@ -125,6 +128,10 @@ class _PreparedResult:
     # the manifest encoder writes as that payload occurrence's prepared data.
     # Only the precompile path's assembly produces any.
     native_rows: dict[str, object] = field(default_factory=dict)
+    # Logical -> compiled definition ids, set only when the payload's
+    # occurrence list holds a run object: the manifest encoder writes the
+    # run's rows with the compiled id of the run's definition.
+    run_definition_ids: dict[str, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -778,7 +785,15 @@ class DirectVueEventsProducer:
         )
         payload_occurrences = cast("list[dict[str, object]]", payload["occurrences"])
         opaque_record_values: list[object] = []
+        # A run object (``_NativeRun``, one object standing for every row of a
+        # call run) holds rows Rust read, and Rust reads no row whose
+        # template writes opaque HTML.
+        native_run = _native_render.NativeRun
+        holds_runs = False
         for occurrence in payload_occurrences:
+            if type(occurrence) is native_run:
+                holds_runs = True
+                continue
             prepared_data = cast("dict[str, object]", occurrence["preparedData"])
             opaque_data = cast("dict[str, dict[str, object]]", prepared_data.get("opaqueHtml", {}))
             opaque_record_values.extend(record["html"] for record in opaque_data.values())
@@ -1057,6 +1072,15 @@ class DirectVueEventsProducer:
         }
         occurrences = cast("list[dict[str, object]]", payload["occurrences"])
         for occurrence in occurrences:
+            # The local flag first, so a manifest without runs pays one bool
+            # test per occurrence here.
+            if holds_runs and type(occurrence) is native_run:
+                # The encoder writes each run row's renderId from the run.
+                # No Events instance can be a simple='vue' row, so a match
+                # here would be a Citry bug.
+                if instances and cast("_rust.native_render._NativeRun", occurrence).holds_any(instances):
+                    raise AssertionError("an Events instance matched a row held by a run object")
+                continue
             occurrence_id = cast("str", occurrence["id"])
             render_id = render_for_occurrence[occurrence_id]
             occurrence["renderId"] = render_id
@@ -1108,8 +1132,22 @@ class DirectVueEventsProducer:
             if built_in_metadata is not None
             else None
         )
-        native_rows = {item.id: item._native for item in view.occurrences if item._native is not None}
-        return _PreparedResult(payload, cached_tags, validate_metadata, browser_extensions, native_rows)
+        # The rows a run object holds are written from the run, so only the
+        # other Rust-read rows are looked up by id.
+        native_occurrence = _native_render.NativeOccurrence
+        native_rows = {
+            item.id: item._native
+            for item in view.occurrences
+            if item._native is not None and (not holds_runs or type(item) is not native_occurrence)
+        }
+        return _PreparedResult(
+            payload,
+            cached_tags,
+            validate_metadata,
+            browser_extensions,
+            native_rows,
+            definition_ids if holds_runs else None,
+        )
 
 
 def native_compile_view(

@@ -6,7 +6,11 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
+from . import native_render as _native_render
+
 if TYPE_CHECKING:
+    from citry_core import _rust
+
     from .prepared import PreparedViewMetadata
 
 
@@ -112,7 +116,20 @@ def prepared_manifest(
     # The declared keys depend only on the compiled asset, so each set is built
     # once, at the first occurrence that uses it.
     declared_keys_by_asset: dict[str, set[object]] = {}
+    # The rows of a call run that one run object recorded (``_NativeOccurrence``,
+    # level B1 of docs/design/native_render.md) share one definition and hold
+    # no opaque HTML, since Rust reads no row whose template writes any. Each
+    # such definition is checked once, as the check below would for its first
+    # row, and the manifest then lists each run once.
+    native_occurrence = _native_render.NativeOccurrence
+    checked_run_definitions: set[str] = set()
     for occurrence in view.occurrences:
+        if type(occurrence) is native_occurrence:
+            if occurrence.definition_id not in checked_run_definitions:
+                if assets_by_id[compiled_ids[occurrence.definition_id]].opaque_html_sites:
+                    raise ValueError("prepared opaque HTML values do not match definition declarations")
+                checked_run_definitions.add(occurrence.definition_id)
+            continue
         asset_id = compiled_ids[occurrence.definition_id]
         asset = assets_by_id[asset_id]
         opaque = occurrence.prepared_data.get("opaqueHtml", {})
@@ -160,7 +177,54 @@ def prepared_manifest(
             }
             for item in assets
         ],
-        "occurrences": [
+        "occurrences": (
+            [
+                {
+                    "id": item.id,
+                    "typeKey": item.type_key,
+                    "definitionId": compiled_ids[item.definition_id],
+                    "serverData": item.server_data,
+                    "preparedData": item.prepared_data,
+                    "parentId": item.parent_id,
+                    "placementKey": item.placement_key,
+                }
+                for item in view.occurrences
+            ]
+            if not checked_run_definitions
+            else _occurrence_items_with_runs(view, compiled_ids)
+        ),
+    }
+
+
+def _occurrence_items_with_runs(view: PreparedViewMetadata, compiled_ids: dict[str, str]) -> list[object]:
+    """
+    Return the manifest's occurrence list when run objects recorded some of the view's rows.
+
+    Each run object (``_NativeRun``) stands for all its rows, once, at its
+    first row's place, and the manifest writer (``_manifest_json`` in
+    ``serialization.py``) writes the rows there. Every other occurrence gets
+    its ordinary item.
+    """
+    native_occurrence = _native_render.NativeOccurrence
+    items: list[object] = []
+    last_run: object = None
+    written: set[int] = set()
+    for item in view.occurrences:
+        if type(item) is native_occurrence:
+            run = cast("_rust.native_render._NativeOccurrence", item).run
+            if run is not last_run:
+                # The writer puts a run's rows in one block, so the view must
+                # hold them in one block too; anything else is a Citry bug.
+                if id(run) in written:
+                    raise AssertionError("a run object's rows are not adjacent in the prepared view")
+                written.add(id(run))
+                items.append(run)
+                last_run = run
+            continue
+        last_run = None
+        # The same item as in prepared_manifest; the tests that compare the
+        # native and Python paths byte for byte catch any drift between them.
+        items.append(
             {
                 "id": item.id,
                 "typeKey": item.type_key,
@@ -170,9 +234,8 @@ def prepared_manifest(
                 "parentId": item.parent_id,
                 "placementKey": item.placement_key,
             }
-            for item in view.occurrences
-        ],
-    }
+        )
+    return items
 
 
 def _validate_opaque_html_sites(values: tuple[dict[str, object], ...]) -> None:

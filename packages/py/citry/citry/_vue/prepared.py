@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Protocol, TypeAlias
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from citry_core import _rust
+
 
 @dataclass(frozen=True, slots=True)
 class Html:
@@ -325,8 +327,12 @@ class PreparedViewMetadata(Protocol):
     @property
     def root_id(self) -> str: ...
 
+    # An assembled view on the precompile path also lists the rows a run
+    # object recorded (``_NativeOccurrence``, level B1 of
+    # ``docs/design/native_render.md``), which carry the same read-only
+    # attributes but are not ``PreparedOccurrence`` objects.
     @property
-    def occurrences(self) -> tuple[PreparedOccurrence, ...]: ...
+    def occurrences(self) -> tuple[PreparedOccurrence | _rust.native_render._NativeOccurrence, ...]: ...
 
     @property
     def definitions(self) -> tuple[PreparedDefinitionIdentity, ...]: ...
