@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeAlias
 
 from citry.attrs import format_attrs
 from citry.util.html import Markup
+from citry_core.html_transform import _JAVASCRIPT_MIME_TYPES
 
 if TYPE_CHECKING:
     from citry._owned_resource import _OwnedResource
@@ -70,30 +71,6 @@ class DependencyRecord(NamedTuple):
     """Exact class version that produced the record, retained for delayed serialization."""
 
 
-# JavaScript MIME types that mean "classic script" (subject to IIFE wrapping).
-# See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types#textjavascript
-_JAVASCRIPT_MIME_TYPES = frozenset(
-    {
-        "text/javascript",
-        "application/javascript",
-        "application/ecmascript",
-        "application/x-ecmascript",
-        "application/x-javascript",
-        "text/ecmascript",
-        "text/javascript1.0",
-        "text/javascript1.1",
-        "text/javascript1.2",
-        "text/javascript1.3",
-        "text/javascript1.4",
-        "text/javascript1.5",
-        "text/jscript",
-        "text/livescript",
-        "text/x-ecmascript",
-        "text/x-javascript",
-    }
-)
-
-
 def _script_type_should_wrap(attrs: dict[str, str | bool]) -> bool:
     """
     Whether inline script content may be wrapped in a self-executing function.
@@ -110,6 +87,9 @@ def _script_type_should_wrap(attrs: dict[str, str | bool]) -> bool:
         return True
 
     type_str = str(type_val).strip().lower()
+    # These are the JavaScript MIME types that mean "classic script"; the
+    # check of finished HTML uses the same list.
+    # See https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types#textjavascript
     return type_str == "" or type_str in _JAVASCRIPT_MIME_TYPES
 
 

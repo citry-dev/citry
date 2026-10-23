@@ -2,36 +2,25 @@
 
 from __future__ import annotations
 
-import re
-from base64 import b64decode
-from binascii import Error as BinasciiError
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, cast
-from urllib.parse import unquote_to_bytes
 
+from citry import _output_policy
 from citry._caller_warnings import warn_at_caller
-from citry._csp_validation import (
-    _ASCII_LOWER,
-    _decode_html_attribute,
-    _is_native_event_attribute,
-    _is_url_attribute,
-    _javascript_url,
-    _node_html,
-)
-from citry._output_html import OutputAttr, OutputTemplate, scan_output_html
+from citry._csp_validation import _ASCII_LOWER
 from citry._serialization_security import _is_executable
 from citry.ext.dependencies.types import Dependency, Script, Style
+from citry_core.html_transform import _classify_dependency_attribute, _is_javascript_url
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from citry.settings import SecurityJavascriptMode
 
-_LEADING_URL_SPACE = "".join(chr(codepoint) for codepoint in range(0x21))
-# Whole groups of four, then at most one group that ends in the padding its
-# length needs. Python 3.12 and later accept exactly this with
-# `b64decode(validate=True)`.
-_STRICT_BASE64_RE = re.compile(rb"(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?")
+# The bits of `_classify_dependency_attribute`'s answer.
+_ACTIVATION_ATTRIBUTE = 1
+_NATIVE_EVENT_ATTRIBUTE = 2
+_JAVASCRIPT_URL_ATTRIBUTE = 4
 _DependencyT = TypeVar("_DependencyT", bound="Dependency")
 
 
@@ -65,7 +54,9 @@ class _JavascriptPolicy:
         self._findings: list[_JavascriptFinding] = []
         self._seen: set[tuple[object, ...]] = set()
         self._site_counts: dict[tuple[str, tuple[object, ...]], int] = {}
-        self._pre_extension_raw: dict[str, int] = {}
+        # Each executable script seen before the hooks ran, by its source
+        # bytes, with how many identical copies are still unmatched.
+        self._pre_extension_raw: dict[bytes, int] = {}
 
     @property
     def mode(self) -> SecurityJavascriptMode:
@@ -199,73 +190,84 @@ class _JavascriptPolicy:
         self,
         html: str,
         *,
-        marker_prefix: str,
+        marker_prefix: str | None,
         trusted_tag_starts: frozenset[int],
         component_classes: dict[str, str],
         omit_handler_marker: str | None = None,
+        check: _output_policy.OutputCheck | None = None,
     ) -> str:
-        """Inventory active behavior after every string-level extension hook."""
-        try:
-            template = scan_output_html(html)
-        except Exception as error:
+        """
+        Inventory active behavior after every string-level extension hook.
+
+        Returns ``html`` with every ``omit_handler_marker`` attribute removed.
+        A caller that already checked ``html`` with these options passes that
+        ``check``, so the page is read once.
+        """
+        if check is None:
+            check = _output_policy.check_output_html(
+                html,
+                javascript=self._mode,
+                marker_prefix=marker_prefix,
+                trusted_tag_starts=trusted_tag_starts,
+                omit_handler_marker=omit_handler_marker,
+            )
+        check.require(html, pre_extension=False, csp=False, javascript=self._mode)
+        if check.error is not None:
             if omit_handler_marker is not None and omit_handler_marker.lower() in html.lower():
-                raise ValueError("Citry omission handler metadata remained in unparseable settled HTML") from error
+                msg = "Citry omission handler metadata remained in unparseable settled HTML"
+                raise ValueError(msg) from check.error
             self._add(
                 "unparseable-output",
-                f"settled HTML could not be parsed for JavaScript policy validation ({error})",
+                f"settled HTML could not be parsed for JavaScript policy validation ({check.error})",
                 "settled render output",
             )
             return html
-        marker_spans: list[tuple[int, int]] = []
-        settled_bytes = html.encode()
-        self._walk_template(
-            html,
-            template,
-            marker_prefix,
-            trusted_tag_starts,
-            component_classes,
-            inherited_component=None,
-            inherited_instance=None,
-            inherited_inside_form=False,
-            omit_handler_marker=omit_handler_marker,
-            omit_handler_spans=marker_spans,
-            settled_bytes=settled_bytes,
-        )
+        for event in check.events:
+            if event[0] == "element":
+                if event[1] == "script":
+                    self._replay_settled_script(check, event, component_classes)
+            elif event[0].startswith("js-"):
+                self._replay_finding(event, component_classes)
         if omit_handler_marker is None:
             return html
-        merged_spans: list[tuple[int, int]] = []
-        for start, end in sorted(marker_spans):
-            if merged_spans and start <= merged_spans[-1][1]:
-                previous_start, previous_end = merged_spans[-1]
-                merged_spans[-1] = (previous_start, max(previous_end, end))
-            else:
-                merged_spans.append((start, end))
-        retained: list[bytes] = []
-        cursor = 0
-        for start, end in merged_spans:
-            retained.append(settled_bytes[cursor:start])
-            cursor = end
-        retained.append(settled_bytes[cursor:])
-        cleaned = b"".join(retained).decode()
+        cleaned = html if check.cleaned_html is None else check.cleaned_html
         if omit_handler_marker.lower() in cleaned.lower():
             raise ValueError("Citry omission handler metadata escaped settled HTML cleanup")
         return cleaned
 
-    def validate_pre_extension_html(self, html: str, *, component_classes: dict[str, str]) -> None:
+    def validate_pre_extension_html(
+        self,
+        html: str,
+        *,
+        component_classes: dict[str, str],
+        check: _output_policy.OutputCheck | None = None,
+    ) -> None:
         """Remember warning-mode raw scripts before identical dependencies are inserted."""
         if self._mode != "warn":
             return
-        try:
-            template = scan_output_html(html)
-        except Exception:  # noqa: BLE001 - the settled pass reports malformed output
+        if check is None:
+            check = _output_policy.check_output_html(html, pre_extension=True)
+        check.require(html, pre_extension=True, csp=False, javascript=None)
+        # The settled pass reports malformed output.
+        if check.error is not None:
             return
-        self._walk_pre_extension_raw(
-            html,
-            template,
-            component_classes,
-            inherited_component=None,
-            inherited_instance=None,
-        )
+        for event in check.events:
+            _, tag, token_start, name_start, name_end, element_end, _, executable, _, cids = event
+            if tag != "script" or not executable:
+                continue
+            instance = _output_policy.own_instance(cids, component_classes)
+            component = component_classes.get(instance or "", "settled render output")
+            fingerprint = check.element_bytes(token_start, element_end)
+            self._pre_extension_raw[fingerprint] = self._pre_extension_raw.get(fingerprint, 0) + 1
+            self._add(
+                "raw-script",
+                "a raw executable <script> remains outside Citry's dependency policy",
+                component,
+                range_kind="pre-extension HTML",
+                start=name_start,
+                end=name_end,
+                key=("pre-raw-script", instance, token_start),
+            )
 
     def report(self) -> None:
         """Emit one inventory warning or reject JavaScript-dependent output."""
@@ -282,237 +284,86 @@ class _JavascriptPolicy:
             RuntimeWarning,
         )
 
-    def _walk_template(
+    def _replay_settled_script(
         self,
-        html: str,
-        template: OutputTemplate,
-        marker_prefix: str,
-        trusted_tag_starts: frozenset[int],
+        check: _output_policy.OutputCheck,
+        event: tuple[Any, ...],
         component_classes: dict[str, str],
-        *,
-        inherited_component: str | None,
-        inherited_instance: str | None,
-        inherited_inside_form: bool,
-        omit_handler_marker: str | None = None,
-        omit_handler_spans: list[tuple[int, int]] | None = None,
-        settled_bytes: bytes | None = None,
     ) -> None:
-        for element in template.elements:
-            node = element
-            attrs = tuple(node.start_tag.attrs)
-            tag = node.start_tag.name.content.translate(_ASCII_LOWER)
-            own_instance = next(
-                (
-                    name[len("data-cid-") :]
-                    for attr in attrs
-                    if (name := attr.key.content.translate(_ASCII_LOWER)).startswith("data-cid-")
-                    and name[len("data-cid-") :] in component_classes
-                ),
-                inherited_instance,
+        _, _, token_start, name_start, name_end, element_end, trusted, executable, has_manager, cids = event
+        # An identical script seen before the hooks ran was reported then, so
+        # one remembered copy is used up instead, even for a trusted tag.
+        if self._pre_extension_raw:
+            fingerprint = check.element_bytes(token_start, element_end)
+            remembered = self._pre_extension_raw.get(fingerprint, 0)
+            if remembered:
+                self._pre_extension_raw[fingerprint] = remembered - 1
+                return
+        if trusted or not (executable or has_manager):
+            return
+        instance = _output_policy.own_instance(cids, component_classes)
+        component = component_classes.get(instance or "", "settled render output")
+        if executable:
+            self._add(
+                "raw-script",
+                "a raw executable <script> remains outside Citry's dependency policy",
+                component,
+                start=name_start,
+                end=name_end,
+                key=self._site_key(instance, ("raw-script", token_start)),
             )
-            component = component_classes.get(own_instance or "", inherited_component or "settled render output")
-            trusted = node.start_tag.token.start_index in trusted_tag_starts or any(
-                attr.key.content.translate(_ASCII_LOWER).startswith(marker_prefix) for attr in attrs
+        else:
+            self._add(
+                "raw-manager-manifest",
+                "a raw Citry browser manifest requires the client manager",
+                component,
+                start=name_start,
+                end=name_end,
+                key=self._site_key(instance, ("raw-manifest", token_start)),
             )
-            attr_map = _attribute_map(attrs)
-            has_managed_handler = False
-            if omit_handler_marker is not None:
-                marker = omit_handler_marker.lower()
-                for attr in attrs:
-                    if attr.key.content.lower() != marker:
-                        continue
-                    has_managed_handler = True
-                    start = attr.key.start_index
-                    assert settled_bytes is not None  # noqa: S101 - omission-marker scans always carry source bytes
-                    raw = settled_bytes
-                    while start > node.start_tag.token.start_index and raw[start - 1] in b" \t\r\n\f":
-                        start -= 1
-                    end = attr.key.end_index
-                    if attr.inner_value is not None:
-                        inner = attr.inner_value
-                        end = inner.end_index
-                        if inner.start_index > 0 and raw[inner.start_index - 1] in b"\"'":
-                            quote = raw[inner.start_index - 1]
-                            if end < len(raw) and raw[end] == quote:
-                                end += 1
-                    if end < node.start_tag.token.end_index and raw[end] not in b" \t\r\n\f/>":
-                        # A hook may place another attribute immediately after
-                        # this one. Retain our leading separator so removing
-                        # the marker cannot merge that neighbor into the tag
-                        # name or previous attribute.
-                        start = attr.key.start_index
-                    assert omit_handler_spans is not None  # noqa: S101 - validate_settled_html owns the collected spans
-                    omit_handler_spans.append((start, end))
-            if tag == "script":
-                fingerprint = _node_html(html, node)
-                remembered = self._pre_extension_raw.get(fingerprint, 0)
-                if remembered:
-                    self._pre_extension_raw[fingerprint] = remembered - 1
-                elif not trusted and _raw_script_is_executable(attrs):
-                    self._add(
-                        "raw-script",
-                        "a raw executable <script> remains outside Citry's dependency policy",
-                        component,
-                        start=node.start_tag.name.start_index,
-                        end=node.start_tag.name.end_index,
-                        key=self._site_key(own_instance, ("raw-script", node.start_tag.token.start_index)),
-                    )
-                elif not trusted and any(name.startswith("data-citry") for name in attr_map):
-                    self._add(
-                        "raw-manager-manifest",
-                        "a raw Citry browser manifest requires the client manager",
-                        component,
-                        start=node.start_tag.name.start_index,
-                        end=node.start_tag.name.end_index,
-                        key=self._site_key(own_instance, ("raw-manifest", node.start_tag.token.start_index)),
-                    )
 
-            activation_attrs: list[str] = []
-            for attr in attrs:
-                name = attr.key.content.translate(_ASCII_LOWER)
-                decoded = _decoded_attr(attr)
-                if _is_activation_attribute(name):
-                    activation_attrs.append(name)
-                    if self._mode in {"warn", "forbid"}:
-                        self._add(
-                            "browser-attribute",
-                            f"the browser activation attribute {attr.key.content!r} requires JavaScript",
-                            component,
-                            attribute=attr.key.content,
-                            range_kind="settled HTML",
-                            start=attr.key.start_index,
-                            end=attr.key.end_index,
-                            key=self._site_key(own_instance, ("activation", name, attr.key.start_index)),
-                        )
-                    elif self._mode == "omit" and _is_omit_hazard(name, node, html, attr_map):
-                        self._add(
-                            "static-fallback",
-                            f"{attr.key.content!r} is inert after Citry-managed JavaScript is omitted and may "
-                            "leave an unusable static fallback",
-                            component,
-                            attribute=attr.key.content,
-                            range_kind="settled HTML",
-                            start=attr.key.start_index,
-                            end=attr.key.end_index,
-                            key=self._site_key(own_instance, ("fallback", name, attr.key.start_index)),
-                        )
-                if _is_native_event_attribute(name):
-                    self._add(
-                        "native-handler",
-                        f"the native inline event attribute {attr.key.content!r} remains executable browser code",
-                        component,
-                        attribute=attr.key.content,
-                        range_kind="settled HTML",
-                        start=attr.key.start_index,
-                        end=attr.key.end_index,
-                        key=self._site_key(own_instance, ("native", name, attr.key.start_index)),
-                    )
-                if _is_url_attribute(tag, name) and _javascript_url(decoded):
-                    inner_value = attr.inner_value
-                    start = attr.key.end_index if inner_value is None else inner_value.start_index
-                    self._add(
-                        "javascript-url",
-                        f"a javascript: URL in {attr.key.content!r} remains executable browser code",
-                        component,
-                        attribute=attr.key.content,
-                        range_kind="settled HTML",
-                        start=start,
-                        end=start + len(("" if inner_value is None else inner_value.content).encode()),
-                        key=self._site_key(own_instance, ("javascript-url", tag, name, start)),
-                    )
-                if _embedded_document_requires_javascript(tag, name, decoded):
-                    inner_value = attr.inner_value
-                    start = attr.key.end_index if inner_value is None else inner_value.start_index
-                    self._add(
-                        "embedded-document",
-                        f"{attr.key.content!r} contains an embedded HTML document with executable browser code",
-                        component,
-                        attribute=attr.key.content,
-                        range_kind="settled HTML",
-                        start=start,
-                        end=start + len(("" if inner_value is None else inner_value.content).encode()),
-                        key=self._site_key(own_instance, ("embedded-document", tag, name, start)),
-                    )
-
-            if (
-                self._mode == "omit"
-                and (activation_attrs or has_managed_handler)
-                and _handler_only_control(
-                    tag,
-                    attr_map,
-                    activation_attrs,
-                    has_managed_handler=has_managed_handler,
-                    inside_form=inherited_inside_form,
-                )
-            ):
-                self._add(
-                    "handler-only-control",
-                    "this control has a browser handler but no native navigation or submission fallback",
-                    component,
-                    range_kind="settled HTML",
-                    start=node.start_tag.name.start_index,
-                    end=node.start_tag.name.end_index,
-                    key=self._site_key(own_instance, ("handler-only", tag, node.start_tag.token.start_index)),
-                )
-            body = getattr(node, "body", None)
-            if body is not None:
-                self._walk_template(
-                    html,
-                    body,
-                    marker_prefix,
-                    trusted_tag_starts,
-                    component_classes,
-                    inherited_component=component,
-                    inherited_instance=own_instance,
-                    inherited_inside_form=inherited_inside_form or tag == "form",
-                    omit_handler_marker=omit_handler_marker,
-                    omit_handler_spans=omit_handler_spans,
-                    settled_bytes=settled_bytes,
-                )
-
-    def _walk_pre_extension_raw(
-        self,
-        html: str,
-        template: OutputTemplate,
-        component_classes: dict[str, str],
-        *,
-        inherited_component: str | None,
-        inherited_instance: str | None,
-    ) -> None:
-        for element in template.elements:
-            node = element
-            attrs = tuple(node.start_tag.attrs)
-            own_instance = next(
-                (
-                    name[len("data-cid-") :]
-                    for attr in attrs
-                    if (name := attr.key.content.translate(_ASCII_LOWER)).startswith("data-cid-")
-                    and name[len("data-cid-") :] in component_classes
-                ),
-                inherited_instance,
+    def _replay_finding(self, event: tuple[Any, ...], component_classes: dict[str, str]) -> None:
+        rule, tag, attribute, start, end, token_start, cids = event
+        instance = _output_policy.own_instance(cids, component_classes)
+        component = component_classes.get(instance or "", "settled render output")
+        name = (attribute or "").translate(_ASCII_LOWER)
+        if rule == "js-browser-attribute":
+            finding = "browser-attribute"
+            detail = f"the browser activation attribute {attribute!r} requires JavaScript"
+            signature: tuple[object, ...] = ("activation", name, start)
+        elif rule == "js-static-fallback":
+            finding = "static-fallback"
+            detail = (
+                f"{attribute!r} is inert after Citry-managed JavaScript is omitted and may "
+                "leave an unusable static fallback"
             )
-            component = component_classes.get(own_instance or "", inherited_component or "settled render output")
-            if node.start_tag.name.content.translate(_ASCII_LOWER) == "script" and _raw_script_is_executable(attrs):
-                fingerprint = _node_html(html, node)
-                self._pre_extension_raw[fingerprint] = self._pre_extension_raw.get(fingerprint, 0) + 1
-                self._add(
-                    "raw-script",
-                    "a raw executable <script> remains outside Citry's dependency policy",
-                    component,
-                    range_kind="pre-extension HTML",
-                    start=node.start_tag.name.start_index,
-                    end=node.start_tag.name.end_index,
-                    key=("pre-raw-script", own_instance, node.start_tag.token.start_index),
-                )
-            body = getattr(node, "body", None)
-            if body is not None:
-                self._walk_pre_extension_raw(
-                    html,
-                    body,
-                    component_classes,
-                    inherited_component=component,
-                    inherited_instance=own_instance,
-                )
+            signature = ("fallback", name, start)
+        elif rule == "js-native-handler":
+            finding = "native-handler"
+            detail = f"the native inline event attribute {attribute!r} remains executable browser code"
+            signature = ("native", name, start)
+        elif rule == "js-javascript-url":
+            finding = "javascript-url"
+            detail = f"a javascript: URL in {attribute!r} remains executable browser code"
+            signature = ("javascript-url", tag, name, start)
+        elif rule == "js-embedded-document":
+            finding = "embedded-document"
+            detail = f"{attribute!r} contains an embedded HTML document with executable browser code"
+            signature = ("embedded-document", tag, name, start)
+        else:
+            finding = "handler-only-control"
+            detail = "this control has a browser handler but no native navigation or submission fallback"
+            signature = ("handler-only", tag, token_start)
+        self._add(
+            finding,
+            detail,
+            component,
+            attribute=attribute,
+            range_kind="settled HTML",
+            start=start,
+            end=end,
+            key=self._site_key(instance, signature),
+        )
 
     def _site_key(self, instance: str | None, signature: tuple[object, ...]) -> tuple[object, ...]:
         owner = instance or "settled render output"
@@ -552,30 +403,6 @@ class _JavascriptPolicy:
         )
 
 
-def _attribute_map(attrs: tuple[OutputAttr, ...]) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for attr in attrs:
-        name = attr.key.content.translate(_ASCII_LOWER)
-        result.setdefault(name, _decoded_attr(attr))
-    return result
-
-
-def _decoded_attr(attr: OutputAttr) -> str:
-    inner = attr.inner_value
-    return _decode_html_attribute("" if inner is None else inner.content)
-
-
-def _raw_script_is_executable(attrs: tuple[OutputAttr, ...]) -> bool:
-    type_attrs = [attr for attr in attrs if attr.key.content.translate(_ASCII_LOWER) == "type"]
-    if len(type_attrs) > 1:
-        return True
-    if not type_attrs:
-        return True
-    attr = type_attrs[0]
-    value: str | bool = True if attr.inner_value is None else _decoded_attr(attr)
-    return _is_executable({"type": value})
-
-
 def _is_reserved_manifest(script: Script) -> bool:
     return any(
         isinstance(name, str) and name.translate(_ASCII_LOWER).startswith("data-citry") for name in script.attrs
@@ -593,19 +420,21 @@ def _sanitize_structured_attributes(
         if not isinstance(authored_name, str):
             safe_attrs[authored_name] = value  # type: ignore[index]
             continue
-        name = authored_name.translate(_ASCII_LOWER)
+        # A structured value is a Python string, not HTML, so it is read
+        # without decoding character references.
+        flags = _classify_dependency_attribute(tag, authored_name, value if isinstance(value, str) else None)
         detail: str | None = None
-        if _is_activation_attribute(name):
+        if flags & _ACTIVATION_ATTRIBUTE:
             detail = "a browser activation attribute"
-        elif _is_native_event_attribute(name):
+        elif flags & _NATIVE_EVENT_ATTRIBUTE:
             detail = "a native inline event attribute"
-        elif isinstance(value, str) and _is_url_attribute(tag, name) and _javascript_url(value):
+        elif flags & _JAVASCRIPT_URL_ATTRIBUTE:
             detail = "a javascript: URL"
         if detail is None:
             safe_attrs[authored_name] = value
         else:
             findings.append((authored_name, detail))
-    if dependency.url is not None and _javascript_url(dependency.url):
+    if dependency.url is not None and _is_javascript_url(dependency.url):
         findings.append(("src" if isinstance(dependency, Script) else "href", "a javascript: URL"))
         return None, tuple(findings)
     if not findings:
@@ -620,126 +449,8 @@ def _script_executable_for_policy(script: Script) -> tuple[bool, str | None]:
         return True, str(error)
 
 
-def _is_activation_attribute(name: str) -> bool:
-    # Vue directive spellings in settled HTML need the browser runtime to mean anything.
-    return name.startswith(("v-", "@", ":"))
-
-
-def _is_omit_hazard(name: str, node: Any, html: str, attrs: dict[str, str]) -> bool:
-    del node, html
-    base = name.split(".", 1)[0]
-    if base in {"v-for", "v-if", "v-show"}:
-        return True
-    if base in {"v-text", "v-html"}:
-        # The HTML5 scanner deliberately exposes active source tokens rather
-        # than reconstructing DOM parentage. Conservatively warn because a
-        # source token cannot prove that the browser-visible fallback survives.
-        return True
-    bound = base[1:] if base.startswith(":") else base.removeprefix("v-bind:")
-    if bound == "hidden":
-        return "hidden" in attrs
-    if bound in {"href", "action", "formaction", "src", "value"}:
-        return not attrs.get(bound)
-    return False
-
-
-def _handler_only_control(
-    tag: str,
-    attrs: dict[str, str],
-    activation_attrs: list[str],
-    *,
-    has_managed_handler: bool,
-    inside_form: bool,
-) -> bool:
-    # A Citry-managed handler is marked on the element by the omission scan,
-    # while an authored Vue handler, including the object form `v-on="..."`,
-    # appears as its own activation attribute.
-    has_handler = has_managed_handler or any(
-        name == "v-on" or name.startswith(("@", "v-on:")) for name in activation_attrs
-    )
-    if not has_handler:
-        return False
-    if tag == "a":
-        return not attrs.get("href")
-    if tag == "button":
-        button_type = attrs.get("type", "submit").translate(_ASCII_LOWER)
-        return button_type == "button" or (button_type == "submit" and not inside_form and not attrs.get("form"))
-    if tag == "input":
-        input_type = attrs.get("type", "text").translate(_ASCII_LOWER)
-        return input_type in {"button", "reset"} or (not inside_form and not attrs.get("form"))
-    if tag in {"select", "textarea"}:
-        return not inside_form and not attrs.get("form")
-    return tag in {"div", "span", "section"}
-
-
-def _embedded_document_requires_javascript(tag: str, name: str, value: str) -> bool:
-    if tag == "iframe" and name == "srcdoc":
-        return _html_document_requires_javascript(value, depth=0)
-    if (tag, name) not in {("iframe", "src"), ("object", "data"), ("embed", "src")}:
-        return False
-    decoded = _decode_html_data_url(value)
-    return decoded is not None and _html_document_requires_javascript(decoded, depth=0)
-
-
-def _decode_html_data_url(value: str) -> str | None:
-    header, separator, payload = value.lstrip(_LEADING_URL_SPACE).partition(",")
-    folded_header = header.translate(_ASCII_LOWER)
-    media_type = folded_header.removeprefix("data:").partition(";")[0].strip(" \t\n\r\f")
-    if not separator or not folded_header.startswith("data:") or media_type != "text/html":
-        return None
-    try:
-        body = (
-            _decode_strict_base64(unquote_to_bytes(payload))
-            if ";base64" in folded_header
-            else unquote_to_bytes(payload)
-        )
-        return body.decode("utf8", errors="replace")
-    except (BinasciiError, ValueError, TypeError):
-        return "<script>"
-
-
-def _decode_strict_base64(data: bytes) -> bytes:
-    """Decode base64 that uses only the standard alphabet and exactly the padding it needs."""
-    # `b64decode(validate=True)` accepts different padding on Python 3.10,
-    # 3.11 and later versions, so the accepted form is spelled out here and
-    # every Python version reads a document the same way.
-    if _STRICT_BASE64_RE.fullmatch(data) is None:
-        msg = "base64 data must use the standard alphabet and canonical padding"
-        raise BinasciiError(msg)
-    return b64decode(data)
-
-
-def _html_document_requires_javascript(html: str, *, depth: int) -> bool:
-    if depth >= 4:
-        return True
-    try:
-        template = scan_output_html(html)
-    except Exception:  # noqa: BLE001 - ambiguous embedded markup fails closed
-        return True
-    return _parsed_document_requires_javascript(template, depth=depth)
-
-
-def _parsed_document_requires_javascript(template: OutputTemplate, *, depth: int) -> bool:
-    for node in template.elements:
-        attrs = tuple(node.start_tag.attrs)
-        tag = node.start_tag.name.content.translate(_ASCII_LOWER)
-        if tag == "script" and _raw_script_is_executable(attrs):
-            return True
-        for attr in attrs:
-            name = attr.key.content.translate(_ASCII_LOWER)
-            value = _decoded_attr(attr)
-            if _is_native_event_attribute(name) or (_is_url_attribute(tag, name) and _javascript_url(value)):
-                return True
-            if tag == "iframe" and name == "srcdoc" and _html_document_requires_javascript(value, depth=depth + 1):
-                return True
-            if (tag, name) in {("iframe", "src"), ("object", "data"), ("embed", "src")}:
-                decoded = _decode_html_data_url(value)
-                if decoded is not None and _html_document_requires_javascript(decoded, depth=depth + 1):
-                    return True
-        body = getattr(node, "body", None)
-        if body is not None and _parsed_document_requires_javascript(body, depth=depth):
-            return True
-    return False
-
+# Both validator classes exist now, so an opt-in comparison with the
+# frozen Python rules can wrap them (see _output_policy).
+_output_policy.install_differential_checks()
 
 __all__ = ["_JavascriptPolicy"]

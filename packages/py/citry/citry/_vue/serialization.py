@@ -15,7 +15,7 @@ from secrets import token_hex
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
-from citry._csp_validation import _CspRenderValidator
+from citry import _output_policy
 from citry._owned_resource import OWNED_ASSET_CROSSORIGIN
 from citry._vue import native_render as _native_render
 from citry._vue.capture import PreparedElementOpen
@@ -1042,13 +1042,9 @@ def _server_contents_pass_policies(
         return False
     if security_csp == "off":
         return True
-    # A private validator of the same mode collects findings without
-    # reporting them, so the page's own validator is unaffected. Citry adds
-    # its own trusted dependency tags only after this point, so every raw
-    # <script> or <style> in the copy counts, whatever attributes it has.
-    checker = _CspRenderValidator(security_csp)
-    checker.validate_settled_html(contents, marker_prefix=None, trusted_tag_starts=frozenset(), component_classes={})
-    return not checker._findings
+    # The check only answers here; the page's own validator reports what the
+    # served page holds later.
+    return _output_policy.server_copy_passes_csp(contents, security_csp)
 
 
 def _server_host_contents(full_html: str, placeholders: Mapping[str, str]) -> str | None:

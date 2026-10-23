@@ -391,6 +391,14 @@ It also remembers raw active tags before dependency insertion, so a later
 identical structured tag cannot authenticate authored raw markup; this can
 conservatively warn even when a later hook removes that original raw tag.
 
+Rust reads the final HTML and applies these rules
+(`crates/citry_html_transform/src/output_policy.rs`). It returns only what a
+rule reports, plus every `<script>` and `<style>` element, because warning
+mode compares those with the ones it remembered. Python writes each message
+and decides whether to warn or raise (`citry/_output_policy.py`). When a
+`security_javascript` policy also checks the page, one read of the page
+serves both checks.
+
 ### 6.2 Fragments
 
 A nonce belongs to the loaded document's policy. A later fragment response
