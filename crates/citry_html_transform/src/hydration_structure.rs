@@ -542,6 +542,64 @@ mod tests {
     }
 
     #[test]
+    fn control_characters_and_noncharacters_are_kept_as_written() {
+        // The tokenizer reports these as parse errors, but the browser keeps
+        // them in the text and the attribute value that hold them.
+        let events = [
+            ExpectedNodeEvent::Open {
+                tag: "p".to_owned(),
+                attributes: vec![("title".to_owned(), Some("x".to_owned()))],
+            },
+            close("p"),
+        ];
+        for character in [
+            '\u{1}', '\u{b}', '\u{1c}', '\u{7f}', '\u{80}', '\u{85}', '\u{9f}', '\u{fdd0}',
+            '\u{fffe}',
+        ] {
+            let text = format!("<p title=\"x\">a{character}b</p>");
+            assert!(
+                browser_fragment_matches_nodes(&text, "div", &events),
+                "{text:?}"
+            );
+            let attribute = [
+                ExpectedNodeEvent::Open {
+                    tag: "p".to_owned(),
+                    attributes: vec![("title".to_owned(), Some(format!("a{character}b")))],
+                },
+                close("p"),
+            ];
+            let html = format!("<p title=\"a{character}b\">x</p>");
+            assert!(
+                browser_fragment_matches_nodes(&html, "div", &attribute),
+                "{html:?}"
+            );
+        }
+        // The browser drops the newline right after `<pre>`, `<listing>`
+        // and `<textarea>` even when the text after it holds such a
+        // character, so the parsed text no longer matches the written text
+        // and the check fails.
+        for tag in ["pre", "listing", "textarea"] {
+            let events = [open(tag), close(tag)];
+            let dropped = format!("<{tag}>\na\u{7f}b</{tag}>");
+            assert!(
+                !browser_fragment_matches_nodes(&dropped, "div", &events),
+                "{dropped:?}"
+            );
+            let kept = format!("<{tag}>a\u{7f}b</{tag}>");
+            assert!(
+                browser_fragment_matches_nodes(&kept, "div", &events),
+                "{kept:?}"
+            );
+        }
+        // A NUL is a different error: the browser drops it from text.
+        assert!(!browser_fragment_matches_nodes(
+            "<p title=\"x\">a\u{0}b</p>",
+            "div",
+            &events
+        ));
+    }
+
+    #[test]
     fn root_text_must_be_expected_and_whitespace_only() {
         let root_text = |value: &str| ExpectedNodeEvent::RootText {
             value: value.to_owned(),

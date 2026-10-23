@@ -27,9 +27,8 @@
 //!   escapes them: text has `&`, `<` and `>` written as character references,
 //!   attribute values have `&` and `"` written as references, and neither
 //!   holds a carriage return or NUL (the caller rejects both). The parser then
-//!   decodes each back to the written value. The caller also sends a page to
-//!   the full parse when a value holds a control character or a Unicode
-//!   noncharacter, which the full parse's tokenizer reports as an error. What
+//!   decodes each back to the written value, and keeps any other character
+//!   as it is (a control character or a Unicode noncharacter included). What
 //!   still matters is whether a text is whitespace only (table parts keep only
 //!   whitespace in place) and whether it starts with a newline (the parser
 //!   drops a newline right after `<pre>`, `<textarea>` or `<listing>`); both
@@ -518,13 +517,15 @@ mod tests {
                 0 => {
                     // Texts with and without a leading newline, which the
                     // parser drops right after `pre`, `textarea` and
-                    // `listing`.
+                    // `listing`, and one with characters the tokenizer
+                    // reports as errors but the parser keeps.
                     let (text, whitespace) = [
                         (" \n", true),
                         ("\n ", true),
                         ("a &amp; b", false),
                         ("\nx", false),
-                    ][rng.next(4)];
+                        ("a\u{7f}\u{fdd0}b", false),
+                    ][rng.next(5)];
                     html.push_str(text);
                     tokens.push(NestingToken::Text {
                         whitespace,

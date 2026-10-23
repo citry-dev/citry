@@ -247,6 +247,12 @@
   interactive `"document"` or `"fragment"` serialization of it, now writes
   its scripts and stylesheets like a fresh render instead of leaving them
   out.
+- A Vue page whose text or attribute values hold a control character such
+  as DEL (U+007F) or U+0001, or a Unicode noncharacter such as U+FDD0, now
+  hydrates, so Vue no longer builds it again in the browser. A `<c-raw>`
+  block or `Markup` value holding one of these characters in an
+  interactive component now renders. It used to fail with "is not a
+  complete HTML fragment".
 
 ### Performance
 
