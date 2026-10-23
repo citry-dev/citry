@@ -29,6 +29,13 @@ An optional effect contract could distinguish: **observer** hooks (still called,
 
 ## How to test this direction
 
-First compare a closed, exact-source leaf and one mixed-effects fallback using the **same output mode and callback** as Python. Check complete HTML, prepared manifest, IDs and ID-generator call order, callback counts/order, dependency assets, security decisions, and source-annotated errors. Measure cold compilation and warm full `Page.render() + serialize()` with normal GC at 140/1,400 rows from a release build; record PyO3 crossings, GIL time, and arena/Python object counts. A native walk that still constructs the Python render graph, a gain confined to a synthetic markup-heavy leaf, or a regression in the full page would falsify this migration as a speed strategy. Portability alone could still justify a separate project.
+First compare a closed, exact-source leaf and one mixed-effects fallback using the **same output mode and callback** as Python. Check complete HTML, prepared manifest, IDs and ID-generator call order, callback counts/order, dependency assets, security decisions, and source-annotated errors. Measure cold compilation and warm full `Page.render() + serialize()` with normal GC at 140/1,400 rows from a release build; record PyO3 crossings, GIL time, and arena/Python object counts. A native walk that still constructs the Python render graph, a gain confined to a synthetic markup-heavy leaf, or a regression in the full page would show that this migration does not work as a speed strategy. Portability alone could still justify a separate project.
 
-No Rust benchmark has been run for this design.
+Measurements of this direction, taken in October 2026 on the
+project-board benchmark page at 1,400 rows, are in
+[`rust_rendering_exploration.md`](rust_rendering_exploration.md). They
+show it cannot cut that page's warm server time to one third, the goal in
+[issue #144](https://github.com/citry-dev/citry/issues/144). They also
+measured the smaller steps that the native render path
+([`native_render.md`](native_render.md)) is built from (level A is on
+`main`; B1, C1, C2 and B2 are in #266-#269).
