@@ -487,10 +487,11 @@ Accepted differences, none of which changes output:
   builds on first read, so its equality to a copy can change then.
   Nothing in Citry compares records.
 - Assembly looks up a call run's component tag once per class, not once
-  per row, so it also checks only once whether that class was replaced. If
-  another thread replaces the class while serialize runs, the later check
-  that the class is still registered fails instead, with a different
-  message.
+  per row. Each Rust-read row still goes through `start_occurrence`, so
+  its class is checked against the registry for every row, as before. If
+  another thread replaces the class while serialize runs, a row whose tag
+  was already looked up fails that registry check instead of the tag
+  lookup, with a different message.
 - With a run object, the registry lookup that checks a row's class runs
   once per run instead of once per row, with the same thread consequence.
 - Serialize asks the component tag callback for a run's class once per run
