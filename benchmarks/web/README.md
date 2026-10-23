@@ -53,6 +53,9 @@ The Citry app pins and locks the published `citry` 0.6.0 and `citry-core`
 measures that release. To measure an
 unreleased change instead, see
 [Test Citry with wheels you build](#test-citry-with-wheels-you-build).
+The docs page's Citry numbers come from such wheels, built before the
+Citry 0.6.1 release; see
+[Update the numbers on the docs page](#update-the-numbers-on-the-docs-page).
 
 ## Before you start
 
@@ -174,6 +177,7 @@ Profiles live in [`profiles/`](profiles/). Pass the file name without
 | `cohort` | the fourteen cohort apps | 14, 140 | The canonical measurement |
 | `cohort-100x` | the fourteen cohort apps | 1,400 | Opt-in large board |
 | `release-0.6.0` | the fourteen cohort apps | 14, 140, 1,400 | The `cohort` settings plus the 1,400-output board the docs page shows; run once for the Citry 0.6.0 release |
+| `release-0.6.1-citry` | Citry, Jinja + HTMX + Alpine | 14, 140, 1,400 | The `release-0.6.0` settings with Citry from wheels built before the Citry 0.6.1 release; Jinja + HTMX + Alpine runs again to check that the machine still gives the same times |
 | `citry-local-wheels` | Citry | 14, 140, 1,400 | Citry from wheels you build; for testing before a release |
 | `nuxt-csr` | Nuxt CSR control | 14, 140 | The client-rendered control on its own |
 | `nuxt-ssr-csr` | Nuxt, Nuxt CSR control | 140, 1,400 | Server-rendered and client-rendered Nuxt side by side |
@@ -186,8 +190,9 @@ requests do not render the measured page.
 
 A profile can replace the `citry` and `citry-core` packages of the Citry app
 with wheels built from this repository, to measure a change before it is
-released. This is for testing only: the numbers describe whatever source you
-built, not a release. The profile names the wheels in a `[local_wheels]`
+released. The numbers describe the source you built. Use it to test a
+change, or to measure a release before it is published, as the docs page's
+Citry 0.6.1 numbers were. The profile names the wheels in a `[local_wheels]`
 table, relative to the repository root. `citry-local-wheels` is set up for
 the 0.6.0 wheels:
 
@@ -234,16 +239,37 @@ charts from
 the time until the 1,400-output page is ready for input, first and second
 load, for Citry and eleven other frameworks.
 
-The numbers there now come from one composed report,
-`composed-70d4a8802900`, built on 2026-10-19 from the `release-0.6.0`
-qualify run `20261019T210740Z-2b5cd077` and the measurement run
-(`citry-bench run`) `20261019T213948Z-c6248185`. All fourteen apps of the
-profile, including the twelve frameworks on the docs page, ran in that one
-run, with Citry 0.6.0 and citry-core 1.8.0 installed from PyPI. The runner
-recorded commit `55740fd66` with no uncommitted changes; that local commit
-has the same benchmark sources as the change that published these numbers.
-To repeat it from `benchmarks/web/runner/` (for a later release, copy the
-profile under a new name first):
+The numbers there now come from two composed reports, measured on the
+same Mac:
+
+- **Citry**: `composed-be3f44cc4b6e`, built on 2026-10-23 from the
+  `release-0.6.1-citry` qualify run `20261023T115304Z-71ac7f66` and the
+  measurement run (`citry-bench run`) `20261023T115712Z-411919bf`. Citry
+  and citry-core were wheels built from commit `3f1333792`: Citry 0.6.1,
+  measured before its release. The wheels carry the version numbers that
+  commit had, `citry` 0.6.0 and `citry-core` 1.9.0. The data file's
+  `citry_build.source_had_uncommitted_changes` is `true` only because the
+  new profile file was not committed yet when the runs started; nothing
+  else in the checkout differed from that commit. A second measurement
+  run, `20261023T120134Z-9b07f5dc`, gave Citry totals within 1 ms of the
+  first.
+- **The other eleven frameworks**: `composed-70d4a8802900`, built on
+  2026-10-19 from the `release-0.6.0` qualify run
+  `20261019T210740Z-2b5cd077` and the measurement run
+  `20261019T213948Z-c6248185`. All fourteen apps of the profile ran in
+  that one run, with Citry 0.6.0 and citry-core 1.8.0 installed from PyPI.
+  The runner recorded commit `55740fd66` with no uncommitted changes; that
+  local commit has the same benchmark sources as the change that published
+  these numbers.
+
+The `release-0.6.1-citry` run also measured Jinja + HTMX + Alpine again,
+to check that the Mac gave the same times on both days. Its totals moved
+from 304.2 to 298.3 ms on the first load and from 299.8 to 312.6 ms on the
+second, within the noise of a single measurement, so the data file keeps
+that framework's 2026-10-19 numbers with the other ten.
+
+To measure every framework again, from `benchmarks/web/runner/` (for a
+later release, copy the profile under a new name first):
 
 ```bash
 uv run --no-sync citry-bench prepare --profile release-0.6.0
@@ -267,6 +293,43 @@ measured the same app twice. The docs script needs exactly one
 passed observation per framework and page load at 1,400 outputs, which the
 `release-0.6.0` profile gives. It rewrites the JSON file; update the prose
 on the Benchmarks page to match the new numbers in the same change.
+
+To measure only Citry again, as for Citry 0.6.1:
+
+1. Build the wheels as in
+   [Test Citry with wheels you build](#test-citry-with-wheels-you-build).
+2. Copy `release-0.6.1-citry.toml` under a new name, point its
+   `[local_wheels]` table at your wheels, and add the new name to the
+   list of profiles allowed to name local wheels in
+   `tests/test_runner.py`.
+3. Run the `prepare`, `qualify`, `run` and `compose` commands above with
+   the new profile name, and give `compose` a new `--output` folder.
+4. Publish only Citry's numbers from that folder:
+
+   ```bash
+   uv run --no-sync python -m docs_site.scripts.benchmark_data \
+     .benchmarks/reports/<folder> --only citry
+   ```
+
+With `--only`, the docs script works like this:
+
+- **What it keeps**: it takes the named frameworks from the report and
+  keeps every other framework's entry from the data file, marked
+  `"retained": true`. The file's `source.kept_from` names the report each
+  kept entry came from.
+- **The other apps in the report**: it does not publish their new
+  numbers. It prints them beside the kept ones once it has written the
+  file; compare the two before you commit it, to check that the machine
+  still gives the same times.
+- **What it refuses**: a report whose scenario, page size, number of
+  observations, host operating system and version, processor type,
+  browser, network, cache or compression differ from those of the kept
+  numbers.
+- **What it cannot check**: the data file records nothing else about how
+  the numbers were taken. So run on the same machine and change only the
+  profile's name, apps and `[local_wheels]` table. A test in
+  `tests/test_runner.py` checks that every release profile with local
+  wheels keeps the other `release-0.6.0` settings.
 
 ## What the runner measures
 

@@ -70,16 +70,17 @@ server builds it.
 <picture>
   <source
     media="(prefers-color-scheme: dark)"
-    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-70d4a8802900-90d576e71b4a-dark.png"
+    srcset="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-be3f44cc4b6e-136fc86f06e0-dark.png"
   >
   <img
-    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-70d4a8802900-7fe8bbd937c4-light.png"
-    alt="Bar chart of the time until the page is usable, fastest first: Nuxt 230 ms, Rusty + HTMX + Alpine 294 ms, Jinja + HTMX + Alpine 300 ms, Citry 323 ms, Next.js 324 ms, Tetra 326 ms, Django + HTMX + Alpine 342 ms, Reflex 409 ms, django-components 475 ms, django-unicorn 508 ms, FastHTML 667 ms, ReactPy 910 ms."
+    src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmarks/speed-composed-be3f44cc4b6e-7c0fdf58a8d2-light.png"
+    alt="Bar chart of the time until the page is usable, fastest first: Nuxt 230 ms, Citry 253 ms, Rusty + HTMX + Alpine 294 ms, Jinja + HTMX + Alpine 300 ms, Next.js 324 ms, Tetra 326 ms, Django + HTMX + Alpine 342 ms, Reflex 409 ms, django-components 475 ms, django-unicorn 508 ms, FastHTML 667 ms, ReactPy 910 ms."
     width="720"
   >
 </picture>
 
-Citry 0.6.0, one run per framework. Shorter is faster.
+Citry 0.6.1, measured before its release, one run per framework. Shorter
+is faster.
 [How we measured](https://citry.dev/about/benchmarks/#how-the-numbers-were-taken)
 <!-- benchmark-chart:speed end -->
 

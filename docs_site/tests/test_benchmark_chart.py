@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,7 +16,8 @@ from docs_site._internal.components.benchmark_chart import (
     axis_ticks,
     chart_view,
 )
-from docs_site.scripts.benchmark_data import GROUPS, embedded_report_data, extract
+from docs_site.scripts import benchmark_data
+from docs_site.scripts.benchmark_data import GROUPS, build, embedded_report_data, extract
 
 
 def _framework(name: str, group: str | None, server: float, browser: float) -> dict[str, Any]:
@@ -183,6 +185,8 @@ def test_extract_keeps_totals_phases_and_provenance() -> None:
     assert next(row for row in first if row["key"] == "reflex")["retained"] is True
     # The host name identifies a machine, so it stays out of the docs.
     assert result["source"]["host"] == {"system": "Darwin"}
+    # Every number came from this report, so it kept nothing from another.
+    assert result["source"]["kept_from"] == []
 
 
 def test_extract_rejects_phases_that_do_not_add_up() -> None:
@@ -225,6 +229,220 @@ def test_extract_rejects_a_repeated_observation() -> None:
     samples.append(dict(samples[0]))
     with pytest.raises(ValueError, match="found 2 with 2 successful"):
         extract(_report(samples), _manifest())
+
+
+def _current() -> dict[str, Any]:
+    # The data file as an earlier, complete report left it: every framework
+    # measured in run "older-run", with totals of 37 ms and more.
+    manifest = {
+        **_manifest(),
+        "id": "older-report",
+        "composed_at": "2026-01-01T00:00:00+00:00",
+        "citry_configuration": "older Citry",
+        "cell_provenance": {
+            f"{key}/1400": {"latency": "measured", "latency_run": "older-run"}
+            for _, members in GROUPS
+            for key, _ in members
+        },
+    }
+    samples = [
+        _sample(key, load, {"server": 30.0 + index, "browser_after": 5.0}, 2.0)
+        for load in (1, 2)
+        for index, key in enumerate(key for _, members in GROUPS for key, _ in members)
+    ]
+    return extract(_report(samples), manifest)
+
+
+def _rerun(apps: tuple[str, ...] = ("citry", "jinja_htmx_alpine")) -> tuple[str, dict[str, Any]]:
+    # A later report that measured only a few frameworks, each at 11 ms on the
+    # first load and 12 ms on the second.
+    manifest = {
+        **_manifest(),
+        "id": "newer-report",
+        "citry_configuration": "newer Citry",
+        "cell_provenance": {f"{app}/1400": {"latency": "measured", "latency_run": "newer-run"} for app in apps},
+    }
+    samples = [
+        _sample(app, load, {"server": 3.0 + load, "browser_after": 5.0}, 2.0) for load in (1, 2) for app in apps
+    ]
+    return _report(samples), manifest
+
+
+def _row(data: dict[str, Any], load: str, key: str) -> dict[str, Any]:
+    entries = next(entry for entry in data["loads"] if entry["id"] == load)["frameworks"]
+    return next(row for row in entries if row["key"] == key)
+
+
+def test_only_takes_the_named_frameworks_and_keeps_the_rest_from_the_current_file() -> None:
+    current = _current()
+    data, controls = build(*_rerun(), only=["citry"], current=current)
+
+    assert _row(data, "first", "citry") == {
+        **_row(current, "first", "citry"),
+        "total_ms": 11.0,
+        "phases_ms": {"server": 4.0, "browser_after": 5.0, "layout_wait": 2.0},
+        "measured_in_run": "newer-run",
+    }
+    # The control framework keeps its earlier numbers; only Citry is published.
+    jinja = _row(data, "second", "jinja_htmx_alpine")
+    assert jinja == {**_row(current, "second", "jinja_htmx_alpine"), "retained": True}
+    assert jinja["measured_in_run"] == "older-run"
+    keys = [row["key"] for row in data["loads"][0]["frameworks"]]
+    assert keys == [key for _, members in GROUPS for key, _ in members]
+    assert all(row["retained"] for load in data["loads"] for row in load["frameworks"] if row["key"] != "citry")
+
+    source = data["source"]
+    assert (source["report_id"], source["citry_report_id"]) == ("newer-report", "newer-report")
+    assert source["citry_configuration"] == "newer Citry"
+    assert source["kept_from"] == [
+        {
+            "report_id": "older-report",
+            "composed_at": "2026-01-01T00:00:00+00:00",
+            "frameworks": [key for key in keys if key != "citry"],
+        },
+    ]
+    # Jinja's kept first-load total is 37 + 3 ms; the report measured 11 ms.
+    assert controls == [
+        "Jinja + HTMX + Alpine, first load: 11.0 ms in the report, 40.0 ms kept (-72.5%); "
+        "server 4.0 against 33.0, browser 5.0 against 5.0 ms",
+        "Jinja + HTMX + Alpine, second load: 12.0 ms in the report, 40.0 ms kept (-70.0%); "
+        "server 5.0 against 33.0, browser 5.0 against 5.0 ms",
+    ]
+
+
+def test_only_keeps_citry_build_from_the_report_citry_came_from() -> None:
+    current = _current()
+    current["source"]["citry_build"] = {"source_commit": "older-commit"}
+    # A file written before citry_report_id existed took Citry from its report.
+    del current["source"]["citry_report_id"]
+    data, _ = build(*_rerun(("reflex",)), only=["reflex"], current=current)
+
+    source = data["source"]
+    assert (source["report_id"], source["citry_report_id"]) == ("newer-report", "older-report")
+    assert source["citry_configuration"] == "older Citry"
+    assert source["citry_build"] == {"source_commit": "older-commit"}
+    assert _row(data, "first", "citry")["retained"] is True
+    assert _row(data, "first", "reflex")["measured_in_run"] == "newer-run"
+
+
+def test_a_second_merge_still_names_the_report_that_measured_each_kept_entry() -> None:
+    first, _ = build(*_rerun(("citry",)), only=["citry"], current=_current())
+    document, manifest = _rerun(("reflex",))
+    second, _ = build(document, {**manifest, "id": "newest-report"}, only=["reflex"], current=first)
+
+    others = [key for _, members in GROUPS for key, _ in members if key not in {"citry", "reflex"}]
+    assert second["source"]["kept_from"] == [
+        {"report_id": "newer-report", "composed_at": None, "frameworks": ["citry"]},
+        {"report_id": "older-report", "composed_at": "2026-01-01T00:00:00+00:00", "frameworks": others},
+    ]
+    assert (second["source"]["citry_report_id"], second["source"]["citry_configuration"]) == (
+        "newer-report",
+        "newer Citry",
+    )
+
+
+def test_only_refuses_to_keep_an_entry_the_same_report_measured() -> None:
+    # Taking only Jinja from the report that already supplied Citry would
+    # mark Citry's entry as kept from the very report being read.
+    document, manifest = _rerun()
+    merged, _ = build(document, manifest, only=["citry"], current=_current())
+    with pytest.raises(ValueError, match="citry: the current data file already took its numbers from this report"):
+        build(document, manifest, only=["jinja_htmx_alpine"], current=merged)
+    # Taking the same frameworks again from the same report gives the same file.
+    assert build(document, manifest, only=["citry"], current=merged)[0] == merged
+
+
+def test_only_refuses_a_control_that_fails_the_checks() -> None:
+    document, manifest = _rerun()
+    rows = embedded_report_data(document)["samples"]
+    next(row for row in rows if row["app"] == "jinja_htmx_alpine")["status"] = "failed"
+    with pytest.raises(ValueError, match=r"cannot compare the control frameworks \['jinja_htmx_alpine'\]"):
+        build(_report(rows), manifest, only=["citry"], current=_current())
+
+
+def _without(data: dict[str, Any], key: str) -> dict[str, Any]:
+    loads = [
+        {**load, "frameworks": [row for row in load["frameworks"] if row["key"] != key]} for load in data["loads"]
+    ]
+    return {**data, "loads": loads}
+
+
+@pytest.mark.parametrize(
+    ("only", "current", "message"),
+    [
+        (["citry", "svelte"], _current(), r"does not draw: \['svelte'\]"),
+        (["reflex"], _current(), r"did not measure \['reflex'\]"),
+        (["citry"], _without(_current(), "nuxt"), "nuxt load 1: not named with --only and not in the current"),
+        (["citry"], None, "needs that file"),
+        ([], _current(), "at least one framework"),
+    ],
+)
+def test_only_refuses_a_framework_neither_source_can_supply(
+    only: list[str], current: dict[str, Any] | None, message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        build(*_rerun(), only=only, current=current)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("scenario", "board (other-revision)"),
+        ("outputs", 140),
+        ("observations_per_framework_and_load", 3),
+        ("host", {"system": "Linux"}),
+        ("browser", "chromium 2.0"),
+        ("network", "shaped"),
+        ("cache", "warm"),
+        ("compression", "gzip"),
+    ],
+)
+def test_only_refuses_numbers_measured_another_way(field: str, value: Any) -> None:
+    current = _current()
+    current["source"][field] = value
+    with pytest.raises(ValueError, match=f"cannot share a chart: {field}: the report has"):
+        build(*_rerun(), only=["citry"], current=current)
+
+
+def test_only_refuses_a_current_file_that_does_not_record_a_compared_field() -> None:
+    current = _current()
+    del current["source"]["browser"]
+    message = r"browser: the report has 'chromium 1\.0', the current data file does not record it"
+    with pytest.raises(ValueError, match=message):
+        build(*_rerun(), only=["citry"], current=current)
+
+
+def test_main_keeps_entries_from_the_file_it_rewrites(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    document, manifest = _rerun()
+    (tmp_path / "report.html").write_text(document, encoding="utf-8")
+    (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    data_path = tmp_path / "data.json"
+    data_path.write_text(json.dumps(_current()), encoding="utf-8")
+    monkeypatch.setattr(benchmark_data, "DATA_PATH", data_path)
+
+    assert benchmark_data.main([str(tmp_path), "--only", "citry"]) == 0
+    written = json.loads(data_path.read_text(encoding="utf-8"))
+    assert _row(written, "first", "nuxt")["retained"] is True
+    assert "Jinja + HTMX + Alpine, first load" in capsys.readouterr().out
+
+    # A refused merge leaves the file as it was and says why.
+    assert benchmark_data.main([str(tmp_path), "--only", "reflex"]) == 1
+    assert json.loads(data_path.read_text(encoding="utf-8")) == written
+    assert "did not measure ['reflex']" in capsys.readouterr().err
+
+    # A data file that is missing, unreadable or of another shape is
+    # reported by name instead of ending in a traceback.
+    for content in ("{", "[]"):
+        data_path.write_text(content, encoding="utf-8")
+        assert benchmark_data.main([str(tmp_path), "--only", "citry"]) == 1
+        assert "data.json" in capsys.readouterr().err
+    data_path.unlink()
+    assert benchmark_data.main([str(tmp_path), "--only", "citry"]) == 1
+    assert "data.json" in capsys.readouterr().err
+    assert benchmark_data.main([str(tmp_path / "missing"), "--only", "citry"]) == 1
+    assert "report.html" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("load", ["first", "second"])

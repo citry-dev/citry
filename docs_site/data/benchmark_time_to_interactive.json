@@ -1,17 +1,20 @@
 {
   "generated_by": "docs_site/scripts/benchmark_data.py",
   "source": {
-    "report_id": "composed-70d4a8802900",
+    "report_id": "composed-be3f44cc4b6e",
     "report_status": "composed",
-    "composed_at": "2026-10-19T22:03:00.409331+00:00",
+    "composed_at": "2026-10-23T12:01:08.284960+00:00",
     "recomposed_at": null,
-    "citry_configuration": "The Citry app benchmarks/web/apps/citry with default settings, running citry 0.6.0 and citry-core 1.8.0 installed from the lockfile.",
+    "citry_report_id": "composed-be3f44cc4b6e",
+    "citry_configuration": "The Citry app benchmarks/web/apps/citry with default settings, running citry 0.6.0 and citry-core 1.9.0 installed from wheels built locally (citry-0.6.0-py3-none-any.whl, citry_core-1.9.0-cp312-cp312-macosx_11_0_arm64.whl).",
     "scenario": "project_board (canonical-project-v1)",
     "outputs": 1400,
     "observations_per_framework_and_load": 1,
     "citry_build": {
-      "source_commit": "55740fd66681ab29e4ae46871490a6d35e5ccea9",
-      "source_had_uncommitted_changes": false
+      "citry": "citry-0.6.0-py3-none-any.whl",
+      "citry-core": "citry_core-1.9.0-cp312-cp312-macosx_11_0_arm64.whl",
+      "source_commit": "3f13337924674a65f82ed9eac2dfa7e01142a57d",
+      "source_had_uncommitted_changes": true
     },
     "host": {
       "machine": "arm64",
@@ -23,7 +26,26 @@
     "browser": "chromium 151.0.7922.34",
     "network": "loopback",
     "cache": "cold-context",
-    "compression": "identity"
+    "compression": "identity",
+    "kept_from": [
+      {
+        "report_id": "composed-70d4a8802900",
+        "composed_at": "2026-10-19T22:03:00.409331+00:00",
+        "frameworks": [
+          "django_htmx_alpine",
+          "django_rusty_templates",
+          "jinja_htmx_alpine",
+          "tetra",
+          "unicorn",
+          "django_components",
+          "fasthtml",
+          "reactpy",
+          "reflex",
+          "next",
+          "nuxt"
+        ]
+      }
+    ]
   },
   "loads": [
     {
@@ -34,16 +56,16 @@
           "key": "citry",
           "name": "Citry",
           "group": null,
-          "total_ms": 400,
+          "total_ms": 295.8,
           "phases_ms": {
-            "browser_before": 0.6,
-            "server": 202.4,
-            "exchange_residual": 1.0,
-            "response_receive": 8.4,
-            "browser_after": 169.3,
-            "layout_wait": 18.3
+            "browser_before": 0.7,
+            "server": 107.9,
+            "exchange_residual": 0.7,
+            "response_receive": 7.6,
+            "browser_after": 161.7,
+            "layout_wait": 17.2
           },
-          "measured_in_run": "20261019T213948Z-c6248185",
+          "measured_in_run": "20261023T115712Z-411919bf",
           "retained": false
         },
         {
@@ -60,7 +82,7 @@
             "layout_wait": 15.7
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "django_rusty_templates",
@@ -76,7 +98,7 @@
             "layout_wait": 5.4
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "jinja_htmx_alpine",
@@ -92,7 +114,7 @@
             "layout_wait": 5.3
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "tetra",
@@ -108,7 +130,7 @@
             "layout_wait": 5
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "unicorn",
@@ -124,7 +146,7 @@
             "layout_wait": 0.6
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "django_components",
@@ -140,7 +162,7 @@
             "layout_wait": 18.7
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "fasthtml",
@@ -156,7 +178,7 @@
             "layout_wait": 9.0
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "reactpy",
@@ -172,7 +194,7 @@
             "layout_wait": 31.9
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "reflex",
@@ -188,7 +210,7 @@
             "layout_wait": 29.6
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "next",
@@ -204,7 +226,7 @@
             "layout_wait": 33.0
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "nuxt",
@@ -220,7 +242,7 @@
             "layout_wait": 10.1
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         }
       ]
     },
@@ -232,16 +254,16 @@
           "key": "citry",
           "name": "Citry",
           "group": null,
-          "total_ms": 322.8,
+          "total_ms": 252.6,
           "phases_ms": {
             "browser_before": 0.6,
-            "server": 123.3,
-            "exchange_residual": 0.9,
-            "response_receive": 8.2,
-            "browser_after": 171.9,
-            "layout_wait": 17.9
+            "server": 65.3,
+            "exchange_residual": 0.8,
+            "response_receive": 7.6,
+            "browser_after": 161.0,
+            "layout_wait": 17.3
           },
-          "measured_in_run": "20261019T213948Z-c6248185",
+          "measured_in_run": "20261023T115712Z-411919bf",
           "retained": false
         },
         {
@@ -258,7 +280,7 @@
             "layout_wait": 15.5
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "django_rusty_templates",
@@ -274,7 +296,7 @@
             "layout_wait": 8.6
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "jinja_htmx_alpine",
@@ -290,7 +312,7 @@
             "layout_wait": 5.4
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "tetra",
@@ -306,7 +328,7 @@
             "layout_wait": 5.8
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "unicorn",
@@ -322,7 +344,7 @@
             "layout_wait": 9.1
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "django_components",
@@ -338,7 +360,7 @@
             "layout_wait": 5.8
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "fasthtml",
@@ -354,7 +376,7 @@
             "layout_wait": 19.2
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "reactpy",
@@ -370,7 +392,7 @@
             "layout_wait": 29.4
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "reflex",
@@ -386,7 +408,7 @@
             "layout_wait": 21.6
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "next",
@@ -402,7 +424,7 @@
             "layout_wait": 23.7
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         },
         {
           "key": "nuxt",
@@ -418,7 +440,7 @@
             "layout_wait": 9.7
           },
           "measured_in_run": "20261019T213948Z-c6248185",
-          "retained": false
+          "retained": true
         }
       ]
     }

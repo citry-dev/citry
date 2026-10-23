@@ -1,0 +1,23 @@
+name = "release-0.6.1-citry"
+mode = "native"
+apps = ["citry", "jinja_htmx_alpine"]
+scenario = "project_board"
+scenario_revision = "canonical-project-v1"
+counts = [14, 140, 1400]
+browser = "chromium"
+python = "3.12.13"
+blocks = 1
+sessions = 1
+warmups = 0
+cycles = 2
+initial_timeout_ms = 30000
+action_timeout_ms = 10000
+cache = "cold-context"
+network = "loopback"
+compression = "identity"
+seed = 1729
+publication = false
+
+[local_wheels]
+citry = ".benchmarks/wheels/citry-0.6.1-main/citry-0.6.0-py3-none-any.whl"
+citry-core = ".benchmarks/wheels/citry-0.6.1-main/citry_core-1.9.0-cp312-cp312-macosx_11_0_arm64.whl"

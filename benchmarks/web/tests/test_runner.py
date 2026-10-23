@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 import tomllib
-from citry_bench import cli, config, prepare
+from citry_bench import cli, compose, config, prepare
 from citry_bench.browser import (
     collect_network_then_heap_after_gc,
     module,
@@ -532,7 +532,7 @@ def test_heap_after_gc_waits_until_network_accounting_reads_response_bodies() ->
     assert payload == {"errors": []}
 
 
-def test_every_profile_loads_and_only_the_testing_profile_names_local_wheels(tmp_path, monkeypatch):
+def test_every_profile_loads_and_only_the_local_build_profiles_name_local_wheels(tmp_path, monkeypatch):
     # Profiles that name wheels you build load only once those files exist, so
     # create placeholder files at the paths they name under a temporary root.
     names = sorted(path.stem for path in (config.WEB / "profiles").glob("*.toml"))
@@ -548,8 +548,10 @@ def test_every_profile_loads_and_only_the_testing_profile_names_local_wheels(tmp
         assert data["name"] == name
         if wheels:
             with_wheels.append(name)
-    # A default or release profile must install only what the lockfiles pin.
-    assert with_wheels == ["citry-local-wheels"]
+    # A profile installs only what the lockfiles pin, unless it is listed here
+    # on purpose: the testing profile, and the profile that measured Citry
+    # 0.6.1 before its release for the docs page.
+    assert with_wheels == ["citry-local-wheels", "release-0.6.1-citry"]
 
 
 def test_release_profile_is_the_cohort_plus_the_docs_page_board_size():
@@ -557,6 +559,27 @@ def test_release_profile_is_the_cohort_plus_the_docs_page_board_size():
     release = tomllib.loads((config.WEB / "profiles/release-0.6.0.toml").read_text())
     assert release["counts"] == [*cohort["counts"], 1400]
     assert {**release, "name": "cohort", "counts": cohort["counts"]} == cohort
+
+
+def test_release_rerun_profiles_keep_the_release_settings_of_the_numbers_they_join():
+    # A release profile with local wheels measures some apps again, and the
+    # docs page shows those numbers beside other apps' numbers from
+    # release-0.6.0. The docs data script cannot check most settings, so only
+    # the fields compose lets differ may differ. A copy of such a profile is
+    # checked here too.
+    release = tomllib.loads((config.WEB / "profiles/release-0.6.0.toml").read_text())
+    reruns = sorted((config.WEB / "profiles").glob("release-*.toml"))
+    reruns = [path for path in reruns if "local_wheels" in tomllib.loads(path.read_text())]
+    assert reruns, "no release profile with local wheels found"
+    per_run = compose.PER_RUN_FIELDS
+    for path in reruns:
+        rerun = tomllib.loads(path.read_text())
+        # It measures Citry again, plus apps of the release run as controls.
+        assert "citry" in rerun["apps"], path.name
+        assert set(rerun["apps"]) <= set(release["apps"]), path.name
+        assert {k: v for k, v in rerun.items() if k not in per_run} == {
+            k: v for k, v in release.items() if k not in per_run
+        }, path.name
 
 
 def test_prepare_stops_when_a_lockfile_needs_wheels_the_profile_does_not_supply(tmp_path, monkeypatch):
