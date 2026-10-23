@@ -2413,7 +2413,8 @@ def test_incomplete_raw_html_names_the_block_and_the_rule() -> None:
     assert str(excinfo.value) == (
         "The <c-raw> block at line 2, column 10 is not a complete HTML fragment: '<div class=\"open\">'."
         " Inside an interactive component, Vue inserts this HTML as one block, so every tag it opens must"
-        " be closed inside it, it must not close a tag it did not open, and a '<' that does not start a tag"
+        " be closed inside it, it must not close a tag it did not open, a non-void element such as <iframe>"
+        " needs its end tag because the browser ignores a '/' on it, and a '<' that does not start a tag"
         " must be written as '&lt;'. Fix the HTML, or move the tags it shares with the template into it."
         " Static pages do not have this rule, because there the HTML is written into the page as is."
     )
@@ -2551,3 +2552,50 @@ def test_raw_and_markup_placement_errors_say_what_to_write() -> None:
         _assemble_page(InSvg())
     with pytest.raises(UnsupportedPreparedView, match=r"holds text, not HTML\. Pass a plain string instead\."):
         _assemble_page(InTextarea())
+
+
+@pytest.mark.parametrize(
+    "element",
+    ["iframe", "textarea", "title", "xmp", "noscript", "noembed", "noframes", "style", "script", "plaintext"],
+)
+def test_self_closed_raw_text_element_is_not_a_complete_fragment(element: str) -> None:
+    # The browser ignores the `/` and reads the rest of the page as this
+    # element's text, so the HTML does not end where it seems to.
+    app = Citry(autodiscover=False)
+
+    class RawBlock(Component):
+        citry = app
+        template = f"""
+<main :class="cls">
+  <c-raw><{element}/><p>after</p></c-raw>
+</main>
+"""
+
+    with pytest.raises(ValueError, match=r"^The <c-raw> block at line 3, column 10 is not a complete HTML fragment"):
+        _assemble_page(RawBlock())
+
+    class MarkupValue(Component):
+        citry = app
+        template = """
+<main :class="cls">{{ html }}</main>
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"html": Markup(f"<{element}/><p>after</p>")}  # noqa: S704 - the test writes fixed markup
+
+    with pytest.raises(ValueError, match=r"^A Markup value \(trusted HTML from Python\) is not a complete"):
+        _assemble_page(MarkupValue())
+
+    class IgnoredContents(Component):
+        citry = app
+        template = """
+<main :class="cls">
+  <div #c-ignore>{{ html }}</div>
+</main>
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"html": Markup(f"<{element}/><p>after</p>")}  # noqa: S704 - the test writes fixed markup
+
+    with pytest.raises(ValueError, match=r"^The HTML inside .* is not a complete HTML fragment"):
+        _assemble_page(IgnoredContents())

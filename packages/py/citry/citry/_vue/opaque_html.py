@@ -25,7 +25,8 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
         msg = (
             f"{origin} is not a complete HTML fragment: {preview!r}. Inside an interactive component,"
             " Vue inserts this HTML as one block, so every tag it opens must be closed inside it, it must"
-            " not close a tag it did not open, and a '<' that does not start a tag must be written as"
+            " not close a tag it did not open, a non-void element such as <iframe> needs its end tag because"
+            " the browser ignores a '/' on it, and a '<' that does not start a tag must be written as"
             " '&lt;'. Fix the HTML, or move the tags it shares with the template into it. Static pages"
             " do not have this rule, because there the HTML is written into the page as is."
         )

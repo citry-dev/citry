@@ -210,6 +210,13 @@
 
 ### Fixes
 
+- In a component that uses Vue, a `<c-raw>` block, a `Markup` value, or
+  `#c-ignore` contents that self-close an element whose contents the
+  browser reads as text, such as `<iframe/>`, `<textarea/>`, or
+  `<script src="…"/>`, now fail the render with "is not a complete HTML
+  fragment". The browser ignores the `/` on these tags and reads the rest
+  of the page as that element's text. Write the end tag instead:
+  `<iframe></iframe>`.
 - When `DJANGO_SETTINGS_MODULE` is set, `citry check` and the other
   `citry --app` commands now start Django before they import the `--app`
   module, as `manage.py` does, so a module such as `config.urls` whose

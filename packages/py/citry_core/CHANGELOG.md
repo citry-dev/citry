@@ -35,6 +35,12 @@
 
 ### Fixed
 
+- `html_transform.validate_html_fragment_boundary()` now rejects a
+  fragment that self-closes an element whose contents the browser reads
+  as text, such as `<iframe/>`, `<textarea/>`, `<style/>`, or
+  `<plaintext/>`, because the browser ignores the `/` and reads everything
+  after the tag as that element's text. The same tags self-closed inside
+  SVG or MathML are still accepted.
 - A template that contains a NUL character now compiles to Python code that
   runs. `template_parser.compile_template()` used to write the raw NUL, which
   Python refuses in source code.
