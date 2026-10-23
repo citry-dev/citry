@@ -8,7 +8,6 @@ import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from html import unescape
 from inspect import getattr_static
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -29,7 +28,7 @@ from citry.citry_render import (
 )
 from citry.constness import const_value
 from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprHtmlAttr, ExprNode, ForNode, Node
-from citry.util.html import Markup
+from citry.util.html import Markup, decode_character_references
 
 from .direct import DirectProjectionRender, bind_nested_template, wrap_python_composition_result
 
@@ -895,7 +894,7 @@ class PreparedExprNode(ExprNode):
         from citry.slots import _EscapedSlotText  # noqa: PLC0415
 
         if isinstance(value, _EscapedSlotText) and "<" not in value:
-            return str(unescape(value))
+            return decode_character_references(str(value))
         if getattr_static(value, "__html__", None) is not None:
             html_value = cast("HasHtml", value)
             return PreparedTrustedHtmlValue(str(html_value.__html__()))
@@ -911,7 +910,7 @@ class PreparedExprNode(ExprNode):
             return rendered
         if not isinstance(rendered, str):
             raise TypeError("prepared expression fallback must render as text or a component")
-        return str(unescape(rendered))
+        return decode_character_references(str(rendered))
 
     def render(self, context: CitryContext) -> RenderPart:
         value = self.resolve_value(context)

@@ -57,7 +57,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from html import unescape
 from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
 
@@ -65,7 +64,7 @@ from citry.citry_element import _DEFAULT_CITRY_ELEMENT, CitryElement
 from citry.component_like import _DEFAULT_COMPONENT_LIKE, ComponentLike, _resolve_component_like
 from citry.constness import const_value
 from citry.slots import Slot
-from citry.util.html import escape
+from citry.util.html import decode_character_references, escape
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
@@ -835,7 +834,7 @@ def _render_slot_value(slot: Slot, data: Any, fallback: Slot | None, context: Ci
 
         if vue_render_active() and isinstance(rendered, _EscapedSlotText) and "<" not in rendered:
             source = "python-slot-text"
-            return PreparedTextValue(source, (0, len(source)), unescape(str(rendered)))
+            return PreparedTextValue(source, (0, len(source)), decode_character_references(str(rendered)))
         return rendered
     finally:
         _VALUE_CONTEXT.reset(token)

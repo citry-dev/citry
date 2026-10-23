@@ -6,7 +6,6 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from html import unescape
 from typing import TYPE_CHECKING, Any, Literal, cast
 from weakref import ref
 
@@ -38,7 +37,7 @@ from citry.client_directives import (
 )
 from citry.constness import const_value
 from citry.nodes import ElementAttrsNode, ExprNode, Node, StaticHtmlAttr, _reject_reserved_events_attr
-from citry.util.html import Markup
+from citry.util.html import Markup, decode_character_references
 
 from .usage import CLIENT_CONTEXT_KEY
 
@@ -426,7 +425,8 @@ class I18nBoundExprNode(Node):
             value = self.original.evaluate(context.variables, sandboxed=context.sandboxed)
             rendered = _render_value(value, provides=context.provides, citry=component.citry, context=context)
             if prepared_render_active() and isinstance(rendered, Markup) and "<" not in str(rendered):
-                return PreparedTextValue(self.original.source, self.original.position, unescape(str(rendered)))
+                text = decode_character_references(str(rendered))
+                return PreparedTextValue(self.original.source, self.original.position, text)
             return rendered
         with collector.capture() as captures:
             value = self.original.evaluate(context.variables, sandboxed=context.sandboxed)

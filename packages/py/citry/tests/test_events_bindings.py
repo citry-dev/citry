@@ -301,6 +301,20 @@ class TestStageOneVocabulary:
         with pytest.raises(ValueError, match="@c-poll interval exceeds the JavaScript safe-integer limit"):
             self._one('<div @c-poll.9007199254741s="go">x</div>', events={"go": _noop})
 
+    def test_a_timing_with_thousands_of_digits_is_past_the_safe_integer_limit(self):
+        # Python refuses to convert more than 4,300 digits; the binding check
+        # reports the limit instead of that error.
+        digits = "9" * 5000
+        with pytest.raises(ValueError, match="@c-poll interval exceeds the JavaScript safe-integer limit"):
+            self._one(f'<div @c-poll.{digits}s="go">x</div>', events={"go": _noop})
+        with pytest.raises(ValueError, match="debounce timing exceeds the JavaScript safe-integer limit"):
+            self._one(f'<button @c-click.debounce.{digits}ms="go">x</button>', events={"go": _noop})
+        # Leading zeros do not count: this is 50 ms.
+        tables, _ = self._one_typed(
+            f'<button @c-click.debounce.{"0" * 5000}50ms="go">x</button>', events={"go": _noop}
+        )
+        assert tables["eventBindings"][0]["debounce"] == 50
+
     def test_poll_interval_must_be_positive(self):
         with pytest.raises(
             ValueError,

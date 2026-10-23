@@ -38,7 +38,7 @@ def _nested_renders(rendered: CitryRender) -> Iterator[CitryRender]:
 
 
 def _encode_marker_response(
-    app: Citry, caller: type[Component], payload: CitryElement | CitryRender
+    app: Citry, caller: type[Component], payload: CitryElement | CitryRender, *, revision: str = "4"
 ) -> dict[str, object]:
     dispatcher = dispatcher_for(app)
     handler = app.extensions.get_extension("events").resolve(caller).handlers["refresh"]
@@ -51,7 +51,7 @@ def _encode_marker_response(
         headers={
             "x-citry-vue-app": "marker-app",
             "x-citry-vue-occurrence": "caller_occurrence",
-            "x-citry-vue-revision": "4",
+            "x-citry-vue-revision": revision,
         },
     )
     [encoded] = encode_actions(
@@ -725,3 +725,31 @@ def test_prepared_protocol_rejects_unknown_marker_owner_and_duplicate_alias(
 
     with pytest.raises(ValueError, match=message):
         prepared_manifest(app_id="app", view=invalid, assets=_protocol_assets(valid))
+
+
+@pytest.mark.parametrize(
+    "revision",
+    ["9" * 5000, "9" * 17, "9007199254740992", "\u0663", "-1", ""],
+    ids=["5000-digits", "17-digits", "past-safe-integer", "arabic-indic-digit", "negative", "empty"],
+)
+def test_a_revision_header_the_browser_cannot_send_is_refused(revision: str) -> None:
+    # The browser sends a JavaScript safe integer in ASCII digits. A larger
+    # number (Python refuses to convert more than 4,300 digits), or digits
+    # from another writing system such as Arabic-Indic, is refused with the
+    # same message as a missing header.
+    app = Citry(autodiscover=False)
+
+    class Payload(Component):
+        citry = app
+        template = "<p>payload</p>"
+
+    class Caller(Component):
+        citry = app
+        template = "<button>caller</button>"
+
+        class Events:
+            def refresh(self):
+                return None
+
+    with pytest.raises(ValueError, match="requires current app, occurrence, and revision headers"):
+        _encode_marker_response(app, Caller, Payload(), revision=revision)

@@ -6,10 +6,10 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
-from html.parser import HTMLParser
 from typing import Any, ClassVar, Literal, TypeAlias, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
+from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._active_descendant import ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY
 from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
@@ -272,7 +272,7 @@ def _copy_attrs(
     return copied
 
 
-class _VisualParser(HTMLParser):
+class _VisualParser(LongReferenceSafeParser):
     _VOID: ClassVar[set[str]] = {
         "area",
         "base",

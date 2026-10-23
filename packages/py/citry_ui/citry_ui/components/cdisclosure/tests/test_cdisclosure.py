@@ -291,6 +291,14 @@ def test_python_attrs_reject_vue_directives_before_rendering():
         _render(_disclosure(inputs="c-attrs=\"{':class': 'selected'}\""))
 
 
+def test_title_reads_a_numeric_reference_with_thousands_of_digits():
+    # Python refuses to convert more than 4,300 digits; the title check reads
+    # the reference as the browser does ("j") instead of raising.
+    long_j = "&#" + "0" * 5000 + "106;"
+    html = _render(_disclosure(f"Title {long_j}"))
+    assert long_j in html
+
+
 def test_title_accepts_bindings_to_allowed_attributes():
     html = _render(_disclosure('<span :class="tone">Help</span>'))
     assert ':class="tone"' in html

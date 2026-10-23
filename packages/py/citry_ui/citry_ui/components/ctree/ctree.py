@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha256
-from html.parser import HTMLParser
 from typing import Any, Literal, TypedDict, cast
 
 from citry import LibraryComponent, SlotInput, const_value
+from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs, reject_vue_directive_attrs
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
@@ -177,7 +177,7 @@ def _token(value: str) -> str:
     return sha256(value.encode()).hexdigest()[:12]
 
 
-class _TreeOutputParser(HTMLParser):
+class _TreeOutputParser(LongReferenceSafeParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.stack: list[str | None] = []

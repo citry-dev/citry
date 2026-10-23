@@ -6237,7 +6237,7 @@ _CITRY_BINDING_MODIFIERS = (
 _CITRY_BINDING_MODIFIERS_BY_NAME = {spec.name: spec for spec in _CITRY_BINDING_MODIFIERS}
 _CITRY_TIMING_EXAMPLES = ("100ms", "250ms", "300ms", "500ms", "1s")
 _CITRY_POLL_EXAMPLES = ("1s", "5s", "30s", "60s")
-_CITRY_TIME_SEGMENT = re.compile(r"\d+(?:ms|s)\Z")
+_CITRY_TIME_SEGMENT = re.compile(r"[0-9]+(?:ms|s)\Z")
 
 _VUE_SYNTAX = (
     _SyntaxSpec(

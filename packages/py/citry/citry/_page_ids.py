@@ -13,9 +13,9 @@ check, so it costs nothing there.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from html.parser import HTMLParser
 
 from citry._caller_warnings import warn_at_caller
+from citry.util.html import LongReferenceSafeParser
 
 # Elements whose start tag never has a matching end tag in the HTML.
 _VOID_TAGS = frozenset(
@@ -38,7 +38,7 @@ _INERT_CONTENT_TAGS = frozenset({"template", "noscript"})
 _CHILD_PLACEHOLDER_ATTRIBUTE = "c-render-id"
 
 
-class _IdScanner(HTMLParser):
+class _IdScanner(LongReferenceSafeParser):
     """Collect the ``id`` values a browser would register for one piece of HTML."""
 
     def __init__(self) -> None:

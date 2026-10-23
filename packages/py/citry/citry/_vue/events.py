@@ -61,6 +61,10 @@ _LOCAL_ASSETS: WeakKeyDictionary[Citry, _LocalAssets] = WeakKeyDictionary()
 # How many recent assets each process keeps in memory per engine when the
 # engine has a cache backend, which holds the full set.
 _LOCAL_ASSET_LIMIT = 128
+# The largest JavaScript safe integer, the most a revision the browser sends
+# can be, and how many digits it has.
+_MAX_SAFE_INTEGER = 2**53 - 1
+_REVISION_DIGITS = len(str(_MAX_SAFE_INTEGER))
 # The asset name each kind uses in its collision error message.
 _ASSET_LABELS = {"definition": "definition bundle", "style": "stylesheet asset"}
 # Renders publish into these maps while route requests read and refill them,
@@ -400,7 +404,17 @@ def default_events_producer(citry: Citry) -> DirectVueEventsProducer:
         app_id = headers.get("x-citry-vue-app", "")
         occurrence_id = headers.get("x-citry-vue-occurrence", "")
         raw_revision = headers.get("x-citry-vue-revision", "")
-        if not app_id or not occurrence_id or not raw_revision.isdigit():
+        # The browser sends the revision as a JavaScript safe integer in ASCII
+        # digits. Anything else (digits from another writing system, or a
+        # number past that limit, which may have more digits than Python
+        # converts to an int) is a request this page did not make.
+        if (
+            not app_id
+            or not occurrence_id
+            or not (raw_revision.isascii() and raw_revision.isdigit())
+            or len(raw_revision) > _REVISION_DIGITS
+            or int(raw_revision) > _MAX_SAFE_INTEGER
+        ):
             raise ValueError("Vue Events requires current app, occurrence, and revision headers.")
         base_revision = int(raw_revision)
         return app_id, base_revision + 1, base_revision, occurrence_id

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- A component that checks its rendered fills, such as `CDisclosure`'s
+  title, now reads a numeric character reference with thousands of digits
+  (`&#` followed by 5,000 zeros and `106;`) instead of raising
+  `ValueError`.
+
 ### Changed
 
 - Citry UI components work with Citry's new check that raises
