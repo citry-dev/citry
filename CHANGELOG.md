@@ -296,6 +296,10 @@
   block or `Markup` value holding one of these characters in an
   interactive component now renders. It used to fail with "is not a
   complete HTML fragment".
+- On Python 3.14, a `simple = "vue"` component now renders when its class
+  body, or a plain base class it inherits from, holds an annotation such as
+  `start: int = 3`. It used to fail with "instance member
+  __annotate_func__ is not supported".
 
 ### Performance
 
