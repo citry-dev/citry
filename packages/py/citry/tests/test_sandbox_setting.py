@@ -9,6 +9,7 @@ sandbox rejects succeeds when the sandbox is off.
 """
 
 import re
+import sys
 
 import pytest
 
@@ -129,6 +130,11 @@ _SURROGATE_TEMPLATES = [
     f"<i c-for=\"it in {_SURROGATE_DATA}\">{{{{ it or '' }}}}</i>",
     f"<p>{{{{ f'{{{_SURROGATE_ROW}}}' }}}}</p>",
 ]
+# The f-string template reuses its quote and a backslash inside the
+# replacement field, which Python's own parser accepts only from 3.12
+# (PEP 701). The sandbox parses it on every version, but with the sandbox off
+# Python itself compiles the expression, so that case needs 3.12.
+_PEP_701_TEMPLATE = _SURROGATE_TEMPLATES[-1]
 
 
 def _render_surrogate_key(body: str, *, kind: bool | str, sandbox: bool) -> str:
@@ -177,6 +183,8 @@ def _render_surrogate_key(body: str, *, kind: bool | str, sandbox: bool) -> str:
 def test_every_evaluator_reads_a_lone_surrogate_escape_as_python_does(
     body: str, sandbox: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    if body == _PEP_701_TEMPLATE and not sandbox and sys.version_info < (3, 12):
+        pytest.skip("Python compiles this f-string only from 3.12 (PEP 701)")
     # Citry evaluates some of these templates with its generated leaf
     # evaluator (for simple paths) and the rest with the expression sandbox,
     # or plain Python when the sandbox is off. render_both renders on the
