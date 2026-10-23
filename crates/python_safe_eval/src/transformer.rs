@@ -252,6 +252,10 @@
 
 use crate::comments::extract_comments;
 use crate::parse::parse_expression;
+use crate::utils::literal_source::{
+    escape_format_braces, has_surrogate_escape, interpolated_text_as_plain_body,
+    plain_literal_text, source_text,
+};
 use crate::utils::python_ast::{
     attribute, call, get_expr_range, interceptor_call, none_literal, string_literal,
 };
@@ -263,6 +267,7 @@ use ruff_source_file::LineIndex;
 use ruff_text_size::Ranged;
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 /// Metadata of a matched token with its position information
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -391,7 +396,7 @@ pub fn transform_expression_string(source: &str) -> Result<TransformResult, Stri
     let wrapped_source = format!("(\n{}\n)", source);
     let wrap_prefix_len = 2; // "(\n" = 2 characters
 
-    let transformer = SandboxTransformer::new(wrap_prefix_len);
+    let transformer = SandboxTransformer::new(wrap_prefix_len, &wrapped_source);
     let ast =
         parse_expression_with_adjusted_error_ranges(&wrapped_source, source, wrap_prefix_len)?;
 
@@ -538,10 +543,14 @@ pub struct SandboxTransformer {
     used_variables: RefCell<Vec<(String, usize, usize)>>,
     // Offset to adjust ranges from wrapped source back to original source
     wrap_prefix_len: usize,
+    // The wrapped source the AST ranges point into. A literal the parser
+    // cannot decode as Python does is written from this text (see
+    // `utils::literal_source`).
+    source: Rc<str>,
 }
 
 impl SandboxTransformer {
-    pub fn new(wrap_prefix_len: usize) -> Self {
+    pub fn new(wrap_prefix_len: usize, source: &str) -> Self {
         Self {
             comprehension_variables: RefCell::new(HashSet::new()),
             lambda_variables: RefCell::new(HashSet::new()),
@@ -549,7 +558,37 @@ impl SandboxTransformer {
             assignments: RefCell::new(Vec::new()),
             used_variables: RefCell::new(Vec::new()),
             wrap_prefix_len,
+            source: Rc::from(source),
         }
+    }
+
+    /// The source text of the node at `range`.
+    fn source_at(&self, range: ruff_text_size::TextRange) -> &str {
+        &self.source[range]
+    }
+
+    /// The literal's source text, when the parser's decoded value would give
+    /// Python another string (it holds a lone surrogate escape). Raw strings
+    /// have no escapes, so they always decode alike.
+    fn literal_needing_source(&self, literal: &ast::StringLiteral) -> Option<&str> {
+        let text = self.source_at(literal.range);
+        (!literal.flags.prefix().is_raw() && has_surrogate_escape(text)).then_some(text)
+    }
+
+    /// The text between an f-string's or t-string's interpolations, as an
+    /// ordinary literal written from its source, when the parser's decoded
+    /// value would give Python a different string.
+    fn interpolated_text_needing_source(
+        &self,
+        element: &ast::InterpolatedStringLiteralElement,
+        flags: impl ast::StringFlags,
+    ) -> Option<Expr> {
+        let text = self.source_at(element.range);
+        if flags.prefix().is_raw() || !has_surrogate_escape(text) {
+            return None;
+        }
+        let body = interpolated_text_as_plain_body(text);
+        Some(source_text(plain_literal_text(&body, flags), element.range))
     }
 
     /// Adjust a TextRange from wrapped source coordinates to original source coordinates
@@ -589,6 +628,7 @@ impl SandboxTransformer {
             assignments: RefCell::new(Vec::new()),
             wrap_prefix_len: self.wrap_prefix_len,
             used_variables: RefCell::new(Vec::new()),
+            source: Rc::clone(&self.source),
         }
     }
 
@@ -760,13 +800,139 @@ impl SandboxTransformer {
     }
 }
 
+/// The format spec of one f-string or t-string interpolation, rebuilt for
+/// the generated code.
+enum FormatSpec {
+    /// A spec with no interpolations (`:>10`), passed on as one string.
+    Static(Expr),
+    /// A spec with interpolations (`:{width}`): a `str.format` template and
+    /// the arguments for its `{}` placeholders, in order.
+    Dynamic { template: String, args: Vec<Expr> },
+}
+
+/// A piece of an f-string's text passed as an argument to the sandbox's
+/// `format()` function, which the generated code calls in place of
+/// `str.format`. It takes every placeholder's argument as a
+/// `(value, conversion, format_spec)` tuple; with no conversion and no spec,
+/// the text is used as it is.
+fn format_text_argument(text: Expr) -> Expr {
+    let range = text.range();
+    Expr::Tuple(ast::ExprTuple {
+        node_index: Default::default(),
+        range,
+        ctx: ast::ExprContext::Load,
+        parenthesized: false,
+        elts: vec![text, none_literal(range), string_literal("", range)],
+    })
+}
+
+/// The conversion an interpolation applies. A self-documenting
+/// interpolation (`{x=}`) with neither a conversion nor a format spec shows
+/// the value's `repr()`, as Python does.
+fn interpolation_conversion(interpolation: &ast::InterpolatedElement) -> ast::ConversionFlag {
+    if interpolation.debug_text.is_some()
+        && interpolation.conversion == ast::ConversionFlag::None
+        && interpolation.format_spec.is_none()
+    {
+        ast::ConversionFlag::Repr
+    } else {
+        interpolation.conversion
+    }
+}
+
+impl SandboxTransformer {
+    /// Transform the expressions in a format spec and rebuild its text.
+    ///
+    /// A static spec reaches Python's `format()` as it is. A dynamic spec
+    /// becomes a `str.format` template, so its literal text goes in with
+    /// braces doubled. Text the parser cannot decode as Python does is
+    /// written from its source: the whole static spec, or one `{}`
+    /// argument of the dynamic template.
+    fn visit_format_spec(
+        &self,
+        format_spec: &mut ast::InterpolatedStringFormatSpec,
+        flags: impl ast::StringFlags,
+        range: ruff_text_size::TextRange,
+    ) -> FormatSpec {
+        let is_dynamic = format_spec
+            .elements
+            .iter()
+            .any(|element| matches!(element, ast::InterpolatedStringElement::Interpolation(_)));
+        if !is_dynamic {
+            let literals = format_spec
+                .elements
+                .iter()
+                .filter_map(|element| match element {
+                    ast::InterpolatedStringElement::Literal(lit) => Some(lit),
+                    ast::InterpolatedStringElement::Interpolation(_) => None,
+                });
+            let needs_source = !flags.prefix().is_raw()
+                && literals
+                    .clone()
+                    .any(|lit| has_surrogate_escape(self.source_at(lit.range)));
+            if needs_source {
+                let body = literals
+                    .map(|lit| interpolated_text_as_plain_body(self.source_at(lit.range)))
+                    .collect::<String>();
+                return FormatSpec::Static(source_text(plain_literal_text(&body, flags), range));
+            }
+            let value = literals.map(|lit| lit.value.as_ref()).collect::<String>();
+            return FormatSpec::Static(string_literal(&value, range));
+        }
+
+        let mut template = String::new();
+        let mut args = Vec::new();
+        for element in format_spec.elements.iter_mut() {
+            match element {
+                ast::InterpolatedStringElement::Literal(lit) => {
+                    match self.interpolated_text_needing_source(lit, flags) {
+                        Some(text) => {
+                            template.push_str("{}");
+                            args.push(text);
+                        }
+                        None => template.push_str(&escape_format_braces(&lit.value)),
+                    }
+                }
+                ast::InterpolatedStringElement::Interpolation(spec_interp) => {
+                    // Format specs with expressions, e.g. f"{value:{width}.{precision}f}"
+                    self.visit_expr(&mut spec_interp.expression);
+                    template.push_str("{}");
+                    args.push(*spec_interp.expression.clone());
+                }
+            }
+        }
+        FormatSpec::Dynamic { template, args }
+    }
+}
+
 impl Transformer for SandboxTransformer {
     /// Override the default visit_expr to implement our validation and transformation logic
     fn visit_expr(&self, expr: &mut Expr) {
         match expr {
             // ✅ ALLOWED - Literals
-            Expr::StringLiteral(_)
-            | Expr::BytesLiteral(_)
+            // A string literal the parser cannot decode as Python does is
+            // written from its source text, so Python decodes it when the
+            // generated code runs. Bytes literals need no such step: `\u`
+            // is not an escape in them.
+            Expr::StringLiteral(literal) => {
+                if literal
+                    .value
+                    .iter()
+                    .any(|part| self.literal_needing_source(part).is_some())
+                {
+                    // Every part is written from its source, joined as
+                    // implicit concatenation, so each keeps its own prefix
+                    // and quotes.
+                    let text = literal
+                        .value
+                        .iter()
+                        .map(|part| self.source_at(part.range))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    *expr = source_text(text, literal.range);
+                }
+            }
+            Expr::BytesLiteral(_)
             | Expr::NumberLiteral(_)
             | Expr::BooleanLiteral(_)
             | Expr::NoneLiteral(_)
@@ -1131,116 +1297,111 @@ impl Transformer for SandboxTransformer {
 
                 // Process all parts of the f-string
                 for part in &mut f_string.value {
-                    if let ast::FStringPart::FString(f_str) = part {
-                        // Process each element in the f-string
-                        for element in f_str.elements.iter_mut() {
-                            match element {
-                                ast::InterpolatedStringElement::Literal(lit) => {
-                                    // Add literal text to template
-                                    template_parts.push(lit.value.to_string());
+                    let f_str = match part {
+                        ast::FStringPart::FString(f_str) => f_str,
+                        // An ordinary literal joined to the f-string by
+                        // implicit concatenation (`'a' f'{x}'`) is part of
+                        // the text too.
+                        ast::FStringPart::Literal(literal) => {
+                            match self.literal_needing_source(literal) {
+                                Some(text) => {
+                                    template_parts.push("{}".to_string());
+                                    format_args.push(format_text_argument(source_text(
+                                        text.to_owned(),
+                                        literal.range,
+                                    )));
                                 }
-                                ast::InterpolatedStringElement::Interpolation(interpolation) => {
-                                    // Transform the expression
-                                    self.visit_expr(&mut interpolation.expression);
+                                None => template_parts.push(escape_format_braces(&literal.value)),
+                            }
+                            continue;
+                        }
+                    };
+                    let flags = f_str.flags;
+                    // Process each element in the f-string
+                    for element in f_str.elements.iter_mut() {
+                        match element {
+                            ast::InterpolatedStringElement::Literal(lit) => {
+                                // The template is a `str.format` template, so
+                                // literal text goes in with its braces doubled.
+                                // Text the parser cannot decode as Python does
+                                // is passed as an argument written from its
+                                // source, in a `{}` placeholder.
+                                match self.interpolated_text_needing_source(lit, flags) {
+                                    Some(text) => {
+                                        template_parts.push("{}".to_string());
+                                        format_args.push(format_text_argument(text));
+                                    }
+                                    None => template_parts.push(escape_format_braces(&lit.value)),
+                                }
+                            }
+                            ast::InterpolatedStringElement::Interpolation(interpolation) => {
+                                // Transform the expression
+                                self.visit_expr(&mut interpolation.expression);
 
-                                    // Get range from the expression before cloning
-                                    let expr_range =
-                                        get_expr_range(&interpolation.expression, range);
-                                    let value_expr = *interpolation.expression.clone();
+                                // Get range from the expression before cloning
+                                let expr_range = get_expr_range(&interpolation.expression, range);
+                                let value_expr = *interpolation.expression.clone();
 
-                                    // Build conversion flag string ("r", "s", "a", or None)
-                                    let conversion_flag = match interpolation.conversion {
-                                        ast::ConversionFlag::None => none_literal(expr_range),
-                                        ast::ConversionFlag::Str => string_literal("s", expr_range),
-                                        ast::ConversionFlag::Ascii => {
-                                            string_literal("a", expr_range)
-                                        }
-                                        ast::ConversionFlag::Repr => {
-                                            string_literal("r", expr_range)
-                                        }
-                                    };
+                                // Build conversion flag string ("r", "s", "a", or None)
+                                let conversion_flag = match interpolation_conversion(interpolation)
+                                {
+                                    ast::ConversionFlag::None => none_literal(expr_range),
+                                    ast::ConversionFlag::Str => string_literal("s", expr_range),
+                                    ast::ConversionFlag::Ascii => string_literal("a", expr_range),
+                                    ast::ConversionFlag::Repr => string_literal("r", expr_range),
+                                };
 
-                                    // Build format spec. Either:
-                                    // - static string (`:.2f`, `:>10`, etc.)
-                                    // - dynamic expression (`{width}.{precision}f`)
-                                    // We don't call built-in `format()` here; we pass the format spec as metadata
-                                    // and let our `format()` interceptor handle it.
-                                    let format_spec_expr =
-                                        if let Some(format_spec) = &mut interpolation.format_spec {
-                                            // Build the format spec - can be static or dynamic
-                                            let mut spec_template_parts = Vec::new();
-                                            let mut spec_format_args = Vec::new();
-
-                                            for spec_element in format_spec.elements.iter_mut() {
-                                                match spec_element {
-                                                ast::InterpolatedStringElement::Literal(lit) => {
-                                                    spec_template_parts.push(lit.value.to_string());
-                                                }
-                                                ast::InterpolatedStringElement::Interpolation(
-                                                    spec_interp,
-                                                ) => {
-                                                    // Format specs with expressions!
-                                                    // e.g., f"{value:{width}.{precision}f}"
-                                                    // Transform the expression in the format spec
-                                                    self.visit_expr(&mut spec_interp.expression);
-
-                                                    // Add {} placeholder
-                                                    spec_template_parts.push("{}".to_string());
-
-                                                    // Add the transformed expression to spec args
-                                                    spec_format_args
-                                                        .push(*spec_interp.expression.clone());
-                                                }
-                                            }
-                                            }
-
-                                            let spec_template_str = spec_template_parts.join("");
-
-                                            // Build the format spec expression
-                                            if spec_format_args.is_empty() {
-                                                // Static format spec - just use a string literal
-                                                string_literal(&spec_template_str, expr_range)
-                                            } else {
-                                                // Dynamic format spec - we need to pass both template and args
-                                                // We'll pass this as a tuple: (template, *args)
-                                                let spec_template_literal =
-                                                    string_literal(&spec_template_str, expr_range);
-                                                // Create a tuple: (template, arg1, arg2, ...)
+                                // Build format spec. Either:
+                                // - static string (`:.2f`, `:>10`, etc.)
+                                // - dynamic expression (`{width}.{precision}f`)
+                                // We don't call built-in `format()` here; we pass the format spec as metadata
+                                // and let our `format()` interceptor handle it.
+                                let format_spec_expr = match &mut interpolation.format_spec {
+                                    Some(format_spec) => {
+                                        match self.visit_format_spec(format_spec, flags, expr_range)
+                                        {
+                                            FormatSpec::Static(spec) => spec,
+                                            // Dynamic format spec - we pass both template and
+                                            // args as a tuple: (template, arg1, arg2, ...)
+                                            FormatSpec::Dynamic { template, args } => {
+                                                let mut elts =
+                                                    vec![string_literal(&template, expr_range)];
+                                                elts.extend(args);
                                                 Expr::Tuple(ast::ExprTuple {
                                                     node_index: Default::default(),
                                                     range: expr_range,
                                                     ctx: ast::ExprContext::Load,
                                                     parenthesized: false,
-                                                    elts: {
-                                                        let mut tuple_elts =
-                                                            vec![spec_template_literal];
-                                                        tuple_elts.extend(spec_format_args);
-                                                        tuple_elts
-                                                    },
+                                                    elts,
                                                 })
                                             }
-                                        } else {
-                                            // No format spec - use empty string
-                                            string_literal("", expr_range)
-                                        };
+                                        }
+                                    }
+                                    // No format spec - use empty string
+                                    None => string_literal("", expr_range),
+                                };
 
-                                    // Add simple placeholder to template
-                                    template_parts.push("{}".to_string());
-
-                                    // Pass each interpolation as a tuple: (value, conversion_flag, format_spec)
-                                    // This allows our format() interceptor to apply conversion and format_spec
-                                    // instead of calling built-in functions that won't be caught by error handling
-                                    let interpolation_tuple = Expr::Tuple(ast::ExprTuple {
-                                        node_index: Default::default(),
-                                        range: expr_range,
-                                        ctx: ast::ExprContext::Load,
-                                        parenthesized: false,
-                                        elts: vec![value_expr, conversion_flag, format_spec_expr],
-                                    });
-
-                                    // Add the tuple to format args
-                                    format_args.push(interpolation_tuple);
+                                // Add simple placeholder to template
+                                // `f'{x=}'` writes its own source text (`x=`) before
+                                // the value, as Python does.
+                                if let Some(debug_text) = &interpolation.debug_text {
+                                    template_parts.push(escape_format_braces(debug_text.as_str()));
                                 }
+                                template_parts.push("{}".to_string());
+
+                                // Pass each interpolation as a tuple: (value, conversion_flag, format_spec)
+                                // This allows our format() interceptor to apply conversion and format_spec
+                                // instead of calling built-in functions that won't be caught by error handling
+                                let interpolation_tuple = Expr::Tuple(ast::ExprTuple {
+                                    node_index: Default::default(),
+                                    range: expr_range,
+                                    ctx: ast::ExprContext::Load,
+                                    parenthesized: false,
+                                    elts: vec![value_expr, conversion_flag, format_spec_expr],
+                                });
+
+                                // Add the tuple to format args
+                                format_args.push(interpolation_tuple);
                             }
                         }
                     }
@@ -1277,12 +1438,17 @@ impl Transformer for SandboxTransformer {
 
                 // Process all parts of the t-string (TString doesn't have wrapper, just TString directly)
                 for t_str in &mut t_string.value {
+                    let flags = t_str.flags;
                     // Process each element in the t-string
                     for element in t_str.elements.iter_mut() {
                         match element {
                             ast::InterpolatedStringElement::Literal(lit) => {
-                                // Add literal string to Template args
-                                let string_lit_literal = string_literal(&lit.value, lit.range);
+                                // Add literal string to Template args, written
+                                // from its source when the parser cannot decode
+                                // it as Python does.
+                                let string_lit_literal = self
+                                    .interpolated_text_needing_source(lit, flags)
+                                    .unwrap_or_else(|| string_literal(&lit.value, lit.range));
                                 template_args.push(string_lit_literal);
                             }
                             ast::InterpolatedStringElement::Interpolation(interpolation) => {
@@ -1300,7 +1466,8 @@ impl Transformer for SandboxTransformer {
                                 let expr_text = "".to_string(); // TODO: preserve original expression text
 
                                 // Build conversion argument
-                                let conversion_expr = match interpolation.conversion {
+                                let conversion_expr = match interpolation_conversion(interpolation)
+                                {
                                     ast::ConversionFlag::None => none_literal(interpolation.range),
                                     ast::ConversionFlag::Str => {
                                         string_literal("s", interpolation.range)
@@ -1314,55 +1481,27 @@ impl Transformer for SandboxTransformer {
                                 };
 
                                 // Build format spec - can be static string or dynamic expression
-                                let format_spec_expr = if let Some(format_spec) =
-                                    &mut interpolation.format_spec
-                                {
-                                    let mut spec_template_parts = Vec::new();
-                                    let mut spec_format_args = Vec::new();
-
-                                    for spec_element in format_spec.elements.iter_mut() {
-                                        match spec_element {
-                                            ast::InterpolatedStringElement::Literal(lit) => {
-                                                spec_template_parts.push(lit.value.to_string());
-                                            }
-                                            ast::InterpolatedStringElement::Interpolation(
-                                                spec_interp,
-                                            ) => {
-                                                // Dynamic format spec with expressions!
-                                                self.visit_expr(&mut spec_interp.expression);
-                                                spec_template_parts.push("{}".to_string());
-                                                spec_format_args
-                                                    .push(*spec_interp.expression.clone());
-                                            }
-                                        }
-                                    }
-
-                                    let spec_template_str = spec_template_parts.join("");
-
-                                    // Build the format spec expression
-                                    // Use interpolation.range for consistency with conversion expressions
-                                    if spec_format_args.is_empty() {
-                                        // Static format spec - just use a string literal
-                                        string_literal(&spec_template_str, interpolation.range)
-                                    } else {
-                                        // Dynamic format spec - use "{}".format(args...)
-                                        let spec_template_literal =
-                                            string_literal(&spec_template_str, interpolation.range);
-                                        // `"{}".format(args...)`
-                                        call(
+                                let format_spec_expr = match &mut interpolation.format_spec {
+                                    Some(format_spec) => match self.visit_format_spec(
+                                        format_spec,
+                                        flags,
+                                        interpolation.range,
+                                    ) {
+                                        FormatSpec::Static(spec) => spec,
+                                        // Dynamic format spec - `"{}".format(args...)`
+                                        FormatSpec::Dynamic { template, args } => call(
                                             attribute(
-                                                spec_template_literal,
+                                                string_literal(&template, interpolation.range),
                                                 "format",
                                                 interpolation.range,
                                             ),
-                                            spec_format_args,
+                                            args,
                                             vec![],
                                             interpolation.range,
-                                        )
-                                    }
-                                } else {
+                                        ),
+                                    },
                                     // No format spec - use empty string
-                                    string_literal("", interpolation.range)
+                                    None => string_literal("", interpolation.range),
                                 };
 
                                 // `interpolation(context, source, token, value, expression, conversion, format_spec)`
@@ -1381,6 +1520,14 @@ impl Transformer for SandboxTransformer {
                                     adjusted_interpolation_range,
                                 );
 
+                                // `t'{x=}'` holds its own source text (`x=`) before the
+                                // interpolation, as Python's template does.
+                                if let Some(debug_text) = &interpolation.debug_text {
+                                    template_args.push(string_literal(
+                                        debug_text.as_str(),
+                                        interpolation.range,
+                                    ));
+                                }
                                 template_args.push(interpolation_call);
                             }
                         }

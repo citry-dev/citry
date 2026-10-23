@@ -25,6 +25,10 @@ AST, and returns it along with the variables it uses.
 - `src/codegen.rs` - regenerating Python source from the AST.
 - `src/comments.rs` - comment extraction.
 - `src/utils/python_ast.rs` - AST helpers.
+- `src/utils/literal_source.rs` - writing a string literal from its source
+  text when the parser's decoded value cannot reproduce it (a lone surrogate
+  escape), and the helpers that write f-string text into the `str.format`
+  template the transformer builds.
 
 ## Who depends on it
 
@@ -33,6 +37,12 @@ AST, and returns it along with the variables it uses.
 - `crates/citry_template_parser` uses it (via the Python `LangImpl`) to extract
   used / assigned variables and comments from `{{ }}` expressions and from
   `<c-for>` loop expressions.
+
+## Gotchas
+
+- After the transformer runs, a name node can hold a literal's source text
+  (`literal_source::source_text`), which the generator writes as it is. A
+  step added after the transformer must not read name ids as variable names.
 
 ## Verifying changes
 

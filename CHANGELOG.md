@@ -247,6 +247,14 @@
   interactive `"document"` or `"fragment"` serialization of it, now writes
   its scripts and stylesheets like a fresh render instead of leaving them
   out.
+- In a template expression, a string with a lone surrogate escape, such
+  as `row['\ud800']`, now means U+D800, as it does in Python. With the
+  expression sandbox on (the default), some templates used to read U+FFFD
+  (the replacement character), so the same lookup could read a different
+  key in different templates. Also with the sandbox on, an f-string in a
+  template expression now behaves as in Python: `f'{{a}}'` gives `{a}`
+  instead of raising `KeyError`, `'x' f'{y}'` keeps its `'x'`, and
+  `f'{x=}'` shows `x=` before the value.
 
 ### Performance
 

@@ -2308,3 +2308,44 @@ class TestErrorReporting:
             ),
         ):
             compiled(context)
+
+
+# Expressions the sandbox must evaluate exactly as Python does: lone
+# surrogate escapes, which the Rust parser cannot decode as Python does;
+# look-alikes that hold none (an escaped backslash, raw and bytes literals);
+# and f-string text the sandbox rebuilds as a `str.format` template.
+LITERALS_PYTHON_READS = [
+    r"'\ud800'",
+    r"'a\U0000dfffb'",
+    r"'\ud800' 'a'",
+    "('\\ud800'\n 'b')",
+    "'''a\n\\ud800'''",
+    r"{'\ud800': 1}['\ud800']",
+    r"'\\ud800'",
+    r"r'\ud800'",
+    r"b'\ud800'",
+    r"f'\ud800{x}'",
+    r"f'''\ud800'{x}'''",
+    r"f'\N{BULLET}{{\ud800}}{x}'",
+    r"f'{x:\ud800>5}'",
+    r"f'{x:{w}}\ud800'",
+    r"rf'\ud800{x}'",
+    r"'\ud800' f'{x}'",
+    r"f'{{a}}'",
+    r"f'{x}{{'",
+    r"'x' f'{x}'",
+    r"f'{x}' 'z{'",
+    r"f'\{{'",
+    r"f'\ud800\{x}'",
+    r"f'\ud800\\\{x}'",
+    "f'{x=}'",
+    "f'{x = !r:>8}'",
+    "f'{ {1:2}[1] = }'",
+    "f'a{x=}b{w=:>3}'",
+]
+
+
+@pytest.mark.parametrize("source", LITERALS_PYTHON_READS)
+def test_sandbox_reads_literals_as_python_does(source: str) -> None:
+    context = {"x": 5, "w": 4}
+    assert safe_eval(source)(dict(context)) == eval(source, {}, dict(context))  # noqa: S307

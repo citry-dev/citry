@@ -10,6 +10,7 @@ pub mod comments;
 mod parse;
 pub mod transformer;
 mod utils {
+    pub mod literal_source;
     pub mod python_ast;
 }
 

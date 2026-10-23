@@ -2671,4 +2671,140 @@ mod tests {
             ],
         );
     }
+
+    fn _test_generated(cases: &[(&str, &str)]) {
+        for (input, expected) in cases {
+            let result = transform_expression_string(input).unwrap();
+            assert_eq!(
+                generate_python_code(&result.expression),
+                *expected,
+                "{input}"
+            );
+        }
+    }
+
+    // === LITERALS THE PARSER CANNOT DECODE AS PYTHON DOES ===
+
+    #[test]
+    fn test_lone_surrogate_escapes_are_written_from_their_source() {
+        // The parser decodes a lone surrogate escape to U+FFFD, so the
+        // literal (or the f-string or t-string text holding it) is written
+        // from its source text, and Python decodes the escape itself.
+        _test_generated(&[
+            (
+                r#"row['\ud800']"#,
+                r#"subscript(context, source, (0, 13), variable(context, source, (0, 3), 'row'), '\ud800')"#,
+            ),
+            (r#"'\U0000dfff'"#, r#"'\U0000dfff'"#),
+            (r#"'\ud800' 'a'"#, r#"'\ud800' 'a'"#),
+            (
+                r#"f'\ud800{x}'"#,
+                r#"format(context, source, (0, 12), '{}{}', ('\ud800', None, ''), (variable(context, source, (9, 10), 'x'), None, ''))"#,
+            ),
+            (
+                r#"f'{x:\ud800}'"#,
+                r#"format(context, source, (0, 13), '{}', (variable(context, source, (3, 4), 'x'), None, '\ud800'))"#,
+            ),
+            (
+                r#"f'{x:{w}\ud800}'"#,
+                r#"format(context, source, (0, 16), '{}', (variable(context, source, (3, 4), 'x'), None, ('{}{}', variable(context, source, (6, 7), 'w'), '\ud800')))"#,
+            ),
+            (
+                r#"'\ud800' f'{x}'"#,
+                r#"format(context, source, (0, 15), '{}{}', ('\ud800', None, ''), (variable(context, source, (12, 13), 'x'), None, ''))"#,
+            ),
+            (
+                r#"f'''\ud800'{x}'''"#,
+                r#"format(context, source, (0, 17), '{}{}', ('''\ud800\'''', None, ''), (variable(context, source, (12, 13), 'x'), None, ''))"#,
+            ),
+            (
+                r#"f'\N{BULLET}{{\ud800}}{x}'"#,
+                r#"format(context, source, (0, 26), '{}{}', ('\N{BULLET}{\ud800}', None, ''), (variable(context, source, (23, 24), 'x'), None, ''))"#,
+            ),
+            (
+                r#"t'\ud800{x}'"#,
+                r#"template(context, source, (0, 12), '\ud800', interpolation(context, source, (8, 11), variable(context, source, (9, 10), 'x'), '', None, ''))"#,
+            ),
+            (
+                r#"t'{x:\ud800}'"#,
+                r#"template(context, source, (0, 13), interpolation(context, source, (2, 12), variable(context, source, (3, 4), 'x'), '', None, '\ud800'))"#,
+            ),
+            (
+                r#"t'{x:{w}\ud800}'"#,
+                r#"template(context, source, (0, 16), interpolation(context, source, (2, 15), variable(context, source, (3, 4), 'x'), '', None, '{}{}'.format(variable(context, source, (6, 7), 'w'), '\ud800')))"#,
+            ),
+        ]);
+    }
+
+    #[test]
+    fn test_text_ending_in_a_backslash_keeps_it_when_written_from_source() {
+        // The f-string keeps `\{` as a backslash before the interpolation;
+        // written as its own literal, that backslash is doubled so it does
+        // not escape the closing quote.
+        _test_generated(&[(
+            r#"f'\ud800\{x}'"#,
+            r#"format(context, source, (0, 13), '{}{}', ('\ud800\\', None, ''), (variable(context, source, (10, 11), 'x'), None, ''))"#,
+        )]);
+    }
+
+    #[test]
+    fn test_self_documenting_interpolations_write_their_source_text() {
+        // `{x=}` shows the source text before the value, and the value's
+        // repr() when there is no conversion or format spec.
+        _test_generated(&[
+            (
+                "f'{x=}'",
+                "format(context, source, (0, 7), 'x={}', (variable(context, source, (3, 4), 'x'), 'r', ''))",
+            ),
+            (
+                "f'{x=:>4}'",
+                "format(context, source, (0, 10), 'x={}', (variable(context, source, (3, 4), 'x'), None, '>4'))",
+            ),
+            (
+                "f'{ {1:2}[1] = }'",
+                "format(context, source, (0, 17), ' {{1:2}}[1] = {}', (subscript(context, source, (4, 12), {1: 2}, 1), 'r', ''))",
+            ),
+            (
+                "t'{x=}'",
+                "template(context, source, (0, 7), 'x=', interpolation(context, source, (2, 6), variable(context, source, (3, 4), 'x'), '', 'r', ''))",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn test_literals_without_a_lone_surrogate_escape_are_written_as_before() {
+        // An escaped backslash, a raw string and a bytes literal hold no
+        // surrogate escape.
+        _test_generated(&[
+            (r#"'\\ud800'"#, r#"'\\ud800'"#),
+            (r#"r'\ud800'"#, r#"r'\ud800'"#),
+            (r#"b'\ud800'"#, r#"b'\\ud800'"#),
+            (
+                r#"rf'\ud800{x}'"#,
+                r#"format(context, source, (0, 13), '\\ud800{}', (variable(context, source, (10, 11), 'x'), None, ''))"#,
+            ),
+        ]);
+    }
+
+    #[test]
+    fn test_fstring_text_keeps_its_braces_and_concatenated_literals() {
+        // The f-string becomes a `str.format` template, so a literal brace is
+        // written doubled, and an ordinary literal joined to the f-string is
+        // part of the text.
+        _test_generated(&[
+            (r#"f'{{a}}'"#, r#"format(context, source, (0, 8), '{{a}}')"#),
+            (
+                r#"'x' f'{x}'"#,
+                r#"format(context, source, (0, 10), 'x{}', (variable(context, source, (7, 8), 'x'), None, ''))"#,
+            ),
+            (
+                r#"f'{x}' 'z{'"#,
+                r#"format(context, source, (0, 11), '{}z{{', (variable(context, source, (3, 4), 'x'), None, ''))"#,
+            ),
+            (
+                r#"f'{x:>{w}}{{'"#,
+                r#"format(context, source, (0, 13), '{}{{', (variable(context, source, (3, 4), 'x'), None, ('>{}', variable(context, source, (7, 8), 'w'))))"#,
+            ),
+        ]);
+    }
 }

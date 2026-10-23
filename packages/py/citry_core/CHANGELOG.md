@@ -38,6 +38,11 @@
 - A template that contains a NUL character now compiles to Python code that
   runs. `template_parser.compile_template()` used to write the raw NUL, which
   Python refuses in source code.
+- `safe_eval()` now reads a lone surrogate escape, such as `'\ud800'`, as
+  Python does. It used to read U+FFFD, the replacement character. An
+  f-string's doubled braces (`f'{{a}}'`) now give one brace instead of
+  raising `KeyError`, a plain literal joined to an f-string (`'x' f'{y}'`)
+  is no longer dropped, and `f'{x=}'` shows `x=` before the value.
 
 ## v1.8.0
 

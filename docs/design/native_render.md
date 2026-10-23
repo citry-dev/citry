@@ -273,13 +273,12 @@ With level C2, on the Rust path only:
    `ForNode._build_walk_plan` turns the loop clause, the key and each input
    into paths (`citry/_vue/native_walk.py`). An expression reaches two
    evaluators: Python's own parser reads it when the expression sandbox is
-   off, and the sandbox's rewriter reads it when it is on. They read some
-   literals differently (the rewriter turns a lone surrogate escape such as
-   `'\ud800'` into U+FFFD). So each expression is turned into a path twice,
-   from Python's parse of the text and from the Python code the sandbox
-   generated for it, and the loop gets no plan unless both give the same
-   path. Each input's `used_vars` (the names Citry records that the
-   expression reads) must be exactly its path's first name, because Citry
+   off, and the sandbox's rewriter reads it when it is on. Both read a plain
+   path's names and keys alike, so each expression is turned into a path
+   from Python's parse of the text. The sandbox compiles the text first.
+   When it refuses the expression, the loop gets no plan, and Python's walk
+   raises the error. Each input's `used_vars` (the names Citry records that
+   the expression reads) must be exactly its path's first name, because Citry
    decides whether an input is constant from `used_vars`, and Rust must
    check the same name. The node keeps the plan (`_CallRunWalkPlan`), or the
    reason it has none, for every later render.
@@ -550,7 +549,7 @@ error:
 |---|---|
 | A loop clause with `if`, several targets or several `for` clauses, or an iterable that is not a plain path | No plan (`no_plan_loop`). |
 | A key or input that is not a plain path, a static input (always constant), an input written in Vue syntax, which `_resolve_inputs` rejects (`_vue_code_attr_key`), or an input whose `used_vars` is not its path's name | No plan (`no_plan_key`, `no_plan_input`). |
-| A name or string key that starts with `_`, a name that is not an ASCII identifier, a negative, bool or above-i64 index, a surrogate in a string key, or any path the sandbox's code reads differently from Python's parse | No plan (`no_plan_loop`, `no_plan_key` or `no_plan_input`, for the expression that holds it). With the sandbox on, a `_` name or key raises the sandbox's `SecurityError` in Python's walk. |
+| A name or string key that starts with `_`, a name that is not an ASCII identifier, a negative, bool or above-i64 index, a surrogate in a string key, or an expression the sandbox cannot compile | No plan (`no_plan_loop`, `no_plan_key` or `no_plan_input`, for the expression that holds it). With the sandbox on, a `_` name or key raises the sandbox's `SecurityError` in Python's walk. |
 | Any error while the plan is built (a Rust panic in the constructor raises `RuntimeError`) | No plan (`no_plan_error`); the reason is kept, so the plan is not built again. |
 | The Rust module is not used (`SUPPORTED` is false) | No plan (`no_plan_unsupported`). The walk is reached only on the Rust path, so this guards a direct call. |
 | Tracing is on; the variables are not exactly `_ConstMapping` (an extension replaced them with a plain dict); an input reads a scope name marked constant | Declined before Rust runs (`tracing`, `scope`, `const_input`). |

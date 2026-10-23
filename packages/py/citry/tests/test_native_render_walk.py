@@ -603,8 +603,8 @@ LOWER_PATHS: list[tuple[str, Any]] = [
     ("(row := other)", None),
     ("row[", None),
     ("class", None),
-    # The sandbox's rewriter reads these escapes as U+FFFD, Python's parser
-    # as the surrogate itself.
+    # Both evaluators read these keys as lone surrogates, which no Rust
+    # string can hold.
     ("row['\\ud800']", None),
     ("row['a\\udfffb']", None),
     ("row['\\U0000d800']", None),
@@ -634,49 +634,6 @@ def test_lower_path(expr: str, expected: Any) -> None:
 @pytest.mark.parametrize(("targets", "clause", "expected"), LOWER_LOOPS)
 def test_lower_loop(targets: tuple[str, ...], clause: str, expected: Any) -> None:
     assert lower_loop(targets, clause) == expected
-
-
-def test_a_path_is_refused_when_the_sandbox_reads_another_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Python's parse alone would accept this path; the sandbox's generated
-    # code reads another key, so the two lowerings disagree.
-    real = compile_expr
-
-    def other_key(source: str, *, sandboxed: bool = True) -> Any:
-        evaluate = real(source, sandboxed=sandboxed)
-        wrapped = SimpleNamespace(_source_code=evaluate._source_code.replace("'id'", "'other'"))
-        return wrapped
-
-    monkeypatch.setattr("citry._vue.native_walk.compile_expr", other_key)
-    assert lower_path("row['id']") is None
-    assert lower_loop(("row",), "row in rows['id']") is None
-
-
-@pytest.mark.parametrize(
-    "generated",
-    [
-        None,
-        "not python (",
-        "_eval_expr = 1",
-        "_eval_expr = lambda: (row)",
-        "x = 1\ny = 2",
-        "_eval_expr = lambda context: (variable(context, source, (0, 3), 'row', 'extra'))",
-        "_eval_expr = lambda context: (variable(context, source, (0, 3), name='row'))",
-        "_eval_expr = lambda context: (subscript(context, source, (0, 9), row, 'id'))",
-        # The key is a name, not a constant.
-        "_eval_expr = lambda context: "
-        "(subscript(context, source, (0, 9), variable(context, source, (0, 3), 'row'), k))",
-    ],
-)
-def test_generated_code_of_another_shape_refuses_the_path(
-    generated: str | None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # The lowering trusts only the shape of code the sandbox generates
-    # today; any other shape keeps Python's walk.
-    monkeypatch.setattr(
-        "citry._vue.native_walk.compile_expr",
-        lambda _source, **_options: SimpleNamespace(_source_code=generated),
-    )
-    assert lower_path("row['id']") is None
 
 
 def test_an_expression_the_sandbox_cannot_compile_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:

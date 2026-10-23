@@ -1394,17 +1394,18 @@ the board's own data.
 - **A lone surrogate in a template literal.** `#c-key="row['\ud800']"`
   made the C2 prototype raise `UnicodeEncodeError` on every render: a
   Rust `String` cannot hold it, and the error escaped the plan builder.
-  Python's `ast` also keeps U+D800 while the sandbox's expression rewriter
-  turns the escape into U+FFFD, so the two paths would read different
-  keys anyway. Production C2 reads each expression twice, from Python's
-  parse and from the sandbox's generated code, and plans a loop only when
-  both agree. The C2 review found that the split is wider: the expression
-  sandbox reads `'\ud800'` as U+FFFD wherever it runs, while the fast
-  generated evaluator (`_simple_json_expr_from_ast` in
-  `_vue/leaf_program.py`) and the unsandboxed path keep U+D800, so even an
-  ordinary component's key depends on which evaluator its template gets.
-  The fix belongs in the sandbox's code generator and is not made
-  (section 7).
+  Python's `ast` also kept U+D800 while the sandbox's expression rewriter
+  turned the escape into U+FFFD, so the two paths would have read
+  different keys anyway. The C2 review found that the split was wider: the
+  expression sandbox read `'\ud800'` as U+FFFD wherever it ran, while the
+  fast generated evaluator (`_simple_json_expr_from_ast` in
+  `_vue/leaf_program.py`) and the unsandboxed path kept U+D800, so even an
+  ordinary component's key depended on which evaluator its template got.
+  The fix for [#280](https://github.com/citry-dev/citry/issues/280) went
+  into the sandbox's rewriter: it writes such a literal from its source
+  text, and C2 now turns each expression into a path from Python's parse
+  alone. C2 and level A still refuse the key, because no Rust string can
+  hold it.
 - **Cache keys that compare equal but encode differently.**
   - `True == 1` in Python while their JSON differs, so a cache keyed on
     `DefinitionCompileInput` must not rely on `==` alone.
@@ -2564,10 +2565,3 @@ Still open:
    the ruling that the built-in `on_attrs_resolved` hook is an observer
    for these components (see "Not built: C3, and what it would need").
    The research switch for C3 stayed off for lack of it.
-8. **Who fixes the sandbox's reading of lone surrogates?** The
-   expression sandbox reads a template literal such as `'\ud800'` as
-   U+FFFD, while the fast generated evaluator and the unsandboxed path keep
-   U+D800, so an ordinary component can read a different key depending on
-   which evaluator its template gets (see "Traps found while building the
-   levels"). Level A refuses such a key and production C2 refuses a path
-   whose two readings differ; the sandbox's code generator is not fixed.
