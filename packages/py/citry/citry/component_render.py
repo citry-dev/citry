@@ -59,6 +59,7 @@ from citry._pure import (
     pure_body_lookup,
     store_pure_body,
 )
+from citry._simple_declarations import _ANNOTATION_CACHE_NAMES
 from citry._vue import native_render as _native_render
 from citry._vue.capture import (
     PreparedTextValue,
@@ -254,7 +255,15 @@ def _simple_vue_admission(component_class: type[Component]) -> _SimpleVueAdmissi
 
 def _plain_base_snapshot(base: type) -> tuple[tuple[str, object], ...]:
     """Record a plain base's namespace so a later write to it can be detected."""
-    return tuple(_static_class_namespace_copy(base).items())
+    # Reading a class's annotations can add entries to its namespace: on
+    # Python 3.14 always, and on earlier versions when the class declares
+    # none. Annotations do not affect the admission, so the snapshot leaves
+    # them out and that read does not count as a change.
+    return tuple(
+        (name, value)
+        for name, value in _static_class_namespace_copy(base).items()
+        if name not in _ANNOTATION_CACHE_NAMES
+    )
 
 
 def _plain_bases_unchanged(plain_bases: tuple[tuple[type, tuple[tuple[str, object], ...]], ...]) -> bool:
@@ -262,7 +271,7 @@ def _plain_bases_unchanged(plain_bases: tuple[tuple[type, tuple[tuple[str, objec
     # Most components have no plain bases, so this loop usually does nothing.
     for base, snapshot in plain_bases:
         current = _static_class_dict(base)
-        if len(current) != len(snapshot):
+        if len(current) - sum(name in current for name in _ANNOTATION_CACHE_NAMES) != len(snapshot):
             return False
         for name, value in snapshot:
             if current.get(name, _MISSING_MEMBER) is not value:
@@ -328,7 +337,10 @@ def _compute_simple_vue_admission(
         "__qualname__",
         "__dict__",
         "__weakref__",
-        "__annotations__",
+        # The annotation entries. Their names differ by Python version: 3.14
+        # stores a function that builds `__annotations__` on first read and
+        # then caches the result.
+        *_ANNOTATION_CACHE_NAMES,
         "__classcell__",
         "__slots__",
         "__firstlineno__",
