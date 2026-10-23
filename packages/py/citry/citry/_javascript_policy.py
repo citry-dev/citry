@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from base64 import b64decode
 from binascii import Error as BinasciiError
 from dataclasses import dataclass, replace
@@ -27,6 +28,10 @@ if TYPE_CHECKING:
     from citry.settings import SecurityJavascriptMode
 
 _LEADING_URL_SPACE = "".join(chr(codepoint) for codepoint in range(0x21))
+# Whole groups of four, then at most one group that ends in the padding its
+# length needs. Python 3.12 and later accept exactly this with
+# `b64decode(validate=True)`.
+_STRICT_BASE64_RE = re.compile(rb"(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?")
 _DependencyT = TypeVar("_DependencyT", bound="Dependency")
 
 
@@ -684,13 +689,24 @@ def _decode_html_data_url(value: str) -> str | None:
         return None
     try:
         body = (
-            b64decode(unquote_to_bytes(payload), validate=True)
+            _decode_strict_base64(unquote_to_bytes(payload))
             if ";base64" in folded_header
             else unquote_to_bytes(payload)
         )
         return body.decode("utf8", errors="replace")
     except (BinasciiError, ValueError, TypeError):
         return "<script>"
+
+
+def _decode_strict_base64(data: bytes) -> bytes:
+    """Decode base64 that uses only the standard alphabet and exactly the padding it needs."""
+    # `b64decode(validate=True)` accepts different padding on Python 3.10,
+    # 3.11 and later versions, so the accepted form is spelled out here and
+    # every Python version reads a document the same way.
+    if _STRICT_BASE64_RE.fullmatch(data) is None:
+        msg = "base64 data must use the standard alphabet and canonical padding"
+        raise BinasciiError(msg)
+    return b64decode(data)
 
 
 def _html_document_requires_javascript(html: str, *, depth: int) -> bool:

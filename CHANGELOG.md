@@ -246,6 +246,10 @@
   conversion" when an attribute value holds a very long decimal character
   reference such as `&#0000…0106;`. The check reads it as the character it
   names, here `j`.
+- On Python 3.10 and 3.11, `security_javascript` now reports an
+  `<iframe>`, `<object>`, or `<embed>` whose `data:text/html;base64,` URL
+  has padding that is not valid base64, such as a stray `=` after a
+  complete group, as it already did on Python 3.12 and later.
 - A Vue page whose body text contains `</body>`, for example inside a
   comment, now serializes instead of raising `ValueError`; until Vue
   mounts, its body is empty.

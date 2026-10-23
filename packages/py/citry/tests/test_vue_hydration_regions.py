@@ -810,7 +810,7 @@ def test_csp_body_with_a_raw_style_element_keeps_an_empty_host(style: str) -> No
         js = "$component({});"
 
         def template_data(self, kwargs: object, slots: object) -> dict[str, object]:
-            return {"widget": Markup(style)}
+            return {"widget": Markup(style)}  # noqa: S704 - the test supplies its own fixed markup
 
     rendered = Page().render()
     html = rendered.serialize(csp_nonce="cmVxdWVzdE5vbmNl")
