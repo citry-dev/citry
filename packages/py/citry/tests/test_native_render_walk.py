@@ -189,18 +189,16 @@ class _PlainScope(Extension):
 
 
 def _engine_class(case: str, log: list[str], page_rows: list[Any]) -> type[Citry]:
-    """The ``Citry`` class for ``case``; ``custom_get`` overrides ``get`` with code that has side effects."""
+    """The ``Citry`` class for ``case``; ``custom_get`` overrides ``get`` with a lookup that logs each call."""
     if case != "custom_get":
         return Citry
 
     class LookupCitry(Citry):
         def get(self, name: str) -> Any:
-            # User code that logs and adds a row the first time the row
-            # class is looked up, which Python's walk then iterates.
+            # An overridden lookup still only returns the class, so the
+            # Rust walk calls it too; the log shows it ran once per row.
             if name == "row":
                 log.append(f"get {len(page_rows)}")
-                if len(page_rows) == 4:
-                    page_rows.append({"key": "added-by-get", "title": "added"})
             return super().get(name)
 
     return LookupCitry
@@ -372,9 +370,8 @@ CASE_WALKS: dict[str, tuple[int, tuple[str, ...]]] = {
     "read_raised": _declined("read_raised"),
     "get_raised": _declined("get_raised"),
     "class_changed": _declined("class_changed"),
-    # A get that is not Citry's own keeps Python's walk, which calls it
-    # between the rows' reads.
-    "custom_get": _declined("custom_get"),
+    # An overridden get is called by the Rust walk too.
+    "custom_get": _walked(),
 }
 
 

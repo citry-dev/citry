@@ -252,9 +252,10 @@ evaluates the key and builds the call metadata. When the iterable, every
 input and the key are plain paths, and every container they pass through
 is an exact `dict`, `list` or `tuple`, none of these steps runs template or
 user code, with two exceptions: a dict lookup calls `__eq__` on a stored key
-whose hash equals the key looked up, and the engine may override `get`. So
-Rust can make the same reads, and leaves a loop whose `get` is not Citry's
-own to Python's walk.
+whose hash equals the key looked up, and a `Citry` subclass may override
+`get`. So Rust can make the same reads. It calls `get` for each row after
+every read, which changes nothing a page renders, because `get` only
+returns the row's class.
 
 With level C2, on the Rust path only:
 
@@ -466,7 +467,7 @@ error:
 | A name or string key that starts with `_`, a name that is not an ASCII identifier, a negative, bool or above-i64 index, a surrogate in a string key, or any path the sandbox's code reads differently from Python's parse | No plan (`no_plan_loop`, `no_plan_key` or `no_plan_input`, for the expression that holds it). With the sandbox on, a `_` name or key raises the sandbox's `SecurityError` in Python's walk. |
 | Any error while the plan is built (a Rust panic in the constructor raises `RuntimeError`) | No plan (`no_plan_error`); the reason is kept, so the plan is not built again. |
 | The Rust module is not used (`SUPPORTED` is false) | No plan (`no_plan_unsupported`). The walk is reached only on the Rust path, so this guards a direct call. |
-| Tracing is on; the variables are not exactly `_ConstMapping` (an extension replaced them with a plain dict); an input reads a scope name marked constant; the engine's `get` is not `Citry.get` (a `Citry` subclass overrides it) | Declined before Rust runs (`tracing`, `scope`, `const_input`, `custom_get`). |
+| Tracing is on; the variables are not exactly `_ConstMapping` (an extension replaced them with a plain dict); an input reads a scope name marked constant | Declined before Rust runs (`tracing`, `scope`, `const_input`). |
 | The iterable is not an exact list or tuple, such as a generator (declined before it is iterated) or a dict | `iterable`. |
 | A missing name, key or index | `missing`; Python's walk raises its `KeyError` or `IndexError` with the template position. |
 | A container of another type on a path (a dict subclass, a list read by a str key, a str read by an index) | `not_plain`. |
@@ -506,6 +507,9 @@ named below has side effects:
   (`ForNode._call_run_class`), not again for each row. A change that another
   thread makes during the walk shows when the rows render, where the run
   task's per-row checks handle it as one task per row would.
+- An overridden `get` runs after every row's reads instead of between
+  them. A `get` that changed the rows being walked would see its change
+  ignored by the Rust walk; a registry lookup has no reason to do that.
 - Another thread can run while `get` is called. If it changes a row in
   place, the walk does not see the change: the rows hold the values Rust
   read just before.
