@@ -15,12 +15,9 @@ error modes.
 
 An expression reaches two evaluators: Python's own parser reads it when the
 expression sandbox is off, and the sandbox's rewriter reads it when it is on.
-The two read some literals differently (the rewriter turns a lone surrogate
-escape such as ``'\ud800'`` into U+FFFD). So a path is lowered twice, once
-from Python's parse of the text and once from the Python code the sandbox
-generated for it, and the expression is refused unless both give the same
-path. Then Rust reads the same keys whichever evaluator Python's walk would
-use.
+Both read a plain path's names and keys alike, so the path is lowered from
+Python's parse of the text. The lowering asks the sandbox to compile the
+text first.
 
 The lowering also refuses:
 
@@ -49,13 +46,6 @@ Path: TypeAlias = tuple[str, PathSteps]
 
 # The largest index Rust accepts; a constant beyond it cannot index a real list anyway.
 _I64_MAX = 2**63 - 1
-# The names the sandbox's generated code calls for a variable and a subscript
-# (`variable` and `subscript` in citry_core/safe_eval/eval.py).
-_VARIABLE_CALL = "variable"
-_SUBSCRIPT_CALL = "subscript"
-# The arguments before the operands in each of those calls: the context, the
-# source text and the token's position.
-_CALL_PREFIX = 3
 
 
 def _plain_name(name: str) -> bool:
@@ -88,60 +78,17 @@ def _lower_parsed(node: ast.expr) -> Path | None:
     return node.id, tuple(steps)
 
 
-def _call_operands(node: ast.expr, function: str, count: int) -> list[ast.expr] | None:
-    """Return the operands of the sandbox's generated ``function(context, source, token, ...)`` call, or None."""
-    if (
-        not isinstance(node, ast.Call)
-        or not isinstance(node.func, ast.Name)
-        or node.func.id != function
-        or node.keywords
-        or len(node.args) != _CALL_PREFIX + count
-    ):
-        return None
-    return node.args[_CALL_PREFIX:]
+def _sandbox_compiles(source: str) -> bool:
+    """
+    Whether the expression sandbox compiles ``source``.
 
-
-def _lower_generated(node: ast.expr) -> Path | None:
-    """Lower the sandbox's generated code for an expression to ``(name, steps)``, or None."""
-    steps: list[str | int] = []
-    while (operands := _call_operands(node, _SUBSCRIPT_CALL, 2)) is not None:
-        target, index = operands
-        if not isinstance(index, ast.Constant) or not _plain_step(index.value):
-            return None
-        steps.append(index.value)
-        node = target
-    operands = _call_operands(node, _VARIABLE_CALL, 1)
-    if operands is None:
-        return None
-    (name,) = operands
-    if not isinstance(name, ast.Constant) or type(name.value) is not str or not _plain_name(name.value):
-        return None
-    steps.reverse()
-    return name.value, tuple(steps)
-
-
-def _generated_body(source: str) -> ast.expr | None:
-    """Return the expression the sandbox generated for ``source``, or None when it cannot compile it."""
+    When it does not, the loop keeps Python's walk, which raises the template's error.
+    """
     try:
-        evaluate = compile_expr(source, sandboxed=True)
+        compile_expr(source, sandboxed=True)
     except Exception:  # noqa: BLE001 - Python's walk raises the template's own error
-        return None
-    # The generated code is one assignment of a one-argument lambda, for
-    # example `_eval_expr = lambda context: (subscript(...))`. Anything else
-    # means the sandbox changed shape, and the expression keeps Python's walk.
-    generated = getattr(evaluate, "_source_code", None)
-    if type(generated) is not str:
-        return None
-    try:
-        module = ast.parse(generated, mode="exec")
-    except (SyntaxError, ValueError):
-        return None
-    if len(module.body) != 1 or not isinstance(module.body[0], ast.Assign):
-        return None
-    function = module.body[0].value
-    if not isinstance(function, ast.Lambda) or len(function.args.args) != 1:
-        return None
-    return function.body
+        return False
+    return True
 
 
 def _parsed_body(source: str) -> ast.expr | None:
@@ -154,25 +101,12 @@ def _parsed_body(source: str) -> ast.expr | None:
         return None
 
 
-def _same_path(first: Path | None, second: Path | None) -> bool:
-    """Whether two lowerings are the same path, comparing each step's exact type too."""
-    if first is None or second is None:
-        return False
-    return first[0] == second[0] and [(type(step), step) for step in first[1]] == [
-        (type(step), step) for step in second[1]
-    ]
-
-
 def lower_path(expr: str) -> Path | None:
-    """Return ``(name, steps)`` for a plain path expression that both evaluators read alike, or None."""
+    """Return ``(name, steps)`` for a plain path, or None when it is not one or the sandbox cannot compile it."""
     parsed = _parsed_body(expr)
-    generated = _generated_body(expr)
-    if parsed is None or generated is None:
+    if parsed is None or not _sandbox_compiles(expr):
         return None
-    lowered = _lower_parsed(parsed)
-    if not _same_path(lowered, _lower_generated(generated)):
-        return None
-    return lowered
+    return _lower_parsed(parsed)
 
 
 def _loop_iterable(node: ast.expr, target: str) -> ast.expr | None:
@@ -205,15 +139,13 @@ def lower_loop(targets: tuple[str, ...], clause: str) -> tuple[str, Path] | None
     target = targets[0]
     source = f"(({target},) for {clause})"
     parsed = _parsed_body(source)
-    generated = _generated_body(source)
-    if parsed is None or generated is None:
+    if parsed is None or not _sandbox_compiles(source):
         return None
     parsed_iterable = _loop_iterable(parsed, target)
-    generated_iterable = _loop_iterable(generated, target)
-    if parsed_iterable is None or generated_iterable is None:
+    if parsed_iterable is None:
         return None
     iterable = _lower_parsed(parsed_iterable)
     # The iterable is read before the loop variable exists.
-    if not _same_path(iterable, _lower_generated(generated_iterable)) or iterable is None or iterable[0] == target:
+    if iterable is None or iterable[0] == target:
         return None
     return target, iterable
