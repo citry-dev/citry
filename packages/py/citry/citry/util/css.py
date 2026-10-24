@@ -141,9 +141,8 @@ def validate_css_var_value(value: str) -> None:
         # name character, or a `#`, `@` or `\` that joins the next name, it is
         # part of that name (`xurl(`, `#url(`), not a url token.
         previous = value[index - 1] if index else ""
-        at_token_start = not (
-            previous.isalnum() or previous in "-_#@\\" or (previous != "" and ord(previous) >= 0x80)
-        )
+        # `previous` is empty at the start of the value, which is a token start.
+        at_token_start = previous == "" or not (previous.isalnum() or previous in "-_#@\\" or ord(previous) >= 0x80)
         if (
             char in "uU"
             and at_token_start
