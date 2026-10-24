@@ -1072,6 +1072,27 @@ def _compile_simple_json_operations(
     lexical_names: tuple[str, ...] = (),
     allow_instance_free_spread: bool = False,
 ) -> tuple[_SimpleJsonOperation, ...] | None:
+    """Compile operations for the generated evaluator, or return None when one is unsupported."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(
+        _compile_simple_json_walk(
+            operations,
+            nested=nested,
+            lexical_names=lexical_names,
+            allow_instance_free_spread=allow_instance_free_spread,
+        )
+    )
+
+
+def _compile_simple_json_walk(
+    operations: tuple[object, ...],
+    *,
+    nested: bool,
+    lexical_names: tuple[str, ...],
+    allow_instance_free_spread: bool,
+) -> Generator[Call, Any, tuple[_SimpleJsonOperation, ...] | None]:
+    """The walk generator behind ``_compile_simple_json_operations``."""
     compiled: list[_SimpleJsonOperation] = []
     for operation in operations:
         if isinstance(operation, (_Static, _Close)):
@@ -1147,7 +1168,8 @@ def _compile_simple_json_operations(
                     condition = _compile_simple_json_expr(condition_attr.expr, condition_attr.used_vars)
                     if condition is None or condition.kind != "path":
                         return None
-                body = _compile_simple_json_operations(
+                body = yield Call(
+                    _compile_simple_json_walk,
                     branch_operations,
                     nested=True,
                     lexical_names=lexical_names,
@@ -1164,13 +1186,15 @@ def _compile_simple_json_operations(
             target, iterable = loop
             if target in lexical_names:
                 return None
-            body = _compile_simple_json_operations(
+            body = yield Call(
+                _compile_simple_json_walk,
                 operation.body,
                 nested=True,
                 lexical_names=(*lexical_names, target),
                 allow_instance_free_spread=allow_instance_free_spread,
             )
-            empty = _compile_simple_json_operations(
+            empty = yield Call(
+                _compile_simple_json_walk,
                 operation.empty,
                 nested=True,
                 lexical_names=lexical_names,
