@@ -2536,7 +2536,7 @@ class ExtensionManager:
     ) -> list[BodyItem]:
         # The walk runs as generators on one driver loop, so Python's call
         # depth does not grow with how deeply the template nests. Child bodies
-        # are still resolved, completely and in order, before their parent.
+        # are resolved, completely and in order, before their parent.
         return run(
             self._resolve_foreign_body_walk(
                 component_class,

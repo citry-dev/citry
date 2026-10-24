@@ -454,8 +454,8 @@ def compile_template_bindings(nodes: list[Any], *, component_name: str) -> list[
     ordinal = [0]
     # The walk runs as generators on one driver loop, so Python's call depth
     # does not grow with how deeply the template nests. Each nested body is
-    # transformed completely where it is reached, so binding ordinals are
-    # numbered in the same order as before.
+    # transformed completely where it is reached, so a nested body's bindings
+    # are numbered before this body's own elements, in source order.
     return run(_transform_body(nodes, component_name=component_name, ordinal=ordinal))
 
 

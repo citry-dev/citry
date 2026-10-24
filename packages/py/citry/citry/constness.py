@@ -1399,7 +1399,13 @@ def _precompute_into(
     visible_names: frozenset[str] | None,
     precompute_attrs: bool,
 ) -> Generator[Call, Any, list[BodyItem]]:
-    """Precompute one body list (the recursion step of ``precompute_const_parts``), as a walk generator."""
+    """
+    Precompute one body list for ``precompute_const_parts``.
+
+    A walk generator: it yields a ``Call`` for each item where it would call
+    ``_precompute_item``, and ``citry._walk.run`` runs those calls from a
+    list.
+    """
     precomputed: list[BodyItem] = []
     for item in body:
         (

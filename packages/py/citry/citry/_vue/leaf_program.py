@@ -812,8 +812,9 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
             depth, raw, _positions = scanned
         return depth, raw
 
-    # `walk_body` is a walk generator run by `run`, so checking the plan does
-    # not need one Python call per level of control flow.
+    # `walk_body` yields `Call(...)` where it would call itself, and
+    # `citry._walk.run` runs those calls from a list, so checking the plan
+    # does not need one Python call per level of control flow.
     def walk_body(
         simple_operations: tuple[_SimpleJsonOperation, ...],
         depth: int,
