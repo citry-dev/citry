@@ -443,9 +443,12 @@ class _EnclosingFrames:
     ``ctx.render`` the same way. The output the hook received and the output
     that replaced it then carry the same render id, so the inner one gets a
     placeholder key of its own, numbered by how many frames around it have
-    that id. Two frames with one render id at the same level are the same
-    output placed twice, so their keys collide and serialization rejects
-    them.
+    that id. That output is the component's content passed to the other
+    component, as a nested template written in its template would be, so it
+    carries no root markers of its own; the replacement around it, which is
+    the component's output root, does. Two frames with one render id at the
+    same level are the same output placed twice, so their keys collide and
+    serialization rejects them.
     """
 
     __slots__ = ("_built_ids", "_parent", "_render", "_render_id")
@@ -460,6 +463,17 @@ class _EnclosingFrames:
         self._built_ids = built_ids
         if self._render_id is not None:
             built_ids.add(self._render_id)
+
+    def encloses(self, render_id: str) -> bool:
+        """Whether this frame or one around it has ``render_id``."""
+        if render_id not in self._built_ids:
+            return False
+        frames: _EnclosingFrames | None = self
+        while frames is not None:
+            if frames._render_id == render_id:
+                return True
+            frames = frames._parent
+        return False
 
     def child(self, render: CitryRender) -> _EnclosingFrames:
         """Return the chain for the child frame ``render``, inside this one."""
@@ -788,6 +802,15 @@ def _serialize_render_result(
             render, inherited, inherited_valued, key, outer_frames = stack.pop()
             component = render.context.component
             render_frame = render.frame
+            # Output a hook placed inside its own component's output is that
+            # component's content passed to another component, as a nested
+            # template is, so it carries no markers of its own (see
+            # _EnclosingFrames). Checked before this frame joins the chain.
+            inside_itself = (
+                render_frame.render_id is not None
+                and outer_frames is not None
+                and outer_frames.encloses(render_frame.render_id)
+            )
             frames = _EnclosingFrames(render, None, built_ids) if outer_frames is None else outer_frames.child(render)
             if render_frame.render_id is not None:
                 component_classes[render_frame.render_id] = (
@@ -847,6 +870,7 @@ def _serialize_render_result(
             if (
                 render_frame.render_id is not None
                 and render_frame.is_component_root
+                and not inside_itself
                 and render_frame.render_id != _AFTER_RENDER_HOOKS_RENDER_ID.get()
             ):
                 extension_markers = list(render_frame.root_markers)

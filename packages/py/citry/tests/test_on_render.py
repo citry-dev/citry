@@ -9,6 +9,7 @@ each yield receives the settled ``(result, error)``, and the generator may
 replace the output, catch a child's error, or raise.
 """
 
+import json
 import re
 import warnings
 
@@ -18,6 +19,7 @@ from citry import Citry, CitryRender, Component, Extension, Markup
 from citry._vue.capture import render_prepared_direct
 from citry._vue.direct_capture import assemble_typed_render
 from citry.citry_render import DeferredComponent
+from citry.ext.debug import Debug
 
 
 def _has_deferred(render):
@@ -896,9 +898,7 @@ def _named_cids(html: str) -> str:
 
 
 # Outer > Inner, where Inner's on_render hook passes its output to Frame.
-_NESTED = (
-    '<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2=""> <p data-cid-c2="">inner</p> </section> </main>'
-)
+_NESTED = '<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2=""> <p>inner</p> </section> </main>'
 
 
 class TestWrapReceivedOutputInAComponent:
@@ -943,14 +943,15 @@ class TestWrapReceivedOutputInAComponent:
     def _html(root: type[Component]) -> str:
         return " ".join(_named_cids(root().render().serialize(deps_strategy="ignore")).split())
 
-    def test_the_kept_output_keeps_the_components_marker_on_its_own(self, render_path):
+    def test_the_passed_output_carries_no_marker_of_its_own(self, render_path):
         del render_path  # the fixture switches the render path
         app = Citry(autodiscover=False)
         _frame, inner = self._components(app)
         # Frame's section carries Frame's marker and Inner's, because the
-        # section is the root of Inner's output now; the kept <p> still
-        # carries Inner's own marker.
-        assert self._html(inner) == '<section data-cid-c0="" data-cid-c1=""> <p data-cid-c1="">inner</p> </section>'
+        # section is the root of Inner's output now. The <p> is Inner's
+        # content passed into Frame, as a nested template is, so it carries
+        # no marker of its own.
+        assert self._html(inner) == '<section data-cid-c0="" data-cid-c1=""> <p>inner</p> </section>'
 
     def test_nested_inside_another_component_it_writes_the_same_html(self, render_path):
         del render_path  # the fixture switches the render path
@@ -1127,11 +1128,11 @@ class TestWrapReceivedOutputInAComponent:
                 <p>inner</p>
             """
 
-        # The inner section is the first wrap's Frame: it carries its own
-        # marker and Inner's, because it was Inner's output root.
+        # The inner section is the first wrap's Frame. It is Inner's content
+        # passed into the second Frame, so it carries only its own marker.
         assert self._html(self._outer(app)) == (
             '<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2="">'
-            ' <section data-cid-c3="" data-cid-c2=""> <p data-cid-c2="">inner</p> </section>'
+            ' <section data-cid-c3=""> <p>inner</p> </section>'
             " </section> </main>"
         )
 
@@ -1147,8 +1148,8 @@ class TestWrapReceivedOutputInAComponent:
             """
 
         assert self._html(Outer) == (
-            '<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2=""> <p data-cid-c2="">inner</p> </section>'
-            ' <section data-cid-c3="" data-cid-c4=""> <p data-cid-c4="">inner</p> </section> </main>'
+            '<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2=""> <p>inner</p> </section>'
+            ' <section data-cid-c3="" data-cid-c4=""> <p>inner</p> </section> </main>'
         )
 
     def test_output_that_contains_itself_is_an_error(self):
@@ -1205,7 +1206,7 @@ class TestWrapReceivedOutputInAComponent:
             html = self._html(self._outer(app))
         assert html.count('id="intro"') == 1
 
-    def test_the_kept_output_keeps_its_css_variables_marker(self, render_path):
+    def test_the_passed_output_inherits_css_variables_from_the_root(self, render_path):
         del render_path  # the fixture switches the render path
         app = Citry(autodiscover=False)
 
@@ -1241,23 +1242,25 @@ class TestWrapReceivedOutputInAComponent:
         found = re.search(r"data-ccss-[0-9a-f]{32}", html)
         assert found is not None
         marker = found.group()
-        # The marker that css_data's variables target stays on the kept <p>.
+        # The marker that css_data's variables target sits on Inner's root,
+        # the section, and the <p> inside inherits the variables from it.
         assert html == (
             f'<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2="" {marker}="">'
-            f' <p data-cid-c2="" {marker}="">inner</p> </section> </main>'
+            " <p>inner</p> </section> </main>"
         )
 
 
 def _vue_body(root: type[Component]) -> str:
-    """Return the HTML the server writes for a Vue page, without its scripts, generated ids, or spaces between tags."""
+    """Return the server HTML of a Vue page, without scripts, ids, or line-break whitespace between tags."""
     html = str(root()).split("<script", 1)[0]
     return _without_spaces_between_tags(re.sub(r"citry-vue-[0-9a-f]+", "citry-vue-ID", html))
 
 
 def _without_spaces_between_tags(html: str) -> str:
-    # Vue drops whitespace-only text between two elements, so a multiline
-    # template and a one-line one compile to the same output.
-    return re.sub(r">\s+<", "><", " ".join(html.split()))
+    # Vue drops whitespace-only text between two tags when it holds a line
+    # break, and turns any other run of whitespace into one space, so a
+    # multiline template and a one-line one compile to the same output.
+    return " ".join(re.sub(r">\s*\n\s*<", "><", html).split())
 
 
 def _named_definitions(root: type[Component]) -> list[str]:
@@ -1266,8 +1269,8 @@ def _named_definitions(root: type[Component]) -> list[str]:
 
     Generated slot and call names are numbered in order of first use, a
     component's tag loses its class id, and runs of whitespace become one
-    space (none between two tags), so two pages that compile the same way
-    compare equal.
+    space (none between two tags when it holds a line break), so two pages
+    that compile the same way compare equal.
     """
     assembly = _assemble_prepared(root())
     names: dict[str, str] = {}
@@ -1335,6 +1338,18 @@ def _vue_pages(app: Citry, inner: type[Component]) -> dict[str, type[Component]]
         """
 
     return {"alone": inner, "nested": Outer, "in-a-fill": Filled}
+
+
+def _named_prepared_data(root: type[Component]) -> str:
+    """Return each occurrence's browser data, as JSON, with generated call, occurrence and slot names numbered."""
+    assembly = _assemble_prepared(root())
+    data = json.dumps([[item.type_key.split("_", 1)[0], item.prepared_data] for item in assembly.view.occurrences])
+    names: dict[str, str] = {}
+
+    def name(match: re.Match[str]) -> str:
+        return names.setdefault(match.group(0), f"{match.group(1)}{len(names)}")
+
+    return re.sub(r"(citryCall|citryOccurrence|citrySlotKey|citrySlot)[0-9a-f]+", name, data)
 
 
 def _definitions_per_component(root: type[Component]) -> dict[str, int]:
@@ -1498,3 +1513,612 @@ class TestVueCompilesReceivedOutputInItsComponent:
 
         with pytest.raises(RuntimeError, match="encountered more than once"):
             str(Inner())
+
+    # The tests below are what the change makes work.
+
+    @staticmethod
+    def _hook_inner(app: Citry, *, shape: str, cached: bool = False) -> type[Component]:
+        frame = app.get("frame")
+        shell = app.get("shell")
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            class Cache:
+                enabled = cached
+
+            def on_render(self):
+                result, _error = yield
+                if shape == "return":
+                    return frame(body=result)
+                if shape == "yield":
+                    yield frame(body=result)
+                    return None
+                if shape == "slot":
+                    return shell(slots={"default": result})
+                return result
+
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        return Inner
+
+    @pytest.mark.parametrize("shape", ["return", "yield"])
+    @pytest.mark.parametrize("page", ["alone", "nested", "in-a-fill"])
+    def test_a_wrapped_result_compiles_like_a_nested_template(self, shape, page):
+        reference_app = Citry(autodiscover=False)
+        _vue_wrappers(reference_app)
+        reference = _vue_pages(reference_app, self._nested_template_inner(reference_app, cached=False))[page]
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        root = _vue_pages(app, self._hook_inner(app, shape=shape))[page]
+        assert _named_definitions(root) == _named_definitions(reference)
+        assert _vue_body(root) == _vue_body(reference)
+        assert _named_prepared_data(root) == _named_prepared_data(reference)
+
+    @pytest.mark.parametrize("page", ["alone", "nested", "in-a-fill"])
+    def test_a_cached_wrapped_result_compiles_the_same_on_a_hit(self, page):
+        reference_app = Citry(autodiscover=False)
+        _vue_wrappers(reference_app)
+        reference = _vue_pages(reference_app, self._nested_template_inner(reference_app, cached=False))[page]
+        hits: list[str] = []
+        app = Citry(autodiscover=False, extensions=[_cache_hit_probe(hits)])
+        _vue_wrappers(app)
+        root = _vue_pages(app, self._hook_inner(app, shape="return", cached=True))[page]
+        expected = (_named_definitions(reference), _vue_body(reference), _named_prepared_data(reference))
+        assert (_named_definitions(root), _vue_body(root), _named_prepared_data(root)) == expected
+        assert (_named_definitions(root), _vue_body(root), _named_prepared_data(root)) == expected
+        assert "Inner" in hits
+
+    def test_a_result_passed_as_a_slot_compiles_into_its_component(self):
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        inner = self._hook_inner(app, shape="slot")
+        assert _named_definitions(inner) == [
+            '<x-shell :citry-id="$citryPrepared.calls.citryCall0.id" :key="$citryPrepared.calls.citryCall0.key">'
+            "<template v-slot:['citrySlot0']><p>inner</p></template></x-shell>",
+            '<section><slot name="citrySlot0"></slot></section>',
+        ]
+        assert _vue_body(inner) == '<div id="citry-vue-ID"><section><!--[--><p>inner</p><!--]--></section></div>'
+
+    @pytest.mark.parametrize("page", ["alone", "nested", "in-a-fill"])
+    def test_returning_the_received_output_writes_the_template(self, page):
+        plain_app = Citry(autodiscover=False)
+        _vue_wrappers(plain_app)
+
+        class Inner(Component):
+            citry = plain_app
+            name = "inner"
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        plain = _vue_pages(plain_app, Inner)[page]
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        root = _vue_pages(app, self._hook_inner(app, shape="unwrapped"))[page]
+        assert _named_definitions(root) == _named_definitions(plain)
+        assert _vue_body(root) == _vue_body(plain)
+        assert _named_prepared_data(root) == _named_prepared_data(plain)
+
+    def test_its_own_nested_template_and_the_result_get_separate_slots(self):
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        frame = app.get("frame")
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                return frame(body=result)
+
+            template = """
+                <c-frame c-body="<b>own</b>" />
+            """
+            js = """
+                $component({});
+            """
+
+        class Rows(Component):
+            citry = app
+            template = """
+                <main>
+                    <c-for each="key in keys">
+                        <c-inner #c-key="key" c-key="key" />
+                    </c-for>
+                </main>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"keys": ["a", "b"]}
+
+        # Inner's own nested template and the output its hook passes on are
+        # two places Inner wrote content, so they fill two different slots.
+        # The rows still share one definition of Inner; Frame has one for
+        # each slot it prints.
+        assert _definitions_per_component(Rows) == {"Rows": 1, "Inner": 1, "Frame": 2}
+        assert _named_definitions(Rows) == [
+            '<main><x-inner :citry-id="$citryPrepared.calls.citryCall0.id"'
+            ' :key="$citryPrepared.calls.citryCall0.key"></x-inner>'
+            '<x-inner :citry-id="$citryPrepared.calls.citryCall1.id"'
+            ' :key="$citryPrepared.calls.citryCall1.key"></x-inner></main>',
+            '<x-frame :citry-id="$citryPrepared.calls.citryCall2.id" :key="$citryPrepared.calls.citryCall2.key">'
+            "<template v-slot:['citrySlot0']>"
+            '<x-frame :citry-id="$citryPrepared.calls.citryCall3.id" :key="$citryPrepared.calls.citryCall3.key">'
+            "<template v-slot:['citrySlot1']><b>own</b></template></x-frame>"
+            "</template></x-frame>",
+            '<section><slot name="citrySlot0"></slot></section>',
+            '<section><slot name="citrySlot1"></slot></section>',
+        ]
+        assert _vue_body(Rows) == (
+            '<div id="citry-vue-ID"><main>'
+            "<section><!--[--><section><!--[--><b>own</b><!--]--></section><!--]--></section>"
+            "<section><!--[--><section><!--[--><b>own</b><!--]--></section><!--]--></section>"
+            "</main></div>"
+        )
+
+    @pytest.mark.parametrize("page", ["alone", "nested", "in-a-fill"])
+    def test_an_on_component_rendered_wrap_compiles_like_a_nested_template(self, page):
+        frames: list[type[Component]] = []
+
+        class WrapInner(Extension):
+            name = "wrap_inner"
+
+            def on_component_rendered(self, ctx):
+                if type(ctx.component).__name__ == "Inner":
+                    return frames[0](body=ctx.render).render()
+                return None
+
+        reference_app = Citry(autodiscover=False)
+        _vue_wrappers(reference_app)
+        reference = _vue_pages(reference_app, self._nested_template_inner(reference_app, cached=False))[page]
+        app = Citry(autodiscover=False, extensions=[WrapInner])
+        _vue_wrappers(app)
+        frames.append(app.get("frame"))
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        root = _vue_pages(app, Inner)[page]
+        assert _named_definitions(root) == _named_definitions(reference)
+        assert _vue_body(root) == _vue_body(reference)
+        assert _named_prepared_data(root) == _named_prepared_data(reference)
+
+    def test_two_wraps_in_a_row_compile_one_inside_the_other(self):
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        frame = app.get("frame")
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                # The second wrap receives the first one's output.
+                result, _error = yield frame(body=result)
+                return frame(body=result)
+
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        # Both Frames print the same slot, each filled by Inner, so they
+        # share one definition.
+        assert _definitions_per_component(Inner) == {"Inner": 1, "Frame": 1}
+        assert _named_definitions(Inner) == [
+            '<x-frame :citry-id="$citryPrepared.calls.citryCall0.id" :key="$citryPrepared.calls.citryCall0.key">'
+            "<template v-slot:['citrySlot0']>"
+            '<x-frame :citry-id="$citryPrepared.calls.citryCall1.id" :key="$citryPrepared.calls.citryCall1.key">'
+            "<template v-slot:['citrySlot0']><p>inner</p></template></x-frame>"
+            "</template></x-frame>",
+            '<section><slot name="citrySlot0"></slot></section>',
+        ]
+        assert _vue_body(Inner) == (
+            '<div id="citry-vue-ID"><section><!--[-->'
+            "<section><!--[--><p>inner</p><!--]--></section>"
+            "<!--]--></section></div>"
+        )
+
+    def test_a_parent_printing_a_rendered_component_still_calls_it(self):
+        # Only the component's own hook passes its output on as content. A
+        # parent that prints `Row().render()` gets an ordinary call of Row,
+        # even when Row has an on_render hook.
+        app = Citry(autodiscover=False)
+
+        class Row(Component):
+            citry = app
+            name = "row"
+
+            def on_render(self):
+                _result, _error = yield
+
+            template = """
+                <p>row</p>
+            """
+            js = """
+                $component({});
+            """
+
+        class Page(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"row": Row().render()}
+
+            template = """
+                <main>{{ row }}</main>
+            """
+
+        assert _named_definitions(Page) == [
+            '<main><x-row :citry-id="$citryPrepared.calls.citryCall0.id" :key="$citryPrepared.calls.citryCall0.key">'
+            "</x-row></main>",
+            "<p>row</p>",
+        ]
+        assert _vue_body(Page) == '<div id="citry-vue-ID"><main><p>row</p></main></div>'
+
+    @staticmethod
+    def _checking(app: Citry) -> type[Component]:
+        # A Shell that calls its slot to look at it before printing it.
+        class Checking(Component):
+            citry = app
+            name = "checking"
+
+            def template_data(self, kwargs, slots):
+                slots["default"]()
+                return {}
+
+            template = """
+                <section><c-slot /></section>
+            """
+
+        return Checking
+
+    # Only placing the output twice is an error. A Shell that calls its slot
+    # to look at it, and a hook that renders a preview it drops, each
+    # evaluate the output once more without placing it.
+
+    def test_a_result_evaluated_and_dropped_first_still_renders_without_vue(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        frame = app.get("frame")
+        checking = self._checking(app)
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                frame(body=result).render()
+                return checking(slots={"default": result})
+
+            template = """
+                <p>inner</p>
+            """
+
+        html = " ".join(_named_cids(Inner().render().serialize(deps_strategy="ignore")).split())
+        assert html == '<section data-cid-c0="" data-cid-c1=""> <p>inner</p> </section>'
+
+    def test_a_result_evaluated_and_dropped_first_still_renders_on_vue(self):
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        frame = app.get("frame")
+        checking = self._checking(app)
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                frame(body=result).render()
+                return checking(slots={"default": result})
+
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        assert _vue_body(Inner) == '<div id="citry-vue-ID"><section><!--[--><p>inner</p><!--]--></section></div>'
+
+    def test_an_error_boundary_does_not_hide_the_result_printed_twice(self):
+        # The second placement is found when the page is written, after the
+        # render, so the boundary's fallback cannot replace the error.
+        app = Citry(autodiscover=False)
+
+        class Pair(Component):
+            citry = app
+            name = "pair"
+
+            def template_data(self, kwargs, slots):
+                return {"first": kwargs["first"], "second": kwargs["second"]}
+
+            template = """
+                <section>{{ first }}{{ second }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                return Pair(first=result, second=result)
+
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        class Guarded(Component):
+            citry = app
+            template = """
+                <!doctype html>
+                <html>
+                    <head></head>
+                    <body>
+                        <c-error-fallback fallback="oops"><c-inner /></c-error-fallback>
+                    </body>
+                </html>
+            """
+
+        with pytest.raises(RuntimeError, match="encountered more than once"):
+            str(Guarded())
+
+    def test_an_error_boundary_does_not_hide_the_result_printed_twice_without_vue(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+
+        class Pair(Component):
+            citry = app
+            name = "pair"
+
+            def template_data(self, kwargs, slots):
+                return {"first": kwargs["first"], "second": kwargs["second"]}
+
+            template = """
+                <section>{{ first }}{{ second }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                return Pair(first=result, second=result)
+
+            template = """
+                <p>inner</p>
+            """
+
+        class Guarded(Component):
+            citry = app
+            template = """
+                <main><c-error-fallback fallback="oops"><c-inner /></c-error-fallback></main>
+            """
+
+        with pytest.raises(RuntimeError, match="encountered more than once"):
+            Guarded().render().serialize(deps_strategy="ignore")
+
+    def test_a_simple_receiver_prints_the_result_in_place(self):
+        # A simple=True component renders in its caller's context, so the
+        # output it prints is already the caller's own content.
+        app = Citry(autodiscover=False)
+
+        class Plain(Component):
+            citry = app
+            name = "plain"
+            simple = True
+            template = """
+                <section>{{ body }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                return Plain(body=result)
+
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        assert _vue_body(Inner) == '<div id="citry-vue-ID"><section><p>inner</p></section></div>'
+
+    def test_a_decorated_result_keeps_its_decoration(self):
+        # The debug outline decorates Inner's output before the next
+        # extension passes it to Frame; the outline stays around the content.
+        frames: list[type[Component]] = []
+
+        class WrapInner(Extension):
+            name = "wrap_inner"
+
+            def on_component_rendered(self, ctx):
+                if type(ctx.component).__name__ == "Inner":
+                    return frames[0](body=ctx.render).render()
+                return None
+
+        app = Citry(
+            autodiscover=False,
+            extensions=[Debug, WrapInner],
+            extensions_defaults={"debug": {"highlight_components": True}},
+        )
+        _vue_wrappers(app)
+        frames.append(app.get("frame"))
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        body = re.sub(r' style="[^"]*"| \(\w+\)', "", _vue_body(Inner))
+        assert body == (
+            '<div id="citry-vue-ID"><div class="citry-debug citry-debug-component">'
+            '<span aria-hidden="true" class="citry-debug-label">Frame: </span><section><!--[-->'
+            '<div class="citry-debug citry-debug-component">'
+            '<span aria-hidden="true" class="citry-debug-label">Inner: </span><p>inner</p></div>'
+            "<!--]--></section></div></div>"
+        )
+
+    def test_a_transparent_component_passes_its_result_on_like_a_nested_template(self):
+        # A transparent component has no Vue definition, so its content
+        # compiles in the template it is copied into, as its own nested
+        # template would.
+        reference_app = Citry(autodiscover=False)
+        _vue_wrappers(reference_app)
+
+        class Reference(Component):
+            citry = reference_app
+            name = "inner"
+            transparent = True
+            template = """
+                <c-frame c-body="<p>inner</p>" />
+            """
+
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        frame = app.get("frame")
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+            transparent = True
+
+            def on_render(self):
+                result, _error = yield
+                return frame(body=result)
+
+            template = """
+                <p>inner</p>
+            """
+
+        reference = _vue_pages(reference_app, Reference)["nested"]
+        root = _vue_pages(app, Inner)["nested"]
+        assert _named_definitions(root) == _named_definitions(reference)
+        assert _named_prepared_data(root) == _named_prepared_data(reference)
+
+    @staticmethod
+    def _tone_frame(app: Citry) -> type[Component]:
+        class Frame(Component):
+            citry = app
+            name = "frame"
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+            def css_data(self, kwargs, slots):
+                return {"tone": "blue"}
+
+            template = """
+                <section>{{ body }}</section>
+            """
+            css = """
+                section { color: var(--tone); }
+            """
+
+        return Frame
+
+    @staticmethod
+    def _markers_per_element(html: str) -> list[tuple[str, list[str]]]:
+        """List each element in the page body with the CSS-variables markers on it, in order."""
+        # The page's scripts hold compiled templates, so read only the body.
+        body = html[html.index("<main") : html.index("</main>")]
+        return [
+            (tag, sorted(re.findall(r"data-ccss-[0-9a-f]+", attrs)))
+            for tag, attrs in re.findall(r"<(main|section|p)\b([^>]*)>", body)
+        ]
+
+    def test_the_markers_land_on_the_same_elements_with_and_without_vue(self):
+        # Frame and Inner both set --tone. In both outputs the section, the
+        # root of Inner's output, carries both markers, and the <p> Inner
+        # passed into Frame carries none, so it inherits --tone from there.
+        static_app = Citry(autodiscover=False)
+        static_frame = self._tone_frame(static_app)
+
+        class StaticInner(Component):
+            citry = static_app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                return static_frame(body=result)
+
+            def css_data(self, kwargs, slots):
+                return {"tone": "red"}
+
+            template = """
+                <p>inner</p>
+            """
+            css = """
+                p { color: var(--tone); }
+            """
+
+        vue_app = Citry(autodiscover=False)
+        vue_frame = self._tone_frame(vue_app)
+
+        class VueInner(Component):
+            citry = vue_app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                return vue_frame(body=result)
+
+            def css_data(self, kwargs, slots):
+                return {"tone": "red"}
+
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+            css = """
+                p { color: var(--tone); }
+            """
+
+        static_html = str(_vue_pages(static_app, StaticInner)["nested"]())
+        vue_html = str(_vue_pages(vue_app, VueInner)["nested"]())
+        assert "citry-vue-" not in static_html
+        assert "citry-vue-" in vue_html
+        static_markers = self._markers_per_element(static_html)
+        assert self._markers_per_element(vue_html) == static_markers
+        [(_main, main_markers), (_section, section_markers), (_p, p_markers)] = static_markers
+        assert (main_markers, len(section_markers), p_markers) == ([], 2, [])

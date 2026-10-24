@@ -35,6 +35,7 @@ from citry.citry_render import (
 from citry.citry_template import CitryTemplate
 from citry.client_directives import ComponentTagClientBindingKind
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
+from citry.serialize import _REPEATED_RENDER_MESSAGE
 from citry.util.html import Markup, decode_attribute_entities, decode_character_references, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
@@ -505,6 +506,10 @@ def assemble_typed_render(
         lambda: defaultdict(int)
     )
     seen_render_ids: set[str] = set()
+    # Each output an on_render hook passed on, by object id, once a
+    # projection has placed it (see _projected_content). The value keeps the
+    # output alive, so an id is never reused while it is remembered.
+    placed_outputs: dict[int, CitryRender] = {}
     seen_occurrence_ids: set[str] = set()
     flattened_transparent_receivers: set[str] = set()
     # A transparent component has no Vue definition: its template is copied
@@ -1765,7 +1770,7 @@ def assemble_typed_render(
                     if copied_outside_author:
                         browser_read_trackers.append((lexical_owner, call_owner_id, fill_reads))
                     selected = transform_parts(
-                        list(part.parts),
+                        _projected_content(part, placed_outputs),
                         placement_route=(*placement_route, body_route_step),
                         data_owner_id=lexical_owner,
                         # A flattened transparent receiver contributes its
@@ -3787,6 +3792,62 @@ def _append_slot_outlet(
 _IGNORED_CONTENTS_ALLOWED = (
     "Inside a '#c-ignore' element, write plain HTML, '{{ }}' expressions, '<c-if>', '<c-for>', and '<c-raw>'."
 )
+
+
+def _projected_content(part: DirectProjectionRender, placed_outputs: dict[int, CitryRender]) -> list[RenderPart]:
+    """
+    Return the parts a projection passes to its receiver.
+
+    The output an ``on_render`` hook received and passed to another
+    component is projected with its component's frame still on it (see
+    ``bind_received_output``). That frame is the author's own output, not
+    another occurrence of the author inside its receiver, so the content is
+    the parts inside it.
+    """
+    # A cache replay stores the content inside an extra render with the
+    # same frame, so look through every level that is the author's output
+    # or no component's output.
+    inner = list(part.parts)
+    output: CitryRender | None = None
+    while len(inner) == 1:
+        level = inner[0]
+        # Only a plain render or a decoration can carry the output's frame;
+        # a projection or call record inside is the content itself. The
+        # isinstance check is for the type checker, which the exact type
+        # check does not narrow.
+        if not isinstance(level, CitryRender) or type(level) not in {CitryRender, RenderDecoration}:
+            break
+        frame = level.frame
+        # A transparent component's output carries its own kind of root.
+        is_root = frame.is_component_root or frame.is_transparent_root
+        if is_root and frame.render_id != part.fill_source.lexical_render_id:
+            break
+        if output is None and is_root:
+            output = level
+        if type(level) is RenderDecoration:
+            # An extension decorated the output before passing it on, as the
+            # debug outline does. Keep the decoration around the content,
+            # without the component's frame, as a slot's decoration is.
+            inner = [
+                RenderDecoration(
+                    list(level.parts),
+                    level.context,
+                    opening=level.opening,
+                    closing=level.closing,
+                    omit_around_document=level.omit_around_document,
+                )
+            ]
+            break
+        inner = list(level.parts)
+    if output is None:
+        return list(part.parts)
+    if id(output) in placed_outputs:
+        # The output was rendered once, by the template the hook replaced,
+        # so a second placement would put one output in two places. A page
+        # without Vue raises the same error when it writes the HTML.
+        raise RuntimeError(_REPEATED_RENDER_MESSAGE)
+    placed_outputs[id(output)] = output
+    return inner
 
 
 def _ignored_element_label(part: PreparedElementOpen) -> str:
