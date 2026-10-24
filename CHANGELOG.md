@@ -210,6 +210,10 @@
 
 ### Fixes
 
+- A slow cache backend, such as Redis over the network, no longer holds
+  up cached renders on other threads or a hot reload while Citry writes to
+  it. A hot reload also no longer waits while `Citry.clear()` wipes the
+  backend.
 - With `@event(latest_wins=True)`, a call that a newer call replaced no
   longer changes the page. Its remaining actions are dropped, including
   delayed ones with `wait=False`. The newer call no longer waits for its
