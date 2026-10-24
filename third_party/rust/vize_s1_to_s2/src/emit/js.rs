@@ -131,9 +131,10 @@ pub(super) fn escape_js_attribute_string(s: &str) -> String {
     escape_decoded_js_string(&decode_html_attribute_entities(s))
 }
 
-/// Escape `s`, a name from the template such as an attribute, slot, or
-/// directive modifier name, for a JavaScript double-quoted string literal.
-/// HTML never decodes character references in a name, so neither does Vue:
+/// Escape `s` for a JavaScript double-quoted string literal without decoding
+/// it: a name from the template (an attribute, slot, or directive modifier
+/// name), a comment, or a value already decoded. HTML never decodes
+/// character references in a name, and Vue keeps a comment as written, so
 /// `#a&copy` names the slot `a&copy`.
 pub(super) fn escape_js_name(s: &str) -> String {
     escape_decoded_js_string(s)

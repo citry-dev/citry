@@ -218,7 +218,7 @@ pub(super) fn emit_slot_object(
     cx.buf.push("{");
     cx.buf.indent();
     cx.buf.newline();
-    emit_entry_name(cx, content);
+    emit_entry_name(cx, content)?;
     cx.buf.push(",");
     cx.buf.newline();
     cx.buf.push("fn: ");
@@ -259,11 +259,15 @@ pub(super) fn emit_slot_object(
     Ok(())
 }
 
-fn emit_entry_name(cx: &mut EmitCx<'_>, content: &SlotContentOp<'_>) {
+fn emit_entry_name(cx: &mut EmitCx<'_>, content: &SlotContentOp<'_>) -> Result<(), EmitError> {
     cx.buf.push("name: ");
     match &content.name {
+        // S2 refuses a dynamic name it cannot read as JavaScript, so Citry
+        // compiles the template with `vize_atelier_core`, which reports an
+        // invalid expression, as Vue does, rather than S2 writing an empty
+        // name.
         Some(DynamicName::Dynamic(expr)) if cx.prefixing() => {
-            let text = cx.prefixed_expr(expr, Site::Expression).unwrap_or_default();
+            let text = cx.prefixed_expr(expr, Site::Expression)?;
             cx.buf.push(text.as_str());
         }
         Some(DynamicName::Dynamic(expr)) => {
@@ -286,6 +290,7 @@ fn emit_entry_name(cx: &mut EmitCx<'_>, content: &SlotContentOp<'_>) {
             cx.buf.push("\"");
         }
     }
+    Ok(())
 }
 
 fn emit_params(cx: &mut EmitCx<'_>, content: &SlotContentOp<'_>) {

@@ -7,7 +7,7 @@ SHA-256 is
 `8db1544b90c72dbe51fe237437ff296d59934e44af7b99686f02cf09d0298d4e`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.5`.
+package as `0.420.0+citry.6`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,13 +16,20 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.5` package version (the two
+- `Cargo.toml`: records the local `0.420.0+citry.6` package version (the two
   patched crates share one version, so it moves when either changes),
   registers the `v_for_unwrapped_runtime_directives`,
   `event_handler_statements`, and `event_key_modifiers` regression targets,
   depends on `htmlize` 1.1.0 (already a dependency of `vize_armature`) for
   `src/entity.rs`, and drops the upstream `davinci` benchmark target because
   its source is not included here.
+- `src/codegen/helpers.rs`: `escape_js_string` escapes the text it is given
+  without decoding it, because the parser has already decoded text and
+  attribute values, so a written `&amp;#40;` shows `&#40;`, as in Vue and the
+  browser. It drops the upstream `decode_html_entities` helper, which only
+  it used.
+- `src/codegen/element/block.rs` and `src/codegen/element/inline.rs`: escape
+  a static `is` on `<component>` for its string literal.
 - `src/entity.rs` and `src/lib.rs`: add `authored_expression_text` and
   `authored_expression_str`, which return the text Vue reads from an
   expression written in the template: a directive value decoded by the

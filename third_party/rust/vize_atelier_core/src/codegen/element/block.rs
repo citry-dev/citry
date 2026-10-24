@@ -301,8 +301,9 @@ pub fn generate_element_block(ctx: &mut CodegenContext, el: &ElementNode<'_>) {
                 // Static is: resolveDynamicComponent("componentName")
                 ctx.use_helper(RuntimeHelper::ResolveDynamicComponent);
                 ctx.push(ctx.helper(RuntimeHelper::ResolveDynamicComponent));
+                // The parser decoded the value; escape it for the literal.
                 ctx.push("(\"");
-                ctx.push(component_name);
+                ctx.push(&crate::codegen::helpers::escape_js_string(component_name));
                 ctx.push("\")");
             } else if let Some(builtin) = is_builtin_component(el.tag) {
                 // Check for built-in components (Teleport, KeepAlive, Suspense)

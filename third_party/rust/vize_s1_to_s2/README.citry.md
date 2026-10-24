@@ -7,7 +7,7 @@ SHA-256 is
 `13d57e14a66a37b558d10c5a46c6c1deb857ffbbfaa7f99118db584646ca096d`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.5`.
+package as `0.420.0+citry.6`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,7 +16,7 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.5` package version, omits the
+- `Cargo.toml`: records the local `0.420.0+citry.6` package version, omits the
   upstream `emit_for` test target (the published manifest does not contain its
   `vize_atelier_dom` development dependency, and adding it would create a
   cycle), registers the `citry_runtime_directives`,
@@ -80,13 +80,20 @@ Relative to that archive, the Citry delta is:
   decode an interpolation's text by the text rule, as Vue does. Names and
   dynamic arguments are not decoded. Each decoded value is allocated once,
   and `Cx` maps any part of it back to the span of the authored value
-  (`decoded_directive_value`, `decoded_interpolation_text`). The decoders
-  for these values (`decode_directive_value` and
-  `decode_interpolation_text` in `src/emit/entity.rs`) read each reference
-  once. The decoders for static text and static attribute values keep the
-  shipped lane's reading of a written `&amp;#40;` and `&amp;#41;` as `(` and
-  `)`, where Vue writes `&#40;` and `&#41;`; that difference is left for a
-  later change.
+  (`decoded_directive_value`, `decoded_interpolation_text`).
+- `src/emit/entity.rs`: every decoder reads each reference once, so a
+  written `&amp;#40;` in text, an attribute value or an expression reads as
+  `&#40;`, as in Vue and the browser.
+- `src/emit/builtin.rs`: decodes and escapes a static `is` on `<component>`
+  as an attribute value.
+- `src/emit/style.rs`: decodes a static `style` before splitting it at `;`,
+  as Vue does, so a `&quot;` inside a declaration stays in it.
+- `src/emit/children.rs`: writes a kept comment as written, without
+  decoding it, as Vue does.
+- `src/emit/create_slots/entry.rs`, `src/emit/slots.rs`, and
+  `src/emit/slots/params.rs`: refuse a dynamic slot name that is not
+  JavaScript, such as `#[x&amp;y]`, so `vize_atelier_core` reports it as an
+  invalid expression, as Vue does, rather than writing an empty name.
 - `src/emit/prefix.rs`, `src/emit/cx.rs`, `src/emit/html.rs`,
   `src/emit/props_value.rs`, `src/emit/props_class.rs`, and
   `src/emit/style.rs`: read a decoded directive value as it arrives from the

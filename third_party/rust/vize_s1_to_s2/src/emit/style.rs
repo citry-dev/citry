@@ -8,7 +8,8 @@ use vize_s2::expr::JsExpr;
 use vize_s2::op::{Attribute, BindOp};
 
 use super::buf::Buf;
-use super::js::{escape_js_attribute_string, js_expr_source};
+use super::entity::decode_html_attribute_entities;
+use super::js::{escape_js_name, js_expr_source};
 use super::prefix::Site;
 use super::props_value::{BindValue, authored_value_padding};
 use super::{EmitCx, EmitError};
@@ -205,6 +206,10 @@ fn emit_bound_style_source(
 }
 
 fn emit_static_style_object(cx: &mut EmitCx<'_>, value: &str) {
+    // Vue decodes the attribute value first and then splits it at `;`, so a
+    // `&quot;` or `&#39;` inside a declaration cannot end it early.
+    let decoded = decode_html_attribute_entities(value);
+    let value = decoded.as_str();
     cx.buf.push("{");
     let mut depth = 0i32;
     let mut start = 0usize;
@@ -236,10 +241,10 @@ fn emit_declaration(cx: &mut EmitCx<'_>, declaration: &str, emitted: &mut usize)
         cx.buf.push(",");
     }
     *emitted += 1;
+    // The value was decoded before it was split, so only escape it here.
     cx.buf.push("\"");
-    cx.buf.push(escape_js_attribute_string(key.trim()).as_str());
+    cx.buf.push(escape_js_name(key.trim()).as_str());
     cx.buf.push("\":\"");
-    cx.buf
-        .push(escape_js_attribute_string(value.trim()).as_str());
+    cx.buf.push(escape_js_name(value.trim()).as_str());
     cx.buf.push("\"");
 }

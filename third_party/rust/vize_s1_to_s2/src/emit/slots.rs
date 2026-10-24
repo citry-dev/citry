@@ -179,7 +179,7 @@ pub(super) fn emit_slots(
     cx.buf.indent();
     for (i, group) in facts.groups.iter().enumerate() {
         cx.buf.newline();
-        emit_slot_key(cx, &group.name);
+        emit_slot_key(cx, &group.name)?;
         cx.buf.push(": ");
         cx.buf.push(Buf::with_ctx_alias());
         cx.buf.push("(");
