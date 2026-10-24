@@ -53,7 +53,7 @@ docs = [
 # (`playwright install chromium`). The build skips card generation cleanly when
 # this is absent, so the `docs` extra alone produces a deployable site.
 social-cards = [
-    "playwright",           # headless browser that screenshots each OG card to a PNG
+    "playwright>=1.64.1",   # headless browser that screenshots each OG card to a PNG
 ]
 
 # uv downloads each package's build backend (setuptools, or maturin for

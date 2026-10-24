@@ -208,6 +208,11 @@
   `event.args` directly, or a Pydantic model in strict mode, gets `"3"`
   instead of `3`, as it already did without JavaScript.
 
+- The `ext-preview` extra now needs Playwright 1.64.1 or newer, whose
+  bundled Node.js does not trust the affected emSign root certificate when
+  `playwright install` downloads browsers. After upgrading, run
+  `playwright install chromium` again to fetch the matching browser.
+
 ### Fixes
 
 - In a component that uses Vue, `&amp;#40;` written in text or an

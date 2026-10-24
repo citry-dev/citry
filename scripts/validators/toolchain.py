@@ -58,11 +58,6 @@ _UV_ACTION = "astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e"
 _SCCACHE_ACTION = "mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba"
 _RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
 _PNPM_ACTION = "pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86"
-# The composite action that makes sure the runner's system certificate list
-# no longer holds emSign ECC Root CA - G3, and the file in that list Node.js is
-# pointed at.
-_DROP_G3_ACTION = ".github/actions/drop-emsign-g3"
-_SYSTEM_CA_FILE = "/etc/ssl/certs/ca-certificates.crt"
 
 
 def check() -> list[str]:
@@ -425,26 +420,19 @@ def check() -> list[str]:
 
 def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
     """
-    Report steps that leave the reviewed setup-uv, PyPI upload, or Playwright download setup.
+    Report steps that leave the reviewed setup-uv or PyPI upload setup.
 
     Every workflow, example workflow, and composite action under
     `.github/actions/` is read as YAML. Each setup-uv step must use the
     reviewed commit, install exactly `uv_pin` (resolved through
     ``${{ env.NAME }}`` references at workflow, job, and step level), and set
-    `prune-cache: true`. Each `playwright install` in a workflow must set
-    NODE_OPTIONS and SSL_CERT_FILE so Node.js reads the system certificate
-    list, and must run after a step that drops emSign ECC Root CA - G3 from
-    that list: the drop action itself, or, in a job without a checkout, an
-    inline copy whose commands match the action's run commands exactly
-    (comments and blank lines aside).
+    `prune-cache: true`.
     """
     errors: list[str] = []
     # GitHub runs both spellings of the YAML extension.
     paths = sorted(path for path in (root / ".github" / "workflows").glob("*.y*ml"))
     # Users copy the example workflows, so they follow the same pins.
     paths += sorted(root.glob("examples/*/*/.github/workflows/*.y*ml"))
-    # The drop action's own commands are the one copy every inline check must match.
-    g3_check = _g3_check(root / _DROP_G3_ACTION / "action.yml")
     for path in paths:
         workflow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         # Messages name files with forward slashes on every OS, as the repository does.
@@ -453,32 +441,10 @@ def pinned_action_errors(root: Path, uv_pin: str) -> list[str]:
         for job_name, job in (workflow.get("jobs") or {}).items():
             env = {**workflow_env, **(job.get("env") or {})}
             where = f"{label} job {job_name}"
-            # Set once a step in this job has removed G3 from the system list.
-            dropped_g3 = False
             for step in job.get("steps") or []:
                 errors.extend(_action_pin_errors(where, step, env, uv_pin))
-                run = str(step.get("run", ""))
-                # A `g3=` line marks an inline copy of the drop check. One that
-                # drifted from the action could pass while the system list
-                # still trusts the root, so it must match command for command.
-                inline_copy = any(line.strip().startswith("g3=") for line in run.splitlines())
-                matches_action = g3_check is not None and _command_lines(run) == g3_check
-                if inline_copy and g3_check is not None and not matches_action:
-                    errors.append(
-                        f"{where} has an inline emSign ECC Root CA - G3 check that differs from "
-                        f"{_DROP_G3_ACTION}/action.yml; copy the action's run commands exactly"
-                    )
-                if _playwright_install_lines(run):
-                    errors.extend(
-                        _playwright_errors(
-                            where, step, env, run, dropped_g3=dropped_g3, have_check=g3_check is not None
-                        )
-                    )
-                if str(step.get("uses", "")) == f"./{_DROP_G3_ACTION}" or (inline_copy and matches_action):
-                    dropped_g3 = True
     # A composite action can install uv or upload to PyPI on behalf of any
-    # job that uses it, so its steps follow the same pins. The Playwright rule
-    # stays with workflow jobs, where the earlier drop step can be seen.
+    # job that uses it, so its steps follow the same pins.
     for path in sorted((root / ".github" / "actions").glob("*/action.y*ml")):
         action = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         where = f"{path.relative_to(root).as_posix()} composite action"
@@ -517,100 +483,4 @@ def _action_pin_errors(where: str, step: dict[str, object], env: dict[str, objec
     # saved cache small and pruned, as it was before that release.
     if str(settings.get("prune-cache")).lower() != "true":
         errors.append(f"{where} must set prune-cache: true on {_UV_ACTION}")
-    return errors
-
-
-def _command_lines(run: str) -> tuple[str, ...]:
-    """Return the shell lines of `run` without comments, blank lines, or indentation."""
-    stripped = (line.strip() for line in run.splitlines())
-    return tuple(line for line in stripped if line and not line.startswith("#"))
-
-
-def _g3_check(action_path: Path) -> tuple[str, ...] | None:
-    """Return the drop action's command lines, or None when the action or its `g3=` line is missing."""
-    if not action_path.is_file():
-        return None
-    action = yaml.safe_load(action_path.read_text(encoding="utf-8")) or {}
-    for step in (action.get("runs") or {}).get("steps") or []:
-        lines = _command_lines(str(step.get("run", "")))
-        if any(line.startswith("g3=") for line in lines):
-            return lines
-    return None
-
-
-# `playwright install`, allowing any run of spaces between the two words.
-_PLAYWRIGHT_INSTALL = re.compile(r"\bplaywright\s+install\b")
-# Shell operators that end one simple command and start the next.
-_COMMAND_SEPARATOR = re.compile(r"&&|\|\||[;|&]")
-# One `NAME=value` assignment at the start of a simple command.
-_ASSIGNMENT = re.compile(r"""([A-Za-z_]\w*)=("[^"]*"|'[^']*'|[^\s"']*)\s+""")
-
-
-def _playwright_install_lines(run: str) -> list[str]:
-    """Return each simple shell command in `run` that calls `playwright install`."""
-    # A trailing backslash continues the command, so the env assignments
-    # before it and the install after it count as one line.
-    joined = run.replace("\\\n", " ")
-    commands: list[str] = []
-    for line in joined.splitlines():
-        if line.strip().startswith("#"):
-            continue
-        # An assignment only reaches the command it prefixes, so split at the
-        # shell operators and keep the command that runs the install.
-        commands.extend(
-            command.strip() for command in _COMMAND_SEPARATOR.split(line) if _PLAYWRIGHT_INSTALL.search(command)
-        )
-    return commands
-
-
-def _prefix_assignments(command: str) -> dict[str, str]:
-    """Return the `NAME=value` assignments that prefix `command`, with quotes removed."""
-    assignments: dict[str, str] = {}
-    position = 0
-    while match := _ASSIGNMENT.match(command, position):
-        assignments[match.group(1)] = match.group(2).strip("\"'")
-        position = match.end()
-    return assignments
-
-
-def _playwright_errors(
-    where: str,
-    step: dict[str, object],
-    env: dict[str, object],
-    run: str,
-    *,
-    dropped_g3: bool,
-    have_check: bool,
-) -> list[str]:
-    """Report a `playwright install` step that could still trust emSign ECC Root CA - G3."""
-    errors: list[str] = []
-    name = f"step {str(step.get('name') or 'without a name')!r}"
-    step_env = step.get("env")
-    merged_env = {**env, **(step_env if isinstance(step_env, dict) else {})}
-    for command in _playwright_install_lines(run):
-        # Playwright downloads browsers with its own bundled Node.js, which
-        # trusts G3 unless it reads the system list the drop step cleaned. An
-        # assignment prefixing the install command overrides the step env.
-        values = {key: str(value) for key, value in merged_env.items()} | _prefix_assignments(command)
-        if "--use-openssl-ca" not in values.get("NODE_OPTIONS", "").split():
-            errors.append(
-                f"{where} {name} runs `playwright install` without NODE_OPTIONS=--use-openssl-ca; "
-                "set it in the step's env: or as a prefix of the install command"
-            )
-        if values.get("SSL_CERT_FILE") != _SYSTEM_CA_FILE:
-            errors.append(
-                f"{where} {name} runs `playwright install` without SSL_CERT_FILE={_SYSTEM_CA_FILE}; "
-                "set it in the step's env: or as a prefix of the install command"
-            )
-    if not have_check:
-        errors.append(
-            f"{where} {name} runs `playwright install`, but {_DROP_G3_ACTION}/action.yml is missing "
-            "or has no g3= line, so no step can drop emSign ECC Root CA - G3"
-        )
-    elif not dropped_g3:
-        errors.append(
-            f"{where} {name} runs `playwright install` before any step drops emSign ECC Root CA - G3; "
-            f"add `uses: ./{_DROP_G3_ACTION}` as an earlier step, or, in a job without a checkout, "
-            "an earlier inline copy of the action's run commands"
-        )
     return errors
