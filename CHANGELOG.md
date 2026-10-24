@@ -389,6 +389,8 @@
 
 ### Performance
 
+- Large templates parse much faster: a 92 KB template that took more than
+  a second to parse now takes about 10 ms.
 - Pages that repeat a component many times render up to about 9% faster
   on the server.
 - `serialize()` with `security_csp` or `security_javascript` set is much

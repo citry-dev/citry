@@ -69,6 +69,11 @@
   interpolation (`{x=}`) that holds a comment now leaves the comment out
   of its `x=` text, as Python does.
 
+### Performance
+
+- `template_parser.parse_template()` is much faster on large templates: a
+  92 KB template that took more than a second now parses in about 10 ms.
+
 ## v1.8.0
 
 ### Removed

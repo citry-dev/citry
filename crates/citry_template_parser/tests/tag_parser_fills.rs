@@ -1336,4 +1336,47 @@ mod tests {
             assert!(result.is_ok(), "{input}: {:?}", result.err());
         }
     }
+
+    /// Every node's tag name and `contains_fills` flag, parents first.
+    fn fill_flags(template: &Template) -> Vec<(String, bool)> {
+        let mut flags = Vec::new();
+        for element in &template.elements {
+            if let TemplateElement::Node(node) = element {
+                flags.push((node.tag_name().to_string(), node.contains_fills()));
+                if let Node::WithBody { body, .. } = node {
+                    flags.extend(fill_flags(body));
+                }
+            }
+        }
+        flags
+    }
+
+    #[test]
+    fn test_contains_fills_reaches_through_nested_control_flow() {
+        // The parser sets each node's flag from its children's flags, so a
+        // fill two control-flow levels down must still mark every level
+        // above it. A control-flow tag whose body holds only a plain element
+        // stays false.
+        let template = parse_template(
+            r#"<c-card><c-if cond="a"><c-for each="i in xs"><c-fill c-name="i">x</c-fill></c-for></c-if><c-else><c-fill name="b">y</c-fill></c-else></c-card><c-if cond="z"><div>no fill</div></c-if>"#,
+            None,
+            None,
+        )
+        .unwrap();
+        let expected = [
+            ("c-card", true),
+            ("c-if", true),
+            ("c-for", true),
+            ("c-fill", false),
+            ("c-else", true),
+            ("c-fill", false),
+            ("c-if", false),
+            ("div", false),
+        ];
+        let expected: Vec<(String, bool)> = expected
+            .iter()
+            .map(|(tag, flag)| (tag.to_string(), *flag))
+            .collect();
+        assert_eq!(fill_flags(&template), expected);
+    }
 }

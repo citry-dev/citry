@@ -102,8 +102,16 @@ Python wrapper together (CLAUDE.md Mechanism 4).
   Control-flow shortcuts are the semantic exception: `c-if`/`c-elif` must be
   expressions, `c-for` must be a loop clause, and the `c-else`/`c-empty`
   markers must be valueless.
-- Variable tracking: `used_variables` is collected from attributes and body in
-  source order (a `Vec`, not a set, so order is stable);
+- Token positions come from `utils/line_index.rs`, built once from the whole
+  template string the caller passed and shared with the parses of nested
+  `Template` attribute values. It returns the same line and column as
+  `pest::Position::line_col`, which scans from the start of the source and
+  would make parsing grow with the square of its length.
+- Variable tracking: each node's `used_variables` lists the variables its
+  body reads, then those its attributes read, and a template lists its
+  elements' variables in source order (a `Vec`, not a set, so order is
+  stable). `recompute_template_used_variables` builds these lists once the
+  whole tree exists, so they are complete only after parsing finishes;
   `introduced_variables` come from `<c-for>` loop targets and `<c-fill>`
   `data` / `fallback`. Python variable extraction delegates to
   `python_safe_eval` via the `LangImpl`.
@@ -111,6 +119,12 @@ Python wrapper together (CLAUDE.md Mechanism 4).
   validated for adjacency and ordering (`constants::TAG_ORDERING_RULES`) in
   both explicit-tag and shorthand-attribute forms, using the same IF-before-FOR
   precedence as compiler lowering.
+
+Some parse costs still grow faster than the template, because the AST
+contract requires them: every node holds its subtree's comments and used
+variables, and every body holds its subtree's comments and slots, so these
+lists cost depth times count. A nesting limit is planned to bound them
+(#272).
 
 Validation runs through `validate_node` (fill placement, attributes present,
 attribute conflicts, `c-bind`, fill names, variable shadowing). **`<c-raw>` is

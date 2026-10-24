@@ -73,6 +73,10 @@ struct TagStackEntry {
     introduced_variables: Vec<Token>,
     /// Slots declared inside nested-template attributes on the start tag.
     attribute_slots: Vec<StaticNamedSlot>,
+    /// Whether the body already holds a `<c-fill>` as a direct child.
+    /// `validate_fill_exclusivity` needs this for every closed child, and
+    /// keeping it here saves searching all earlier siblings each time.
+    holds_fill: bool,
 }
 
 /// Parse a complete template into a Template AST
@@ -223,6 +227,9 @@ fn parse_template_inner(input: &str, context: &ParserContext) -> Result<Template
         slots: vec![],
     };
 
+    // The root template has no stack entry, so its own flag lives here (see
+    // `TagStackEntry::holds_fill`).
+    let mut root_holds_fill = false;
     for template_element_pair in template_element_pairs {
         // Skip EOI (End Of Input) marker
         if template_element_pair.as_rule() == Rule::EOI {
@@ -235,6 +242,7 @@ fn parse_template_inner(input: &str, context: &ParserContext) -> Result<Template
             template_element_pair,
             &mut tag_stack,
             &mut root_template,
+            &mut root_holds_fill,
             context,
         )?;
     }
@@ -265,6 +273,7 @@ fn process_template_element(
     element_pair: pest::iterators::Pair<Rule>,
     tag_stack: &mut Vec<TagStackEntry>,
     root_template: &mut Template,
+    root_holds_fill: &mut bool,
     context: &ParserContext,
 ) -> Result<(), ParseError> {
     // template_element -> html_comment | html_directive | html_processing_instruction | html_tag
@@ -305,7 +314,14 @@ fn process_template_element(
         }
         Rule::html_text_container => {
             let (node, attribute_slots) = process_html_text_container(inner, context)?;
-            finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
+            finalize_node(
+                node,
+                attribute_slots,
+                tag_stack,
+                root_template,
+                root_holds_fill,
+                context,
+            )?;
         }
         Rule::template_expression => {
             let expression_span = inner.as_span();
@@ -332,7 +348,14 @@ fn process_template_element(
             match tag_result {
                 // Push as body element of the current layer
                 HtmlTagResult::SelfClosing(node, attribute_slots) => {
-                    finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
+                    finalize_node(
+                        node,
+                        attribute_slots,
+                        tag_stack,
+                        root_template,
+                        root_holds_fill,
+                        context,
+                    )?;
                 }
                 // Create new layer in the stack (unless it's a void element)
                 HtmlTagResult::StartTag(ProcessedStartTag {
@@ -363,7 +386,14 @@ fn process_template_element(
                             introduced_variables,
                             contains_fills: false,
                         };
-                        finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
+                        finalize_node(
+                            node,
+                            attribute_slots,
+                            tag_stack,
+                            root_template,
+                            root_holds_fill,
+                            context,
+                        )?;
                     } else {
                         let body = Template {
                             elements: vec![],
@@ -376,6 +406,7 @@ fn process_template_element(
                             body,
                             introduced_variables,
                             attribute_slots,
+                            holds_fill: false,
                         });
                     }
                 }
@@ -417,6 +448,7 @@ fn process_template_element(
                         body,
                         introduced_variables,
                         attribute_slots,
+                        holds_fill: _,
                     } = tag_stack.pop().unwrap();
 
                     // `introduced_variables` was computed when the start tag was
@@ -428,7 +460,14 @@ fn process_template_element(
                         introduced_variables,
                     );
 
-                    finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
+                    finalize_node(
+                        node,
+                        attribute_slots,
+                        tag_stack,
+                        root_template,
+                        root_holds_fill,
+                        context,
+                    )?;
                 }
             }
         }
@@ -448,18 +487,38 @@ fn finalize_node(
     attribute_slots: Vec<StaticNamedSlot>,
     tag_stack: &mut [TagStackEntry],
     root_template: &mut Template,
+    root_holds_fill: &mut bool,
     context: &ParserContext,
 ) -> Result<(), ParseError> {
-    // Extract fill nodes and determine contains_fills
+    // Only a component tag checks its fills, so only it needs the full list.
+    // Building it for every closed tag would walk every nested control-flow
+    // tag again at each level, which grows with the square of the depth.
     let fill_nodes = match &node {
-        Node::WithBody { body, .. } => extract_fill_nodes(body, false, false, false),
-        Node::SelfClosing { .. } => vec![],
+        Node::WithBody { body, .. } if takes_fills(node.tag_name()) => {
+            extract_fill_nodes(body, false, false, false)
+        }
+        _ => vec![],
     };
-    let contains_fills = !fill_nodes.is_empty();
+    // Every node still records whether its body holds fills. The children
+    // already know whether theirs do, so this looks one level down only.
+    let contains_fills = match &node {
+        Node::WithBody { body, .. } => body_contains_fills(body),
+        Node::SelfClosing { .. } => false,
+    };
 
     validate_node(&node, &fill_nodes, tag_stack, context)?;
+    // The parent's flag is read before this node joins its siblings, so it
+    // says whether an earlier sibling is a fill.
+    let parent_holds_fill = match tag_stack.last_mut() {
+        Some(entry) => &mut entry.holds_fill,
+        None => root_holds_fill,
+    };
+    let siblings_hold_fill = *parent_holds_fill;
+    if node.tag_name() == C_FILL_TAG {
+        *parent_holds_fill = true;
+    }
     let parent_template = get_current_template(tag_stack, root_template);
-    validate_node_against_parent(&node, parent_template, context)?;
+    validate_node_against_parent(&node, parent_template, siblings_hold_fill, context)?;
 
     // Let components know how to handle body based on whether it contains fills
     node.set_contains_fills(contains_fills);
@@ -478,11 +537,11 @@ fn finalize_node(
         parent_template.slots.extend(body.slots.clone());
     }
 
-    // Propagate upwards
+    // Propagate comments upwards. Each node's used-variable list is built
+    // later by `recompute_template_used_variables`, once the whole tree
+    // exists, because copying every subtree's list into its parent at each
+    // close would grow with depth times variables.
     parent_template.comments.extend(node.comments().clone());
-    parent_template
-        .used_variables
-        .extend(node.used_variables().clone());
     parent_template.elements.push(TemplateElement::Node(node));
 
     Ok(())
@@ -3005,10 +3064,11 @@ fn validate_attribute_values(node: &Node, context: &ParserContext) -> Result<(),
 fn validate_node_against_parent(
     node: &Node,
     parent_template: &Template,
+    siblings_hold_fill: bool,
     context: &ParserContext,
 ) -> Result<(), ParseError> {
     validate_tag_grouping(node, parent_template, context)?;
-    validate_fill_exclusivity(node, parent_template, context)?;
+    validate_fill_exclusivity(node, parent_template, siblings_hold_fill, context)?;
 
     Ok(())
 }
@@ -3183,6 +3243,7 @@ fn validate_fill_placement(
 fn validate_fill_exclusivity(
     node: &Node,
     template: &Template,
+    siblings_hold_fill: bool,
     context: &ParserContext,
 ) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
@@ -3216,11 +3277,7 @@ fn validate_fill_exclusivity(
     // tag among the siblings (including the current node being added). Without a <c-fill>,
     // control flow tags can be siblings of anything normally.
     let is_current_fill = tag_name == C_FILL_TAG;
-    let has_fill_in_siblings = is_current_fill
-        || template
-            .elements
-            .iter()
-            .any(|elem| matches!(elem, TemplateElement::Node(n) if n.tag_name() == C_FILL_TAG));
+    let has_fill_in_siblings = is_current_fill || siblings_hold_fill;
 
     // If we're NOT in a fill context, no fill-related validation needed
     if !has_fill_in_siblings {
@@ -4483,10 +4540,7 @@ fn validate_fill_names(
 ) -> Result<(), ParseError> {
     // Only validate component nodes with body
     let tag_name = node.tag_name();
-    let is_component =
-        has_citry_component_prefix(tag_name) && !is_reserved_citry_tag_identity(tag_name);
-
-    if !is_component {
+    if !takes_fills(tag_name) {
         return Ok(());
     }
 
@@ -4903,6 +4957,30 @@ fn extract_fill_nodes(
     }
 
     fill_nodes
+}
+
+/// Whether a tag is a component whose `<c-fill>` children fill its slots.
+///
+/// `finalize_node` builds the full fill list only for these tags, and
+/// `validate_fill_names` checks it only for them, so both use this one rule.
+fn takes_fills(tag_name: &str) -> bool {
+    has_citry_component_prefix(tag_name) && !is_reserved_citry_tag_identity(tag_name)
+}
+
+/// Whether a body holds a `<c-fill>` that `extract_fill_nodes` would find.
+///
+/// That search looks at the body's direct children and continues only into
+/// control-flow tags. A control-flow child already recorded the same answer
+/// for its own body when it closed, so one level is enough here.
+fn body_contains_fills(body: &Template) -> bool {
+    body.elements.iter().any(|element| match element {
+        TemplateElement::Node(child) => {
+            let tag_name = child.tag_name();
+            tag_name == C_FILL_TAG
+                || (CONTROL_FLOW_TAGS.contains(&tag_name) && child.contains_fills())
+        }
+        _ => false,
+    })
 }
 
 /// The effective identity category of a `<c-fill>` node.
