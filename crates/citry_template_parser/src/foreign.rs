@@ -8,7 +8,7 @@ use crate::error::ParseError;
 
 /// One half-open UTF-8 byte range whose syntax belongs to an external
 /// template provider.
-#[pyclass(frozen)]
+#[pyclass(from_py_object, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignSpan {
     #[pyo3(get)]
@@ -81,7 +81,7 @@ impl ForeignSpan {
 }
 
 /// Optional parser inputs. The default is exactly the pre-interop parser.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ParseOptions {
     #[pyo3(get)]

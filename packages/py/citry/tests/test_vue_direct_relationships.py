@@ -1545,7 +1545,7 @@ def test_direct_callable_slot_maps_transparent_receiver_to_physical_owner() -> N
     assert "<b>content</b>" in assembly.compile_inputs[root.definition_id].template
 
 
-def test_flattened_projection_namespaces_lexical_text_after_physical_key() -> None:
+def test_a_fill_passed_through_a_transparent_component_keeps_its_text_in_its_author() -> None:
     registry = Citry(autodiscover=False)
 
     class Physical(Component):
@@ -1576,13 +1576,16 @@ def test_flattened_projection_namespaces_lexical_text_after_physical_key() -> No
     )
     physical = next(item for item in assembly.view.occurrences if item.type_key == Physical.class_id)
     root = next(item for item in assembly.view.occurrences if item.type_key == Root.class_id)
-    projected_keys = [key for key in physical.prepared_data if key.startswith("citryTextp")]
+    lexical_keys = [key for key, value in root.prepared_data.items() if value == "lexical"]
 
+    # Root's fill reaches Physical as a Vue slot, so it is compiled in Root's
+    # definition and reads its text from Root's data. Physical holds only its
+    # own text.
     assert physical.prepared_data["citryText0"] == "physical"
-    assert len(projected_keys) == 1
-    assert physical.prepared_data[projected_keys[0]] == "lexical"
-    assert root.prepared_data[projected_keys[0]] == "lexical"
-    assert f"$citryPrepared.{projected_keys[0]}" in assembly.compile_inputs[root.definition_id].template
+    assert "lexical" not in physical.prepared_data.values()
+    assert len(lexical_keys) == 1
+    assert f"$citryPrepared.{lexical_keys[0]}" in assembly.compile_inputs[root.definition_id].template
+    assert "<slot " in assembly.compile_inputs[physical.definition_id].template
 
 
 def test_component_call_preserves_native_vue_props_events_and_refs() -> None:

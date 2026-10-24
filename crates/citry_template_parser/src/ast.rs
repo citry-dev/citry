@@ -18,7 +18,7 @@ use crate::grammar::Rule;
 ///
 /// The section may represent anything from variable references, Python expressions,
 /// entire components or tags, plain text, or even comments.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Token {
     /// String content of the token
@@ -196,7 +196,7 @@ impl Token {
 ///
 /// - `{# ... #}` comments are NOT included in the output.
 /// - `<!-- ... -->` comments ARE included in the output, and treated as text.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Comment {
     /// Token containing the entire comment span including `{# #}` or `<!-- ... -->` delimiters
@@ -228,7 +228,7 @@ impl Comment {
 // #########################################################
 
 /// One source-to-target field in a `<c-fill data="{ ... }">` binding.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct FillDataField {
     /// Slot-data key read by this field.
@@ -259,7 +259,7 @@ impl FillDataField {
 }
 
 /// Parsed binding form for a `<c-fill>` `data` attribute.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct FillDataPattern {
     /// Token containing the complete binding expression.
@@ -306,7 +306,7 @@ impl FillDataPattern {
 }
 
 /// The kind of HTML attribute, determining how it should be processed
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum HtmlAttrKind {
     /// Static attribute - name doesn't start with `c-`, value interpreted literally
@@ -356,7 +356,7 @@ impl HtmlAttrKind {
 /// Attributes can be:
 /// - Key-value pairs: `key="value"`, `key='value'`, `key=value`
 /// - Boolean attributes: `disabled` (no value)
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct HtmlAttr {
     /// Token containing the entire attribute span
@@ -457,7 +457,7 @@ impl HtmlAttr {
 // #########################################################
 
 /// Represents an HTML tag (start tag, or self-closing tag)
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct HtmlStartTag {
     /// Token containing the entire tag span including `<`, `>`, and `/` delimiters
@@ -526,7 +526,7 @@ impl HtmlStartTag {
 }
 
 /// Represents an HTML end tag
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct HtmlEndTag {
     /// Token containing the entire tag span including `<`, `>`, and `/` delimiters
@@ -568,7 +568,7 @@ impl HtmlEndTag {
 // #########################################################
 
 /// Represents a template expression `{{ ... }}`
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Expr {
     /// Token containing the entire expression span including `{{ }}` delimiters
@@ -617,7 +617,7 @@ impl Expr {
 // #########################################################
 
 /// Represents plain text in a template
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Text {
     /// Token containing the text content and position information
@@ -650,7 +650,7 @@ impl Text {
 /// A node can be:
 /// - An HTML element: `<div>...</div>`, `<img/>`
 /// - A component: `<c-MyComp>...</c-MyComp>`, `<c-img/>`
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum Node {
     /// A node with a body (has opening tag, body content, and closing tag)
@@ -869,7 +869,7 @@ pub(crate) fn remove_introduced_variables(
 // #########################################################
 
 /// Original source owned by an installed external template provider.
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ForeignSourcePart {
     #[pyo3(get)]
@@ -908,7 +908,7 @@ impl ForeignSourcePart {
 }
 
 /// Represents a single element in a template
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum TemplateElement {
     Node(Node),
@@ -963,7 +963,7 @@ impl TemplateElement {
 ///
 /// Then we can infer and raise as error that the component declared "bar",
 /// but "bar" is missing, and instead there's "fee".
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct StaticNamedSlot {
     /// Token containing the slot name (from the `name` attribute's inner value)
@@ -1001,7 +1001,7 @@ impl StaticNamedSlot {
 // #########################################################
 
 /// Represents a complete parsed template
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Template {
     /// The elements in the template

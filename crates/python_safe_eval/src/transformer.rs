@@ -252,6 +252,7 @@
 
 use crate::comments::extract_comments;
 use crate::parse::parse_expression;
+use crate::stack::with_enough_stack;
 use crate::utils::literal_source::{
     escape_format_braces, has_surrogate_escape, interpolated_text_as_plain_body,
     plain_literal_text, source_text,
@@ -382,6 +383,12 @@ pub fn parse_expression_with_adjusted_error_ranges(
 /// The main entry point for transforming an expression string.
 /// Returns the transformed expression along with tokens for variables used and assigned.
 pub fn transform_expression_string(source: &str) -> Result<TransformResult, String> {
+    // The transformer calls itself once per tree level, so give it enough
+    // stack on any thread (see `stack.rs`).
+    with_enough_stack(|| transform_expression_source(source))
+}
+
+fn transform_expression_source(source: &str) -> Result<TransformResult, String> {
     // Wrap the expression in (\n{}\n) to allow multi-line expressions and trailing comments.
     // This is because in Python when we're inside an expression like inside `(...)`, `[...]`, or `{...}`,
     // then Python does care about the newlines and whitespace indentation.

@@ -17,10 +17,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10 is part of the package test matrix.
-    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
+import tomllib
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence

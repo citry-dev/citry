@@ -15,13 +15,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+import tomllib
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
-
-try:
-    import tomllib
-except ImportError:  # Python < 3.11
-    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 try:
     from scripts import build_constraints
@@ -72,7 +68,7 @@ def _constraint_errors(entries: Any) -> tuple[list[str], dict[str, list[str]], s
             errors.append(f"build constraint {entry['requirement']!r} needs at least one sha256 hash; {FIX}")
             continue
         name = canonicalize_name(requirement.name)
-        # A marked pin (such as tomli for Python 3.10 only) cannot stand in for
+        # A marked pin (one limited to some Python versions) cannot stand in for
         # a backend a package names directly, which every Python needs.
         if requirement.marker is None:
             pinned.setdefault(name, []).append(version)

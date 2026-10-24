@@ -29,7 +29,7 @@ RELEASE_VERSION = distribution_verifier.package_version()
 def _write_wheel(path: Path, *, extra: str | None = None) -> None:
     dist_info = f"pygments_citry-{RELEASE_VERSION}.dist-info"
     metadata = (
-        f"Metadata-Version: 2.4\nName: pygments-citry\nVersion: {RELEASE_VERSION}\nRequires-Python: <4.0,>=3.10\n"
+        f"Metadata-Version: 2.4\nName: pygments-citry\nVersion: {RELEASE_VERSION}\nRequires-Python: <4.0,>=3.11\n"
         + "".join(
             f"Requires-Dist: {requirement}\n" for requirement in sorted(distribution_verifier.EXPECTED_REQUIRES_DIST)
         )
