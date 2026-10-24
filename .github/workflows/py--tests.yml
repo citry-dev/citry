@@ -36,7 +36,6 @@ on:
       - "pnpm-workspace.yaml"
       - "README.md" # the citry wheel's metadata includes the root README
       - ".github/workflows/py--tests.yml"
-      - ".github/actions/**"
       - ".github/workflows/py--citry-ui--publish.yml"
       - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
@@ -70,7 +69,6 @@ on:
       - "pnpm-workspace.yaml"
       - "README.md" # the citry wheel's metadata includes the root README
       - ".github/workflows/py--tests.yml"
-      - ".github/actions/**"
       - ".github/workflows/py--citry-ui--publish.yml"
       - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
@@ -317,16 +315,8 @@ jobs:
       - name: Install the workspace with the e2e group
         run: uv sync --locked --all-packages --group e2e
 
-      - name: Drop the emSign ECC Root CA - G3 from the system certificates
-        uses: ./.github/actions/drop-emsign-g3
-
       - name: Install the chromium browser
         run: uv run --no-sync playwright install --with-deps chromium
-        # Playwright's bundled Node.js still trusts emSign ECC Root CA - G3,
-        # so its downloads use the refreshed system list.
-        env:
-          NODE_OPTIONS: --use-openssl-ca
-          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 
       - name: Set up pnpm for the pinned axe runtime
         uses: pnpm/action-setup@v6
@@ -686,29 +676,10 @@ jobs:
             --no-index \
             --find-links "$RUNNER_TEMP/wheelhouse" \
             dist/citry_ui-*.whl
-          python -m pip install "playwright==1.61.0"
-
-      - name: Drop the emSign ECC Root CA - G3 from the system certificates
-        # Same check as .github/actions/drop-emsign-g3, written out because
-        # this job tests the installed artifact without checking out the repo.
-        run: |
-          g3=MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBrMQswCQYDVQQG
-          if grep -RqF "$g3" /etc/ssl/certs/; then
-            sudo apt-get update -qq
-            sudo apt-get install --only-upgrade -y -qq ca-certificates
-          fi
-          if grep -RqF "$g3" /etc/ssl/certs/; then
-            echo "::error::the system certificate list still trusts emSign ECC Root CA - G3"
-            exit 1
-          fi
+          python -m pip install "playwright==1.64.1"
 
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
-        # Playwright's bundled Node.js still trusts emSign ECC Root CA - G3,
-        # so its downloads use the refreshed system list.
-        env:
-          NODE_OPTIONS: --use-openssl-ca
-          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 
       - name: Smoke-test the installed artifact in Chromium
         shell: bash
@@ -787,16 +758,8 @@ jobs:
       - name: Install the workspace with the e2e group
         run: uv sync --locked --all-packages --group e2e
 
-      - name: Drop the emSign ECC Root CA - G3 from the system certificates
-        uses: ./.github/actions/drop-emsign-g3
-
       - name: Install the ${{ matrix.browser }} browser
         run: uv run --no-sync playwright install --with-deps ${{ matrix.browser }}
-        # Playwright's bundled Node.js still trusts emSign ECC Root CA - G3,
-        # so its downloads use the refreshed system list.
-        env:
-          NODE_OPTIONS: --use-openssl-ca
-          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 
       - name: Run compact Vue and i18n qualification on ${{ matrix.browser }}
         run: >-

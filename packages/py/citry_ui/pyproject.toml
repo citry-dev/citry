@@ -40,11 +40,11 @@ dev = [
     "pyyaml>=6.0", # test_component_contracts reads the component manifests
 ]
 e2e = [
-    "playwright>=1.49",
+    "playwright>=1.64.1",
     "pytest-playwright>=0.5",
 ]
 storybook = [
-    "playwright>=1.49",
+    "playwright>=1.64.1",
     "uvicorn>=0.49",
 ]
 
