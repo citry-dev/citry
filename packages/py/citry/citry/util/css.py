@@ -127,9 +127,11 @@ def validate_css_var_value(value: str) -> None:
             index = _scan_css_string(value, index)
             continue
 
+        # An escape outside a string can spell a name such as `url` that the
+        # browser decodes and this check would not recognise, and a
+        # `css_data()` value never needs one there, so it is refused.
         if char == "\\":
-            index = _consume_css_escape(value, index)
-            continue
+            raise ValueError(f"CSS value contains a backslash outside a string at offset {index}.")
 
         # `url(` with no quote reads its own token up to the next `)`, where
         # a quote, `(`, or whitespace inside makes the browser's bad-url

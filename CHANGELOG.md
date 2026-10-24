@@ -233,8 +233,8 @@
     quote, a byte-order mark, or a Unicode noncharacter.
   - `<c-element c-is="...">` naming a tag such as `script`, `style`,
     `iframe`, or `textarea`, whose contents escaping cannot protect.
-  - A `css_data()` value with a comment, a brace, a top-level `!`, or a
-    malformed string or `url()`. Quoted font names, `rgb()`, `calc()`, and
+  - A `css_data()` value with a comment, a brace, a top-level `!`, a
+    backslash outside a quoted string, or a malformed string or `url()`. Quoted font names, `rgb()`, `calc()`, and
     `url()` values, SVG data URLs included, still work.
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in

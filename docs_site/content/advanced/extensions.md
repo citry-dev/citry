@@ -152,7 +152,8 @@ such as `on_template_loaded`, `on_template_compiled`, `on_js_loaded`,
 runs. Build those results from your extension's own text, never from
 request data. An `on_attrs_resolved` hook may change attribute values,
 but it may not add an inline event handler such as `onclick`; Citry
-raises `ValueError` if it does.
+raises `ValueError` if it does. A hook may change the value of a handler
+the template already has, so never put request data into such a value.
 
 ### Handle a failed render
 

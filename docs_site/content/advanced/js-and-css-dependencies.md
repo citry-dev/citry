@@ -195,7 +195,8 @@ leading `--`. Citry quotes a string that contains spaces,
 unless it starts with a CSS function such as `calc(...)` or `rgba(...)`.
 It reads each value the way the browser's CSS parser does and raises
 `ValueError` for one that could break out of its declaration: a top-level
-`;` or `!`, a brace, an unbalanced bracket, a comment, an unclosed or
+`;` or `!`, a brace, an unbalanced bracket, a comment, a backslash
+outside a quoted string, an unclosed or
 malformed string or `url()`, a `<` outside a string or `url()`, or a
 `</style` end tag anywhere. A quoted font name, `rgb(...)`, `calc(...)`,
 and `url(...)`, including an SVG data URL, keep working.
