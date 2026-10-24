@@ -74,6 +74,7 @@ from .compiler import (
     _generated_event_args,
     _generated_event_modifiers,
     _generated_vue_attr,
+    _guard_template_braces,
     _RuntimeEventDeclaration,
 )
 from .json_data import _JS_SAFE_INTEGER, _vue_attribute_map, _vue_attribute_value
@@ -2830,12 +2831,14 @@ class _Compiler:
         if type(item) is PreparedStaticRunNode:
             if _unsafe_body_text(item._prepared.html):
                 self.safe_body = False
-            self.append(item._prepared.html)
+            # Static text may meet the next item's `{` across a Citry tag;
+            # the server still writes the text itself.
+            self.append(_guard_template_braces(item._prepared.html))
             return _Static(item._prepared.html, item._prepared)
         if type(item) is PreparedSourceTextNode:
             if _unsafe_body_text(item.text):
                 self.safe_body = False
-            self.append(item.text)
+            self.append(_guard_template_braces(item.text))
             return _Static(item.text, item._prepared)
         if type(item) is PreparedVerbatimHtmlNode:
             # Raw HTML is data, never Vue template source. Keep this component
