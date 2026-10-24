@@ -4,6 +4,13 @@ All notable changes to `pygments-citry` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- **Breaking:** pygments-citry now requires Python 3.11 or newer. On
+  Python 3.10, pip keeps installing pygments-citry 0.2.1.
+
 ## [0.2.1] - 2026-10-19
 
 ### Fixed

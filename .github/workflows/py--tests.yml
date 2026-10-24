@@ -148,13 +148,13 @@ jobs:
       # the other supported Windows and Linux versions.
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
         os: [ubuntu-latest, windows-latest]
         # macOS is a smoke pair (oldest + newest Python) rather than the full
         # matrix, since macOS runners are costly and the maintainer develops on
         # darwin. The publish workflow builds the full macOS wheel set.
         include:
-          - { os: macos-latest, python-version: "3.10" }
+          - { os: macos-latest, python-version: "3.11" }
           - { os: macos-latest, python-version: "3.14" }
 
     steps:
@@ -190,7 +190,7 @@ jobs:
       - name: Install the workspace
         run: uv sync --locked --all-packages
 
-      # The Linux 3.10 cell renders with Citry's Python render path, the one
+      # The Linux 3.11 cell renders with Citry's Python render path, the one
       # PyPy, Pyodide and free-threaded builds use, because no job runs the
       # suite on those interpreters. Every other cell keeps the native path.
       # The option is added here rather than as a matrix key, so the cell's
@@ -203,7 +203,7 @@ jobs:
           -n 4
           --dist loadfile
           --durations 30
-          ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') && '--python-render-path' || '' }}
+          ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11') && '--python-render-path' || '' }}
 
   reload-servers:
     runs-on: ubuntu-latest
@@ -500,7 +500,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/download-artifact@v8
         with:

@@ -52,7 +52,7 @@ def _write_wheel(
     members = {name: (ROOT / "packages" / "py" / "citry_core" / name).read_bytes() for name in source_inventory()}
     members[extension] = b"native-extension"
     members[f"{dist_info}/METADATA"] = (
-        b"Metadata-Version: 2.4\nName: citry_core\nVersion: 1.7.0\nRequires-Python: >=3.10, <4.0\n"
+        b"Metadata-Version: 2.4\nName: citry_core\nVersion: 1.7.0\nRequires-Python: >=3.11, <4.0\n"
         b"License-File: LICENSE\nLicense-File: LICENSE-vize\n"
     )
     members[f"{dist_info}/WHEEL"] = (f"Wheel-Version: 1.0\nRoot-Is-Purelib: {root_is_purelib}\nTag: {tag}\n").encode()
@@ -93,15 +93,6 @@ def test_expected_release_inventory_is_closed_and_includes_the_browser_wheel() -
     assert "citry_core-1.7.0-cp310-abi3-manylinux_2_5_i686.manylinux1_i686.whl" in names
     assert not any("cp311-cp311" in name for name in names)
     assert not any("manylinux_2_17_i686" in name for name in names)
-
-
-def test_package_version_falls_back_without_python_311_tomllib(monkeypatch: pytest.MonkeyPatch) -> None:
-    # The manifest owns the version, so the fallback reader must agree with
-    # the TOML parser rather than with a copied literal.
-    expected = distribution_verifier.package_version()
-    monkeypatch.setattr(distribution_verifier, "_tomllib", None)
-
-    assert distribution_verifier.package_version() == expected
 
 
 def test_pyodide_build_config_owns_the_exact_wheel_name() -> None:

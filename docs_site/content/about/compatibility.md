@@ -11,14 +11,17 @@ supports, and the one case where installing it needs a compiler.
 
 ## Python versions { #supported-python-versions }
 
-Citry supports every
-[officially supported Python version](https://devguide.python.org/versions/){: target="_blank" rel="noopener"}:
+Citry supports Python 3.11 through 3.14:
 
-- Python 3.10
 - Python 3.11
 - Python 3.12
 - Python 3.13
 - Python 3.14
+
+Python 3.15 is not supported yet. pip still installs Citry on it, but Citry is
+not tested there, so use Python 3.14 for now. See the
+[Python release status](https://devguide.python.org/versions/){: target="_blank" rel="noopener"}
+for which versions are still maintained upstream.
 
 ## Operating systems
 
@@ -40,7 +43,7 @@ Wheels are published for:
 - Windows, 64-bit and 32-bit
 - macOS, on Intel and Apple Silicon
 
-These wheels cover regular CPython 3.10 to 3.14. Free-threaded CPython
+These wheels cover regular CPython 3.11 to 3.14. Free-threaded CPython
 3.14 and PyPy 3.11 have wheels only on Linux; elsewhere pip builds
 `citry-core` from source, as described below.
 

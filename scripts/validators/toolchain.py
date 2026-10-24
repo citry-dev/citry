@@ -4,12 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import tomllib
 import yaml  # type: ignore[import-untyped]
-
-try:
-    import tomllib
-except ImportError:  # Python < 3.11
-    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOLCHAIN_FILE = REPO_ROOT / "rust-toolchain.toml"
@@ -298,7 +294,7 @@ def check() -> list[str]:
             "versioned command name, not architecture-specific /opt/python paths"
         )
     for interpreter_args in (
-        "--features abi3-py310 --interpreter python3.10",
+        "--features abi3-py310 --interpreter python3.11",
         "--features abi3-py310 --interpreter python3.14t pypy3.11",
     ):
         if publish.count(interpreter_args) != 2:

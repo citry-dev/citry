@@ -456,7 +456,7 @@ Older committed snapshots keep their historical header unchanged.
 
 ## Set up the environment
 
-The docs require Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), the
+The docs require Python 3.11 or newer, [uv](https://docs.astral.sh/uv/), the
 repository's pinned nightly Rust toolchain, and the recursive Git submodules.
 CI currently uses Python 3.14.
 
