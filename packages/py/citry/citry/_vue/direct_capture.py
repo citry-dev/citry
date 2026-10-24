@@ -782,7 +782,17 @@ def assemble_typed_render(
                 raise UnsupportedPreparedView(
                     f"flattened projection reused a prepared container with conflicting physical data: {name!r}"
                 )
-            for nested_key, item in value.items():
+            if name == "opaqueHtml":
+                # The manifest requires a definition's blocks of HTML to match
+                # its declared sites exactly, so a block moves to the
+                # definition that reads it, and only the blocks this body
+                # wrote move.
+                entries = [(nested_key, value.pop(nested_key)) for nested_key in sorted(keys & value.keys())]
+                if not value:
+                    del lexical_values[name]
+            else:
+                entries = list(value.items())
+            for nested_key, item in entries:
                 prior = existing.setdefault(nested_key, _json_plain(item))
                 if prior != item:
                     raise UnsupportedPreparedView(
@@ -1344,6 +1354,11 @@ def assemble_typed_render(
 
         active_projected_data_keys: list[set[str] | None] = []
         active_projected_data_containers: list[set[str] | None] = []
+        # The occurrence whose compiled template receives the body that each
+        # active `transform_parts` call builds. Values the body's author wrote
+        # are copied into that occurrence's data, because its template reads
+        # them.
+        active_definition_owners: list[str] = []
 
         def data_key(prefix: str, source: str, span: tuple[int, int], owner_id: str) -> str:
             del source, span
@@ -1351,23 +1366,37 @@ def assemble_typed_render(
             index = binding_counts[prefix]
             binding_counts[prefix] += 1
             key = f"citry{prefix}{index}"
+            # The key lands in the data of the occurrence whose template reads
+            # it: the owner's own, or, for a value copied into another
+            # template, that template's occurrence.
+            physical_owner = active_definition_owners[-1] if active_definition_owners else occurrence_id
             projected = (
-                owner_id != occurrence_id and active_projected_data_keys and active_projected_data_keys[-1] is not None
+                owner_id != physical_owner
+                and active_projected_data_keys
+                and active_projected_data_keys[-1] is not None
             )
             # Only this dict's keys are read here, so an occurrence holding
             # leaf JSON placeholders needs no owner_values check.
-            physical_values = prepared_by_occurrence[occurrence_id]
-            reserved_keys = projected_data_keys_by_occurrence[occurrence_id]
-            if owner_id == occurrence_id:
-                # Leaf data and an earlier flattened projection may already
-                # occupy this compact key. Advance the physical owner counter
-                # rather than aliasing two independently changing values.
-                while key in physical_values or key in reserved_keys:
+            physical_values = prepared_by_occurrence[physical_owner]
+            reserved_keys = projected_data_keys_by_occurrence[physical_owner]
+            # A block of HTML is stored under its key inside `opaqueHtml`, not
+            # at the top level, so its key is checked there too.
+            nested_values = physical_values.get("opaqueHtml") if prefix == "Opaque" else None
+            nested_keys = nested_values if type(nested_values) is dict else {}
+
+            def occupied(candidate: str) -> bool:
+                return candidate in physical_values or candidate in reserved_keys or candidate in nested_keys
+
+            if owner_id == physical_owner:
+                # Leaf data and an earlier copied value may already occupy
+                # this compact key. Advance the owner's counter so two values
+                # that change independently never share one key.
+                while occupied(key):
                     index = binding_counts[prefix]
                     binding_counts[prefix] += 1
                     key = f"citry{prefix}{index}"
             elif projected:
-                if key in physical_values or key in reserved_keys:
+                if occupied(key):
                     # The lexical owner already uses this compact ordinal in
                     # its own namespace, but the physical definition cannot
                     # reuse it. Keep the ordinary key when possible and use a
@@ -1377,7 +1406,7 @@ def assemble_typed_render(
                     # the loop below keeps it unique.
                     key = f"citry{prefix}p{_digest('projected', prefix, index)[:20]}"
                     suffix = 0
-                    while key in physical_values or key in reserved_keys:
+                    while occupied(key):
                         suffix += 1
                         key = f"citry{prefix}p{_digest('projected', prefix, index, suffix)[:20]}"
                 reserved_keys.add(key)
@@ -1474,10 +1503,10 @@ def assemble_typed_render(
             project_root_markers: bool = True,
             parent_element_stack: tuple[str, ...] = (),
             parent_element_keys: tuple[str | None, ...] | None = None,
-            # Whether this body is compiled into this occurrence's definition.
-            # Only then are the values of parts authored elsewhere copied into
-            # this occurrence's data. The two root calls pass True.
-            compiled_here: bool = False,
+            # The occurrence whose definition this body is compiled into. The
+            # values of parts another occurrence wrote are copied into its
+            # data, which its template reads.
+            definition_owner_id: str = occurrence_id,
         ) -> _DefinitionFragment:
             nonlocal dynamic_site_index
             output = _DefinitionFragment.empty()
@@ -1495,10 +1524,25 @@ def assemble_typed_render(
             inherited_element_depth = len(element_stack)
             dom_depth = 0
             data_values = owner_values(data_owner_id)
-            projected_keys: set[str] | None = set() if compiled_here and data_owner_id != occurrence_id else None
-            projected_containers: set[str] | None = set() if compiled_here and data_owner_id != occurrence_id else None
+            projected_keys: set[str] | None = set() if data_owner_id != definition_owner_id else None
+            projected_containers: set[str] | None = set() if data_owner_id != definition_owner_id else None
             active_projected_data_keys.append(projected_keys)
             active_projected_data_containers.append(projected_containers)
+            active_definition_owners.append(definition_owner_id)
+
+            def refuse_compiled_elsewhere(what: str) -> None:
+                # A receiver's slot fallback that `<c-fill fallback=...>`
+                # shows is compiled in the caller's template, but its calls
+                # and slot choices are recorded in the receiver's data, which
+                # that template does not read.
+                if call_owner_id != definition_owner_id:
+                    raise UnsupportedPreparedView(
+                        "In a component that uses Vue, a slot's fallback that a caller shows through"
+                        f" '<c-fill fallback=...>' cannot hold {what}, which Vue cannot show there. Write that"
+                        " content in the fill itself, or leave the slot unfilled so the receiving component shows"
+                        " its own fallback."
+                    )
+
             # A projected body keeps the lexical data owner for values, but its
             # component declarations and prepared call bindings belong to the
             # definition that receives the body.  These owners coincide for an
@@ -1527,6 +1571,11 @@ def assemble_typed_render(
                     for candidate in parts
                 )
                 if not matching:
+                    # The call below pushes its own entries, so drop this
+                    # call's before handing the parts over.
+                    active_projected_data_keys.pop()
+                    active_projected_data_containers.pop()
+                    active_definition_owners.pop()
                     return transform_parts(
                         parts,
                         placement_route=placement_route,
@@ -1536,7 +1585,7 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
-                        compiled_here=compiled_here,
+                        definition_owner_id=definition_owner_id,
                     )
                 if parts:
                     # `matching` has just proven every part eligible, so the run is all of them.
@@ -1703,6 +1752,11 @@ def assemble_typed_render(
                         except UnsupportedPreparedView:
                             flattened_transparent_receiver = True
                             copied_outside_author = True
+                    if not flattened_transparent_receiver:
+                        # A transparent component's own outlet is copied in
+                        # place, but any other outlet records which content
+                        # it shows in a receiver's data.
+                        refuse_compiled_elsewhere("a '<c-slot>' outlet")
                     # Calls inside this body are counted and keyed in the
                     # lexical owner's namespace, so two receivers that share
                     # one slot name must still give their bodies different
@@ -1752,12 +1806,11 @@ def assemble_typed_render(
                         and receiver_owner == data_owner_id
                         else occurrence_id
                     )
-                    # When this body's author is another occurrence, its values
-                    # are copied into this occurrence's prepared data. Copy them
-                    # only when the body is compiled into this occurrence's
-                    # definition; a fill handed on as a Vue slot reads its
-                    # values from its author's data, and an extra opaque HTML
-                    # entry here fails the manifest check.
+                    # The body stays in the definition being built when it is
+                    # copied here or becomes the outlet's inline content (the
+                    # branches below). Otherwise it is handed on as a Vue slot,
+                    # compiled in its author's definition, and reads its values
+                    # from its author's data.
                     body_stays_here = flattened_transparent_receiver or (
                         not nested_template and receiver_owner == output_owner and lexical_owner == output_owner
                     )
@@ -1783,7 +1836,9 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers and dom_depth == 0,
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
-                        compiled_here=compiled_here and body_stays_here,
+                        # A fill handed on as a Vue slot is compiled in its
+                        # author's definition.
+                        definition_owner_id=definition_owner_id if body_stays_here else lexical_owner,
                     )
                     if copied_outside_author:
                         browser_read_trackers.pop()
@@ -1839,7 +1894,7 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
-                        compiled_here=compiled_here,
+                        definition_owner_id=definition_owner_id,
                     )
                     wrapped = _DefinitionFragment.empty()
                     wrapped.extend(
@@ -1852,7 +1907,7 @@ def assemble_typed_render(
                             project_root_markers=False,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            compiled_here=compiled_here,
+                            definition_owner_id=definition_owner_id,
                         )
                     )
                     wrapped.extend(decorated)
@@ -1879,7 +1934,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            compiled_here=compiled_here,
+                            definition_owner_id=definition_owner_id,
                         )
                     )
                     continue
@@ -1895,7 +1950,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            compiled_here=compiled_here,
+                            definition_owner_id=definition_owner_id,
                         )
                     )
                     continue
@@ -2008,7 +2063,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            compiled_here=compiled_here,
+                            definition_owner_id=definition_owner_id,
                         )
                         if wrapper_key is None:
                             output.extend(transparent_body)
@@ -2065,6 +2120,7 @@ def assemble_typed_render(
                         explicit_key = metadata.explicit_key
                     run_group = run_first.get(part_index)
                     if run_group is not None:
+                        refuse_compiled_elsewhere("a component")
                         run_values = call_values.setdefault("callRuns", {})
                         if type(run_values) is not dict:
                             raise AssertionError("prepared callRuns container changed type")
@@ -2124,6 +2180,7 @@ def assemble_typed_render(
                                 }
                             )
                             continue
+                        refuse_compiled_elsewhere("a component")
                         calls = call_values["calls"]
                         if type(calls) is not dict:
                             raise AssertionError("prepared calls container changed type")
@@ -2185,6 +2242,7 @@ def assemble_typed_render(
                         tuple(element_stack),
                         data_owner_id,
                     )
+                    refuse_compiled_elsewhere("a component")
                     calls = call_values["calls"]
                     if type(calls) is not dict:
                         raise AssertionError("prepared calls container changed type")
@@ -3012,13 +3070,14 @@ def assemble_typed_render(
             if projected_keys is not None and projected_containers is not None:
                 merge_projected_data(
                     data_values,
-                    owner_values(occurrence_id),
+                    owner_values(definition_owner_id),
                     projected_keys,
                     projected_containers,
-                    occurrence_id,
+                    definition_owner_id,
                 )
             active_projected_data_keys.pop()
             active_projected_data_containers.pop()
+            active_definition_owners.pop()
             return output
 
         if isinstance(value, SimpleVueRecord) and value.call_children is not None and value_parts == [value.leaf]:
@@ -3038,7 +3097,6 @@ def assemble_typed_render(
                 transform_parts(
                     [child],
                     parent_element_stack=(*physical_parent_stack, *call.element_stack),
-                    compiled_here=True,
                 )
                 for call, child in zip(call_fragment_source.calls, call_children, strict=True)
             ]
@@ -3118,7 +3176,6 @@ def assemble_typed_render(
                 fragment = transform_parts(
                     selected_parts,
                     parent_element_stack=physical_parent_stack,
-                    compiled_here=True,
                 )
                 compile_input = fragment.compile_input(template_context_names)
             definition_id = _definition_id(type_key, compile_input)

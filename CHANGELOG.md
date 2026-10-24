@@ -235,6 +235,14 @@
   up cached renders on other threads or a hot reload while Citry writes to
   it. A hot reload also no longer waits while `Citry.clear()` wipes the
   backend.
+- In a component that uses Vue, a `<c-fill fallback="...">` that shows
+  the receiving component's fallback now shows the receiving component's
+  values, not the caller's values with the same names, and no longer fails
+  when a value is `Markup`. A fallback shown this way that holds a
+  component or a `<c-slot>` now raises an error, where it used to drop
+  that content or fail with an unrelated error. Content passed through
+  a captured `Slot` to another component no longer shows the page's
+  own text in its place.
 - In a component that uses Vue, `&amp;#40;` written in text or an
   attribute value now shows `&#40;`, as the same component without Vue
   does; it used to show `(`. A static `style` with `&quot;` inside a
