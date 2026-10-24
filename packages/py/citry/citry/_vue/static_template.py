@@ -49,8 +49,9 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from citry._walk import Call, run
 from citry.client_directives import ComponentTagClientBindingKind, classify_component_tag_client_binding_key
 from citry.nodes import ComponentNode, FillNode, ForNode, IfNode, SlotNode, StaticHtmlAttr
 
@@ -81,7 +82,7 @@ from .direct_capture import (
 from .leaf_program import branch_opening, compile_leaf_program, loop_empty_opening, loop_opening
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Generator, Sequence
 
     from citry.nodes import BodyItem
 
@@ -242,7 +243,7 @@ def static_vue_template(
         raise UnsupportedStaticTemplate(str(error)) from error
     writer = _Writer(source.encode(), leaf=_is_leaf_program(nodes), renders_in_place=renders_in_place)
     # A whole-document template gets only its body contents compiled, as in a render.
-    writer.write_nodes(nodes if bounds is None else nodes[bounds[0] : bounds[1]])
+    run(writer.write_nodes(nodes if bounds is None else nodes[bounds[0] : bounds[1]]))
     return StaticVueTemplate(
         writer.source,
         writer.output.compile_input(),
@@ -281,12 +282,12 @@ class _Writer:
         self.counter += 1
         return f"{prefix}{self.counter}"
 
-    def write_nodes(self, nodes: Sequence[BodyItem]) -> None:
+    def write_nodes(self, nodes: Sequence[BodyItem]) -> Generator[Call, Any, None]:
         index = 0
         while index < len(nodes):
-            index = self.write_node(nodes, index)
+            index = yield Call(self.write_node, nodes, index)
 
-    def write_node(self, nodes: Sequence[BodyItem], index: int) -> int:
+    def write_node(self, nodes: Sequence[BodyItem], index: int) -> Generator[Call, Any, int]:
         """Write `nodes[index]` and return the index of the next node to write."""
         node = nodes[index]
         if isinstance(node, PreparedSourceTextNode):
@@ -307,44 +308,44 @@ class _Writer:
                 tag, start = self.open_elements.pop()
                 self.elements.append((tag, start, node.position[0], node.position[1]))
         elif isinstance(node, IfNode):
-            self.write_if(node)
+            (yield Call(self.write_if, node))
         elif isinstance(node, ForNode):
-            self.write_for(node)
+            (yield Call(self.write_for, node))
         elif isinstance(node, ComponentNode):
-            self.write_component(node)
+            (yield Call(self.write_component, node))
         elif isinstance(node, SlotNode):
-            self.write_slot(node)
+            (yield Call(self.write_slot, node))
         else:
             msg = f"no Vue form for {type(node).__name__}"
             raise UnsupportedStaticTemplate(msg)
         return index + 1
 
-    def write_if(self, node: IfNode) -> None:
+    def write_if(self, node: IfNode) -> Generator[Call, Any, None]:
         if not self.leaf:
             # A render writes the branch it picks, so each branch is written
             # in turn and every one must compile.
             for branch in node.branches:
-                self.write_nodes(branch[2])
+                (yield Call(self.write_nodes, branch[2]))
             return
         key = self.next_key("citryIf")
         for index, branch in enumerate(node.branches):
             self.write_generated(branch_opening(key, index), branch[0])
-            self.write_nodes(branch[2])
+            (yield Call(self.write_nodes, branch[2]))
             self.write_generated("</template>", branch[0])
 
-    def write_for(self, node: ForNode) -> None:
+    def write_for(self, node: ForNode) -> Generator[Call, Any, None]:
         if not self.leaf:
             # A render repeats the body once per row; one copy compiles the same.
             for branch in node.branches:
-                self.write_nodes(branch[2])
+                (yield Call(self.write_nodes, branch[2]))
             return
         key = self.next_key("citryLoop")
         self.write_generated(loop_opening(key), node.branches[0][0])
-        self.write_nodes(node.branches[0][2])
+        (yield Call(self.write_nodes, node.branches[0][2]))
         self.write_generated("</template>", node.branches[0][0])
         for branch in node.branches[1:]:
             self.write_generated(loop_empty_opening(key), branch[0])
-            self.write_nodes(branch[2])
+            (yield Call(self.write_nodes, branch[2]))
             self.write_generated("</template>", branch[0])
 
     def write_generated(self, text: str, span: tuple[int, int]) -> None:
@@ -487,7 +488,7 @@ class _Writer:
         if end > cursor:
             self.segments.append(SourceSegment(cursor, end, span[0], span[1], authored=False))
 
-    def write_component(self, node: ComponentNode) -> None:
+    def write_component(self, node: ComponentNode) -> Generator[Call, Any, None]:
         # A built-in is decided by its name; only another component's kind
         # comes from the caller, which may count a built-in as transparent.
         in_place = node.name in _IN_PLACE_BODIES or (
@@ -500,7 +501,7 @@ class _Writer:
         if in_place:
             # The render copies the body into the caller's template.
             for _site_id, _span, body in _fills(node):
-                self.write_nodes(body)
+                (yield Call(self.write_nodes, body))
             return
         if node.name == "element":
             # A `<c-element>` whose tag Python chooses. The tag is unknown
@@ -509,7 +510,7 @@ class _Writer:
             start = self.output.byte_length
             self.output.append("<template>")
             self.mark_generated(start, node.position)
-            self.write_nodes(node.body)
+            (yield Call(self.write_nodes, node.body))
             start = self.output.byte_length
             self.output.append("</template>")
             self.mark_generated(start, node.position)
@@ -538,7 +539,7 @@ class _Writer:
             start = self.output.byte_length
             self.output.append(_fill_opening(site_id))
             self.mark_generated(start, span)
-            self.write_nodes(body)
+            (yield Call(self.write_nodes, body))
             start = self.output.byte_length
             self.output.append("</template>")
             self.mark_generated(start, span)
@@ -592,11 +593,11 @@ class _Writer:
             )
         return {"kind": kind.value, "name": attr.key, "value": value, "sourceStart": start, "sourceEnd": end}
 
-    def write_slot(self, node: SlotNode) -> None:
+    def write_slot(self, node: SlotNode) -> Generator[Call, Any, None]:
         # The fallback is written on its own first, because the shared writer
         # takes it as one finished fragment.
         fallback = _Writer(self.source, leaf=self.leaf, renders_in_place=self.renders_in_place, counter=self.counter)
-        fallback.write_nodes(node.body)
+        yield Call(fallback.write_nodes, node.body)
         self.counter = fallback.counter
         # Element spans are authored positions, so they need no shift.
         self.elements.extend(fallback.elements)
@@ -652,15 +653,15 @@ def _fills(node: ComponentNode) -> list[tuple[str, tuple[int, int], Sequence[Bod
     """
     fills: list[FillNode] = []
 
-    def collect(body: Sequence[BodyItem]) -> None:
+    def collect(body: Sequence[BodyItem]) -> Generator[Call, Any, None]:
         for item in body:
             if isinstance(item, FillNode):
                 fills.append(item)
             elif isinstance(item, (IfNode, ForNode)):
                 for branch in item.branches:
-                    collect(branch[2])
+                    (yield Call(collect, branch[2]))
 
-    collect(node.body)
+    run(collect(node.body))
     if not fills:
         # Content without `<c-fill>` is the default fill.
         # A render passes any content, a comment included, but not whitespace alone.
