@@ -550,8 +550,8 @@ def test_every_profile_loads_and_only_the_local_build_profiles_name_local_wheels
             with_wheels.append(name)
     # A profile installs only what the lockfiles pin, unless it is listed here
     # on purpose: the testing profile, and the profile that measured Citry
-    # 0.6.1 before its release for the docs page.
-    assert with_wheels == ["citry-local-wheels", "release-0.6.1-citry"]
+    # 0.7.0 before its release for the docs page.
+    assert with_wheels == ["citry-local-wheels", "release-0.7.0-citry"]
 
 
 def test_release_profile_is_the_cohort_plus_the_docs_page_board_size():

@@ -63,7 +63,7 @@ faster.
 
 - **When**: Citry on 2026-10-23, the other eleven frameworks on
   2026-10-19.
-- **Which Citry**: Citry 0.6.1 before its release, built with
+- **Which Citry**: Citry 0.7.0 before its release, built with
   citry-core 1.9.0 from the repository at commit
   [3f13337](https://github.com/citry-dev/citry/tree/3f13337924674a65f82ed9eac2dfa7e01142a57d).
   The Citry app uses Citry's Vue runtime and
@@ -133,7 +133,7 @@ a React app, which sends each click to a Python backend.
 ### Where Citry stands { #errors-where-citry-stands }
 
 - **Before the app runs: 54 of 61** (47 errors, 7 warnings),
-  measured with the code that ships as Citry 0.6.1, before its
+  measured with Citry at commit bf935bc, before the Citry 0.7.0
   release. Citry 0.6.0 catches 29 of 61 (see
   [How we measured](#errors-how-we-measured)). Two of the 63 mistakes
   don't apply to Citry. Next.js 45 of 57, Nuxt 39 of
@@ -200,7 +200,7 @@ a React app, which sends each click to a Python backend.
 - **Which Citry**: Citry and its language server, citry-lsp, built from
   the repository at commit
   [bf935bc](https://github.com/citry-dev/citry/tree/bf935bc77fc3e868cb7c3915035c32f0ab7147ff),
-  the code that ships as Citry 0.6.1, measured before its release,
+  measured before the Citry 0.7.0 release,
   with citry-core 1.8.0 from PyPI. The run's report names a later commit that changed only the
   benchmark, so the Citry code is the same. Citry 0.6.0, the release
   before that commit, reports 29 of the 61.

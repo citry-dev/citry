@@ -1,4 +1,4 @@
-name = "release-0.6.1-citry"
+name = "release-0.7.0-citry"
 mode = "native"
 apps = ["citry", "jinja_htmx_alpine"]
 scenario = "project_board"
@@ -19,5 +19,5 @@ seed = 1729
 publication = false
 
 [local_wheels]
-citry = ".benchmarks/wheels/citry-0.6.1-main/citry-0.6.0-py3-none-any.whl"
-citry-core = ".benchmarks/wheels/citry-0.6.1-main/citry_core-1.9.0-cp312-cp312-macosx_11_0_arm64.whl"
+citry = ".benchmarks/wheels/citry-0.7.0-main/citry-0.6.0-py3-none-any.whl"
+citry-core = ".benchmarks/wheels/citry-0.7.0-main/citry_core-1.9.0-cp312-cp312-macosx_11_0_arm64.whl"
