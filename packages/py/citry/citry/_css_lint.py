@@ -21,19 +21,20 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from citry._browser_expressions import _ascii_lower, _nested_template
 from citry._css_scan import CssDeclarations, scan_css, split_class_attribute
 from citry._diagnostic_catalog import CSS_MISSPELLED_CLASS, CSS_UNDECLARED_CLASS, CSS_UNDECLARED_VARIABLE
 from citry._diagnostics import render_diagnostic
 from citry._markup_lint import one_slip_from
+from citry._walk import Call, run
 from citry.analysis import _css_var_arguments, _skip_css_trivia, _utf8_boundaries
 from citry.util.html import decode_attribute_entities
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection
+    from collections.abc import Callable, Collection, Generator
 
     from citry_core.template_parser import HtmlAttr, Template
 
@@ -148,7 +149,7 @@ def template_css(template: Template, *, parse_nested: Callable[[str], Template])
 
     """
     walker = _TemplateCssWalker(parse_nested=parse_nested)
-    walker.walk(template, base_index=0)
+    run(walker.walk(template, base_index=0))
     declarations = CssDeclarations(custom_properties=frozenset(walker.custom_properties))
     for text in walker.stylesheets:
         declarations = declarations.merged(scan_css(text))
@@ -332,7 +333,7 @@ class _TemplateCssWalker:
         self.stylesheets: list[str] = []
         self.custom_properties: set[str] = set()
 
-    def walk(self, template: Template, *, base_index: int) -> None:
+    def walk(self, template: Template, *, base_index: int) -> Generator[Call, Any, None]:
         for element in template.elements:
             if not isinstance(element, TemplateElement.Node):
                 continue
@@ -348,7 +349,7 @@ class _TemplateCssWalker:
                     nested = _nested_template(inner.content, self.parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        self.walk(parsed, base_index=base_index + inner.start_index + nested_start)
+                        (yield Call(self.walk, parsed, base_index=base_index + inner.start_index + nested_start))
                     continue
                 key = _ascii_lower(attr.key.content)
                 if key in _STYLE_BINDINGS:
@@ -378,7 +379,7 @@ class _TemplateCssWalker:
                     "".join(item._0.token.content for item in body.elements if isinstance(item, TemplateElement.Text))
                 )
                 continue
-            self.walk(body, base_index=base_index)
+            (yield Call(self.walk, body, base_index=base_index))
 
     def _record_classes(self, written: str, value_start: int) -> None:
         # Citry renders `{{ }}` in a plain attribute as written, so the words
