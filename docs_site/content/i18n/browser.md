@@ -313,20 +313,55 @@ Empty names, empty or unclosed brackets, extra punctuation, uppercase
 spellings, and other HTML attributes are errors. Rendering,
 `citry check`, and the editor all report them.
 
-### Add `$c-tr` from Python
+### Keep the server text { #keep-the-server-text }
 
-To decide during the server render whether to add the binding, use the
-`c-` prefix, `c-$c-tr:...="python_expression"`, or return a `$c-tr:...`
-key from `c-bind`. The Python value must be:
+A `$c-tr` binding and its value are always written in the template,
+because the value is browser JavaScript. When the server decides
+whether the browser should translate an element, for example because a
+caller passed its own label, return a flag from
+[`js_data()`](/vue/component-options/#seed-browser-data-from-python)
+and let the value return `null`:
 
-- a string, which is the browser expression for the variables object;
-- `True`, for a binding without variables (an empty string means the
-  same);
-- `None` or `False`, for no binding.
+```citry
+class SaveButton(Component):
+    def template_data(self, kwargs, slots):
+        return {"label": kwargs.get("label")}
 
-Any other value raises `TypeError`. The binding must be on a plain HTML
-element that holds the text or attribute itself, not on a component
-tag.
+    def js_data(self, kwargs, slots):
+        return {"useCatalog": kwargs.get("label") is None}
+
+    template = """
+      <button
+        c-aria-label="label or tr('my-app-save')"
+        $c-tr:my-app-save[aria-label]="useCatalog ? {} : null"
+      >
+        Save
+      </button>
+    """
+
+    messages = """
+      my-app-save = Save
+    """
+```
+
+While the value is `null`, the element keeps the text or attribute the
+server rendered. When it returns an object again, the browser
+translates as usual.
+
+- A value that can return `null` lets the server render text that
+  `tr()` did not produce, such as the caller's label. A value without
+  `null` must pair with the matching `tr()` call.
+- Only `null` keeps the server text on purpose. `undefined`, often from
+  a misspelled name, keeps it too, and in development mode the browser
+  console reports it with the message ID and the element.
+- When such an element renders no attribute to translate, Citry adds
+  no binding for it.
+- The binding must be on a plain HTML element that holds the text or
+  attribute itself, not on a component tag.
+
+Rendering raises `VueCodeError` when Python data names a binding: a
+`c-$c-tr:` attribute, a `$c-tr` key in a `c-bind` mapping, or one added
+by an extension hook. `citry check` and the editor report the first two.
 
 ### Avoid `v-text` with `$c-tr`
 

@@ -160,14 +160,11 @@ def test_vue_component_prop_object_value_is_javascript():
     assert not any(token is Error for token, _ in toks)
 
 
-def test_client_translation_binding_uses_javascript_and_dynamic_form_uses_python():
-    direct = lex_template('<button $c-tr:notice[aria-label]="{ title: toast.title }"></button>')
-    dynamic = lex_template('<button c-$c-tr:notice[aria-label]="binding_for(toast)"></button>')
+def test_client_translation_binding_value_is_javascript():
+    toks = lex_template('<button $c-tr:notice[aria-label]="{ title: toast.title }"></button>')
 
-    assert (Name.Attribute, "$c-tr:notice[aria-label]") in direct
-    assert (Name.Other, "toast") in direct
-    assert (Name.Attribute, "c-$c-tr:notice[aria-label]") in dynamic
-    assert (Name, "binding_for") in dynamic
+    assert (Name.Attribute, "$c-tr:notice[aria-label]") in toks
+    assert (Name.Other, "toast") in toks
 
 
 def test_only_exact_client_props_name_gets_special_highlighting():

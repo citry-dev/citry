@@ -4,6 +4,12 @@ All notable changes to `citry-lsp` are documented here.
 
 ## Unreleased
 
+### Changed
+
+- Attribute completion offers `$c-tr:` only, and the editor reports a
+  `c-$c-tr:` attribute or a `$c-tr` key in a `c-bind` mapping as an
+  error, because a translation binding is written in the template.
+
 ### Added
 
 - The editor reports a misspelled directive, such as `c-iff` for `c-if`,

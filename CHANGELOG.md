@@ -135,6 +135,22 @@
 
 ### Changed
 
+- **Breaking:** write a `$c-tr` translation binding and its values in the
+  template. A binding that Python data names, through `c-$c-tr:...`, a
+  `$c-tr` key in a `c-bind` mapping, or an `on_attrs_resolved` hook, now
+  raises `VueCodeError`, because its value is browser JavaScript. To let
+  the server decide whether the browser translates an element, return a
+  flag from `js_data()` and return `null` from the binding to keep the
+  server-rendered text
+  ([details](https://citry.dev/i18n/browser/#keep-the-server-text)):
+
+  ```citry-html
+  <!-- Before -->
+  <span c-$c-tr:my-app-save="True if use_catalog else None">
+  <!-- After: useCatalog comes from js_data() -->
+  <span $c-tr:my-app-save="useCatalog ? {} : null">
+  ```
+
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old
@@ -217,6 +233,10 @@
   references correctly too, and a dynamic slot name that is not
   JavaScript, such as `#[x&amp;y]`, now reports Vue's invalid-expression
   error instead of compiling to broken JavaScript.
+- The render cache replays a stored entry only when its template text,
+  static markup, and `$c-tr` values match what the running app's templates
+  produce. Any other entry is treated as a miss and the component renders
+  again, so the first render of a template in a new process may miss once.
 - With `@event(latest_wins=True)`, a call that a newer call replaced no
   longer changes the page. Its remaining actions are dropped, including
   delayed ones with `wait=False`. The newer call no longer waits for its

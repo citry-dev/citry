@@ -93,11 +93,14 @@ template:
 ```
 
 Citry rejects a key that Vue would read as code: a name that starts with
-`v-`, `:`, `@`, `#`, `.`, or `^`, in any letter case. The key fails
+`v-`, `:`, `@`, `#`, `.`, or `^`, in any letter case, and a `$c-tr`
+translation binding, whose value is browser JavaScript (see
+[Keep the server text](/i18n/browser/#keep-the-server-text)).
+The key fails
 whatever its value, even `None`: the name itself is Python data choosing
 Vue code. Citry's own `@c-` and `:c-` Events bindings are allowed. The
 same check applies to a directive written with a `c-` prefix, such as
-`c-v-if`, `c-@click`, or `c-:title`, because its value is also a Python
+`c-v-if`, `c-@click`, `c-:title`, or `c-$c-tr:greeting`, because its value is also a Python
 expression, and to a name that an extension's `on_attrs_resolved` hook
 adds or changes.
 

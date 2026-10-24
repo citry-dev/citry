@@ -6677,16 +6677,6 @@ _I18N_BINDING_DIRECTIVES = (
         insert_text='\\$c-tr:${1:message}="${2:{}}"',
         repeatable=True,
     ),
-    _SyntaxSpec(
-        "c-$c-tr:",
-        "attribute",
-        "Compute a translation values expression in Python",
-        "Evaluate Python to produce the Vue named-values expression for a browser translation binding.",
-        _BROWSER_I18N_URL,
-        context="i18n-binding",
-        insert_text='c-\\$c-tr:${1:message}="${2:expression}"',
-        repeatable=True,
-    ),
 )
 _STRUCTURAL_ATTRIBUTES: dict[str, tuple[_SyntaxSpec, ...]] = {
     name: _syntax_specs(kind="attribute", context=name) for name in RESERVED_TAG_NAMES
@@ -6924,12 +6914,12 @@ def _syntax_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
             (spec for spec in _STRUCTURAL_ATTRIBUTES[normalized_tag] if spec.label == attr_name),
             None,
         )
-    translated_name = attr_name.removeprefix("c-")
-    if looks_like_i18n_binding(translated_name):
-        if normalized_tag.startswith("c-"):
+    if looks_like_i18n_binding(attr_name.removeprefix("c-")):
+        # A translation binding is written in the template on an HTML element.
+        # Its `c-` spelling is a check error, so hover shows that diagnostic.
+        if normalized_tag.startswith("c-") or attr_name.startswith("c-"):
             return None
-        label = "c-$c-tr:" if attr_name.startswith("c-") else "$c-tr:"
-        return next(spec for spec in _I18N_BINDING_DIRECTIVES if spec.label == label)
+        return _I18N_BINDING_DIRECTIVES[0]
     contexts: list[str | None] = []
     if normalized_tag in {"c-component", "c-element"}:
         contexts.append("dynamic-target")
