@@ -428,6 +428,25 @@ def test_blog_guard_reports_source_and_line(tmp_path: Path) -> None:
     assert results[0].line == 4
 
 
+def test_blog_guard_rejects_a_post_that_links_to_main(tmp_path: Path) -> None:
+    post_dir = tmp_path / "blog"
+    post_dir.mkdir()
+    (post_dir / "index.md").write_text("# Blog\n\n<c-blog-list />\n", encoding="utf-8")
+    (post_dir / "2026-07-27-post.md").write_text(
+        "---\ntitle: Post\ndescription: Summary.\ndate: 2026-07-27T09:00:00+02:00\nauthor: Maintainers\n---\n"
+        "![a](https://raw.githubusercontent.com/citry-dev/citry/main/a.gif)\n"
+        "![b](https://raw.githubusercontent.com/citry-dev/citry/citry@0.6.0/b.gif)\n"
+        "[edit](https://github.com/citry-dev/citry/edit/main/docs_site/content/blog/x.md)\n",
+        encoding="utf-8",
+    )
+
+    results = list(blog.check(_content_ctx(tmp_path)))
+
+    # Only the main link fails: a tag shows what the post described, and edits are made on main.
+    assert [(r.source, r.line, r.severity) for r in results] == [("blog/2026-07-27-post.md", 7, Severity.ERROR)]
+    assert "raw.githubusercontent.com/citry-dev/citry/main/a.gif" in results[0].message
+
+
 def test_blog_feed_guard_requires_feed_for_published_posts(tmp_path: Path) -> None:
     post_dir = tmp_path / "blog"
     post_dir.mkdir()

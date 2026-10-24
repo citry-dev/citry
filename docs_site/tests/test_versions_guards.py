@@ -10,12 +10,21 @@ under ``tmp_path``. The wiring the versions-check command uses
 
 from __future__ import annotations
 
+import contextlib
 import json
+import subprocess
 from pathlib import Path
 
 from docs_site._internal._vendor.mike_versions import Versions
-from docs_site._internal.guards import cross_version_link, make_versions_context, versions_manifest
+from docs_site._internal.guards import (
+    VERSION_GUARDS,
+    cross_version_link,
+    make_versions_context,
+    snapshot_main_links,
+    versions_manifest,
+)
 from docs_site._internal.guards.base import GuardContext, Severity
+from docs_site._internal.snapshot_links import checkout_release_ref, pin_snapshot_links
 from docs_site._internal.versioning import (
     BUILD_INFO_NAME,
     DOCS_BUILDER_VERSION,
@@ -405,3 +414,79 @@ def test_make_versions_context_flags_a_synthetic_orphan(tmp_path: Path) -> None:
     errors = _errors(list(versions_manifest.check(make_versions_context(root))))
 
     assert any(r.source == "0.9.0" and "does not exist" in r.message for r in errors)
+
+
+def test_snapshot_main_links_flags_a_link_to_main_and_pinning_clears_it(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    vdir = _make_version(root, "1.0.0", pages=("index.html", "index.md", "logo.png", "api.yml", "events.js"))
+    (vdir / "index.html").write_text(
+        '<img src="https://raw.githubusercontent.com/citry-dev/citry/main/a.gif">'
+        '<a href="https://github.com/citry-dev/citry/edit/main/docs/a.md">edit</a>',
+        encoding="utf-8",
+    )
+    (vdir / "index.md").write_text("intro\n[src](https://github.com/citry-dev/citry/tree/main/benchmarks)\n")
+    # A binary file is not read as text, whatever bytes it holds.
+    (vdir / "logo.png").write_bytes(b"\x89PNG https://github.com/citry-dev/citry/blob/main/x \xff")
+    # Text the rewrite never changes is still checked.
+    (vdir / "api.yml").write_text("source: https://github.com/citry-dev/citry/blob/main/api.yml\n")
+    js = "fetch('https://raw.githubusercontent.com/citry-dev/citry/main/e.json')\n"
+    (vdir / "events.js").write_text(js)
+    # The latest/ alias holds redirect stubs and no build stamp, so it is skipped.
+    (root / "latest").mkdir()
+    (root / "latest" / "index.html").write_text('<a href="https://github.com/citry-dev/citry/blob/main/x">x</a>')
+
+    results = list(snapshot_main_links.check(_versions_ctx(root)))
+    assert [(r.source, r.line, r.severity) for r in results] == [
+        ("1.0.0/api.yml", 1, Severity.ERROR),
+        ("1.0.0/events.js", 1, Severity.ERROR),
+        ("1.0.0/index.html", 1, Severity.ERROR),
+        ("1.0.0/index.md", 2, Severity.ERROR),
+    ]
+
+    # The rewrite changes the pages only, so the script keeps its bytes.
+    assert pin_snapshot_links(vdir, "citry@1.0.0") == 2
+    assert (vdir / "events.js").read_text() == js
+    assert [r.source for r in snapshot_main_links.check(_versions_ctx(root))] == [
+        "1.0.0/api.yml",
+        "1.0.0/events.js",
+    ]
+    # The edit link is left on main, where edits are made.
+    assert "/edit/main/docs/a.md" in (vdir / "index.html").read_text(encoding="utf-8")
+
+
+def test_snapshot_main_links_runs_in_versions_check() -> None:
+    assert snapshot_main_links.check in VERSION_GUARDS
+
+
+def test_pin_snapshot_links_keeps_line_endings_and_skips_symlinks(tmp_path: Path) -> None:
+    vdir = tmp_path / "1.0.0"
+    vdir.mkdir()
+    page = vdir / "index.md"
+    page.write_bytes(b"a\r\n[x](https://github.com/citry-dev/citry/blob/main/x)\r\n")
+    outside = tmp_path / "outside.md"
+    outside.write_text("[x](https://github.com/citry-dev/citry/blob/main/x)\n")
+    with contextlib.suppress(OSError):  # Windows without the symlink privilege.
+        (vdir / "link.md").symlink_to(outside)
+    pin_snapshot_links(vdir, "citry@1.0.0")
+    assert page.read_bytes() == b"a\r\n[x](https://github.com/citry-dev/citry/blob/citry@1.0.0/x)\r\n"
+    # A symlink could lead outside the snapshot, so its target is left alone.
+    assert "/blob/main/x" in outside.read_text()
+
+
+def _git(repo: Path, *args: str) -> str:
+    command = ["git", "-C", str(repo), *args]
+    return subprocess.run(command, check=True, capture_output=True, text=True).stdout.strip()
+
+
+def test_checkout_release_ref_uses_the_tag_only_on_its_commit(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "one")
+    _git(repo, "tag", "citry@1.0.0")
+    assert checkout_release_ref(repo, "1.0.0") == "citry@1.0.0"
+    # A later commit is not the release, so the links name that commit.
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "two")
+    assert checkout_release_ref(repo, "1.0.0") == _git(repo, "rev-parse", "HEAD")
+    # Outside a git checkout there is nothing to name.
+    assert checkout_release_ref(tmp_path / "not-a-repo", "1.0.0") == ""
