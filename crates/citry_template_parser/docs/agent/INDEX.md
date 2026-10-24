@@ -160,6 +160,10 @@ contract):
   as the `ComponentNode`'s trailing key argument, emitted only when authored;
   the Python runtime likewise treats an evaluated `None` as no key.
 - Expression content retains its trailing whitespace from `{{ expr }}`.
+- The Python printer (`lang/python.rs`) keeps each generated statement within
+  100 nested brackets, because CPython rejects more than 200. For a deeper
+  template it moves some subtrees into earlier `_nN = ...` statements, chosen
+  so Python still builds the nodes in the same order. Its tests are in `src/lang/python_printer_tests.rs`.
 - `<c-raw>` compiles its body to a single literal text part (an `UnsafeString`
   that `coalesce_strings` may merge with adjacent static text); the inner
   content is emitted verbatim, with no template processing.

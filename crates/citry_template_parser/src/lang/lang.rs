@@ -127,6 +127,11 @@ pub trait LangImpl {
     ///     return body
     /// ```
     ///
+    /// The `args` tree nests as deep as the template does, so a target
+    /// language that limits nesting must split it. The Python printer moves
+    /// deep subtrees into earlier local variables (see "Deep templates" in
+    /// the `compiler` module docs).
+    ///
     /// # Arguments
     /// * `args` - A vector of `LangSpecArgument` representing the compiled template structure
     ///

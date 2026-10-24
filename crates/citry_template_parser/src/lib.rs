@@ -25,6 +25,8 @@ pub mod lang {
     pub mod lang;
     pub mod php;
     pub mod python;
+    #[cfg(test)]
+    mod python_printer_tests;
     pub mod rust;
 }
 pub mod parser;

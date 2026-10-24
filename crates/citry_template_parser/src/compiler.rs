@@ -73,6 +73,17 @@
 //!   `None`. `#c-ignore` emits the literal ` data-citry-morph="ignore"`. On a
 //!   component tag, `#c-key` and `#c-ignore` ride in the `ComponentNode`'s
 //!   tagged trailing metadata tuple (see the table above), never as kwargs.
+//! - Deep templates: CPython rejects a statement with more than 200 open
+//!   brackets, and each `<c-if>`/`<c-for>` level adds four. When the
+//!   `body = [...]` statement would nest more than 100, the Python printer
+//!   moves some subtrees into local variables `_n1`, `_n2`, ..., numbered
+//!   in the order the printer writes their statements. Each is assigned in
+//!   its own earlier statement, and its name stands where the subtree was.
+//!   Working from the leaves up, the printer picks the fewest subtrees that
+//!   keep each statement within the budget. It then also moves every
+//!   earlier sibling that calls a constructor, so Python still builds the
+//!   nodes in the order the single statement would. A template within the budget
+//!   keeps the single `body = [...]` statement, byte for byte.
 //!
 //! ## Determinism
 //!
@@ -161,7 +172,7 @@ pub fn compile_prepared_template(
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum CompileMode {
+pub(crate) enum CompileMode {
     Html,
     Prepared,
 }
@@ -202,7 +213,7 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
     compile_template_body_with_mode(template, CompileMode::Html)
 }
 
-fn compile_template_body_with_mode(
+pub(crate) fn compile_template_body_with_mode(
     template: Template,
     mode: CompileMode,
 ) -> Result<Vec<LangSpecArgument>, CompileError> {

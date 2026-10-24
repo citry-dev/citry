@@ -210,6 +210,10 @@
 
 ### Fixes
 
+- A template that nests 50 or more `<c-if>` or `<c-for>` tags now renders.
+  It used to fail with `SyntaxError: too many nested parentheses`.
+  Templates nested more than about 300 levels raise `RecursionError`
+  instead, and much deeper ones can crash the process.
 - In a component that uses Vue, a `Markup` value without tags, such as
   `Markup("a&#127;b")`, now keeps a character such as U+007F, or the
   Unicode noncharacter U+FDD0, that a numeric reference names, as the
