@@ -1353,10 +1353,8 @@ dev = ["maturin>=1.10.2", "ruff>=0.10.0", "mypy>=1.0.0"]
 
 The workspace has exactly one dependency lockfile: the root [`uv.lock`](../uv.lock).
 Run `uv lock` from the repository root and commit that file for every workspace
-dependency or package-version change. Workspace-member package-local `uv.lock` files belong to
-the pre-workspace layout and are not development, CI, or release inputs; the
-remaining Citry Core copy is tracked for removal in
-[#87](https://github.com/citry-dev/citry/issues/87).
+dependency or package-version change. Development, CI, and release all read this
+root file, including for every workspace member.
 
 **Usage:**
 
