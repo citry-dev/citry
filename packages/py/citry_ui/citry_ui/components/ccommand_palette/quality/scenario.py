@@ -1,7 +1,5 @@
 """Shared CommandPalette scenario used by repository quality tools."""
 
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from __future__ import annotations
 
 from typing import Any
@@ -137,13 +135,17 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'lifecycle retained-equal changed-records replacement-root removal restore owner-token',
                 }"
-                :open="lifecycleOpen" :query="lifecycleQuery" :onOpenChange="(value)=>{
+                :open="lifecycleOpen"
+                :query="lifecycleQuery"
+                :onOpenChange="(value)=>{
                     lifecycleOpens++;
                     lifecycleOpen=value;
-                  }" :onQueryChange="(value)=>{
+                  }"
+                :onQueryChange="(value)=>{
                     lifecycleQueries++;
                     lifecycleQuery=value;
-                  }" :onAction="()=>lifecycleActions++"
+                  }"
+                :onAction="()=>lifecycleActions++"
               />
             </c-if>
             <output id="quality-command-palette-lifecycle-output">
@@ -199,7 +201,11 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                       + 'start-adornment end-adornment accepted-close app-shortcut '
                       + 'sm md lg rtl narrow zoom-200 zoom-400 reduced-motion forced-colors print',
                   }"
-                  :open="basicOpen" :query="basicQuery" :onOpenChange="(value)=>basicOpen=value" :onQueryChange="(value)=>basicQuery=value" :onAction="(value)=>basicAction=value"
+                  :open="basicOpen"
+                  :query="basicQuery"
+                  :onOpenChange="(value)=>basicOpen=value"
+                  :onQueryChange="(value)=>basicQuery=value"
+                  :onAction="(value)=>basicAction=value"
                 >
                   <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                     <c-CButton
@@ -242,9 +248,12 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                     'data-quality-states':
                       'controlled-open controlled-query declined-close accepted-close null-release',
                   }"
-                  :open="controlledOpen" :query="controlledQuery" :onOpenChange="(value)=>{
+                  :open="controlledOpen"
+                  :query="controlledQuery"
+                  :onOpenChange="(value)=>{
                       if (value || acceptClose) controlledOpen=value;
-                    }" :onQueryChange="(value,detail)=>{
+                    }"
+                  :onQueryChange="(value,detail)=>{
                       if (acceptQuery || detail.reason==='close') controlledQuery=value;
                     }"
                 />
@@ -269,10 +278,12 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                     'data-quality-states':
                       'action-once stay-open focus-winner',
                   }"
-                  :open="actionOpen" :onOpenChange="(value,detail)=>{
+                  :open="actionOpen"
+                  :onOpenChange="(value,detail)=>{
                       actionLog.push(`open:${value}:${detail.reason}`);
                       actionOpen=value;
-                    }" :onAction="(value,detail)=>{
+                    }"
+                  :onAction="(value,detail)=>{
                       actionLog.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
                       if (value==='copy-id') focusOwnerTarget();
                     }"
@@ -314,7 +325,11 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                     </c-fill>
                   </c-CCommandPalette>
                   <button type="submit">Save profile</button>
-                  <button type="submit" name="intent" value="publish">Publish profile</button>
+                  <button
+                    type="submit"
+                    name="intent"
+                    value="publish"
+                  >Publish profile</button>
                 </form>
                 <output id="quality-command-palette-submit-output" v-text="submits">0</output>
               </article>

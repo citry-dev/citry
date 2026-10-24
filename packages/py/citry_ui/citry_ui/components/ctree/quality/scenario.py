@@ -11,7 +11,12 @@ def tree_states_component(app: Citry) -> type[Component]:
         template = """
           <section class="citry-ui-quality-stack" data-quality-tree-ready>
             <h1>Tree states</h1>
-            <c-CTree label="Files" c-expanded="['src']" c-selected="['app']" variant="outline">
+            <c-CTree
+              label="Files"
+              c-expanded="['src']"
+              c-selected="['app']"
+              variant="outline"
+            >
               <c-CTreeItem value="src" label="src">
                 <c-CTreeItem value="app" label="app.py" />
                 <c-CTreeItem value="style" label="style.css" />
@@ -19,9 +24,19 @@ def tree_states_component(app: Citry) -> type[Component]:
               <c-CTreeItem value="tests" label="tests" />
               <c-CTreeItem value="readme" label="README" />
             </c-CTree>
-            <c-CTree label="Multiple" selection_mode="multiple" c-selected="['one', 'three']" variant="soft" size="sm">
+            <c-CTree
+              label="Multiple"
+              selection_mode="multiple"
+              c-selected="['one', 'three']"
+              variant="soft"
+              size="sm"
+            >
               <c-CTreeItem value="one" label="One" />
-              <c-CTreeItem value="two" label="Two" disabled />
+              <c-CTreeItem
+                value="two"
+                label="Two"
+                disabled
+              />
               <c-CTreeItem value="three" label="Three" />
             </c-CTree>
             <fieldset disabled>
@@ -38,7 +53,12 @@ def tree_states_component(app: Citry) -> type[Component]:
               </c-CTree>
             </div>
             <div style="color-scheme:dark; background:Canvas; color:CanvasText; padding:1rem">
-              <c-CTree label="Night" c-selected="['night-b']" variant="soft" size="lg">
+              <c-CTree
+                label="Night"
+                c-selected="['night-b']"
+                variant="soft"
+                size="lg"
+              >
                 <c-CTreeItem value="night-a" label="Night A" />
                 <c-CTreeItem value="night-b" label="Night B" />
               </c-CTree>

@@ -27,13 +27,58 @@ def time_states_component(app: Citry) -> type[Component]:
               <button type="submit">Submit times</button><button type="reset">Reset times</button>
             </form>
             <div class="citry-ui-quality-grid">
-              <c-CTimePicker value="09:30" min="09:00" max="12:00" :value="selected" :open="open" :onValueChange="(value,detail)=>{last=`value ${value}`;selected=value}" :onOpenChange="(value,detail)=>{last=`open ${value}`;open=value}" c-attrs="{'data-quality-states':'controlled value open refusal acceptance callbacks'}" />
-              <c-CTimePicker value="23:00" min="23:00" max="01:00" c-step="3600" size="sm" variant="filled" c-attrs="{'data-quality-states':'wrapped filled sm'}" />
-              <c-CTimePicker value="10:00" min="09:00" max="12:00" size="lg" readonly c-attrs="{'data-quality-states':'readonly submitted lg outline inspectable'}" />
-              <c-CTimePicker value="10:15" min="09:00" max="12:00" disabled c-attrs="{'data-quality-states':'disabled omitted md outline'}" />
-              <c-CTimePicker value="10:30" min="09:00" max="12:00" invalid c-attrs="{'data-quality-states':'invalid'}" />
-              <c-CTimeInput value="11:00" variant="plain" readonly c-attrs="{'aria-label':'Readonly native time','data-quality-states':'time-input plain readonly submitted'}" />
-              <div lang="ar" dir="rtl" style="color-scheme:dark"><c-CTimePicker value="14:30" min="13:00" max="16:00" placement="top-end" c-attrs="{'data-quality-states':'rtl dark placement collision touch long-content'}" /></div>
+              <c-CTimePicker
+                value="09:30"
+                min="09:00"
+                max="12:00"
+                :value="selected"
+                :open="open"
+                :onValueChange="(value,detail)=>{last=`value ${value}`;selected=value}"
+                :onOpenChange="(value,detail)=>{last=`open ${value}`;open=value}"
+                c-attrs="{'data-quality-states':'controlled value open refusal acceptance callbacks'}"
+              />
+              <c-CTimePicker
+                value="23:00"
+                min="23:00"
+                max="01:00"
+                c-step="3600"
+                size="sm"
+                variant="filled"
+                c-attrs="{'data-quality-states':'wrapped filled sm'}"
+              />
+              <c-CTimePicker
+                value="10:00"
+                min="09:00"
+                max="12:00"
+                size="lg"
+                readonly
+                c-attrs="{'data-quality-states':'readonly submitted lg outline inspectable'}"
+              />
+              <c-CTimePicker
+                value="10:15"
+                min="09:00"
+                max="12:00"
+                disabled
+                c-attrs="{'data-quality-states':'disabled omitted md outline'}"
+              />
+              <c-CTimePicker
+                value="10:30"
+                min="09:00"
+                max="12:00"
+                invalid
+                c-attrs="{'data-quality-states':'invalid'}"
+              />
+              <c-CTimeInput
+                value="11:00"
+                variant="plain"
+                readonly
+                c-attrs="{'aria-label':'Readonly native time','data-quality-states':'time-input plain readonly submitted'}"
+              />
+              <div
+                lang="ar"
+                dir="rtl"
+                style="color-scheme:dark"
+              ><c-CTimePicker value="14:30" min="13:00" max="16:00" placement="top-end" c-attrs="{'data-quality-states':'rtl dark placement collision touch long-content'}" /></div>
             </div>
             <output v-text="last">No time action yet</output>
           </section>

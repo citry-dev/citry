@@ -268,11 +268,24 @@ class CFormCollection(LibraryComponent):
     template = """
       <c-CInternalFormCollectionDeclarations><c-slot /></c-CInternalFormCollectionDeclarations>
       <c-CInternalFormCollection
-        c-root_id="root_id" c-legend_id="legend_id" c-description_id="description_id"
-        c-label="label" c-description="description" c-action_name="action_name" c-add_value="add_value"
-        c-allow_add="allow_add" c-allow_remove="allow_remove" c-allow_reorder="allow_reorder"
-        c-min_items="min_items" c-max_items="max_items" c-disabled="disabled" c-size="size"
-        c-catalog="catalog" c-labels="labels" c-attrs="attrs" c-registry="registry"
+        c-root_id="root_id"
+        c-legend_id="legend_id"
+        c-description_id="description_id"
+        c-label="label"
+        c-description="description"
+        c-action_name="action_name"
+        c-add_value="add_value"
+        c-allow_add="allow_add"
+        c-allow_remove="allow_remove"
+        c-allow_reorder="allow_reorder"
+        c-min_items="min_items"
+        c-max_items="max_items"
+        c-disabled="disabled"
+        c-size="size"
+        c-catalog="catalog"
+        c-labels="labels"
+        c-attrs="attrs"
+        c-registry="registry"
       />
     """
 
@@ -575,30 +588,55 @@ class CInternalFormCollectionItem(LibraryComponent):
         }
 
     template = """
-      <li class="cui-form-collection__item" #c-key="morph_key" c-bind="attrs" c-id="item_id"
-        c-data-label="label" data-citry-form-collection-item data-citry-ui-part="item">
+      <li
+        class="cui-form-collection__item"
+        #c-key="morph_key"
+        c-bind="attrs"
+        c-id="item_id"
+        c-data-label="label"
+        data-citry-form-collection-item
+        data-citry-ui-part="item"
+      >
         <div role="group" c-aria-labelledby="label_id">
           <header data-citry-ui-part="item-header">
             <div c-id="label_id" data-citry-ui-part="item-label">{{ label }}</div>
             <div data-citry-ui-part="item-actions">
-            <button c-if="show_reorder" c-type="button_type" c-name="action_name" c-value="move_up_value"
-              c-disabled="up_disabled" c-formnovalidate="formnovalidate"
+            <button
+              c-if="show_reorder"
+              c-type="button_type"
+              c-name="action_name"
+              c-value="move_up_value"
+              c-disabled="up_disabled"
+              c-formnovalidate="formnovalidate"
               c-data-citry-form-collection-action-disabled="'true' if up_structural_disabled else None"
               c-aria-label="tr('citry-ui-form-collection-move-up', item=label) if catalog_up else move_up_label"
               c-$c-tr:citry-ui-form-collection-move-up[aria-label]="up_binding"
-              data-citry-form-collection-action="move-up">↑</button>
-            <button c-if="show_reorder" c-type="button_type" c-name="action_name" c-value="move_down_value"
-              c-disabled="down_disabled" c-formnovalidate="formnovalidate"
+              data-citry-form-collection-action="move-up"
+            >↑</button>
+            <button
+              c-if="show_reorder"
+              c-type="button_type"
+              c-name="action_name"
+              c-value="move_down_value"
+              c-disabled="down_disabled"
+              c-formnovalidate="formnovalidate"
               c-data-citry-form-collection-action-disabled="'true' if down_structural_disabled else None"
               c-aria-label="tr('citry-ui-form-collection-move-down', item=label) if catalog_down else move_down_label"
               c-$c-tr:citry-ui-form-collection-move-down[aria-label]="down_binding"
-              data-citry-form-collection-action="move-down">↓</button>
-            <button c-if="show_remove" c-type="button_type" c-name="action_name" c-value="remove_value"
-              c-disabled="remove_disabled" c-formnovalidate="formnovalidate"
+              data-citry-form-collection-action="move-down"
+            >↓</button>
+            <button
+              c-if="show_remove"
+              c-type="button_type"
+              c-name="action_name"
+              c-value="remove_value"
+              c-disabled="remove_disabled"
+              c-formnovalidate="formnovalidate"
               c-data-citry-form-collection-action-disabled="'true' if remove_structural_disabled else None"
               c-aria-label="tr('citry-ui-form-collection-remove', item=label) if catalog_remove else remove_label"
               c-$c-tr:citry-ui-form-collection-remove[aria-label]="remove_binding"
-              data-citry-form-collection-action="remove">&#215;</button>
+              data-citry-form-collection-action="remove"
+            >&#215;</button>
             </div>
           </header>
           <div data-citry-ui-part="item-content">{{ content }}</div>

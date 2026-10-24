@@ -393,7 +393,11 @@ class CEditable(LibraryComponent):
         c-bind="attrs"
         data-citry-ui-part="root"
       >
-        <div class="cui-editable__preview" c-bind="preview_attrs" data-citry-ui-part="preview">
+        <div
+          class="cui-editable__preview"
+          c-bind="preview_attrs"
+          data-citry-ui-part="preview"
+        >
           <span data-citry-ui-part="preview-value">{{ display_value }}</span>
           <button
             class="cui-editable__action cui-editable__edit"

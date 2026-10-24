@@ -195,7 +195,11 @@ class CSidebar(LibraryComponent):
           c-aria-expanded="'false' if collapsed else 'true'"
           data-citry-ui-part="toggle"
         >
-          <span class="cui-sidebar__toggle-icon" aria-hidden="true" data-citry-ui-part="toggle-icon">
+          <span
+            class="cui-sidebar__toggle-icon"
+            aria-hidden="true"
+            data-citry-ui-part="toggle-icon"
+          >
             <c-if cond="has_toggle"><c-slot name="toggle" c-collapsed="collapsed" /></c-if>
             <c-else>&#8801;</c-else>
           </span>

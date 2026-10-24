@@ -1,7 +1,5 @@
 """Shared Virtual List scenario used by repository quality tools."""
 
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from citry import Citry, Component
 
 
@@ -43,7 +41,9 @@ def virtual_list_states_component(app: Citry) -> type[Component]:
                   c-initial_index="20"
                   c-viewport_size="320"
                   c-attrs="{'data-quality-states':'window fixed-size positions spacers pending controlled cleanup'}"
-                  :itemSize="itemSize" :overscan="overscan" :onRangeChange="(detail)=>last=`${detail.reason}: ${detail.startIndex}-${detail.endIndex - 1}`"
+                  :itemSize="itemSize"
+                  :overscan="overscan"
+                  :onRangeChange="(detail)=>last=`${detail.reason}: ${detail.startIndex}-${detail.endIndex - 1}`"
                 >
                   <c-for each="record in window_records">
                     <c-CVirtualListItem #c-key="record['key']" c-item_key="record['key']">

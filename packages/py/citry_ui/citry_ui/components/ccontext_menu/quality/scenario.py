@@ -182,7 +182,8 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                     'data-quality-states':
                       'controlled claim accept refuse release external same-open no-flash'
                   }"
-                  :open="controlled ? controlledOpen : null" :onOpenChange="(next,detail)=>{
+                  :open="controlled ? controlledOpen : null"
+                  :onOpenChange="(next,detail)=>{
                       lastReason=detail.reason;
                       lastPoint=`${Math.round(detail.clientX)},${Math.round(detail.clientY)}`;
                       if (!next) {

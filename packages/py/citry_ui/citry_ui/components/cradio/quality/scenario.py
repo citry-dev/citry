@@ -29,21 +29,35 @@ def radio_states_component(app: Citry) -> type[Component]:
                   <c-CRadio value="pond" disabled>Pond edge</c-CRadio>
                 </c-fill>
               </c-CRadioGroup>
-              <c-CRadioGroup name="quality-outline" variant="outline" orientation="horizontal" size="sm">
+              <c-CRadioGroup
+                name="quality-outline"
+                variant="outline"
+                orientation="horizontal"
+                size="sm"
+              >
                 <c-fill name="label">Small outline</c-fill>
                 <c-fill name="default">
                   <c-CRadio value="dawn">Dawn</c-CRadio>
                   <c-CRadio value="dusk">Dusk</c-CRadio>
                 </c-fill>
               </c-CRadioGroup>
-              <c-CRadioGroup name="quality-large" value="leaf" size="lg" label_pos="start">
+              <c-CRadioGroup
+                name="quality-large"
+                value="leaf"
+                size="lg"
+                label_pos="start"
+              >
                 <c-fill name="label">Large labels first</c-fill>
                 <c-fill name="default">
                   <c-CRadio value="leaf">Leaf</c-CRadio>
                   <c-CRadio value="flower">Flower</c-CRadio>
                 </c-fill>
               </c-CRadioGroup>
-              <c-CRadioGroup name="quality-disabled" value="rest" disabled>
+              <c-CRadioGroup
+                name="quality-disabled"
+                value="rest"
+                disabled
+              >
                 <c-fill name="label">Disabled group</c-fill>
                 <c-fill name="default"><c-CRadio value="rest">Winter rest</c-CRadio></c-fill>
               </c-CRadioGroup>
@@ -85,7 +99,11 @@ def radio_states_component(app: Citry) -> type[Component]:
               <c-fill name="error">Choose one light level.</c-fill>
             </c-CField>
             <div dir="rtl">
-              <c-CRadioGroup name="quality-rtl" value="east" orientation="horizontal">
+              <c-CRadioGroup
+                name="quality-rtl"
+                value="east"
+                orientation="horizontal"
+              >
                 <c-fill name="label">اتجاه الحديقة</c-fill>
                 <c-fill name="default">
                   <c-CRadio value="east">الشرق</c-CRadio>

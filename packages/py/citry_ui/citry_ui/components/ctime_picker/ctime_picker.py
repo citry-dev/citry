@@ -554,7 +554,11 @@ class CTimePicker(LibraryComponent):
                 :onValueChange="timePickerOnListValueChange"
               >
                 <c-for each="option in options">
-                  <c-CListboxOption #c-key="option.value" c-value="option.value" c-text_value="option.label">{{ option.label }}</c-CListboxOption>
+                  <c-CListboxOption
+                    #c-key="option.value"
+                    c-value="option.value"
+                    c-text_value="option.label"
+                  >{{ option.label }}</c-CListboxOption>
                 </c-for>
               </c-CListbox>
             </c-fill>

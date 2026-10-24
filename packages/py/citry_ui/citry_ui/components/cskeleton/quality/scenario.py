@@ -27,7 +27,11 @@ def skeleton_states_component(app: Citry) -> type[Component]:
               <c-CSkeleton c-animation="animation" height="3rem" />
             </c-for>
             <c-CSkeleton kind="circle" width="3rem" />
-            <c-CSkeleton kind="text" c-lines="4" last_line_width="42%" />
+            <c-CSkeleton
+              kind="text"
+              c-lines="4"
+              last_line_width="42%"
+            />
             <div dir="rtl"><c-CSkeleton kind="text" c-lines="2" /></div>
             <div style="color-scheme:dark"><c-CSkeleton height="2rem" /></div>
             <div class="skeleton-quality-brand"><c-CSkeleton animation="wave" height="4rem" /></div>

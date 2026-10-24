@@ -47,7 +47,11 @@ def tags_input_states_component(app: Citry) -> type[Component]:
             @quality-morph="refresh"
           >
             <h1 id="tags-input-states-title">TagsInput states</h1>
-            <output hidden data-quality-morph-step v-text="morphStep">{{ morph_step }}</output>
+            <output
+              hidden
+              data-quality-morph-step
+              v-text="morphStep"
+            >{{ morph_step }}</output>
 
             <form
               id="tags-input-quality-form"
@@ -114,13 +118,16 @@ def tags_input_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'controlled controlled-value controlled-draft refusal acceptance'
                 }"
-                :value="controlledTags" :inputValue="controlledDraft" :onValueChange="(next,detail)=>{
+                :value="controlledTags"
+                :inputValue="controlledDraft"
+                :onValueChange="(next,detail)=>{
                     last=`Requested ${JSON.stringify(next)}`;
                     if (acceptControlled) {
                       controlledTags=next;
                       controlledDraft=detail.nextInputValue;
                     }
-                  }" :onInputValueChange="(next)=>controlledDraft=next"
+                  }"
+                :onInputValueChange="(next)=>controlledDraft=next"
               />
 
               <c-CTagsInput

@@ -580,7 +580,11 @@ class CInternalStepper(LibraryComponent):
         }
 
     template = """
-      <nav class="cui-stepper" c-bind="attrs" data-citry-ui-part="stepper">
+      <nav
+        class="cui-stepper"
+        c-bind="attrs"
+        data-citry-ui-part="stepper"
+      >
         <ol class="cui-stepper__list" data-citry-ui-part="list">
           <c-for each="step in steps">
             <c-CInternalStep
@@ -664,7 +668,12 @@ class CInternalStep(LibraryComponent):
         }
 
     template = """
-      <li class="cui-stepper__step" #c-key="morph_key" c-bind="attrs" data-citry-ui-part="step">
+      <li
+        class="cui-stepper__step"
+        #c-key="morph_key"
+        c-bind="attrs"
+        data-citry-ui-part="step"
+      >
         <c-if cond="interactive">
           <button
             class="cui-stepper__trigger"
@@ -674,7 +683,11 @@ class CInternalStep(LibraryComponent):
             c-aria-describedby="description_id"
             data-citry-ui-part="trigger"
           >
-            <span class="cui-stepper__indicator" aria-hidden="true" data-citry-ui-part="indicator">
+            <span
+              class="cui-stepper__indicator"
+              aria-hidden="true"
+              data-citry-ui-part="indicator"
+            >
               <c-if cond="indicator is not None">{{ indicator }}</c-if><c-else>{{ index + 1 }}</c-else>
             </span>
             <span class="cui-stepper__copy" data-citry-ui-part="copy">
@@ -696,7 +709,11 @@ class CInternalStep(LibraryComponent):
             c-aria-describedby="description_id"
             data-citry-ui-part="trigger"
           >
-            <span class="cui-stepper__indicator" aria-hidden="true" data-citry-ui-part="indicator">
+            <span
+              class="cui-stepper__indicator"
+              aria-hidden="true"
+              data-citry-ui-part="indicator"
+            >
               <c-if cond="indicator is not None">{{ indicator }}</c-if><c-else>{{ index + 1 }}</c-else>
             </span>
             <span class="cui-stepper__copy" data-citry-ui-part="copy">

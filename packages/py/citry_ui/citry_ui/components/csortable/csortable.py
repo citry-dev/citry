@@ -282,9 +282,17 @@ class CSortable(LibraryComponent):
       <c-CInternalSortableDeclarations><c-slot required /></c-CInternalSortableDeclarations>
       <c-CInternalSortable
         ref="root"
-        c-root_id="root_id" c-order="order" c-name="name" c-form="form"
-        c-layout="layout" c-disabled="disabled" c-size="size"
-        c-catalog="catalog" c-labels="labels" c-attrs="attrs" c-registry="registry"
+        c-root_id="root_id"
+        c-order="order"
+        c-name="name"
+        c-form="form"
+        c-layout="layout"
+        c-disabled="disabled"
+        c-size="size"
+        c-catalog="catalog"
+        c-labels="labels"
+        c-attrs="attrs"
+        c-registry="registry"
       />
     """
 
@@ -480,18 +488,25 @@ class CInternalSortable(LibraryComponent):
 
     template = """
       <div
-        class="cui-sortable" c-bind="attrs" c-id="root_id"
+        class="cui-sortable"
+        c-bind="attrs"
+        c-id="root_id"
         data-citry-ui-part="sortable"
       >
         <ol
           c-aria-label="tr('citry-ui-sortable-label') if catalog_label else label"
           c-$c-tr:citry-ui-sortable-label[aria-label]="True if catalog_label else None"
-          data-citry-sortable-items data-citry-ui-part="items"
+          data-citry-sortable-items
+          data-citry-ui-part="items"
         >
           <c-for each="item in items"><c-CInternalSortableItem c-item="item" c-name="name" c-form="form" c-disabled="disabled" c-catalog_handle="catalog_handle" /></c-for>
         </ol>
         <p data-citry-sortable-instructions data-citry-ui-part="instructions">{{ instructions }}</p>
-        <div aria-live="polite" aria-atomic="true" data-citry-ui-part="status"></div>
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          data-citry-ui-part="status"
+        ></div>
       </div>
     """
 
@@ -540,15 +555,33 @@ class CInternalSortableItem(LibraryComponent):
         }
 
     template = """
-      <li class="cui-sortable__item" #c-key="morph_key" c-bind="attrs" c-id="item_id" c-data-label="label" data-citry-sortable-item data-citry-ui-part="item">
+      <li
+        class="cui-sortable__item"
+        #c-key="morph_key"
+        c-bind="attrs"
+        c-id="item_id"
+        c-data-label="label"
+        data-citry-sortable-item
+        data-citry-ui-part="item"
+      >
         <button
-          type="button" c-disabled="button_disabled"
+          type="button"
+          c-disabled="button_disabled"
           c-aria-label="tr('citry-ui-sortable-handle', item=label) if catalog_handle_attr else handle_label"
           c-$c-tr:citry-ui-sortable-handle[aria-label]="handle_values_expression"
-          data-citry-sortable-handle data-citry-ui-part="handle"
+          data-citry-sortable-handle
+          data-citry-ui-part="handle"
         ><c-if cond="handle is not None">{{ handle }}</c-if><c-else><span aria-hidden="true">⠿</span></c-else></button>
         <div data-citry-ui-part="content">{{ content }}</div>
-        <input c-if="name is not None" type="hidden" c-name="name" c-form="form" c-value="value" c-disabled="root_disabled" data-citry-sortable-input />
+        <input
+          c-if="name is not None"
+          type="hidden"
+          c-name="name"
+          c-form="form"
+          c-value="value"
+          c-disabled="root_disabled"
+          data-citry-sortable-input
+        />
       </li>
     """
 

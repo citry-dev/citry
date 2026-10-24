@@ -461,7 +461,12 @@ class CRating(LibraryComponent):
           </span>
         </span>
         <span c-aria-hidden="'true' if readonly else None" data-citry-ui-part="choices">
-          <label c-for="choice in choices" c-style="choice['position']" c-data-value="choice['value']" data-citry-ui-part="choice">
+          <label
+            c-for="choice in choices"
+            c-style="choice['position']"
+            c-data-value="choice['value']"
+            data-citry-ui-part="choice"
+          >
             <input
               c-id="choice['id']"
               c-name="name"
@@ -481,7 +486,12 @@ class CRating(LibraryComponent):
             <span class="cui-rating__visually-hidden" data-citry-ui-part="choice-label">{{ choice['label'] }}</span>
           </label>
         </span>
-        <span c-if="readonly and value is not None" class="cui-rating__visually-hidden" c-id="readonly_value_id" data-citry-ui-part="readonly-value">{{ readonly_value_label }}</span>
+        <span
+          c-if="readonly and value is not None"
+          class="cui-rating__visually-hidden"
+          c-id="readonly_value_id"
+          data-citry-ui-part="readonly-value"
+        >{{ readonly_value_label }}</span>
         <input
           c-id="transport_id"
           c-name="name"
