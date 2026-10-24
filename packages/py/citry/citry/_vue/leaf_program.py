@@ -2587,7 +2587,19 @@ class LeafProgramNode(Node):
         if self._simple_json_program is None or self._simple_json_has_i18n_spread or self._simple_json_has_i18n_attrs:
             return False
 
-        def supported(operations: Sequence[object]) -> bool:
+        # Nested branch and loop bodies are checked on this function's own
+        # stack, so the check does not need Python stack in proportion to how
+        # deeply the template nests. The answer does not depend on the order
+        # bodies are checked in.
+        def supported(root: Sequence[object]) -> bool:
+            pending: list[Sequence[object]] = [root]
+            while pending:
+                if not supported_level(pending.pop(), pending):
+                    return False
+            return True
+
+        def supported_level(operations: Sequence[object], pending: list[Sequence[object]]) -> bool:
+            """Check one body's own operations; queue its branch and loop bodies on ``pending``."""
             for operation in operations:
                 if isinstance(operation, (_Static, _Close, _Text)):
                     continue
@@ -2623,12 +2635,11 @@ class LeafProgramNode(Node):
                         return False
                     continue
                 if isinstance(operation, _If):
-                    if any(not supported(branch) for branch in operation.branches):
-                        return False
+                    pending.extend(operation.branches)
                     continue
                 if isinstance(operation, _For):
-                    if not supported(operation.body) or not supported(operation.empty):
-                        return False
+                    pending.append(operation.body)
+                    pending.append(operation.empty)
                     continue
                 if isinstance(operation, _Call):
                     continue
