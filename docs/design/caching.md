@@ -568,9 +568,12 @@ region anchors described in section 7.2.
 Lookup snapshots the engine-local cache revision. After backend fetch, decode,
 and staging, core checks that the revision is unchanged before applying a hit.
 If it changed, the staged hit is discarded without mutation and lookup restarts
-under the new revision. Publication checks the same snapshot immediately before
-`set()`. A revision change during a miss lets the current render complete but
-skips storage of its now-old artifact.
+under the new revision. Publication checks the same snapshot before `set()` and
+again after it, with no lock held during the backend call. A revision change
+during a miss lets the current render complete but skips storage of its
+now-old artifact; when the change lands during `set()`, the entry just stored
+is deleted (a failed delete only leaves an entry whose key names the old
+revision, which no lookup reads).
 
 ### 5.2 Miss state belongs to the finalize task
 
@@ -734,10 +737,14 @@ unreachable without enumerating them. They expire or are evicted normally.
 
 Template reset, file reset, and `Citry.clear()` hold the revision guard across
 all core and extension invalidation work. Concurrent key snapshots block until
-that work finishes; the revision increments in the guard's `finally` path, so
-even a partially mutating reset that raises cannot leave old keys reachable.
+the invalidation work finishes; the revision increments in the guard's
+`finally` path, so even a partially mutating reset that raises cannot leave
+old keys reachable.
 The new revision is therefore the reset commit point, not an early hook
-notification.
+notification. `Citry.clear()` wipes the backend after that work, outside the
+guard, so a slow backend does not hold up key snapshots; the revision has
+already moved, so entries stored meanwhile under the old revision are never
+read.
 
 Every lookup and publication carries the revision snapshot described in
 section 5.1. This closes the race where a template reset happens after a value
@@ -919,8 +926,10 @@ current render:
 5. Ask each payload extension to validate and stage an immutable contribution.
    Import hooks cannot mutate `CitryContext.extra`, the ownership graph, or
    other live state.
-6. Recheck the engine-local revision, then apply the replay and staged extension
-   contributions. Backend `get`, `set`, and `delete` calls are independent and
+6. Check the engine-local revision, apply the replay and staged extension
+   contributions with no lock held, then check the revision again; if it
+   moved, undo the keys this replay created whose write is marked
+   `rollback_delete`, and render again. Backend `get`, `set`, and `delete` calls are independent and
    do not form a distributed transaction. A failed replay rolls back the fresh
    Events state key it created and leaves live render state unchanged. An
    ordinary content-addressed backend repair may remain after a later failure;
@@ -1368,7 +1377,10 @@ The public feature is not complete until tests cover:
 - concurrent misses may render more than once but publish only valid complete
   artifacts;
 - nested same-key misses do not deadlock;
-- no backend or lifecycle lock is held while user render code runs.
+- no backend or lifecycle lock is held while user render code runs;
+- during a render or cache replay, no Citry lock is held while the cache
+  backend runs; a reset's own hooks may still call the backend while the
+  reset holds its locks.
 
 **Limits and shared capacity**
 

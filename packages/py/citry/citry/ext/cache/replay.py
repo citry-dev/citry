@@ -9,6 +9,7 @@ behavior-preserving codec.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from types import MappingProxyType
@@ -99,12 +100,14 @@ from .artifact import (
     _require_attribute_origin,
     _thaw_json,
 )
-from .errors import CacheArtifactError
+from .errors import CacheArtifactError, _CacheRevisionChanged
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from citry.component import Component
+
+logger = logging.getLogger("citry")
 
 
 class _UnsupportedTypedCachePart(CacheArtifactError):
@@ -675,7 +678,9 @@ def _replay_boundary_artifact(
     written: list[str] = []
     original_extra = context.extra
     try:
-        with cache_extension._stable_revision(revision):
+        # The backend calls run with no lock held, so a reset does not wait
+        # for them; the revision is checked before and after them.
+        with cache_extension._unchanged_revision(revision):
             for contribution in staged:
                 for write in contribution.cache_writes:
                     previous_cached = boundary.citry.cache.get(write.key)
@@ -684,7 +689,19 @@ def _replay_boundary_artifact(
                     boundary.citry.cache.set(write.key, write.value, ttl=write.ttl)
                     if write.rollback_delete and previous_cached is None:
                         written.append(write.key)
-            context.extra = merged_extra
+        context.extra = merged_extra
+    except _CacheRevisionChanged:
+        context.extra = original_extra
+        # Undo only the keys this replay created and marked safe to delete;
+        # content-addressed repairs stay valid. The undo is best-effort: a
+        # failed delete leaves an unused key, and the caller must still see
+        # the revision change, so it renders again.
+        for key in reversed(written):
+            try:
+                boundary.citry.cache.delete(key)
+            except Exception as error:  # noqa: BLE001 - the backend is the application's code
+                logger.warning("Render cache rollback delete failed exception=%s", type(error).__name__)
+        raise
     except Exception:
         context.extra = original_extra
         for key in reversed(written):

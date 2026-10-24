@@ -210,6 +210,10 @@
 
 ### Fixes
 
+- A slow cache backend, such as Redis over the network, no longer holds
+  up cached renders on other threads or a hot reload while Citry writes to
+  it. A hot reload also no longer waits while `Citry.clear()` wipes the
+  backend.
 - In a component that uses Vue, `&amp;#40;` written in text or an
   attribute value now shows `&#40;`, as the same component without Vue
   does; it used to show `(`. A static `style` with `&quot;` inside a
