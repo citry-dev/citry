@@ -1246,3 +1246,255 @@ class TestWrapReceivedOutputInAComponent:
             f'<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2="" {marker}="">'
             f' <p data-cid-c2="" {marker}="">inner</p> </section> </main>'
         )
+
+
+def _vue_body(root: type[Component]) -> str:
+    """Return the HTML the server writes for a Vue page, without its scripts, generated ids, or spaces between tags."""
+    html = str(root()).split("<script", 1)[0]
+    return _without_spaces_between_tags(re.sub(r"citry-vue-[0-9a-f]+", "citry-vue-ID", html))
+
+
+def _without_spaces_between_tags(html: str) -> str:
+    # Vue drops whitespace-only text between two elements, so a multiline
+    # template and a one-line one compile to the same output.
+    return re.sub(r">\s+<", "><", " ".join(html.split()))
+
+
+def _named_definitions(root: type[Component]) -> list[str]:
+    """
+    Return each compiled Vue template of a page, in the order its components occur.
+
+    Generated slot and call names are numbered in order of first use, a
+    component's tag loses its class id, and runs of whitespace become one
+    space (none between two tags), so two pages that compile the same way
+    compare equal.
+    """
+    assembly = _assemble_prepared(root())
+    names: dict[str, str] = {}
+
+    def name(match: re.Match[str]) -> str:
+        kind = match.group(1)
+        if match.group(0) not in names:
+            names[match.group(0)] = f"{kind}{sum(value.startswith(kind) for value in names.values())}"
+        return names[match.group(0)]
+
+    templates = [assembly.compile_inputs[item.definition_id].template for item in assembly.view.occurrences]
+    named = []
+    for template in dict.fromkeys(templates):
+        numbered = re.sub(r"(citrySlot|citryCall)[0-9a-f]+", name, template)
+        named.append(_without_spaces_between_tags(re.sub(r"x-([a-z]+)-[0-9a-f]+", r"x-\1", numbered)))
+    return named
+
+
+# What Inner compiles to on a Vue page when it passes its content to Frame
+# as a nested template, `<c-frame c-body="<p>inner</p>" />`: Inner's
+# definition fills a slot of Frame, and Frame prints that slot.
+_NESTED_TEMPLATE_DEFINITIONS = [
+    '<x-frame :citry-id="$citryPrepared.calls.citryCall0.id" :key="$citryPrepared.calls.citryCall0.key">'
+    "<template v-slot:['citrySlot0']><p>inner</p></template></x-frame>",
+    '<section><slot name="citrySlot0"></slot></section>',
+]
+_NESTED_TEMPLATE_BODY = '<div id="citry-vue-ID"><section><!--[--><p>inner</p><!--]--></section></div>'
+
+
+def _vue_wrappers(app: Citry) -> None:
+    """Register Frame, which prints its ``body`` input, and Shell, which prints its default slot."""
+
+    class Frame(Component):
+        citry = app
+        name = "frame"
+
+        def template_data(self, kwargs, slots):
+            return {"body": kwargs["body"]}
+
+        template = """
+            <section>{{ body }}</section>
+        """
+
+    class Shell(Component):
+        citry = app
+        name = "shell"
+        template = """
+            <section><c-slot /></section>
+        """
+
+
+def _vue_pages(app: Citry, inner: type[Component]) -> dict[str, type[Component]]:
+    """Return the pages that place ``inner``: alone, inside a template, and inside a slot fill."""
+
+    class Outer(Component):
+        citry = app
+        template = """
+            <main><c-inner /></main>
+        """
+
+    class Filled(Component):
+        citry = app
+        template = """
+            <main><c-shell><c-inner /></c-shell></main>
+        """
+
+    return {"alone": inner, "nested": Outer, "in-a-fill": Filled}
+
+
+def _definitions_per_component(root: type[Component]) -> dict[str, int]:
+    """Return how many separate Vue definitions each component class of a page compiles to."""
+    assembly = _assemble_prepared(root())
+    ids: dict[str, set[str]] = {}
+    for item in assembly.view.occurrences:
+        ids.setdefault(item.type_key.split("_", 1)[0], set()).add(item.definition_id)
+    return {name: len(values) for name, values in ids.items()}
+
+
+def _cache_hit_probe(hits: list[str]) -> type[Extension]:
+    """Return an extension that records the class name of each component the cache replays."""
+
+    class CacheHitProbe(Extension):
+        name = "cache_hit_probe"
+
+        def on_component_cache_hit(self, ctx):
+            hits.append(type(ctx.component).__name__)
+
+    return CacheHitProbe
+
+
+class TestVueCompilesReceivedOutputInItsComponent:
+    """
+    On a Vue page, output an on_render hook passes to another component compiles in the hook's component.
+
+    The output reaches the other component as content the hook's component
+    wrote, the way a nested template does, not as a second copy of the
+    hook's component inside itself.
+    """
+
+    @staticmethod
+    def _nested_template_inner(app: Citry, *, cached: bool) -> type[Component]:
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            class Cache:
+                enabled = cached
+
+            template = """
+                <c-frame c-body="<p>inner</p>" />
+            """
+            js = """
+                $component({});
+            """
+
+        return Inner
+
+    # The tests below lock what the nested template does today, before the
+    # on_render output reuses the same machinery.
+
+    def test_a_nested_template_compiles_into_its_author(self):
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        inner = self._nested_template_inner(app, cached=False)
+        assert _named_definitions(inner) == _NESTED_TEMPLATE_DEFINITIONS
+        assert _vue_body(inner) == _NESTED_TEMPLATE_BODY
+
+    def test_keyed_nested_template_authors_share_one_definition(self):
+        app = Citry(autodiscover=False)
+        _vue_wrappers(app)
+        self._nested_template_inner(app, cached=False)
+
+        class Rows(Component):
+            citry = app
+            template = """
+                <main>
+                    <c-for each="key in keys">
+                        <c-inner #c-key="key" c-key="key" />
+                    </c-for>
+                </main>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"keys": ["a", "b"]}
+
+        # Each component has one definition for both rows, and the slot
+        # name does not depend on the row.
+        assert _definitions_per_component(Rows) == {"Rows": 1, "Inner": 1, "Frame": 1}
+        assert _named_definitions(Rows) == [
+            '<main><x-inner :citry-id="$citryPrepared.calls.citryCall0.id"'
+            ' :key="$citryPrepared.calls.citryCall0.key"></x-inner>'
+            '<x-inner :citry-id="$citryPrepared.calls.citryCall1.id"'
+            ' :key="$citryPrepared.calls.citryCall1.key"></x-inner></main>',
+            '<x-frame :citry-id="$citryPrepared.calls.citryCall2.id" :key="$citryPrepared.calls.citryCall2.key">'
+            "<template v-slot:['citrySlot0']><p>inner</p></template></x-frame>",
+            '<section><slot name="citrySlot0"></slot></section>',
+        ]
+        assert _vue_body(Rows) == (
+            '<div id="citry-vue-ID"><main><section><!--[--><p>inner</p><!--]--></section>'
+            "<section><!--[--><p>inner</p><!--]--></section></main></div>"
+        )
+
+    @pytest.mark.parametrize("page", ["alone", "nested", "in-a-fill"])
+    def test_a_cached_nested_template_compiles_the_same_on_a_hit(self, page):
+        hits: list[str] = []
+        app = Citry(autodiscover=False, extensions=[_cache_hit_probe(hits)])
+        _vue_wrappers(app)
+        root = _vue_pages(app, self._nested_template_inner(app, cached=True))[page]
+        stored = (_named_definitions(root), _vue_body(root))
+        assert (_named_definitions(root), _vue_body(root)) == stored
+        assert "Inner" in hits
+
+    @pytest.mark.parametrize("page", ["alone", "nested"])
+    def test_returning_the_received_output_writes_the_template_without_vue(self, render_path, page):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                return result
+
+            template = """
+                <p>inner</p>
+            """
+
+        root = _vue_pages(app, Inner)[page]
+        html = " ".join(_named_cids(root().render().serialize(deps_strategy="ignore")).split())
+        assert (
+            html
+            == {
+                "alone": '<p data-cid-c0="">inner</p>',
+                "nested": '<main data-cid-c0=""> <p data-cid-c1="">inner</p> </main>',
+            }[page]
+        )
+
+    def test_the_same_result_printed_twice_is_an_error(self):
+        app = Citry(autodiscover=False)
+
+        class Pair(Component):
+            citry = app
+            name = "pair"
+
+            def template_data(self, kwargs, slots):
+                return {"first": kwargs["first"], "second": kwargs["second"]}
+
+            template = """
+                <section>{{ first }}{{ second }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+            name = "inner"
+
+            def on_render(self):
+                result, _error = yield
+                return Pair(first=result, second=result)
+
+            template = """
+                <p>inner</p>
+            """
+            js = """
+                $component({});
+            """
+
+        with pytest.raises(RuntimeError, match="encountered more than once"):
+            str(Inner())
