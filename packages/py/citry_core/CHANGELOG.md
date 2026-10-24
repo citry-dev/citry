@@ -82,6 +82,9 @@
 
 - `template_parser.parse_template()` is much faster on large templates: a
   92 KB template that took more than a second now parses in about 10 ms.
+- `template_parser.parse_template()` now reports an error that covers many
+  lines in well under a second. An invalid 20,000-line expression took more
+  than a minute.
 
 ## v1.8.0
 
