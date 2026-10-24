@@ -36,9 +36,10 @@ else:
     _tomllib = _stdlib_tomllib
 
 try:
-    from scripts import build_constraints
+    from scripts import build_constraints, release_links
 except ImportError:  # Run as `python scripts/<name>.py`, where scripts/ itself is on sys.path.
     import build_constraints  # type: ignore[no-redef]
+    import release_links  # type: ignore[no-redef]
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -192,6 +193,16 @@ def _safe_archive_name(name: str, *, artifact: Path) -> PurePosixPath:
 
 
 def _parse_metadata(payload: bytes, *, artifact: Path) -> Message:
+    # PyPI shows this metadata (the README as the description, plus the
+    # project URLs) for the release forever, so during a release every
+    # repository link in it must name the release tag, not main.
+    unpinned = release_links.unpinned_links(payload, PACKAGE_ROOT)
+    if unpinned:
+        raise DistributionVerificationError(
+            f"{artifact.name} metadata links to {unpinned[0]}, not the release tag; "
+            "`scripts/release_links.py pin <package dir>` rewrites blob/, tree/, and raw/ links before the build; "
+            "change any other link by hand"
+        )
     try:
         return BytesParser().parsebytes(payload)
     except Exception as error:
@@ -455,7 +466,9 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         if name == "PKG-INFO":
             continue
         if name == "pyproject.toml":
-            expected_manifest = _loads_toml((PACKAGE_ROOT / name).read_text(encoding="utf-8"))
+            expected_manifest = _loads_toml(
+                release_links.checkout_bytes(PACKAGE_ROOT, PACKAGE_ROOT / name).decode("utf-8")
+            )
             expected_manifest["tool"]["maturin"]["manifest-path"] = "crates/citry_core_py/Cargo.toml"
             if _loads_toml(payload.decode("utf-8")) != expected_manifest:
                 raise DistributionVerificationError(f"{path.name} contains an unexpected generated pyproject.toml")
@@ -481,7 +494,7 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
                 actual_package.pop("readme")
             if actual_manifest != expected_manifest:
                 raise DistributionVerificationError(f"{path.name} contains changed Cargo metadata in {name}")
-        elif payload != source_path.read_bytes():
+        elif payload != release_links.checkout_bytes(PACKAGE_ROOT, source_path):
             raise DistributionVerificationError(f"{path.name} contains changed source bytes in {name}")
     workspace = _loads_toml(relative["Cargo.toml"].decode("utf-8"))
     if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.96":
@@ -742,7 +755,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         else:
             report = smoke_sdist(_one(args.sdist), rust_toolchain=args.rust_toolchain)
-    except DistributionVerificationError as error:
+    # A malformed tag prefix or manifest version is reported like any other failure.
+    except (DistributionVerificationError, release_links.ReleaseLinkError) as error:
         parser.exit(1, f"citry-core distribution verification failed: {error}\n")
     sys.stdout.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return 0

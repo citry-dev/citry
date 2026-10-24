@@ -15,6 +15,11 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Final
 from xml.etree import ElementTree as ET
 
+try:
+    from scripts import release_links
+except ImportError:  # Run as `python scripts/<name>.py`, where scripts/ itself is on sys.path.
+    import release_links  # type: ignore[no-redef]
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -38,7 +43,7 @@ def sha256_bytes(value: bytes) -> str:
 def package_manifest() -> dict[str, Any]:
     """Read the checked extension manifest."""
     try:
-        payload: Any = json.loads((PACKAGE_ROOT / "package.json").read_text(encoding="utf-8"))
+        payload: Any = json.loads(release_links.checkout_bytes(PACKAGE_ROOT, PACKAGE_ROOT / "package.json"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise DistributionVerificationError(f"cannot read extension package.json: {error}") from error
     if not isinstance(payload, dict):
@@ -243,10 +248,21 @@ def verify_vsix(path: Path, *, version: str | None = None) -> dict[str, Any]:
     for member, source in source_members().items():
         if not source.is_file():
             raise DistributionVerificationError(f"checked VSIX source is missing: {source.relative_to(REPO_ROOT)}")
-        if by_name[member] != source.read_bytes():
+        # During a release the README, changelog, and manifest are expected
+        # with their repository links already pointing at the release tag.
+        if by_name[member] != release_links.checkout_bytes(PACKAGE_ROOT, source):
             raise DistributionVerificationError(f"{member} differs from {source.relative_to(REPO_ROOT).as_posix()}")
     _require_package_json(by_name["extension/package.json"], version=version)
     _require_vsix_manifest(by_name["extension.vsixmanifest"], version=version)
+    # vsce writes this manifest from package.json, so no checkout file holds
+    # its bytes; check the Marketplace links in it directly.
+    unpinned = release_links.unpinned_links(by_name["extension.vsixmanifest"], PACKAGE_ROOT)
+    if unpinned:
+        raise DistributionVerificationError(
+            f"extension.vsixmanifest links to {unpinned[0]}, not the release tag; "
+            "`scripts/release_links.py pin packages/editors/vscode` rewrites blob/, tree/, and raw/ links before "
+            "packaging; change any other link by hand"
+        )
     _require_icon(by_name["extension/images/icon.png"])
     for member, member_payload in by_name.items():
         _require_no_local_paths(member, member_payload)
@@ -372,7 +388,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = _release_report(path)
             if args.stage_output_dir is not None:
                 report = stage_qualification(path, args.stage_output_dir)
-    except DistributionVerificationError as error:
+    # A malformed tag prefix or manifest version is reported like any other failure.
+    except (DistributionVerificationError, release_links.ReleaseLinkError) as error:
         parser.exit(1, f"VS Code extension verification failed: {error}\n")
     sys.stdout.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return 0

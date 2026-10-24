@@ -318,14 +318,20 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   repo-relative link or image 404s while looking fine on GitHub. The
   `published_readme_links` validator fails the gate on one.
 - **Text that outlives a commit links to a commit or tag, never to `main`.**
-  A published package README, a blog post, a release note, a changelog entry,
-  or an archived docs version keeps its links forever, while `main` keeps
-  changing. A link such as `raw.githubusercontent.com/citry-dev/citry/main/...`
-  breaks as soon as the file moves or is deleted, so the repository could
-  never be cleaned up without breaking old pages. Point these links at a
-  commit SHA or at a release tag (such as `citry@0.6.1`) that exists when the
-  text is published. Links in the live docs site and in files read only on
-  GitHub may follow `main`.
+  A blog post, a release note, a changelog entry, or an archived docs version
+  keeps its links forever, while `main` keeps changing. A link such as
+  `raw.githubusercontent.com/citry-dev/citry/main/...` breaks as soon as the
+  file moves or is deleted, so the repository could never be cleaned up
+  without breaking old pages. Point these links at a commit SHA or at a
+  release tag (such as `citry@0.6.1`) that exists when the text is published.
+  Links in the live docs site and in files read only on GitHub may follow
+  `main`.
+  - A package's own README (for `citry`, the root `README.md`), its
+    `CHANGELOG.md`, and the URLs in its `pyproject.toml` or `package.json` are
+    the exception. Write `main` links there. Each publish workflow rewrites
+    them to the package's release tag before it builds the package, and
+    creates that tag right after publishing (see
+    [`docs/codebase.md`](docs/codebase.md#images-and-links-in-a-published-readme)).
 
 ## Code conventions
 

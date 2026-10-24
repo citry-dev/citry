@@ -30,9 +30,10 @@ else:
     _tomllib = _stdlib_tomllib
 
 try:
-    from scripts import build_constraints
+    from scripts import build_constraints, release_links
 except ImportError:  # Run as `python scripts/<name>.py`, where scripts/ itself is on sys.path.
     import build_constraints  # type: ignore[no-redef]
+    import release_links  # type: ignore[no-redef]
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -103,6 +104,16 @@ def _safe_archive_name(name: str, *, artifact: Path) -> PurePosixPath:
 
 
 def _parse_metadata(payload: bytes, *, artifact: Path) -> Message:
+    # PyPI shows this metadata (the README as the description, plus the
+    # project URLs) for the release forever, so during a release every
+    # repository link in it must name the release tag, not main.
+    unpinned = release_links.unpinned_links(payload, PACKAGE_ROOT)
+    if unpinned:
+        raise DistributionVerificationError(
+            f"{artifact.name} metadata links to {unpinned[0]}, not the release tag; "
+            "`scripts/release_links.py pin <package dir>` rewrites blob/, tree/, and raw/ links before the build; "
+            "change any other link by hand"
+        )
     try:
         return BytesParser().parsebytes(payload)
     except Exception as error:
@@ -238,7 +249,10 @@ def verify_wheel(path: Path, *, version: str) -> dict[str, Any]:
 
 def _checkout_sdist_files() -> dict[str, bytes]:
     """Return every checkout file setuptools places in the source archive."""
-    result = {name: (PACKAGE_ROOT / name).read_bytes() for name in ("LICENSE", "README.md", "pyproject.toml")}
+    result = {
+        name: release_links.checkout_bytes(PACKAGE_ROOT, PACKAGE_ROOT / name)
+        for name in ("LICENSE", "README.md", "pyproject.toml")
+    }
     for path in sorted(SOURCE_ROOT.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}:
             continue
@@ -712,7 +726,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             if args.stage_output_dir is not None:
                 report["release"] = stage_qualification(wheel, sdist, args.stage_output_dir)
-    except DistributionVerificationError as error:
+    # A malformed tag prefix or manifest version is reported like any other failure.
+    except (DistributionVerificationError, release_links.ReleaseLinkError) as error:
         parser.exit(1, f"citry-lsp distribution verification failed: {error}\n")
     sys.stdout.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return 0

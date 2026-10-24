@@ -38,6 +38,10 @@ permissions:
   contents: read
 
 env:
+  # This package's published README, changelog, and project URLs link to the
+  # tag <prefix><version>; scripts/release_links.py rewrites them, and
+  # scripts/release.py owns the prefix.
+  CITRY_RELEASE_TAG_PREFIX: "pygments-citry@"
   PROJECT_DIR: packages/py/pygments_citry
   SOURCE_DATE_EPOCH: "315532800"
   UV_VERSION: "0.13.5"
@@ -78,6 +82,11 @@ jobs:
         with:
           prune-cache: true
           version: ${{ env.UV_VERSION }}
+      # The registry keeps this package's README, changelog, and project URLs
+      # forever, so their repository links must name the release tag rather
+      # than main, which keeps changing.
+      - name: Point published links at the release tag
+        run: python3 scripts/release_links.py pin packages/py/pygments_citry
       - name: Build the wheel and source distribution
         run: uv build --package pygments-citry --out-dir dist
       - uses: actions/upload-artifact@v7
