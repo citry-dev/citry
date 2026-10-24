@@ -135,6 +135,12 @@
 
 ### Changed
 
+- **Breaking:** Citry now requires Python 3.11 or newer, because Python
+  3.10 reached its end of life on October 1, 2026. On Python 3.10, pip
+  keeps installing Citry 0.6.x. If your project declares
+  `requires-python = ">=3.10"`, raise it to `">=3.11"` before upgrading,
+  or uv and other lockfile tools cannot pick this release.
+
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old

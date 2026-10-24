@@ -273,9 +273,3 @@ def test_vscode_verifier_expects_the_pinned_readme_and_manifest(
     assert release_links.unpinned_links(manifest, package) == [
         "https://github.com/citry-dev/citry/tree/main/packages/editors/vscode"
     ]
-
-
-def test_release_tag_reads_the_version_without_tomllib(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Python 3.10 has no tomllib, so the verifiers there read the first `version =` line.
-    monkeypatch.setattr(release_links, "_tomllib", None)
-    assert release_links.release_tag(_package(tmp_path), RELEASE) == TAG

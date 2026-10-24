@@ -11,6 +11,8 @@
 
 ### Changed
 
+- **Breaking:** Citry UI now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing Citry UI 0.3.0.
 - Citry UI components work with Citry's new check that raises
   `TypeError` for an input of the wrong type, and accept the same values
   as before, such as `heading_level="2"`. Earlier Citry UI releases

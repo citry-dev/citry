@@ -97,7 +97,7 @@ jobs:
         if: contains(inputs.workspace_dependencies, 'citry-core')
         run: >-
           uv build --package citry-core --wheel --out-dir core-dist
-          --config-setting 'maturin.build-args=--features abi3-py310'
+          --config-setting 'maturin.build-args=--features abi3-py311'
       - uses: actions/upload-artifact@v7
         with:
           name: raw-citry-distributions
@@ -117,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
         with:
