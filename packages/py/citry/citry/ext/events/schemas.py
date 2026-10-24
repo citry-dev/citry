@@ -43,8 +43,8 @@ their own models).
 
 from __future__ import annotations
 
-import functools
 import math
+import threading
 from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, fields
 from datetime import date, datetime, time
@@ -130,7 +130,14 @@ class StringArgs(dict[str, Any]):
     """
 
 
-@functools.cache
+# The results of `convert_schema_class` and `_schema_info`, one per schema
+# class. Two threads may compute one at the same time; the lock makes both
+# return the result stored first, so a schema keeps one converted class.
+_CONVERTED_SCHEMAS: dict[type, type] = {}
+_SCHEMA_INFOS: dict[type, tuple[type, tuple[_FieldSpec, ...]]] = {}
+_SCHEMA_CACHE_LOCK = threading.Lock()
+
+
 def convert_schema_class(schema_cls: type) -> type:
     """
     Resolve a ``data`` schema class to the class payloads are validated into.
@@ -153,11 +160,15 @@ def convert_schema_class(schema_cls: type) -> type:
         The class validated payloads are constructed with.
 
     """
-    if _is_pydantic_model(schema_cls):
-        return schema_cls
-    if "__dataclass_fields__" in schema_cls.__dict__:
-        return schema_cls
-    return convert_state_class(schema_cls.__name__, schema_cls)
+    cached = _CONVERTED_SCHEMAS.get(schema_cls)
+    if cached is not None:
+        return cached
+    if _is_pydantic_model(schema_cls) or "__dataclass_fields__" in schema_cls.__dict__:
+        converted = schema_cls
+    else:
+        converted = convert_state_class(schema_cls.__name__, schema_cls)
+    with _SCHEMA_CACHE_LOCK:
+        return _CONVERTED_SCHEMAS.setdefault(schema_cls, converted)
 
 
 def validate_args(
@@ -241,9 +252,11 @@ def _field_hints(converted: type) -> dict[str, Any]:
     return get_type_hints(carrier)
 
 
-@functools.cache
 def _schema_info(schema_cls: type) -> tuple[type, tuple[_FieldSpec, ...]]:
     """The converted class and field specs of a non-Pydantic schema, computed once."""
+    cached = _SCHEMA_INFOS.get(schema_cls)
+    if cached is not None:
+        return cached
     converted = convert_schema_class(schema_cls)
     # Resolved annotation objects, not strings: user modules may use
     # ``from __future__ import annotations``.
@@ -267,7 +280,8 @@ def _schema_info(schema_cls: type) -> tuple[type, tuple[_FieldSpec, ...]]:
         # come from the wire; they are neither accepted nor required.
         if field.init
     )
-    return converted, specs
+    with _SCHEMA_CACHE_LOCK:
+        return _SCHEMA_INFOS.setdefault(schema_cls, (converted, specs))
 
 
 def payload_fields(schema_cls: type) -> tuple[_FieldSpec, ...] | None:

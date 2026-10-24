@@ -1083,6 +1083,11 @@ docstring).
 _CacheKey: TypeAlias = "tuple[ReferenceType[type[Component]], ConstSignature, frozenset[str], Hashable | None, object]"
 
 
+# How many times `ConstBodyCache.get_or_build` builds a body when
+# evictions keep arriving while it builds.
+_BUILD_ATTEMPTS = 3
+
+
 class ConstBodyCache:
     """
     The cache of pre-computed template bodies, one per set of ``Const`` values.
@@ -1093,7 +1098,8 @@ class ConstBodyCache:
     already computed; the entry for a render with no ``Const`` inputs is the
     plain compiled body that all such renders share. Keys are
     ``(weak component-class reference, ConstSignature, visible variable
-    names, private output format, ABC registration state)``. The weak reference lets an unregistered component class be
+    names, the loaded template's id and private output format, ABC
+    registration state)``. The weak reference lets an unregistered component class be
     collected without waiting for this cache's LRU limit. Variable names
     participate because Citry binders reject an already-visible name; two
     otherwise equal renders with different context shapes may therefore need
@@ -1111,11 +1117,12 @@ class ConstBodyCache:
     mistake, but possible) wastes some work instead of growing memory without
     limit.
 
-    A single lock guards lookups and builds, so when two threads render the
-    same new combination at once, it is computed once. The lock is re-entrant
-    (the same thread may re-enter it) because building evaluates user
-    expressions, which may render nested content and consult this cache
-    again.
+    A lock guards the entries, but ``build()`` runs with no lock held,
+    because building evaluates the template's expressions (including
+    ``Const`` functions) and runs the ``on_template_compiled`` hooks, and
+    those may render other components. Two threads rendering the same new
+    combination at once may therefore both build it; both get the body
+    stored first.
     """
 
     def __init__(self, max_entries: int = DEFAULT_MAX_ENTRIES) -> None:
@@ -1126,6 +1133,9 @@ class ConstBodyCache:
         # depend only on constant inputs have been computed (see precompute_const_parts).
         self._entries: OrderedDict[_CacheKey, list[BodyItem]] = OrderedDict()
         self._has_collected_components = False
+        # Moves on every eviction and clear. A build that saw it move while
+        # it ran builds again, so it cannot store a body from before a reset.
+        self._generation = 0
 
     def _component_collected(self, _component_ref: object) -> None:
         """Flag dead class keys without releasing cached bodies from a GC callback."""
@@ -1139,14 +1149,24 @@ class ConstBodyCache:
         *,
         visible_names: Collection[str] = (),
         format_key: Hashable | None = None,
+        template_id: str = "",
     ) -> list[BodyItem]:
         """
         Return the cached body for this const signature and visible-name set.
 
         On a hit the entry is marked most-recently-used. On a miss ``build()``
-        runs under the lock and the result is stored; if it raises, nothing is
-        cached and the error propagates (so the next render retries).
+        runs with no lock held and the first body stored is kept; if it
+        raises, nothing is cached and the error propagates (so the next
+        render retries). When an eviction or clear happens while ``build()``
+        runs, the body may come from the template before a reset, so it is
+        built again; after ``_BUILD_ATTEMPTS`` builds the last one is stored
+        anyway, so a stream of resets cannot stall a render.
         """
+        # The template id is part of the key because ``build()`` reads the
+        # template that this render loaded: a body built from the template
+        # before a reset is stored under that template's id, where renders
+        # of the new template never find it.
+        format_key = (template_id, format_key)
         key = (ref(comp_cls), signature, frozenset(visible_names), format_key, abc.get_cache_token())
         with self._lock:
             self._prune_collected_components()
@@ -1154,16 +1174,28 @@ class ConstBodyCache:
             if body is not None:
                 self._entries.move_to_end(key)
                 return body
+        for attempt in range(1, _BUILD_ATTEMPTS + 1):
+            generation = self._generation
             body = build()
-            stored_key = (ref(comp_cls, self._component_collected), signature, key[2], format_key, key[4])
-            self._entries[stored_key] = body
-            while len(self._entries) > self._max_entries:
-                self._entries.popitem(last=False)
-            return body
+            with self._lock:
+                if self._generation != generation and attempt < _BUILD_ATTEMPTS:
+                    continue
+                stored = self._entries.get(key)
+                if stored is not None:
+                    self._entries.move_to_end(key)
+                    return stored
+                stored_key = (ref(comp_cls, self._component_collected), signature, key[2], format_key, key[4])
+                self._entries[stored_key] = body
+                while len(self._entries) > self._max_entries:
+                    self._entries.popitem(last=False)
+                return body
+        # The last attempt always returns from the loop.
+        raise AssertionError
 
     def evict_component(self, comp_cls: type[Component]) -> None:
         """Drop every entry of one component class during reset or final unregistration."""
         with self._lock:
+            self._generation += 1
             self._prune_collected_components()
             stale = [key for key in self._entries if key[0]() is comp_cls]
             for key in stale:
@@ -1183,6 +1215,7 @@ class ConstBodyCache:
     def clear(self) -> None:
         """Drop all entries."""
         with self._lock:
+            self._generation += 1
             self._entries.clear()
             self._has_collected_components = False
 

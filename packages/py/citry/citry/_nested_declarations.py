@@ -26,6 +26,7 @@ from citry._class_introspection import (
     _static_class_attribute,
     _static_class_dict,
     _static_class_mro,
+    _static_class_namespace_copy,
 )
 
 if TYPE_CHECKING:
@@ -474,7 +475,9 @@ def _is_plain_field_family(declaration: type) -> bool:
         flags = _static_class_attribute(klass, "__flags__")
         if type(flags) is not int or not flags & _HEAP_TYPE_FLAG:
             return False
-        namespace = _static_class_dict(klass)
+        # A copy: the set check below loops over it, and another thread may
+        # store on the class meanwhile.
+        namespace = _static_class_namespace_copy(klass)
         if "__dataclass_fields__" in namespace:
             continue
         # The declared class itself is always converted, as an authored nested

@@ -411,7 +411,8 @@ def _resolved_one_by_one(cls: type) -> dict[str, object]:
     merged: dict[str, object] = {}
     for candidate in reversed(_static_class_mro(cls)):
         module = sys.modules.get(candidate.__module__)
-        namespace = dict(vars(module)) if module is not None else {}
+        # A copy: an import may change the module's globals meanwhile.
+        namespace = vars(module).copy() if module is not None else {}
         for name, hint in _own_annotations(candidate).items():
             merged[name] = _resolve_annotation(hint, namespace)
     return merged

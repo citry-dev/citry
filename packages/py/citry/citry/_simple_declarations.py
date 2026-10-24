@@ -7,7 +7,12 @@ from inspect import isasyncgenfunction, iscoroutinefunction, isgeneratorfunction
 from types import FunctionType, GetSetDescriptorType
 from typing import TYPE_CHECKING, Any, cast
 
-from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
+from citry._class_introspection import (
+    _safe_class_text,
+    _static_class_dict,
+    _static_class_mro,
+    _static_class_namespace_copy,
+)
 from citry._nested_declarations import (
     _SYNTHESIZED_DECLARATION_ATTR,
     _active_nested_class_declarations,
@@ -81,7 +86,9 @@ def validate_simple_declaration(
     name = _safe_class_text(component_class, "__name__") or "Component"
     effective: dict[str, object] = {}
     for base in reversed(_static_class_mro(component_class)):
-        effective.update(_static_class_dict(base))
+        # Copies, so another thread storing a value on a class cannot change
+        # its namespace while this loop reads it.
+        effective.update(_static_class_namespace_copy(base))
     ordinary = _static_class_dict(component_base)
     object_members = _static_class_dict(object)
 
@@ -177,7 +184,7 @@ def validate_simple_declaration(
         for base in _static_class_mro(declared) if isinstance(declared, type) else ():
             if base is object:
                 continue
-            namespace = _static_class_dict(base)
+            namespace = _static_class_namespace_copy(base)
             if namespace.get(_SYNTHESIZED_DECLARATION_ATTR, False) is True:
                 continue
             unexpected = namespace.keys() - _SLOT_DECLARATION_METADATA - {"default"}
@@ -215,7 +222,7 @@ def validate_simple_declaration(
                     cls,
                     tuple(
                         (name, value)
-                        for name, value in _static_class_dict(cls).items()
+                        for name, value in _static_class_namespace_copy(cls).items()
                         if name not in _ANNOTATION_CACHE_NAMES
                     ),
                 )

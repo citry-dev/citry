@@ -6,6 +6,7 @@ import sys
 import threading
 from pathlib import Path
 from textwrap import dedent
+from typing import Any
 
 import pytest
 
@@ -340,7 +341,7 @@ class TestInitialize:
 
 
 class TestConcurrentDiscovery:
-    def test_other_thread_cannot_observe_partial_discovery(self, tmp_path, monkeypatch):
+    def test_lookups_on_other_threads_wait_for_discovery_to_finish(self, tmp_path, monkeypatch):
         app = Citry(dirs=[tmp_path])
         started = threading.Event()
         release = threading.Event()
@@ -368,33 +369,62 @@ class TestConcurrentDiscovery:
         owner.start()
         assert started.wait(5)
 
-        observers = [
-            lambda: app.get("card"),
-            lambda: app.has("card"),
-            lambda: app.components,
-            lambda: app.get_component_by_class_id(discovered_classes[0].class_id),
-            lambda: repr(app),
-            lambda: app._tag_rules(),
-        ]
-        for observe in observers:
-            with pytest.raises(CitryLifecycleInProgress, match="component discovery"):
-                observe()
+        observers = {
+            "get": lambda: app.get("card").__name__,
+            "has": lambda: app.has("card"),
+            "components": lambda: "card" in app.components,
+            "class id": lambda: app.get_component_by_class_id(discovered_classes[0].class_id).__name__,
+            "repr": lambda: repr(app),
+            "tag rules": lambda: isinstance(app._tag_rules(), dict),
+        }
+        # Lookups on other threads wait for the discovery to finish instead
+        # of reading the registry while it is only partly filled.
+        results: dict[str, object] = {}
+        observer_errors: list[BaseException] = []
+
+        def observe(name: str, call: Any) -> None:
+            try:
+                results[name] = call()
+            except BaseException as err:  # noqa: BLE001 - worker failures are asserted below
+                observer_errors.append(err)
+
+        threads = [threading.Thread(target=observe, args=item, daemon=True) for item in observers.items()]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(0.2)
+        assert all(thread.is_alive() for thread in threads), "a lookup read the registry during discovery"
+        assert results == {}
 
         release.set()
         owner.join(5)
+        for thread in threads:
+            thread.join(5)
 
         assert not owner.is_alive()
+        assert not any(thread.is_alive() for thread in threads)
         assert owner_errors == []
+        assert observer_errors == []
+        assert results["get"] == "Card"
+        assert results["has"] is True
+        assert results["components"] is True
+        assert results["class id"] == "Card"
+        assert results["tag rules"] is True
         assert app.has("card") is True
 
-    def test_import_lock_cycle_fails_fast(self, project, monkeypatch):
-        _build_app(project, "import_cycle")
-        project("import_cycle/components/_sync.py")
+    @pytest.mark.parametrize("start", ["initialize", "lookup"])
+    def test_import_lock_cycle_fails_fast(self, project, monkeypatch, start):
+        # Discovery starts either from initialize() or from a first lookup;
+        # in both, a lookup inside a module import that discovery also
+        # needs fails at once instead of waiting.
+        package = "import_cycle" if start == "initialize" else "import_cycle_lookup"
+        _build_app(project, package)
+        project(f"{package}/components/_sync.py")
         project(
-            "import_cycle/components/held.py",
-            dedent("""
-                from import_cycle.app import app
-                from import_cycle.components import _sync
+            f"{package}/components/held.py",
+            dedent(f"""
+                from {package}.app import app
+                from {package}.components import _sync
 
                 _sync.module_started.set()
                 assert _sync.allow_lookup.wait(5)
@@ -406,12 +436,12 @@ class TestConcurrentDiscovery:
                     _sync.lookup_done.set()
             """),
         )
-        sync = importlib.import_module("import_cycle.components._sync")
+        sync = importlib.import_module(f"{package}.components._sync")
         sync.module_started = threading.Event()
         sync.allow_lookup = threading.Event()
         sync.lookup_done = threading.Event()
         sync.lookup_error = None
-        app = _load_app("import_cycle")
+        app = _load_app(package)
         discovery_reached_locked_module = threading.Event()
         owner_errors: list[BaseException] = []
         importer_errors: list[BaseException] = []
@@ -419,19 +449,22 @@ class TestConcurrentDiscovery:
         original_import_module = autodiscovery_module.import_module
 
         def observed_import(module_name):
-            if module_name == "import_cycle.components.held":
+            if module_name == f"{package}.components.held":
                 discovery_reached_locked_module.set()
             return original_import_module(module_name)
 
         def import_held():
             try:
-                importlib.import_module("import_cycle.components.held")
+                importlib.import_module(f"{package}.components.held")
             except BaseException as err:  # noqa: BLE001 - worker failures are asserted below
                 importer_errors.append(err)
 
         def initialize():
             try:
-                app.initialize()
+                if start == "initialize":
+                    app.initialize()
+                else:
+                    app.has("missing")
             except BaseException as err:  # noqa: BLE001 - worker failures are asserted below
                 owner_errors.append(err)
 

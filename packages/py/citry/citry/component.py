@@ -66,6 +66,7 @@ from citry._class_introspection import (
     _safe_class_text,
     _static_class_dict,
     _static_class_mro,
+    _static_class_namespace_copy,
 )
 from citry._input_types import _check_input_types
 from citry._linting import _validate_component_lint
@@ -514,7 +515,8 @@ class ComponentMeta(LibraryComponentMeta):
                 # rebinding a base method must not change its checked contract.
                 effective: dict[str, object] = {}
                 for base in reversed(_static_class_mro(cls)):
-                    effective.update(_static_class_dict(base))
+                    # A copy: another thread may store on a class meanwhile.
+                    effective.update(_static_class_namespace_copy(base))
                 for member, value in effective.items():
                     if not member.startswith("_") and member not in cls.__dict__:
                         type.__setattr__(cls, member, value)

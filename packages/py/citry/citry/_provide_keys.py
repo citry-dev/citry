@@ -38,7 +38,13 @@ from pathlib import Path
 from types import CodeType, FunctionType
 from typing import TYPE_CHECKING, Any, Literal
 
-from citry._class_introspection import _safe_class_import_path, _safe_class_text, _static_class_dict, _static_class_mro
+from citry._class_introspection import (
+    _safe_class_import_path,
+    _safe_class_text,
+    _static_class_dict,
+    _static_class_mro,
+    _static_class_namespace_copy,
+)
 from citry._component_graph import _build_node, _collect_sources, _foreign_options, _nested_content
 from citry._component_introspection import _group_registrations, _loaded_python_file
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement, parse_template
@@ -699,7 +705,7 @@ def _compiled_methods_call(cls: type, name: str) -> bool:
     """Return whether any function stored on the class mentions the attribute ``name``, such as ``self.provide``."""
     pending: list[CodeType] = []
     functions: list[object] = []
-    for value in _static_class_dict(cls).values():
+    for value in _static_class_namespace_copy(cls).values():
         # `staticmethod` and `classmethod` keep the function under
         # `__func__`, and a property its accessors.
         functions.extend([getattr(value, "__func__", value), *(getattr(value, name, None) for name in _ACCESSORS)])

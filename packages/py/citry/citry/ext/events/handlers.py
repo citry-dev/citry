@@ -429,7 +429,7 @@ def collect_event_handlers(comp_name: str, raw_events_cls: type) -> dict[str, Fu
     """
     handlers: dict[str, FunctionType] = {}
     for klass in reversed(user_level_classes(raw_events_cls)):
-        for member_name, value in vars(klass).items():
+        for member_name, value in _static_class_namespace_copy(klass).items():
             if member_name.startswith("__") and member_name.endswith("__"):
                 continue
             if member_name.startswith("_"):

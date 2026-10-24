@@ -13,7 +13,7 @@ from typing import ClassVar, NamedTuple, TypedDict
 
 import pytest
 
-from citry import Citry, CitryLifecycleInProgress, Component, SlotInput
+from citry import Citry, Component, SlotInput
 from citry.tag_rules import build_tag_rules
 from citry_core.template_parser import TagRules, parse_template
 
@@ -263,20 +263,19 @@ class TestBuildTagRules:
         owner.start()
         assert started.wait(5)
 
-        with pytest.raises(CitryLifecycleInProgress):
-            app.register(TypedCard)
+        # Building the rules holds no lock, so registering goes ahead; the
+        # build sees the registry change and builds again.
+        app.register(TypedCard)
 
         release.set()
         owner.join(5)
 
         assert not owner.is_alive()
         assert owner_errors == []
+        # The rules stored are the ones built after the registration.
         assert app._tag_rules_cache is not None
-        assert "c-typed-card" not in app._tag_rules_cache
-
-        app.register(TypedCard)
-        assert app._tag_rules_cache is None
-        assert "c-typed-card" in app._tag_rules()
+        assert "c-typed-card" in app._tag_rules_cache
+        assert app._tag_rules() is app._tag_rules_cache
 
 
 class TestKwargsValidation:
@@ -834,3 +833,30 @@ class TestNonDataclassDeclarations:
 
         with pytest.raises(SyntaxError, match="can only have the following attributes"):
             str(Bad())
+
+
+def test_rules_built_while_registrations_keep_arriving_are_not_kept(monkeypatch):
+    # Each build sees a registration land during it. After the last try the
+    # rules serve that one parse but are not stored, so the next parse
+    # builds them again with every component.
+    app = Citry(autodiscover=False)
+    app.initialize()
+    rules_module = importlib.import_module("citry.citry")
+    original_build_tag_rules = rules_module.build_tag_rules
+    builds = 0
+
+    def build_then_register(citry_instance):
+        nonlocal builds
+        rules = original_build_tag_rules(citry_instance)
+        builds += 1
+        if builds <= 3:
+            kwargs = type("Kwargs", (), {"__annotations__": {"title": str}})
+            type(f"New{builds}", (Component,), {"citry": app, "template": "<p>late</p>", "Kwargs": kwargs})
+        return rules
+
+    monkeypatch.setattr(rules_module, "build_tag_rules", build_then_register)
+    app._invalidate_tag_rules()
+    returned = app._tag_rules()
+    assert "c-new3" not in returned
+    assert app._tag_rules_cache is None
+    assert "c-new3" in app._tag_rules()

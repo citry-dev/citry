@@ -121,9 +121,25 @@ Calling `initialize()` again does nothing unless components were added or
 removed since; then it prepares them again. If it raises, fix the problem
 and call it again.
 
-Start discovery from one place, at startup. A second thread that starts
-discovery or `initialize()` while one is running raises
-[`CitryLifecycleInProgress`][citry.CitryLifecycleInProgress].
+Without `initialize()`, the first render runs discovery itself. Renders on
+other threads that start meanwhile wait for it to finish, then each one
+builds the rules that check component tags again. If that discovery fails,
+each waiting render runs it again and raises the same error.
+
+These cases raise
+[`CitryLifecycleInProgress`][citry.CitryLifecycleInProgress] instead of
+waiting:
+
+- a thread calls `autodiscover()` or `initialize()` while discovery is
+  running, or renders while one of those calls is running;
+- a thread that is importing a module, such as a module that renders a
+  component at import time, needs discovery while another thread runs it;
+- a reset hook renders while another thread runs discovery;
+- a render waits more than a minute for discovery on another thread, for
+  example because code that runs during discovery waits for that render.
+
+Call `initialize()` once at startup, before the server handles requests,
+to avoid the wait, the repeated work, and these errors.
 
 [Web frameworks](/advanced/web-frameworks/) shows where startup code goes in each
 framework.

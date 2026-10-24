@@ -24,13 +24,15 @@ The full design, including what diverges from django-components and why, is in
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, cast, runtime_checkable
 
 from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
 from citry._inline_assets import normalize_inline_asset
 from citry.citry_template import CitryTemplate
+from citry.lifecycle import no_setup_wait
 from citry.util.logger import logger
 from citry.util.misc import get_module_info
 
@@ -79,6 +81,9 @@ ASSET_PAIRS: tuple[tuple[str, str], ...] = (
     ("js", "js_file"),
     ("css", "css_file"),
 )
+
+# The type of a value a loader stores on a class.
+_T = TypeVar("_T")
 
 # Class-level cache attributes. Presence in the class's own __dict__ means
 # "already resolved"; the cached value may be None (a valid result). The
@@ -274,6 +279,19 @@ def _load_pair(
 ################################################
 
 
+# Stands for "not loaded yet"; a loaded asset can be None (no JS or CSS).
+_NOT_LOADED = object()
+
+
+def _store_on_class(comp_cls: type[Component], attr: str, value: _T) -> _T:
+    """Keep the value another thread stored first, or store ``value``; the caller holds ``_template_source_lock``."""
+    stored = comp_cls.__dict__.get(attr, _NOT_LOADED)
+    if stored is not _NOT_LOADED:
+        return cast("_T", stored)
+    setattr(comp_cls, attr, value)
+    return value
+
+
 def load_template(comp_cls: type[Component]) -> CitryTemplate | None:
     """
     The component's loaded template, or ``None`` for a template-less component.
@@ -284,30 +302,36 @@ def load_template(comp_cls: type[Component]) -> CitryTemplate | None:
     render pipeline later fills the struct's compiled form in place; this
     loader never does.
 
+    Several threads making the class's first render at once may each run
+    the hooks; all of them get the one ``CitryTemplate`` stored first (see
+    ``Citry._load_and_store``).
+
     Users reach this through ``Card.get_template()``.
     """
-    with comp_cls.citry._template_source_lock:
-        if _TEMPLATE_CACHE in comp_cls.__dict__:
-            return comp_cls.__dict__[_TEMPLATE_CACHE]  # type: ignore[no-any-return]
+    # Read the cache in one lookup: a reset on another thread can delete the
+    # entry between an `in` check and a read.
+    cached = comp_cls.__dict__.get(_TEMPLATE_CACHE, _NOT_LOADED)
+    if cached is not _NOT_LOADED:
+        return cast("CitryTemplate | None", cached)
 
+    def load() -> CitryTemplate | None:
         content, path = _load_pair(comp_cls, "template", "template_file")
-
-        result: CitryTemplate | None
         if content is None:
-            result = None
-        else:
-            origin = str(path) if path is not None else _inline_origin(comp_cls)
-            result = CitryTemplate(source=content, origin=origin, filepath=path)
-            result.source = comp_cls.citry.extensions.on_template_loaded(
-                comp_cls,
-                content,
-                template_id=result.template_id,
-                origin=origin,
-                template_kind=result.kind,
-            )
-
-        setattr(comp_cls, _TEMPLATE_CACHE, result)
+            return None
+        origin = str(path) if path is not None else _inline_origin(comp_cls)
+        result = CitryTemplate(source=content, origin=origin, filepath=path)
+        result.source = comp_cls.citry.extensions.on_template_loaded(
+            comp_cls,
+            content,
+            template_id=result.template_id,
+            origin=origin,
+            template_kind=result.kind,
+        )
         return result
+
+    # Every caller must get the same CitryTemplate, because the render
+    # pipeline fills in its compiled form once and later renders reuse it.
+    return comp_cls.citry._load_and_store(load, lambda result: _store_on_class(comp_cls, _TEMPLATE_CACHE, result))
 
 
 def load_js(comp_cls: type[Component]) -> str | None:
@@ -328,55 +352,74 @@ def load_messages(comp_cls: type[Component]) -> str | None:
         "messages",
         "messages_file",
     )
-    with comp_cls.citry._messages_source_lock:
-        cached_source = comp_cls.citry._messages_source_cache.get(declaration_owner)
+    citry = comp_cls.citry
+    with citry._messages_source_lock:
+        cached_source = citry._messages_source_cache.get(declaration_owner)
         if cached_source is not None:
             cached_content, _origin = cached_source
             if _file_value is not None:
                 cached_path = resolve_asset_file(
                     _file_value,
                     declaration_owner,
-                    search_dirs=comp_cls.citry.settings.dirs,
+                    search_dirs=citry.settings.dirs,
                 )
-                comp_cls.citry._register_component_file(cached_path, comp_cls)
+                citry._register_component_file(cached_path, comp_cls)
             setattr(comp_cls, _MESSAGES_CACHE, cached_content)
             return cached_content
 
-        if declaration_owner in comp_cls.citry._messages_sources_loading:
+        # Only this thread's own loads count: a messages hook that loads the
+        # same messages again would recurse, while another thread loading
+        # them at the same time is fine.
+        loading_key = (declaration_owner, threading.get_ident())
+        if loading_key in citry._messages_sources_loading:
             msg = (
                 f"Re-entrant messages loading for source unit {declaration_owner.__module__}::"
                 f"{declaration_owner.__qualname__}."
             )
             raise RuntimeError(msg)
-        comp_cls.citry._messages_sources_loading.add(declaration_owner)
-        try:
-            try:
-                content, path = _load_pair(comp_cls, "messages", "messages_file")
-                origin: str | None = None
-                if content is not None:
-                    origin = str(path) if path is not None else f"{_inline_origin(declaration_owner)}.messages"
-                    content = comp_cls.citry.extensions.on_messages_loaded(
-                        declaration_owner,
-                        declaration_owner,
-                        content,
-                        origin,
-                    )
-            except Exception:
-                previous = comp_cls.citry._messages_reload_fallbacks.pop(
-                    declaration_owner,
-                    None,
-                )
-                if previous is not None:
-                    comp_cls.citry._messages_source_cache[declaration_owner] = previous
-                    setattr(comp_cls, _MESSAGES_CACHE, previous[0])
-                raise
+        citry._messages_sources_loading.add(loading_key)
 
-            comp_cls.citry._messages_reload_fallbacks.pop(declaration_owner, None)
-            comp_cls.citry._messages_source_cache[declaration_owner] = (content, origin)
-            setattr(comp_cls, _MESSAGES_CACHE, content)
-            return content
-        finally:
-            comp_cls.citry._messages_sources_loading.discard(declaration_owner)
+    def load() -> tuple[str | None, str | None]:
+        started = citry._asset_revision
+        try:
+            content, path = _load_pair(comp_cls, "messages", "messages_file")
+            origin: str | None = None
+            if content is not None:
+                origin = str(path) if path is not None else f"{_inline_origin(declaration_owner)}.messages"
+                content = citry.extensions.on_messages_loaded(
+                    declaration_owner,
+                    declaration_owner,
+                    content,
+                    origin,
+                )
+        except Exception:
+            # A broken edit after reset_files(): later renders keep using the
+            # last source that loaded, while this caller sees the error. After
+            # a newer reset the fallback belongs to that reset's reload, so
+            # this failure leaves it alone.
+            with citry._messages_source_lock:
+                current = citry._asset_revision == started
+                previous = citry._messages_reload_fallbacks.pop(declaration_owner, None) if current else None
+                if previous is not None:
+                    citry._messages_source_cache[declaration_owner] = previous
+                    setattr(comp_cls, _MESSAGES_CACHE, previous[0])
+            raise
+        return content, origin
+
+    def store(loaded: tuple[str | None, str | None]) -> tuple[str | None, str | None]:
+        # Subclasses that inherit these messages share one stored source,
+        # so keep the one another thread stored first.
+        citry._messages_reload_fallbacks.pop(declaration_owner, None)
+        kept = citry._messages_source_cache.setdefault(declaration_owner, loaded)
+        setattr(comp_cls, _MESSAGES_CACHE, kept[0])
+        return kept
+
+    try:
+        content, _origin = citry._load_and_store(load, store, citry._messages_source_lock)
+    finally:
+        with citry._messages_source_lock:
+            citry._messages_sources_loading.discard(loading_key)
+    return content
 
 
 def messages_declaration_owner(comp_cls: type[Component]) -> type:
@@ -415,19 +458,22 @@ def _load_asset_content(
     file_attr: str,
     cache_attr: str,
 ) -> str | None:
-    if cache_attr in comp_cls.__dict__:
-        return comp_cls.__dict__[cache_attr]  # type: ignore[no-any-return]
+    # Read the cache in one lookup: a reset on another thread can delete the
+    # entry between an `in` check and a read.
+    cached = comp_cls.__dict__.get(cache_attr, _NOT_LOADED)
+    if cached is not _NOT_LOADED:
+        return cast("str | None", cached)
 
-    content, _path = _load_pair(comp_cls, inline_attr, file_attr)
-    if content is not None:
+    def load() -> str | None:
+        content, _path = _load_pair(comp_cls, inline_attr, file_attr)
+        if content is None:
+            return None
         extensions = comp_cls.citry.extensions
         if inline_attr == "js":
-            content = extensions.on_js_loaded(comp_cls, content)
-        else:
-            content = extensions.on_css_loaded(comp_cls, content)
+            return extensions.on_js_loaded(comp_cls, content)
+        return extensions.on_css_loaded(comp_cls, content)
 
-    setattr(comp_cls, cache_attr, content)
-    return content
+    return comp_cls.citry._load_and_store(load, lambda content: _store_on_class(comp_cls, cache_attr, content))
 
 
 def _inline_origin(comp_cls: type[Component]) -> str:
@@ -458,12 +504,23 @@ def reset_template(comp_cls: type[Component]) -> None:
     clear it too (file-driven invalidation via
     ``Citry.get_components_for_file`` reaches all of them).
     """
-    with comp_cls.citry.extensions._render_cache_invalidation():
+    # A render from a reset hook must not wait for another thread's
+    # one-time setup, which may need the locks this reset holds.
+    with no_setup_wait(), comp_cls.citry.extensions._render_cache_invalidation():
         with comp_cls.citry._template_source_lock:
-            if _TEMPLATE_CACHE in comp_cls.__dict__:
-                delattr(comp_cls, _TEMPLATE_CACHE)
-            comp_cls.citry._evict_component_cache(comp_cls)
-            comp_cls.citry.extensions.on_template_reset(comp_cls)
+            # A template load running now, with no lock, sees the revision
+            # move and loads again, so it cannot store the old template.
+            comp_cls.citry._bump_asset_revision()
+            try:
+                if _TEMPLATE_CACHE in comp_cls.__dict__:
+                    delattr(comp_cls, _TEMPLATE_CACHE)
+                comp_cls.citry._evict_component_cache(comp_cls)
+                comp_cls.citry.extensions.on_template_reset(comp_cls)
+            finally:
+                # Again after the hooks: a load that started after the first
+                # move may have run its hooks before these reset hooks cleared
+                # their state, so it must run again too.
+                comp_cls.citry._bump_asset_revision()
 
 
 def reset_files(comp_cls: type[Component]) -> None:
@@ -475,8 +532,20 @@ def reset_files(comp_cls: type[Component]) -> None:
     ``CitryDependencies`` for this class there. Users reach this through
     ``Card.reset_files()``.
     """
-    with comp_cls.citry.extensions._render_cache_invalidation():
-        with comp_cls.citry._messages_source_lock:
+    # Both locks that loads store under: JS, CSS and Dependencies are stored
+    # under the template source lock and messages under the messages lock,
+    # so a load either stored before this reset or sees the revision move
+    # and loads again. A load holds at most one of them, and only to store.
+    # A render from a reset hook must not wait for another thread's
+    # one-time setup, which may need the locks this reset holds.
+    with (
+        no_setup_wait(),
+        comp_cls.citry.extensions._render_cache_invalidation(),
+        comp_cls.citry._template_source_lock,
+        comp_cls.citry._messages_source_lock,
+    ):
+        comp_cls.citry._bump_asset_revision()
+        try:
             owner = messages_declaration_owner(comp_cls)
             previous = comp_cls.citry._messages_source_cache.pop(owner, None)
             if previous is not None:
@@ -487,3 +556,8 @@ def reset_files(comp_cls: type[Component]) -> None:
             # Keep source invalidation and extension state invalidation atomic
             # with respect to a concurrent first reload of this source unit.
             comp_cls.citry.extensions.on_files_reset(comp_cls)
+        finally:
+            # Again after the hooks: a load that started after the first move
+            # may have run its hooks before these reset hooks cleared their
+            # state, so it must run again too.
+            comp_cls.citry._bump_asset_revision()

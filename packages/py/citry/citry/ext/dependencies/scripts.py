@@ -552,6 +552,26 @@ def _component_script_capture(
     if captures is not None and script_type in captures:
         return captures[script_type]
 
+    def store(capture: _ComponentScriptCapture) -> _ComponentScriptCapture:
+        # Runs under the engine's `_template_source_lock`. Keep a capture
+        # another thread stored first, so every render sends the browser the
+        # same script.
+        stored = vars(comp_cls).get(_COMPONENT_SCRIPT_CAPTURE)
+        if stored is not None and script_type in stored:
+            return stored[script_type]
+        setattr(comp_cls, _COMPONENT_SCRIPT_CAPTURE, {**(stored or {}), script_type: capture})
+        return capture
+
+    # Reading the JS or CSS can run the class's `on_js_loaded` or
+    # `on_css_loaded` hooks, so the capture is built with no lock held.
+    return comp_cls.citry._load_and_store(lambda: _build_component_script_capture(script_type, comp_cls), store)
+
+
+def _build_component_script_capture(
+    script_type: ScriptType,
+    comp_cls: type[Component],
+) -> _ComponentScriptCapture:
+    """Derive one exact class's asset from its current JS or CSS, without storing it."""
     content = _component_content(script_type, comp_cls)
     uses_component_call = False
     script: Script | Style | None = None
@@ -567,14 +587,12 @@ def _component_script_capture(
 
     serialized = None if script is None else json.dumps(script.to_json())
     content_hash = None if serialized is None else md5(serialized.encode(), usedforsecurity=False).hexdigest()[:12]
-    capture = _ComponentScriptCapture(
+    return _ComponentScriptCapture(
         script=script,
         serialized=serialized,
         content_hash=content_hash,
         uses_component=uses_component_call,
     )
-    setattr(comp_cls, _COMPONENT_SCRIPT_CAPTURE, {**(captures or {}), script_type: capture})
-    return capture
 
 
 def _component_script(script_type: ScriptType, comp_cls: type[Component]) -> Script | Style | None:

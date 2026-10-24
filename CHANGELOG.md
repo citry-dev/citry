@@ -353,6 +353,34 @@
   interpolation that holds a comment, such as `{x # note` followed by a
   new line and `=}`, now leaves the comment out of its `x=` text, as
   Python does.
+- A render no longer hangs when an extension's load or compile hook, a
+  function in a component's `Dependencies` class, or a function marked
+  `Const` renders another component while another thread resets a
+  template or files, as a hot reload does.
+- A slow load hook, such as a template preprocessor in
+  `on_template_loaded`, no longer holds up renders of other components.
+  When several threads render a component for the first time at once,
+  such a hook can run once per thread, and every render gets the same
+  result
+  ([details](https://citry.dev/advanced/extensions/#hooks-that-run-twice)).
+- A hot reload that arrives while Citry loads a component's template,
+  JS, CSS, or messages, or prepares its template for `Const` values, no
+  longer leaves the old content in use.
+- Without `initialize()`, renders that start on several threads at once
+  no longer fail with `CitryLifecycleInProgress`: renders on other threads
+  wait for the first one to finish discovery. A render inside a module
+  import or a reset hook still raises instead of waiting while another
+  thread runs discovery, and so does a wait longer than a minute
+  ([details](https://citry.dev/advanced/component-discovery/#initialize-before-starting-worker-threads)).
+  Call `initialize()` at startup to avoid the wait.
+- On free-threaded Python, a component's first render fails less often
+  with `RuntimeError: dictionary changed size during iteration` when
+  another thread renders at the same time.
+- On Python 3.14, an Events `State` class with one annotation that does not
+  resolve (such as a type imported only for type checkers) now keeps the
+  type checks on its other fields when the module has no `from __future__
+  import annotations`. Every field used to accept any value from the
+  browser.
 
 ### Performance
 

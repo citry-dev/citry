@@ -383,9 +383,35 @@ extension hooks:
   source is loaded and indentation is removed. User extensions may replace the
   text. The built-in i18n extension runs last and compiles that final text.
 
-Template, JS, and CSS hooks fire once per requesting class. The message hook
-fires once per source declaration. A reset (section 8) causes the relevant hook
-to run again on the next access.
+Template, JS, and CSS hooks fire once per load of a requesting class. The
+message hook fires once per load of a source declaration. A reset (section
+8) causes the relevant hook to run again on the next access.
+
+A load reads the source and runs these hooks with no Citry lock held, then
+takes a short lock to store its result (`Citry._load_and_store`). When
+another thread stored a result first, the load returns that one, so every
+caller gets the same value. Two consequences for hook authors:
+
+- When several threads load a class for the first time at once, each may run
+  the hook. Citry keeps one result.
+- A reset increments `Citry._asset_revision`. A load that sees the counter
+  change while it ran discards its result and runs again from the start, up to
+  three runs, so the hooks of its last run act on the new source. After the
+  third run Citry stores the last result anyway, so a stream of resets cannot
+  stall a render.
+
+So a hook must return the same text for the same input, and any side effect
+must overwrite what an earlier call did (the built-in i18n extension replaces
+the catalog entry for the source it installs). The compiled-template hooks
+(`on_template_foreign_spans`, `on_template_foreign_compiled`,
+`on_template_compiled`) also run with no lock held, and concurrent first
+renders may each run them; Citry keeps the first compiled form and body
+stored. The compiled form and the per-template body caches need no
+revision check, because a reset replaces the whole `CitryTemplate` rather
+than changing it. The const-body cache is keyed by class, so it keeps its
+own counter (`ConstBodyCache._generation`) and includes the template id in
+its key. Resets keep their locks while their own hooks run; those hooks
+may render on their own thread but must not wait for another thread.
 
 `get_js_data` / `get_css_data` (per-render variables for the assets) remain a
 TODO tracked in [`extensions.md`](extensions.md) section 7.5; they are consumers
