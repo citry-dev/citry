@@ -41,7 +41,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from difflib import get_close_matches
 from inspect import getattr_static
-from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast
+from typing import TYPE_CHECKING, Any, NamedTuple, NoReturn, cast, final
 
 from citry._class_introspection import (
     _component_declaration_generation,
@@ -105,6 +105,7 @@ from citry.ext.dependencies.extension import _DependencyCacheCapture
 from citry.ext.dependencies.scripts import has_component_asset
 from citry.ext.dependencies.types import DependencyRecord
 from citry.nodes import (
+    BodySteps,
     ComponentNode,
     ElementAttrsNode,
     ElementKeyNode,
@@ -134,7 +135,7 @@ from citry_core.template_parser import ForeignSpan, ParseOptions, compile_templa
 
 if TYPE_CHECKING:
     from collections import OrderedDict
-    from collections.abc import Callable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
     from contextlib import AbstractContextManager
 
     from citry._vue.direct import DirectExecutionFrame
@@ -3142,6 +3143,49 @@ def _compile_nested_template(
     return lambda: compiled
 
 
+@final
+class _BodyFrame:
+    """
+    One body the body renderer is partway through.
+
+    ``items`` is an iterator, so the renderer's inner loop resumes where it
+    stopped after it finishes a nested body. The frame sets the value
+    context while its items render and resets it when it finishes or an
+    error passes through it, as one call of the recursive renderer did.
+    """
+
+    __slots__ = ("context", "direct_prepared", "items", "parts", "tracing", "value_token")
+
+    def __init__(self, body: Iterable[BodyItem], context: CitryContext, parts: list[RenderPart]) -> None:
+        self.items = iter(body)
+        self.context = context
+        self.parts = parts
+        self.value_token = _VALUE_CONTEXT.set(context)
+        self.direct_prepared = vue_render_active()
+        # Hoisted: one level check per body walk, not per node.
+        self.tracing = is_tracing()
+
+
+@final
+class _NodeFrame:
+    """
+    An ``IfNode`` or ``ForNode`` whose bodies the body renderer is rendering.
+
+    Every body's parts go into ``parts``. When ``bodies`` runs out,
+    ``finish`` wraps them into the node's part, which joins ``outer``, the
+    frame of the body that holds the node.
+    """
+
+    __slots__ = ("bodies", "finish", "node", "outer", "parts")
+
+    def __init__(self, node: BodyItem, steps: BodySteps, outer: _BodyFrame) -> None:
+        self.node = node
+        self.bodies = steps.bodies
+        self.finish = steps.finish
+        self.outer = outer
+        self.parts: list[RenderPart] = []
+
+
 def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[RenderPart]:
     """
     Render a body (a list of static strings and nodes) into a list of parts.
@@ -3160,44 +3204,129 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     The parts are returned as a list, not joined into one string, so that an
     already-rendered value embedded in the middle can still be read later. Joining
     happens in ``CitryRender.serialize()``.
-    """
-    value_token = _VALUE_CONTEXT.set(context)
-    try:
-        direct_prepared = vue_render_active()
-        parts: list[RenderPart] = []
-        tracing = is_tracing()  # hoisted: one level check per body walk, not per node
-        for item in body:
-            if isinstance(item, str):
-                if direct_prepared:
-                    raise TypeError("prepared Vue rendering received unsupported raw compiled output")
-                parts.append(item)
-                continue
-            if tracing:
-                trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
-            try:
-                part = item.render(context)
-            except Exception as err:
-                _attach_template_position(err, item, context)
-                raise
-            if type(part) is str:
-                if direct_prepared:
-                    raise TypeError(
-                        f"prepared Vue rendering received unsupported raw output from {type(item).__name__}"
-                    )
-                parts.append(part)
-                continue
-            unwrapped = part
-            if (
-                isinstance(unwrapped, CitryRender)
-                and unwrapped.context is not context
-                and not _contains_deferred(unwrapped)
-            ):
-                _merge_dependencies(context, unwrapped.context)
-            parts.append(part)
 
-        return parts
-    finally:
-        _VALUE_CONTEXT.reset(value_token)
+    ``<c-if>`` and ``<c-for>`` nodes render their bodies on this function's own
+    stack instead of through their ``render`` methods, so Python's call depth
+    does not grow with how deeply they nest. Each one adds a ``_NodeFrame``
+    and one ``_BodyFrame`` per body, and its part is wrapped exactly as its
+    ``render`` would wrap it. An error raised inside passes out through every
+    frame in turn, innermost first: each body frame resets the value context,
+    and each node frame closes its loop and adds its node's template position,
+    the same steps in the same order as nested calls would take them.
+    """
+    root = _BodyFrame(body, context, [])
+    # Body and node frames alternate above the root: a node frame's bodies
+    # sit directly on top of it.
+    stack: list[_BodyFrame | _NodeFrame] = [root]
+    try:
+        while True:
+            frame = cast("_BodyFrame", stack[-1])
+            parts = frame.parts
+            frame_context = frame.context
+            pushed = False
+            for item in frame.items:
+                if isinstance(item, str):
+                    if frame.direct_prepared:
+                        raise TypeError("prepared Vue rendering received unsupported raw compiled output")
+                    parts.append(item)
+                    continue
+                if frame.tracing:
+                    trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
+                item_type = type(item)
+                part: RenderPart
+                try:
+                    if item_type is IfNode or item_type is ForNode:
+                        steps = cast("IfNode | ForNode", item)._render_steps(frame_context)
+                        if type(steps) is BodySteps:
+                            node_frame = _NodeFrame(item, steps, frame)
+                            # The first body is read inside this `try`, as
+                            # `render` would read it: evaluating the loop can
+                            # fail, and the error then gets this node's
+                            # position once. The node frame joins the stack
+                            # only once it has a body to render.
+                            first = next(node_frame.bodies, None)
+                            if first is not None:
+                                stack.append(node_frame)
+                                stack.append(_BodyFrame(first[0], first[1], node_frame.parts))
+                                pushed = True
+                                break
+                            part = node_frame.finish(node_frame.parts)
+                        else:
+                            part = steps
+                    else:
+                        part = item.render(frame_context)
+                except Exception as err:
+                    _attach_template_position(err, item, frame_context)
+                    raise
+                _add_rendered_part(part, item, frame)
+            if pushed:
+                continue
+
+            # This body is finished. Back in the node that holds it, read its
+            # next body, or wrap the node's part once there are no more.
+            stack.pop()
+            _VALUE_CONTEXT.reset(frame.value_token)
+            if not stack:
+                return root.parts
+            node_frame = cast("_NodeFrame", stack[-1])
+            outer = node_frame.outer
+            try:
+                following = next(node_frame.bodies, None)
+                if following is not None:
+                    stack.append(_BodyFrame(following[0], following[1], node_frame.parts))
+                    continue
+                stack.pop()
+                part = node_frame.finish(node_frame.parts)
+            except Exception as err:
+                stack.pop()
+                _attach_template_position(err, node_frame.node, outer.context)
+                raise
+            _add_rendered_part(part, node_frame.node, outer)
+    except BaseException as err:
+        _unwind_body_frames(stack, err)
+        raise
+
+
+def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> None:
+    """Add a node's part to the body it belongs to, as the recursive renderer did."""
+    if type(part) is str:
+        if frame.direct_prepared:
+            raise TypeError(f"prepared Vue rendering received unsupported raw output from {type(item).__name__}")
+        frame.parts.append(part)
+        return
+    if isinstance(part, CitryRender) and part.context is not frame.context and not _contains_deferred(part):
+        _merge_dependencies(frame.context, part.context)
+    frame.parts.append(part)
+
+
+def _unwind_body_frames(stack: list[_BodyFrame | _NodeFrame], err: BaseException) -> None:
+    """
+    Take an error out through every frame still open, innermost first.
+
+    A body frame resets its value context. A node frame closes its loop, so
+    the loop's ``finally`` blocks run now, and adds its node's template
+    position, as the node's ``render`` call did when the error passed out of
+    it. Adding a position can replace the error with a clearer one; the
+    replacement is raised from the original and passes through the frames
+    that remain.
+    """
+    while stack:
+        frame = stack.pop()
+        if type(frame) is _BodyFrame:
+            _VALUE_CONTEXT.reset(frame.value_token)
+            continue
+        node_frame = cast("_NodeFrame", frame)
+        close = getattr(node_frame.bodies, "close", None)
+        if close is not None:
+            close()
+        if isinstance(err, Exception):
+            try:
+                _attach_template_position(err, node_frame.node, node_frame.outer.context)
+            except Exception as replacement:
+                # `_attach_template_position` raised the replacement from
+                # `err` itself; it passes through the frames that remain.
+                _unwind_body_frames(stack, replacement)
+                raise
 
 
 def _attach_template_position(err: Exception, node: BodyItem, context: CitryContext) -> None:

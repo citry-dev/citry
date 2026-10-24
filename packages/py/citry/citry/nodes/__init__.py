@@ -67,7 +67,7 @@ from difflib import get_close_matches
 from enum import Enum
 from keyword import iskeyword
 from threading import RLock
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeAlias, cast, final
 from unicodedata import normalize
 from weakref import ReferenceType, ref
 
@@ -2158,6 +2158,24 @@ class ComponentNode(Node):
 
 
 @final
+@final
+class BodySteps(NamedTuple):
+    """
+    The bodies a control-flow node renders, and how it wraps their parts.
+
+    ``IfNode`` and ``ForNode`` return this from ``_render_steps``, so the body
+    renderer can render each body on its own stack instead of calling the
+    node's ``render``, which would call the body renderer again for every
+    level of nesting. ``bodies`` yields each ``(body, context)`` pair in render
+    order, and is read one pair at a time, so loop side effects and errors
+    happen in the same order as in ``render``. ``finish`` takes the parts of
+    every body, in order, and returns the node's part.
+    """
+
+    bodies: Iterator[tuple[Sequence[BodyItem], CitryContext]]
+    finish: Callable[[list[RenderPart]], CitryRender]
+
+
 class IfNode(Node):
     """
     A conditional node (``<c-if>``/``<c-elif>``/``<c-else>``).
@@ -2219,6 +2237,17 @@ class IfNode(Node):
         if body is None:
             return CitryRender(parts=[], context=context)
         return CitryRender(parts=_render_body(body, context), context=context)
+
+    def _render_steps(self, context: CitryContext) -> BodySteps:
+        """
+        Return what ``render`` would render, for the body renderer's own stack.
+
+        The matching branch's body renders against ``context``, and its parts
+        are wrapped exactly as ``render`` wraps them.
+        """
+        body = self.active_branch_body(context)
+        bodies = iter(((body, context),) if body is not None else ())
+        return BodySteps(bodies, lambda parts: CitryRender(parts=parts, context=context))
 
     @override
     def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
@@ -2348,6 +2377,24 @@ class ForNode(Node):
         """
         from citry.component_render import _render_body  # noqa: PLC0415
 
+        steps = self._render_steps(context)
+        if type(steps) is not BodySteps:
+            return steps
+        parts: list[RenderPart] = []
+        for body, body_context in steps.bodies:
+            parts.extend(_render_body(body, body_context))
+        return steps.finish(parts)
+
+    def _render_steps(self, context: CitryContext) -> BodySteps | CitryRender:
+        """
+        Return what ``render`` would render, for the body renderer's own stack.
+
+        A loop with precomputed parts, or one that records its rows as a
+        call run, renders here and returns its finished part: neither one
+        renders a nested body. Any other loop returns one body per
+        iteration, read one at a time from ``iter_bodies``, and the step
+        that wraps their parts as ``render`` does.
+        """
         if self._precomputed_parts is not None:
             targets: tuple[str, ...] = self.branches[0][3]
             _validate_introduced_variables("c-for", targets, context)
@@ -2362,10 +2409,11 @@ class ForNode(Node):
             # Python's walk then runs the loop from the start.
             walked = self._walk_call_run(context, run_class) if _native_render.ACTIVE else None
             parts = walked if type(walked) is list else self._render_call_run(context, run_class)
-        else:
-            parts = []
-            for body, body_context in self.iter_bodies(context):
-                parts.extend(_render_body(body, body_context))
+            return self._finish_render(parts, context)
+        return BodySteps(self.iter_bodies(context), lambda parts: self._finish_render(parts, context))
+
+    def _finish_render(self, parts: list[RenderPart], context: CitryContext) -> CitryRender:
+        """Wrap the loop's parts as ``render`` returns them: a render, or a call run."""
         selected = CitryRender(parts=parts, context=context)
         from citry._vue.capture import direct_prepared_render_active  # noqa: PLC0415
 
