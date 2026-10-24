@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from difflib import get_close_matches
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from citry._browser_expressions import (
     BrowserExpression,
@@ -43,12 +43,13 @@ from citry._html_attribute_values import (
     OBSOLETE_ELEMENTS,
     SVG_ELEMENTS,
 )
+from citry._walk import Call, run
 from citry.util.html import decode_attribute_entities
 from citry_core.template_parser import HtmlAttr, HtmlAttrKind, TemplateElement
 from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Generator, Sequence
 
     from citry_core.template_parser import Template
 
@@ -575,7 +576,7 @@ class _MarkupWalker:
 
     def walk_template(self, template: Template, *, base_index: int) -> None:
         """Visit one template; a nested template starts with nothing open around it."""
-        self._walk(template, _Context(), base_index=base_index, roots=_single_root_starts(template))
+        run(self._walk(template, _Context(), base_index=base_index, roots=_single_root_starts(template)))
 
     def _walk(
         self,
@@ -584,7 +585,7 @@ class _MarkupWalker:
         *,
         base_index: int,
         roots: frozenset[int] = frozenset(),
-    ) -> None:
+    ) -> Generator[Call, Any, None]:
         for element in template.elements:
             if not isinstance(element, TemplateElement.Node):
                 continue
@@ -640,10 +641,13 @@ class _MarkupWalker:
                     nested = _nested_template(inner.content, self.parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        self._walk(
-                            parsed,
-                            _Context(foreign=foreign, may_repeat=True, vue_skipped=vue_skipped),
-                            base_index=base_index + inner.start_index + nested_start,
+                        (
+                            yield Call(
+                                self._walk,
+                                parsed,
+                                _Context(foreign=foreign, may_repeat=True, vue_skipped=vue_skipped),
+                                base_index=base_index + inner.start_index + nested_start,
+                            )
                         )
             if (
                 html
@@ -653,19 +657,22 @@ class _MarkupWalker:
                 self._check_image_alt(node, names, attrs, base_index)
             body = getattr(node, "body", None)
             if body is not None:
-                self._walk(
-                    body,
-                    _Context(
-                        foreign=foreign,
-                        in_paragraph=self._paragraph_stays_open(context, lower, html=html, component=component)
-                        and not foreign,
-                        may_repeat=may_repeat,
-                        vue_skipped=vue_skipped,
-                    ),
-                    base_index=base_index,
-                    # A root inside a top-level condition is still the
-                    # element Vue passes a parent's attributes to.
-                    roots=roots,
+                (
+                    yield Call(
+                        self._walk,
+                        body,
+                        _Context(
+                            foreign=foreign,
+                            in_paragraph=self._paragraph_stays_open(context, lower, html=html, component=component)
+                            and not foreign,
+                            may_repeat=may_repeat,
+                            vue_skipped=vue_skipped,
+                        ),
+                        base_index=base_index,
+                        # A root inside a top-level condition is still the
+                        # element Vue passes a parent's attributes to.
+                        roots=roots,
+                    )
                 )
 
     @staticmethod

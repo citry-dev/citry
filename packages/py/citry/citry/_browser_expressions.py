@@ -18,6 +18,7 @@ from citry._state_binding_targets import (
     _element_of,
     _validate_binding_target,
 )
+from citry._walk import Call, run
 from citry_core.template_parser import (
     RESERVED_TAG_NAMES,
     HtmlAttrKind,
@@ -35,7 +36,7 @@ from citry_core.template_parser import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
     from citry_core.template_parser import BrowserOptionsSection, Template
 
@@ -483,7 +484,7 @@ def mark_literal_findings(
 ) -> tuple[MarkLiteralFinding, ...]:
     """Find violations of the static marker-name contract at byte offsets."""
     found: list[MarkLiteralFinding] = []
-    _collect_mark_literal_findings(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_mark_literal_findings(template, found, parse_nested=parse_nested, base_index=0))
     return tuple(found)
 
 
@@ -690,14 +691,16 @@ def browser_expressions(
 ) -> tuple[BrowserExpression, ...]:
     """Extract supported Vue/Citry browser hosts, including nested templates."""
     found: list[BrowserExpression] = []
-    _collect_browser_expressions(
-        template,
-        found,
-        parse_nested=parse_nested,
-        base_index=0,
-        bindings=(),
-        ambient_names=(),
-        python_names=(),
+    run(
+        _collect_browser_expressions(
+            template,
+            found,
+            parse_nested=parse_nested,
+            base_index=0,
+            bindings=(),
+            ambient_names=(),
+            python_names=(),
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -710,12 +713,14 @@ def browser_declarative_events(
 ) -> tuple[BrowserDeclarativeEvent, ...]:
     """Extract literal server handlers from parser-proven Citry bindings."""
     found: list[BrowserDeclarativeEvent] = []
-    _collect_declarative_events(
-        template,
-        found,
-        known_names=known_names,
-        parse_nested=parse_nested,
-        base_index=0,
+    run(
+        _collect_declarative_events(
+            template,
+            found,
+            known_names=known_names,
+            parse_nested=parse_nested,
+            base_index=0,
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -727,7 +732,7 @@ def browser_state_binding_target_errors(
 ) -> tuple[BrowserStateBindingTargetError, ...]:
     """Report statically invalid State binding targets without requiring a loaded app."""
     found: list[BrowserStateBindingTargetError] = []
-    _collect_state_target_errors(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_state_target_errors(template, found, parse_nested=parse_nested, base_index=0))
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
@@ -737,7 +742,7 @@ def _collect_state_target_errors(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -775,15 +780,18 @@ def _collect_state_target_errors(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_state_target_errors(
-                        parsed,
-                        found,
-                        parse_nested=parse_nested,
-                        base_index=base_index + inner.start_index + nested_start,
+                    (
+                        yield Call(
+                            _collect_state_target_errors,
+                            parsed,
+                            found,
+                            parse_nested=parse_nested,
+                            base_index=base_index + inner.start_index + nested_start,
+                        )
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_state_target_errors(body, found, parse_nested=parse_nested, base_index=base_index)
+            (yield Call(_collect_state_target_errors, body, found, parse_nested=parse_nested, base_index=base_index))
 
 
 def browser_state_bindings(
@@ -793,7 +801,7 @@ def browser_state_bindings(
 ) -> tuple[BrowserStateBinding, ...]:
     """Extract State keys from parsed template attributes, including nested templates."""
     found: list[BrowserStateBinding] = []
-    _collect_state_bindings(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_state_bindings(template, found, parse_nested=parse_nested, base_index=0))
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
@@ -803,7 +811,7 @@ def _collect_state_bindings(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -821,15 +829,18 @@ def _collect_state_bindings(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_state_bindings(
-                        parsed,
-                        found,
-                        parse_nested=parse_nested,
-                        base_index=base_index + inner.start_index + nested_start,
+                    (
+                        yield Call(
+                            _collect_state_bindings,
+                            parsed,
+                            found,
+                            parse_nested=parse_nested,
+                            base_index=base_index + inner.start_index + nested_start,
+                        )
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_state_bindings(body, found, parse_nested=parse_nested, base_index=base_index)
+            (yield Call(_collect_state_bindings, body, found, parse_nested=parse_nested, base_index=base_index))
 
 
 def browser_bindings(
@@ -839,11 +850,13 @@ def browser_bindings(
 ) -> tuple[BrowserBinding, ...]:
     """Return every exact Vue binding declaration, including nested templates."""
     found: list[BrowserBinding] = []
-    _collect_browser_bindings(
-        template,
-        found,
-        parse_nested=parse_nested,
-        base_index=0,
+    run(
+        _collect_browser_bindings(
+            template,
+            found,
+            parse_nested=parse_nested,
+            base_index=0,
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -858,7 +871,7 @@ def enclosing_vue_loops(template: Template, start_index: int, end_index: int) ->
     are separate sources and are not searched.
     """
     elements: list[tuple[object, str, int]] = []
-    _collect_enclosing_elements(template, start_index, end_index, elements)
+    run(_collect_enclosing_elements(template, start_index, end_index, elements))
     tags = [tag for _node, tag, _start in elements]
     return tuple(
         EnclosingVueLoop(binding, tag, tag_start, _v_for_expression(node), tuple(tags[depth + 1 :]))
@@ -874,7 +887,7 @@ def _collect_enclosing_elements(
     start_index: int,
     end_index: int,
     found: list[tuple[object, str, int]],
-) -> None:
+) -> Generator[Call, Any, None]:
     """Append each element that contains the byte span, outermost first, with its tag name and start."""
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -889,7 +902,7 @@ def _collect_enclosing_elements(
         found.append((node, node.start_tag.name.content, tag_token.start_index))
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_enclosing_elements(body, start_index, end_index, found)
+            (yield Call(_collect_enclosing_elements, body, start_index, end_index, found))
 
 
 def _v_for_expression(node: Any) -> str:
@@ -911,7 +924,7 @@ def browser_component_prop_sites(
 ) -> tuple[BrowserComponentPropSite, ...]:
     """Return byte-mapped native Vue prop supplies on static component calls."""
     found: list[BrowserComponentPropSite] = []
-    _collect_component_prop_sites(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_component_prop_sites(template, found, parse_nested=parse_nested, base_index=0))
     return tuple(sorted(found, key=lambda item: (item.tag_start_index, item.tag_end_index)))
 
 
@@ -1085,11 +1098,13 @@ def browser_i18n_binding_directives(
 ) -> tuple[BrowserI18nBindingDirective, ...]:
     """Return parser-backed declarative browser translation bindings."""
     found: list[BrowserI18nBindingDirective] = []
-    _collect_i18n_binding_directives(
-        template,
-        found,
-        parse_nested=parse_nested,
-        base_index=0,
+    run(
+        _collect_i18n_binding_directives(
+            template,
+            found,
+            parse_nested=parse_nested,
+            base_index=0,
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.name_start_index, item.name_end_index)))
 
@@ -2096,7 +2111,7 @@ def _collect_browser_expressions(
     bindings: tuple[BrowserBinding, ...],
     ambient_names: tuple[str, ...],
     python_names: tuple[str, ...],
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2150,16 +2165,19 @@ def _collect_browser_expressions(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_browser_expressions(
-                        parsed,
-                        found,
-                        parse_nested=parse_nested,
-                        base_index=base_index + inner.start_index + nested_start,
-                        bindings=(*bindings, *loop_bindings),
-                        ambient_names=descendant_ambient,
-                        # A nested template renders in the same Python scope
-                        # as the attribute that holds it.
-                        python_names=own_python,
+                    (
+                        yield Call(
+                            _collect_browser_expressions,
+                            parsed,
+                            found,
+                            parse_nested=parse_nested,
+                            base_index=base_index + inner.start_index + nested_start,
+                            bindings=(*bindings, *loop_bindings),
+                            ambient_names=descendant_ambient,
+                            # A nested template renders in the same Python scope
+                            # as the attribute that holds it.
+                            python_names=own_python,
+                        )
                     )
                 continue
             canonical_attribute = _ascii_lower(attr.key.content)
@@ -2211,14 +2229,17 @@ def _collect_browser_expressions(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_browser_expressions(
-                body,
-                found,
-                parse_nested=parse_nested,
-                base_index=base_index,
-                bindings=(*bindings, *introduced),
-                ambient_names=descendant_ambient,
-                python_names=descendant_python,
+            (
+                yield Call(
+                    _collect_browser_expressions,
+                    body,
+                    found,
+                    parse_nested=parse_nested,
+                    base_index=base_index,
+                    bindings=(*bindings, *introduced),
+                    ambient_names=descendant_ambient,
+                    python_names=descendant_python,
+                )
             )
 
 
@@ -2264,7 +2285,7 @@ def _collect_declarative_events(
     known_names: frozenset[str],
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2277,12 +2298,15 @@ def _collect_declarative_events(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_declarative_events(
-                        parsed,
-                        found,
-                        known_names=known_names,
-                        parse_nested=parse_nested,
-                        base_index=base_index + inner.start_index + nested_start,
+                    (
+                        yield Call(
+                            _collect_declarative_events,
+                            parsed,
+                            found,
+                            known_names=known_names,
+                            parse_nested=parse_nested,
+                            base_index=base_index + inner.start_index + nested_start,
+                        )
                     )
                 continue
             attribute = attr.key.content
@@ -2304,12 +2328,15 @@ def _collect_declarative_events(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_declarative_events(
-                body,
-                found,
-                known_names=known_names,
-                parse_nested=parse_nested,
-                base_index=base_index,
+            (
+                yield Call(
+                    _collect_declarative_events,
+                    body,
+                    found,
+                    known_names=known_names,
+                    parse_nested=parse_nested,
+                    base_index=base_index,
+                )
             )
 
 
@@ -2319,7 +2346,7 @@ def _collect_browser_bindings(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2333,19 +2360,25 @@ def _collect_browser_bindings(
             if nested is None:
                 continue
             parsed, nested_start = nested
-            _collect_browser_bindings(
-                parsed,
-                found,
-                parse_nested=parse_nested,
-                base_index=base_index + inner.start_index + nested_start,
+            (
+                yield Call(
+                    _collect_browser_bindings,
+                    parsed,
+                    found,
+                    parse_nested=parse_nested,
+                    base_index=base_index + inner.start_index + nested_start,
+                )
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_browser_bindings(
-                body,
-                found,
-                parse_nested=parse_nested,
-                base_index=base_index,
+            (
+                yield Call(
+                    _collect_browser_bindings,
+                    body,
+                    found,
+                    parse_nested=parse_nested,
+                    base_index=base_index,
+                )
             )
 
 
@@ -2355,7 +2388,7 @@ def _collect_component_prop_sites(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2373,11 +2406,14 @@ def _collect_component_prop_sites(
                     nested = _nested_template(inner.content, parse_nested)
                     if nested is not None:
                         nested_template, nested_start = nested
-                        _collect_component_prop_sites(
-                            nested_template,
-                            found,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
+                        (
+                            yield Call(
+                                _collect_component_prop_sites,
+                                nested_template,
+                                found,
+                                parse_nested=parse_nested,
+                                base_index=base_index + inner.start_index + nested_start,
+                            )
                         )
                 continue
             if not component_boundary:
@@ -2474,11 +2510,14 @@ def _collect_component_prop_sites(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_component_prop_sites(
-                body,
-                found,
-                parse_nested=parse_nested,
-                base_index=base_index,
+            (
+                yield Call(
+                    _collect_component_prop_sites,
+                    body,
+                    found,
+                    parse_nested=parse_nested,
+                    base_index=base_index,
+                )
             )
 
 
@@ -2488,7 +2527,7 @@ def _collect_mark_literal_findings(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2624,15 +2663,18 @@ def _collect_mark_literal_findings(
             nested = _nested_template(inner.content, parse_nested)
             if nested is not None:
                 parsed, nested_start = nested
-                _collect_mark_literal_findings(
-                    parsed,
-                    found,
-                    parse_nested=parse_nested,
-                    base_index=base_index + inner.start_index + nested_start,
+                (
+                    yield Call(
+                        _collect_mark_literal_findings,
+                        parsed,
+                        found,
+                        parse_nested=parse_nested,
+                        base_index=base_index + inner.start_index + nested_start,
+                    )
                 )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_mark_literal_findings(body, found, parse_nested=parse_nested, base_index=base_index)
+            (yield Call(_collect_mark_literal_findings, body, found, parse_nested=parse_nested, base_index=base_index))
 
 
 def _collect_i18n_binding_directives(
@@ -2641,7 +2683,7 @@ def _collect_i18n_binding_directives(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -2653,11 +2695,14 @@ def _collect_i18n_binding_directives(
                     nested = _nested_template(inner.content, parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        _collect_i18n_binding_directives(
-                            parsed,
-                            found,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
+                        (
+                            yield Call(
+                                _collect_i18n_binding_directives,
+                                parsed,
+                                found,
+                                parse_nested=parse_nested,
+                                base_index=base_index + inner.start_index + nested_start,
+                            )
                         )
                 continue
             authored = attr.key.content
@@ -2726,11 +2771,14 @@ def _collect_i18n_binding_directives(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_i18n_binding_directives(
-                body,
-                found,
-                parse_nested=parse_nested,
-                base_index=base_index,
+            (
+                yield Call(
+                    _collect_i18n_binding_directives,
+                    body,
+                    found,
+                    parse_nested=parse_nested,
+                    base_index=base_index,
+                )
             )
 
 
