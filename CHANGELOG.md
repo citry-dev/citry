@@ -239,8 +239,10 @@
     raw text or code. Write such an element directly in the template.
   - An attribute passed to `<c-element>`, from a template, `c-bind`,
     `<c-component c-is>`, or Python code, that starts with `on` or is
-    `innerHTML`, `outerHTML`, or `srcdoc`. Put an event handler on an
-    element written in the template, or use `@click` or `@c-click`.
+    `innerHTML`, `outerHTML`, or `srcdoc`. An event handler on `<c-element>`,
+    including one written in the template, now raises; write it as a Vue
+    `@event` in a component with `js`, or on a plain element in a `c-if`
+    branch.
   - A `css_data()` value without spaces that has a comment, a brace, a
     top-level `;` or `!`, a `<` or backslash outside a string or `url()`,
     or a malformed string or `url()`, and any value containing `</style`

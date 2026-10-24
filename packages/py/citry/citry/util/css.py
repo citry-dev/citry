@@ -137,10 +137,12 @@ def validate_css_var_value(value: str) -> None:
         # a quote, `(`, or whitespace inside makes the browser's bad-url
         # token. A quoted `url("...")` is an ordinary function plus string,
         # handled by the bracket and string branches.
-        # `url(` starts a url token only where a new token starts; inside a
-        # longer name such as `xurl(` it is an ordinary function.
-        at_token_start = index == 0 or not (
-            value[index - 1].isalnum() or value[index - 1] in "-_" or ord(value[index - 1]) >= 0x80
+        # `url(` starts a url token only where a new token starts; after a
+        # name character, or a `#`, `@` or `\` that joins the next name, it is
+        # part of that name (`xurl(`, `#url(`), not a url token.
+        previous = value[index - 1] if index else ""
+        at_token_start = not (
+            previous.isalnum() or previous in "-_#@\\" or (previous != "" and ord(previous) >= 0x80)
         )
         if (
             char in "uU"

@@ -364,8 +364,11 @@ def _resolve_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any])
     # Every name reaching this element arrives as a kwarg, whether a template
     # wrote it, a c-bind mapping or <c-component c-is> passed it on, or Python
     # code called the element directly, so one check here covers every route.
+    from citry.nodes import _reject_reserved_events_attr  # noqa: PLC0415
+
     for key in contributions:
         name = validate_html_attr_name(key, where="<c-element>")
+        _reject_reserved_events_attr(name, tag_name=tag)
         reject_script_capable_attr_name(name, tag_name=tag, where="<c-element>")
     for value in contributions.values():
         # A nested-template attribute value resolves to a CitryRender, whose
