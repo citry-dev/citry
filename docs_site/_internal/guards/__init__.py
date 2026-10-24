@@ -50,6 +50,7 @@ from docs_site._internal.guards import (
     rendered_css,
     rendered_markdown,
     single_h1,
+    snapshot_main_links,
     snippet_path,
     stray_markup,
     ui_library_projection,
@@ -130,6 +131,7 @@ GUARDS: list[Guard] = [*SOURCE_GUARDS, *POST_BUILD_GUARDS]
 VERSION_GUARDS: list[Guard] = [
     versions_manifest.check,
     cross_version_link.check,
+    snapshot_main_links.check,
 ]
 
 
