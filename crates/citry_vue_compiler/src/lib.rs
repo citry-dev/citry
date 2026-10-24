@@ -1515,6 +1515,37 @@ fn slot_fill_name(element: &ElementNode<'_>) -> Option<String> {
     })
 }
 
+/// The text of a string literal in render code, or `None` when it holds a
+/// lone surrogate.
+///
+/// A lone surrogate is half of a UTF-16 pair with no partner, as a
+/// `'\ud800'` escape writes. A Rust string cannot hold one, so oxc then
+/// stores the value in its own encoding (`StringLiteral::lone_surrogates`).
+/// The page's UTF-8 HTML cannot hold it either, so the server cannot write
+/// the value Vue renders, and each caller leaves that part to the browser.
+pub(crate) fn literal_text<'a>(literal: &'a oxc_ast::ast::StringLiteral<'_>) -> Option<&'a str> {
+    (!literal.lone_surrogates).then(|| literal.value.as_str())
+}
+
+/// The fixed name of an object key, or `None` when the key has no fixed
+/// name or is a string or template literal holding a lone surrogate (see
+/// [`literal_text`]).
+pub(crate) fn key_name<'a>(
+    key: &'a oxc_ast::ast::PropertyKey<'_>,
+) -> Option<std::borrow::Cow<'a, str>> {
+    match key {
+        oxc_ast::ast::PropertyKey::StringLiteral(literal) => {
+            literal_text(literal).map(std::borrow::Cow::Borrowed)
+        }
+        oxc_ast::ast::PropertyKey::TemplateLiteral(literal)
+            if literal.quasis.iter().any(|quasi| quasi.lone_surrogates) =>
+        {
+            None
+        }
+        _ => key.static_name(),
+    }
+}
+
 /// The text of a quoted JavaScript string with no quotes or escapes inside.
 fn string_literal(content: &str) -> Option<String> {
     let quote = content.chars().next()?;

@@ -73,6 +73,8 @@ use oxc_span::SourceType;
 use serde::Deserialize;
 use serde_json::Value as Json;
 
+use crate::{key_name, literal_text};
+
 // ---------------------------------------------------------------------------
 // Programs: one compiled render function, read once per definition
 // ---------------------------------------------------------------------------
@@ -338,11 +340,13 @@ pub fn read_program(
                             Some(Expression::CallExpression(call))
                                 if callee(&call.callee) == Some("_resolveComponent") =>
                             {
-                                let Some(Argument::StringLiteral(tag)) = call.arguments.first()
-                                else {
+                                let Some(tag) = (match call.arguments.first() {
+                                    Some(Argument::StringLiteral(tag)) => literal_text(tag),
+                                    _ => None,
+                                }) else {
                                     return Err("render-shape");
                                 };
-                                components.insert(id.name.to_string(), tag.value.to_string());
+                                components.insert(id.name.to_string(), tag.to_owned());
                             }
                             // Custom directives resolve here; reading them
                             // is left to the element that uses them.
@@ -452,9 +456,10 @@ impl Reader {
                     | "_createVNode"
                     | "_createBlock" => self.vnode(arguments, locals, Directives::None),
                     "_createCommentVNode" => match argument(arguments, 0) {
-                        Some(Expression::StringLiteral(text)) => {
-                            Node::Comment(text.value.to_string())
-                        }
+                        Some(Expression::StringLiteral(text)) => match literal_text(text) {
+                            Some(text) => Node::Comment(text.to_owned()),
+                            None => Node::Unsupported("render-shape"),
+                        },
                         None => Node::Comment(String::new()),
                         Some(_) => Node::Unsupported("render-shape"),
                     },
@@ -534,9 +539,10 @@ impl Reader {
                 let mut keys = Vec::new();
                 for element in &array.elements {
                     match element {
-                        ArrayExpressionElement::StringLiteral(key) => {
-                            keys.push(key.value.to_string())
-                        }
+                        ArrayExpressionElement::StringLiteral(key) => match literal_text(key) {
+                            Some(key) => keys.push(key.to_owned()),
+                            None => return Node::Unsupported("render-shape"),
+                        },
                         _ => return Node::Unsupported("render-shape"),
                     }
                 }
@@ -562,11 +568,14 @@ impl Reader {
                 }
             }
             Expression::StringLiteral(tag) => {
+                let Some(tag) = literal_text(tag) else {
+                    return Node::Unsupported("render-shape");
+                };
                 let tag = self
                     .aliases
-                    .get(tag.value.as_str())
+                    .get(tag)
                     .cloned()
-                    .unwrap_or_else(|| tag.value.to_string());
+                    .unwrap_or_else(|| tag.to_owned());
                 Node::Element {
                     tag,
                     props,
@@ -593,8 +602,11 @@ impl Reader {
                     Some(Expression::StringLiteral(tag))
                         if matches!(directives, Directives::None) =>
                     {
+                        let Some(tag) = literal_text(tag) else {
+                            return Node::Unsupported("render-shape");
+                        };
                         Node::Component {
-                            tag: tag.value.to_string(),
+                            tag: tag.to_owned(),
                             props,
                             slots: self.slots(argument(arguments, 2), locals),
                         }
@@ -657,7 +669,10 @@ impl Reader {
                 if member.property.name == "$slots"
                     && matches!(&member.object, Expression::Identifier(id) if id.name == self.ctx_name.as_str())
         );
-        let Some(Expression::StringLiteral(name)) = argument(arguments, 1).map(strip) else {
+        let Some(name) = (match argument(arguments, 1).map(strip) {
+            Some(Expression::StringLiteral(name)) => literal_text(name),
+            _ => None,
+        }) else {
             return Node::Unsupported("render-shape");
         };
         if !own_slots {
@@ -674,7 +689,7 @@ impl Reader {
             },
         };
         Node::Slot {
-            name: name.value.to_string(),
+            name: name.to_owned(),
             fallback,
         }
     }
@@ -781,7 +796,13 @@ impl Reader {
 
     fn read_expr(&self, expression: &Expression<'_>, locals: &[String]) -> Expr {
         match strip(expression) {
-            Expression::StringLiteral(value) => Expr::Str(value.value.to_string()),
+            // When the literal holds a lone surrogate, the server cannot
+            // write Vue's value (see `literal_text`), so it declines it with
+            // the code it uses for other text it cannot write as Vue does.
+            Expression::StringLiteral(value) => match literal_text(value) {
+                Some(value) => Expr::Str(value.to_owned()),
+                None => Expr::Unsupported("text-value"),
+            },
             Expression::NumericLiteral(value) => Expr::Num(value.value),
             Expression::BooleanLiteral(value) => Expr::Bool(value.value),
             Expression::NullLiteral(_) => Expr::Null,
@@ -803,10 +824,14 @@ impl Reader {
             ),
             Expression::ComputedMemberExpression(member) if !member.optional => {
                 match strip(&member.expression) {
-                    Expression::StringLiteral(key) => Expr::Member(
-                        Box::new(self.expr(&member.object, locals)),
-                        key.value.to_string(),
-                    ),
+                    Expression::StringLiteral(key) => match literal_text(key) {
+                        Some(key) => Expr::Member(
+                            Box::new(self.expr(&member.object, locals)),
+                            key.to_owned(),
+                        ),
+                        // The server cannot look up a key it cannot hold.
+                        None => Expr::Unsupported("browser-value"),
+                    },
                     _ => Expr::Unsupported("browser-value"),
                 }
             }
@@ -912,11 +937,11 @@ impl Reader {
 fn property_name(key: &PropertyKey<'_>, computed: bool) -> Option<String> {
     if computed {
         return match key.as_expression().map(strip) {
-            Some(Expression::StringLiteral(literal)) => Some(literal.value.to_string()),
+            Some(Expression::StringLiteral(literal)) => literal_text(literal).map(str::to_owned),
             _ => None,
         };
     }
-    key.static_name().map(|name| name.to_string())
+    key_name(key).map(|name| name.to_string())
 }
 
 /// The parameter names and returned expression of `(a, b) => value` or
@@ -3934,6 +3959,46 @@ mod tests {
         assert_eq!(host.html, None);
         assert_eq!(host.reason, Some("host-root"));
         assert_eq!(declines(&host), [("host-root", "text", None)]);
+    }
+
+    #[test]
+    fn a_lone_surrogate_in_a_string_literal_is_left_to_the_browser() {
+        // A Rust string cannot hold the value Vue builds from `'\ud800'`,
+        // so the server leaves the text and the attribute to the browser
+        // rather than write oxc's replacement encoding.
+        // Hydration sets a dynamic `v-text` itself, so its element is
+        // written empty, as for any value only the browser knows.
+        let text = root(r#"<main><p v-text="'a\ud800b'"></p></main>"#, json!({}));
+        assert_eq!(html(&text), "<main><p></p></main>");
+        assert_eq!(declines(&text), []);
+        let attribute = root(r#"<main><p :title="'c\udc00d'">x</p></main>"#, json!({}));
+        assert_eq!(
+            html(&attribute),
+            r#"<main data-allow-mismatch="children"><p>x</p></main>"#
+        );
+        assert_eq!(
+            declines(&attribute),
+            [("text-value", "title", Some("main"))]
+        );
+        // A key the server cannot hold is looked up only in the browser.
+        for (template, code) in [
+            (r#"<main><p>{{ 'a\ud800b' }}</p></main>"#, "text-value"),
+            (
+                r#"<main><p>{{ $citryPrepared.t['\ud800'] }}</p></main>"#,
+                "browser-value",
+            ),
+        ] {
+            let result = root(template, json!({"t": {}}));
+            assert_eq!(
+                html(&result),
+                r#"<main><p data-allow-mismatch="children"></p></main>"#
+            );
+            assert_eq!(declines(&result), [(code, "text", Some("p"))]);
+        }
+        // An escape that writes a complete character, such as `\u00e9`, is
+        // read as usual.
+        let paired = root(r#"<main><p v-text="'e\u00e9f'"></p></main>"#, json!({}));
+        assert_eq!(html(&paired), "<main><p>e\u{e9}f</p></main>");
     }
 
     #[test]

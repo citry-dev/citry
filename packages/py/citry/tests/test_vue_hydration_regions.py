@@ -1049,3 +1049,26 @@ def test_runtime_empties_shells_only_when_one_carries_served_html() -> None:
     assert '<div data-allow-mismatch="children"></div>' in _host(html)
     assert [item.shell_content for item in _admission(rendered).declines] == [False]
     assert '"emptyShells":true' in Filled().render().serialize()
+
+
+def test_a_lone_surrogate_escape_in_a_vue_expression_is_left_to_the_browser() -> None:
+    # Vue builds strings holding U+D800 and U+DC00 from these escapes.
+    # Neither Rust nor the page's UTF-8 HTML can hold them, so the server
+    # leaves those values out and Vue writes them in the browser, rather
+    # than the server writing U+FFFD and the hex digits.
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = r"""
+<main><p v-text="'a\ud800b'"></p><p :title="'c\udc00d'">x</p><p v-text="'eéf'"></p></main>
+"""
+        js = """
+$component({});
+"""
+
+    rendered = Card().render()
+    host = _host(rendered.serialize())
+    assert "\ufffd" not in host
+    assert host == '<main data-allow-mismatch="children"><p></p><p>x</p><p>e\xe9f</p></main>'
+    assert _declines(_admission(rendered)) == [("text-value", "title", "shell", "main", "Card")]

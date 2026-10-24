@@ -210,6 +210,10 @@
 
 ### Fixes
 
+- In a component that uses Vue, a Vue expression holding an unpaired
+  surrogate escape, such as `v-text="'a\ud800b'"`, no longer makes the
+  server write U+FFFD and the escape's hex digits into the page. Vue now
+  writes that value in the browser instead.
 - In a component that uses Vue, `&amp;#40;` written in text or an
   attribute value now shows `&#40;`, as the same component without Vue
   does; it used to show `(`. A static `style` with `&quot;` inside a

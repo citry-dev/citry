@@ -11,13 +11,14 @@
 //! Python reads, so a field change here is a change to citry-core's Python
 //! surface and to the hand-written `_rust.pyi` stub.
 
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrowFunctionBody, AssignmentExpression, AssignmentTarget, CallExpression,
     Expression, FormalParameters, Function, ObjectExpression, ObjectPropertyKind, Program,
-    SimpleAssignmentTarget, Statement, VariableDeclarator,
+    PropertyKey, SimpleAssignmentTarget, Statement, StringLiteral, VariableDeclarator,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_diagnostics::OxcDiagnostic;
@@ -1208,11 +1209,15 @@ impl<'semantic> ComponentVisitor<'semantic> {
                                 state.unknown_reason = Some("non-literal-entry".to_string());
                                 continue;
                             };
-                            if let Expression::StringLiteral(literal) =
-                                expression.without_parentheses()
-                            {
+                            let literal = match expression.without_parentheses() {
+                                Expression::StringLiteral(literal) => Some(literal),
+                                _ => None,
+                            };
+                            if let Some((literal, authored)) = literal.and_then(|literal| {
+                                literal_text(literal).map(|text| (literal, text))
+                            }) {
                                 let span = literal.span();
-                                let authored = literal.value.to_string();
+                                let authored = authored.to_owned();
                                 self.public_names.push(public_name(
                                     authored,
                                     section_name,
@@ -1410,7 +1415,7 @@ impl<'semantic> ComponentVisitor<'semantic> {
                 state.unknown_reason = Some("computed-key".to_string());
                 continue;
             }
-            let Some(name) = property.key.static_name() else {
+            let Some(name) = key_name(&property.key) else {
                 state.state = "unknown".to_string();
                 state.unknown_reason = Some("dynamic-key".to_string());
                 continue;
@@ -1627,6 +1632,20 @@ impl<'name, 'semantic> ScopeWriteVisitor<'name, 'semantic> {
         if !self.is_scope_reference(member.object()) {
             return;
         }
+        // `scope['a\ud800']` has no name the analysis can record (see
+        // `literal_text`), so it is skipped like a computed key.
+        if let oxc_ast::ast::MemberExpression::ComputedMemberExpression(computed) = member {
+            let lone_surrogate = match computed.expression.without_parentheses() {
+                Expression::StringLiteral(literal) => literal_text(literal).is_none(),
+                Expression::TemplateLiteral(literal) => {
+                    literal.quasis.iter().any(|quasi| quasi.lone_surrogates)
+                }
+                _ => false,
+            };
+            if lone_surrogate {
+                return;
+            }
+        }
         let Some((name_span, name)) = member.static_property_info() else {
             return;
         };
@@ -1645,7 +1664,7 @@ impl<'name, 'semantic> ScopeWriteVisitor<'name, 'semantic> {
             let ObjectPropertyKind::ObjectProperty(property) = property else {
                 continue;
             };
-            let Some(name) = property.key.static_name() else {
+            let Some(name) = key_name(&property.key) else {
                 continue;
             };
             let name_span = property.key.span();
@@ -1761,7 +1780,9 @@ fn read_named_option(
             Expression::ArrayExpression(array) if accepts_array => {
                 for element in &array.elements {
                     match element.as_expression().map(Expression::without_parentheses) {
-                        Some(Expression::StringLiteral(literal)) => {
+                        Some(Expression::StringLiteral(literal))
+                            if literal_text(literal).is_some() =>
+                        {
                             let span = literal.span();
                             names.push((
                                 literal.value.to_string(),
@@ -1782,7 +1803,7 @@ fn read_named_option(
                     let name = if entry.computed {
                         None
                     } else {
-                        entry.key.static_name()
+                        key_name(&entry.key)
                     };
                     let Some(name) = name else {
                         mark_unknown(&mut state, "computed-key");
@@ -1802,6 +1823,31 @@ fn read_named_option(
         names.clear();
     }
     (state, names)
+}
+
+/// The text of a string literal, or `None` when it holds a lone surrogate.
+///
+/// A lone surrogate is half of a UTF-16 pair with no partner, as a
+/// `'\ud800'` escape writes. A Rust string cannot hold one, so oxc then
+/// stores the value in its own encoding (`StringLiteral::lone_surrogates`),
+/// and a name read from it would not be the name the browser sees. The
+/// Vue compiler crate has the same helper for the render code it reads.
+fn literal_text<'a>(literal: &'a StringLiteral<'_>) -> Option<&'a str> {
+    (!literal.lone_surrogates).then(|| literal.value.as_str())
+}
+
+/// The fixed name of an object key, or `None` when the key has no fixed
+/// name or is a string or template literal holding a lone surrogate.
+fn key_name<'a>(key: &'a PropertyKey<'_>) -> Option<Cow<'a, str>> {
+    match key {
+        PropertyKey::StringLiteral(literal) => literal_text(literal).map(Cow::Borrowed),
+        PropertyKey::TemplateLiteral(literal)
+            if literal.quasis.iter().any(|quasi| quasi.lone_surrogates) =>
+        {
+            None
+        }
+        _ => key.static_name(),
+    }
 }
 
 fn section_object<'a>(
@@ -2734,6 +2780,61 @@ $component /* kept */ ({
                 .map(|name| name.exposed_name.as_str())
                 .collect::<Vec<_>>(),
             ["foo-Bar", "foo_bar", "plain_name"]
+        );
+    }
+
+    #[test]
+    fn names_holding_a_lone_surrogate_leave_their_section_unknown() {
+        let analysis = analyze_component_source(
+            r"$component({ props: ['ok', 'a\ud800'], inject: ['b\udc00'], computed: { 'c\ud800'() { return 1 } }, emits: ['e\ud800'] })",
+        );
+        // oxc stores such a name in its own encoding, which is not the name
+        // the browser reads, so the section is unknown rather than wrong.
+        assert_eq!(
+            analysis
+                .public_names
+                .iter()
+                .map(|name| name.exposed_name.as_str())
+                .collect::<Vec<_>>(),
+            ["ok"]
+        );
+        let unknown = |name: &str| {
+            analysis
+                .sections
+                .iter()
+                .find(|section| section.name == name)
+                .map(|section| (section.state.as_str(), section.unknown_reason.as_deref()))
+        };
+        assert_eq!(
+            unknown("props"),
+            Some(("unknown", Some("non-literal-entry")))
+        );
+        assert_eq!(
+            unknown("inject"),
+            Some(("unknown", Some("non-literal-entry")))
+        );
+        assert_eq!(unknown("computed"), Some(("unknown", Some("dynamic-key"))));
+        assert_eq!(
+            analysis
+                .emits_sections
+                .iter()
+                .map(|section| (section.state.as_str(), section.unknown_reason.as_deref()))
+                .collect::<Vec<_>>(),
+            [("unknown", Some("non-literal-entry"))]
+        );
+    }
+
+    #[test]
+    fn scope_writes_skip_names_holding_a_lone_surrogate() {
+        let writes = analyze_component_scope_writes(
+            r"$component(({ scope }) => { scope.ok = 1; scope['a\ud800'] = 2; scope[`c\ud800`] = 5; Object.assign(scope, { 'b\ud800': 3, fine: 4 }) })",
+        );
+        assert_eq!(
+            writes
+                .iter()
+                .map(|write| write.name.as_str())
+                .collect::<Vec<_>>(),
+            ["ok", "fine"]
         );
     }
 
