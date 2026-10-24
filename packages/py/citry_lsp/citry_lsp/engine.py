@@ -58,6 +58,7 @@ from citry._registry_lint import (
 )
 from citry._source_lines import source_lines
 from citry._vue_compile_lint import lint_vue_compile
+from citry._walk import Call, run
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
     AlpineAttributeFinding,
@@ -188,7 +189,7 @@ from citry_lsp.type_analysis import is_project_source_file
 from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Generator, Sequence
 
     from citry._linting import TemplateLintInfo, TemplateVariableInfo
     from citry._template_data_source import TemplateDataSourceShape
@@ -1366,7 +1367,7 @@ def _trans_i18n_diagnostics(
     known_types: Mapping[str, str],
 ) -> list[types.Diagnostic]:
     diagnostics: list[types.Diagnostic] = []
-    for node in _trans_nodes(template):
+    for node in run(_trans_nodes(template)):
         attrs = {attr.key.content: attr for attr in node.start_tag.attrs}
         message_attr = attrs.get("message")
         if message_attr is None or message_attr.inner_value is None:
@@ -1437,7 +1438,7 @@ def _trans_i18n_diagnostics(
     return diagnostics
 
 
-def _trans_nodes(template: Any) -> list[Any]:
+def _trans_nodes(template: Any) -> Generator[Call, Any, list[Any]]:
     nodes: list[Any] = []
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -1447,7 +1448,7 @@ def _trans_nodes(template: Any) -> list[Any]:
             nodes.append(node)
         body = getattr(node, "body", None)
         if body is not None:
-            nodes.extend(_trans_nodes(body))
+            nodes.extend((yield Call(_trans_nodes, body)))
     return nodes
 
 

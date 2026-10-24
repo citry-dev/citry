@@ -20,6 +20,7 @@ from citry._component_introspection import (
     _primary_name,
 )
 from citry._inline_assets import normalize_inline_asset
+from citry._walk import Call, run
 from citry.analysis import LspPosition, LspRange
 from citry.assets import _find_pair_declaration, _inspect_asset_path
 from citry.component_graph import (
@@ -40,7 +41,7 @@ from citry_core.template_parser import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Generator, Mapping
 
     from citry.citry import Citry
     from citry.component import Component
@@ -475,7 +476,7 @@ def _walk_template(
     problems: list[_SourceProblem],
     *,
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     """Collect opening component tags, including recursively nested templates."""
     elements = getattr(template, "elements", None)
     if type(elements) is not list:  # pragma: no cover - parser contract guard
@@ -490,7 +491,7 @@ def _walk_template(
             occurrences.append(occurrence)
         body = getattr(node, "body", None)
         if body is not None:
-            _walk_template(engine, source, body, occurrences, problems, base_index=base_index)
+            (yield Call(_walk_template, engine, source, body, occurrences, problems, base_index=base_index))
         for attr in node.start_tag.attrs:
             if attr.inner_value is None or attr.kind != HtmlAttrKind.Template:
                 continue
@@ -520,13 +521,16 @@ def _walk_template(
             except (SyntaxError, ValueError) as exc:
                 problems.append(_diagnostic_problem(exc, code="nested-template-syntax", base_index=nested_base))
                 continue
-            _walk_template(
-                engine,
-                source,
-                nested,
-                occurrences,
-                problems,
-                base_index=nested_base,
+            (
+                yield Call(
+                    _walk_template,
+                    engine,
+                    source,
+                    nested,
+                    occurrences,
+                    problems,
+                    base_index=nested_base,
+                )
             )
 
 
@@ -557,7 +561,7 @@ def _inspect_source(
         problems.append(_diagnostic_problem(exc, code="template-syntax", base_index=0))
         return [], problems
     occurrences: list[_Occurrence] = []
-    _walk_template(engine, source, template, occurrences, problems, base_index=0)
+    run(_walk_template(engine, source, template, occurrences, problems, base_index=0))
     occurrences.sort(key=lambda item: (item.start_index, item.end_index, item.syntax, item.authored_name or ""))
     return occurrences, problems
 
