@@ -215,28 +215,39 @@ def reject_vue_code_attr_name(
         raise vue_code_error(cast("str", name), tag_name=tag_name, origin=origin, hint=hint)
 
 
-def is_event_handler_attr_name(name: object) -> bool:
-    """Return whether a browser would read this attribute name as an inline event handler."""
-    # Every HTML event-handler attribute starts with "on", in any letter case.
-    # `str.lower`/`str.__getitem__` read the real text even from a str subclass.
-    return isinstance(name, str) and str.lower(str.__getitem__(name, slice(2))) == "on"
+# Names whose value the browser reads as HTML or code when Vue or the HTML
+# parser sets them: an inline event handler (any `on*` name), and the DOM
+# properties that insert markup. Vue sets an unknown attribute as a DOM
+# property when the element has one by that name, so `srcdoc` on an
+# `<iframe>` loads its value as a page.
+_MARKUP_PROPERTY_ATTR_NAMES = frozenset({"innerhtml", "outerhtml", "srcdoc"})
 
 
-def reject_event_handler_attr_name(name: object, *, tag_name: str, where: str) -> None:
+def is_script_capable_attr_name(name: object) -> bool:
+    """Return whether a browser reads this attribute's value as code or markup."""
+    if not isinstance(name, str):
+        return False
+    # Read the stored text directly, so a str subclass that overrides these
+    # methods gets the same answer.
+    folded = str.lower(name)
+    return folded.startswith("on") or folded in _MARKUP_PROPERTY_ATTR_NAMES
+
+
+def reject_script_capable_attr_name(name: object, *, tag_name: str, where: str) -> None:
     """
-    Raise `ValueError` when render-time data sets an inline event handler name.
+    Raise `ValueError` when render-time data sets an attribute the browser reads as code.
 
-    A browser runs the value of `onclick` and the like as JavaScript, so an
-    attribute name from data, such as a `c-bind` mapping key or one an
-    `on_attrs_resolved` hook adds, may not start with `on`. A name the author
-    wrote in the template, including a `c-on*` attribute, never reaches this
-    check, so an author-written inline handler keeps working.
+    That is an inline event handler such as `onclick`, or `innerHTML`,
+    `outerHTML`, or `srcdoc`. Such a name from data, such as a `c-bind`
+    mapping key or one an `on_attrs_resolved` hook adds, is refused. A name
+    the author wrote in the template, including a `c-on*` or `c-srcdoc`
+    attribute, never reaches this check.
     """
-    if is_event_handler_attr_name(name):
+    if is_script_capable_attr_name(name):
         msg = (
-            f"{where} sets {name!r} on <{tag_name}>. An attribute name from data may not start with 'on', "
-            "because the browser runs the value of an inline event handler such as onclick as JavaScript. "
-            "Write the listener in the template, with @click on a Vue page or an Events binding such as @c-click."
+            f"{where} sets {name!r} on <{tag_name}>. An attribute name from data may not start with 'on' or be "
+            "innerHTML, outerHTML, or srcdoc, because the browser reads that value as code or markup. Write the "
+            "attribute in the template instead, such as @click on a Vue page or an Events binding such as @c-click."
         )
         raise ValueError(msg)
 
