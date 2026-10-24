@@ -24,7 +24,11 @@ class CardSemantics(Component):
 
         <section aria-labelledby="materials-title">
           <h2 id="materials-title">Named section</h2>
-          <c-CCard tag="section" c-attrs="{'aria-labelledby': 'wool-title'}" variant="outline">
+          <c-CCard
+            tag="section"
+            c-attrs="{'aria-labelledby': 'wool-title'}"
+            variant="outline"
+          >
             <c-fill name="header"><h3 id="wool-title">Wool upholstery</h3></c-fill>
             <c-fill name="default">A subsection of the wider materials guide.</c-fill>
           </c-CCard>

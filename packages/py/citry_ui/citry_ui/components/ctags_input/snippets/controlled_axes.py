@@ -22,7 +22,8 @@ class ControlledTagsInputAxes(Component):
           <c-CTagsInput
             c-value="['alpine']"
             c-input_attrs="{'aria-label':'Draft-owned labels'}"
-            :inputValue="draft" :onInputValueChange="(next)=>{
+            :inputValue="draft"
+            :onInputValueChange="(next)=>{
                 draft=next;
                 draftLast=`Draft: ${next}`;
               }"
@@ -35,7 +36,8 @@ class ControlledTagsInputAxes(Component):
           <h3>Controlled tags, uncontrolled draft</h3>
           <c-CTagsInput
             c-input_attrs="{'aria-label':'Value-owned labels'}"
-            :value="valueTags" :onValueChange="(next,detail)=>{
+            :value="valueTags"
+            :onValueChange="(next,detail)=>{
                 valueLast=`Requested ${JSON.stringify(next)}`;
                 if (accept) valueTags=next;
               }"
@@ -52,11 +54,14 @@ class ControlledTagsInputAxes(Component):
           <h3>Controlled tags and draft</h3>
           <c-CTagsInput
             c-input_attrs="{'aria-label':'Fully controlled labels'}"
-            :value="fullyControlledTags" :inputValue="fullyControlledDraft" :onValueChange="(next,detail)=>{
+            :value="fullyControlledTags"
+            :inputValue="fullyControlledDraft"
+            :onValueChange="(next,detail)=>{
                 fullyControlledTags=next;
                 fullyControlledDraft=detail.nextInputValue || 'owner note';
                 fullyControlledLast=`Accepted ${JSON.stringify(next)}`;
-              }" :onInputValueChange="(next)=>fullyControlledDraft=next"
+              }"
+            :onInputValueChange="(next)=>fullyControlledDraft=next"
           />
           <button type="button" @click="fullyControlledTags=['owner','ordered']">
             Replace tags from the owner

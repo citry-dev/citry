@@ -10,7 +10,8 @@ class TagSelection(Component):
         <c-CTagGroup
           label="Workspace qualities"
           selection_mode="multiple"
-          :value="chosen" :onValueChange="(value) => chosen = value"
+          :value="chosen"
+          :onValueChange="(value) => chosen = value"
         >
           <c-CTag value="quiet">Quiet</c-CTag>
           <c-CTag value="bright">Bright</c-CTag>

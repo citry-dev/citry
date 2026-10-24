@@ -12,7 +12,11 @@ class InputSizesAndLayout(Component):
             Small marker code
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="small" value="A-14" size="sm" />
+            <c-CInput
+              name="small"
+              value="A-14"
+              size="sm"
+            />
           </c-fill>
         </c-CField>
         <c-CField>
@@ -20,7 +24,11 @@ class InputSizesAndLayout(Component):
             Medium marker code
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="medium" value="B-27" size="md" />
+            <c-CInput
+              name="medium"
+              value="B-27"
+              size="md"
+            />
           </c-fill>
         </c-CField>
         <c-CField density="comfortable">
@@ -28,7 +36,11 @@ class InputSizesAndLayout(Component):
             Large marker code
           </c-fill>
           <c-fill name="default">
-            <c-CInput name="large" value="C-08" size="lg" />
+            <c-CInput
+              name="large"
+              value="C-08"
+              size="lg"
+            />
           </c-fill>
         </c-CField>
         <c-CField orientation="horizontal">

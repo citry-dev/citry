@@ -10,12 +10,34 @@ class PinInputStates(Component):
 
     template = """
       <section class="pin-input-state-grid">
-        <c-CPinInput label="Small subtle code" value="12" size="sm" variant="subtle" />
+        <c-CPinInput
+          label="Small subtle code"
+          value="12"
+          size="sm"
+          variant="subtle"
+        />
         <c-CPinInput label="Default code" value="123" />
-        <c-CPinInput label="Large complete code" value="123456" size="lg" />
-        <c-CPinInput label="Readonly code" value="246810" readonly />
-        <c-CPinInput label="Disabled code" value="135790" disabled />
-        <c-CPinInput label="Invalid code" value="12" invalid class_="pin-input-brand" />
+        <c-CPinInput
+          label="Large complete code"
+          value="123456"
+          size="lg"
+        />
+        <c-CPinInput
+          label="Readonly code"
+          value="246810"
+          readonly
+        />
+        <c-CPinInput
+          label="Disabled code"
+          value="135790"
+          disabled
+        />
+        <c-CPinInput
+          label="Invalid code"
+          value="12"
+          invalid
+          class_="pin-input-brand"
+        />
       </section>
     """
     css = """

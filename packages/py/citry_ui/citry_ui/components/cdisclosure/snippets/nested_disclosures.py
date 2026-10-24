@@ -16,7 +16,11 @@ class NestedDisclosures(Component):
                 <c-fill name="title">Proxy settings</c-fill>
                 <c-fill name="default">Use HTTPS_PROXY for outbound requests.</c-fill>
               </c-CDisclosure>
-              <c-CAccordion value="timeouts" variant="plain" size="sm">
+              <c-CAccordion
+                value="timeouts"
+                variant="plain"
+                size="sm"
+              >
                 <c-CAccordionItem value="timeouts">
                   <c-fill name="title">Timeout troubleshooting</c-fill>
                   <c-fill name="default">Check firewall and DNS resolution first.</c-fill>

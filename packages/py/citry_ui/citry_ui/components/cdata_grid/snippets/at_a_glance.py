@@ -7,7 +7,12 @@ citry.register_library(citry_ui)
 
 class DataGridAtAGlance(Component):
     template = """
-      <c-CDataGrid c-columns="columns" c-rows="rows" label="Project members" striped>
+      <c-CDataGrid
+        c-columns="columns"
+        c-rows="rows"
+        label="Project members"
+        striped
+      >
         <c-fill name="caption">Current project members</c-fill>
       </c-CDataGrid>
     """

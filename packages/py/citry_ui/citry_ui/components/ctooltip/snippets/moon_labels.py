@@ -14,14 +14,24 @@ class MoonLabels(Component):
         </c-CTooltip>
         <c-CTooltip text="Compare Ganymede's ancient grooved terrain">
           <c-fill name="activator" data="{ activator_attrs }">
-            <a id="ganymede" class="moon-link" href="#ganymede" c-bind="activator_attrs">
+            <a
+              id="ganymede"
+              class="moon-link"
+              href="#ganymede"
+              c-bind="activator_attrs"
+            >
               Ganymede
             </a>
           </c-fill>
         </c-CTooltip>
         <c-CTooltip text="Filter observations recorded near Callisto">
           <c-fill name="activator" data="{ activator_attrs }">
-            <button class="moon-icon" type="button" aria-label="Filter Callisto" c-bind="activator_attrs">
+            <button
+              class="moon-icon"
+              type="button"
+              aria-label="Filter Callisto"
+              c-bind="activator_attrs"
+            >
               ◌
             </button>
           </c-fill>

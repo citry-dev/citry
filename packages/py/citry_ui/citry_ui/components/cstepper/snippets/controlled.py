@@ -11,7 +11,8 @@ class ControlledStepper(Component):
           label="Workspace setup"
           interactive
           c-linear="False"
-          :active="active" :onActiveChange="(next) => active = next"
+          :active="active"
+          :onActiveChange="(next) => active = next"
         >
           <c-CStep>Workspace</c-CStep>
           <c-CStep>Members</c-CStep>

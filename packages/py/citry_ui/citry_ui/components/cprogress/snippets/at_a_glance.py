@@ -11,7 +11,11 @@ class ProgressAtAGlance(Component):
           <div><p>Research dive 08</p><h2>Mapping the reef shelf</h2></div>
           <strong>68%</strong>
         </c-CRow>
-        <c-CProgress label="Mapping the reef shelf" c-value="68" shape="pill" />
+        <c-CProgress
+          label="Mapping the reef shelf"
+          c-value="68"
+          shape="pill"
+        />
         <p>Sonar pass 17 of 25 · 42 minutes remaining</p>
       </section>
     """

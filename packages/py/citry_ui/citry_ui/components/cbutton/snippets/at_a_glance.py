@@ -41,7 +41,11 @@ class ButtonAtAGlance(Component):
             <c-CButton loading intent="warn">
               Checking weather
             </c-CButton>
-            <c-CButton disabled variant="outline" intent="neutral">
+            <c-CButton
+              disabled
+              variant="outline"
+              intent="neutral"
+            >
               North path closed
             </c-CButton>
           </div>

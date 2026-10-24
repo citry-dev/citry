@@ -16,12 +16,14 @@ class DataGridSortingSelection(Component):
           label="Sortable people"
           selection="multiple"
           c-selected="['grace']"
-          :sort="sort" :onSortChange="(next)=>{
+          :sort="sort"
+          :onSortChange="(next)=>{
               sort=next;
               notice=next.length
                 ? `Sorted: ${next.map((item,index)=>`${index + 1}. ${item.key} ${item.direction}`).join(', ')}`
                 : 'Server row order restored';
-            }" :onSelectionChange="(selected)=>notice=`Selected: ${selected.join(', ') || 'none'}`"
+            }"
+          :onSelectionChange="(selected)=>notice=`Selected: ${selected.join(', ') || 'none'}`"
         />
       </section>
     """

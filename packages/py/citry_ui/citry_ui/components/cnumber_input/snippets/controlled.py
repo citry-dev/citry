@@ -6,7 +6,8 @@ class ControlledNumberInput(Component):
       <section class="number-input-example-stack">
         <c-CNumberInput
           c-input_attrs="{'aria-label':'Controlled quantity'}"
-          :value="value" :onValueChange="(next,detail)=>{value=next;last=`${detail.source}: ${next}`}"
+          :value="value"
+          :onValueChange="(next,detail)=>{value=next;last=`${detail.source}: ${next}`}"
         />
         <output v-text="`Canonical value: ${value}; ${last}`">Canonical value: 2</output>
       </section>

@@ -12,10 +12,23 @@ class SpinnerIntents(Component):
         pass
 
     template = """
-      <c-CRow class_="spinner-intents" gap="lg" wrap>
+      <c-CRow
+        class_="spinner-intents"
+        gap="lg"
+        wrap
+      >
         <c-for each="intent in intents">
-          <c-CCol #c-key="intent" c-attrs="{'data-spinner-intent-example': intent}" align="center" gap="xs">
-            <c-CSpinner #c-key="intent" c-label="f'{intent} observatory task'" c-intent="intent" />
+          <c-CCol
+            #c-key="intent"
+            c-attrs="{'data-spinner-intent-example': intent}"
+            align="center"
+            gap="xs"
+          >
+            <c-CSpinner
+              #c-key="intent"
+              c-label="f'{intent} observatory task'"
+              c-intent="intent"
+            />
             <span>{{ intent }}</span>
           </c-CCol>
         </c-for>

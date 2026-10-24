@@ -8,7 +8,12 @@ class BasicDateRange(Component):
     template = """
       <fieldset>
         <legend>Travel dates</legend>
-        <c-CDateRange start_name="arrival" end_name="departure" start="2026-08-19" end="2026-08-23" />
+        <c-CDateRange
+          start_name="arrival"
+          end_name="departure"
+          start="2026-08-19"
+          end="2026-08-23"
+        />
       </fieldset>
     """
 

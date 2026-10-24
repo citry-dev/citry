@@ -8,7 +8,11 @@ citry.register_library(citry_ui)
 
 class StyledDatePicker(Component):
     template = """
-      <c-CDatePicker class_="brand-date-picker" value="2026-08-19" c-unavailable_dates="('2026-08-20',)" />
+      <c-CDatePicker
+        class_="brand-date-picker"
+        value="2026-08-19"
+        c-unavailable_dates="('2026-08-20',)"
+      />
     """
     css = """
       :where(.brand-date-picker){--cui-date-picker-background:#f0fdfa;--cui-date-picker-foreground:#134e4a;--cui-date-picker-border-color:#0f766e;--cui-date-picker-focus-color:#0d9488;--cui-date-picker-radius:1rem;--cui-calendar-selected-background:#0f766e;--cui-calendar-selected-foreground:white;max-inline-size:24rem}

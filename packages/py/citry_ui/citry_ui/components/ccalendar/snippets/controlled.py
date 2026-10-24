@@ -1,7 +1,5 @@
 from citry import Component
 
-# ruff: noqa: E501 - Vue expressions stay readable in the public source example
-
 
 class ControlledCalendar(Component):
     class Kwargs:
@@ -16,7 +14,10 @@ class ControlledCalendar(Component):
           label="Controlled calendar"
           value="2026-08-19"
           visible_date="2026-08-19"
-          :value="selected" :visibleDate="visible" :onValueChange="(value,detail)=>{last=`selection: ${value}`;selected=value}" :onVisibleDateChange="(value,detail)=>{last=`month: ${value}`;visible=value}"
+          :value="selected"
+          :visibleDate="visible"
+          :onValueChange="(value,detail)=>{last=`selection: ${value}`;selected=value}"
+          :onVisibleDateChange="(value,detail)=>{last=`month: ${value}`;visible=value}"
         />
         <output v-text="last">No request yet</output>
       </section>

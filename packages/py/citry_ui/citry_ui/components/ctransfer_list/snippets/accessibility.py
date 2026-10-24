@@ -14,7 +14,11 @@ class TransferListAccessibility(Component):
       >
         <c-CTransferListItem value="read" label="Read records" />
         <c-CTransferListItem value="write" label="Write records" />
-        <c-CTransferListItem value="audit" label="Audit access required by policy" c-disabled="True">
+        <c-CTransferListItem
+          value="audit"
+          label="Audit access required by policy"
+          c-disabled="True"
+        >
           <strong>Audit access</strong><br /><small>Required by policy; cannot be removed</small>
         </c-CTransferListItem>
       </c-CTransferList>

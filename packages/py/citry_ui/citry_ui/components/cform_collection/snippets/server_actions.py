@@ -18,8 +18,16 @@ class FormCollectionServerActions(Component):
           c-max_items="1"
           :onAction="applyCollectionAction"
         >
-          <c-CFormCollectionItem value="member-17" label="Ada" remove_value="delete:member-17">
-            <input type="hidden" name="members[member-17][id]" value="17" />
+          <c-CFormCollectionItem
+            value="member-17"
+            label="Ada"
+            remove_value="delete:member-17"
+          >
+            <input
+              type="hidden"
+              name="members[member-17][id]"
+              value="17"
+            />
             <label>Role <input name="members[member-17][role]" value="Owner" required /></label>
           </c-CFormCollectionItem>
         </c-CFormCollection>

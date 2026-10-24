@@ -12,10 +12,22 @@ class SpinnerSizes(Component):
         pass
 
     template = """
-      <c-CRow class_="spinner-sizes" gap="lg" align="center">
+      <c-CRow
+        class_="spinner-sizes"
+        gap="lg"
+        align="center"
+      >
         <c-for each="size in sizes">
-          <c-CCol #c-key="size" align="center" gap="xs">
-            <c-CSpinner #c-key="size" c-label="f'{size} star-map load'" c-size="size" />
+          <c-CCol
+            #c-key="size"
+            align="center"
+            gap="xs"
+          >
+            <c-CSpinner
+              #c-key="size"
+              c-label="f'{size} star-map load'"
+              c-size="size"
+            />
             <span>{{ size }}</span>
           </c-CCol>
         </c-for>

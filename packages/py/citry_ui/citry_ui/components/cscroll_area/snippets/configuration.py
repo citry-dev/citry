@@ -48,7 +48,10 @@ class ScrollAreaConfiguration(Component):
           axis="block"
           aria_label="Configurable audit records"
           style="--cui-scroll-area-max-block-size: 12rem"
-          :axis="axis" :scrollbarWidth="width" :scrollbarGutter="gutter" :overscroll="overscroll"
+          :axis="axis"
+          :scrollbarWidth="width"
+          :scrollbarGutter="gutter"
+          :overscroll="overscroll"
         >
           <div class="scroll-area-configuration__content">
             <span>Record 01</span><span>Identity review</span><span>Approved</span>

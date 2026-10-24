@@ -32,10 +32,13 @@ class ControlledCommandPalette(Component):
         <c-CCommandPalette
           label="Switch workspace"
           c-entries="commands"
-          :open="controlOpen ? open : null" :query="controlQuery ? query : null" :onOpenChange="(value,detail)=>{
+          :open="controlOpen ? open : null"
+          :query="controlQuery ? query : null"
+          :onOpenChange="(value,detail)=>{
               requests.push(`open:${value}:${detail.reason}`);
               if (!controlOpen || value || acceptClose) open=value;
-            }" :onQueryChange="(value,detail)=>{
+            }"
+          :onQueryChange="(value,detail)=>{
               requests.push(`query:${value}:${detail.reason}`);
               if (!controlQuery || acceptQuery || detail.reason==='close') query=value;
             }"

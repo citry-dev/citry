@@ -9,15 +9,23 @@ class SelectVariants(Component):
     template = """
       <c-CCol>
         <c-CSelect
-          c-options="options" placeholder="Outline" variant="outline" size="sm"
+          c-options="options"
+          placeholder="Outline"
+          variant="outline"
+          size="sm"
           c-trigger_attrs="{'aria-label':'Small outline'}"
         />
         <c-CSelect
-          c-options="options" placeholder="Filled" variant="filled"
+          c-options="options"
+          placeholder="Filled"
+          variant="filled"
           c-trigger_attrs="{'aria-label':'Medium filled'}"
         />
         <c-CSelect
-          c-options="options" placeholder="Plain" variant="plain" size="lg"
+          c-options="options"
+          placeholder="Plain"
+          variant="plain"
+          size="lg"
           c-trigger_attrs="{'aria-label':'Large plain'}"
         />
       </c-CCol>

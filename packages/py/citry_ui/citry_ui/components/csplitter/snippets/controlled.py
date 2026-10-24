@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -11,7 +9,9 @@ class ControlledSplitter(Component):
       <section >
         <c-CSplitter
           c-sizes="[25, 75]"
-          :sizes="sizes" :onResize="(next) => sizes = next" :onResizeEnd="(next) => saved = next.map(value => value.toFixed(0)).join(' / ')"
+          :sizes="sizes"
+          :onResize="(next) => sizes = next"
+          :onResizeEnd="(next) => saved = next.map(value => value.toFixed(0)).join(' / ')"
         >
           <c-CSplitterPanel id="filters" label="Filters">Filters</c-CSplitterPanel>
           <c-CSplitterPanel id="results" label="Results">Results</c-CSplitterPanel>

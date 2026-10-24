@@ -9,7 +9,8 @@ class ControlledTooltip(Component):
       <section class="controlled-tooltip" >
         <c-CTooltip
           text="Controlled description for the Europa archive"
-          :open="open" :onOpenChange="(nextOpen, detail) => {
+          :open="open"
+          :onOpenChange="(nextOpen, detail) => {
               reason = detail.reason;
               if (!locked) open = nextOpen;
             }"

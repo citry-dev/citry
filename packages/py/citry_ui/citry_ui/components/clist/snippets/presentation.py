@@ -11,7 +11,11 @@ class ListPresentation(Component):
           <c-CListItem>Andromeda Galaxy</c-CListItem>
           <c-CListItem>Triangulum Galaxy</c-CListItem>
         </c-CList>
-        <c-CList label="Compact divided list" density="compact" c-divided="True">
+        <c-CList
+          label="Compact divided list"
+          density="compact"
+          c-divided="True"
+        >
           <c-CListItem>Whirlpool Galaxy</c-CListItem>
           <c-CListItem>Sombrero Galaxy</c-CListItem>
         </c-CList>

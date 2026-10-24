@@ -10,12 +10,31 @@ class RatingStates(Component):
 
     template = """
       <section class="rating-state-grid">
-        <c-CRating label="Small subtle rating" value="2" size="sm" variant="subtle" />
+        <c-CRating
+          label="Small subtle rating"
+          value="2"
+          size="sm"
+          variant="subtle"
+        />
         <c-CRating label="Default rating" value="3" />
-        <c-CRating label="Large readonly rating" value="4.5" precision="0.5" size="lg" readonly />
-        <c-CRating label="Disabled rating" value="1" disabled />
+        <c-CRating
+          label="Large readonly rating"
+          value="4.5"
+          precision="0.5"
+          size="lg"
+          readonly
+        />
+        <c-CRating
+          label="Disabled rating"
+          value="1"
+          disabled
+        />
         <div dir="rtl"><c-CRating label="RTL rating" value="4" /></div>
-        <c-CRating label="Brand rating" value="5" class_="rating-brand" />
+        <c-CRating
+          label="Brand rating"
+          value="5"
+          class_="rating-brand"
+        />
       </section>
     """
     css = """

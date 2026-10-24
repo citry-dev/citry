@@ -8,7 +8,13 @@ class ExactDecimalNumberInput(Component):
           <c-fill name="label">Calibration offset</c-fill>
           <c-fill name="description">Exact increments of 0.0001.</c-fill>
           <c-fill name="default">
-            <c-CNumberInput name="offset" value="0.1001" min="-1" max="1" step="0.0001" />
+            <c-CNumberInput
+              name="offset"
+              value="0.1001"
+              min="-1"
+              max="1"
+              step="0.0001"
+            />
           </c-fill>
         </c-CField>
         <p>The submitted enhanced value remains the exact string <code>0.1001</code>.</p>

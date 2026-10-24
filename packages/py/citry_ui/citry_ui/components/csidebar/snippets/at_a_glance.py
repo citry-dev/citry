@@ -7,7 +7,11 @@ citry.register_library(citry_ui)
 class SidebarAtAGlance(Component):
     template = """
       <div class="sidebar-layout">
-        <c-CSidebar id="workspace" tag="nav" label="Workspace navigation">
+        <c-CSidebar
+          id="workspace"
+          tag="nav"
+          label="Workspace navigation"
+        >
           <c-fill name="header"><strong>Northstar</strong></c-fill>
           <c-fill name="default">
             <c-CList variant="surface">

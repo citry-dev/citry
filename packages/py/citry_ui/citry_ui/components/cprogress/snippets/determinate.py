@@ -17,7 +17,11 @@ class DeterminateProgress(Component):
         </div>
         <div>
           <c-CRow justify="between"><span>Survey complete</span><strong>100%</strong></c-CRow>
-          <c-CProgress label="Survey complete" c-value="100" intent="success" />
+          <c-CProgress
+            label="Survey complete"
+            c-value="100"
+            intent="success"
+          />
         </div>
       </c-CCol>
     """
