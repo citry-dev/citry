@@ -87,7 +87,7 @@ ERRORS_HINT = "More green = earlier feedback = better"
 # than this run's code, so the README must not show the count without the
 # version.
 VERSION_NOTES = {
-    "20261021T182412Z": "Citry 0.6.1, measured before its release.",
+    "20261021T182412Z": "Citry 0.7.0, measured before its release.",
 }
 
 # The speed chart shows the second page load: the first one includes work a
@@ -100,7 +100,7 @@ SPEED_LOAD = "second"
 # can quote, so each report's note lives here.
 SPEED_VERSION_NOTES = {
     "composed-70d4a8802900": "Citry 0.6.0, one run per framework.",
-    "composed-be3f44cc4b6e": "Citry 0.6.1, measured before its release, one run per framework.",
+    "composed-be3f44cc4b6e": "Citry 0.7.0, measured before its release, one run per framework.",
 }
 
 # A file name records the chart, the benchmark run it shows, the first

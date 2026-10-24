@@ -323,7 +323,7 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   `raw.githubusercontent.com/citry-dev/citry/main/...` breaks as soon as the
   file moves or is deleted, so the repository could never be cleaned up
   without breaking old pages. Point these links at a commit SHA or at a
-  release tag (such as `citry@0.6.1`) that exists when the text is published.
+  release tag (such as `citry@0.6.0`) that exists when the text is published.
   Links in the live docs site and in files read only on GitHub may follow
   `main`.
   - A package's own README (for `citry`, the root `README.md`), its

@@ -52,7 +52,7 @@ More green = earlier feedback = better
   >
 </picture>
 
-Citry 0.6.1, measured before its release. Each bar counts only the
+Citry 0.7.0, measured before its release. Each bar counts only the
 mistakes that apply to that framework.
 [How we measured](https://citry.dev/about/benchmarks/#errors-how-we-measured)
 <!-- benchmark-chart:errors end -->
@@ -79,7 +79,7 @@ server builds it.
   >
 </picture>
 
-Citry 0.6.1, measured before its release, one run per framework. Shorter
+Citry 0.7.0, measured before its release, one run per framework. Shorter
 is faster.
 [How we measured](https://citry.dev/about/benchmarks/#how-the-numbers-were-taken)
 <!-- benchmark-chart:speed end -->

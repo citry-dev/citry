@@ -54,7 +54,7 @@ measures that release. To measure an
 unreleased change instead, see
 [Test Citry with wheels you build](#test-citry-with-wheels-you-build).
 The docs page's Citry numbers come from such wheels, built before the
-Citry 0.6.1 release; see
+Citry 0.7.0 release; see
 [Update the numbers on the docs page](#update-the-numbers-on-the-docs-page).
 
 ## Before you start
@@ -177,7 +177,7 @@ Profiles live in [`profiles/`](profiles/). Pass the file name without
 | `cohort` | the fourteen cohort apps | 14, 140 | The canonical measurement |
 | `cohort-100x` | the fourteen cohort apps | 1,400 | Opt-in large board |
 | `release-0.6.0` | the fourteen cohort apps | 14, 140, 1,400 | The `cohort` settings plus the 1,400-output board the docs page shows; run once for the Citry 0.6.0 release |
-| `release-0.6.1-citry` | Citry, Jinja + HTMX + Alpine | 14, 140, 1,400 | The `release-0.6.0` settings with Citry from wheels built before the Citry 0.6.1 release; Jinja + HTMX + Alpine runs again to check that the machine still gives the same times |
+| `release-0.7.0-citry` | Citry, Jinja + HTMX + Alpine | 14, 140, 1,400 | The `release-0.6.0` settings with Citry from wheels built before the Citry 0.7.0 release; Jinja + HTMX + Alpine runs again to check that the machine still gives the same times |
 | `citry-local-wheels` | Citry | 14, 140, 1,400 | Citry from wheels you build; for testing before a release |
 | `nuxt-csr` | Nuxt CSR control | 14, 140 | The client-rendered control on its own |
 | `nuxt-ssr-csr` | Nuxt, Nuxt CSR control | 140, 1,400 | Server-rendered and client-rendered Nuxt side by side |
@@ -192,7 +192,7 @@ A profile can replace the `citry` and `citry-core` packages of the Citry app
 with wheels built from this repository, to measure a change before it is
 released. The numbers describe the source you built. Use it to test a
 change, or to measure a release before it is published, as the docs page's
-Citry 0.6.1 numbers were. The profile names the wheels in a `[local_wheels]`
+Citry 0.7.0 numbers were. The profile names the wheels in a `[local_wheels]`
 table, relative to the repository root. `citry-local-wheels` is set up for
 the 0.6.0 wheels:
 
@@ -243,10 +243,10 @@ The numbers there now come from two composed reports, measured on the
 same Mac:
 
 - **Citry**: `composed-be3f44cc4b6e`, built on 2026-10-23 from the
-  `release-0.6.1-citry` qualify run `20261023T115304Z-71ac7f66` and the
+  `release-0.7.0-citry` qualify run `20261023T115304Z-71ac7f66` and the
   measurement run (`citry-bench run`) `20261023T115712Z-411919bf`. Citry
-  and citry-core were wheels built from commit `3f1333792`: Citry 0.6.1,
-  measured before its release. The wheels carry the version numbers that
+  and citry-core were wheels built from commit `3f1333792`, measured
+  before the Citry 0.7.0 release. The wheels carry the version numbers that
   commit had, `citry` 0.6.0 and `citry-core` 1.9.0. The data file's
   `citry_build.source_had_uncommitted_changes` is `true` only because the
   new profile file was not committed yet when the runs started; nothing
@@ -262,7 +262,7 @@ same Mac:
   local commit has the same benchmark sources as the change that published
   these numbers.
 
-The `release-0.6.1-citry` run also measured Jinja + HTMX + Alpine again,
+The `release-0.7.0-citry` run also measured Jinja + HTMX + Alpine again,
 to check that the Mac gave the same times on both days. Its totals moved
 from 304.2 to 298.3 ms on the first load and from 299.8 to 312.6 ms on the
 second, within the noise of a single measurement, so the data file keeps
@@ -294,11 +294,11 @@ passed observation per framework and page load at 1,400 outputs, which the
 `release-0.6.0` profile gives. It rewrites the JSON file; update the prose
 on the Benchmarks page to match the new numbers in the same change.
 
-To measure only Citry again, as for Citry 0.6.1:
+To measure only Citry again, as for Citry 0.7.0:
 
 1. Build the wheels as in
    [Test Citry with wheels you build](#test-citry-with-wheels-you-build).
-2. Copy `release-0.6.1-citry.toml` under a new name, point its
+2. Copy `release-0.7.0-citry.toml` under a new name, point its
    `[local_wheels]` table at your wheels, and add the new name to the
    list of profiles allowed to name local wheels in
    `tests/test_runner.py`.
