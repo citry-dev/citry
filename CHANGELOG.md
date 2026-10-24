@@ -210,6 +210,11 @@
 
 ### Fixes
 
+- With `@event(latest_wins=True)`, a call that a newer call replaced no
+  longer changes the page. Its remaining actions are dropped, including
+  delayed ones with `wait=False`. The newer call no longer waits for its
+  delays, and `$loading()` and `citry:events:after` stop reporting it as a
+  success.
 - A template that nests 50 or more `<c-if>` or `<c-for>` tags now renders.
   It used to fail with `SyntaxError: too many nested parentheses`.
   Templates nested more than about 300 levels raise `RecursionError`

@@ -354,6 +354,11 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     stateUpdates?: JsonObject;
     stateAccepted: boolean;
     settled: boolean;
+    // The error the call was cancelled with (superseded, retired, or disposed). Once set, none of
+    // the call's remaining actions start.
+    cancelError?: Error;
+    // How many of the call's `wait: false` actions are scheduled and have not finished yet.
+    detachedPending: number;
     cancelled: Promise<never>;
     cancel(error: Error): void;
     resolve(value: JsonValue | undefined): void;
@@ -364,11 +369,20 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   let active: Job | null = null;
   // Calls that page code applies with `applyActions` run outside the queue, so `active` never names them.
   const externalJobs = new Set<Job>();
+  // Calls, finished or not, whose `wait: false` actions have not finished yet. A newer call under
+  // `latestCallWins` cancels these too, so those actions never start.
+  const detachedJobs = new Set<Job>();
   let running = false;
   let disposed = false;
 
   const supersedeEarlier = (input: VueEventSend): void => {
     const error = stale("superseded");
+    const sameCall = (job: Job): boolean =>
+      job.input.source.stableId === input.source.stableId &&
+      job.input.source.generation === input.source.generation &&
+      job.input.handler === input.handler;
+    // Each pending action of these calls reports its own `stale` when its delay is cancelled.
+    for (const job of detachedJobs) if (sameCall(job)) job.cancel(error);
     for (let index = queue.length - 1; index >= 0; index -= 1) {
       const job = queue[index];
       if (
@@ -442,9 +456,16 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   // cancelled with it, but this call's response was accepted, so its later actions still run;
   // only disposing the bridge stops them.
   const remountTimers = new Map<ReturnType<typeof globalThis.setTimeout>, (error: unknown) => void>();
+  // Timers of `applyActions` calls made without a component, which no component record owns; only
+  // disposing the bridge stops them.
+  const sourcelessTimers = new Map<ReturnType<typeof globalThis.setTimeout>, (error: unknown) => void>();
 
   const delay = (milliseconds: number, state: Owner, job: Job): Promise<void> =>
     new Promise((resolve, reject) => {
+      if (job.cancelError) {
+        reject(job.cancelError);
+        return;
+      }
       if (disposed || (state.retired && !job.acceptedRemount)) {
         reject(stale(disposed ? "disposed" : "retired"));
         return;
@@ -455,9 +476,19 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         resolve();
       }, milliseconds);
       timers.set(timer, reject);
+      // A cancelled call stops waiting at once: a blocking delay would otherwise hold back the
+      // newer call queued behind it, and a detached one would still run its action later.
+      void job.cancelled.catch((error: unknown) => {
+        if (!timers.delete(timer)) return;
+        globalThis.clearTimeout(timer);
+        reject(error);
+      });
     });
 
   const continuationCurrent = (source: VueEventSource, state: Owner, epoch: number, job: Job): void => {
+    // The accepted-result count does not move when a newer call supersedes this one, because the
+    // newer call is still waiting in the queue, so the cancellation itself is checked first.
+    if (job.cancelError) throw job.cancelError;
     if (disposed || epoch !== state.acceptedEpoch) {
       throw stale(disposed ? "disposed" : "epoch");
     }
@@ -493,6 +524,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       return;
     }
     if (action.action === "render") {
+      if (job.cancelError) throw job.cancelError;
       stillCurrent(source, state, epoch);
       const context = current(source);
       if (!renderPlan && action.target !== `render:${context.serverRenderId}`) {
@@ -589,6 +621,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         !(typeof action.delay === "number" && action.delay > 0) &&
         action.wait !== false
       ) {
+        // A State commit can run page code that supersedes this call.
+        if (job.cancelError) throw job.cancelError;
         stillCurrent(source, state, epoch);
         options.host.commitState(action.targetRenderId, action.stateToken, action.publicState, source);
         hoisted.add(index);
@@ -611,14 +645,24 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         );
       };
       if ("wait" in action && action.wait === false) {
-        void run().catch((error) => {
-          if (error instanceof VueEventStale) {
-            lifecycle("stale", source, job.input.handler, { reason: error.reason });
-          } else if (!(error instanceof VueEventCancellation)) {
-            lifecycle("error", source, job.input.handler, { error: activityError(error) as JsonObject });
-          }
-          console.error("[Citry] applying a detached Vue event action failed:", error);
-        });
+        job.detachedPending += 1;
+        detachedJobs.add(job);
+        void run()
+          .catch((error) => {
+            if (error instanceof VueEventStale) {
+              // An expected outcome, reported to listeners; nothing failed.
+              lifecycle("stale", source, job.input.handler, { reason: error.reason });
+              return;
+            }
+            if (!(error instanceof VueEventCancellation)) {
+              lifecycle("error", source, job.input.handler, { error: activityError(error) as JsonObject });
+            }
+            console.error("[Citry] applying a detached Vue event action failed:", error);
+          })
+          .finally(() => {
+            job.detachedPending -= 1;
+            if (job.detachedPending === 0) detachedJobs.delete(job);
+          });
       } else await run();
     }
     return data;
@@ -799,6 +843,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     stillCurrent(input.source, state);
     validateTargets(result, input.source, context.serverRenderId);
     const preparedResult = options.host.preflightResult?.(result, input.source) ?? { result };
+    // Preflight runs page code, which may supersede this call. Checked before the count moves, so
+    // a cancelled result does not count as a newer result for the component.
+    if (job.cancelError) throw job.cancelError;
     state.acceptedEpoch += 1;
     // The server has consumed the dequeued State draft once the complete
     // response/result/target preflight succeeds.  Mark that transaction
@@ -828,6 +875,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         try {
           job.activity?.start(job.intent);
           const value = await sendNow(job);
+          // A call cancelled after its last action ran still reports as cancelled, not as a
+          // success: its caller's promise has already rejected.
+          if (job.cancelError) throw job.cancelError;
           job.stateAccepted = true;
           job.activity?.succeed(job.intent);
           if (job.lifecycleStarted) lifecycle("after", job.input.source, job.input.handler, { ok: true });
@@ -910,6 +960,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const job: Job = {
       input,
       acceptedRemount: false,
+      detachedPending: 0,
       activity,
       intent,
       activityFinished: false,
@@ -919,9 +970,14 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       settled: false,
       cancelled,
       cancel(error) {
+        // A finished call can still have `wait: false` actions waiting on their delay; stopping
+        // `cancelled` cancels those delays too.
+        if (job.cancelError === undefined) {
+          job.cancelError = error;
+          cancelPromise(error);
+        }
         if (job.settled) return;
         job.controller?.abort();
-        cancelPromise(error);
         if (!job.activityFinished) {
           job.activityFinished = true;
           job.activity?.finish(job.intent);
@@ -952,9 +1008,17 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     if (!source) {
       let data: JsonValue | undefined;
       for (const action of result.actions) {
+        if (disposed) throw stale("disposed");
         if (typeof action.delay === "number" && action.delay > 0) {
-          const delay = action.delay;
-          await new Promise((resolve) => globalThis.setTimeout(resolve, delay * 1000));
+          const milliseconds = action.delay * 1000;
+          await new Promise<void>((resolve, reject) => {
+            const timer = globalThis.setTimeout(() => {
+              sourcelessTimers.delete(timer);
+              resolve();
+            }, milliseconds);
+            sourcelessTimers.set(timer, reject);
+          });
+          if (disposed) throw stale("disposed");
         }
         if (action.action === "data") data = action.value;
         else if (action.action === "redirect") options.host.redirect(action.url);
@@ -976,6 +1040,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const job = {
       input: { source, handler: "__external__" },
       acceptedRemount: false,
+      detachedPending: 0,
       activityFinished: true,
       lifecycleStarted: true,
       external: true,
@@ -1067,11 +1132,13 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       state.timers.clear();
     }
     owners.clear();
-    for (const [timer, reject] of remountTimers) {
-      globalThis.clearTimeout(timer);
-      reject(stale("disposed"));
+    for (const timers of [remountTimers, sourcelessTimers]) {
+      for (const [timer, reject] of timers) {
+        globalThis.clearTimeout(timer);
+        reject(stale("disposed"));
+      }
+      timers.clear();
     }
-    remountTimers.clear();
     const error = new VueEventStale("disposed");
     for (const job of queue.splice(0)) {
       lifecycle("stale", job.input.source, job.input.handler, { reason: "disposed" });

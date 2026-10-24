@@ -804,6 +804,254 @@ test("latestCallWins supersedes an active predecessor and drops its response", a
   );
 });
 
+const latestWinsDescriptor = {
+  componentClassId: "Board_1",
+  eventHandlers: { move: { httpMethod: "POST", usesState: true, latestCallWins: true } },
+};
+
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+// A bridge whose first call returns `firstActions` and every later call returns data 2, after
+// `laterResponseMs`. The host records every page change, lifecycle event, and activity step, and
+// `accepted` resolves when the first call's result has been accepted.
+const supersedingBridge = (firstActions, { laterResponseMs = 0, onEvent, onState } = {}) => {
+  const record = [];
+  const lifecycle = [];
+  const activity = [];
+  let markAccepted;
+  const accepted = new Promise((resolve) => {
+    markAccepted = resolve;
+  });
+  let bridge;
+  const host = {
+    ...basicHost(() => ({ ...contextFor(), descriptor: latestWinsDescriptor })),
+    preflightResult(result) {
+      markAccepted();
+      return { result };
+    },
+    async prepareRender() {
+      record.push("render:prepared");
+      return { transaction: {} };
+    },
+    abortRender() {},
+    async commitRender() {
+      record.push("render:committed");
+    },
+    commitState(_target, token) {
+      record.push(`state:${token}`);
+      onState?.(token, bridge);
+    },
+    dispatchEvent(name) {
+      record.push(`event:${name}`);
+      onEvent?.(name, bridge);
+    },
+    redirect(url) {
+      record.push(`redirect:${url}`);
+    },
+    updateUrl(url, mode) {
+      record.push(`url:${mode}:${url}`);
+    },
+    lifecycle(kind, _source, _event, detail) {
+      lifecycle.push({ kind, detail });
+      return true;
+    },
+  };
+  let calls = 0;
+  bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    activity: () => ({
+      enqueue: (handler) => handler,
+      start: () => activity.push("start"),
+      succeed: () => activity.push("succeed"),
+      fail: () => activity.push("fail"),
+      finish: () => activity.push("finish"),
+    }),
+    fetch: async (_url, init) => {
+      calls += 1;
+      const envelope = JSON.parse(init.body);
+      if (calls === 1) return resultResponse(envelope, firstActions);
+      await sleep(laterResponseMs);
+      return resultResponse(envelope, [{ action: "data", value: 2 }]);
+    },
+  });
+  return { bridge, record, lifecycle, activity, accepted };
+};
+
+// Sends a first call, waits until its result is accepted and its actions have started, then sends
+// the call that supersedes it.
+const supersedeAfterAcceptance = async ({ bridge, accepted }) => {
+  const source = { stableId: "board", generation: 1 };
+  const first = bridge.send({ source, handler: "move" });
+  first.catch(() => {});
+  await accepted;
+  await sleep(5);
+  const started = Date.now();
+  const second = bridge.send({ source, handler: "move" });
+  const value = await second;
+  return { first, value, elapsed: Date.now() - started };
+};
+
+const staleReasons = (lifecycle) => lifecycle.filter((item) => item.kind === "stale").map((item) => item.detail.reason);
+
+test("a superseded call changes nothing on the page", async () => {
+  const setup = supersedingBridge([
+    { action: "event", eventName: "old", delay: 0.2 },
+    { action: "state", targetRenderId: "server_1", stateToken: "old-token", publicState: {}, delay: 0.01 },
+    { action: "data", value: 1 },
+  ]);
+  const { first, value, elapsed } = await supersedeAfterAcceptance(setup);
+  await assert.rejects(first, /superseded/);
+  assert.equal(value, 2);
+  // The newer call does not wait for the old call's 200 ms delay.
+  assert.ok(elapsed < 100, `the newer call waited ${elapsed} ms`);
+  await sleep(250);
+  assert.deepEqual(setup.record, []);
+});
+
+const delayedActions = {
+  Dispatch: { action: "event", eventName: "old" },
+  Redirect: { action: "redirect", url: "/old" },
+  PushUrl: { action: "url", url: "/old", mode: "push" },
+  ReplaceUrl: { action: "url", url: "/old", mode: "replace" },
+  State: { action: "state", targetRenderId: "server_1", stateToken: "old-token", publicState: {} },
+};
+
+for (const [name, action] of Object.entries(delayedActions)) {
+  test(`a superseded call drops its delayed ${name}`, async () => {
+    const setup = supersedingBridge([
+      { ...action, delay: 0.2 },
+      { action: "data", value: 1 },
+    ]);
+    const { first, value, elapsed } = await supersedeAfterAcceptance(setup);
+    await assert.rejects(first, /superseded/);
+    assert.equal(value, 2);
+    assert.ok(elapsed < 100, `the newer call waited ${elapsed} ms`);
+    await sleep(250);
+    assert.deepEqual(setup.record, []);
+    assert.deepEqual(staleReasons(setup.lifecycle), ["superseded"]);
+  });
+
+  test(`a superseded call drops its delayed ${name} with wait=False`, async () => {
+    // The newer call's result arrives after the old action is due, so only the supersession can
+    // stop it. The old call has already finished when the newer call supersedes it.
+    const setup = supersedingBridge(
+      [
+        { ...action, delay: 0.1, wait: false },
+        { action: "data", value: 1 },
+      ],
+      {
+        laterResponseMs: 250,
+      },
+    );
+    const { first, value } = await supersedeAfterAcceptance(setup);
+    assert.equal(await first, 1);
+    assert.equal(value, 2);
+    await sleep(150);
+    assert.deepEqual(setup.record, []);
+    assert.deepEqual(staleReasons(setup.lifecycle), ["superseded"]);
+  });
+}
+
+test("a superseded call drops its delayed Render", async () => {
+  const setup = supersedingBridge([
+    { ...renderAction(), delay: 0.2 },
+    { action: "data", value: 1 },
+  ]);
+  const { first, value, elapsed } = await supersedeAfterAcceptance(setup);
+  await assert.rejects(first, /superseded/);
+  assert.equal(value, 2);
+  assert.ok(elapsed < 100, `the newer call waited ${elapsed} ms`);
+  await sleep(250);
+  assert.deepEqual(setup.record, []);
+});
+
+test("a superseded call drops its delayed Data", async () => {
+  const setup = supersedingBridge([{ action: "data", value: 1, delay: 0.2 }]);
+  const { first, value, elapsed } = await supersedeAfterAcceptance(setup);
+  await assert.rejects(first, /superseded/);
+  assert.equal(value, 2);
+  // The newer call's result comes first, without waiting for the old call's Data.
+  assert.ok(elapsed < 100, `the newer call waited ${elapsed} ms`);
+});
+
+test("a call superseded during a delay reports no success", async () => {
+  const setup = supersedingBridge([
+    { action: "event", eventName: "old", delay: 0.2 },
+    { action: "data", value: 1 },
+  ]);
+  await supersedeAfterAcceptance(setup);
+  await sleep(250);
+  const afters = setup.lifecycle.filter((item) => item.kind === "after").map((item) => item.detail.ok);
+  // One failed `after` for the superseded call and one successful `after` for the newer call.
+  assert.deepEqual(afters, [false, true]);
+  assert.equal(setup.activity.filter((step) => step === "succeed").length, 1);
+});
+
+test("a call superseded by its own last action reports no success", async () => {
+  // The page code behind the call's last action sends the same handler again at once.
+  let newer;
+  const setup = supersedingBridge([{ action: "event", eventName: "old" }], {
+    onEvent: (name, bridge) => {
+      if (name === "old") newer = bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" });
+    },
+  });
+  const first = setup.bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" });
+  await assert.rejects(first, /superseded/);
+  assert.equal(await newer, 2);
+  assert.deepEqual(
+    setup.lifecycle
+      .filter((item) => item.kind !== "before")
+      .map((item) => [item.kind, item.detail?.reason ?? item.detail?.ok]),
+    [
+      ["stale", "superseded"],
+      ["after", false],
+      ["after", true],
+    ],
+  );
+});
+
+test("a call superseded by its own first State commit commits no more State", async () => {
+  let newer;
+  const setup = supersedingBridge(
+    [
+      { action: "state", targetRenderId: "server_1", stateToken: "a", publicState: {} },
+      { action: "state", targetRenderId: "server_1", stateToken: "b", publicState: {} },
+      { action: "data", value: 1 },
+    ],
+    {
+      onState: (token, bridge) => {
+        if (token === "a") newer = bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" });
+      },
+    },
+  );
+  const first = setup.bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" });
+  await assert.rejects(first, /superseded/);
+  assert.equal(await newer, 2);
+  assert.deepEqual(setup.record, ["state:a"]);
+});
+
+test("disposing the bridge stops a delayed applyActions made without a component", async () => {
+  const record = [];
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host: {
+      ...basicHost(),
+      redirect(url) {
+        record.push(url);
+      },
+    },
+    fetch: async () => {
+      throw new Error("transport must not run");
+    },
+  });
+  const applied = bridge.applyActions([{ action: "redirect", url: "/later", delay: 0.05 }]);
+  bridge.dispose();
+  await assert.rejects(applied, /disposed/);
+  await sleep(80);
+  assert.deepEqual(record, []);
+});
+
 const errorResponse = (envelope, error) =>
   new Response(
     JSON.stringify({
