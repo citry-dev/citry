@@ -34,6 +34,10 @@ validation, the exact compiler output format), see
 
 ## Gotchas
 
+- **Build span errors with `ParseError::from_span`.** Pest's own
+  `Error::new_from_span` takes time that grows with the span's line count
+  times the input length; `from_span` builds the same error in time
+  proportional to the input.
 - **Pest atomicity cascades.** The `template` rule is compound-atomic (`${ }`)
   to stop implicit whitespace being dropped between elements; that atomicity
   flows into `html_comment` and `html_raw`. Do not change a rule's atomicity
