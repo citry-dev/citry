@@ -1,5 +1,6 @@
 # ruff: noqa: E731
 import re
+import sys
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
@@ -2349,3 +2350,50 @@ LITERALS_PYTHON_READS = [
 def test_sandbox_reads_literals_as_python_does(source: str) -> None:
     context = {"x": 5, "w": 4}
     assert safe_eval(source)(dict(context)) == eval(source, {}, dict(context))  # noqa: S307
+
+
+# A comment inside an f-string's replacement field; Python's own parser
+# accepts it only from 3.12 (PEP 701), while the sandbox reads it everywhere.
+COMMENTED_DEBUG_FSTRINGS = ["f'''{x # c\n=}'''", "f'''{(x # c\n)=}'''"]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 12), reason="Python parses a comment in an f-string from 3.12")
+@pytest.mark.parametrize("source", COMMENTED_DEBUG_FSTRINGS)
+def test_sandbox_leaves_comments_out_of_self_documenting_text(source: str) -> None:
+    context = {"x": 5}
+    assert safe_eval(source)(dict(context)) == eval(source, {}, dict(context))  # noqa: S307
+
+
+# A t-string interpolation keeps its own source text as `expression`.
+TSTRING_EXPRESSIONS = [
+    "t'{x + 1}'",
+    "t'{ x }'",
+    "t'{x=}'",
+    "t'{ x = }'",
+    "t'{x!r:>4}'",
+    "t'{x:{w}}'",
+    "t'{ (x) }'",
+    "t'{x == 1}'",
+    "t'{x != 1}'",
+    "t'{\"}\"}'",
+    "t'''{x + # a comment\n 1}'''",
+    "t'''{\n  x  # é\n}'''",
+    "t'{x}' t'{ w }'",
+    # A comment in a nested string belongs to that string's text.
+    "t'''{f\"\"\"{x # c\n}\"\"\"}'''",
+    # A backslash line continuation after the expression is part of it.
+    "t'''{x \\\n}'''",
+    # A self-documenting interpolation drops its comments from its `x=` too.
+    "t'''{x # c\n=}'''",
+]
+
+
+@pytest.mark.skipif(not TSTRINGS_SUPPORTED, reason="t-strings need Python 3.14+")
+@pytest.mark.parametrize("source", TSTRING_EXPRESSIONS)
+def test_sandbox_keeps_each_tstring_interpolations_expression_text(source: str) -> None:
+    context = {"x": 5, "w": 3}
+    sandboxed = safe_eval(source)(dict(context))
+    plain = eval(source, {}, dict(context))  # noqa: S307
+    assert [item.expression for item in sandboxed.interpolations] == [item.expression for item in plain.interpolations]
+    # The text before each value, including a self-documenting `x=`.
+    assert sandboxed.strings == plain.strings

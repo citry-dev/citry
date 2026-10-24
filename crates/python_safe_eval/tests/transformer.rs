@@ -1638,7 +1638,7 @@ mod tests {
         // t-strings become template() function calls
         _test_transformation(
             "t'Hello {name}'",
-            "template(context, source, (0, 15), 'Hello ', interpolation(context, source, (8, 14), variable(context, source, (9, 13), 'name'), '', None, ''))",
+            "template(context, source, (0, 15), 'Hello ', interpolation(context, source, (8, 14), variable(context, source, (9, 13), 'name'), 'name', None, ''))",
             vec![("name", 9, 13, (1, 10))],
             vec![],
         );
@@ -1648,7 +1648,7 @@ mod tests {
     fn test_transform_tstring_with_expression() {
         _test_transformation(
             "t'Result: {x + 1}'",
-            "template(context, source, (0, 18), 'Result: ', interpolation(context, source, (10, 17), variable(context, source, (11, 12), 'x') + 1, '', None, ''))",
+            "template(context, source, (0, 18), 'Result: ', interpolation(context, source, (10, 17), variable(context, source, (11, 12), 'x') + 1, 'x + 1', None, ''))",
             vec![("x", 11, 12, (1, 12))],
             vec![],
         );
@@ -1658,7 +1658,7 @@ mod tests {
     fn test_transform_tstring_multiple_interpolations() {
         _test_transformation(
             "t'{x} and {y}'",
-            "template(context, source, (0, 14), interpolation(context, source, (2, 5), variable(context, source, (3, 4), 'x'), '', None, ''), ' and ', interpolation(context, source, (10, 13), variable(context, source, (11, 12), 'y'), '', None, ''))",
+            "template(context, source, (0, 14), interpolation(context, source, (2, 5), variable(context, source, (3, 4), 'x'), 'x', None, ''), ' and ', interpolation(context, source, (10, 13), variable(context, source, (11, 12), 'y'), 'y', None, ''))",
             vec![("x", 3, 4, (1, 4)), ("y", 11, 12, (1, 12))],
             vec![],
         );
@@ -1669,7 +1669,7 @@ mod tests {
         // Format spec is stored in the interpolation object
         _test_transformation(
             "t'start {value:.2f} end'",
-            "template(context, source, (0, 24), 'start ', interpolation(context, source, (8, 19), variable(context, source, (9, 14), 'value'), '', None, '.2f'), ' end')",
+            "template(context, source, (0, 24), 'start ', interpolation(context, source, (8, 19), variable(context, source, (9, 14), 'value'), 'value', None, '.2f'), ' end')",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1680,7 +1680,7 @@ mod tests {
         // Conversion flag is stored in the interpolation object
         _test_transformation(
             "t'start {value!r} end'",
-            "template(context, source, (0, 22), 'start ', interpolation(context, source, (8, 17), variable(context, source, (9, 14), 'value'), '', 'r', ''), ' end')",
+            "template(context, source, (0, 22), 'start ', interpolation(context, source, (8, 17), variable(context, source, (9, 14), 'value'), 'value', 'r', ''), ' end')",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1691,7 +1691,7 @@ mod tests {
         // Both conversion and format spec are stored in the interpolation object
         _test_transformation(
             "t'start {value!r:>20} end'",
-            "template(context, source, (0, 26), 'start ', interpolation(context, source, (8, 21), variable(context, source, (9, 14), 'value'), '', 'r', '>20'), ' end')",
+            "template(context, source, (0, 26), 'start ', interpolation(context, source, (8, 21), variable(context, source, (9, 14), 'value'), 'value', 'r', '>20'), ' end')",
             vec![("value", 9, 14, (1, 10))],
             vec![],
         );
@@ -1702,7 +1702,7 @@ mod tests {
         // Dynamic format spec: the format spec itself is built using .format()
         _test_transformation(
             "t'start {value:{width}.{precision}f} end'",
-            "template(context, source, (0, 41), 'start ', interpolation(context, source, (8, 36), variable(context, source, (9, 14), 'value'), '', None, '{}.{}f'.format(variable(context, source, (16, 21), 'width'), variable(context, source, (24, 33), 'precision'))), ' end')",
+            "template(context, source, (0, 41), 'start ', interpolation(context, source, (8, 36), variable(context, source, (9, 14), 'value'), 'value', None, '{}.{}f'.format(variable(context, source, (16, 21), 'width'), variable(context, source, (24, 33), 'precision'))), ' end')",
             vec![
                 ("value", 9, 14, (1, 10)),
                 ("width", 16, 21, (1, 17)),
@@ -2723,15 +2723,15 @@ mod tests {
             ),
             (
                 r#"t'\ud800{x}'"#,
-                r#"template(context, source, (0, 12), '\ud800', interpolation(context, source, (8, 11), variable(context, source, (9, 10), 'x'), '', None, ''))"#,
+                r#"template(context, source, (0, 12), '\ud800', interpolation(context, source, (8, 11), variable(context, source, (9, 10), 'x'), 'x', None, ''))"#,
             ),
             (
                 r#"t'{x:\ud800}'"#,
-                r#"template(context, source, (0, 13), interpolation(context, source, (2, 12), variable(context, source, (3, 4), 'x'), '', None, '\ud800'))"#,
+                r#"template(context, source, (0, 13), interpolation(context, source, (2, 12), variable(context, source, (3, 4), 'x'), 'x', None, '\ud800'))"#,
             ),
             (
                 r#"t'{x:{w}\ud800}'"#,
-                r#"template(context, source, (0, 16), interpolation(context, source, (2, 15), variable(context, source, (3, 4), 'x'), '', None, '{}{}'.format(variable(context, source, (6, 7), 'w'), '\ud800')))"#,
+                r#"template(context, source, (0, 16), interpolation(context, source, (2, 15), variable(context, source, (3, 4), 'x'), 'x', None, '{}{}'.format(variable(context, source, (6, 7), 'w'), '\ud800')))"#,
             ),
         ]);
     }
@@ -2766,7 +2766,51 @@ mod tests {
             ),
             (
                 "t'{x=}'",
-                "template(context, source, (0, 7), 'x=', interpolation(context, source, (2, 6), variable(context, source, (3, 4), 'x'), '', 'r', ''))",
+                "template(context, source, (0, 7), 'x=', interpolation(context, source, (2, 6), variable(context, source, (3, 4), 'x'), 'x', 'r', ''))",
+            ),
+        ]);
+    }
+
+    #[test]
+    fn test_tstring_interpolations_keep_their_expression_text() {
+        // Python stores the text between `{` and the `=`, `!`, `:` or `}`
+        // that ends the expression, with its whitespace and parentheses and
+        // without its comments.
+        _test_generated(&[
+            (
+                "t'{ x }'",
+                "template(context, source, (0, 8), interpolation(context, source, (2, 7), variable(context, source, (4, 5), 'x'), ' x ', None, ''))",
+            ),
+            (
+                "t'{ (x) }'",
+                "template(context, source, (0, 10), interpolation(context, source, (2, 9), variable(context, source, (5, 6), 'x'), ' (x) ', None, ''))",
+            ),
+            (
+                "t'{x == 1}'",
+                "template(context, source, (0, 11), interpolation(context, source, (2, 10), variable(context, source, (3, 4), 'x') == 1, 'x == 1', None, ''))",
+            ),
+            (
+                "t'{ x = }'",
+                "template(context, source, (0, 10), ' x = ', interpolation(context, source, (2, 9), variable(context, source, (4, 5), 'x'), ' x ', 'r', ''))",
+            ),
+            (
+                "t'''{x # c\n}'''",
+                "template(context, source, (0, 15), interpolation(context, source, (4, 12), variable(context, source, (5, 6), 'x'), 'x \\n', None, ''))",
+            ),
+            // A comment inside a nested string stays in that string's text.
+            (
+                "t'''{f\"\"\"{x # c\n}\"\"\"}'''",
+                "template(context, source, (0, 24), interpolation(context, source, (4, 21), format(context, source, (5, 20), '{}', (variable(context, source, (10, 11), 'x'), None, '')), 'f\"\"\"{x # c\\n}\"\"\"', None, ''))",
+            ),
+            // A backslash line continuation after the expression is part of it.
+            (
+                "t'''{x \\\n}'''",
+                "template(context, source, (0, 13), interpolation(context, source, (4, 10), variable(context, source, (5, 6), 'x'), 'x \\\\\\n', None, ''))",
+            ),
+            // A self-documenting interpolation's `x=` text drops its comments.
+            (
+                "f'''{x # c\n=}'''",
+                "format(context, source, (0, 16), 'x \\n={}', (variable(context, source, (5, 6), 'x'), 'r', ''))",
             ),
         ]);
     }
