@@ -4,6 +4,8 @@
 
 ### Changed
 
+- **Breaking:** citry-core now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing citry-core 1.8.0.
 - **Breaking:** `template_parser.analyze_browser_source()` and
   `template_parser.analyze_component_source()` return objects with named
   fields, `BrowserAnalysis` and `BrowserComponentAnalysis`, instead of

@@ -379,7 +379,7 @@ workflows repeat the tests across Python versions and operating systems.
 | --- | --- | --- |
 | `repo--check.yml` | `python scripts/check.py --profile full` on Python 3.14 with nightly Rust and Node | Every pull request and every push to `main` or `dev` |
 | `rust--tests.yml` | Rust crate tests on Ubuntu, Windows, and macOS | Changes under `crates/` or `third_party/`, to the Cargo files, `rust-toolchain.toml`, or `.gitmodules` |
-| `py--tests.yml` | `uv sync --locked --all-packages`, then pytest, on Python 3.10 to 3.14 on Ubuntu and Windows, plus Python 3.10 and 3.14 on macOS | Changes under `packages/py/`, `packages/js/citry-client/`, `packages/protocol/`, `crates/`, or `third_party/`, and to the lockfiles and build scripts |
+| `py--tests.yml` | `uv sync --locked --all-packages`, then pytest, on Python 3.11 to 3.14 on Ubuntu and Windows, plus Python 3.11 and 3.14 on macOS | Changes under `packages/py/`, `packages/js/citry-client/`, `packages/protocol/`, `crates/`, or `third_party/`, and to the lockfiles and build scripts |
 | `repo--docs-check.yml` | `python -m docs_site build-check` plus the docs site's own tests | Changes under `docs_site/`, `packages/py/`, `crates/`, and related paths |
 | `repo--docs-deploy.yml` | Builds the docs site and publishes it to GitHub Pages | Pushes to `main` that change the docs or the code they document |
 | `repo--ruff-upstream.yml` | Checks new stable Ruff releases for changes in the internal packages Citry uses, and opens one tracking issue | Monthly, or by hand |

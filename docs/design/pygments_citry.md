@@ -100,7 +100,7 @@ depends on the package being published).
   `pygments_citry`.
 - Pure Python, so it mirrors [`packages/py/citry`](../../packages/py/citry)
   (setuptools backend), not the maturin-backed `citry_core`.
-- `requires-python = ">=3.10, <4.0"` (the Citry family floor), MIT license.
+- `requires-python = ">=3.11, <4.0"` (the Citry family floor), MIT license.
 - One runtime dependency, `pygments>=2.15`, with no upper bound. The docs
   environment keeps its own `pygments<2.21` ceiling (it guards an unrelated
   pymdownx quirk, see the root `pyproject.toml` `docs` extra); a floor-only

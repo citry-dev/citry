@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "citry-lsp"
 version = "0.2.0"
-requires-python = ">=3.10, <4.0"
+requires-python = ">=3.11, <4.0"
 description = "Language server for Citry component templates"
 readme = "README.md"
 keywords = ["citry", "language server", "lsp", "templates", "html"]
@@ -20,7 +20,6 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",

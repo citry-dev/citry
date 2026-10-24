@@ -6,7 +6,7 @@ kind = "starter"
 path = "starters/standalone"
 check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "none"
-python = ">=3.10,<4"
+python = ">=3.11,<4"
 test = ["uv", "run", "pytest"]
 build = ["uv", "run", "python", "-m", "app.render"]
 profile = "starter-standalone-v1"
@@ -18,7 +18,7 @@ kind = "starter"
 path = "starters/fastapi"
 check = ["uv", "run", "citry", "--app", "app.main:citry_app", "check"]
 host = "fastapi"
-python = ">=3.10,<4"
+python = ">=3.11,<4"
 test = ["uv", "run", "pytest"]
 serve = ["uv", "run", "uvicorn", "app.main:web_app", "--host", "127.0.0.1", "--port", "{port}"]
 page_path = "/"
@@ -32,7 +32,7 @@ kind = "starter"
 path = "starters/django"
 check = ["uv", "run", "citry", "--app", "config.urls:citry_app", "check"]
 host = "django"
-python = ">=3.10,<4"
+python = ">=3.11,<4"
 test = ["uv", "run", "pytest"]
 serve = ["uv", "run", "python", "manage.py", "runserver", "127.0.0.1:{port}", "--noreload"]
 page_path = "/"
@@ -46,7 +46,7 @@ kind = "starter"
 path = "starters/flask"
 check = ["uv", "run", "citry", "--app", "app.wsgi:citry_app", "check"]
 host = "flask"
-python = ">=3.10,<4"
+python = ">=3.11,<4"
 test = ["uv", "run", "pytest"]
 serve = ["uv", "run", "flask", "--app", "app:create_app", "run", "--host", "127.0.0.1", "--port", "{port}", "--no-reload"]
 page_path = "/"
@@ -60,7 +60,7 @@ kind = "starter"
 path = "starters/asgi"
 check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "asgi"
-python = ">=3.10,<4"
+python = ">=3.11,<4"
 test = ["uv", "run", "pytest"]
 serve = ["uv", "run", "uvicorn", "app.main:application", "--host", "127.0.0.1", "--port", "{port}"]
 page_path = "/"
@@ -74,7 +74,7 @@ kind = "starter"
 path = "starters/wsgi"
 check = ["uv", "run", "citry", "--app", "app.citry_app:citry_app", "check"]
 host = "wsgi"
-python = ">=3.10,<4"
+python = ">=3.11,<4"
 test = ["uv", "run", "pytest"]
 serve = ["uv", "run", "waitress-serve", "--listen=127.0.0.1:{port}", "app.main:application"]
 page_path = "/"
@@ -88,7 +88,7 @@ kind = "demo"
 path = "demos/project_board"
 check = ["uv", "run", "citry", "--app", "app.main:citry_app", "check"]
 host = "fastapi"
-python = ">=3.10,<4"
+python = ">=3.11,<4"
 test = ["uv", "run", "pytest"]
 serve = ["uv", "run", "uvicorn", "app.main:web_app", "--host", "127.0.0.1", "--port", "{port}"]
 page_path = "/"
@@ -102,7 +102,7 @@ kind = "demo"
 path = "demos/htmx"
 check = ["uv", "run", "citry", "--app", "app.main:citry_app", "check"]
 host = "fastapi"
-python = ">=3.10,<4"
+python = ">=3.11,<4"
 test = ["uv", "run", "pytest"]
 serve = ["uv", "run", "uvicorn", "app.main:web_app", "--host", "127.0.0.1", "--port", "{port}"]
 page_path = "/"

@@ -679,7 +679,7 @@ Accepted differences, none of which changes output:
   which still run both. `packages/py/citry/tests/conftest.py` defines the
   option, so the run must include that directory; a run from the
   repository root does.
-  The ubuntu / Python 3.10 cell of `py--tests.yml` uses it, because no CI
+  The ubuntu / Python 3.11 cell of `py--tests.yml` uses it, because no CI
   job runs the suite on PyPy, Pyodide or free-threaded builds.
 - `tests/test_call_run_order.py` locks the order of user callbacks and
   extension hooks, and runs on both paths.
