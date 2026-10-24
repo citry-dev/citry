@@ -1002,7 +1002,6 @@ impl StaticNamedSlot {
 
 /// Represents a complete parsed template
 #[pyclass]
-#[derive(Debug, PartialEq, Clone)]
 pub struct Template {
     /// The elements in the template
     #[pyo3(get)]
@@ -1019,6 +1018,92 @@ pub struct Template {
     /// All slots defined by `<c-slot>` tags (with static names) found in the template (at any nesting level)
     #[pyo3(get)]
     pub slots: Vec<StaticNamedSlot>,
+}
+
+/// Cloning a template copies its whole tree. That calls itself once per
+/// nesting level, with frames of about 4 KB in a debug build, so a tree a
+/// few dozen levels deep overflowed a 256 KiB thread. Each level passes
+/// through a `Template`, so each one runs through the stack guard, like the
+/// parser's own passes. PyO3 clones a template when Python reads a field
+/// that holds one, such as a node's `body`.
+impl Clone for Template {
+    fn clone(&self) -> Self {
+        let copy = || Template {
+            elements: self.elements.clone(),
+            comments: self.comments.clone(),
+            used_variables: self.used_variables.clone(),
+            slots: self.slots.clone(),
+        };
+        // Most bodies hold only text and expressions, which cannot nest, so
+        // they skip the guard and its closure.
+        if has_child_nodes(&self.elements) {
+            crate::stack::with_enough_stack(copy)
+        } else {
+            copy()
+        }
+    }
+}
+
+/// Comparing and printing a template also walk the whole tree, once per
+/// level. Python reaches both through `==` and `repr()`, and pytest calls
+/// `repr()` on a failed comparison, so they run through the stack guard too.
+/// The output is the same as the derived implementations'.
+impl PartialEq for Template {
+    fn eq(&self, other: &Self) -> bool {
+        let compare = || {
+            self.elements == other.elements
+                && self.comments == other.comments
+                && self.used_variables == other.used_variables
+                && self.slots == other.slots
+        };
+        if has_child_nodes(&self.elements) {
+            crate::stack::with_enough_stack(compare)
+        } else {
+            compare()
+        }
+    }
+}
+
+impl std::fmt::Debug for Template {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let print = |formatter: &mut std::fmt::Formatter<'_>| {
+            formatter
+                .debug_struct("Template")
+                .field("elements", &self.elements)
+                .field("comments", &self.comments)
+                .field("used_variables", &self.used_variables)
+                .field("slots", &self.slots)
+                .finish()
+        };
+        if has_child_nodes(&self.elements) {
+            crate::stack::with_enough_stack(|| print(formatter))
+        } else {
+            print(formatter)
+        }
+    }
+}
+
+/// Whether `elements` holds a node, the only element that can nest further.
+fn has_child_nodes(elements: &[TemplateElement]) -> bool {
+    elements
+        .iter()
+        .any(|element| matches!(element, TemplateElement::Node(_)))
+}
+
+/// Dropping a template frees its whole tree, which also calls itself once
+/// per nesting level. A template parsed from an attribute value is freed
+/// while the parser is still reading the tag that holds it, outside any
+/// guarded pass; there a 128 KiB thread ran out at 192 levels. So each level
+/// with child nodes frees its elements through the stack guard.
+impl Drop for Template {
+    fn drop(&mut self) {
+        // Only a body with child nodes can nest further; the rest are freed
+        // here as usual.
+        if has_child_nodes(&self.elements) {
+            let elements = std::mem::take(&mut self.elements);
+            crate::stack::with_enough_stack(|| drop(elements));
+        }
+    }
 }
 
 #[pymethods]

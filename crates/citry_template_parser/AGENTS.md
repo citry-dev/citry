@@ -34,6 +34,15 @@ validation, the exact compiler output format), see
 
 ## Gotchas
 
+- **Recursive passes run through the stack guard.** Every cycle of calls
+  that repeats once per nesting level of the tree passes through at least
+  one function that wraps its body in `crate::stack::with_enough_stack`, so
+  a deep template cannot overflow a small thread (`tests/deep_nesting.rs`
+  checks this on 128 KiB). The guarded work must stay pure Rust.
+  `Template`'s own `Clone`, `Drop`, `PartialEq` and `Debug` go through the
+  guard too, and `LangSpecArgument` frees its children without recursion.
+  Rust does not allow moving a field out of a type that has its own `Drop`,
+  so code takes a field out of either type with `std::mem::take`.
 - **Pest atomicity cascades.** The `template` rule is compound-atomic (`${ }`)
   to stop implicit whitespace being dropped between elements; that atomicity
   flows into `html_comment` and `html_raw`. Do not change a rule's atomicity

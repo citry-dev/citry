@@ -35,6 +35,11 @@
 
 ### Fixed
 
+- `template_parser.parse_template()` and `compile_template()` handle
+  templates nested hundreds of tags deep, and invalid expressions, on threads
+  with small stacks, such as threads started after a small
+  `threading.stack_size()` or threads on musl Linux. They used to crash the
+  process.
 - `html_transform.validate_html_fragment_boundary()` now rejects a
   fragment that self-closes an element whose contents the browser reads
   as text, such as `<iframe/>`, `<textarea/>`, `<style/>`, or
