@@ -12,7 +12,7 @@ Helpers for Vue-like class/style merging on HTML elements, and the error raised 
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L670" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/attrs.py#L670" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -65,7 +65,7 @@ the attribute.</li>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L545" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/attrs.py#L545" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -112,7 +112,7 @@ override does not move an attribute.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L388" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/attrs.py#L388" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -158,7 +158,7 @@ removes a class added earlier.</li>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L461" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/attrs.py#L461" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -210,7 +210,7 @@ property entirely, even if set earlier.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L515" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/attrs.py#L515" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -252,7 +252,7 @@ declaration without a <code>:</code> is dropped.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L77" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/attrs.py#L77" target="_blank" rel="noopener">
 View source
 </a>
 

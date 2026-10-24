@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **Breaking:** citry-core now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing citry-core 1.8.0.
+- `safe_eval()`, `parse_template()` and `format_template()` now reject an
+  expression nested deeper than about 97 chained operators or 65 nested
+  brackets, and a template with more than 100,000 `{`. `safe_eval()` and
+  `parse_template()` raise `SyntaxError`, and `format_template()` raises
+  `TemplateFormatError`. Much deeper input used to crash the process; input
+  just past these limits used to be accepted, so split it into smaller
+  expressions or templates.
 - **Breaking:** `template_parser.analyze_browser_source()` and
   `template_parser.analyze_component_source()` return objects with named
   fields, `BrowserAnalysis` and `BrowserComponentAnalysis`, instead of
@@ -73,6 +82,9 @@
 
 - `template_parser.parse_template()` is much faster on large templates: a
   92 KB template that took more than a second now parses in about 10 ms.
+- `template_parser.parse_template()` now reports an error that covers many
+  lines in well under a second. An invalid 20,000-line expression took more
+  than a minute.
 
 ## v1.8.0
 

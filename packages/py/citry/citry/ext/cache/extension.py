@@ -185,16 +185,26 @@ class CacheExtension(Extension):
                 self._revision += 1
 
     @contextmanager
-    def _stable_revision(self, expected: int | None) -> Iterator[None]:
-        """Keep one replay apply atomic with respect to local invalidation."""
+    def _unchanged_revision(self, expected: int | None) -> Iterator[None]:
+        """
+        Run cache backend calls with no lock held, then fail if an invalidation overlapped them.
+
+        The backend is the application's own code, often a network call, so
+        it runs without ``_revision_lock``: renders building cache keys and
+        resets do not wait for it. Raises ``_CacheRevisionChanged`` before
+        the body when the revision already moved, and after it when an
+        invalidation ran meanwhile; the caller then deletes the writes it is
+        safe to undo.
+        Reading the revision waits for an invalidation in progress, so one
+        that overlapped the writes is seen here.
+        """
         from .errors import _CacheRevisionChanged  # noqa: PLC0415
 
-        with self._revision_lock:
-            if expected is not None and self._revision != expected:
-                raise _CacheRevisionChanged
-            yield
-            if expected is not None and self._revision != expected:
-                raise _CacheRevisionChanged
+        if expected is not None and self._revision_snapshot() != expected:
+            raise _CacheRevisionChanged
+        yield
+        if expected is not None and self._revision_snapshot() != expected:
+            raise _CacheRevisionChanged
 
     def _key_context(self) -> _CacheKeyContext:
         """Snapshot all engine-owned inputs to physical key construction."""
@@ -527,12 +537,22 @@ class CacheExtension(Extension):
             return False
         stored = False
         try:
-            with self._stable_revision(plan.revision):
+            with self._unchanged_revision(plan.revision):
                 self.citry.cache.set(plan.key, value, ttl=plan.ttl)
                 stored = True
         except _CacheRevisionChanged:
+            # The key names the old revision, so no new lookup reads it;
+            # delete it so the backend does not keep the stale entry. A
+            # failed delete only leaves that unused entry, so the render
+            # goes on.
             if stored:
-                self.citry.cache.delete(plan.key)
+                try:
+                    self.citry.cache.delete(plan.key)
+                except Exception as error:  # noqa: BLE001 - the backend is the application's code
+                    logger.warning(
+                        "Render cache stale-entry delete failed exception=%s",
+                        type(error).__name__,
+                    )
             self._diagnose_plan("store-skipped", plan, component, reason="revision-changed")
             return False
         except Exception:

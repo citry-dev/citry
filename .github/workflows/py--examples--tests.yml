@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -82,7 +82,7 @@ jobs:
       - name: Install qualification tools
         run: |
           uv venv .example-tools --python "${{ matrix.python-version }}"
-          uv pip install --python .example-tools/bin/python pytest==9.1.1 "tomli==2.3.0; python_version < '3.11'"
+          uv pip install --python .example-tools/bin/python pytest==9.1.1
 
       - name: Validate the catalog and archives
         run: .example-tools/bin/python -m pytest examples/tests -q

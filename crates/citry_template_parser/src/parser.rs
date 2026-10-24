@@ -185,6 +185,61 @@ pub fn parse_template_with_custom_lang_and_options(
     Ok(template)
 }
 
+/// The most `{` characters a template may hold.
+///
+/// The grammar calls itself once for each `{` it opens inside a `{{ ... }}`
+/// expression. Where it skips a `}` (inside a Python string or `#` comment)
+/// depends on parsing context that no quick count can follow exactly, so
+/// the parser uses the total number of `{` instead: the grammar can never open
+/// more levels than there are `{` characters. Typical templates hold far fewer,
+/// even with large inline styles and scripts.
+const MAX_BRACES: usize = 100_000;
+
+/// Stack the grammar needs per level it opens: about 1.7 KB in a debug
+/// build (measured on macOS arm64, where a 256 KiB thread reached 155
+/// levels), doubled and rounded up to 4 KiB. A release build needs less.
+const GRAMMAR_STACK_PER_BRACE: usize = 4 * 1024;
+
+/// Stack reserved for a template with no `{` at all, with room to spare.
+const GRAMMAR_STACK_BASE: usize = 256 * 1024;
+
+/// The number of `{` in `source`, and the offset of the first one past
+/// [`MAX_BRACES`], if any.
+fn count_braces(source: &str) -> (usize, Option<usize>) {
+    let mut count = 0;
+    for (offset, byte) in source.bytes().enumerate() {
+        if byte == b'{' {
+            count += 1;
+            if count > MAX_BRACES {
+                return (count, Some(offset));
+            }
+        }
+    }
+    (count, None)
+}
+
+/// Run the template grammar with enough stack for `braces` levels.
+///
+/// The stack needed is `GRAMMAR_STACK_BASE` plus `GRAMMAR_STACK_PER_BRACE` for
+/// every `{`: about 256 KiB for a template with none, 4.2 MiB for 1,000, and
+/// at most about 391 MiB at the limit. When less than that is left, `stacker`
+/// runs the grammar on a new segment of that size from the heap. On Linux and
+/// macOS the segment is mapped memory, and only the pages the grammar
+/// actually reaches are used, so many sibling `{` with little nesting cost
+/// little. On wasm32 (Pyodide), `stacker` cannot tell how much stack is left,
+/// so every parse takes a segment of this size from the heap and frees it
+/// afterwards. The grammar is pure Rust, so running it off the thread's own
+/// stack is safe.
+fn parse_grammar(
+    source: &str,
+    braces: usize,
+) -> Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>> {
+    let needed = GRAMMAR_STACK_BASE + braces * GRAMMAR_STACK_PER_BRACE;
+    stacker::maybe_grow(needed, needed, || {
+        GrammarParser::parse(Rule::template, source)
+    })
+}
+
 /// Internal method to parse a template with a context that may have offsets
 /// This is also used when parsing a nested template string,
 /// e.g. `c-body="<>Hello {{ name }}<>"` or `c-body="<div>Hello {{ name }}</div>"`.
@@ -200,7 +255,18 @@ fn parse_template_inner(input: &str, context: &ParserContext) -> Result<Template
     }
 
     let masked_source = context.masked_local_source(input)?;
-    let mut pairs = GrammarParser::parse(Rule::template, &masked_source)
+    let (braces, first_too_many) = count_braces(&masked_source);
+    if let Some(offset) = first_too_many {
+        return Err(context.error_from_local_span(
+            pest::Span::new(&masked_source, offset, offset + 1).unwrap(),
+            format!(
+                "This template holds more than {MAX_BRACES} `{{` characters, the most \
+                 Citry can parse in one template. Split it into smaller templates, \
+                 or move large inline styles or scripts out of it."
+            ),
+        ));
+    }
+    let mut pairs = parse_grammar(&masked_source, braces)
         .map_err(|error| context.error_from_pest(error, "Failed to parse template: "))?;
 
     // Stack for tracking open HTML tags with bodies
@@ -1439,7 +1505,14 @@ fn is_tag_bounded_nested_template(content: &str) -> bool {
         return false;
     }
 
-    let Ok(mut pairs) = GrammarParser::parse(Rule::template, trimmed) else {
+    // A value with too many braces is not parsed as a template here. It is
+    // handled as an expression, whose parser accepts it or raises its own
+    // clean error.
+    let (braces, first_too_many) = count_braces(trimmed);
+    if first_too_many.is_some() {
+        return false;
+    }
+    let Ok(mut pairs) = parse_grammar(trimmed, braces) else {
         return false;
     };
     let Some(template_pair) = pairs.next() else {

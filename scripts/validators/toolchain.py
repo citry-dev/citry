@@ -4,12 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import tomllib
 import yaml  # type: ignore[import-untyped]
-
-try:
-    import tomllib
-except ImportError:  # Python < 3.11
-    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOLCHAIN_FILE = REPO_ROOT / "rust-toolchain.toml"
@@ -151,9 +147,9 @@ def check() -> list[str]:
     if wheel_profile != expected_wheel_profile:
         errors.append(f"Cargo release-wheel profile must be {expected_wheel_profile!r}, found {wheel_profile!r}")
     binding_manifest = tomllib.loads(_CORE_BINDING_CARGO.read_text(encoding="utf-8"))
-    abi3_feature = binding_manifest.get("features", {}).get("abi3-py310")
-    if abi3_feature != ["pyo3/abi3-py310", "pyo3/extension-module"]:
-        errors.append("citry_core_py abi3-py310 feature must enable PyO3's stable ABI and extension module")
+    abi3_feature = binding_manifest.get("features", {}).get("abi3-py311")
+    if abi3_feature != ["pyo3/abi3-py311", "pyo3/extension-module"]:
+        errors.append("citry_core_py abi3-py311 feature must enable PyO3's stable ABI and extension module")
 
     docs_toolchain = f"{minimum}.0"
     docs_cache_settings = (
@@ -283,7 +279,7 @@ def check() -> list[str]:
         errors.append("every citry-core wheel action must pass --locked")
     if publish.count("--profile release-wheel") != action_count - 1:
         errors.append("every native citry-core wheel action must use the release-wheel Cargo profile")
-    if publish.count("--features abi3-py310") != action_count - 1:
+    if publish.count("--features abi3-py311") != action_count - 1:
         errors.append("every native citry-core wheel action must select the reviewed ABI3 release feature")
     if "--find-interpreter" in publish:
         errors.append("citry-core release builders must select the closed interpreter families explicitly")
@@ -293,8 +289,8 @@ def check() -> list[str]:
             "versioned command name, not architecture-specific /opt/python paths"
         )
     for interpreter_args in (
-        "--features abi3-py310 --interpreter python3.10",
-        "--features abi3-py310 --interpreter python3.14t pypy3.11",
+        "--features abi3-py311 --interpreter python3.11",
+        "--features abi3-py311 --interpreter python3.14t pypy3.11",
     ):
         if publish.count(interpreter_args) != 2:
             errors.append(f"Linux and musllinux citry-core builders must each select {interpreter_args!r}")

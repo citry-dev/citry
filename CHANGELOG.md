@@ -135,6 +135,12 @@
 
 ### Changed
 
+- **Breaking:** Citry now requires Python 3.11 or newer, because Python
+  3.10 reached its end of life on October 1, 2026. On Python 3.10, pip
+  keeps installing Citry 0.6.x. If your project declares
+  `requires-python = ">=3.10"`, raise it to `">=3.11"` before upgrading,
+  or uv and other lockfile tools cannot pick this release.
+
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old
@@ -215,6 +221,10 @@
 
 ### Fixes
 
+- A slow cache backend, such as Redis over the network, no longer holds
+  up cached renders on other threads or a hot reload while Citry writes to
+  it. A hot reload also no longer waits while `Citry.clear()` wipes the
+  backend.
 - In a component that uses Vue, `&amp;#40;` written in text or an
   attribute value now shows `&#40;`, as the same component without Vue
   does; it used to show `(`. A static `style` with `&quot;` inside a
@@ -242,6 +252,11 @@
   sets `Tom & Jerry`. Citry used to keep `&amp;` in strings written in
   `@click`, `v-if`, `v-show`, `v-for`, `v-slot`, `v-model` and other
   directives.
+- A template expression nested deeper than about 97 chained operators such
+  as `+`, or 65 nested brackets, now raises `SyntaxError`, and so does a
+  template with more than 100,000 `{`. Much deeper input used to crash the
+  process, and input just past these limits used to render, so split such an
+  expression into smaller ones.
 - A template that nests 50 or more `<c-if>` or `<c-for>` tags now renders.
   It used to fail with `SyntaxError: too many nested parentheses`.
   Templates nested more than about 300 levels raise `RecursionError`
@@ -418,6 +433,10 @@
 
 - Large templates parse much faster: a 92 KB template that took more than
   a second to parse now takes about 10 ms.
+- Citry now reports a template error that covers many lines, such as an
+  invalid expression spread over thousands of lines, in well under a
+  second. A 20,000-line expression with an error took more than a minute to
+  report.
 - Pages that repeat a component many times render up to about 9% faster
   on the server.
 - `serialize()` with `security_csp` or `security_javascript` set is much

@@ -32,7 +32,7 @@ and HTML help inside nested templates is missing. For those, use
 
 2. Install **LSP4IJ** from PyCharm's plugin Marketplace.
 3. Download Citry's
-   [LSP4IJ template folder](https://github.com/citry-dev/citry/tree/main/packages/editors/jetbrains/lsp4ij/citry){: target="_blank" rel="noopener"}.
+   [LSP4IJ template folder](https://github.com/citry-dev/citry/tree/citry@0.6.0/packages/editors/jetbrains/lsp4ij/citry){: target="_blank" rel="noopener"}.
 4. Open **Settings → Languages & Frameworks → Language Servers**, add a
    language server, open the template selector, and choose
    **Import from custom template…**. Select the downloaded `citry` folder.

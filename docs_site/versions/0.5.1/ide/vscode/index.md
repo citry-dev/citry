@@ -22,12 +22,12 @@ the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemN
 Citry completes registered components and their inputs without leaving the
 Python file:
 
-<img src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/autocomplete.gif" alt="Citry component autocomplete inside an inline Python template" width="960" />
+<img src="https://raw.githubusercontent.com/citry-dev/citry/citry@0.5.1/packages/editors/vscode/images/autocomplete.gif" alt="Citry component autocomplete inside an inline Python template" width="960" />
 
 Hover hints explain template values, while references and navigation connect
 them to their Python definitions:
 
-<img src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/refs_hints.gif" alt="Citry hover hints and references connecting a template to Python" width="960" />
+<img src="https://raw.githubusercontent.com/citry-dev/citry/citry@0.5.1/packages/editors/vscode/images/refs_hints.gif" alt="Citry hover hints and references connecting a template to Python" width="960" />
 
 ## Install the language server
 
@@ -305,7 +305,7 @@ The command palette exposes only two Citry formatting commands:
 Formatting expands Citry/HTML structure and formats embedded JavaScript and
 CSS while preserving readable Python triple-quoted strings:
 
-<img src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/formatting.gif" alt="Citry formatting an inline template, JavaScript, and CSS inside a Python component" width="960" />
+<img src="https://raw.githubusercontent.com/citry-dev/citry/citry@0.5.1/packages/editors/vscode/images/formatting.gif" alt="Citry formatting an inline template, JavaScript, and CSS inside a Python component" width="960" />
 
 The commands do not format `messages` blocks or standalone `.ftl` files.
 Fluent syntax highlighting is available in both places, but Citry does not yet
