@@ -1473,7 +1473,10 @@ def assemble_typed_render(
             project_root_markers: bool = True,
             parent_element_stack: tuple[str, ...] = (),
             parent_element_keys: tuple[str | None, ...] | None = None,
-            projected_data: bool = False,
+            # Whether this body is compiled into this occurrence's definition.
+            # Only then are the values of parts authored elsewhere copied into
+            # this occurrence's data. The two root calls pass True.
+            compiled_here: bool = False,
         ) -> _DefinitionFragment:
             nonlocal dynamic_site_index
             output = _DefinitionFragment.empty()
@@ -1491,10 +1494,8 @@ def assemble_typed_render(
             inherited_element_depth = len(element_stack)
             dom_depth = 0
             data_values = owner_values(data_owner_id)
-            projected_keys: set[str] | None = set() if projected_data and data_owner_id != occurrence_id else None
-            projected_containers: set[str] | None = (
-                set() if projected_data and data_owner_id != occurrence_id else None
-            )
+            projected_keys: set[str] | None = set() if compiled_here and data_owner_id != occurrence_id else None
+            projected_containers: set[str] | None = set() if compiled_here and data_owner_id != occurrence_id else None
             active_projected_data_keys.append(projected_keys)
             active_projected_data_containers.append(projected_containers)
             # A projected body keeps the lexical data owner for values, but its
@@ -1534,7 +1535,7 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
-                        projected_data=projected_data,
+                        compiled_here=compiled_here,
                     )
                 if parts:
                     # `matching` has just proven every part eligible, so the run is all of them.
@@ -1736,6 +1737,29 @@ def assemble_typed_render(
                                 raise AssertionError("prepared slotKeys container changed type")
                             if slot_keys.setdefault(site_id, slot_key) != slot_key:
                                 raise UnsupportedPreparedView("one prepared slot site received conflicting keys")
+                    # The occurrence whose definition this fill's body lands
+                    # in when it is not passed on to another receiver.
+                    output_owner = (
+                        data_owner_id
+                        if containing_slot is not None
+                        # A fallback body belongs to its receiver. Once an
+                        # enclosing projection has carried it into that
+                        # receiver's data scope, emit it there. A supplied
+                        # fill still belongs to its caller and must continue
+                        # through the ordinary forwarding path.
+                        and fill_source.kind == "fallback"
+                        and receiver_owner == data_owner_id
+                        else occurrence_id
+                    )
+                    # When this body's author is another occurrence, its values
+                    # are copied into this occurrence's prepared data. Copy them
+                    # only when the body is compiled into this occurrence's
+                    # definition; a fill handed on as a Vue slot reads its
+                    # values from its author's data, and an extra opaque HTML
+                    # entry here fails the manifest check.
+                    body_stays_here = flattened_transparent_receiver or (
+                        not nested_template and receiver_owner == output_owner and lexical_owner == output_owner
+                    )
                     fill_reads: list[str] = []
                     if copied_outside_author:
                         browser_read_trackers.append((lexical_owner, call_owner_id, fill_reads))
@@ -1758,7 +1782,7 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers and dom_depth == 0,
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
-                        projected_data=projected_data or flattened_transparent_receiver,
+                        compiled_here=compiled_here and body_stays_here,
                     )
                     if copied_outside_author:
                         browser_read_trackers.pop()
@@ -1770,18 +1794,6 @@ def assemble_typed_render(
                         output.extend(selected)
                         continue
                     fill = _FillFragment(site_id, part.public_name, lexical_owner, selected)
-                    output_owner = (
-                        data_owner_id
-                        if containing_slot is not None
-                        # A fallback body belongs to its receiver. Once an
-                        # enclosing projection has carried it into that
-                        # receiver's data scope, emit it there. A supplied
-                        # fill still belongs to its caller and must continue
-                        # through the ordinary forwarding path.
-                        and fill_source.kind == "fallback"
-                        and receiver_owner == data_owner_id
-                        else occurrence_id
-                    )
                     if receiver_owner != output_owner:
                         if containing_slot is None:
                             raise UnsupportedPreparedView("direct slot result moved outside its receiver")
@@ -1826,7 +1838,7 @@ def assemble_typed_render(
                         project_root_markers=project_root_markers,
                         parent_element_stack=tuple(element_stack),
                         parent_element_keys=tuple(element_keys),
-                        projected_data=projected_data,
+                        compiled_here=compiled_here,
                     )
                     wrapped = _DefinitionFragment.empty()
                     wrapped.extend(
@@ -1839,7 +1851,7 @@ def assemble_typed_render(
                             project_root_markers=False,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            projected_data=projected_data,
+                            compiled_here=compiled_here,
                         )
                     )
                     wrapped.extend(decorated)
@@ -1866,7 +1878,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            projected_data=projected_data,
+                            compiled_here=compiled_here,
                         )
                     )
                     continue
@@ -1882,7 +1894,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            projected_data=projected_data,
+                            compiled_here=compiled_here,
                         )
                     )
                     continue
@@ -1995,7 +2007,7 @@ def assemble_typed_render(
                             project_root_markers=project_root_markers and dom_depth == 0,
                             parent_element_stack=tuple(element_stack),
                             parent_element_keys=tuple(element_keys),
-                            projected_data=projected_data,
+                            compiled_here=compiled_here,
                         )
                         if wrapper_key is None:
                             output.extend(transparent_body)
@@ -3019,7 +3031,13 @@ def assemble_typed_render(
                 raise UnsupportedPreparedView("simple='vue' called children do not match the template's calls")
             attach_leaf_data(call_leaf, prepared_values)
             call_outputs = [
-                transform_parts([child], parent_element_stack=(*physical_parent_stack, *call.element_stack))
+                # Each row's template is compiled into this occurrence's
+                # definition, so parts authored elsewhere copy their values here.
+                transform_parts(
+                    [child],
+                    parent_element_stack=(*physical_parent_stack, *call.element_stack),
+                    compiled_here=True,
+                )
                 for call, child in zip(call_fragment_source.calls, call_children, strict=True)
             ]
             # The element text names the child's tag and call id, both fixed
@@ -3093,9 +3111,12 @@ def assemble_typed_render(
                     tuple(dict(value) for value in leaf.fragment.runtime_event_sites),
                 )
             else:
+                # The body is compiled into this occurrence's definition, so a
+                # part authored elsewhere inside it has its values copied here.
                 fragment = transform_parts(
                     selected_parts,
                     parent_element_stack=physical_parent_stack,
+                    compiled_here=True,
                 )
                 compile_input = fragment.compile_input(template_context_names)
             definition_id = _definition_id(type_key, compile_input)
