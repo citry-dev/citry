@@ -7,7 +7,9 @@ generated leaf code stops at a fixed nesting depth. So the deepest Python
 call stack during a render stays the same however deeply control flow
 nests. Each case renders once to compile, then measures the second render
 with a profile hook that records the deepest stack. The peak at depth 128
-may be at most 20 frames above the peak at depth 32.
+may be at most 20 frames above the peak at depth 32. A first render, which
+also compiles the component and walks its template several times, is
+measured the same way.
 """
 
 from __future__ import annotations
@@ -83,9 +85,10 @@ def _component(template: str) -> type[Component]:
     return Root
 
 
-def _peak_frames(root: type[Component]) -> int:
-    """Return the deepest Python stack seen while rendering ``root`` a second time."""
-    root().render().serialize(deps_strategy="ignore")
+def _peak_frames(root: type[Component], *, first_render: bool = False) -> int:
+    """Return the deepest Python stack seen while rendering ``root``, a second time unless ``first_render``."""
+    if not first_render:
+        root().render().serialize(deps_strategy="ignore")
     peak = 0
 
     def profile(frame: FrameType, event: str, arg: object) -> None:
@@ -137,3 +140,17 @@ def test_simple_vue_components_render_at_every_depth(depth: int, render_path: st
     html = Root().render().serialize(deps_strategy="ignore")
     assert html.count("<div") == depth
     assert ">7<" in html
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_deeper_templates_render_the_first_time_in_the_same_python_stack(
+    shape: str,
+    render_path: str,
+) -> None:
+    # A component's first render also precomputes its constant parts, runs
+    # the i18n and events transforms (both on by default), and compiles its
+    # Vue leaf program; each of those walks the whole template.
+    build = SHAPES[shape]
+    shallow = _peak_frames(_component(build(SHALLOW)), first_render=True)
+    deep = _peak_frames(_component(build(DEEP)), first_render=True)
+    assert deep - shallow <= ALLOWED_GROWTH, f"{shape}: {shallow} frames at depth {SHALLOW}, {deep} at {DEEP}"
