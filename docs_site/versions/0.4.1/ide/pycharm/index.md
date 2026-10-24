@@ -44,7 +44,7 @@ component catalog. Then install **LSP4IJ** from PyCharm's plugin Marketplace.
 ## Import the Citry server definition
 
 1. Download or copy Citry's
-   [LSP4IJ template directory](https://github.com/citry-dev/citry/tree/main/packages/editors/jetbrains/lsp4ij/citry){: target="_blank" rel="noopener"}.
+   [LSP4IJ template directory](https://github.com/citry-dev/citry/tree/citry@0.4.1/packages/editors/jetbrains/lsp4ij/citry){: target="_blank" rel="noopener"}.
 2. Open **Settings → Languages & Frameworks → Language Servers** in PyCharm.
 3. Add a language server, open the template selector, and choose
    **Import from custom template…**.
