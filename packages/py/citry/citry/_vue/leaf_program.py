@@ -13,6 +13,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, final, overload
 
 import citry.citry_render as render_module
+from citry._walk import Call, run
 from citry.attrs import (
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
@@ -80,7 +81,7 @@ from .compiler import (
 from .json_data import _JS_SAFE_INTEGER, _vue_attribute_map, _vue_attribute_value
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import Callable, Generator, Iterator, Sequence
     from typing import Protocol, TypeAlias
 
     from citry.citry_context import CitryContext
@@ -2821,7 +2822,9 @@ def compile_leaf_program(
     how to render the children the evaluator records.
     """
     compiler = _Compiler(allow_i18n_passthrough=allow_i18n_passthrough, allow_calls=allow_calls)
-    operations = compiler.compile_body(body)
+    # The compiler's methods are walk generators, so Python's call depth does
+    # not grow with how deeply the template nests.
+    operations = run(compiler.compile_body(body))
     if operations is None or (not compiler.has_data_ops and not allow_static_only) or not compiler.safe_body:
         return None
     evaluation_operations = _evaluation_only_operations(operations)
@@ -2876,7 +2879,7 @@ class _Compiler:
         self.output.append(value)
         self.byte_position += len(value.encode("utf-8"))
 
-    def compile_body(self, body: Sequence[object]) -> tuple[object, ...] | None:
+    def compile_body(self, body: Sequence[object]) -> Generator[Call, Any, tuple[object, ...] | None]:
         operations: list[object] = []
         skip_close_tag: str | None = None
         index = 0
@@ -2891,7 +2894,7 @@ class _Compiler:
                 index += 1
                 continue
             skip_close_tag = None
-            operation = self.compile_item(item)
+            operation = yield Call(self.compile_item, item)
             if operation is None:
                 return None
             operations.append(operation)
@@ -2900,7 +2903,7 @@ class _Compiler:
             index += 1
         return tuple(operations)
 
-    def compile_item(self, item: object) -> object | None:
+    def compile_item(self, item: object) -> Generator[Call, Any, object | None]:
         if type(item) is PreparedStaticRunNode:
             if _unsafe_body_text(item._prepared.html):
                 self.safe_body = False
@@ -2943,11 +2946,11 @@ class _Compiler:
         if type(item) is ComponentNode and self.allow_calls:
             return self._compile_call(item)
         if type(item) is IfNode:
-            return self._compile_if(item)
+            return (yield Call(self._compile_if, item))
         if type(item) is ForNode:
             if item._precomputed_parts is not None:
                 return None
-            return self._compile_for(item)
+            return (yield Call(self._compile_for, item))
         return None
 
     def _compile_open(self, node: PreparedElementOpenNode, renderer: Node) -> _Open:
@@ -3163,7 +3166,7 @@ class _Compiler:
         self.calls.append(call)
         return call
 
-    def _compile_if(self, node: IfNode) -> _If | None:
+    def _compile_if(self, node: IfNode) -> Generator[Call, Any, _If | None]:
         self.has_data_ops = True
         key = f"citryIf{self.if_index}"
         self.if_index += 1
@@ -3171,7 +3174,7 @@ class _Compiler:
         for index, branch in enumerate(node.branches):
             self.append(branch_opening(key, index))
             self.scope_steps.append({"kind": "branch", "key": key, "index": index})
-            compiled = self.compile_body(branch[2])
+            compiled = yield Call(self.compile_body, branch[2])
             self.scope_steps.pop()
             if compiled is None:
                 return None
@@ -3179,7 +3182,7 @@ class _Compiler:
             self.append("</template>")
         return _If(node, key, tuple(branches))
 
-    def _compile_for(self, node: ForNode) -> _For | None:
+    def _compile_for(self, node: ForNode) -> Generator[Call, Any, _For | None]:
         self.has_data_ops = True
         key = f"citryLoop{self.loop_index}"
         self.loop_index += 1
@@ -3191,7 +3194,7 @@ class _Compiler:
         )
         child.open_tags = list(self.open_tags)
         child.scope_steps = [*self.scope_steps, {"kind": "each", "key": key}]
-        compiled_body = child.compile_body(node.branches[0][2])
+        compiled_body = yield Call(child.compile_body, node.branches[0][2])
         if compiled_body is None:
             return None
         offset = self.byte_position
@@ -3209,7 +3212,7 @@ class _Compiler:
         if len(node.branches) > 1:
             self.append(loop_empty_opening(key))
             self.scope_steps.append({"kind": "empty", "key": key})
-            compiled_empty = self.compile_body(node.branches[1][2])
+            compiled_empty = yield Call(self.compile_body, node.branches[1][2])
             self.scope_steps.pop()
             if compiled_empty is None:
                 return None
