@@ -8,6 +8,15 @@ from citry._output_html import scan_output_html
 from citry.attrs import _html_attr_identity
 from citry_core.html_transform import mark_html, static_html_node_count, validate_html_fragment_boundary
 
+# How the fragment check starts its message when it refuses a parse error
+# rather than the shape of the tags (`validate_html_fragment_boundary`). Keep
+# in step with the message in `output_scanner.rs`.
+_PARSE_ERROR_PREFIX = "opaque HTML has the HTML parse error "
+# The parse errors a '<' that does not start a tag causes.
+_STRAY_LESS_THAN_ERRORS = frozenset(
+    {"invalid-first-character-of-tag-name", "eof-before-tag-name", "missing-end-tag-name"}
+)
+
 
 def reject_cross_boundary_html(html: str, *, origin: str) -> None:
     """
@@ -22,13 +31,34 @@ def reject_cross_boundary_html(html: str, *, origin: str) -> None:
         validate_html_fragment_boundary(html)
     except ValueError as error:
         preview = html if len(html) <= 80 else f"{html[:77]}..."
+        # The check names a parse error it refuses by its name in the HTML
+        # standard, so the message can say what to fix in the text itself;
+        # the tag rules cover the shape of the tags.
+        parse_error = (
+            str(error).removeprefix(_PARSE_ERROR_PREFIX) if str(error).startswith(_PARSE_ERROR_PREFIX) else None
+        )
+        if parse_error is not None:
+            hint = (
+                " A '<' that does not start a tag must be written as '&lt;'."
+                if parse_error in _STRAY_LESS_THAN_ERRORS
+                else ""
+            )
+            msg = (
+                f"{origin} is not well-formed HTML: {preview!r} has the HTML parse error {parse_error!r}"
+                " (see https://html.spec.whatwg.org/multipage/parsing.html#parse-errors)."
+                f"{hint} Inside an interactive component, Vue inserts this HTML as one block, so Citry"
+                " accepts only HTML the browser reads without such an error, where it can tell where each"
+                " tag starts and ends. Static pages do not need this, because there the HTML is written"
+                " into the page as is."
+            )
+            raise ValueError(msg) from error
         msg = (
             f"{origin} is not a complete HTML fragment: {preview!r}. Inside an interactive component,"
             " Vue inserts this HTML as one block, so every tag it opens must be closed inside it, it must"
-            " not close a tag it did not open, a non-void element such as <iframe> needs its end tag because"
-            " the browser ignores a '/' on it, and a '<' that does not start a tag must be written as"
-            " '&lt;'. Fix the HTML, or move the tags it shares with the template into it. Static pages"
-            " do not have this rule, because there the HTML is written into the page as is."
+            " not close a tag it did not open, and a non-void element such as <iframe> needs its end tag"
+            " because the browser ignores a '/' on it. Fix the HTML, or move the tags it shares with the"
+            " template into it. Static pages do not have this rule, because there the HTML is written into"
+            " the page as is."
         )
         raise ValueError(msg) from error
 

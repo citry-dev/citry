@@ -231,8 +231,9 @@ page, runs in the browser (it has its own `js`, or uses Vue syntax such as
 - write a `<` in text as `&lt;`.
 
 Otherwise the render fails with "A Markup value (trusted HTML from Python)
-is not a complete HTML fragment". On pages without browser behavior, Citry
-inserts the value unchanged.
+is not a complete HTML fragment", or, for a stray `<`, "... is not
+well-formed HTML". On pages without browser behavior, Citry inserts the
+value unchanged.
 
 ## Python `#` comments { #add-a-comment }
 

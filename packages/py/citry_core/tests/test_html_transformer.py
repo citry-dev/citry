@@ -19,9 +19,15 @@ from citry_core.html_transform import (
 def test_strict_fragment_boundary():
     for html in ("", "<div>x</div><br>", "<svg><path/></svg>", "<math><mspace/></math>"):
         validate_html_fragment_boundary(html)
-    for html in ("<div>", "</div>", "<div/>", "<li>a<li>b", "<!-- unfinished"):
+    for html in ("<div>", "</div>", "<div/>", "<li>a<li>b"):
         with pytest.raises(ValueError, match="self-contained strict fragment"):
             validate_html_fragment_boundary(html)
+    # A tokenizer error is named by its name in the HTML standard.
+    with pytest.raises(ValueError, match=r"^opaque HTML has the HTML parse error eof-in-comment$"):
+        validate_html_fragment_boundary("<!-- unfinished")
+    # A character reference the browser decodes to text is accepted.
+    for html in ("<p>&copy 2026</p>", "<b>a&#127;b</b>", "<b>a&#x80;b</b>", "<p>a&foo;b</p>"):
+        validate_html_fragment_boundary(html)
 
 
 def test_browser_fragment_matches_nodes_reads_every_event_kind():

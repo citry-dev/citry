@@ -2413,10 +2413,10 @@ def test_incomplete_raw_html_names_the_block_and_the_rule() -> None:
     assert str(excinfo.value) == (
         "The <c-raw> block at line 2, column 10 is not a complete HTML fragment: '<div class=\"open\">'."
         " Inside an interactive component, Vue inserts this HTML as one block, so every tag it opens must"
-        " be closed inside it, it must not close a tag it did not open, a non-void element such as <iframe>"
-        " needs its end tag because the browser ignores a '/' on it, and a '<' that does not start a tag"
-        " must be written as '&lt;'. Fix the HTML, or move the tags it shares with the template into it."
-        " Static pages do not have this rule, because there the HTML is written into the page as is."
+        " be closed inside it, it must not close a tag it did not open, and a non-void element such as"
+        " <iframe> needs its end tag because the browser ignores a '/' on it. Fix the HTML, or move the"
+        " tags it shares with the template into it. Static pages do not have this rule, because there the"
+        " HTML is written into the page as is."
     )
 
     class StaticPage(Component):
@@ -2599,3 +2599,58 @@ def test_self_closed_raw_text_element_is_not_a_complete_fragment(element: str) -
 
     with pytest.raises(ValueError, match=r"^The HTML inside .* is not a complete HTML fragment"):
         _assemble_page(IgnoredContents())
+
+
+def test_raw_html_with_character_references_the_browser_decodes_renders() -> None:
+    # `&copy 2026` (a legacy name without `;`) and `&#127;` are parse errors
+    # in the HTML standard, but each decodes to text, so Vue's block stays
+    # whole and the page renders.
+    app = Citry(autodiscover=False)
+
+    class Footer(Component):
+        citry = app
+        template = """
+<footer><c-raw><p>&copy 2026 Example &#127;&#x80;</p></c-raw></footer>
+"""
+        js = """
+$component({data() { return {}; }});
+"""
+
+    html = Footer().render().serialize()
+    # The block reaches the page as written, and the page still hydrates.
+    assert "<p>&copy 2026 Example &#127;&#x80;</p>" in html
+    assert '"hydrate":true' in html
+
+
+def test_raw_html_with_another_parse_error_names_it() -> None:
+    app = Citry(autodiscover=False)
+
+    class RawBlock(Component):
+        citry = app
+        template = """
+<main :class="cls"><c-raw><p a="1"b="2">x</p></c-raw></main>
+"""
+
+    with pytest.raises(ValueError, match="parse error") as excinfo:
+        _assemble_page(RawBlock())
+    message = str(excinfo.value)
+    assert message.startswith("The <c-raw> block at line 2, column 27 is not well-formed HTML:")
+    assert "'missing-whitespace-between-attributes'" in message
+    assert "#parse-errors" in message
+    assert "'&lt;'" not in message
+
+
+def test_raw_html_with_a_stray_less_than_sign_says_how_to_write_it() -> None:
+    app = Citry(autodiscover=False)
+
+    class RawBlock(Component):
+        citry = app
+        template = """
+<main :class="cls"><c-raw>a < b</c-raw></main>
+"""
+
+    with pytest.raises(ValueError, match="not well-formed HTML") as excinfo:
+        _assemble_page(RawBlock())
+    message = str(excinfo.value)
+    assert "'invalid-first-character-of-tag-name'" in message
+    assert "A '<' that does not start a tag must be written as '&lt;'." in message
