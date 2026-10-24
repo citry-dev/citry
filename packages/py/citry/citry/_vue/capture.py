@@ -368,6 +368,9 @@ class PreparedBrowserBinding:
     target: Literal["text", "attribute"]
     name: str | None = None
     values_expression: str | None = None
+    # The server-rendered text the browser shows when the values expression
+    # returns `null`. Only a binding with a values expression can have one.
+    fallback: str | None = None
     _producer_token: object | None = field(default=None, init=False, repr=False, compare=False)
 
 
@@ -381,6 +384,7 @@ def prepared_browser_binding(
     target: Literal["text", "attribute"],
     name: str | None = None,
     values_expression: str | None = None,
+    fallback: str | None = None,
 ) -> PreparedBrowserBinding:
     """Create one checked browser projection from trusted producer metadata."""
     if not re.fullmatch(r"\$[A-Za-z_][A-Za-z0-9_]*", helper):
@@ -391,7 +395,10 @@ def prepared_browser_binding(
         raise ValueError("prepared browser binding target and attribute name disagree")
     if values_expression is not None and (type(values_expression) is not str or not values_expression):
         raise ValueError("prepared browser binding values expression must be non-empty")
-    value = PreparedBrowserBinding(helper, operand, target, name, values_expression)
+    # Only an expression can return `null`, the case the server text is for.
+    if fallback is not None and (values_expression is None or type(fallback) is not str):
+        raise ValueError("prepared browser binding fallback text needs a values expression")
+    value = PreparedBrowserBinding(helper, operand, target, name, values_expression, fallback)
     object.__setattr__(value, "_producer_token", _BROWSER_BINDING_TOKEN)
     return value
 

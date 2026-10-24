@@ -751,6 +751,7 @@ def _replace_browser_binding(value: PreparedBrowserBinding, replacements: dict[s
         target=value.target,
         name=value.name,
         values_expression=value.values_expression,
+        fallback=value.fallback,
     )
 
 
@@ -781,6 +782,7 @@ def _export_typed_leaf(part: object) -> ArtifactPart:
                 binding.target,
                 binding.name,
                 binding.values_expression,
+                binding.fallback,
             ),
         )
     if type(part) is PreparedTrustedHtmlValue:
@@ -812,6 +814,7 @@ def _export_typed_leaf(part: object) -> ArtifactPart:
                     value.target,
                     value.name,
                     value.values_expression,
+                    value.fallback,
                 )
                 for value in part.browser_bindings
             ),
@@ -916,6 +919,7 @@ def _replay_typed_leaf(part: ArtifactPart) -> RenderPart:
                     target=binding.target,  # type: ignore[arg-type]
                     name=binding.name,
                     values_expression=binding.values_expression,
+                    fallback=binding.fallback,
                 )
             ),
         )
@@ -949,6 +953,7 @@ def _replay_typed_leaf(part: ArtifactPart) -> RenderPart:
                     target=value.target,  # type: ignore[arg-type]
                     name=value.name,
                     values_expression=value.values_expression,
+                    fallback=value.fallback,
                 )
                 for value in part.browser_bindings
             ),

@@ -42,6 +42,7 @@ from . import native_leaf_json as _native_leaf_json
 from . import native_render as _native_render
 from .capture import (
     PreparedAttribute,
+    PreparedBrowserBinding,
     PreparedDynamicElementClose,
     PreparedDynamicElementOpen,
     PreparedElementClose,
@@ -2520,12 +2521,8 @@ def assemble_typed_render(
                                 "prepared browser text_browser_binding helper is not reserved"
                             )
                         operand_key = data_key("Binding", part.source, part.span, data_owner_id)
-                        data_values[operand_key] = _json_plain(text_browser_binding.operand)
-                        thunk = (
-                            ""
-                            if text_browser_binding.values_expression is None
-                            else f", () => ({text_browser_binding.values_expression})"
-                        )
+                        data_values[operand_key] = _browser_binding_operand(text_browser_binding)
+                        thunk = _browser_binding_thunk(text_browser_binding)
                         output.append(f"{{{{ {text_browser_binding.helper}($citryPrepared.{operand_key}{thunk}) }}}}")
                     continue
                 if isinstance(part, (PreparedTrustedHtmlValue, Markup)):
@@ -2608,13 +2605,9 @@ def assemble_typed_render(
                         operand_key = data_key("Binding", part.source, part.span, data_owner_id)
                         while operand_key in data_values:
                             operand_key += "x"
-                        data_values[operand_key] = _json_plain(browser_binding.operand)
+                        data_values[operand_key] = _browser_binding_operand(browser_binding)
                         browser_keys.append(operand_key)
-                        thunk = (
-                            ""
-                            if browser_binding.values_expression is None
-                            else f", () => ({browser_binding.values_expression})"
-                        )
+                        thunk = _browser_binding_thunk(browser_binding)
                         expression = escape(
                             f"{browser_binding.helper}($citryPrepared.{operand_key}{thunk})", quote=True
                         )
@@ -3881,6 +3874,24 @@ def _ignored_contents_html(
 
     visit(parts)
     return "".join(out)
+
+
+def _browser_binding_operand(binding: PreparedBrowserBinding) -> object:
+    """Encode the prepared data the browser helper receives as its first argument."""
+    operand = _json_plain(binding.operand)
+    if binding.fallback is None:
+        return operand
+    # A values expression may return `null`, and the browser then shows the
+    # server text. That text is data, so it rides in the prepared JSON next
+    # to the binding ID and is never written into the template as code.
+    return {"id": operand, "fallback": binding.fallback}
+
+
+def _browser_binding_thunk(binding: PreparedBrowserBinding) -> str:
+    """Write the helper's optional second argument, the template-authored values function."""
+    if binding.values_expression is None:
+        return ""
+    return f", () => ({binding.values_expression})"
 
 
 def _append_element_open(

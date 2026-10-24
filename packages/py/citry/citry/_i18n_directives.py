@@ -46,7 +46,9 @@ class I18nBindingNameError(ValueError):
 
 def looks_like_i18n_binding(name: str) -> bool:
     """Return whether ``name`` belongs to the reserved ``$c-tr`` family."""
-    folded = name.lower()
+    # The unbound `str.lower` reads the real text even from a str subclass
+    # that overrides `lower`, so no spelling of the name hides from this check.
+    folded = str.lower(name)
     return folded == I18N_BINDING_ROOT or (
         folded.startswith(I18N_BINDING_ROOT)
         and len(folded) > len(I18N_BINDING_ROOT)

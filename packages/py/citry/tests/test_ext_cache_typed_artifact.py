@@ -1535,6 +1535,7 @@ def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None
         target="attribute",
         name="title",
         values_expression="state.value",
+        fallback='server "title" <b>',
     )
     text = prepared_browser_binding(helper="$probe", operand="binding-2", target="text")
     opening = PreparedElementOpen(
@@ -1553,6 +1554,9 @@ def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None
     replayed_value = _replay_typed_leaf(_export_typed_leaf(value))
 
     assert replayed_opening.browser_bindings[0].operand == attribute.operand
+    assert replayed_opening.browser_bindings[0].fallback == 'server "title" <b>'
+    with pytest.raises(ValueError, match="fallback text needs a values expression"):
+        prepared_browser_binding(helper="$probe", operand="x", target="text", fallback="server")
     assert replayed_value.browser_binding is not None
     assert replayed_value.browser_binding.operand == "binding-2"
     assert is_authenticated_browser_binding(replayed_opening.browser_bindings[0])

@@ -2661,6 +2661,9 @@ def _collect_i18n_binding_directives(
                         )
                 continue
             authored = attr.key.content
+            if authored == "c-bind" and inner is not None:
+                _collect_spread_i18n_bindings(inner.content, found, base_index + inner.start_index)
+                continue
             server_dynamic = authored.startswith("c-") and looks_like_i18n_binding(authored[2:])
             directive = authored[2:] if server_dynamic else authored
             if not looks_like_i18n_binding(directive):
@@ -2702,6 +2705,9 @@ def _collect_i18n_binding_directives(
                     )
                 )
                 continue
+            # The render rejects a `c-$c-tr:` name with `VueCodeError`, because
+            # its Python value would become browser code; report it here too.
+            python_error = _python_i18n_binding_error(directive) if server_dynamic else None
             found.append(
                 BrowserI18nBindingDirective(
                     parsed_name.message,
@@ -2719,9 +2725,9 @@ def _collect_i18n_binding_directives(
                     dynamic_arguments,
                     has_values_expression,
                     server_dynamic,
-                    None,
-                    None,
-                    None,
+                    python_error,
+                    None if python_error is None else name_start - 2,
+                    None if python_error is None else name_end,
                 )
             )
         body = getattr(node, "body", None)
@@ -2731,6 +2737,52 @@ def _collect_i18n_binding_directives(
                 found,
                 parse_nested=parse_nested,
                 base_index=base_index,
+            )
+
+
+def _python_i18n_binding_error(name: str) -> str:
+    """Explain why Python data may not supply a `$c-tr` binding, in the words the render error uses."""
+    return (
+        f"Python data may not set {name!r}, because a $c-tr binding's value is browser code. "
+        "Write the $c-tr binding directly in the template, with any values expression written there too, "
+        "and return those values from js_data()."
+    )
+
+
+def _collect_spread_i18n_bindings(source: str, found: list[BrowserI18nBindingDirective], start_index: int) -> None:
+    """Report `$c-tr` keys that a literal `c-bind` mapping in the template would spread."""
+    # Only a dict literal written in the template can be read here; a mapping
+    # built in Python is still rejected when the template renders.
+    try:
+        parsed = ast.parse(source.strip(), mode="eval").body
+    except SyntaxError:
+        return
+    if not isinstance(parsed, ast.Dict):
+        return
+    end_index = start_index + len(source.encode("utf-8"))
+    for key in parsed.keys:
+        if isinstance(key, ast.Constant) and type(key.value) is str and looks_like_i18n_binding(key.value):
+            found.append(
+                BrowserI18nBindingDirective(
+                    None,
+                    None,
+                    None,
+                    start_index,
+                    end_index,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    (),
+                    True,  # noqa: FBT003 - positional dataclass field
+                    True,  # noqa: FBT003 - positional dataclass field
+                    True,  # noqa: FBT003 - positional dataclass field
+                    _python_i18n_binding_error(key.value),
+                    start_index,
+                    end_index,
+                )
             )
 
 
@@ -3019,6 +3071,11 @@ def _nested_template(source: str, parser: Callable[[str], Template]) -> tuple[Te
     return parsed, len(source[:leading_chars].encode("utf-8")) + 2
 
 
+def javascript_tokens(source: str) -> tuple[_Token, ...]:
+    """Split browser expression source into identifier, string, and punctuation tokens, skipping comments."""
+    return _tokens(source)
+
+
 def _tokens(source: str) -> tuple[_Token, ...]:
     tokens: list[_Token] = []
     index = 0
@@ -3275,6 +3332,7 @@ __all__ = [
     "browser_expressions",
     "browser_i18n_bind_calls",
     "browser_i18n_binding_directives",
+    "javascript_tokens",
     "browser_i18n_calls_checkable",
     "browser_i18n_message_calls",
     "browser_i18n_profile_calls",

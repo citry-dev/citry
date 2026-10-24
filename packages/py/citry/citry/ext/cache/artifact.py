@@ -101,6 +101,7 @@ class ArtifactBrowserBinding:
     target: str
     name: str | None
     values_expression: str | None
+    fallback: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -551,13 +552,20 @@ def _prepared_call_to_wire(value: ArtifactPreparedCall) -> list[object]:
 
 
 def _browser_binding_to_wire(value: ArtifactBrowserBinding) -> list[object]:
-    return [value.helper, _thaw_json(value.operand), value.target, value.name, value.values_expression]
+    return [
+        value.helper,
+        _thaw_json(value.operand),
+        value.target,
+        value.name,
+        value.values_expression,
+        value.fallback,
+    ]
 
 
 def _browser_binding_from_wire(value: object, path: str) -> ArtifactBrowserBinding:
     item = _require_list(value, path)
-    if len(item) != 5:
-        raise CacheArtifactError(f"{path} must contain exactly five fields.")
+    if len(item) != 6:
+        raise CacheArtifactError(f"{path} must contain exactly six fields.")
     target = _require_nonempty_string(item[2], f"{path}[2]")
     name = None if item[3] is None else _require_nonempty_string(item[3], f"{path}[3]")
     if target not in {"text", "attribute"} or (target == "text") != (name is None):
@@ -568,6 +576,7 @@ def _browser_binding_from_wire(value: object, path: str) -> ArtifactBrowserBindi
         target,
         name,
         None if item[4] is None else _require_nonempty_string(item[4], f"{path}[4]"),
+        None if item[5] is None else _require_string(item[5], f"{path}[5]"),
     )
 
 

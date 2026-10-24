@@ -43,6 +43,7 @@ from typing import Any, Literal, TypeAlias, cast
 
 import wrapt
 
+from citry._i18n_directives import looks_like_i18n_binding
 from citry.util import html as _html
 from citry.util.html import Markup, decode_attribute_entities, escape_attribute_value, escape_to_str
 
@@ -80,15 +81,18 @@ class VueCodeError(TypeError):
 
     Vue reads an attribute whose name starts with `v-`, `:`, `.`, `^`, `@`,
     or `#` (in any letter case) as a directive, a binding, a listener, or a
-    slot, and evaluates its value as JavaScript. Citry lets only the template
-    author write such names. When one of them comes from Python data
-    instead, the render fails with this error. Python data sets attribute
-    names in three places:
+    slot, and evaluates its value as JavaScript. A `$c-tr` translation
+    binding is code in the same way: Citry writes its values expression
+    into the Vue template. Citry lets only the template author write such
+    names. When one of them comes from Python data instead, the render
+    fails with this error. Python data sets attribute names in three
+    places:
 
     - a `c-bind` mapping, such as `c-bind="attrs"` where `attrs` holds
-      `{"@click": "save()"}`;
+      `{"@click": "save()"}` or `{"$c-tr:greeting": "..."}`;
     - a `c-*` attribute whose name, without the `c-`, starts with one of
-      those prefixes, such as `c-v-if="is_open"`;
+      those prefixes or is a `$c-tr` binding, such as `c-v-if="is_open"`
+      or `c-$c-tr:greeting="values"`;
     - an extension's `on_attrs_resolved` hook that adds such a name, or
       changes the value of one written in the template.
 
@@ -125,10 +129,14 @@ _CITRY_OWNED_ATTR_PREFIXES = ("@c-", ":c-", "#c-")
 def is_vue_code_attr_name(name: object) -> bool:
     """Return whether Python data must not set this attribute name, because Vue would read it as code."""
     # Non-strings are left to `validate_html_attr_name`, which names the bad type.
+    if not isinstance(name, str):
+        return False
+    # A `$c-tr` binding's value is a browser expression that Citry writes into
+    # the Vue template, so only the template author may write one.
+    if looks_like_i18n_binding(name):
+        return True
     # `str.startswith` reads the real text even from a str subclass.
-    return (
-        isinstance(name, str) and is_vue_directive_name(name) and not str.startswith(name, _CITRY_OWNED_ATTR_PREFIXES)
-    )
+    return is_vue_directive_name(name) and not str.startswith(name, _CITRY_OWNED_ATTR_PREFIXES)
 
 
 def vue_code_error(
@@ -159,10 +167,18 @@ def vue_code_error(
         subject = f"Python data sets {name!r} on {tag}"
     rule = (
         "Python data from c-bind, c-* attributes, and extension hooks may not set a name that starts with "
-        "v-, :, ., ^, @, or #, even on a page that does not use Vue."
+        "v-, :, ., ^, @, or #, or a $c-tr binding, even on a page that does not use Vue."
     )
     if hint is not None:
         fix = hint
+    elif looks_like_i18n_binding(name):
+        # A `$c-tr` value is a browser expression, so the fix is to write the
+        # binding in the template and send only its values as data.
+        fix = (
+            "Write the $c-tr binding directly in the template, with any values expression written there too, "
+            'such as $c-tr:greeting="{ name: userName }", and return those values from js_data(). '
+            "A values expression that evaluates to null keeps the server-rendered text."
+        )
     elif str.startswith(str.casefold(name), ("v-c-", "v-citry-")):
         # Writing these in the template fails too, so the general advice
         # would send the reader into a second error.

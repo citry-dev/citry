@@ -94,6 +94,10 @@ class _Declaration:
     output: str | None
     target: I18nBindingTarget
     values_expression: str | None
+    # Whether the values expression contains a `null` token. Only such an
+    # expression can ask the browser to keep the server text, so only its
+    # destination may hold something other than a matching `tr()` result.
+    allows_untranslated: bool = False
 
 
 @dataclass(slots=True)
@@ -183,6 +187,21 @@ class I18nBindingCollector:
             self.records.append(_binding_record(pending.binding_id, pending.owner, pending.declaration, capture))
         return pending
 
+    def finish_untranslated_text(self, ordinal: int) -> _PendingText:
+        """Close a text destination whose body is not a `tr()` call, allowed only under a `null`-capable expression."""
+        try:
+            pending = self._pending_text.pop(ordinal)
+        except KeyError as error:
+            raise RuntimeError("An i18n text binding rendered without its start-tag declaration.") from error
+        if pending.binding_id is not None:
+            assert pending.owner is not None  # noqa: S101 - allocated IDs always have an owner
+            self.records.append(_binding_record(pending.binding_id, pending.owner, pending.declaration, None))
+        return pending
+
+    def pending_declaration(self, ordinal: int) -> _Declaration:
+        """Return the start-tag declaration waiting for this text expression."""
+        return self._pending_text[ordinal].declaration
+
     def has_pending_text(self, ordinal: int) -> bool:
         """Whether the resolved start tag declared a text binding for this expression."""
         return ordinal in self._pending_text
@@ -190,12 +209,15 @@ class I18nBindingCollector:
     def add_attribute(
         self,
         declaration: _Declaration,
-        capture: _CapturedTranslation,
+        capture: _CapturedTranslation | None,
         *,
         owner: str | None,
     ) -> str | None:
         assert declaration.target.name is not None  # noqa: S101 - attribute target invariant
-        _check_capture(declaration, capture, destination=declaration.target.name)
+        # `None` is a value that no `tr()` call produced; the caller allows
+        # it only under a values expression that can return `null`.
+        if capture is not None:
+            _check_capture(declaration, capture, destination=declaration.target.name)
         if owner is None:
             return None
         binding_id = self.allocate_id()
@@ -252,6 +274,9 @@ class I18nBindingElementAttrsNode(Node):
         declarations: OrderedDict[tuple[str, str | None], _Declaration] = OrderedDict()
         contributions: list[Mapping[str, Any]] = []
         provenance: dict[str, _CapturedTranslation | None] = {}
+        # Attributes whose value called `tr()` but is not exactly its result,
+        # such as `tr('a') + '!'`. Those never count as untranslated text.
+        composed: set[str] = set()
 
         for attr in self.original.attrs:
             with collector.capture() as captures:
@@ -267,14 +292,10 @@ class I18nBindingElementAttrsNode(Node):
                 contribution: dict[str, Any] = {}
                 for key, value in raw.items():
                     resolved_key = validate_html_attr_name(key, where=f"c-bind on <{self.original.tag_name}>")
+                    # A spread key is Python data, and a `$c-tr` key would make
+                    # its value browser code, so this rejects every `$c-tr`
+                    # spelling before the binding parser could see it.
                     reject_vue_code_attr_name(resolved_key, tag_name=self.original.tag_name, origin="c-bind")
-                    if _apply_directive(
-                        declarations,
-                        resolved_key,
-                        const_value(value),
-                        dynamic=True,
-                    ):
-                        continue
                     _reject_reserved_events_attr(
                         resolved_key,
                         tag_name=self.original.tag_name,
@@ -282,19 +303,15 @@ class I18nBindingElementAttrsNode(Node):
                     _reject_reserved_output(resolved_key, self.original.tag_name)
                     normalized = const_value(value)
                     contribution[resolved_key] = normalized
-                    provenance[_html_identity(resolved_key)] = _capture_for_value(captures, normalized)
+                    _note_provenance(provenance, composed, _html_identity(resolved_key), captures, normalized)
                 contributions.append(contribution)
                 continue
 
             resolved_key = attr.key.removeprefix("c-")
-            if _apply_directive(
-                declarations,
-                resolved_key,
-                raw,
-                dynamic=attr.key.startswith("c-"),
-            ):
-                if captures:
-                    raise RuntimeError("A $c-tr values expression cannot itself call server tr().")
+            # Only a literal template attribute declares a binding. A
+            # `c-$c-tr:...` attribute was already rejected above through
+            # `_vue_code_attr_key`, because its value would be Python data.
+            if type(attr) is StaticHtmlAttr and _apply_directive(declarations, attr.key, raw):
                 continue
             if attr.key.startswith("c-"):
                 _reject_reserved_events_attr(
@@ -307,7 +324,7 @@ class I18nBindingElementAttrsNode(Node):
                 # marker, as on a plain element, instead of a rejected `True`.
                 raw = template_attr_value(resolved_key, raw)
             contributions.append({resolved_key: raw})
-            provenance[_html_identity(resolved_key)] = _capture_for_value(captures, raw)
+            _note_provenance(provenance, composed, _html_identity(resolved_key), captures, raw)
 
         resolved = merge_attrs(*contributions)
         for key in resolved:
@@ -370,12 +387,28 @@ class I18nBindingElementAttrsNode(Node):
                 )
             value = resolved[winning_key]
             capture = provenance.get(target_name)
-            if capture is None or value is not capture.text:
+            # A values expression with a `null` token may keep the server
+            # text, so its attribute may hold text that no `tr()` produced,
+            # such as an author's own label. Every other binding pairs with
+            # the exact `tr()` result.
+            untranslated = (
+                capture is None and declaration.allows_untranslated and target_name not in composed
+            )
+            if untranslated and not isinstance(value, str):
+                raise TypeError(
+                    f"$c-tr:{declaration.message}[{target_name}] keeps a server {target_name!r} value that is "
+                    f"not text; got {type(value).__name__}."
+                )
+            if not untranslated and (capture is None or value is not capture.text):
                 raise RuntimeError(
                     f"$c-tr:{declaration.message}[{target_name}] must pair with the complete winning "
                     f"{target_name!r} value returned directly by tr()."
                 )
-            binding_id = collector.add_attribute(declaration, capture, owner=cast("str | None", owner))
+            binding_id = collector.add_attribute(
+                declaration,
+                None if untranslated else capture,
+                owner=cast("str | None", owner),
+            )
             if binding_id is not None:
                 marker_ids.append(binding_id)
                 browser_bindings.append(
@@ -385,6 +418,9 @@ class I18nBindingElementAttrsNode(Node):
                         target="attribute",
                         name=target_name,
                         values_expression=declaration.values_expression,
+                        # The browser shows this text when the expression
+                        # returns `null`; it travels as JSON data, not code.
+                        fallback=None if declaration.values_expression is None else str(value),
                     )
                 )
 
@@ -430,22 +466,58 @@ class I18nBoundExprNode(Node):
             return rendered
         with collector.capture() as captures:
             value = self.original.evaluate(context.variables, sandboxed=context.sandboxed)
+        if not captures and collector.pending_declaration(self.ordinal).allows_untranslated:
+            return self._render_untranslated(value, context, collector)
         if len(captures) != 1 or value is not captures[0].text:
             raise RuntimeError(
                 "$c-tr textContent must contain exactly one complete {{ tr(...) }} expression, with no composition."
             )
         pending = collector.finish_text(self.ordinal, captures[0])
         if prepared_render_active():
-            binding = None
-            if pending.binding_id is not None:
-                binding = prepared_browser_binding(
-                    helper="$citryI18nBinding",
-                    operand=pending.binding_id,
-                    target="text",
-                    values_expression=pending.declaration.values_expression,
-                )
-            return PreparedTextValue(self.original.source, self.original.position, str(value), browser_binding=binding)
+            return PreparedTextValue(
+                self.original.source,
+                self.original.position,
+                str(value),
+                browser_binding=_text_browser_binding(pending, str(value)),
+            )
         return _render_value(value, provides=context.provides, citry=component.citry, context=context)
+
+    def _render_untranslated(self, value: object, context: CitryContext, collector: Any) -> Any:
+        """Render a body that no `tr()` call produced, under a values expression that can return `null`."""
+        component = cast("Component", context.component)
+        rendered = _render_value(value, provides=context.provides, citry=component.citry, context=context)
+        pending = collector.finish_untranslated_text(self.ordinal)
+        if not prepared_render_active():
+            return rendered
+        # The browser can put back only plain text, so the binding needs the
+        # body's exact text, the same text a plain `{{ }}` would send.
+        if not isinstance(rendered, Markup) or "<" in str(rendered):
+            raise RuntimeError(
+                f"$c-tr:{pending.declaration.message} owns textContent, but its body renders HTML markup, "
+                "which the browser cannot keep as the server text."
+            )
+        text = decode_character_references(str(rendered))
+        return PreparedTextValue(
+            self.original.source,
+            self.original.position,
+            text,
+            browser_binding=_text_browser_binding(pending, text),
+        )
+
+
+def _text_browser_binding(pending: _PendingText, server_text: str) -> PreparedBrowserBinding | None:
+    """Build the browser projection for one finished text destination, if a client provider owns it."""
+    if pending.binding_id is None:
+        return None
+    return prepared_browser_binding(
+        helper="$citryI18nBinding",
+        operand=pending.binding_id,
+        target="text",
+        values_expression=pending.declaration.values_expression,
+        # The browser shows this text when the expression returns `null`;
+        # it travels as JSON data, not code.
+        fallback=None if pending.declaration.values_expression is None else server_text,
+    )
 
 
 def compile_template_bindings(nodes: list[Any], *, component_name: str) -> list[Any]:
@@ -497,12 +569,13 @@ def _transform_body(nodes: list[Any], *, component_name: str, ordinal: list[int]
         ordinal[0] += 1
         text_eligible = _complete_text_expression(result, index, item.tag_name)
         for attr in item.attrs:
-            resolved_key = attr.key.removeprefix("c-")
-            if looks_like_i18n_binding(resolved_key):
-                declaration = _parse_directive(resolved_key)
+            # A `c-$c-tr:...` spelling fails at render with `VueCodeError`,
+            # like `c-v-if`, so only the literal template form is checked here.
+            if looks_like_i18n_binding(attr.key):
+                declaration = _parse_directive(attr.key)
                 if declaration.target.kind == "text" and not text_eligible:
                     raise ValueError(
-                        f"{resolved_key!r} in {component_name} targets textContent, but the element body is not "
+                        f"{attr.key!r} in {component_name} targets textContent, but the element body is not "
                         "exactly one translated expression."
                     )
         result[index] = I18nBindingElementAttrsNode(item, ordinal=current_ordinal, text_eligible=text_eligible)
@@ -545,31 +618,31 @@ def _complete_text_expression(body: list[Any], index: int, tag_name: str) -> boo
 
 def _reject_direct_structural(attrs: tuple[Any, ...], *, tag_name: str) -> None:
     for attr in attrs:
-        if attr.key == "c-bind":
+        # A `c-bind` spread and a `c-$c-tr:...` attribute carry Python data,
+        # so the render rejects them with `VueCodeError` instead.
+        if attr.key.startswith("c-"):
             continue
-        reject_translation_binding_key(attr.key.removeprefix("c-"), tag_name=tag_name)
+        reject_translation_binding_key(attr.key, tag_name=tag_name)
 
 
 def _apply_directive(
     declarations: OrderedDict[tuple[str, str | None], _Declaration],
     key: str,
     value: object,
-    *,
-    dynamic: bool,
 ) -> bool:
+    """Record one `$c-tr` attribute written literally in the template."""
     if not looks_like_i18n_binding(key):
         return False
     declaration = _parse_directive(key)
     destination = (declaration.target.kind, declaration.target.name)
-    if dynamic and (value is None or value is False):
-        declarations.pop(destination, None)
-        return True
+    # The parser gives a bare `$c-tr:msg` the value `True` and a written
+    # value its exact text, so nothing here can come from Python data.
     if value is True:
         expression = None
-    elif isinstance(value, str):
+    elif type(value) is str:
         expression = value.strip() or None
     else:
-        raise TypeError(f"{key} must resolve to a string, True, None, or False; got {type(value).__name__}.")
+        raise TypeError(f"{key} must be written in the template; got a {type(value).__name__} value.")
     if expression is not None:
         _validate_values_expression(expression, key=key)
     declaration = _Declaration(
@@ -577,6 +650,7 @@ def _apply_directive(
         declaration.output,
         declaration.target,
         expression,
+        expression is not None and _may_evaluate_to_null(expression),
     )
     declarations.pop(destination, None)
     declarations[destination] = declaration
@@ -593,12 +667,44 @@ def _parse_directive(key: str) -> _Declaration:
     return _Declaration(parsed.message, parsed.output, target, None)
 
 
+def _may_evaluate_to_null(expression: str) -> bool:
+    """Return whether a values expression contains a `null` keyword token."""
+    from citry._browser_expressions import javascript_tokens  # noqa: PLC0415
+
+    # A tokenizer, not a substring search, so `"null"` in a string, a
+    # comment, or a name such as `nullable` does not count. A member name
+    # (`x.null`) is a property read, not the keyword.
+    tokens = javascript_tokens(expression)
+    return any(
+        token.kind == "identifier"
+        and token.source == "null"
+        and (index == 0 or tokens[index - 1].source not in {".", "?."})
+        for index, token in enumerate(tokens)
+    )
+
+
 def _validate_values_expression(expression: str, *, key: str) -> None:
     from citry._browser_expressions import BrowserExpression, analyze_browser_expression  # noqa: PLC0415
 
     checked = analyze_browser_expression(BrowserExpression(expression, 0, len(expression.encode()), "expression", key))
     if not checked.valid:
         raise ValueError(f"{key} has an invalid browser named-values expression.")
+
+
+def _note_provenance(
+    provenance: dict[str, _CapturedTranslation | None],
+    composed: set[str],
+    identity: str,
+    captures: list[_CapturedTranslation],
+    value: object,
+) -> None:
+    """Record which `tr()` call, if any, produced the latest value of one attribute."""
+    capture = _capture_for_value(captures, value)
+    provenance[identity] = capture
+    if capture is None and captures:
+        composed.add(identity)
+    else:
+        composed.discard(identity)
 
 
 def _capture_for_value(captures: list[_CapturedTranslation], value: object) -> _CapturedTranslation | None:
@@ -619,14 +725,17 @@ def _binding_record(
     binding_id: str,
     owner: str,
     declaration: _Declaration,
-    capture: _CapturedTranslation,
+    capture: _CapturedTranslation | None,
 ) -> I18nBindingRecord:
     from .extension import I18nExtension  # noqa: PLC0415
 
+    # A destination that no `tr()` call filled has no server values; the
+    # browser then translates only with what its values expression returns.
+    captured_values = {} if capture is None else capture.values
     component_values = tuple(
         (name, (tagged["type"], tagged["value"]))
         for name, tagged in sorted(
-            ((name, I18nExtension._tag_value(name, value)) for name, value in capture.values.items()),
+            ((name, I18nExtension._tag_value(name, value)) for name, value in captured_values.items()),
             key=lambda item: item[0],
         )
     )
