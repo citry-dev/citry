@@ -324,11 +324,13 @@ def event(
         latest_wins: Opt this handler into newest-wins queueing on the
             client. When a newer call to the handler is queued for the same
             component instance, calls still waiting to be sent are dropped,
-            and an in-flight one is abandoned (its response is ignored when
-            it arrives). The server still executes every call it received,
-            so opt in only when overlapping runs are safe, e.g. an
-            idempotent autosave. Off by default, because dropping a call is
-            data loss unless the handler is written for it.
+            an in-flight one is abandoned (its response is ignored when it
+            arrives), and one whose result already arrived stops, so none
+            of its actions that have not started yet will run. The server
+            still executes every call it received, so opt in only when
+            overlapping runs are safe, e.g. an idempotent autosave. Off by
+            default, because dropping a call is data loss unless the
+            handler is written for it.
         bundle: Whether the client may send this handler's calls in a shared
             batch request alongside other calls that become ready at the
             same moment. Pass ``False`` for a handler that should always

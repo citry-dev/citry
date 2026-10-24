@@ -701,6 +701,43 @@ values and a newer token with older ones.
 Actions after a redirect race the navigation, so a server should warn when it encodes
 such a list even though the authored order remains unchanged.
 
+### Superseded calls
+
+A handler with `latestCallWins` keeps only its newest call for one
+component instance. When the client queues a newer call to that handler,
+an older call changes nothing more on the page:
+
+- A call still waiting in the queue is removed and never sent.
+- A call in flight is abandoned; its response is ignored when it arrives.
+- A call whose result was already accepted stops. Every action of that
+  result that has not started yet is dropped: blocking or `wait: false`,
+  delayed or not, and of every type, `redirect` included. A blocking delay
+  ends at once, so the newer call does not wait behind it. This holds even
+  when the older call has already finished and only its `wait: false`
+  actions are still waiting on their delays.
+
+Supersession takes effect when the newer call is queued, so the older
+call's actions are dropped even if the newer call then fails.
+
+If the older call has not finished, its promise rejects with reason
+`superseded`, Citry's browser client reports no success for it, and the
+client fires `citry:events:stale` with that reason once for the call. In
+either case it fires one more for each `wait: false` action of the older
+call that had not finished yet.
+
+What supersession does not change:
+
+- The server still runs every call it received, with all its side effects.
+- A `render` that is already being committed to the page finishes, because
+  it cannot be undone halfway. It may finish after the newer call's
+  actions, and the client still reports it as `superseded`, with no
+  `swapped`.
+- Only a call from the same component instance supersedes. After a
+  `render` replaced the component, a call from the new instance does not
+  supersede one from the old instance.
+- Actions that page code applies itself, with `Citry.events.applyActions`,
+  are never superseded.
+
 ### Errors
 
 Every wire error has exactly `status`, `code`, and `message`, plus optional
@@ -916,7 +953,7 @@ object:
 | `usesState` | Optional; when present it is exactly `true`. | The handler receives State. |
 | `debounceMilliseconds` | Optional non-negative integer. | Default debounce for compiled browser bindings. |
 | `throttleMilliseconds` | Optional non-negative integer. | Default throttle for compiled browser bindings. |
-| `latestCallWins` | Optional; when present it is exactly `true`. | A newer call supersedes older calls to this handler in the client queue. |
+| `latestCallWins` | Optional; when present it is exactly `true`. | A newer call supersedes older calls to this handler in the client queue. See [Superseded calls](#superseded-calls). |
 | `allowBatching` | Optional; when present it is exactly `false`. | Calls to this handler must travel alone. |
 
 The defaults are omitted: State is unused, timing is absent, older calls are

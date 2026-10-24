@@ -210,6 +210,11 @@
 
 ### Fixes
 
+- With `@event(latest_wins=True)`, a call that a newer call replaced no
+  longer changes the page. Its remaining actions are dropped, including
+  delayed ones with `wait=False`. The newer call no longer waits for its
+  delays, and `$loading()` and `citry:events:after` stop reporting it as a
+  success.
 - In a component that uses Vue, a character reference inside a directive
   value now means what it means in Vue: `@click="msg = 'Tom &amp; Jerry'"`
   sets `Tom & Jerry`. Citry used to keep `&amp;` in strings written in

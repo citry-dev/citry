@@ -495,7 +495,7 @@ name the component as Citry last saw it.
 
 | `reason` | What happened |
 | --- | --- |
-| `superseded` | A newer call to the same handler replaced this one. This happens only for a handler declared with `@event(latest_wins=True)`. |
+| `superseded` | A newer call to the same handler replaced this one, so the actions of this call that have not started yet are dropped, delayed ones included. This happens only for a handler declared with `@event(latest_wins=True)`. |
 | `retired` | The component was removed or replaced before the call finished. |
 | `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. |
 | `disposed` | The page's Vue app was shut down. |
