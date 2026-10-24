@@ -261,7 +261,9 @@ def test_vscode_verifier_expects_the_pinned_readme_and_manifest(
     package = tmp_path / "vscode"
     package.mkdir()
     (package / "package.json").write_text('{"version": "0.3.0", "homepage": "https://citry.dev/"}', encoding="utf-8")
-    (package / "README.md").write_text("![x](https://raw.githubusercontent.com/citry-dev/citry/main/x.gif)\n")
+    # Bytes, so the README holds LF on every platform: text mode would write
+    # CRLF on Windows, and the expected bytes below are written with LF.
+    (package / "README.md").write_bytes(b"![x](https://raw.githubusercontent.com/citry-dev/citry/main/x.gif)\n")
     monkeypatch.setattr(verify_vscode_citry_distribution, "PACKAGE_ROOT", package)
     monkeypatch.setenv(release_links.TAG_PREFIX_ENV, "vscode-citry@")
 
