@@ -317,6 +317,12 @@
   that many digits, such as `.debounce.<5,000 digits>ms`, now fails with
   the JavaScript safe-integer error, and one written with digits other
   than ASCII `0`-`9` is now an unknown modifier.
+- In an interactive component, a `<c-raw>` block or `Markup` value whose
+  HTML writes a character reference the browser reads as text, such as
+  `&copy 2026` without `;`, `&nbsp`, `&#127;` or `&#x80;`, now renders.
+  It used to fail with "is not a complete HTML fragment". Other HTML the
+  browser repairs, such as a stray `<` or an unfinished comment, now
+  fails with "is not well-formed HTML" and names the parse error.
 
 ### Performance
 

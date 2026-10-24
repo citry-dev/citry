@@ -77,6 +77,9 @@ impl ScannerSink for TreeBuilder<Handle, RcDom> {
 struct BoundaryTracker {
     stack: Vec<String>,
     invalid: bool,
+    // The first tokenizer error the fragment check refuses, by its name in
+    // the HTML standard, so the caller can say what to fix.
+    parse_error: Option<&'static str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -386,13 +389,19 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
             CallbackEvent::Error(error) => {
                 // These two errors leave the browser's tree exactly as
                 // written, so they do not fail the parse; every other error
-                // still does.
+                // still fails the page parse.
                 if !error_keeps_input_as_written(error) {
                     if let Some(tracker) = self.lexical_text.as_deref_mut() {
                         tracker.valid = false;
                     }
+                }
+                // A fragment check also lets a character reference error
+                // pass: the reference decodes to text, so it cannot open or
+                // close an element.
+                if !error_keeps_input_as_written(error) && !is_character_reference_error(error) {
                     if let Some(boundary) = self.boundary.as_deref_mut() {
                         boundary.invalid = true;
+                        boundary.parse_error.get_or_insert(error.as_str());
                     }
                 }
                 // Tokenizer errors stop here, as in the browser, whose tree
@@ -419,15 +428,41 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
 /// and the tree is the same as without the error. They are also the only
 /// errors the server's escaped text and attribute values can hold, because
 /// the server writes these characters as they are and rejects NUL and
-/// carriage returns. Every other error keeps failing both checks, which
-/// accept only explicit, correctly nested markup; some of those errors
-/// also change what the browser builds (a NUL is dropped, a tag left open
-/// at the end is lost). html5gum never reports `surrogate-in-input-stream`
+/// carriage returns. Every other error fails the page parse; the fragment
+/// check also lets a character reference error pass (see
+/// `is_character_reference_error`). Both accept only explicit, correctly
+/// nested markup; some of the errors they refuse also change what the
+/// browser builds (a NUL is dropped, a tag left open at the end is lost). html5gum never reports `surrogate-in-input-stream`
 /// for a Rust string.
 fn error_keeps_input_as_written(error: Error) -> bool {
     matches!(
         error,
         Error::ControlCharacterInInputStream | Error::NoncharacterInInputStream
+    )
+}
+
+/// Whether this tokenizer error is about a character reference.
+///
+/// The HTML standard reports a reference it can still decode as a parse
+/// error: a legacy name without `;` (`&copy 2026`), an unknown name
+/// (`&foo;`, kept as written), a numeric reference to a control character,
+/// a noncharacter, NUL, a surrogate or a value past U+10FFFF (decoded, the
+/// last three to U+FFFD, and most of U+0080 to U+009F mapped as
+/// Windows-1252), and
+/// `&#` with no digits (kept as written). In every case the reference
+/// becomes text, so it cannot open or close an element, and a fragment
+/// that holds one keeps the shape it is written with.
+fn is_character_reference_error(error: Error) -> bool {
+    matches!(
+        error,
+        Error::MissingSemicolonAfterCharacterReference
+            | Error::UnknownNamedCharacterReference
+            | Error::ControlCharacterReference
+            | Error::NoncharacterCharacterReference
+            | Error::NullCharacterReference
+            | Error::SurrogateCharacterReference
+            | Error::CharacterReferenceOutsideUnicodeRange
+            | Error::AbsenceOfDigitsInNumericCharacterReference
     )
 }
 
@@ -584,14 +619,17 @@ pub(crate) fn parse_div_fragment_with_lexical_text(
 /// The accepted subset requires explicit, correctly nested tags and rejects
 /// every tokenizer error except a control character (other than NUL and
 /// whitespace) or a noncharacter in the input, which the browser keeps as
-/// written. It rejects a self-closed non-void HTML element such as
-/// `<div/>` or `<iframe/>`, because the browser ignores the `/` there.
+/// written, and a character reference error such as `&copy` without `;`,
+/// which the browser reads as text (see `is_character_reference_error`).
+/// It rejects a self-closed non-void HTML element such as `<div/>` or
+/// `<iframe/>`, because the browser ignores the `/` there.
 /// html5ever logs most of these as an unacknowledged self-closing tag; it
 /// logs nothing for a tag whose contents the parser reads as text, so the
 /// validator also checks for that state change. Self-closed SVG and MathML
 /// elements are allowed. Other browser recovery behavior is not promised by
-/// this validator.
-pub fn validate_html_fragment_boundary(input: &str) -> Result<(), &'static str> {
+/// this validator. When it refuses a tokenizer error, the message names the
+/// first one by its name in the HTML standard.
+pub fn validate_html_fragment_boundary(input: &str) -> Result<(), String> {
     let dom = RcDom::default();
     let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
     let mut facts = Vec::new();
@@ -614,8 +652,10 @@ pub fn validate_html_fragment_boundary(input: &str) -> Result<(), &'static str> 
     Tokenizer::new_with_emitter(input, emitter)
         .finish()
         .expect("string input is infallible");
-    if boundary.invalid || !boundary.stack.is_empty() {
-        Err("opaque HTML must be a self-contained strict fragment")
+    if let Some(name) = boundary.parse_error {
+        Err(format!("opaque HTML has the HTML parse error {name}"))
+    } else if boundary.invalid || !boundary.stack.is_empty() {
+        Err("opaque HTML must be a self-contained strict fragment".to_owned())
     } else {
         Ok(())
     }
@@ -705,6 +745,61 @@ mod tests {
                 "{source:?}"
             );
         }
+    }
+
+    /// The text html5gum decodes from `input`, joined across its string tokens.
+    fn decoded_text(input: &str) -> String {
+        html5gum::Tokenizer::new(input)
+            .flatten()
+            .filter_map(|token| match token {
+                html5gum::Token::String(value) => {
+                    Some(String::from_utf8_lossy(&value).into_owned())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn strict_fragment_boundary_accepts_character_references_the_browser_decodes() {
+        // The HTML standard calls each of these a parse error, but the
+        // reference becomes text, so it cannot change where an element
+        // ends. The decoded text is what the browser reads (parse5 7.3.0).
+        for (source, text) in [
+            ("<p>&copy 2026</p>", "\u{a9} 2026"),
+            ("<p>&nbsp</p>", "\u{a0}"),
+            ("<p>a&foo;b</p>", "a&foo;b"),
+            ("<b>a&#127;b</b>", "a\u{7f}b"),
+            ("<b>a&#xfdd0;b</b>", "a\u{fdd0}b"),
+            ("<b>a&#x80;b</b>", "a\u{20ac}b"),
+            ("<p>&#0;</p>", "\u{fffd}"),
+            ("<p>&#xd800;</p>", "\u{fffd}"),
+            ("<p>&#x110000;</p>", "\u{fffd}"),
+            ("<p>&#;</p>", "&#;"),
+            ("<a title='&copy 2026'>x</a>", "x"),
+        ] {
+            assert_eq!(
+                validate_html_fragment_boundary(source),
+                Ok(()),
+                "{source:?}"
+            );
+            assert_eq!(decoded_text(source), text, "{source:?}");
+        }
+    }
+
+    #[test]
+    fn strict_fragment_boundary_names_the_parse_error_it_refuses() {
+        assert_eq!(
+            validate_html_fragment_boundary("<p a='1'b='2'>x</p>"),
+            Err(
+                "opaque HTML has the HTML parse error missing-whitespace-between-attributes"
+                    .to_owned()
+            )
+        );
+        assert_eq!(
+            validate_html_fragment_boundary("<div>"),
+            Err("opaque HTML must be a self-contained strict fragment".to_owned())
+        );
     }
 
     #[test]

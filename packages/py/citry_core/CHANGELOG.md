@@ -54,6 +54,11 @@
   holds a control character such as DEL (U+007F) or a Unicode noncharacter
   such as U+FDD0. The browser keeps these characters as written, but both
   functions used to reject the HTML.
+- `html_transform.validate_html_fragment_boundary()` now accepts a
+  character reference the browser reads as text, such as `&copy` without
+  `;` or `&#127;`. When it refuses a parse error, its message now names
+  that error ("opaque HTML has the HTML parse error
+  missing-whitespace-between-attributes").
 
 ## v1.8.0
 

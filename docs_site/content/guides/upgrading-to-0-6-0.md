@@ -723,7 +723,8 @@ are not affected.
 ### Close `<c-raw>` tags
 
 **What you see:** the render stops with an error such as "The `<c-raw>`
-block at line 2, column 10 is not a complete HTML fragment".
+block at line 2, column 10 is not a complete HTML fragment" (or, for a
+stray `<`, "... is not well-formed HTML").
 
 Inside an interactive component, `<c-raw>` content and `Markup` values
 must each be a complete HTML fragment: every tag closed, and no stray
