@@ -233,13 +233,30 @@ caps the depth. Checking the remembered index first and otherwise scanning the
 list keeps the position correct even if user code or an extension edited `.parts`
 in between.
 
-One render can sit in a parent's parts more than once, for example when a
-template prints a slot's result twice. `scan` enters each parts list once per
-call. When it reaches a list again, it skips it if every component in it has
-rendered. If the list still holds a `DeferredComponent` or a call-run row
-(described below), it raises a `RuntimeError` that names the component,
-because a second `Render` for the same `DeferredComponent` would render the
-component twice and then find its place taken.
+One render can appear on the page more than once, for example when a
+template prints a slot's result twice, or prints it and passes it to a child
+that prints it too. Every `scan` of one render queue run shares a record
+(`_QueueScans`) of the parts lists entered and the placeholders queued
+(`DeferredComponent`s and call-run rows, described below). `scan` raises a
+`RuntimeError` that names the component whose output prints the content the
+second time:
+
+- when it reaches a list again that still holds a placeholder, because a
+  second `Render` for the same `DeferredComponent` would render the
+  component twice and then find its place taken;
+- when it reaches a list again whose components already rendered, from any
+  component's output, because they would appear twice on the page;
+- when it would queue a placeholder again from another list, because a copy
+  of a parts list holds the same placeholders.
+
+It skips a list reached again that holds no components (the output of a
+`simple = "vue"` component counts as a component), since such content can
+appear anywhere. A placeholder repeated within one list, as an extension hook
+may do, renders at each position. When an `on_render` hook returns or wraps
+the output it received, the record forgets that output's lists and
+placeholders before the replacement is scanned, because the output moved
+rather than being printed twice. A replacement that holds the received output
+twice still raises, when the replacement is scanned.
 
 Where that error goes depends on whose output holds the shared render:
 
@@ -255,10 +272,13 @@ Where that error goes depends on whose output holds the shared render:
 
 Markup passed in a `c-*` attribute (a nested template) that a component
 prints twice does not hit this error, because each print after the first
-renders the template again. The check compares lists by identity, so it
-does not catch a copy of a parts list that holds the same
-`DeferredComponent`s, or one list reached from the outputs of two
-components; those still fail when the second render finds its place taken.
+renders the template again. The record lasts for one run of the queue; a
+nested run (for example one that settles a component placed in an
+expression, such as `{{ el }}` where `el = Show(body=body)`) keeps its own.
+Content printed both inside such a nested run and in the outer one is not
+caught by this check. When it holds an ordinary component, it fails at
+serialization with "The same rendered component id was encountered more
+than once"; repeated output of `simple = "vue"` components goes uncaught.
 
 When a `<c-for>` loop places a `simple = "vue"` component (a component that
 renders without a Python object; each occurrence is a row) and qualifies as a

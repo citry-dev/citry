@@ -459,15 +459,14 @@ def test_a_hook_that_edits_the_unplaced_rows_gets_the_same_render(
     assert counts.tasks >= 1
 
 
-def test_a_row_list_printed_again_after_its_first_row_renders_only_the_unplaced_rows(
+def test_a_row_list_printed_again_after_its_first_row_renders_raises_before_rendering_a_row_twice(
     render_path: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Holder keeps the fill's render, and row k0's child Leaf prints a copy
-    # of it after k0 was placed. The copy shares the rows' list, so the
-    # queue scans that list again with only k1 and k2 unplaced: it renders
-    # those two, not k0 again. The task from the first scan then renders k1
-    # once more and raises, because k1's position is already filled, as
-    # with one task per row.
+    # of it after k0 was placed. The copy holds the same placeholders for
+    # k1 and k2, which the first scan already queued, so queueing them from
+    # Leaf's output raises before any row renders twice, as with one task
+    # per row.
     del render_path  # the fixture switches the render path
     kept: list[CitryRender] = []
 
@@ -494,10 +493,16 @@ def test_a_row_list_printed_again_after_its_first_row_renders_only_the_unplaced_
     with_runs, without_runs, counts = _render_with_and_without_runs(case, monkeypatch)
     assert with_runs == without_runs
     assert with_runs == (
-        ("RuntimeError", "deferred part vanished from its .parts list before resolution"),
-        ["row k0", "leaf k0", "row k1", "leaf k1", "row k2", "leaf k2", "row k1"],
+        (
+            "RuntimeError",
+            "An error occurred while rendering components Page > Row > Leaf:\nThis content is printed in more "
+            "than one place, but the components inside it have not rendered yet, so each would render twice. "
+            "Print it in one place, or make it once for each place: for a slot, call the slot once for each "
+            "place you print its result.",
+        ),
+        ["row k0", "leaf k0"],
     )
-    assert counts.tasks >= 2
+    assert counts.tasks >= 1
 
 
 _CHANGING_CASES: dict[str, tuple[dict[str, Any], list[str]]] = {
