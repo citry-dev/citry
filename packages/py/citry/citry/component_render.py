@@ -3220,23 +3220,27 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     stack: list[_BodyFrame | _NodeFrame] = [root]
     try:
         while True:
-            frame = cast("_BodyFrame", stack[-1])
+            # Only body frames are ever on top here: a node frame always has
+            # its current body above it.
+            frame: _BodyFrame = stack[-1]  # type: ignore[assignment]
             parts = frame.parts
             frame_context = frame.context
+            direct_prepared = frame.direct_prepared
+            tracing = frame.tracing
             pushed = False
             for item in frame.items:
                 if isinstance(item, str):
-                    if frame.direct_prepared:
+                    if direct_prepared:
                         raise TypeError("prepared Vue rendering received unsupported raw compiled output")
                     parts.append(item)
                     continue
-                if frame.tracing:
+                if tracing:
                     trace_node_msg("RENDER", type(item).__name__, getattr(item, "position", None))
                 item_type = type(item)
                 part: RenderPart
                 try:
                     if item_type is IfNode or item_type is ForNode:
-                        steps = cast("IfNode | ForNode", item)._render_steps(frame_context)
+                        steps = item._render_steps(frame_context)  # type: ignore[attr-defined]
                         if type(steps) is BodySteps:
                             node_frame = _NodeFrame(item, steps, frame)
                             # The first body is read inside this `try`, as
@@ -3258,7 +3262,22 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                 except Exception as err:
                     _attach_template_position(err, item, frame_context)
                     raise
-                _add_rendered_part(part, item, frame)
+                # Written out here rather than through `_add_rendered_part`,
+                # because this runs once for every part of every render.
+                if type(part) is str:
+                    if direct_prepared:
+                        raise TypeError(
+                            f"prepared Vue rendering received unsupported raw output from {type(item).__name__}"
+                        )
+                    parts.append(part)
+                    continue
+                if (
+                    isinstance(part, CitryRender)
+                    and part.context is not frame_context
+                    and not _contains_deferred(part)
+                ):
+                    _merge_dependencies(frame_context, part.context)
+                parts.append(part)
             if pushed:
                 continue
 
@@ -3268,7 +3287,7 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
             _VALUE_CONTEXT.reset(frame.value_token)
             if not stack:
                 return root.parts
-            node_frame = cast("_NodeFrame", stack[-1])
+            node_frame = stack[-1]  # type: ignore[assignment]
             outer = node_frame.outer
             try:
                 following = next(node_frame.bodies, None)
@@ -3288,7 +3307,11 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
 
 
 def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> None:
-    """Add a node's part to the body it belongs to, as the recursive renderer did."""
+    """
+    Add a finished ``<c-if>`` or ``<c-for>`` part to the body that holds it.
+
+    These are the same steps the main loop takes for every other node's part.
+    """
     if type(part) is str:
         if frame.direct_prepared:
             raise TypeError(f"prepared Vue rendering received unsupported raw output from {type(item).__name__}")
