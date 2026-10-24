@@ -38,6 +38,10 @@ permissions:
   contents: read
 
 env:
+  # This package's published README, changelog, and project URLs link to the
+  # tag <prefix><version>; scripts/release_links.py rewrites them, and
+  # scripts/release.py owns the prefix.
+  CITRY_RELEASE_TAG_PREFIX: "citry-ui@"
   PROJECT_DIR: packages/py/citry_ui
   SOURCE_DATE_EPOCH: "315532800"
   UV_VERSION: "0.13.5"
@@ -92,6 +96,11 @@ jobs:
         run: pnpm install --frozen-lockfile --filter citry-dev-tooling
       - name: Verify checked-in production assets
         run: pnpm run citry-ui:check-assets
+      # The registry keeps this package's README, changelog, and project URLs
+      # forever, so their repository links must name the release tag rather
+      # than main, which keeps changing.
+      - name: Point published links at the release tag
+        run: python3 scripts/release_links.py pin packages/py/citry_ui
       - name: Build the wheel and source distribution
         run: uv build --package citry-ui --out-dir dist
       - name: Build selected workspace dependencies for candidate smoke tests

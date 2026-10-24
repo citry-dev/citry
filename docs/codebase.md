@@ -1155,11 +1155,62 @@ published version; the new description appears with that package's next
 release. Do not create an otherwise-empty patch release merely to refresh the
 description unless maintainers explicitly choose to do so.
 
-A released description never changes, so its links must not depend on what
-`main` holds later. Point each image and file link in a published README at a
-commit SHA or a release tag that exists when the package is published, not at
-`main`. A link to `main` breaks for every old release as soon as the file
-moves or is deleted.
+A released description never changes, and a link to `main` in it would break
+as soon as the file moves or is deleted. Still write `main` links in a package
+README, because they render on GitHub and stay current there. Each publish
+workflow rewrites them to the package's release tag when it builds the package.
+
+Each publish workflow sets the `CITRY_RELEASE_TAG_PREFIX` environment variable
+to its package's tag prefix, such as `citry-ui@`. It is the same prefix
+`scripts/release.py` uses to name the release tag. Every job that builds the
+package runs this step just before the build (shown here for `citry-ui`):
+
+```bash
+python3 scripts/release_links.py pin packages/py/citry_ui
+```
+
+The command appends the version from the package's `pyproject.toml` (or
+`package.json` for the VS Code extension) to the prefix. That gives the tag
+the release will create, such as `citry-ui@0.4.0`. It then points each file,
+folder, or raw link on `main` in the citry-dev/citry repository at that tag.
+That covers the `github.com/citry-dev/citry/blob/main/`, `tree/main/`, and
+`raw/main/` forms, `raw.githubusercontent.com/citry-dev/citry/main/`, and the
+long `refs/heads/main` spelling. It rewrites the `README.md`, `CHANGELOG.md`,
+`pyproject.toml`, and `package.json` directly inside that package directory.
+For `citry`, whose README is a link to the root `README.md`, it rewrites the
+root file. The workflow never commits the rewritten files.
+
+Each publish workflow creates the tag only after it publishes the package, so
+the rewritten links do not resolve yet while it checks the built package.
+Nothing fetches them during the release.
+
+The command fails, and the build stops, when the variable is unset or is not a
+`<package>@` prefix, when the manifest has no `X.Y.Z` version, or when the
+package directory does not exist. If you run it yourself with the variable
+set, it rewrites your working copy.
+
+The `scripts/verify_*_distribution.py` scripts, which check each built package
+before it is published, read the same variable. When it is set, they check
+three things:
+
+- The package's copies of those files match the rewritten files, so a package
+  built without the rewrite, or for another version, fails.
+- A wheel's `METADATA`, an sdist's `PKG-INFO`, and the VSIX manifest contain
+  no link to `main` in this repository, even in a form the rewrite does not
+  cover, such as `commits/main`. Change such a link by hand. "Edit this page"
+  links (`edit/main/`) are allowed, because an edit is always made on `main`.
+- The same files have no file, folder, or raw link pinned to another version
+  of the same package, such as an older `citry@0.5.0`. Links to another
+  package's tag, and `compare/` ranges, are allowed: they name releases that
+  already exist.
+
+When the variable is not set, as in pull-request CI and local runs, they
+expect the files exactly as the repository holds them.
+
+The `published_readme_links` validator fails when a package publishes a README
+but `scripts/release.py` does not list the package, when its publish workflow
+does not set the tag prefix that `scripts/release.py` uses, or when that
+workflow has no `release_links.py pin` step for the package directory.
 
 #### Benchmark chart images in the README
 
@@ -1647,11 +1698,14 @@ Prepare a release as follows:
    Core and citry-ui versions named in the next Citry release's source. The
    skip rule for these tests is described in
    [Which browser tests run against the pinned release](../docs_site/static/playground/README.md#which-browser-tests-run-against-the-pinned-release).
-10. When Citry is selected, open every link in the root `README.md` that
-    points at the new tag (for example
-    `https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/starters/fastapi`)
-    and confirm each one resolves. These links 404 until the tag exists, so
-    no earlier check can prove them.
+10. When a package is selected, open a few links in its published
+    description on PyPI or the Marketplace (for example the root README's
+    `https://github.com/citry-dev/citry/tree/citry@0.7.0/examples/starters/fastapi`)
+    and confirm they resolve. The release build points them at the new tag,
+    which exists only after publication, so no earlier check can prove them.
+    If a link returns 404, check that the package's tag exists. Rerunning
+    **Release qualified packages** with the same candidate resumes the
+    remaining steps, including creating the tag.
 11. When an example raised its Citry or citry-lsp floor to a version that
     this release published, run `uv lock` in that example, run
     `python -m examples._internal.release_gate` from the repository root, and

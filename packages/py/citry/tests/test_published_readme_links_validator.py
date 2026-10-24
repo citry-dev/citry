@@ -1,18 +1,38 @@
 """The published README validator finds relative links wherever a README puts them."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from scripts.validators import published_readme_links
 
+# A publish workflow that rewrites the demo package's links at release time.
+_PIN_WORKFLOW = (
+    'env:\n  CITRY_RELEASE_TAG_PREFIX: "demo@"\n'
+    "jobs:\n  build:\n    steps:\n      - run: python3 scripts/release_links.py pin packages/py/demo\n"
+)
+_DEMO_SPEC = SimpleNamespace(
+    key="demo", manifest="packages/py/demo/pyproject.toml", workflow="demo--publish.yml", tag_prefix="demo@"
+)
 
-def _check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, readme: str) -> list[str]:
+
+def _check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    readme: str,
+    workflow: str = _PIN_WORKFLOW,
+    specs: tuple[SimpleNamespace, ...] = (_DEMO_SPEC,),
+) -> list[str]:
     package = tmp_path / "packages" / "py" / "demo"
     package.mkdir(parents=True)
     (package / "pyproject.toml").write_text('[project]\nname = "demo"\nreadme = "README.md"\n', encoding="utf-8")
     (package / "README.md").write_text(readme, encoding="utf-8")
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "demo--publish.yml").write_text(workflow, encoding="utf-8")
     monkeypatch.setattr(published_readme_links, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(published_readme_links, "_EXTRA_PUBLISHED", ())
+    monkeypatch.setattr(published_readme_links, "_PACKAGE_SPECS", specs)
     return published_readme_links.check()
 
 
@@ -86,3 +106,34 @@ def test_text_after_a_code_block_is_still_checked(tmp_path: Path, monkeypatch: p
 def test_a_greater_than_sign_in_a_value_does_not_end_the_tag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     readme = '<img alt="a > b" src="docs/chart.png">\n'
     assert _check(tmp_path, monkeypatch, readme) == [_problem(1, "docs/chart.png")]
+
+
+_README = "[Docs](https://citry.dev/)\n"
+
+
+def test_a_published_readme_needs_a_release_pin_step(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    workflow = 'env:\n  CITRY_RELEASE_TAG_PREFIX: "demo@"\njobs: {}\n'
+    assert _check(tmp_path, monkeypatch, _README, workflow) == [
+        "packages/py/demo/README.md is published, but demo--publish.yml has no "
+        "`scripts/release_links.py pin packages/py/demo` step; add one before the build"
+    ]
+
+
+@pytest.mark.parametrize("env", ["", '  CITRY_RELEASE_TAG_PREFIX: "other@"\n'])
+def test_the_workflow_must_tag_like_the_release_controller(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, env: str
+) -> None:
+    # A missing or different prefix would publish links to a tag the release never creates.
+    workflow = (
+        f"env:\n{env}jobs:\n  build:\n    steps:\n      - run: python3 scripts/release_links.py pin packages/py/demo\n"
+    )
+    assert _check(tmp_path, monkeypatch, _README, workflow) == [
+        "demo--publish.yml must set CITRY_RELEASE_TAG_PREFIX to 'demo@', "
+        "the tag prefix scripts/release.py uses for demo"
+    ]
+
+
+def test_a_published_readme_needs_a_release_controller_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _check(tmp_path, monkeypatch, _README, specs=()) == [
+        "packages/py/demo/README.md is published, but scripts/release.py lists no package in packages/py/demo"
+    ]

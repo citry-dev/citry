@@ -1,5 +1,5 @@
 """
-A README that ships outside the repository must not link to it by relative path.
+Check that published READMEs use absolute links and that a release workflow pins them to the release tag.
 
 PyPI and the VS Code Marketplace render these files on their own domains, where
 `docs/assets/citry-wordmark.png` or `./LICENSE` resolves against *their* site and
@@ -13,6 +13,15 @@ are fine, since they stay inside the rendered document.
 
 Which files count as published: the `readme` a packaging config points at, plus
 the VS Code extension's own README.
+
+In the repository a `main` link is correct, because GitHub then shows the
+current file. Each publish workflow rewrites it to the package's release tag
+just before it builds the package (see `scripts/release_links.py`), so a
+released README never depends on what `main` holds later. This check also makes
+sure that rewrite reaches every published README: the package that owns one
+must be listed in `scripts/release.py`, and its publish workflow must set
+`CITRY_RELEASE_TAG_PREFIX` to the package's tag prefix and run a
+`release_links.py pin` step on the package directory.
 
 The check reads each file whole rather than line by line, because an HTML tag
 often spreads its attributes over several lines. It checks Markdown link and
@@ -29,7 +38,21 @@ try:
 except ImportError:  # Python < 3.11
     import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
+try:
+    from scripts import release
+except ImportError:  # validate.py runs with scripts/ itself on sys.path.
+    import release  # type: ignore[no-redef]
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Every package the release controller publishes, with its manifest, publish
+# workflow, and tag prefix. Tests replace it with synthetic packages.
+_PACKAGE_SPECS = release.PACKAGE_SPECS
+
+# A workflow step that rewrites one package directory's published text, and
+# the variable that step builds the release tag from.
+_PIN_STEP_RE = re.compile(r"\bscripts/release_links\.py\s+pin\s+(?P<dirs>[^\n#]+)")
+_TAG_PREFIX_RE = re.compile(r"^\s*CITRY_RELEASE_TAG_PREFIX:\s*[\"']?(?P<prefix>[^\"'\s#]*)", re.MULTILINE)
 
 # `[text](target)` in Markdown. Markdown images are the link form with a
 # leading `!`, so one pattern covers both.
@@ -53,18 +76,53 @@ _ABSOLUTE_PREFIXES = ("http://", "https://", "#", "mailto:", "data:")
 _EXTRA_PUBLISHED = (Path("packages/editors/vscode/README.md"),)
 
 
-def _published_readmes() -> list[Path]:
-    """Every README a package publishes, resolved to a path under the repo root."""
-    found: list[Path] = []
+def _package_readmes() -> list[tuple[Path, Path]]:
+    """Each (package directory, README path) pair a package publishes, before resolving symlinks."""
+    found: list[tuple[Path, Path]] = []
     for pyproject in sorted(REPO_ROOT.glob("packages/*/*/pyproject.toml")):
         config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
         readme = config.get("project", {}).get("readme")
         if isinstance(readme, str):
-            found.append(pyproject.parent / readme)
-    found.extend(REPO_ROOT / path for path in _EXTRA_PUBLISHED)
+            found.append((pyproject.parent, pyproject.parent / readme))
+    found.extend(((REPO_ROOT / path).parent, REPO_ROOT / path) for path in _EXTRA_PUBLISHED)
+    return [(package, readme) for package, readme in found if readme.is_file()]
+
+
+def _published_readmes() -> list[Path]:
+    """Every README a package publishes, resolved to a path under the repo root."""
     # A package may symlink the repo-root README, so the same file can arrive
     # twice under different paths.
-    return sorted({path.resolve() for path in found if path.is_file()})
+    return sorted({readme.resolve() for _package, readme in _package_readmes()})
+
+
+def _unpinned_packages() -> list[str]:
+    """Report each package whose published README no release workflow rewrites to the right tag."""
+    specs = {(REPO_ROOT / spec.manifest).parent: spec for spec in _PACKAGE_SPECS}
+    problems: list[str] = []
+    for package, readme in _package_readmes():
+        where = package.relative_to(REPO_ROOT).as_posix()
+        published = readme.relative_to(REPO_ROOT).as_posix()
+        spec = specs.get(package)
+        if spec is None:
+            problems.append(f"{published} is published, but scripts/release.py lists no package in {where}")
+            continue
+        workflow = REPO_ROOT / ".github" / "workflows" / spec.workflow
+        text = workflow.read_text(encoding="utf-8") if workflow.is_file() else ""
+        prefix = _TAG_PREFIX_RE.search(text)
+        # The tag the links name must be the tag the release creates, so the
+        # workflow's prefix has to match the one scripts/release.py tags with.
+        if prefix is None or prefix.group("prefix") != spec.tag_prefix:
+            problems.append(
+                f"{spec.workflow} must set CITRY_RELEASE_TAG_PREFIX to {spec.tag_prefix!r}, "
+                f"the tag prefix scripts/release.py uses for {spec.key}"
+            )
+        pinned = {part.rstrip("/") for match in _PIN_STEP_RE.finditer(text) for part in match.group("dirs").split()}
+        if where not in pinned:
+            problems.append(
+                f"{published} is published, but {spec.workflow} has no `scripts/release_links.py pin {where}` step; "
+                "add one before the build"
+            )
+    return problems
 
 
 def _blank_fences(text: str) -> str:
@@ -108,7 +166,7 @@ def _targets(text: str) -> list[tuple[int, str]]:
 
 
 def check() -> list[str]:
-    problems: list[str] = []
+    problems: list[str] = _unpinned_packages()
     for readme in _published_readmes():
         # Report the path with forward slashes on every OS, as the repository names it.
         where = readme.relative_to(REPO_ROOT).as_posix()

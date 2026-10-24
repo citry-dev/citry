@@ -38,6 +38,10 @@ permissions:
   contents: read
 
 env:
+  # This package's published README, changelog, and project URLs link to the
+  # tag <prefix><version>; scripts/release_links.py rewrites them, and
+  # scripts/release.py owns the prefix.
+  CITRY_RELEASE_TAG_PREFIX: "citry-core@"
   PROJECT_DIR: packages/py/citry_core
   SOURCE_DATE_EPOCH: "315532800"
   CITRY_CORE_RUST_TOOLCHAIN: "1.96.0"
@@ -83,6 +87,11 @@ jobs:
         with:
           ref: ${{ inputs.release_commit }}
           submodules: recursive
+      # The registry keeps this package's README, changelog, and project URLs
+      # forever, so their repository links must name the release tag rather
+      # than main, which keeps changing.
+      - name: Point published links at the release tag
+        run: python3 scripts/release_links.py pin packages/py/citry_core
       - name: Build the CPython ABI3 wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
@@ -190,6 +199,11 @@ jobs:
         with:
           ref: ${{ inputs.release_commit }}
           submodules: recursive
+      # The registry keeps this package's README, changelog, and project URLs
+      # forever, so their repository links must name the release tag rather
+      # than main, which keeps changing.
+      - name: Point published links at the release tag
+        run: python3 scripts/release_links.py pin packages/py/citry_core
       - name: Build the CPython ABI3 wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
@@ -262,6 +276,12 @@ jobs:
         with:
           python-version: "3.14"
           architecture: ${{ matrix.target }}
+      # The registry keeps this package's README, changelog, and project URLs
+      # forever, so their repository links must name the release tag rather
+      # than main, which keeps changing.
+      - name: Point published links at the release tag
+        shell: pwsh
+        run: python scripts/release_links.py pin packages/py/citry_core
       - name: Build one CPython ABI3 wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
@@ -325,6 +345,11 @@ jobs:
         id: python314
         with:
           python-version: "3.14"
+      # The registry keeps this package's README, changelog, and project URLs
+      # forever, so their repository links must name the release tag rather
+      # than main, which keeps changing.
+      - name: Point published links at the release tag
+        run: python3 scripts/release_links.py pin packages/py/citry_core
       - name: Build one CPython ABI3 wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
@@ -374,6 +399,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # pinned 2026-08-18
         with:
           toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
+      # The registry keeps this package's README, changelog, and project URLs
+      # forever, so their repository links must name the release tag rather
+      # than main, which keeps changing.
+      - name: Point published links at the release tag
+        run: python3 scripts/release_links.py pin packages/py/citry_core
       - name: Build the source distribution
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
@@ -442,6 +472,11 @@ jobs:
             --from pyodide-cli==0.5.0 \
             --with pyodide-build==0.37.0 \
             pyodide xbuildenv install-emscripten --path "$CITRY_XBUILDENV"
+      # The registry keeps this package's README, changelog, and project URLs
+      # forever, so their repository links must name the release tag rather
+      # than main, which keeps changing.
+      - name: Point published links at the release tag
+        run: python3 scripts/release_links.py pin packages/py/citry_core
       - name: Build from one clean source tree
         env:
           CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv

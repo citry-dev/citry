@@ -230,11 +230,11 @@ The [web-framework guide](https://citry.dev/advanced/web-frameworks/) shows the 
 startup and routing setup for each host.
 
 Want a complete project instead of an integration excerpt? Copy the
-[FastAPI starter](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/starters/fastapi)
+[FastAPI starter](https://github.com/citry-dev/citry/tree/main/examples/starters/fastapi)
 or choose from the
-[standalone, Django, Flask, ASGI, and WSGI starter matrix](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples).
+[standalone, Django, Flask, ASGI, and WSGI starter matrix](https://github.com/citry-dev/citry/tree/main/examples).
 The collection also includes complete Project Board and
-[HTMX integration](https://github.com/citry-dev/citry/tree/citry%400.6.0/examples/demos/htmx)
+[HTMX integration](https://github.com/citry-dev/citry/tree/main/examples/demos/htmx)
 demos. Each project has its own dependencies, lockfile, and tests. Every web
 starter includes a browser interaction powered by Citry Events. The HTMX demo
 uses HTMX for every request and page update.
