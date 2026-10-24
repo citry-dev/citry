@@ -168,7 +168,8 @@ class CSidebar(LibraryComponent):
                 "size": kwargs.size,
                 "sticky": kwargs.sticky,
             },
-            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogExpandLabel": uses_catalog_default(self, "expand_label"),
             "catalogCollapseLabel": uses_catalog_default(self, "collapse_label"),
         }

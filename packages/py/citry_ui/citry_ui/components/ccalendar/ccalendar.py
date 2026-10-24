@@ -345,7 +345,8 @@ class CCalendar(LibraryComponent):
             "fixedWeeks": kwargs.fixed_weeks,
             "unavailableMessage": unavailable_message,
             "catalogUnavailableMessage": catalog["unavailable_message"],
-            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogLabel": snapshot["catalog_label"],
             "catalogPreviousLabel": snapshot["catalog_previous_label"],
             "catalogNextLabel": snapshot["catalog_next_label"],

@@ -104,7 +104,7 @@ class TestHtmlElement:
         assert message == (
             "c-bind on <div> sets '@click', which Vue would read as code. Python data from c-bind, "
             "c-* attributes, and extension hooks may not set a name that starts with v-, :, ., ^, @, or #, "
-            "or a $c-tr binding, even on a page that does not use Vue. Write Vue directives, bindings, and "
+            "or name a $c-tr binding, even on a page that does not use Vue. Write Vue directives, bindings, and "
             "listeners directly in the template."
         )
 
@@ -335,7 +335,7 @@ class TestExtensionHook:
         assert message == (
             "An on_attrs_resolved extension hook sets '@click' on <div>, which Vue would read as code. "
             "Python data from c-bind, c-* attributes, and extension hooks may not set a name that starts with "
-            "v-, :, ., ^, @, or #, or a $c-tr binding, even on a page that does not use Vue. Return only plain "
+            "v-, :, ., ^, @, or #, or name a $c-tr binding, even on a page that does not use Vue. Return only plain "
             "attribute names from the hook, and write Vue directives, bindings, and listeners directly in the "
             "template."
         )

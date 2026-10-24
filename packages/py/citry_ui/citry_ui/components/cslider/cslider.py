@@ -489,7 +489,8 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
         "ariaLabelledby": single_aria_labelledby,
         "rangeLabelledby": [lower_labelledby, upper_labelledby] if is_range else [],
         "fieldLabelId": field.label_id if field is not None else None,
-        # The range thumbs' `$c-tr` bindings read these: `null` keeps a caller's own label.
+        # The range thumbs' `$c-tr` bindings read these flags and return `null` when one is false,
+        # which keeps a caller's own label.
         "catalogLowerLabel": lower_catalog,
         "catalogUpperLabel": upper_catalog,
     }

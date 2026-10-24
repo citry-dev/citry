@@ -262,7 +262,8 @@ class CCarousel(LibraryComponent):
                 "variant": snapshot["variant"],
                 "size": snapshot["size"],
             },
-            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogPreviousLabel": snapshot["catalog_previous_label"],
             "catalogNextLabel": snapshot["catalog_next_label"],
             "catalogPickerLabel": snapshot["catalog_picker_label"],

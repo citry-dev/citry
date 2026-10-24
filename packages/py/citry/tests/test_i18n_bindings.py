@@ -175,7 +175,7 @@ def test_prepared_text_binding_escapes_translation_without_compiling_vue_syntax(
     assert all("{{ state }}" not in template for template in templates)
 
 
-def test_null_capable_text_binding_keeps_untranslated_plain_text() -> None:
+def test_binding_with_null_text_binding_keeps_untranslated_plain_text() -> None:
     app = _app()
 
     class Page(Component):
@@ -271,36 +271,51 @@ def test_authored_values_expression_is_kept_exactly() -> None:
     ]
 
 
-_ATTACK = "{ title: (globalThis.ran = 1, 'x') }"
+_FOREIGN_EXPRESSION = "{ title: foreignValue }"
 
 
 @pytest.mark.parametrize(
     ("element", "data"),
     [
-        # The `c-` form, whose Python value used to become the expression.
-        ('<span c-$c-tr:dismiss="expression">{{ tr("dismiss", title="t") }}</span>', {"expression": _ATTACK}),
+        # The `c-` form, which would turn a Python value into the expression.
+        (
+            '<span c-$c-tr:dismiss="expression">{{ tr("dismiss", title="t") }}</span>',
+            {"expression": _FOREIGN_EXPRESSION},
+        ),
         (
             "<button c-title=\"tr('dismiss', title='t')\" c-$c-tr:dismiss[title]=\"expression\"></button>",
-            {"expression": _ATTACK},
+            {"expression": _FOREIGN_EXPRESSION},
         ),
-        ('<span c-$C-TR:dismiss="expression">{{ tr("dismiss", title="t") }}</span>', {"expression": _ATTACK}),
+        (
+            '<span c-$C-TR:dismiss="expression">{{ tr("dismiss", title="t") }}</span>',
+            {"expression": _FOREIGN_EXPRESSION},
+        ),
         ('<span c-$c-tr:dismiss="True">{{ tr("dismiss", title="t") }}</span>', {}),
         ('<span c-$c-tr:dismiss="None">{{ tr("dismiss", title="t") }}</span>', {}),
         # A key in a spread mapping, in every spelling the parser reserves.
-        ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-tr:dismiss": _ATTACK}}),
+        (
+            '<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>',
+            {"attrs": {"$c-tr:dismiss": _FOREIGN_EXPRESSION}},
+        ),
         (
             "<button c-title=\"tr('dismiss', title='t')\" c-bind=\"attrs\"></button>",
-            {"attrs": {"$c-tr:dismiss[title]": _ATTACK}},
+            {"attrs": {"$c-tr:dismiss[title]": _FOREIGN_EXPRESSION}},
         ),
-        ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$C-TR:dismiss": _ATTACK}}),
-        ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-tr": _ATTACK}}),
-        ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-Tr.x": _ATTACK}}),
-        ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-tr[title]": _ATTACK}}),
+        (
+            '<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>',
+            {"attrs": {"$C-TR:dismiss": _FOREIGN_EXPRESSION}},
+        ),
+        ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-tr": _FOREIGN_EXPRESSION}}),
+        ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-Tr.x": _FOREIGN_EXPRESSION}}),
+        (
+            '<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>',
+            {"attrs": {"$c-tr[title]": _FOREIGN_EXPRESSION}},
+        ),
         ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-tr:dismiss": True}}),
         ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-tr:dismiss": None}}),
         (
             '<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>',
-            {"attrs": {_StrSubclass("$c-tr:dismiss"): _ATTACK}},
+            {"attrs": {_StrSubclass("$c-tr:dismiss"): _FOREIGN_EXPRESSION}},
         ),
     ],
 )
@@ -379,7 +394,7 @@ def test_binding_constness_stays_render_local_in_both_provider_orders() -> None:
     assert marker.search(server_then_client)
 
 
-def test_null_capable_attribute_binding_keeps_an_untranslated_value() -> None:
+def test_binding_with_null_attribute_binding_keeps_an_untranslated_value() -> None:
     app = _app()
 
     class Page(Component):
@@ -435,7 +450,7 @@ def test_binding_without_a_null_token_still_requires_tr(expression: str) -> None
         Page().render()
 
 
-def test_null_capable_binding_still_checks_a_tr_message() -> None:
+def test_binding_with_null_binding_still_checks_a_tr_message() -> None:
     app = _app()
 
     class Page(Component):
@@ -452,7 +467,7 @@ def test_null_capable_binding_still_checks_a_tr_message() -> None:
         Page().render()
 
 
-def test_null_capable_attribute_binding_rejects_a_composed_tr_value() -> None:
+def test_binding_with_null_attribute_binding_rejects_a_composed_tr_value() -> None:
     app = _app()
 
     class Page(Component):
@@ -618,7 +633,7 @@ def test_values_expression_reads_character_references_as_an_attribute_value(
     assert "() => ({ name: 'c & d' })" in code
 
 
-def test_null_capable_binding_on_an_absent_attribute_is_dropped() -> None:
+def test_binding_with_null_binding_on_an_absent_attribute_is_dropped() -> None:
     app = _app()
 
     class Page(Component):

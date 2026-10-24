@@ -292,7 +292,8 @@ class CToastRegion(LibraryComponent):
         # caller supplies a mutable or side-effecting public Sequence.
         self._toast_messages = messages
         self._toast_i18n_data = {
-            # The region's `$c-tr` binding reads this: `null` keeps a caller's label.
+            # The region's `$c-tr` binding reads this flag and returns `null` when it is false,
+            # which keeps a caller's own label.
             "catalogLabel": catalog_label,
             "catalogDismiss": catalog_dismiss,
             "catalogActionAnnouncement": catalog_action_announcement,
@@ -340,8 +341,9 @@ class CToastRegion(LibraryComponent):
             **self._toast_i18n_data,
         }
 
-    # A dismiss button's catalog default keeps the title the server passed to
-    # tr(); a caller's own label renders the unbound c-elif button.
+    # On the catalog branch, the dismiss button's bare `$c-tr` binding
+    # translates again in the browser with the `title` the server passed to
+    # tr(). A caller's own label renders the c-elif button, which has no binding.
     template = """
       <section
         ref="root"

@@ -6,9 +6,10 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
-- Attribute completion offers `$c-tr:` only, and the editor reports a
-  `c-$c-tr:` attribute or a `$c-tr` key in a `c-bind` mapping as an
-  error, because a translation binding is written in the template.
+- Attribute completion no longer offers `c-$c-tr:`. The editor reports a
+  `c-$c-tr:` attribute, or a `$c-tr` key in a dict written directly in
+  `c-bind`, as an error, because a translation binding must be written in
+  the template.
 
 ### Added
 

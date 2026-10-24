@@ -435,7 +435,8 @@ class CCombobox(LibraryComponent):
             "catalogRequiredMessage": messages["catalog_required_message"],
             "catalogOpenLabel": messages["catalog_open_label"],
             "catalogCloseLabel": messages["catalog_close_label"],
-            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogClearLabel": messages["catalog_clear_label"],
             "catalogLoadingLabel": messages["catalog_loading_label"],
             "catalogEmptyLabel": messages["catalog_empty_label"],

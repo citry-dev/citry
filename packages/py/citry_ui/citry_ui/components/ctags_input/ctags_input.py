@@ -675,8 +675,9 @@ class CTagsInput(LibraryComponent):
         self._snapshot(kwargs)
         return self._cui_tags_input_data
 
-    # A remove button's catalog default keeps the value the server passed to
-    # tr(); a caller's own label renders the unbound c-else button.
+    # On the catalog branch, the remove button's bare `$c-tr` binding
+    # translates again in the browser with the `value` the server passed to
+    # tr(). A caller's own label renders the c-else button, which has no binding.
     template = """
       <div
         class="cui-tags-input"

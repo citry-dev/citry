@@ -136,12 +136,12 @@
 ### Changed
 
 - **Breaking:** write a `$c-tr` translation binding and its values in the
-  template. A binding that Python data names, through `c-$c-tr:...`, a
-  `$c-tr` key in a `c-bind` mapping, or an `on_attrs_resolved` hook, now
+  template. A binding that comes from Python data, through `c-$c-tr:...`,
+  a `$c-tr` key in a `c-bind` mapping, or an `on_attrs_resolved` hook, now
   raises `VueCodeError`, because its value is browser JavaScript. To let
   the server decide whether the browser translates an element, return a
-  flag from `js_data()` and return `null` from the binding to keep the
-  server-rendered text
+  flag from `js_data()` and make the binding's values expression return
+  `null` where the server-rendered text should stay
   ([details](https://citry.dev/i18n/browser/#keep-the-server-text)):
 
   ```citry-html
@@ -233,10 +233,11 @@
   references correctly too, and a dynamic slot name that is not
   JavaScript, such as `#[x&amp;y]`, now reports Vue's invalid-expression
   error instead of compiling to broken JavaScript.
-- The render cache replays a stored entry only when its template text,
-  static markup, and `$c-tr` values match what the running app's templates
-  produce. Any other entry is treated as a miss and the component renders
-  again, so the first render of a template in a new process may miss once.
+- A render cache entry is reused only when the templates running in this
+  process wrote the same template text, `$c-tr` bindings, and values
+  expressions, so an entry left by a different version of a template is
+  rendered again. After a restart, a cached component may render once more
+  before its entry is used.
 - With `@event(latest_wins=True)`, a call that a newer call replaced no
   longer changes the page. Its remaining actions are dropped, including
   delayed ones with `wait=False`. The newer call no longer waits for its

@@ -188,7 +188,11 @@ class I18nBindingCollector:
         return pending
 
     def finish_untranslated_text(self, ordinal: int) -> _PendingText:
-        """Close a text destination whose body is not a `tr()` call, allowed only under a `null`-capable expression."""
+        """
+        Close a text destination whose body is not a `tr()` call.
+
+        Only a binding whose values expression contains `null` allows that.
+        """
         try:
             pending = self._pending_text.pop(ordinal)
         except KeyError as error:
@@ -382,12 +386,13 @@ class I18nBindingElementAttrsNode(Node):
             target_name = cast("str", declaration.target.name)
             winning_key = next((key for key in resolved if _html_identity(key) == target_name), None)
             if winning_key is None:
-                # A `null`-capable binding already says "this element may keep
-                # what the server rendered". When the server rendered no such
-                # attribute at all (an `aria-labelledby` label, say), there is
-                # nothing to translate, so the binding is dropped. Python only
-                # decided whether the attribute exists; the expression is
-                # still the author's own text and is never emitted.
+                # A values expression that contains `null` already says "this
+                # element may keep what the server rendered". When the server
+                # rendered no such attribute at all (an `aria-labelledby`
+                # label, say), there is nothing to translate, so the binding
+                # is dropped. Python only decided whether the attribute
+                # exists; the expression is still the author's own text, and
+                # no binding is sent to the browser.
                 if declaration.allows_untranslated:
                     continue
                 raise RuntimeError(
@@ -403,7 +408,7 @@ class I18nBindingElementAttrsNode(Node):
             if untranslated and not isinstance(value, str):
                 raise TypeError(
                     f"$c-tr:{declaration.message}[{target_name}] keeps a server {target_name!r} value that is "
-                    f"not text; got {type(value).__name__}."
+                    f"not text; got {type(value).__name__}. Pass a string."
                 )
             if not untranslated and (capture is None or value is not capture.text):
                 raise RuntimeError(
@@ -500,7 +505,8 @@ class I18nBoundExprNode(Node):
         if not isinstance(rendered, Markup) or "<" in str(rendered):
             raise RuntimeError(
                 f"$c-tr:{pending.declaration.message} owns textContent, but its body renders HTML markup, "
-                "which the browser cannot keep as the server text."
+                "which the browser cannot keep as the server text. Render plain text in the element, "
+                "or move the markup outside it."
             )
         text = decode_character_references(str(rendered))
         return PreparedTextValue(
@@ -624,8 +630,9 @@ def _complete_text_expression(body: list[Any], index: int, tag_name: str) -> boo
 
 def _reject_direct_structural(attrs: tuple[Any, ...], *, tag_name: str) -> None:
     for attr in attrs:
-        # A `c-bind` spread and a `c-$c-tr:...` attribute carry Python data,
-        # so the render rejects them with `VueCodeError` instead.
+        # A `c-` attribute carries Python data, so the render checks its name
+        # instead: `c-$c-tr:...`, or a `$c-tr` key in a `c-bind` spread,
+        # raises `VueCodeError` there.
         if attr.key.startswith("c-"):
             continue
         reject_translation_binding_key(attr.key, tag_name=tag_name)
@@ -679,7 +686,7 @@ def _parse_directive(key: str) -> _Declaration:
 
 
 # Every `$c-tr` values expression a template in this process wrote, after
-# the attribute-rule decoding above. It grows with the templates, not the renders.
+# the character-reference decoding above. It grows with the templates, not the renders.
 _AUTHORED_VALUES_EXPRESSIONS: set[str] = set()
 
 

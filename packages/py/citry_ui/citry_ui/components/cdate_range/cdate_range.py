@@ -452,7 +452,8 @@ class CDateRange(LibraryComponent):
             "clearLabel": clear_label,
             "unavailableMessage": unavailable_message,
             "catalog": catalog,
-            # The range `$c-tr` bindings read this: `null` keeps a caller's own label.
+            # The range `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogRangeLabel": snapshot["catalog_range_label"],
             "variant": kwargs.variant,
             "size": kwargs.size,

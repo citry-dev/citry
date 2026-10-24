@@ -603,9 +603,10 @@ class CInternalTransferList(LibraryComponent):
         }
 
     def js_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
-        # The `$c-tr` bindings read these flags in the browser: `null` keeps
-        # a caller's own label. CTransferList always renders this component
-        # and has its own JavaScript, so the page is browser code already.
+        # The `$c-tr` bindings read these flags and return `null` when one is
+        # false, which keeps a caller's own label. Adding js_data() gives this
+        # component a Vue instance; its only parent, CTransferList, already
+        # ships JavaScript, so the page loads no new browser code.
         return {"catalog": dict(kwargs.catalog)}
 
     template = (

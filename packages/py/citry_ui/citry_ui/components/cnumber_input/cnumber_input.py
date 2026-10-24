@@ -441,7 +441,8 @@ class CNumberInput(LibraryComponent):
             },
             "describedby": described_by,
             "errormessage": error_message,
-            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogIncrementLabel": catalog["increment_label"],
             "catalogDecrementLabel": catalog["decrement_label"],
         }

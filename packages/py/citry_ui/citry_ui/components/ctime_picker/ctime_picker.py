@@ -467,7 +467,8 @@ class CTimePicker(LibraryComponent):
         self._cui_time_picker_data = {
             "serverDefaults": {key: value for key, value in client_data.items() if key in prop_names},
             **{key: value for key, value in client_data.items() if key not in prop_names},
-            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogPickerLabel": catalog["picker_label"],
             "catalogClearLabel": catalog["clear_label"],
         }

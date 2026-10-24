@@ -172,7 +172,8 @@ class CDialog(LibraryComponent):
                 "size": kwargs.size,
                 "scroll": kwargs.scroll,
             },
-            # The close button's `$c-tr` binding reads this: `null` keeps a caller's own label.
+            # The close button's `$c-tr` binding reads this flag and returns `null` when it is false,
+            # which keeps a caller's own label.
             "catalogCloseLabel": uses_catalog_default(self, "close_label"),
         }
 

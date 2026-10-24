@@ -294,7 +294,7 @@ def _assert_null_form(default: str, override: str, message: str, flag: str, call
     assert caller_text in html
 
 
-def test_null_form_infinite_scroll_keeps_a_caller_label() -> None:
+def test_null_binding_infinite_scroll_keeps_a_caller_label() -> None:
     _assert_null_form(
         "<c-CInfiniteScroll />",
         '<c-CInfiniteScroll loading_label="Fetching rows" />',
@@ -304,7 +304,7 @@ def test_null_form_infinite_scroll_keeps_a_caller_label() -> None:
     )
 
 
-def test_null_form_number_input_keeps_a_caller_label() -> None:
+def test_null_binding_number_input_keeps_a_caller_label() -> None:
     _assert_null_form(
         "<c-CNumberInput />",
         '<c-CNumberInput increment_label="Add one" />',
@@ -314,7 +314,7 @@ def test_null_form_number_input_keeps_a_caller_label() -> None:
     )
 
 
-def test_null_form_sidebar_keeps_a_caller_label() -> None:
+def test_null_binding_sidebar_keeps_a_caller_label() -> None:
     _assert_null_form(
         '<c-CSidebar label="Site">x</c-CSidebar>',
         '<c-CSidebar label="Site" expand_label="Open menu">x</c-CSidebar>',
@@ -324,7 +324,7 @@ def test_null_form_sidebar_keeps_a_caller_label() -> None:
     )
 
 
-def test_null_form_tag_keeps_a_caller_label() -> None:
+def test_null_binding_tag_keeps_a_caller_label() -> None:
     _assert_null_form(
         '<c-CTagGroup label="Tags" removable><c-CTag value="a">A</c-CTag></c-CTagGroup>',
         '<c-CTagGroup label="Tags" removable remove_label="Drop"><c-CTag value="a">A</c-CTag></c-CTagGroup>',
@@ -334,7 +334,7 @@ def test_null_form_tag_keeps_a_caller_label() -> None:
     )
 
 
-def test_null_form_time_picker_keeps_a_caller_label() -> None:
+def test_null_binding_time_picker_keeps_a_caller_label() -> None:
     _assert_null_form(
         "<c-CTimePicker />",
         '<c-CTimePicker clear_label="Wipe time" />',
@@ -344,7 +344,7 @@ def test_null_form_time_picker_keeps_a_caller_label() -> None:
     )
 
 
-def test_null_form_range_slider_keeps_a_caller_label() -> None:
+def test_null_binding_range_slider_keeps_a_caller_label() -> None:
     _assert_null_form(
         "<c-CRangeSlider />",
         '<c-CRangeSlider lower_label="Minimum price" />',
@@ -446,7 +446,7 @@ def _null_form_flag(manifest: dict[str, object], path: str) -> object:
         ),
     ],
 )
-def test_null_form_binding_follows_the_catalog_flag_in_browser_data(
+def test_null_binding_binding_follows_the_catalog_flag_in_browser_data(
     template: str, base: dict[str, object], message: str, flag: str, override: dict[str, object]
 ) -> None:
     for extra, uses_catalog in (({}, True), (override, False)):
@@ -505,7 +505,7 @@ def _bindings_for(manifest: dict[str, object], message: str) -> list[dict[str, o
         ),
     ],
 )
-def test_null_form_binding_on_an_attribute_the_component_left_out_is_dropped(
+def test_null_binding_binding_on_an_attribute_the_component_left_out_is_dropped(
     template: str, kwargs: dict[str, object], message: str, attribute: str
 ) -> None:
     html, manifest = _null_form_manifest(template, kwargs)
@@ -608,7 +608,7 @@ _TRANSFER = '<c-CTransferList name="r" c-bind="kw"><c-CTransferListItem value="a
         ),
     ],
 )
-def test_null_form_binding_keeps_a_caller_label_in_more_families(
+def test_null_binding_binding_keeps_a_caller_label_in_more_families(
     template: str,
     base: dict[str, object],
     message: str,

@@ -122,7 +122,8 @@ class CInfiniteScroll(LibraryComponent):
     class JsData:
         # Keep this camelCase spelling in sync with the JavaScript data key.
         serverDefaults: dict[str, object]  # noqa: N815
-        # The `$c-tr` bindings read these flags: `null` keeps a caller's own label.
+        # The `$c-tr` bindings read these flags and return `null` when one is false,
+        # which keeps a caller's own label.
         catalogLoading: bool  # noqa: N815
         catalogError: bool  # noqa: N815
         catalogEnd: bool  # noqa: N815

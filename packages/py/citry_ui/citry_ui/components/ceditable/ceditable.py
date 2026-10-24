@@ -328,7 +328,8 @@ class CEditable(LibraryComponent):
             "serverSize": kwargs.size,
             "placeholder": placeholder,
             "catalogPlaceholder": catalog_placeholder,
-            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogEditLabel": catalog_edit_label,
             "catalogSubmitLabel": catalog_submit_label,
             "catalogCancelLabel": catalog_cancel_label,

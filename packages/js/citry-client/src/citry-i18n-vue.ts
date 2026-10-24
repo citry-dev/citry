@@ -695,9 +695,9 @@ interface PluginGlobal extends Window {
             const keepsServerText =
               candidate === null || (fallback !== undefined && (!candidate || typeof candidate !== "object"));
             if (keepsServerText) {
-              // `null` means "no binding": show the exact server-rendered
-              // text, on the first render and whenever the value returns to
-              // `null`, until the expression returns an object again.
+              // `null` asks to keep the server-rendered text: show it on the
+              // first render and whenever the value returns to `null`, until
+              // the expression returns an object again.
               if (fallback === undefined) fail("I18N_BINDING_INVALID", `binding ${id} has no server text to keep.`);
               if (candidate !== null && host.development === true) {
                 // Any other non-object, most often `undefined` from a name no

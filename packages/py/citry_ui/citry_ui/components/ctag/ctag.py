@@ -835,7 +835,8 @@ class CTag(LibraryComponent):
                 "disabled": bool(kwargs.disabled),
                 "textValue": _plain("CTag text_value", kwargs.text_value, optional=True),
             },
-            # The `$c-tr` binding reads this: `null` keeps the group's own remove label.
+            # The `$c-tr` binding reads this flag and returns `null` when it is
+            # false, which keeps the group's own remove label.
             "catalogRemoveLabel": provided is not None and provided.context.catalog_remove_label,
         }
 

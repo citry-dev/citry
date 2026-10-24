@@ -167,7 +167,7 @@ def vue_code_error(
         subject = f"Python data sets {name!r} on {tag}"
     rule = (
         "Python data from c-bind, c-* attributes, and extension hooks may not set a name that starts with "
-        "v-, :, ., ^, @, or #, or a $c-tr binding, even on a page that does not use Vue."
+        "v-, :, ., ^, @, or #, or name a $c-tr binding, even on a page that does not use Vue."
     )
     if hint is not None:
         fix = hint
@@ -176,7 +176,7 @@ def vue_code_error(
         # binding in the template and send only its values as data.
         fix = (
             "Write the $c-tr binding directly in the template, with any values expression written there too, "
-            'such as $c-tr:greeting="{ name: userName }", and return those values from js_data(). '
+            'such as $c-tr:greeting="{ name: userName }", and return the data it reads from js_data(). '
             "A values expression that evaluates to null keeps the server-rendered text."
         )
     elif str.startswith(str.casefold(name), ("v-c-", "v-citry-")):

@@ -705,7 +705,8 @@ class CCommandPalette(LibraryComponent):
             "titleId": data["title_id"],
             "inputId": data["input_id"],
             "listboxId": data["listbox_id"],
-            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            # The `$c-tr` bindings read these flags and return `null` when one is false,
+            # which keeps a caller's own label.
             "catalogCloseLabel": data["catalog_close_label"],
             "catalogSearchLabel": data["catalog_search_label"],
             "catalogPlaceholder": data["catalog_placeholder"],

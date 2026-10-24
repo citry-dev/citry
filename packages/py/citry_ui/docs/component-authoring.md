@@ -443,7 +443,8 @@ Choose between two server ownership paths:
    that destination needs a browser continuation; or
 2. when the caller explicitly supplies the prop or slot, use it unchanged and
    keep the browser from translating it: the binding's values expression
-   returns `null`, or the override branch has no binding (see item 5).
+   returns `null`, or the override branch has no binding (see item 5 of the
+   audit below).
 
 Determine that choice from raw prop or slot presence, not truthiness or equality
 with the English source text. A binding that translates on the caller-override
@@ -547,35 +548,47 @@ i18n section to the design package and complete this audit before runtime work:
 
    Write every `$c-tr` binding and its values expression in the template,
    because the expression is browser JavaScript. When the catalog default and
-   a caller override share one element, return the ownership decision from
-   `js_data()` and let the expression return `null` on the override path:
+   a caller override share one element, return the same ownership decision
+   from both `template_data()` (for the server `tr()`) and `js_data()` (for
+   the browser), and let the expression return `null` on the override path:
 
-   ```html
+   ```citry-html
    <button
-     c-aria-label="tr('citry-ui-dialog-close') if catalog_close_label else close_label"
-     $c-tr:citry-ui-dialog-close[aria-label]="catalogCloseLabel ? {} : null"
+     c-aria-label="
+       tr('citry-ui-dialog-close') if use_catalog else label
+     "
+     $c-tr:citry-ui-dialog-close[aria-label]="
+       useCatalog ? {} : null
+     "
    >
    ```
 
    While the expression returns `null`, the element keeps its server-rendered
-   value, so a caller's label stays fixed through locale switches. Only a
-   written `null` token lets the server accept a value that `tr()` did not
-   produce; a `tr()` value must still name the same message. Return exactly
-   `null`: `undefined`, for example from a misspelled `js_data()` key, also
-   keeps the server value but is reported in development mode. When the
-   override path renders no target attribute at all, a binding that can return
-   `null` is dropped.
+   value, so a caller's label stays fixed through locale switches.
+
+   - Only an expression that contains the word `null` lets the server accept
+     a value that `tr()` did not produce; a `tr()` value must still name the
+     same message.
+   - Return exactly `null`. Any other non-object, for example `undefined`
+     from a misspelled `js_data()` key, also keeps the server value but is
+     reported in development mode.
+   - When the override path renders no target attribute at all, a binding
+     whose expression contains `null` is dropped.
 
    A component without its own Vue instance (no `js` or `js_data()`) has no
    browser data to read, so it picks between two authored elements with
    `c-if`/`c-else`: the catalog branch carries the binding and the override
-   branch carries none. Inside a `c-for` loop, use the same split.
+   branch carries none. Inside a Python `c-for` loop, use the same split,
+   because the expression cannot read the loop item; a bare binding on the
+   catalog branch reuses the values the server passed to `tr()`.
 
-   Rendering raises `VueCodeError` for a binding named by Python data: a
-   `c-$c-tr:` attribute, a `$c-tr` key in a `c-bind` mapping, or one added by
-   an `on_attrs_resolved` hook. The last declaration for the same text or
-   HTML-attribute destination wins even if it names a different message. Never
-   leave a default catalog binding that can translate an explicit override.
+   Rendering raises `VueCodeError` for a binding that comes from Python data:
+   a `c-$c-tr:` attribute, a `$c-tr` key in a `c-bind` mapping, or one added
+   by an `on_attrs_resolved` hook.
+
+   The last declaration for the same text or HTML-attribute destination wins
+   even if it names a different message. Never leave a default catalog binding
+   that can translate an explicit override.
 
    In `$c-tr:<message>.<fluent-output>[<html-attribute>]`, the dot selects a
    Fluent message attribute and brackets select the HTML attribute to update.
