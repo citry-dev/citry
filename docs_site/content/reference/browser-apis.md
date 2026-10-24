@@ -497,7 +497,7 @@ name the component as Citry last saw it.
 | --- | --- |
 | `superseded` | A newer call to the same handler replaced this one, so the actions of this call that have not started yet are dropped, delayed ones included. This happens only for a handler declared with `@event(latest_wins=True)`. |
 | `retired` | The component was removed or replaced before the call finished. |
-| `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. |
+| `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. This also happens when the call's own Render replaced the component and the page then accepted a newer result for the new component. A delayed redirect is never dropped for this reason. |
 | `disposed` | The page's Vue app was shut down. |
 | `version` | The server no longer accepts the State this page holds, usually because the app was deployed or its signing secret changed after the page loaded. |
 

@@ -312,6 +312,13 @@ A delay on an action that waits keeps the call running, so `$loading()`
 stays true and later calls wait for it. Add `wait=False` to a
 delayed action that only tidies up.
 
+A delayed action is dropped when the page applies a newer result for the
+same component first. It is also dropped when the component is removed.
+If the same component makes another call within those three seconds, the
+old `Toast:hide` does not run, so that call's handler should return its
+own `Toast:hide`. A delayed Redirect is the exception to the newer-result
+rule: it still runs.
+
 Put a Redirect last. Actions after it may not run before the browser leaves
 the page. To show something first, give the Redirect a delay and
 `wait=False`:
