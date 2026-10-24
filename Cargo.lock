@@ -410,6 +410,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "stacker",
  "thiserror",
 ]
 
@@ -435,6 +436,7 @@ dependencies = [
  "ruff_python_ast",
  "ruff_python_parser",
  "ruff_text_size",
+ "stacker",
  "thiserror",
  "unicode-normalization",
 ]
@@ -2901,6 +2903,7 @@ dependencies = [
  "ruff_python_parser",
  "ruff_source_file",
  "ruff_text_size",
+ "stacker",
 ]
 
 [[package]]

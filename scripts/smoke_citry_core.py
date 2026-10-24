@@ -93,6 +93,24 @@ def main() -> None:
             raise RuntimeError("the native render module declined a plain row")
         native_row_json = native_row.prepared_json
         native_occurrences = native._encode_occurrences([native_item], {"o": native_row}, json.dumps)
+    # The largest expressions the depth check accepts (97 chained additions,
+    # 65 nested lists, 97 attribute lookups) must still be evaluated, parsed
+    # and formatted here. On Pyodide the WebAssembly engine's own call stack
+    # cannot grow, so this checks that the Rust passes fit in it; the
+    # formatter's frames are the largest. One more level must give the clean
+    # error instead of a crash.
+    deepest_sum = safe_eval("1" + "+1" * 97)({})
+    deepest_lists_parse = bool(parse_template("{{ " + "[" * 65 + "]" * 65 + " }}").elements)
+    deepest_formats = all(
+        "<p>" in format_template("<p>{{ " + expression + " }}</p>")
+        for expression in ("[" * 65 + "]" * 65, "a" + ".b" * 97, "1" + "+1" * 97)
+    )
+    try:
+        safe_eval("1" + "+1" * 98)
+    except SyntaxError as error:
+        too_deep_rejected = "expression is nested too deeply" in str(error)
+    else:
+        too_deep_rejected = False
     segments, placeholders = mark_html(
         "<main><p>Hello</p></main>",
         ["data-citry"],
@@ -101,6 +119,9 @@ def main() -> None:
 
     checks = {
         "compiled": "def generate_template" in compiled,
+        "deepest_formats": deepest_formats,
+        "deepest_lists_parse": deepest_lists_parse,
+        "deepest_sum": deepest_sum,
         "embedded_languages": [request.language.value for request in embedded_plan.requests],
         "extension": _rust.__file__,
         "formatted": formatted,
@@ -117,11 +138,15 @@ def main() -> None:
         "rich_slot_count": sum(segment["type"] == "slot" for segment in rich["segments"]),
         "rich_has_private_marker": "__CITRY_SLOT_" in json.dumps(rich),
         "text_direction": locale_direction("ar"),
+        "too_deep_rejected": too_deep_rejected,
         "used_variables": [token.content for token in parsed.used_variables],
         "version": installed_version,
     }
     expected = {
         "compiled": True,
+        "deepest_formats": True,
+        "deepest_lists_parse": True,
+        "deepest_sum": 98,
         "embedded_languages": ["javascript", "css"],
         "locale": "en-US",
         "marked": '<main data-citry=""><p>Hello</p></main>',
@@ -133,6 +158,7 @@ def main() -> None:
         "rich_slot_count": 2,
         "rich_has_private_marker": False,
         "text_direction": "rtl",
+        "too_deep_rejected": True,
         "used_variables": ["title"],
     }
     if reads_rows:

@@ -11,6 +11,7 @@
 //! rejected instead of written to the file. The pinned identity below is part of
 //! the contract: change it and the corpus's expected bytes change with it.
 
+use python_safe_eval::nesting::check_nesting;
 use python_safe_eval::parse_expression;
 use ruff_formatter::{IndentWidth, LineWidth, printer::LineEnding};
 use ruff_python_ast::{
@@ -28,6 +29,27 @@ use crate::newline::normalize_to_lf;
 /// Wraps a bare expression as `x((<expr>))` so Ruff sees a module. The call
 /// parentheses also give it somewhere to break long lines.
 const EXPRESSION_WRAPPER: &str = "x";
+
+/// The stack the formatter's Python passes can need for one expression.
+///
+/// Ruff's formatter and the syntax-tree comparisons call themselves once per
+/// tree level, with larger frames than python_safe_eval's passes. At the
+/// deepest expressions the template parser accepts, a debug build needed up to
+/// about 560 KiB (measured on macOS arm64; about 13 KB per `lambda` in a chain
+/// of 29 of them), more than a small thread has. 4 MiB leaves a wide margin.
+const STACK_RED_ZONE: usize = 4 * 1024 * 1024;
+
+/// The size of a new stack segment, twice the red zone.
+const STACK_SEGMENT: usize = 8 * 1024 * 1024;
+
+/// Run `work` with enough stack for the passes over one expression.
+///
+/// When less than the red zone is left, `stacker` runs the work on a new
+/// segment taken from the heap. The work is pure Rust, so running it off the
+/// thread's own stack is safe.
+pub(crate) fn with_enough_stack<T>(work: impl FnOnce() -> T) -> T {
+    stacker::maybe_grow(STACK_RED_ZONE, STACK_SEGMENT, work)
+}
 /// Turns a `c-for` clause into a comprehension, the only Python construct where
 /// `item in items` is valid on its own.
 const CLAUSE_PREFIX: &str = "None for ";
@@ -36,6 +58,14 @@ const CLAUSE_PREFIX: &str = "None for ";
 pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.16.6+22f65a2ab5";
 
 pub(crate) fn format_expression(
+    source: &str,
+    available_width: usize,
+    newline: &str,
+) -> Result<String, FormatError> {
+    with_enough_stack(|| format_expression_on_stack(source, available_width, newline))
+}
+
+fn format_expression_on_stack(
     source: &str,
     available_width: usize,
     newline: &str,
@@ -85,6 +115,14 @@ pub(crate) fn format_expression(
         .print()
         .map_err(|error| FormatError::invariant(format!("Python provider failed: {error}")))?;
     let formatted = extract_wrapped_expression(printed.as_code(), newline)?;
+    // Ruff may add parentheses. They add no tree level, but the depth check
+    // counts each bracket, so they raise the depth bound. Near the limit that
+    // could make the template parser, which checks each expression wrapped as
+    // `(\n...\n)`, refuse the formatted template, so the author's text is kept
+    // as it is.
+    if check_nesting(&format!("(\n{formatted}\n)")).is_err() {
+        return Ok(source.to_string());
+    }
     let after = parse_expression(&formatted).map_err(|error| {
         FormatError::invariant(format!(
             "Python expression provider returned invalid syntax: {error}"
@@ -124,6 +162,14 @@ pub(crate) fn format_for_clause(
     available_width: usize,
     newline: &str,
 ) -> Result<String, FormatError> {
+    with_enough_stack(|| format_for_clause_on_stack(source, available_width, newline))
+}
+
+fn format_for_clause_on_stack(
+    source: &str,
+    available_width: usize,
+    newline: &str,
+) -> Result<String, FormatError> {
     let before_source = format!("({CLAUSE_PREFIX}{source}{newline})");
     let before = parse_expression(&before_source).map_err(|error| {
         FormatError::invariant(format!(
@@ -134,6 +180,11 @@ pub(crate) fn format_for_clause(
     let formatted_generator = format_expression(&before_source, available_width, newline)?;
     let formatted = extract_for_clause(&formatted_generator)?;
     let after_source = format!("({CLAUSE_PREFIX}{formatted}\n)");
+    // The template parser checks a clause wrapped exactly like this, so a
+    // formatted clause past its depth limit keeps the author's text.
+    if check_nesting(&after_source).is_err() {
+        return Ok(source.to_string());
+    }
     let after = parse_expression(&after_source).map_err(|error| {
         FormatError::invariant(format!(
             "Python expression provider returned an invalid c-for clause: {error}"

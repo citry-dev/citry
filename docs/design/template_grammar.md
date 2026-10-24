@@ -522,6 +522,49 @@ The isolated Pest rules are `fill_data_pattern` through
 positions are explicit and cannot change with the general grammar's implicit
 whitespace behavior.
 
+### 12. Expressions and braces that nest too deeply
+
+Two checks stop a deep input before code that calls itself once per level
+can overflow the stack:
+
+- **Braces.** The grammar calls `python_expr` again for every `{` it opens
+  inside an expression. Where it skips a `}` (inside a Python string or `#`
+  comment) depends on parsing context, so the parser counts every `{` in the
+  source, in text as well as in expressions. The grammar can never open more
+  levels than that. A template with more than 100,000 `{` raises
+  `SyntaxError` ("This template holds more than 100000 `{` characters"),
+  pointing at the first `{` too many. Below that, the grammar runs with a
+  stack sized for the count, so a small thread is safe too. Braces in text
+  count toward the limit but are otherwise ordinary text.
+- **Expressions.** `python_safe_eval` (the crate that checks and compiles
+  each Python expression) reads the expression's tokens before it parses it,
+  and computes a depth bound: a number meant never to be smaller than the
+  depth of the syntax tree. Tests check this on 2,000 random expressions and
+  on a pure chain of each of 26 common constructs. The count works like this:
+  - The whole expression counts as one outer bracket.
+  - Inside a bracket, each comma-separated part scores 2 for each operator,
+    keyword, `.`, `:` or `=`, and for each call or subscript bracket (as in
+    `f()` or `a[0]`). It adds the score of its deepest inner bracket, plus 2.
+    A comma between a `lambda`'s parameters does not start a new part.
+  - A bracket scores 1 more than its highest-scoring part.
+
+  An expression whose depth bound is above 200 raises `SyntaxError`
+  ("expression is nested too deeply"). This covers chains with no brackets,
+  such as `1+1+...` or `a.b.c...`, as well as brackets. Each expression is
+  checked wrapped in `(`...`)`, which adds 3, so the largest accepted chain
+  is 97 `+`, and the deepest accepted list nests 65 levels. Typical
+  expressions stay far below the limit: `a.b(c[d] + 1)` has a depth bound of
+  16.
+
+Both errors are ordinary `SyntaxError`s, and the expression error covers the
+whole expression. `format_template()` reports either one as
+`TemplateFormatError`.
+
+The template formatter keeps an expression as the author wrote it when its
+formatted version, with any parentheses Ruff adds, would go past the depth
+limit. So the formatter never writes an expression the depth check would
+refuse.
+
 ## Control-flow shortcuts
 
 Control flow can be written two ways: as dedicated tags
