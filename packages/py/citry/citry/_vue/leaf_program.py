@@ -812,13 +812,15 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
             depth, raw, _positions = scanned
         return depth, raw
 
-    def walk(
+    # `walk_body` is a walk generator run by `run`, so checking the plan does
+    # not need one Python call per level of control flow.
+    def walk_body(
         simple_operations: tuple[_SimpleJsonOperation, ...],
         depth: int,
         raw: str | None,
         *,
         top: bool,
-    ) -> tuple[int, str | None] | None:
+    ) -> Generator[Call, Any, tuple[int, str | None] | None]:
         for simple in simple_operations:
             if simple.kind == "skip":
                 operation = simple.operation
@@ -854,7 +856,7 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
                     else (simple.body, simple.empty)
                 )
                 for body in bodies:
-                    if walk(body, depth, None, top=False) != (depth, None):
+                    if (yield Call(walk_body, body, depth, None, top=False)) != (depth, None):
                         return None
                 continue
             else:
@@ -864,7 +866,7 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
             depth, raw = state
         return depth, raw
 
-    if walk(operations, 0, None, top=True) is None:
+    if run(walk_body(operations, 0, None, top=True)) is None:
         return None
     return _MaterializedRowPlan(literal_pieces, runtime_opens, frozenset(plain_name_opens))
 
@@ -2048,7 +2050,9 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
     lines.append(f"{pad}plain_scalar_types = _simple_json_plain_scalar_types()")
     counter = 0
 
-    def emit(value: str, plan: _SimpleJsonReadNode, depth: int) -> None:
+    # `emit` is a walk generator run by `run`, so writing the check does not
+    # need one Python call per level of the read set.
+    def emit(value: str, plan: _SimpleJsonReadNode, depth: int) -> Generator[Call, Any, None]:
         nonlocal counter
         counter += 1
         kind = f"value_type{counter}"
@@ -2101,7 +2105,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                         f"{at}{child_value} = dict.__getitem__({value}, {key!r})",
                     )
                 )
-                emit(child_value, child, depth)
+                yield Call(emit, child_value, child, depth)
         if plan.items is not None:
             counter += 1
             item_value = f"item{counter}"
@@ -2112,7 +2116,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                     f"{at}for {item_value} in {value}:",
                 )
             )
-            emit(item_value, plan.items, depth + 4)
+            yield Call(emit, item_value, plan.items, depth + 4)
 
     for name, plan in read_set.roots:
         counter += 1
@@ -2124,7 +2128,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                 f"{pad}{root_value} = dict.__getitem__(variables, {name!r})",
             )
         )
-        emit(root_value, plan, indent)
+        run(emit(root_value, plan, indent))
     lines.append(f"{pad}return True")
     return lines
 
@@ -2355,6 +2359,15 @@ def _native_row_operations(
     operations: tuple[_SimpleJsonOperation, ...],
 ) -> tuple[tuple[object, ...], ...] | None:
     """Describe one scope of simple JSON operations, or return None for a shape Rust does not run."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(_native_row_operations_walk(operations))
+
+
+def _native_row_operations_walk(
+    operations: tuple[_SimpleJsonOperation, ...],
+) -> Generator[Call, Any, tuple[tuple[object, ...], ...] | None]:
+    """The walk generator behind ``_native_row_operations``."""
     described: list[tuple[object, ...]] = []
     for simple in operations:
         operation = simple.operation
@@ -2393,15 +2406,15 @@ def _native_row_operations(
             branches: list[tuple[tuple[object, ...] | None, tuple[tuple[object, ...], ...]]] = []
             for condition, body in simple.branches:
                 described_condition = None if condition is None else _native_row_expr(condition)
-                described_body = _native_row_operations(body)
+                described_body = yield Call(_native_row_operations_walk, body)
                 if (condition is not None and described_condition is None) or described_body is None:
                     return None
                 branches.append((described_condition, described_body))
             described.append(("if", cast("_If", operation).key, tuple(branches)))
         elif simple.kind == "for":
             iterable = _native_row_expr(cast("_SimpleJsonExpr", simple.iterable))
-            loop_body = _native_row_operations(simple.body)
-            loop_empty = _native_row_operations(simple.empty)
+            loop_body = yield Call(_native_row_operations_walk, simple.body)
+            loop_empty = yield Call(_native_row_operations_walk, simple.empty)
             if iterable is None or loop_body is None or loop_empty is None:
                 return None
             described.append(("for", cast("_For", operation).key, simple.target, iterable, loop_body, loop_empty))
@@ -2414,11 +2427,18 @@ def _native_row_operations(
 
 def _native_row_read_node(node: _SimpleJsonReadNode) -> tuple[object, ...]:
     """Describe one read-set node as (kinds, children, items)."""
-    return (
-        tuple(sorted(node.kinds)),
-        tuple((key, _native_row_read_node(child)) for key, child in node.children),
-        None if node.items is None else _native_row_read_node(node.items),
-    )
+    # A read set nests as deeply as the template's paths and loops; the walk
+    # driver keeps that from costing one Python frame per level.
+    return run(_native_row_read_node_walk(node))
+
+
+def _native_row_read_node_walk(node: _SimpleJsonReadNode) -> Generator[Call, Any, tuple[object, ...]]:
+    """The walk generator behind ``_native_row_read_node``."""
+    children: list[tuple[str, tuple[object, ...]]] = []
+    for key, child in node.children:
+        children.append((key, (yield Call(_native_row_read_node_walk, child))))
+    items = None if node.items is None else (yield Call(_native_row_read_node_walk, node.items))
+    return (tuple(sorted(node.kinds)), tuple(children), items)
 
 
 # What ``native_row_plan_tuples`` returns: the described operations, the
