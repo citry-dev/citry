@@ -398,3 +398,11 @@ def test_follows_the_consumers_severity():
             MarkupLintConsumer(rule_vue_compile_error="warning"),
         ),
     ) == [("ExtendPoint", "<div>", "warning")]
+
+
+def test_braces_that_meet_across_a_citry_tag_are_text_not_an_expression():
+    # `citry check` writes the loop body's text right after the text before
+    # the loop; the two braces must not form a Vue expression that it then
+    # fails to parse.
+    source = '<p>{<c-for each="i in xs">{ i +* 1 }}</c-for></p><c-raw><b>r</b></c-raw>'
+    assert lint_vue_compile(source, parse_template(source), ()) == ()

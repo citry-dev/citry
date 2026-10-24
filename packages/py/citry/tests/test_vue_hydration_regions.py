@@ -566,6 +566,106 @@ $component({});
     assert admission.declines == ()
 
 
+@pytest.mark.parametrize(
+    ("template", "host"),
+    [
+        # A constant `<c-if>` writes nothing, so the braces around it meet.
+        ('<main><p>{<c-if cond="True">{ 1 + 1 }}</c-if></p></main>', "<main><p>{{ 1 + 1 }}</p></main>"),
+        # An unrolled literal loop does the same for each item.
+        ('<main><p>{<c-for each="i in [1, 2]">{ i }}</c-for></p></main>', "<main><p>{{ i }}{ i }}</p></main>"),
+        # A value next to a brace stays a value, on either side.
+        ('<main><p>a {{ "{" }}{ b</p></main>', "<main><p>a {{ b</p></main>"),
+        ('<main><p>a {<c-if cond="True">{{ "X" }}</c-if></p></main>', "<main><p>a {X</p></main>"),
+    ],
+)
+def test_braces_that_meet_across_a_citry_tag_stay_text(template: str, host: str) -> None:
+    # Without Vue the page shows the braces as text, so Vue must not read
+    # them as an interpolation and run what is between them.
+    engine = Citry(autodiscover=False)
+    page = type("Page", (Component,), {"citry": engine, "template": template, "js": "\n$component({});\n"})
+
+    rendered, admission = _hydrated_host(page)
+    assert rendered == host
+    assert admission.declines == ()
+
+
+def test_braces_that_meet_before_a_root_with_css_variables_stay_text() -> None:
+    # A component with `css_data` marks its roots, which writes the text
+    # before each root in its own piece.
+    engine = Citry(autodiscover=False)
+
+    class Root(Component):
+        citry = engine
+        template = """
+{<c-if cond="True">{ 1 + 1 }}</c-if><div>x</div>
+"""
+        css = """
+div { color: var(--tone); }
+"""
+
+        def css_data(self, kwargs, slots):
+            return {"tone": "red"}
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><c-Root /></main>
+"""
+        js = """
+$component({});
+"""
+
+    rendered, admission = _hydrated_host(Page)
+    assert "{{ 1 + 1 }}" in rendered
+    assert admission.declines == ()
+
+
+def test_braces_beside_raw_html_stay_text_when_a_branch_is_chosen_on_the_server() -> None:
+    # A `<c-raw>` block keeps the component off the single-program path, so
+    # only the chosen branch is written and its braces meet the text before.
+    engine = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><p>{<c-if cond="flag">{ x }}</c-if></p><c-raw><b>r</b></c-raw></main>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"flag": True}
+
+    rendered, admission = _hydrated_host(Page)
+    assert rendered.startswith("<main><p>{{ x }}</p>")
+    assert admission.declines == ()
+
+
+def test_a_simple_component_that_writes_a_brace_does_not_open_an_interpolation() -> None:
+    engine = Citry(autodiscover=False)
+
+    class Brace(Component):
+        citry = engine
+        simple = True
+        # One line on purpose: the brace must be the last character, and a
+        # multiline template would end with a line break instead.
+        template = """{"""
+
+    class Page(Component):
+        citry = engine
+        template = """
+<main><p><c-Brace />{ 'a' }}</p></main>
+"""
+        js = """
+$component({});
+"""
+
+    rendered, admission = _hydrated_host(Page)
+    assert rendered == "<main><p>{{ 'a' }}</p></main>"
+    assert admission.declines == ()
+
+
 def test_spread_attributes_vary_per_row_and_follow_vue_value_rules() -> None:
     engine = Citry(autodiscover=False)
 

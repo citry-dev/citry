@@ -210,6 +210,11 @@
 
 ### Fixes
 
+- In a component that uses Vue, a `{` before a Citry tag and a `{` after
+  it, as in `{<c-if cond="True">{ x }}</c-if>`, now show as text, as they
+  do without Vue. Vue used to read the two braces as an interpolation and
+  run the text between them as JavaScript, and a `{` right before a value,
+  as in `{<c-if cond="True">{{ x }}</c-if>`, failed to compile.
 - In a component that uses Vue, `&amp;#40;` written in text or an
   attribute value now shows `&#40;`, as the same component without Vue
   does; it used to show `(`. A static `style` with `&quot;` inside a

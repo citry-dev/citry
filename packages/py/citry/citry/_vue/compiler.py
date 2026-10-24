@@ -435,6 +435,30 @@ _ALLOWED_HELPERS = {
 _ROOT_SHAPES = frozenset({"element", "component", "empty", "fragment", "text", "opaque-html", "unknown"})
 _FORBIDDEN_CODE = ("_cache[", "createStaticVNode", "setBlockTracking", "withMemo")
 _FORBIDDEN_TEMPLATE = re.compile(r"<(?:script|style)(?:\s|>|/)|\bv-(?:once|memo)\b", re.IGNORECASE)
+
+
+def _guard_template_braces(text: str) -> str:
+    """
+    Return static template text in which no two braces can open a Vue interpolation.
+
+    Citry writes the static text on each side of a Citry tag next to each
+    other in the Vue template, and a tag such as a constant `<c-if>` writes
+    nothing there. So `{` before the tag and `{` after it meet as `{{`,
+    either inside one static run that Citry joined or where two chunks of
+    text meet, and Vue would read an interpolation and run it as JavaScript,
+    where the same template without Vue shows the braces as text. In text,
+    Citry reads an authored `{{` as an expression, so a `{{` in static text
+    came from a join. Attribute values and comments can hold `{{`, and
+    rewriting them is harmless, because Vue decodes attribute values and
+    drops comments. Writing the second brace of each `{{`, and a trailing
+    brace, as `&#123;` keeps them text: Vue decodes the reference to `{`.
+    Vue would not decode it inside `<script>` or `<style>`, and
+    `_FORBIDDEN_TEMPLATE` keeps both out of the template.
+    """
+    text = text.replace("{{", "{&#123;")
+    return f"{text[:-1]}&#123;" if text.endswith("{") else text
+
+
 # The descriptor also names the browser globals the definition code writes to and reads from,
 # so a definition built for other global names gets a different contract hash: the artifact
 # cache does not find it, and the browser runtime rejects it.
