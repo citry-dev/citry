@@ -98,7 +98,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter python3.11
+            --features abi3-py311 --interpreter python3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -110,7 +110,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter python3.14t pypy3.11
+            --features abi3-py311 --interpreter python3.14t pypy3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -158,7 +158,7 @@ jobs:
         env:
           CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
         run: |
-          abi3_wheel="$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-cp310-abi3-manylinux*x86_64.whl"
+          abi3_wheel="$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-cp311-abi3-manylinux*x86_64.whl"
           for python in \
             "${{ steps.python311.outputs.python-path }}" \
             "${{ steps.python312.outputs.python-path }}" \
@@ -204,7 +204,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter python3.11
+            --features abi3-py311 --interpreter python3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -216,7 +216,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter python3.14t pypy3.11
+            --features abi3-py311 --interpreter python3.14t pypy3.11
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -277,7 +277,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter ${{ steps.python311.outputs.python-path }}
+            --features abi3-py311 --interpreter ${{ steps.python311.outputs.python-path }}
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -287,7 +287,7 @@ jobs:
           CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
         shell: pwsh
         run: |
-          $wheel = "$env:PROJECT_DIR/dist/citry_core-$env:CITRY_CORE_VERSION-cp310-abi3-win*.whl"
+          $wheel = "$env:PROJECT_DIR/dist/citry_core-$env:CITRY_CORE_VERSION-cp311-abi3-win*.whl"
           $pythons = @(
             '${{ steps.python311.outputs.python-path }}',
             '${{ steps.python312.outputs.python-path }}',
@@ -344,7 +344,7 @@ jobs:
           target: ${{ matrix.target }}
           args: >-
             --profile release-wheel --strip --locked --compatibility pypi --out dist
-            --features abi3-py310 --interpreter ${{ steps.python311.outputs.python-path }}
+            --features abi3-py311 --interpreter ${{ steps.python311.outputs.python-path }}
           rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
           maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
@@ -353,7 +353,7 @@ jobs:
         env:
           CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
         run: |
-          wheel="$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-cp310-abi3-macosx*.whl"
+          wheel="$PROJECT_DIR/dist/citry_core-${CITRY_CORE_VERSION}-cp311-abi3-macosx*.whl"
           for python in \
             "${{ steps.python311.outputs.python-path }}" \
             "${{ steps.python314.outputs.python-path }}"

@@ -2139,10 +2139,8 @@ The first publish from a configured pending publisher creates the project. The G
 
 Candidate preparation invokes `py--citry-core--publish.yml` on the exact
 `main` release commit. That qualification builds one source distribution and
-34 native wheels. Fourteen `cp310-abi3` wheels cover GIL-enabled CPython
-3.11 and newer across every supported platform. The tag names the oldest
-stable ABI the build targets; the package's `Requires-Python` sets the 3.11
-floor. Linux and musllinux also carry
+34 native wheels. Fourteen `cp311-abi3` wheels cover GIL-enabled CPython
+3.11 and newer across every supported platform. Linux and musllinux also carry
 one CPython 3.14 free-threaded wheel and one PyPy 3.11 wheel per architecture.
 The workflow also builds one
 `cp314-cp314-pyemscripten_2026_0_wasm32` wheel for the exact Pyodide runtime

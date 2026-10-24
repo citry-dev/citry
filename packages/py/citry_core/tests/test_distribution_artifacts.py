@@ -87,10 +87,10 @@ def test_expected_release_inventory_is_closed_and_includes_the_browser_wheel() -
     assert "citry_core-1.7.0.tar.gz" in names
     assert "citry_core-1.7.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl" in names
     assert sum(name.endswith(".whl") for name in names) == 35
-    assert sum("cp310-abi3" in name for name in names) == 14
+    assert sum("cp311-abi3" in name for name in names) == 14
     assert sum("pypy311_pp73" in name for name in names) == 10
     assert sum("cp314t" in name for name in names) == 10
-    assert "citry_core-1.7.0-cp310-abi3-manylinux_2_5_i686.manylinux1_i686.whl" in names
+    assert "citry_core-1.7.0-cp311-abi3-manylinux_2_5_i686.manylinux1_i686.whl" in names
     assert not any("cp311-cp311" in name for name in names)
     assert not any("manylinux_2_17_i686" in name for name in names)
 
@@ -128,22 +128,22 @@ def test_wheel_verifier_checks_payload_metadata_extension_license_and_record(tmp
 
 
 def test_wheel_verifier_accepts_the_canonical_abi3_extension(tmp_path: Path) -> None:
-    wheel = tmp_path / "citry_core-1.7.0-cp310-abi3-macosx_11_0_arm64.whl"
+    wheel = tmp_path / "citry_core-1.7.0-cp311-abi3-macosx_11_0_arm64.whl"
     _write_wheel(
         wheel,
         extension="citry_core/_rust.abi3.so",
-        tag="cp310-abi3-macosx_11_0_arm64",
+        tag="cp311-abi3-macosx_11_0_arm64",
     )
 
     report = verify_wheel(wheel, version="1.7.0")
 
     assert report["extension"] == "citry_core/_rust.abi3.so"
 
-    windows_wheel = tmp_path / "citry_core-1.7.0-cp310-abi3-win_amd64.whl"
+    windows_wheel = tmp_path / "citry_core-1.7.0-cp311-abi3-win_amd64.whl"
     _write_wheel(
         windows_wheel,
         extension="citry_core/_rust.pyd",
-        tag="cp310-abi3-win_amd64",
+        tag="cp311-abi3-win_amd64",
     )
 
     windows_report = verify_wheel(windows_wheel, version="1.7.0")
@@ -275,7 +275,7 @@ def test_staged_bundle_requires_the_recorded_artifact_bytes(
 ) -> None:
     bundle = tmp_path / "bundle"
     bundle.mkdir()
-    wheel = bundle / "citry_core-1.7.0-cp310-abi3-test.whl"
+    wheel = bundle / "citry_core-1.7.0-cp311-abi3-test.whl"
     wheel.write_bytes(b"qualified-wheel")
     artifact_report = {"name": wheel.name, "bytes": len(wheel.read_bytes()), "sha256": hex_sha256(wheel.read_bytes())}
     (bundle / "release-inventory.json").write_text(

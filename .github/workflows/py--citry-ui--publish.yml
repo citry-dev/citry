@@ -112,7 +112,7 @@ jobs:
           if [[ "$selected" == *,citry-core,* ]]; then
             git submodule update --init --recursive
             uv build --package citry-core --wheel --out-dir candidate-dependencies \
-              --config-setting 'maturin.build-args=--features abi3-py310'
+              --config-setting 'maturin.build-args=--features abi3-py311'
           fi
           if [[ "$selected" == *,citry,* ]]; then
             uv build --package citry --wheel --out-dir candidate-dependencies

@@ -136,11 +136,11 @@ def expected_release_filenames(version: str) -> set[str]:
     """Return the closed artifact set for the support matrix."""
     wheels: set[str] = set()
     for platform in (*LINUX_PLATFORMS.values(), *MUSL_PLATFORMS.values()):
-        wheels.add(f"citry_core-{version}-cp310-abi3-{platform}.whl")
+        wheels.add(f"citry_core-{version}-cp311-abi3-{platform}.whl")
         wheels.add(f"citry_core-{version}-cp314-cp314t-{platform}.whl")
         wheels.add(f"citry_core-{version}-pp311-pypy311_pp73-{platform}.whl")
     for platform in (*WINDOWS_PLATFORMS, *MACOS_PLATFORMS):
-        wheels.add(f"citry_core-{version}-cp310-abi3-{platform}.whl")
+        wheels.add(f"citry_core-{version}-cp311-abi3-{platform}.whl")
     config: Any = json.loads(PYODIDE_CONFIG.read_text(encoding="utf-8"))
     wheels.add(f"citry_core-{version}-{config['python_tag']}-{config['abi_tag']}-{config['platform_tag']}.whl")
     wheels.add(f"citry_core-{version}.tar.gz")

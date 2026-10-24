@@ -442,7 +442,7 @@ jobs:
       - name: Build the matching local Citry Core wheel
         run: >-
           uv build --package citry-core --wheel --out-dir dist
-          --config-setting 'maturin.build-args=--features abi3-py310'
+          --config-setting 'maturin.build-args=--features abi3-py311'
 
       # Release qualification runs this same wheel check, so a size or
       # file-list problem shows up on the pull request instead of mid-release.
