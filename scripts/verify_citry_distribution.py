@@ -69,7 +69,7 @@ def _citry_core_version() -> str:
 # pin follows citry-core's own version instead of repeating it here.
 EXPECTED_REQUIRES_DIST: Final = {
     'uvicorn>=0.49; extra == "ext-preview"',
-    'playwright>=1.62.0; extra == "ext-preview"',
+    'playwright>=1.64.1; extra == "ext-preview"',
     f"citry-core=={_citry_core_version()}",
     "wrapt>=1.16",
     "markupsafe>=2.1",
