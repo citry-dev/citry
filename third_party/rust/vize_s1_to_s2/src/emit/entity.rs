@@ -13,38 +13,33 @@ use vize_s0::String;
 /// accepts without `;`, such as `&copy`) decodes here even before `=` or a
 /// letter or digit, so `&copyX` reads as `©X`.
 pub(crate) fn decode_html_entities(source: &str) -> String {
-    decode_html_entities_in(source, Context::General, true)
+    decode_html_entities_in(source, Context::General)
 }
 
 /// Decode entities in an attribute value, where a legacy name without `;`
 /// followed by `=` or a letter or digit stays as written, so a URL such as
-/// `?q=x&region=eu` keeps its `&region`. Vue's tokenizer and the browser
-/// read attribute values this way, directive expressions included.
+/// `?q=x&region=eu` keeps its `&region`. The browser reads attribute values
+/// this way, and so does Vue for a name that nothing else continues; for
+/// `a&notin`, Vue writes `a¬in` where the browser and this decoder keep it.
 pub(crate) fn decode_html_attribute_entities(source: &str) -> String {
-    decode_html_entities_in(source, Context::Attribute, true)
+    decode_html_entities_in(source, Context::Attribute)
 }
 
-/// Decode a directive value as Vue reads it before parsing the JavaScript:
-/// by the attribute rule, each reference once.
+/// Decode a directive value as Vue reads it before parsing the JavaScript,
+/// by the attribute rule.
 pub(crate) fn decode_directive_value(source: &str) -> String {
-    decode_html_entities_in(source, Context::Attribute, false)
+    decode_html_attribute_entities(source)
 }
 
 /// Decode an interpolation's text as Vue reads it before parsing the
-/// JavaScript: by the text rule, each reference once.
+/// JavaScript, by the text rule.
 pub(crate) fn decode_interpolation_text(source: &str) -> String {
-    decode_html_entities_in(source, Context::General, false)
+    decode_html_entities(source)
 }
 
-/// Decode `source` by `context`'s rule. `match_shipped_static_text` keeps
-/// the shipped lane's reading of static text and static attribute values,
-/// whose code generator decodes `&#40;` and `&#41;` a second time, so a
-/// written `&amp;#40;` comes out as `(`. An expression is read once.
-fn decode_html_entities_in(
-    source: &str,
-    context: Context,
-    match_shipped_static_text: bool,
-) -> String {
+/// Decode `source` by `context`'s rule, each reference once, so a written
+/// `&amp;#40;` reads as `&#40;`, as in Vue and the browser.
+fn decode_html_entities_in(source: &str, context: Context) -> String {
     if !source.contains('&') {
         return String::from(source);
     }
@@ -53,13 +48,6 @@ fn decode_html_entities_in(
     let mut out = String::with_capacity(source.len());
     let mut index = 0usize;
     while index < bytes.len() {
-        if match_shipped_static_text
-            && let Some((ch, consumed)) = decode_escaped_numeric_parenthesis(&bytes[index..])
-        {
-            out.push(ch);
-            index += consumed;
-            continue;
-        }
         if let Some((ch, consumed)) = try_decode_entity(&bytes[index..], context) {
             out.push(ch);
             index += consumed;
@@ -71,24 +59,6 @@ fn decode_html_entities_in(
         index += ch.len_utf8();
     }
     out
-}
-
-fn decode_escaped_numeric_parenthesis(input: &[u8]) -> Option<(char, usize)> {
-    const OPEN: &[u8] = b"&amp;#40;";
-    const OPEN_PADDED: &[u8] = b"&amp;#040;";
-    const CLOSE: &[u8] = b"&amp;#41;";
-    const CLOSE_PADDED: &[u8] = b"&amp;#041;";
-    if input.starts_with(OPEN) {
-        Some(('(', OPEN.len()))
-    } else if input.starts_with(OPEN_PADDED) {
-        Some(('(', OPEN_PADDED.len()))
-    } else if input.starts_with(CLOSE) {
-        Some((')', CLOSE.len()))
-    } else if input.starts_with(CLOSE_PADDED) {
-        Some((')', CLOSE_PADDED.len()))
-    } else {
-        None
-    }
 }
 
 fn try_decode_entity(input: &[u8], context: Context) -> Option<(char, usize)> {

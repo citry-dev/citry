@@ -67,9 +67,12 @@ pub(super) fn emit_dynamic_tag(
     if let Some(BindingOp::Bind(bind)) = component.bindings.iter().find(|b| is_is_bind(b)) {
         bind_value(bind)?.emit_authored(cx, bind)?;
     } else if let Some(attr) = component.attributes.iter().find(|attr| attr.name == "is") {
+        // A static `is` is an attribute value: decode its references as Vue
+        // does and escape it for the string literal.
         cx.buf.push("\"");
         if let Some(value) = attr.value {
-            cx.buf.push(value);
+            cx.buf
+                .push(super::js::escape_js_attribute_string(value).as_str());
         }
         cx.buf.push("\"");
     } else {

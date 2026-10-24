@@ -598,6 +598,17 @@ their baked discovery metadata: older snapshots retain the relations emitted
 by their historical builder, while new snapshots receive the current Markdown
 `alternate` and `llms.txt` `describedby` relations.
 
+One part of a snapshot is rewritten after its build: links into the Citry
+repository on `main`. Every build of a version (`build-tag`, `build-all`, and
+`build --docs-version`) rewrites each file, folder, or raw-download link on
+`main` in its pages to the release tag it was built from, or to the build
+commit when that is not the tag's commit. Otherwise those links would show code
+that no longer matches the page and break once a file moves. "Edit this page"
+links stay on `main`. The committed snapshots were rewritten once when this
+landed: 0.3.0 and 0.3.1, which were built from commits other than their tags,
+link to those commits. The rewrite never changes any other file, so the
+event-definition files named by a hash of their contents keep their names.
+
 Shared root infrastructure is a deliberate size tradeoff, not full snapshot
 isolation. Search from an old version uses the current Pagefind index and may
 lead to current Docs, Community, or Blog pages. Old HTML also runs against the
@@ -608,8 +619,8 @@ assets, and dynamic historical chrome remain deferred.
 
 Landed but still requiring first-release authorization review: the disaster-recovery
 `build-all` (rebuild every
-release tag via git worktrees), the two version-tree guards (`versions_manifest`,
-`cross_version_link`) with a `versions-check` command, and the
+release tag via git worktrees), the three version-tree guards (`versions_manifest`,
+`cross_version_link`, `snapshot_main_links`) with a `versions-check` command, and the
 `repo--docs-release.yml` workflow that on a `citry@X.Y.Z` tag builds that version
 from the exact tag commit in a detached worktree, stages and registers it under
 `versions/<v>/`, runs the guards, commits it from `main`, and then assembles the
