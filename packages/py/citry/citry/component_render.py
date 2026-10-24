@@ -3151,7 +3151,7 @@ class _BodyFrame:
     ``items`` is an iterator, so the renderer's inner loop resumes where it
     stopped after it finishes a nested body. The frame sets the value
     context while its items render and resets it when it finishes or an
-    error passes through it, as one call of the recursive renderer did.
+    error passes through it.
     """
 
     __slots__ = ("context", "direct_prepared", "items", "parts", "tracing", "value_token")
@@ -3160,10 +3160,11 @@ class _BodyFrame:
         self.items = iter(body)
         self.context = context
         self.parts = parts
-        self.value_token = _VALUE_CONTEXT.set(context)
         self.direct_prepared = vue_render_active()
         # Hoisted: one level check per body walk, not per node.
         self.tracing = is_tracing()
+        # Set last: once it is set, the renderer's error handling resets it.
+        self.value_token = _VALUE_CONTEXT.set(context)
 
 
 @final
@@ -3206,13 +3207,13 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     happens in ``CitryRender.serialize()``.
 
     ``<c-if>`` and ``<c-for>`` nodes render their bodies on this function's own
-    stack instead of through their ``render`` methods, so Python's call depth
+    stack, so Python's call depth
     does not grow with how deeply they nest. Each one adds a ``_NodeFrame``
     and one ``_BodyFrame`` per body, and its part is wrapped exactly as its
     ``render`` would wrap it. An error raised inside passes out through every
     frame in turn, innermost first: each body frame resets the value context,
     and each node frame closes its loop and adds its node's template position,
-    the same steps in the same order as nested calls would take them.
+    in the same order as their ``render`` methods.
     """
     root = _BodyFrame(body, context, [])
     # Body and node frames alternate above the root: a node frame's bodies
@@ -3262,8 +3263,9 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                 except Exception as err:
                     _attach_template_position(err, item, frame_context)
                     raise
-                # Written out here rather than through `_add_rendered_part`,
-                # because this runs once for every part of every render.
+                # The same steps as `_add_rendered_part`, written out here
+                # because this runs once for every part of every render; the
+                # two must stay alike.
                 if type(part) is str:
                     if direct_prepared:
                         raise TypeError(
@@ -3310,7 +3312,8 @@ def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> N
     """
     Add a finished ``<c-if>`` or ``<c-for>`` part to the body that holds it.
 
-    These are the same steps the main loop takes for every other node's part.
+    These are the same steps the main loop in ``_render_body`` takes, inline,
+    for every other node's part; the two must stay alike.
     """
     if type(part) is str:
         if frame.direct_prepared:
@@ -3328,8 +3331,8 @@ def _unwind_body_frames(stack: list[_BodyFrame | _NodeFrame], err: BaseException
 
     A body frame resets its value context. A node frame closes its loop, so
     the loop's ``finally`` blocks run now, and adds its node's template
-    position, as the node's ``render`` call did when the error passed out of
-    it. Adding a position can replace the error with a clearer one; the
+    position, as the node's ``render`` does when an error passes out of it.
+    Adding a position can replace the error with a clearer one; the
     replacement is raised from the original and passes through the frames
     that remain.
     """
@@ -3359,9 +3362,9 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
     Every compiler-emitted node carries ``source`` (the whole template
     string) and ``position`` (its start/end indices in it); a node injected
     by an extension may not, in which case this does nothing. The snippet is
-    added once per error, by the innermost failing node: control-flow bodies
-    render through ``_render_body`` recursively, so the enclosing node's
-    pass through here is a no-op (see ``set_template_position_error_message``).
+    added once per error, by the innermost failing node: an error passes out
+    through every enclosing node, and each enclosing node's pass through here
+    is a no-op (see ``set_template_position_error_message``).
 
     The header names the lexical template class, which can be a simple class
     rendering under another component's ownership. Slot-fill content retains

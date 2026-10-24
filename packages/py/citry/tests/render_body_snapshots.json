@@ -1038,12 +1038,22 @@
   ]
  },
  "error/python": {
-  "text": "An error occurred while rendering components Root:\nNo component registered as 'row'.\n\nIn template of 'Root' (/Users/mac/repos/citry-deep/packages/py/citry/tests/test_render_body_snapshots.py::Root):\n\n     1 | <main><c-Row label=\"r\" /><c-if cond=\"flag\"><c-for each=\"x in items\"><p class=\"row\">{{ x.missing }}</p></c-for></c-if></main>\n               ^^^^^^^^^^^^^^^^^^^",
-  "type": "NotRegistered"
+  "attached": [
+   "PreparedExprNode",
+   "ForNode",
+   "IfNode"
+  ],
+  "text": "An error occurred while rendering components Root:\nError in attribute: AttributeError: 'int' object has no attribute 'missing'\n\n     1 | x.missing \n         ^^^^^^^^^\n\nIn template of 'Root' (/Users/mac/repos/citry-deep/packages/py/citry/tests/test_render_body_snapshots.py::Root):\n\n     1 | <main><c-Row label=\"r\" /><c-if cond=\"flag\"><c-for each=\"x in items\"><p class=\"row\">{{ x.missing }}</p></c-for></c-if></main>\n                                                                                            ^^^^^^^^^^^^^^^",
+  "type": "AttributeError"
  },
  "error/rust": {
-  "text": "An error occurred while rendering components Root:\nNo component registered as 'row'.\n\nIn template of 'Root' (/Users/mac/repos/citry-deep/packages/py/citry/tests/test_render_body_snapshots.py::Root):\n\n     1 | <main><c-Row label=\"r\" /><c-if cond=\"flag\"><c-for each=\"x in items\"><p class=\"row\">{{ x.missing }}</p></c-for></c-if></main>\n               ^^^^^^^^^^^^^^^^^^^",
-  "type": "NotRegistered"
+  "attached": [
+   "PreparedExprNode",
+   "ForNode",
+   "IfNode"
+  ],
+  "text": "An error occurred while rendering components Root:\nError in attribute: AttributeError: 'int' object has no attribute 'missing'\n\n     1 | x.missing \n         ^^^^^^^^^\n\nIn template of 'Root' (/Users/mac/repos/citry-deep/packages/py/citry/tests/test_render_body_snapshots.py::Root):\n\n     1 | <main><c-Row label=\"r\" /><c-if cond=\"flag\"><c-for each=\"x in items\"><p class=\"row\">{{ x.missing }}</p></c-for></c-if></main>\n                                                                                            ^^^^^^^^^^^^^^^",
+  "type": "AttributeError"
  },
  "for_empty_branch/python": {
   "html": "<i data-cid-c1=\"\"><i><i><i><i><i><i><i>nothing</i></i></i></i></i></i></i></i>",

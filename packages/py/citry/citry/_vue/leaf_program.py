@@ -360,6 +360,9 @@ class _SimpleJsonReadSet:
 class _SimpleJsonProgram:
     readset_preflight: _SimpleJsonPreflight
     evaluate: _SimpleJsonEvaluate
+    # How many generated functions nest inside each other, the root body
+    # counted as one. Each one costs a Python frame while it runs.
+    nesting: int
 
 
 _SIMPLE_VUE_ERROR_COMPONENT: ContextVar[str | None] = ContextVar("citry_simple_vue_error_component", default=None)
@@ -1383,12 +1386,16 @@ def _simple_vue_spread_hooks_supported(extensions: Any) -> bool:
     return True
 
 
-# The deepest nesting of branch and loop bodies the generated evaluator and
-# row writer emit. Each body is one generated function that calls the next,
-# so each level costs a Python frame. A deeper template raises ValueError
-# while generating, and its leaf uses the Python evaluator and the general
-# row path instead, which walk any depth on their own stacks. 16 also stays
-# well under CPython's limits of 20 nested blocks and 100 indentation levels.
+# The deepest nesting of generated functions a leaf uses on a path that has a
+# Python alternative. Each branch or loop body is one generated function that
+# calls the next, so each level costs a Python frame; the root body counts as
+# one, so up to 15 nested `<c-if>`/`<c-for>` levels use generated code.
+# - The row HTML writer refuses a deeper template with ValueError while it
+#   generates, and the row then takes the per-row path.
+# - The evaluator is still generated for a deeper template, because the
+#   context-free `simple='vue'` renderer has no other evaluator. The ordinary
+#   leaf render uses it only up to this depth and walks a deeper template
+#   with the Python evaluator, which keeps its own stack.
 _MAX_GENERATED_NESTING = 16
 
 
@@ -1407,8 +1414,10 @@ class _SimpleJsonCodegen:
         self.operations: list[object] = []
         self.functions: list[str] = []
         self.counter = 0
-        # How many generated functions the one being written is nested in.
+        # How many generated functions the one being written is nested in,
+        # and the most there have been.
         self._depth = 0
+        self.max_depth = 0
         self._root_operations = operations
         self._read_set = _simple_json_read_set(operations)
         self.readset_preflight_root = self._readset_preflight_function()
@@ -1699,7 +1708,8 @@ class _SimpleJsonCodegen:
         sets_value_context: bool = False,
     ) -> str:
         outer_depth = self._depth
-        self._depth = _enter_generated_body(outer_depth)
+        self._depth = outer_depth + 1
+        self.max_depth = max(self.max_depth, self._depth)
         try:
             return self._write_evaluate_function(operations, local_names, sets_value_context=sets_value_context)
         finally:
@@ -1764,6 +1774,7 @@ class _SimpleJsonCodegen:
         return _SimpleJsonProgram(
             cast("_SimpleJsonPreflight", namespace[self.readset_preflight_root]),
             cast("_SimpleJsonEvaluate", namespace[evaluate_root]),
+            self.max_depth,
         )
 
 
@@ -2717,6 +2728,10 @@ class LeafProgramNode(Node):
                 # Unsupported templates keep the established evaluator.
                 self._simple_json_program = None
         simple_program = self._simple_json_program
+        if simple_program is not None and simple_program.nesting > _MAX_GENERATED_NESTING:
+            # Too deep for one frame per level here; the Python evaluator
+            # below walks it on its own stack.
+            simple_program = None
         if simple_program is not None:
             extensions = component.citry.extensions if component is not None else None
             if self._simple_json_has_i18n_spread or (
@@ -3350,8 +3365,8 @@ def _evaluate_inner(
     stack, so Python's call depth does not grow with how deeply control flow
     nests. Each body frame makes its context current while it runs, and an
     error passes out through the frames innermost first: each loop frame
-    closes its loop and adds its ``<c-for>``'s template position, as the
-    nested evaluator did.
+    closes its loop and adds its ``<c-for>``'s template position, because an
+    error anywhere inside a loop belongs to that loop as well.
     """
     root = _LeafBodyFrame(operations, context, data, set_value_context=False)
     frames: list[_LeafBodyFrame | _LeafLoopFrame] = [root]
@@ -3548,9 +3563,10 @@ def _evaluate_inner(
                         break
                 elif isinstance(operation, _For):
                     loop_frame = _LeafLoopFrame(operation, context, data)
-                    # The loop's first row is read here, as the nested evaluator read
-                    # it inside its `try`; the frame joins the stack once it has
-                    # started, so an error gets this node's position only once.
+                    # The loop's first row is read inside this `try`, because
+                    # evaluating the loop can fail; the frame joins the stack
+                    # once it has started, so an error gets this node's
+                    # position only once.
                     try:
                         loop_frame.iterations = operation.node.iter_bodies(context)
                         first = _next_leaf_row(loop_frame)
@@ -3592,7 +3608,7 @@ class _LeafBodyFrame:
         self.data = data
         # The root body runs inside `_evaluate`, which already made its
         # context current; every nested body sets its own, as `_evaluate`
-        # did for each call.
+        # does for the root body.
         self.value_token = _VALUE_CONTEXT.set(context) if set_value_context else None
 
     def finish(self) -> None:
@@ -3633,7 +3649,7 @@ def _next_leaf_row(loop_frame: _LeafLoopFrame) -> _LeafBodyFrame | None:
 
 
 def _finish_leaf_loop(loop_frame: _LeafLoopFrame) -> None:
-    """Store a finished loop's records, as the nested evaluator did after its loop."""
+    """Store a finished loop's records in the row that holds the loop."""
     operation = loop_frame.operation
     loop_frame.data[operation.key] = loop_frame.records
     if not loop_frame.rendered_any and not operation.empty:

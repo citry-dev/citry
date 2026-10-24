@@ -7,7 +7,7 @@ generated leaf code stops at a fixed nesting depth. So the deepest Python
 call stack during a render stays the same however deeply control flow
 nests. Each case renders once to compile, then measures the second render
 with a profile hook that records the deepest stack. The peak at depth 128
-may be at most 20 frames above the peak at depth 8.
+may be at most 20 frames above the peak at depth 32.
 """
 
 from __future__ import annotations
@@ -23,7 +23,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from types import FrameType
 
-SHALLOW = 8
+# Both depths are past the 15 levels a Vue leaf program runs as generated
+# code (one frame per level by design), so both use the same evaluator.
+SHALLOW = 32
 DEEP = 128
 ALLOWED_GROWTH = 20
 
@@ -37,9 +39,9 @@ def _for_tags(depth: int) -> str:
 # starts with `<c-Row />` renders through the body renderer; one without a
 # component renders through a Vue leaf program.
 SHAPES: dict[str, Callable[[int], str]] = {
-    "if_tags": lambda d: '<c-Row /><c-if cond="flag">' * 1 + '<c-if cond="flag">' * (d - 1) + "x" + "</c-if>" * d,
+    "if_tags": lambda d: "<c-Row />" + '<c-if cond="flag">' * d + "x" + "</c-if>" * d,
     "for_tags": lambda d: "<c-Row />" + _for_tags(d) + "x" + "</c-for>" * d,
-    "if_attributes": lambda d: '<c-Row /><div c-if="flag">' + '<div c-if="flag">' * (d - 1) + "x" + "</div>" * d,
+    "if_attributes": lambda d: "<c-Row />" + '<div c-if="flag">' * d + "x" + "</div>" * d,
     "leaf_if_tags": lambda d: '<c-if cond="flag">' * d + "{{ n }}" + "</c-if>" * d,
     "leaf_for_tags": lambda d: _for_tags(d) + "{{ n }}" + "</c-for>" * d,
     "leaf_if_attributes": lambda d: '<p c-if="flag">' * d + "{{ n }}" + "</p>" * d,
@@ -111,3 +113,27 @@ def test_deeper_templates_render_in_the_same_python_stack(shape: str, render_pat
     shallow = _peak_frames(_component(build(SHALLOW)))
     deep = _peak_frames(_component(build(DEEP)))
     assert deep - shallow <= ALLOWED_GROWTH, f"{shape}: {shallow} frames at depth {SHALLOW}, {deep} at {DEEP}"
+
+
+@pytest.mark.parametrize("depth", [15, 16, 20])
+def test_simple_vue_components_render_at_every_depth(depth: int, render_path: str) -> None:
+    # A `simple='vue'` component renders without an instance, through the
+    # generated evaluator only, so the generated code must exist at any depth.
+    app = Citry()
+
+    class Leaf(Component):
+        citry = app
+        simple = "vue"
+        template = '<div c-if="flag">' * depth + "{{ n }}" + "</div>" * depth
+
+    class Root(Component):
+        citry = app
+        template = '<c-Leaf c-flag="flag" c-n="n" />'
+
+        def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+            return {"flag": True, "n": 7}
+
+    del Leaf
+    html = Root().render().serialize(deps_strategy="ignore")
+    assert html.count("<div") == depth
+    assert ">7<" in html

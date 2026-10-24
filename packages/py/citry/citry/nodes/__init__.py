@@ -393,8 +393,8 @@ def collect_fills_from_body(body: Sequence[BodyItem], context: CitryContext, sin
     into a slot nor rendered. Non-whitespace text is rejected (when a
     component body contains ``<c-fill>`` tags, all other content must be
     inside the fills). Each node dispatches through its own
-    ``collect_fills``, so what a node contributes (a fill, a taken branch,
-    one pass per loop iteration, or an error) is the node's own business.
+    ``collect_fills``, so what a node contributes (a fill or an error) is the
+    node's own business, except for the two control-flow nodes below.
 
     The parser already rejects most content beside fills; the checks on this
     path are the runtime half of that contract (dynamic fill names make some
@@ -447,7 +447,7 @@ def collect_fills_from_body(body: Sequence[BodyItem], context: CitryContext, sin
                 stack.pop()
     except BaseException:
         # Close each loop still open, innermost first, so its `finally`
-        # blocks run as they did when the nested calls ended.
+        # blocks run before the error leaves this function.
         for entry in reversed(stack):
             close = getattr(entry, "close", None)
             if close is not None:
@@ -2201,7 +2201,6 @@ class ComponentNode(Node):
 
 
 @final
-@final
 class BodySteps(NamedTuple):
     """
     The bodies a control-flow node renders, and how it wraps their parts.
@@ -2219,6 +2218,7 @@ class BodySteps(NamedTuple):
     finish: Callable[[list[RenderPart]], CitryRender]
 
 
+@final
 class IfNode(Node):
     """
     A conditional node (``<c-if>``/``<c-elif>``/``<c-else>``).

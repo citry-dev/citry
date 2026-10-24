@@ -3,13 +3,14 @@ Rendering a body produces the same output, structure and errors as before.
 
 The body renderer walks a template's nodes with an explicit stack instead
 of calling itself once per ``<c-if>`` or ``<c-for>``. These snapshots were
-recorded with the earlier recursive renderer and lock what it produced, for
+recorded on 1b64f7102, before that change, and lock what it produced, for
 each fixture on both render paths:
 
 - the serialized HTML;
 - the nested structure of the render result: which ``CitryRender`` and
   other parts hold which, written by ``_structure`` below;
-- the error text for an expression that fails three levels deep.
+- the error text for an expression that fails three levels deep, and the
+  nodes that add their template position as the error passes out.
 
 Run with ``CITRY_UPDATE_RENDER_SNAPSHOTS=1`` to record them again; the file
 is ``render_body_snapshots.json`` next to this one.
@@ -24,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, component_render
 from citry.citry_render import CitryRender
 
 if TYPE_CHECKING:
@@ -225,7 +226,20 @@ def test_render_output_and_structure_match_the_snapshot(name: str, render_path: 
     )
 
 
-def test_an_error_three_levels_deep_matches_the_snapshot(render_path: str) -> None:
+def test_an_error_three_levels_deep_matches_the_snapshot(render_path: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Only the innermost node's snippet shows in the text, so the nodes that
+    # add their position on the way out are recorded too, in order.
+    attached: list[str] = []
+    original = component_render._attach_template_position
+
+    def spy(err: Exception, node: object, context: object) -> None:
+        attached.append(type(node).__name__)
+        original(err, node, context)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(component_render, "_attach_template_position", spy)
     with pytest.raises(Exception) as caught:  # noqa: PT011 - the recorded text is what is compared
-        _render_root(ERROR_TEMPLATE, {"items": [1], "flag": True}).serialize(deps_strategy="ignore")
-    _check(f"error/{render_path}", {"type": type(caught.value).__name__, "text": str(caught.value)})
+        _render_root(ERROR_TEMPLATE, {"items": [1], "flag": True}, _children).serialize(deps_strategy="ignore")
+    _check(
+        f"error/{render_path}",
+        {"type": type(caught.value).__name__, "text": str(caught.value), "attached": attached},
+    )
