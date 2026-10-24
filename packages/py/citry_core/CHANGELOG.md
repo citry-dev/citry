@@ -30,9 +30,19 @@
 - `analyze_browser_source()` now reports text such as `a); (b` as invalid.
   It used to accept text that closes the function Citry wraps around it,
   which Vue rejects.
+- The variant classes of `template_parser.Node` and
+  `template_parser.TemplateElement` are named after their variant:
+  `type(node).__name__` is `"WithBody"`, where it was `"Node_WithBody"`,
+  and `__qualname__` is `"Node.WithBody"`. They carry their docstrings, and
+  the type stub declares them as `Node.WithBody`, `TemplateElement.Text`
+  and so on.
+- A wrong argument type passed to a `citry_core` function raises a
+  `TypeError` with new wording, such as `'int' object is not an instance of
+  'str'`, and names the argument in a note (`while processing 'input'`).
 
 ### Added
 
+- citry-core builds from source on Python 3.15 and free-threaded 3.15.
 - For text that does not parse, `analyze_browser_source()` returns the
   JavaScript parser's first error in `error`, with its message and
   position, and each reference's `written` says whether the code assigns

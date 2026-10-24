@@ -10,7 +10,7 @@ use crate::grammar::Rule;
 /// Indices are half-open UTF-8 byte offsets in the complete template source.
 /// Pest position errors have an empty range. Line and column values are
 /// 1-based, matching Pest's rendered diagnostics.
-#[pyclass(frozen)]
+#[pyclass(from_py_object, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseDiagnostic {
     /// Stable identifier for the broad failure category.

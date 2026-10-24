@@ -1185,66 +1185,61 @@ class template_parser:
         ordinal: int
         may_control_body: bool
 
-    class Node_SelfClosing:
-        """A self-closing HTML/component tag."""
-
-        start_tag: template_parser.HtmlStartTag
-        used_variables: list[template_parser.Token]
-        introduced_variables: list[template_parser.Token]
-        comments: list[template_parser.Comment]
-        contains_fills: bool
-        name: str
-
-    class Node_WithBody:
-        """An HTML/component tag with a body."""
-
-        start_tag: template_parser.HtmlStartTag
-        end_tag: template_parser.HtmlEndTag
-        body: template_parser.Template
-        used_variables: list[template_parser.Token]
-        introduced_variables: list[template_parser.Token]
-        comments: list[template_parser.Comment]
-        contains_fills: bool
-        name: str
-
     class Node:
-        """Enum: SelfClosing or WithBody. Access the variant via `._0`."""
+        """
+        Enum: SelfClosing or WithBody. Each variant is a class nested in this
+        one, such as `Node.WithBody`.
+        """
 
-        SelfClosing: type[template_parser.Node_SelfClosing]
-        WithBody: type[template_parser.Node_WithBody]
+        class SelfClosing:
+            """A self-closing HTML/component tag."""
+
+            start_tag: template_parser.HtmlStartTag
+            used_variables: list[template_parser.Token]
+            introduced_variables: list[template_parser.Token]
+            comments: list[template_parser.Comment]
+            contains_fills: bool
+            name: str
+
+        class WithBody:
+            """An HTML/component tag with a body."""
+
+            start_tag: template_parser.HtmlStartTag
+            end_tag: template_parser.HtmlEndTag
+            body: template_parser.Template
+            used_variables: list[template_parser.Token]
+            introduced_variables: list[template_parser.Token]
+            comments: list[template_parser.Comment]
+            contains_fills: bool
+            name: str
+
         name: str
-
-    class TemplateElement_Text:
-        """A TemplateElement variant wrapping Text. Access via `._0`."""
-
-        _0: template_parser.Text
-
-    class TemplateElement_Expr:
-        """A TemplateElement variant wrapping Expr. Access via `._0`."""
-
-        _0: template_parser.Expr
-
-    class TemplateElement_Node:
-        """A TemplateElement variant wrapping Node. Access via `._0`."""
-
-        _0: template_parser.Node_SelfClosing | template_parser.Node_WithBody
-
-    class TemplateElement_Foreign:
-        """A TemplateElement variant wrapping ForeignSourcePart. Access via `._0`."""
-
-        _0: template_parser.ForeignSourcePart
 
     class TemplateElement:
         """
-        Enum: Text, Expr, Node, or Foreign. The concrete variant type is one of
-        TemplateElement_Text, TemplateElement_Expr, TemplateElement_Node,
-        TemplateElement_Foreign.
+        Enum: Text, Expr, Node, or Foreign. Each variant is a class nested in
+        this one, such as `TemplateElement.Text`, and holds its value in `._0`.
         """
 
-        Text: type[template_parser.TemplateElement_Text]
-        Expr: type[template_parser.TemplateElement_Expr]
-        Node: type[template_parser.TemplateElement_Node]
-        Foreign: type[template_parser.TemplateElement_Foreign]
+        class Text:
+            """A TemplateElement variant wrapping Text."""
+
+            _0: template_parser.Text
+
+        class Expr:
+            """A TemplateElement variant wrapping Expr."""
+
+            _0: template_parser.Expr
+
+        class Node:
+            """A TemplateElement variant wrapping Node."""
+
+            _0: template_parser.Node.SelfClosing | template_parser.Node.WithBody
+
+        class Foreign:
+            """A TemplateElement variant wrapping ForeignSourcePart."""
+
+            _0: template_parser.ForeignSourcePart
 
     class StaticNamedSlot:
         """A slot with a statically-known name."""
@@ -1256,10 +1251,10 @@ class template_parser:
         """The parsed template AST."""
 
         elements: list[
-            template_parser.TemplateElement_Text
-            | template_parser.TemplateElement_Expr
-            | template_parser.TemplateElement_Node
-            | template_parser.TemplateElement_Foreign
+            template_parser.TemplateElement.Text
+            | template_parser.TemplateElement.Expr
+            | template_parser.TemplateElement.Node
+            | template_parser.TemplateElement.Foreign
         ]
         comments: list[template_parser.Comment]
         used_variables: list[template_parser.Token]
