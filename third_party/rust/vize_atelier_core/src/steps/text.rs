@@ -111,7 +111,13 @@ pub fn build_text_call<'a>(
                         parts.push(TextPart::Dynamic(exp.content));
                     }
                     ExpressionNode::Compound(exp) => {
-                        parts.push(TextPart::Dynamic(exp.loc.span.slice(ctx.source)));
+                        // Read back from the source and decoded by the text
+                        // rule, as the interpolation's simple text is.
+                        parts.push(TextPart::Dynamic(crate::entity::authored_expression_str(
+                            ctx.allocator,
+                            ctx.source,
+                            exp.loc.span,
+                        )));
                     }
                 }
             }

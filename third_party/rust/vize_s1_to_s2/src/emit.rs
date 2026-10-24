@@ -61,7 +61,7 @@ mod custom_element;
 mod cx;
 mod directive;
 mod dispatch;
-mod entity;
+pub(crate) mod entity;
 mod entry;
 mod error;
 mod filter;

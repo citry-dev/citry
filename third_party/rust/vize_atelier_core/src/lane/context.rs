@@ -529,7 +529,12 @@ pub(super) fn clone_expression<'a>(
         ExpressionNode::Compound(c) => ExpressionNode::Simple(Box::new_in(
             SimpleExpressionNode {
                 is_handler_key: c.is_handler_key,
-                ..SimpleExpressionNode::new(c.loc.span.slice(source), false, c.loc.clone())
+                // Read back from the source and decoded as Vue reads it (see `entity`).
+                ..SimpleExpressionNode::new(
+                    crate::entity::authored_expression_str(allocator, source, c.loc.span),
+                    false,
+                    c.loc.clone(),
+                )
             },
             &allocator,
         )),

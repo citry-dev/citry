@@ -26,7 +26,7 @@ use super::binding::{defer, lower_slot_content};
 use super::bindop::{RULE_SAME_NAME, lower_bind, lower_on};
 use super::cx::{Cx, attr_slice, attr_span, element_span};
 use super::directive::{Arg, AttrForm, Head};
-use super::element::{Analyzed, attr_value_text};
+use super::element::{Analyzed, attr_value_text, directive_value_text};
 use super::expr::{desc, expr_at};
 use super::structural::lower_children;
 
@@ -69,7 +69,7 @@ pub(crate) fn lower_slot<'a>(
                     // shorthand before slot-outlet name resolution, so
                     // a missing or blank `:name` / `v-bind:name`
                     // selects the runtime `name` variable.
-                    match attr_value_text(element, index).map(str::trim) {
+                    match directive_value_text(cx, element, index).map(str::trim) {
                         Some(text) if !text.is_empty() => {
                             name = Some(DynamicName::Dynamic(expr_at(cx, text)));
                         }

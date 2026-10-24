@@ -31,7 +31,7 @@ use vize_s2::scope::{ScopeBinding, ScopeFacts, ScopeOrigin};
 
 use super::cx::{Cx, attr_slice, attr_span};
 use super::directive::{Arg, Directive, Head};
-use super::element::attr_value_text;
+use super::element::directive_value_text;
 use super::expr::{desc, expr_at, simple_identifier};
 
 /// The op an attribute attaches to.
@@ -146,7 +146,7 @@ fn lower_model<'a>(
 ) -> Option<BindingOp<'a>> {
     let attr = &element.open.attrs[index];
     let span = attr_span(cx, attr);
-    let text = attr_value_text(element, index);
+    let text = directive_value_text(cx, element, index);
     if text.map(str::trim).is_none_or(str::is_empty) {
         cx.error(span, String::from("v-model is missing expression."));
         cx.record(
@@ -223,7 +223,7 @@ fn lower_custom<'a>(
     for modifier in &directive.modifiers {
         modifiers.push(modifier);
     }
-    let value = attr_value_text(element, index)
+    let value = directive_value_text(cx, element, index)
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(|text| expr_at(cx, text));
@@ -274,7 +274,7 @@ pub(crate) fn lower_slot_content<'a>(
     for modifier in &directive.modifiers {
         modifiers.push(modifier);
     }
-    let params = attr_value_text(element, index)
+    let params = directive_value_text(cx, element, index)
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(|text| expr_at(cx, text));

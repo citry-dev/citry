@@ -7,7 +7,7 @@ use vize_s2::op::{BindingOp, VueShowOp};
 use super::binding::defer;
 use super::cx::{Cx, attr_slice, attr_span};
 use super::directive::Directive;
-use super::element::attr_value_text;
+use super::element::directive_value_text;
 use super::expr::expr_at;
 
 pub(crate) fn lower_show<'a>(
@@ -18,7 +18,7 @@ pub(crate) fn lower_show<'a>(
 ) -> Option<BindingOp<'a>> {
     let attr = &element.open.attrs[index];
     let span = attr_span(cx, attr);
-    let text = attr_value_text(element, index)
+    let text = directive_value_text(cx, element, index)
         .map(str::trim)
         .filter(|text| !text.is_empty());
     if directive.arg.is_some() || !directive.modifiers.is_empty() || text.is_none() {

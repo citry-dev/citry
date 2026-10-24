@@ -1,6 +1,6 @@
 //! Structural directive transforms (v-if, v-for).
 
-use vize_s0::{Box, Vec};
+use vize_s0::{Allocator, Box, Vec};
 
 use crate::errors::ErrorCode;
 use crate::{
@@ -31,6 +31,7 @@ pub enum StructuralDirectiveKind {
 }
 
 fn directive_expression_to_content<'a>(
+    allocator: &'a Allocator,
     exp: ExpressionNode<'a>,
     src: &'a str,
 ) -> SimpleExpressionContent<'a> {
@@ -47,7 +48,8 @@ fn directive_expression_to_content<'a>(
         ExpressionNode::Compound(c) => {
             let loc = Box::unbox(c).loc;
             SimpleExpressionContent {
-                content: loc.span.slice(src),
+                // Read back from the source and decoded as Vue reads it (see `entity`).
+                content: crate::entity::authored_expression_str(allocator, src, loc.span),
                 is_static: false,
                 loc,
                 js_ast: None,
@@ -61,6 +63,7 @@ fn directive_expression_to_content<'a>(
 /// In Vue 3, v-if has higher priority than v-for when both are present on the same element.
 /// This removes the selected directive from the element in the same pass we discover it.
 pub fn take_structural_directive<'a>(
+    allocator: &'a Allocator,
     el: &mut Box<'a, ElementNode<'a>>,
     src: &'a str,
 ) -> Option<(
@@ -108,7 +111,7 @@ pub fn take_structural_directive<'a>(
 
     let exp = directive
         .exp
-        .map(|exp| directive_expression_to_content(exp, src));
+        .map(|exp| directive_expression_to_content(allocator, exp, src));
     Some((directive_kind, exp, directive.loc))
 }
 

@@ -27,7 +27,10 @@ pub(super) fn generate_vmodel_prop(ctx: &mut CodegenContext, dir: &DirectiveNode
         .as_ref()
         .map(|e| match e {
             ExpressionNode::Simple(s) => vize_s0::String::new(s.content),
-            ExpressionNode::Compound(c) => vize_s0::String::new(c.loc.span.slice(&ctx.source)),
+            // Read back from the source and decoded as Vue reads it (see `entity`).
+            ExpressionNode::Compound(c) => {
+                crate::entity::authored_expression_text(&ctx.source, c.loc.span)
+            }
         })
         .unwrap_or_else(|| vize_s0::String::new("undefined"));
 

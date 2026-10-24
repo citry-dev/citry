@@ -21,5 +21,10 @@ vize_s1 = { workspace = true }
 # emitter that vize_atelier_dom uses transitively.
 vize_s1_to_s2 = { workspace = true }
 
+[dev-dependencies]
+# The tests compile each template on the `vize_atelier_core` lane alone too,
+# which only this feature's entry point allows.
+vize_atelier_dom = { workspace = true, features = ["davinci-differential"] }
+
 [lints]
 workspace = true

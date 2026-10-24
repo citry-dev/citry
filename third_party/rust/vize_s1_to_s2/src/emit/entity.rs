@@ -12,19 +12,39 @@ use vize_s0::String;
 /// Decode entities in text. A legacy name (a named reference HTML also
 /// accepts without `;`, such as `&copy`) decodes here even before `=` or a
 /// letter or digit, so `&copyX` reads as `©X`.
-pub(super) fn decode_html_entities(source: &str) -> String {
-    decode_html_entities_in(source, Context::General)
+pub(crate) fn decode_html_entities(source: &str) -> String {
+    decode_html_entities_in(source, Context::General, true)
 }
 
 /// Decode entities in an attribute value, where a legacy name without `;`
 /// followed by `=` or a letter or digit stays as written, so a URL such as
 /// `?q=x&region=eu` keeps its `&region`. Vue's tokenizer and the browser
 /// read attribute values this way, directive expressions included.
-pub(super) fn decode_html_attribute_entities(source: &str) -> String {
-    decode_html_entities_in(source, Context::Attribute)
+pub(crate) fn decode_html_attribute_entities(source: &str) -> String {
+    decode_html_entities_in(source, Context::Attribute, true)
 }
 
-fn decode_html_entities_in(source: &str, context: Context) -> String {
+/// Decode a directive value as Vue reads it before parsing the JavaScript:
+/// by the attribute rule, each reference once.
+pub(crate) fn decode_directive_value(source: &str) -> String {
+    decode_html_entities_in(source, Context::Attribute, false)
+}
+
+/// Decode an interpolation's text as Vue reads it before parsing the
+/// JavaScript: by the text rule, each reference once.
+pub(crate) fn decode_interpolation_text(source: &str) -> String {
+    decode_html_entities_in(source, Context::General, false)
+}
+
+/// Decode `source` by `context`'s rule. `match_shipped_static_text` keeps
+/// the shipped lane's reading of static text and static attribute values,
+/// whose code generator decodes `&#40;` and `&#41;` a second time, so a
+/// written `&amp;#40;` comes out as `(`. An expression is read once.
+fn decode_html_entities_in(
+    source: &str,
+    context: Context,
+    match_shipped_static_text: bool,
+) -> String {
     if !source.contains('&') {
         return String::from(source);
     }
@@ -33,7 +53,9 @@ fn decode_html_entities_in(source: &str, context: Context) -> String {
     let mut out = String::with_capacity(source.len());
     let mut index = 0usize;
     while index < bytes.len() {
-        if let Some((ch, consumed)) = decode_escaped_numeric_parenthesis(&bytes[index..]) {
+        if match_shipped_static_text
+            && let Some((ch, consumed)) = decode_escaped_numeric_parenthesis(&bytes[index..])
+        {
             out.push(ch);
             index += consumed;
             continue;

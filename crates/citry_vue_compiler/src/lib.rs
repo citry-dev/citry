@@ -728,7 +728,7 @@ pub fn compile(request: CompileRequest) -> CompileArtifact {
         schema: SCHEMA,
         compiler: CompilerIdentity {
             name: "vize_atelier_dom",
-            version: "0.420.0+citry.4",
+            version: "0.420.0+citry.5",
         },
         target: TARGET,
         options: CompilerOptions {

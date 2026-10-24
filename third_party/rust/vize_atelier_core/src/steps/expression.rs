@@ -262,7 +262,12 @@ pub(crate) fn clone_expression<'a>(
         )),
         ExpressionNode::Compound(compound) => ExpressionNode::Simple(Box::new_in(
             SimpleExpressionNode {
-                content: compound.loc.span.slice(source),
+                // Read back from the source and decoded as Vue reads it (see `entity`).
+                content: crate::entity::authored_expression_str(
+                    allocator,
+                    source,
+                    compound.loc.span,
+                ),
                 is_static: false,
                 const_type: ConstantType::NotConstant,
                 loc: compound.loc.clone(),
@@ -300,7 +305,12 @@ pub(crate) fn normalize_expression<'a>(
         ),
         ExpressionNode::Compound(compound) => Box::new_in(
             SimpleExpressionNode {
-                content: compound.loc.span.slice(source),
+                // Read back from the source and decoded as Vue reads it (see `entity`).
+                content: crate::entity::authored_expression_str(
+                    allocator,
+                    source,
+                    compound.loc.span,
+                ),
                 is_static: false,
                 const_type: ConstantType::NotConstant,
                 loc: compound.loc.clone(),

@@ -74,8 +74,8 @@ pub(super) enum Site {
     SlotText,
 }
 
-/// The shipped node's content for one expression position: the raw
-/// quoted attribute value (entity-decoded) for attribute positions, the
+/// The shipped node's content for one expression position: the quoted
+/// attribute value (its references decoded) for attribute positions, the
 /// trimmed source otherwise, plus where the retained source sits in it.
 pub(super) struct Content<'a> {
     pub(super) text: RawJs<'a>,
@@ -99,37 +99,49 @@ impl Content<'_> {
 /// Recover the shipped content for an expression authored at `span`
 /// inside `file`: the whitespace-padded text between the enclosing
 /// attribute quotes when the span is quote-delimited, else the source.
+///
+/// The lowering hands over a directive value with its character references
+/// already decoded, as Vue reads it (`Cx::decoded_directive_value`), and
+/// gives it the span of the authored value. Such a value is not a slice of
+/// `file`, so its padded content is the authored value decoded the same way.
 pub(super) fn node_content<'a>(file: &'a str, source: &'a str, span: Span) -> Content<'a> {
-    let Some(padded) = quote_padded(file, source, span) else {
+    if let Some(padded) = quote_padded(file, source, span) {
+        let leading = padded.len() - padded.trim_start().len();
         return Content {
-            text: RawJs::Borrowed(source),
-            offset: Some(0),
+            text: RawJs::Borrowed(padded),
+            offset: Some(leading),
         };
-    };
-    let leading = padded.len() - padded.trim_start().len();
+    }
+    if let Some(decoded) = decoded_authored_value(file, source, span) {
+        let leading = decoded.len() - decoded.trim_start().len();
+        return Content {
+            text: RawJs::Owned(decoded),
+            offset: Some(leading),
+        };
+    }
     Content {
-        text: RawJs::Borrowed(padded),
-        offset: Some(leading),
+        text: RawJs::Borrowed(source),
+        offset: Some(0),
     }
 }
 
-/// [`node_content`] for the bind-value positions the shipped lane
-/// entity-decodes (`bind_js_source`, `innerHTML`). A directive's value is an
-/// attribute value, so it decodes by the attribute rule.
-pub(super) fn node_content_decoded<'a>(file: &'a str, source: &'a str, span: Span) -> Content<'a> {
-    decoded(node_content(file, source, span), source)
-}
-
-fn decoded<'a>(content: Content<'a>, source: &str) -> Content<'a> {
-    if !content.text.as_str().contains('&') {
-        return content;
+/// The authored attribute value at `span`, decoded, when `source` is that
+/// whole value decoded at intake (rather than a part of it, such as a
+/// `v-for` alias). Only a quoted value counts: an interpolation's text has
+/// no quotes, and its content is the trimmed source, as without references.
+fn decoded_authored_value(file: &str, source: &str, span: Span) -> Option<String> {
+    let start = usize::try_from(span.start).ok()?;
+    let end = usize::try_from(span.end).ok()?;
+    let authored = file.get(start..end)?;
+    if authored == source || !authored.contains('&') {
+        return None;
     }
-    let text = super::entity::decode_html_attribute_entities(content.text.as_str());
-    let offset = (text.trim() == source).then(|| text.len() - text.trim_start().len());
-    Content {
-        text: RawJs::Owned(text),
-        offset,
+    let quote = file.as_bytes().get(start.checked_sub(1)?).copied()?;
+    if !matches!(quote, b'"' | b'\'') || file.as_bytes().get(end) != Some(&quote) {
+        return None;
     }
+    let decoded = super::entity::decode_directive_value(authored);
+    (decoded.trim() == source).then_some(decoded)
 }
 
 fn quote_padded<'a>(file: &'a str, source: &str, span: Span) -> Option<&'a str> {

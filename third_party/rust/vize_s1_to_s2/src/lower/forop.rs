@@ -13,7 +13,7 @@ use vize_s2::op::{ForBinding, ForOp, Namespace, Op, Region};
 use vize_s2::scope::{ScopeBinding, ScopeFacts, ScopeOrigin, ScopeTag};
 
 use super::cx::{Cx, attr_slice, attr_span, element_span};
-use super::element::{Analyzed, attr_value_text, element_core};
+use super::element::{Analyzed, directive_value_text, element_core};
 use super::expr::{desc, expr_at, opaque_at, simple_identifier, trimmed};
 use super::structural::{
     ForWrapper, capture_wrapper_attrs, capture_wrapper_key, lower_children,
@@ -67,7 +67,7 @@ pub(crate) fn lower_for<'a>(
 ) -> Op<'a> {
     let attr_idx = analyzed.vfor.expect("caller checked v-for presence");
     let attr = &element.open.attrs[attr_idx];
-    let raw = attr_value_text(element, attr_idx).filter(|raw| !raw.trim().is_empty());
+    let raw = directive_value_text(cx, element, attr_idx).filter(|raw| !raw.trim().is_empty());
     let Some(raw) = raw else {
         cx.error(
             attr_span(cx, attr),

@@ -9,6 +9,7 @@ use vize_s2::op::{Attribute, BindOp};
 
 use super::buf::Buf;
 use super::js::{escape_js_attribute_string, js_expr_source};
+use super::prefix::Site;
 use super::props_value::{BindValue, authored_value_padding};
 use super::{EmitCx, EmitError};
 
@@ -186,7 +187,7 @@ fn emit_bound_style_source(
     js: &JsExpr<'_>,
 ) -> Result<(), EmitError> {
     if cx.prefixing() {
-        let text = cx.prefixed_bind_js(js)?;
+        let text = cx.prefixed_js(js, Site::Expression)?;
         cx.buf.push(text.as_str());
         return Ok(());
     }

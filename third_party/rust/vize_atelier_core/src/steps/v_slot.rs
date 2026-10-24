@@ -54,7 +54,9 @@ fn static_slot_name_with_modifiers(mut name: String, dir: &DirectiveNode<'_>) ->
 pub fn get_slot_props_string(dir: &DirectiveNode<'_>, source: &str) -> Option<String> {
     dir.exp.as_ref().map(|exp| match exp {
         ExpressionNode::Simple(s) => String::new(s.content),
-        ExpressionNode::Compound(c) => String::new(c.loc.span.slice(source)),
+        // A compound reads its text back from the source, so decode it as
+        // the parser decoded the simple expression.
+        ExpressionNode::Compound(c) => crate::entity::authored_expression_text(source, c.loc.span),
     })
 }
 

@@ -130,7 +130,9 @@ pub(crate) fn lower_text_run<'a>(
             }
             SurfaceChild::Interpolation(node) => {
                 let span = Span::new(cx.offset(node.open.text), cx.token_span(&node.close).end);
-                let (slice, _) = trimmed(cx, node.content.text);
+                // Vue decodes an interpolation's references by the text rule.
+                let text = cx.decoded_interpolation_text(node.content.text);
+                let (slice, _) = trimmed(cx, text);
                 fold_gap(&mut parts, &mut pending_gap);
                 parts.push(TextPart {
                     text: String::from(slice),

@@ -4,6 +4,7 @@ use vize_s2::expr::JsExpr;
 use vize_s2::op::BindOp;
 
 use super::js::{escape_js_attribute_string, js_expr_source};
+use super::prefix::Site;
 use super::props_object::Piece;
 use super::props_value::authored_value_padding;
 use super::{EmitCx, EmitError};
@@ -59,7 +60,7 @@ fn emit_authored_js(
     authored: (&str, &str),
 ) -> Result<(), EmitError> {
     if cx.prefixing() {
-        let text = cx.prefixed_bind_js(js)?;
+        let text = cx.prefixed_js(js, Site::Expression)?;
         cx.buf.push(text.as_str());
         return Ok(());
     }

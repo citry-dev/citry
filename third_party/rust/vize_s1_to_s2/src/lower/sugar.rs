@@ -18,7 +18,7 @@ use vize_s2::scope::{ScopeBinding, ScopeFacts, ScopeOrigin};
 
 use super::cx::{Cx, attr_slice, attr_span};
 use super::directive::{AttrForm, Head};
-use super::element::{Analyzed, attr_value_text};
+use super::element::{Analyzed, attr_value_text, directive_value_text};
 use super::expr::{expr_at, simple_identifier};
 
 /// Whether this element should consume `slot-scope`/`scope` (and the
@@ -79,7 +79,7 @@ pub(crate) fn lower_slot_scope<'a>(
             .map(str::trim)
             .filter(|text| !text.is_empty())
     });
-    let params = attr_value_text(element, index)
+    let params = directive_value_text(cx, element, index)
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(|text| expr_at(cx, text));
