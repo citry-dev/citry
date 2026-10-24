@@ -41,7 +41,11 @@ def tabs_overview_component(app: Citry) -> type[Component]:
               <c-CTab #c-key="'notifications'" value="notifications">
                 Notifications
               </c-CTab>
-              <c-CTab #c-key="'billing'" value="billing" disabled>
+              <c-CTab
+                #c-key="'billing'"
+                value="billing"
+                disabled
+              >
                 Billing
               </c-CTab>
               <c-CTabPanel #c-key="'account'" value="account">
@@ -88,7 +92,8 @@ def tabs_overview_component(app: Citry) -> type[Component]:
                 c-loop="False"
                 density="compact"
                 align="end"
-                :value="selectedMetric" :onValueChange="(value) => {
+                :value="selectedMetric"
+                :onValueChange="(value) => {
                     selectedMetric = value;
                   }"
               >

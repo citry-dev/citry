@@ -588,7 +588,11 @@ class CMultiSelect(LibraryComponent):
               data-citry-ui-part="chip"
             >{{ option.label }}</span>
           </span>
-          <span class="cui-multi-select__indicator" aria-hidden="true" data-citry-ui-part="indicator"></span>
+          <span
+            class="cui-multi-select__indicator"
+            aria-hidden="true"
+            data-citry-ui-part="indicator"
+          ></span>
         </button>
         <select
           class="cui-multi-select__native"
@@ -660,13 +664,27 @@ class CMultiSelect(LibraryComponent):
                   <span class="cui-multi-select__check" aria-hidden="true"></span>
                   <span>
                     <span c-id="option.label_id" data-citry-ui-part="option-label">{{ option.label }}</span>
-                    <span c-if="option.description is not None" c-id="option.description_id" data-citry-ui-part="option-description">{{ option.description }}</span>
+                    <span
+                      c-if="option.description is not None"
+                      c-id="option.description_id"
+                      data-citry-ui-part="option-description"
+                    >{{ option.description }}</span>
                   </span>
                 </div>
               </c-if>
               <c-else>
-                <div class="cui-multi-select__group" c-id="group.group_id" role="group" c-aria-labelledby="group.label_id" data-citry-ui-part="group">
-                  <span class="cui-multi-select__group-label" c-id="group.label_id" data-citry-ui-part="group-label">{{ group.label }}</span>
+                <div
+                  class="cui-multi-select__group"
+                  c-id="group.group_id"
+                  role="group"
+                  c-aria-labelledby="group.label_id"
+                  data-citry-ui-part="group"
+                >
+                  <span
+                    class="cui-multi-select__group-label"
+                    c-id="group.label_id"
+                    data-citry-ui-part="group-label"
+                  >{{ group.label }}</span>
                   <div
                     c-for="option in group.options"
                     class="cui-multi-select__option"
@@ -684,7 +702,11 @@ class CMultiSelect(LibraryComponent):
                     <span class="cui-multi-select__check" aria-hidden="true"></span>
                     <span>
                       <span c-id="option.label_id" data-citry-ui-part="option-label">{{ option.label }}</span>
-                      <span c-if="option.description is not None" c-id="option.description_id" data-citry-ui-part="option-description">{{ option.description }}</span>
+                      <span
+                        c-if="option.description is not None"
+                        c-id="option.description_id"
+                        data-citry-ui-part="option-description"
+                      >{{ option.description }}</span>
                     </span>
                   </div>
                 </div>

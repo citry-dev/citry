@@ -509,7 +509,11 @@ class CNumberInput(LibraryComponent):
             data-citry-ui-part="increment"
           ><span aria-hidden="true">+</span></button>
         </div>
-        <input c-id="transport_id" type="hidden" disabled />
+        <input
+          c-id="transport_id"
+          type="hidden"
+          disabled
+        />
       </div>
     """
 

@@ -851,7 +851,11 @@ class CDataGrid(LibraryComponent):
             </thead>
             <tbody data-citry-ui-part="body">
               <c-if cond="state == 'ready'">
-                <tr c-if="has_before" aria-hidden="true" data-citry-ui-part="spacer-row">
+                <tr
+                  c-if="has_before"
+                  aria-hidden="true"
+                  data-citry-ui-part="spacer-row"
+                >
                   <td c-colspan="column_count" c-style="{'height': f'{before_size}px'}"></td>
                 </tr>
                 <c-for each="resolved_row in rows">
@@ -898,10 +902,18 @@ class CDataGrid(LibraryComponent):
                     </c-for>
                   </tr>
                 </c-for>
-                <tr c-if="has_after" aria-hidden="true" data-citry-ui-part="spacer-row">
+                <tr
+                  c-if="has_after"
+                  aria-hidden="true"
+                  data-citry-ui-part="spacer-row"
+                >
                   <td c-colspan="column_count" c-style="{'height': f'{after_size}px'}"></td>
                 </tr>
-                <tr c-if="state_output == 'empty'" aria-rowindex="2" data-citry-ui-part="state-row">
+                <tr
+                  c-if="state_output == 'empty'"
+                  aria-rowindex="2"
+                  data-citry-ui-part="state-row"
+                >
                   <td c-colspan="column_count" data-citry-ui-part="empty">
                     <c-slot name="empty">
                       <div role="status" aria-live="polite">
@@ -911,7 +923,11 @@ class CDataGrid(LibraryComponent):
                   </td>
                 </tr>
               </c-if>
-              <tr c-if="state == 'loading'" aria-rowindex="2" data-citry-ui-part="state-row">
+              <tr
+                c-if="state == 'loading'"
+                aria-rowindex="2"
+                data-citry-ui-part="state-row"
+              >
                 <td c-colspan="column_count" data-citry-ui-part="loading">
                   <c-slot name="loading">
                     <div role="status" aria-live="polite">
@@ -920,7 +936,11 @@ class CDataGrid(LibraryComponent):
                   </c-slot>
                 </td>
               </tr>
-              <tr c-if="state == 'error'" aria-rowindex="2" data-citry-ui-part="state-row">
+              <tr
+                c-if="state == 'error'"
+                aria-rowindex="2"
+                data-citry-ui-part="state-row"
+              >
                 <td c-colspan="column_count" data-citry-ui-part="error">
                   <c-slot name="error">
                     <div role="status" aria-live="polite">

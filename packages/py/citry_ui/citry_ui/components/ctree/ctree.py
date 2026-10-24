@@ -765,13 +765,28 @@ class CTreeItem(LibraryComponent):
         }
 
     template = """
-      <div class="cui-tree__item" #c-key="morph_key" c-bind="attrs" data-citry-ui-part="item">
+      <div
+        class="cui-tree__item"
+        #c-key="morph_key"
+        c-bind="attrs"
+        data-citry-ui-part="item"
+      >
         <span class="cui-tree__row" data-citry-ui-part="row">
-          <span class="cui-tree__indicator" aria-hidden="true" data-citry-ui-part="indicator"></span>
+          <span
+            class="cui-tree__indicator"
+            aria-hidden="true"
+            data-citry-ui-part="indicator"
+          ></span>
           <span class="cui-tree__label" data-citry-ui-part="label">{{ label }}</span>
         </span>
         <c-if cond="has_children">
-          <div class="cui-tree__group" role="group" c-hidden="hidden" c-inert="hidden" data-citry-ui-part="group">
+          <div
+            class="cui-tree__group"
+            role="group"
+            c-hidden="hidden"
+            c-inert="hidden"
+            data-citry-ui-part="group"
+          >
             <c-slot c-data="slot_data" />
           </div>
         </c-if>

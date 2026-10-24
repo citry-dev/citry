@@ -387,7 +387,11 @@ class CInternalVirtualList(LibraryComponent):
         />
       </c-if>
       <c-else>
-        <c-CInternalVirtualListStatic c-attrs="attrs" c-items="items" c-total_count="total_count" />
+        <c-CInternalVirtualListStatic
+          c-attrs="attrs"
+          c-items="items"
+          c-total_count="total_count"
+        />
       </c-else>
     """
 
@@ -413,7 +417,12 @@ class CInternalVirtualListStatic(LibraryComponent):
         return {"attrs": kwargs.attrs, "items": kwargs.items, "total_count": kwargs.total_count}
 
     template = """
-      <div class="cui-virtual-list" c-bind="attrs" role="list" data-citry-ui-part="virtual-list">
+      <div
+        class="cui-virtual-list"
+        c-bind="attrs"
+        role="list"
+        data-citry-ui-part="virtual-list"
+      >
         <div class="cui-virtual-list__track" data-citry-ui-part="track">
           <c-for each="item in items">
             <c-CInternalVirtualListItem
@@ -462,7 +471,12 @@ class CInternalVirtualListWindow(LibraryComponent):
         }
 
     template = """
-      <div class="cui-virtual-list" c-bind="attrs" role="list" data-citry-ui-part="virtual-list">
+      <div
+        class="cui-virtual-list"
+        c-bind="attrs"
+        role="list"
+        data-citry-ui-part="virtual-list"
+      >
         <div class="cui-virtual-list__track" data-citry-ui-part="track">
           <div
             aria-hidden="true"

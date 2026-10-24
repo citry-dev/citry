@@ -23,12 +23,49 @@ def calendar_states_component(app: Citry) -> type[Component]:
               <button type="submit">Submit date</button><button type="reset">Reset date</button>
             </form>
             <div class="citry-ui-quality-grid">
-              <c-CCalendar label="Controlled calendar" value="2026-08-19" visible_date="2026-08-19" :value="selected" :visibleDate="visible" :onValueChange="(value,detail)=>{last=`value ${value}`;selected=value}" :onVisibleDateChange="(value,detail)=>{last=`visible ${value}`;visible=value}" c-attrs="{'data-quality-states':'controlled value visible-date refusal acceptance callbacks native-events'}" />
-              <c-CCalendar label="Small plain natural calendar" value="2026-02-14" size="sm" variant="plain" c-fixed_weeks="False" c-show_adjacent_days="False" c-attrs="{'data-quality-states':'plain sm natural-weeks hidden-adjacent'}" />
-              <c-CCalendar label="Readonly large calendar" value="2026-08-21" size="lg" readonly c-attrs="{'data-quality-states':'readonly submitted lg outline'}" />
-              <c-CCalendar label="Disabled calendar" value="2026-08-22" disabled c-attrs="{'data-quality-states':'disabled omitted md outline'}" />
-              <c-CCalendar label="Invalid calendar" value="2026-08-23" invalid c-attrs="{'data-quality-states':'invalid'}" />
-              <div lang="ar" dir="rtl" style="color-scheme:dark"><c-CCalendar label="تقويم الوصول" value="2026-08-24" c-first_day_of_week="7" c-attrs="{'data-quality-states':'rtl dark locale-week-start arrow-direction touch long-content'}" /></div>
+              <c-CCalendar
+                label="Controlled calendar"
+                value="2026-08-19"
+                visible_date="2026-08-19"
+                :value="selected"
+                :visibleDate="visible"
+                :onValueChange="(value,detail)=>{last=`value ${value}`;selected=value}"
+                :onVisibleDateChange="(value,detail)=>{last=`visible ${value}`;visible=value}"
+                c-attrs="{'data-quality-states':'controlled value visible-date refusal acceptance callbacks native-events'}"
+              />
+              <c-CCalendar
+                label="Small plain natural calendar"
+                value="2026-02-14"
+                size="sm"
+                variant="plain"
+                c-fixed_weeks="False"
+                c-show_adjacent_days="False"
+                c-attrs="{'data-quality-states':'plain sm natural-weeks hidden-adjacent'}"
+              />
+              <c-CCalendar
+                label="Readonly large calendar"
+                value="2026-08-21"
+                size="lg"
+                readonly
+                c-attrs="{'data-quality-states':'readonly submitted lg outline'}"
+              />
+              <c-CCalendar
+                label="Disabled calendar"
+                value="2026-08-22"
+                disabled
+                c-attrs="{'data-quality-states':'disabled omitted md outline'}"
+              />
+              <c-CCalendar
+                label="Invalid calendar"
+                value="2026-08-23"
+                invalid
+                c-attrs="{'data-quality-states':'invalid'}"
+              />
+              <div
+                lang="ar"
+                dir="rtl"
+                style="color-scheme:dark"
+              ><c-CCalendar label="تقويم الوصول" value="2026-08-24" c-first_day_of_week="7" c-attrs="{'data-quality-states':'rtl dark locale-week-start arrow-direction touch long-content'}" /></div>
             </div>
             <output v-text="last">No Calendar action yet</output>
           </section>

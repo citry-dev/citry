@@ -332,7 +332,11 @@ class CTagGroup(LibraryComponent):
         c-data-variant="variant"
         c-data-size="size"
       >
-        <div class="cui-tag-group__label" c-id="label_id" data-citry-ui-part="group-label">
+        <div
+          class="cui-tag-group__label"
+          c-id="label_id"
+          data-citry-ui-part="group-label"
+        >
           <c-if cond="has_label_slot"><c-slot name="label" /></c-if>
           <c-else>{{ label }}</c-else>
         </div>
@@ -863,9 +867,17 @@ class CTag(LibraryComponent):
             aria-hidden="true"
           >&#10003;</span>
           <c-if cond="has_start">
-            <span class="cui-tag__start" data-citry-ui-part="start" aria-hidden="true"><c-slot name="start" /></span>
+            <span
+              class="cui-tag__start"
+              data-citry-ui-part="start"
+              aria-hidden="true"
+            ><c-slot name="start" /></span>
           </c-if>
-          <span class="cui-tag__label" c-id="label_id" data-citry-ui-part="tag-label"><c-slot required /></span>
+          <span
+            class="cui-tag__label"
+            c-id="label_id"
+            data-citry-ui-part="tag-label"
+          ><c-slot required /></span>
           <c-if cond="removable">
             <button
               class="cui-tag__remove"

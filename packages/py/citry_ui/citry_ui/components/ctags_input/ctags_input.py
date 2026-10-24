@@ -706,7 +706,11 @@ class CTagsInput(LibraryComponent):
           multiple
           data-citry-tags-input-native
         >
-          <option c-for="option in options" c-value="option" selected>{{ option }}</option>
+          <option
+            c-for="option in options"
+            c-value="option"
+            selected
+          >{{ option }}</option>
         </select>
         <div
           class="cui-tags-input__control"

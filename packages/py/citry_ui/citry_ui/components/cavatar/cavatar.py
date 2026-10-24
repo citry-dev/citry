@@ -257,7 +257,11 @@ class CAvatar(LibraryComponent):
               focusable="false"
               aria-hidden="true"
             >
-              <circle cx="12" cy="8" r="3.25"></circle>
+              <circle
+                cx="12"
+                cy="8"
+                r="3.25"
+              ></circle>
               <path d="M5.75 19c.8-3.35 3.05-5 6.25-5s5.45 1.65 6.25 5"></path>
             </svg>
           </c-else>

@@ -115,7 +115,8 @@ def split_button_states_component(app: Citry) -> type[Component]:
                 menu_label="More controlled publication actions"
                 match_width
                 size="sm"
-                :open="controlledOpen" :onOpenChange="(next)=>controlledOpen=next"
+                :open="controlledOpen"
+                :onOpenChange="(next)=>controlledOpen=next"
                 c-attrs="{'data-quality-states':'controlled match-width sm'}"
               >
                 <c-fill name="default">Publish record</c-fill>
@@ -196,7 +197,11 @@ def split_button_states_component(app: Citry) -> type[Component]:
                 </c-CSplitButton>
               </div>
 
-              <div class="split-button-quality__harbor" style="color-scheme:dark" dir="rtl">
+              <div
+                class="split-button-quality__harbor"
+                style="color-scheme:dark"
+                dir="rtl"
+              >
                 <c-CSplitButton
                   label="إجراءات سجل هاربور"
                   menu_label="المزيد من إجراءات سجل هاربور"

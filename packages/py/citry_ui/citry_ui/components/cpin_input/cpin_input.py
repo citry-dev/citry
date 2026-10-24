@@ -458,7 +458,13 @@ class CPinInput(LibraryComponent):
           data-citry-ui-part="input"
         />
         <span aria-hidden="true" data-citry-ui-part="cells">
-          <span c-for="cell in cells" c-data-index="cell['index']" c-data-filled="'' if cell['filled'] else None" c-data-masked="'' if cell['filled'] and mask else None" data-citry-ui-part="cell">
+          <span
+            c-for="cell in cells"
+            c-data-index="cell['index']"
+            c-data-filled="'' if cell['filled'] else None"
+            c-data-masked="'' if cell['filled'] and mask else None"
+            data-citry-ui-part="cell"
+          >
             <span data-citry-ui-part="character">{{ cell['character'] }}</span>
             <span data-citry-ui-part="caret"></span>
             <span c-if="cell['separator']" data-citry-ui-part="separator">

@@ -212,7 +212,11 @@ class CAlertDialog(LibraryComponent):
         >
           <div class="cui-dialog__surface" data-citry-ui-part="surface">
             <header class="cui-dialog__header" data-citry-ui-part="header">
-              <h2 class="cui-dialog__title" c-id="title_id" data-citry-ui-part="title">
+              <h2
+                class="cui-dialog__title"
+                c-id="title_id"
+                data-citry-ui-part="title"
+              >
                 <c-slot name="title" required />
               </h2>
             </header>

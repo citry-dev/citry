@@ -25,7 +25,11 @@ def alert_states_component(app: Citry) -> type[Component]:
             <h1 id="alert-states-title">Alert states</h1>
             <c-CAlert
               actions_label="Observation actions"
-              :intent="intent" :variant="variant" :size="size" :announce="announce" :icon="icon"
+              :intent="intent"
+              :variant="variant"
+              :size="size"
+              :announce="announce"
+              :icon="icon"
             >
               <c-fill name="title">Controlled observation status</c-fill>
               <c-fill name="default">The guide camera is following the selected star.</c-fill>
@@ -48,7 +52,11 @@ def alert_states_component(app: Citry) -> type[Component]:
                 </c-CAlert>
               </c-for>
               <c-for each="variant in variants">
-                <c-CAlert #c-key="variant" intent="warn" c-variant="variant">
+                <c-CAlert
+                  #c-key="variant"
+                  intent="warn"
+                  c-variant="variant"
+                >
                   {{ variant }} Alert
                 </c-CAlert>
               </c-for>

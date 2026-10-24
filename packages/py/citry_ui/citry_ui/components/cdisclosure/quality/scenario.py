@@ -29,7 +29,8 @@ def disclosure_states_component(app: Citry) -> type[Component]:
               region
               heading_level="2"
               actions_label="System requirement actions"
-              :open="open" :onOpenChange="(next)=>open=next"
+              :open="open"
+              :onOpenChange="(next)=>open=next"
               c-attrs="{'data-quality-states':'controlled open actions region outline md indicator-end ltr'}"
             >
               <c-fill name="title">System requirements</c-fill>
@@ -96,14 +97,22 @@ def disclosure_states_component(app: Citry) -> type[Component]:
             </div>
 
             <div class="disclosure-quality__dark" style="color-scheme:dark">
-              <c-CDisclosure open heading_level="2" c-attrs="{'data-quality-states':'nested nested-dark'}">
+              <c-CDisclosure
+                open
+                heading_level="2"
+                c-attrs="{'data-quality-states':'nested nested-dark'}"
+              >
                 <c-fill name="title">Nested handbook topic</c-fill>
                 <c-fill name="default">
                   <c-CDisclosure variant="plain" size="sm">
                     <c-fill name="title">Nested detail</c-fill>
                     <c-fill name="default">Independent nested content.</c-fill>
                   </c-CDisclosure>
-                  <c-CAccordion value="check" variant="plain" size="sm">
+                  <c-CAccordion
+                    value="check"
+                    variant="plain"
+                    size="sm"
+                  >
                     <c-CAccordionItem value="check">
                       <c-fill name="title">Grouped check</c-fill>
                       <c-fill name="default">Accordion remains the collection owner.</c-fill>
