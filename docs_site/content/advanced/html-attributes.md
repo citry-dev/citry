@@ -206,6 +206,13 @@ mapping.
 Citry's own `@c-` and `:c-` Events bindings are the exception: a mapping
 may set them. See [Bind events in templates](/events/bindings/).
 
+A mapping also may not set an inline event handler, a name that starts
+with `on` in any letter case, such as `onclick`, because the browser runs
+its value as JavaScript. That raises `ValueError`, and so does an
+`on_attrs_resolved` extension hook that adds such a name. An inline
+handler you write in the template, such as `onclick="..."` or
+`c-onclick="handler"`, keeps working, because you chose to run that code.
+
 Vue bindings written on a component tag, such as `@click` on
 `<c-ActionButton>`, do not reach the component's Python `attrs` input. Vue
 passes them to the component as props or listeners, or adds them to its
@@ -222,9 +229,18 @@ values in templates.
 ### Invalid names
 
 An attribute name must be a string. Any other key raises `TypeError`. A
-name that is empty or contains whitespace, `=`, `/`, `>`, `<`, or `{#`
-raises `ValueError`. `c-bind` checks names the same way when it adds a
-mapping to an element.
+name that is empty, or contains whitespace or another control character, a
+quote, `=`, `/`, `>`, `<`, a byte-order mark, a Unicode noncharacter, or
+`{#`, raises `ValueError`. `c-bind` checks names the same way when it adds
+a mapping to an element.
+
+### Values the browser runs
+
+Citry escapes every attribute value, but it does not check what a value
+means. A `javascript:` URL in `href` or `src`, an `<iframe>` `srcdoc`, or a
+value you pass to an inline handler runs in the page when it comes from
+your users. Choose these values in your own code, or check them, as you
+would in Vue, Jinja, or Django.
 
 ### Escape `Markup` values
 

@@ -146,6 +146,14 @@ Never pass user input to the `Markup()` constructor. Return it as a plain
 [`Markup.format()`](/syntax/expressions/#insert-html-you-trust). `on_serialize()` is different: it returns the whole
 page's HTML, and Citry uses that as it is.
 
+Hooks that return a template, script, stylesheet, or the page's HTML,
+such as `on_template_loaded`, `on_template_compiled`, `on_js_loaded`,
+`on_css_loaded`, and `on_serialize`, hand Citry code that the browser
+runs. Build those results from your extension's own text, never from
+request data. An `on_attrs_resolved` hook may change attribute values,
+but it may not add an inline event handler such as `onclick`; Citry
+raises `ValueError` if it does.
+
 ### Handle a failed render
 
 `on_component_rendered` also runs when a component fails to render. Then

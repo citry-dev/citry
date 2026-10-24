@@ -193,8 +193,18 @@ which leaves the property empty. Any other value, such as a `bool` or a
 be a string that is valid as the name of a custom property, without the
 leading `--`. Citry quotes a string that contains spaces,
 unless it starts with a CSS function such as `calc(...)` or `rgba(...)`.
-It raises `ValueError` for a value that could break out of the generated
-CSS, such as one with a top-level `;` or a `</style` end tag.
+It reads each value the way the browser's CSS parser does and raises
+`ValueError` for one that could break out of its declaration: a top-level
+`;` or `!`, a brace, an unbalanced bracket, a comment, an unclosed or
+malformed string or `url()`, a `<` outside a string or `url()`, or a
+`</style` end tag anywhere. A quoted font name, `rgb(...)`, `calc(...)`,
+and `url(...)`, including an SVG data URL, keep working.
+
+To use data in a stylesheet, pass it through `css_data()`, not through
+`{{ }}` inside a `<style>` element you write in the template. The same
+holds for scripts: send data with `js_data()`, not `{{ }}` inside a
+`<script>` element. Citry escapes `{{ }}` for HTML, which does not make a
+value safe inside script or style text.
 
 !!! warning "Keep secrets out of CSS data"
 

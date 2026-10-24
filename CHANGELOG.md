@@ -221,6 +221,21 @@
   `requires-python = ">=3.10"`, raise it to `">=3.11"` before upgrading,
   or uv and other lockfile tools cannot pick this release.
 
+- **Breaking:** values chosen while a page renders can no longer reach a
+  place the browser runs. Each of these now raises `ValueError`:
+  - `actions.Redirect(url)` with a scheme other than `http:` or `https:`;
+    relative URLs still work, as with Django's `HttpResponseRedirect`, and
+    the browser refuses such a redirect too.
+  - A `c-bind` mapping key, or a name an `on_attrs_resolved` hook adds,
+    that starts with `on`, such as `onclick`. Handlers you write in the
+    template, such as `onclick="..."` or `c-onclick="..."`, still work.
+  - An attribute name from data that contains a control character, a
+    quote, a byte-order mark, or a Unicode noncharacter.
+  - `<c-element c-is="...">` naming a tag such as `script`, `style`,
+    `iframe`, or `textarea`, whose contents escaping cannot protect.
+  - A `css_data()` value with a comment, a brace, a top-level `!`, or a
+    malformed string or `url()`. Quoted font names, `rgb()`, `calc()`, and
+    `url()` values, SVG data URLs included, still work.
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old
