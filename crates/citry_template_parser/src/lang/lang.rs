@@ -197,6 +197,36 @@ pub enum LangSpecArgument {
     Struct(LangSpecStruct),
 }
 
+/// Dropping an argument frees its children without calling itself once per
+/// level.
+///
+/// The compiler builds one argument per nesting level of control flow and
+/// components, so the derived drop would need stack in proportion to the
+/// template's depth: about 650 bytes per level in a debug build, which
+/// overflowed a 128 KiB thread at 200 levels. Each argument's children are
+/// moved onto a list instead, so only the outermost drop does the work and
+/// the arguments it frees have no children left.
+impl Drop for LangSpecArgument {
+    fn drop(&mut self) {
+        let mut pending = match self {
+            LangSpecArgument::Tuple(children) | LangSpecArgument::List(children) => {
+                std::mem::take(children)
+            }
+            LangSpecArgument::Struct(struct_arg) => std::mem::take(&mut struct_arg.arguments),
+            _ => return,
+        };
+        while let Some(mut argument) = pending.pop() {
+            match &mut argument {
+                LangSpecArgument::Tuple(children) | LangSpecArgument::List(children) => {
+                    pending.append(children);
+                }
+                LangSpecArgument::Struct(struct_arg) => pending.append(&mut struct_arg.arguments),
+                _ => {}
+            }
+        }
+    }
+}
+
 /// A struct / class instance with a name and arguments.
 ///
 /// E.g. in Python, this may look like this:

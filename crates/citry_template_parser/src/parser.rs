@@ -721,17 +721,19 @@ fn process_expression(
     value_span: Option<pest::Span>,
     context: &ParserContext,
 ) -> Result<(Vec<Token>, Vec<Comment>), ParseError> {
-    let transform_result = context
-        .lang
-        .parse_expression(&value_token.content)
-        .map_err(|e| {
-            let message = format!("Failed to parse expression: {}", e);
-            if let Some(value_span) = value_span {
-                context.error_from_local_span(value_span, message)
-            } else {
-                context.error_from_token(value_token, message)
-            }
-        })?;
+    // An invalid expression's error path needs more stack than the tree
+    // passes leave room for.
+    let transform_result = crate::stack::with_stack_for_expression(|| {
+        context.lang.parse_expression(&value_token.content)
+    })
+    .map_err(|e| {
+        let message = format!("Failed to parse expression: {}", e);
+        if let Some(value_span) = value_span {
+            context.error_from_local_span(value_span, message)
+        } else {
+            context.error_from_token(value_token, message)
+        }
+    })?;
 
     // Calculate offsets for adjusting token positions
     let index_offset = value_token.start_index;
@@ -764,22 +766,27 @@ fn process_template_string(
     template_token: &Token,
     parent_context: &ParserContext,
 ) -> Result<Template, ParseError> {
-    let content = &template_token.content;
+    // A template in an attribute value is parsed, and its own passes run,
+    // while the parser reads the tag that holds it, so its frames sit on top
+    // of the outer parse.
+    crate::stack::with_enough_stack(|| {
+        let content = &template_token.content;
 
-    // Tokens created by ParserContext already carry root-absolute coordinates.
-    // Use that absolute origin directly: adding the parent's offsets again
-    // would double-count every recursive template-attribute level.
-    let (line, col) = template_token.line_col;
-    let new_line_offset = line - 1;
-    let new_col_offset = col - 1;
-    let new_index_offset = template_token.start_index;
+        // Tokens created by ParserContext already carry root-absolute coordinates.
+        // Use that absolute origin directly: adding the parent's offsets again
+        // would double-count every recursive template-attribute level.
+        let (line, col) = template_token.line_col;
+        let new_line_offset = line - 1;
+        let new_col_offset = col - 1;
+        let new_index_offset = template_token.start_index;
 
-    let nested_context =
-        parent_context.create_child_context(new_line_offset, new_col_offset, new_index_offset);
+        let nested_context =
+            parent_context.create_child_context(new_line_offset, new_col_offset, new_index_offset);
 
-    // Parse the content as a template with updated offsets
-    let template = parse_template_inner(content, &nested_context)?;
-    Ok(template)
+        // Parse the content as a template with updated offsets
+        let template = parse_template_inner(content, &nested_context)?;
+        Ok(template)
+    })
 }
 
 /// Process an HTML tag (start, end, or self-closing)
@@ -1418,7 +1425,8 @@ fn parse_html_attribute(
             context.record_nested_template_bindings(&attr_token, nested_bindings);
             let comments = template.comments.clone();
             let used_variables = template.used_variables.clone();
-            let slots = template.slots;
+            let mut template = template;
+            let slots = std::mem::take(&mut template.slots);
             (HtmlAttrKind::Template, used_variables, comments, slots)
         } else {
             // c-... attribute WITH expression value
@@ -2986,44 +2994,47 @@ fn validate_ignored_element_contents(
 /// Find the first child tag or attribute, in source order, that a `#c-ignore`
 /// element cannot keep as server-written HTML.
 fn find_ignored_content_problem(body: &Template) -> Option<IgnoredContentProblem<'_>> {
-    for element in &body.elements {
-        let TemplateElement::Node(child) = element else {
-            continue;
-        };
-        let child_tag = child.tag_name();
-        if has_citry_component_prefix(child_tag)
-            && !IGNORED_CONTENT_CITRY_TAGS
-                .iter()
-                .any(|allowed| citry_component_tag_eq(child_tag, allowed))
-        {
-            return Some(IgnoredContentProblem::Tag(&child.start_tag().name));
-        }
-        for attr in child.attrs() {
-            if attr.kind == HtmlAttrKind::Meta {
+    // This check walks the whole subtree under `#c-ignore`, one call per level.
+    crate::stack::with_enough_stack(|| {
+        for element in &body.elements {
+            let TemplateElement::Node(child) = element else {
                 continue;
+            };
+            let child_tag = child.tag_name();
+            if has_citry_component_prefix(child_tag)
+                && !IGNORED_CONTENT_CITRY_TAGS
+                    .iter()
+                    .any(|allowed| citry_component_tag_eq(child_tag, allowed))
+            {
+                return Some(IgnoredContentProblem::Tag(&child.start_tag().name));
             }
-            let name = attr.key.content.as_str();
-            // `@event`, `:attr`, `v-*`, `#slot`, `.prop`, the `$c-*` browser
-            // bindings, and `ref` all need Vue to read the element.
-            let needs_vue = name.starts_with('@')
-                || name.starts_with(':')
-                || name.starts_with("$c-")
-                || name == "ref"
-                || vue_directive_name(name).is_some();
-            if needs_vue {
-                return Some(IgnoredContentProblem::Binding {
-                    attr,
-                    owner: &child.start_tag().name,
-                });
+            for attr in child.attrs() {
+                if attr.kind == HtmlAttrKind::Meta {
+                    continue;
+                }
+                let name = attr.key.content.as_str();
+                // `@event`, `:attr`, `v-*`, `#slot`, `.prop`, the `$c-*` browser
+                // bindings, and `ref` all need Vue to read the element.
+                let needs_vue = name.starts_with('@')
+                    || name.starts_with(':')
+                    || name.starts_with("$c-")
+                    || name == "ref"
+                    || vue_directive_name(name).is_some();
+                if needs_vue {
+                    return Some(IgnoredContentProblem::Binding {
+                        attr,
+                        owner: &child.start_tag().name,
+                    });
+                }
+            }
+            if let Node::WithBody { body, .. } = child {
+                if let Some(problem) = find_ignored_content_problem(body) {
+                    return Some(problem);
+                }
             }
         }
-        if let Node::WithBody { body, .. } = child {
-            if let Some(problem) = find_ignored_content_problem(body) {
-                return Some(problem);
-            }
-        }
-    }
-    None
+        None
+    })
 }
 
 /// Validate semantic attribute values whose contracts are narrower than the
@@ -3431,40 +3442,43 @@ fn validate_fill_exclusivity(
 /// This is used to validate that control flow siblings of `<c-fill>` don't smuggle in
 /// non-fill content like `<div>` or components.
 fn _contains_only_fills_and_control_flow(template: &Template) -> bool {
-    for element in &template.elements {
-        match element {
-            TemplateElement::Text(text) => {
-                // Whitespace-only text is allowed (formatting/indentation)
-                if !text.token.content.trim().is_empty() {
+    // This check calls itself once per level of control flow.
+    crate::stack::with_enough_stack(|| {
+        for element in &template.elements {
+            match element {
+                TemplateElement::Text(text) => {
+                    // Whitespace-only text is allowed (formatting/indentation)
+                    if !text.token.content.trim().is_empty() {
+                        return false;
+                    }
+                }
+                TemplateElement::Expr(_) => {
+                    // Expressions are not allowed in fill-only context
                     return false;
                 }
-            }
-            TemplateElement::Expr(_) => {
-                // Expressions are not allowed in fill-only context
-                return false;
-            }
-            TemplateElement::Foreign(_) => return false,
-            TemplateElement::Node(node) => {
-                let tag_name = node.tag_name();
-                if tag_name == C_FILL_TAG {
-                    // <c-fill> is always OK
-                    continue;
-                } else if CONTROL_FLOW_TAGS.contains(tag_name) {
-                    // Control flow tag: recursively check its body
-                    if let Node::WithBody { body, .. } = node {
-                        if !_contains_only_fills_and_control_flow(body) {
-                            return false;
+                TemplateElement::Foreign(_) => return false,
+                TemplateElement::Node(node) => {
+                    let tag_name = node.tag_name();
+                    if tag_name == C_FILL_TAG {
+                        // <c-fill> is always OK
+                        continue;
+                    } else if CONTROL_FLOW_TAGS.contains(tag_name) {
+                        // Control flow tag: recursively check its body
+                        if let Node::WithBody { body, .. } = node {
+                            if !_contains_only_fills_and_control_flow(body) {
+                                return false;
+                            }
                         }
+                        // Self-closing control flow is fine (empty body)
+                    } else {
+                        // Any other tag (HTML, component, etc.) is not allowed
+                        return false;
                     }
-                    // Self-closing control flow is fine (empty body)
-                } else {
-                    // Any other tag (HTML, component, etc.) is not allowed
-                    return false;
                 }
             }
         }
-    }
-    true
+        true
+    })
 }
 
 /// Validate that a component body holding `<c-fill>` tags contains nothing else.
@@ -3486,61 +3500,64 @@ fn validate_fill_group_content(
     template: &Template,
     context: &ParserContext,
 ) -> Result<(), ParseError> {
-    for element in &template.elements {
-        match element {
-            TemplateElement::Text(text) => {
-                if !text.token.content.trim().is_empty() {
-                    return Err(context.error_from_token(
-                        &text.token,
-                        "Text cannot appear next to '<c-fill>' tags. When a component body \
-                        contains '<c-fill>' tags, all other content must be inside the fills \
-                        (whitespace-only text is allowed for formatting)."
-                            .to_string(),
-                    ));
-                }
-            }
-            TemplateElement::Expr(expr) => {
-                return Err(context.error_from_token(
-                    &expr.token,
-                    "Expression cannot appear next to '<c-fill>' tags. When a component body \
-                    contains '<c-fill>' tags, all other content must be inside the fills."
-                        .to_string(),
-                ));
-            }
-            TemplateElement::Foreign(part) => {
-                if !part.may_control_body {
-                    return Err(context.error_from_token(
-                        &part.token,
-                        "Non-controlling foreign content cannot appear next to '<c-fill>' tags. The provider must mark host control-flow claims and implement fill collection."
-                            .to_string(),
-                    ));
-                }
-            }
-            TemplateElement::Node(node) => {
-                let tag_name = node.tag_name();
-                if tag_name == C_FILL_TAG {
-                    // A fill's body IS the slot content - don't descend.
-                    continue;
-                } else if CONTROL_FLOW_TAGS.contains(tag_name) {
-                    // Control flow may hold nested fills; its body must satisfy
-                    // the same rule.
-                    if let Node::WithBody { body, .. } = node {
-                        validate_fill_group_content(body, context)?;
+    // This check calls itself once per level of control flow.
+    crate::stack::with_enough_stack(|| {
+        for element in &template.elements {
+            match element {
+                TemplateElement::Text(text) => {
+                    if !text.token.content.trim().is_empty() {
+                        return Err(context.error_from_token(
+                            &text.token,
+                            "Text cannot appear next to '<c-fill>' tags. When a component body \
+                            contains '<c-fill>' tags, all other content must be inside the fills \
+                            (whitespace-only text is allowed for formatting)."
+                                .to_string(),
+                        ));
                     }
-                } else {
+                }
+                TemplateElement::Expr(expr) => {
                     return Err(context.error_from_token(
-                        &node.start_tag().token,
-                        format!(
-                            "Tag '<{}>' cannot appear next to '<c-fill>' tags. When a component \
-                            body contains '<c-fill>' tags, all other content must be inside the fills.",
-                            tag_name
-                        ),
+                        &expr.token,
+                        "Expression cannot appear next to '<c-fill>' tags. When a component body \
+                        contains '<c-fill>' tags, all other content must be inside the fills."
+                            .to_string(),
                     ));
+                }
+                TemplateElement::Foreign(part) => {
+                    if !part.may_control_body {
+                        return Err(context.error_from_token(
+                            &part.token,
+                            "Non-controlling foreign content cannot appear next to '<c-fill>' tags. The provider must mark host control-flow claims and implement fill collection."
+                                .to_string(),
+                        ));
+                    }
+                }
+                TemplateElement::Node(node) => {
+                    let tag_name = node.tag_name();
+                    if tag_name == C_FILL_TAG {
+                        // A fill's body IS the slot content - don't descend.
+                        continue;
+                    } else if CONTROL_FLOW_TAGS.contains(tag_name) {
+                        // Control flow may hold nested fills; its body must satisfy
+                        // the same rule.
+                        if let Node::WithBody { body, .. } = node {
+                            validate_fill_group_content(body, context)?;
+                        }
+                    } else {
+                        return Err(context.error_from_token(
+                            &node.start_tag().token,
+                            format!(
+                                "Tag '<{}>' cannot appear next to '<c-fill>' tags. When a component \
+                                body contains '<c-fill>' tags, all other content must be inside the fills.",
+                                tag_name
+                            ),
+                        ));
+                    }
                 }
             }
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Recompute a template's free-variable metadata from the completed tree.
@@ -3553,19 +3570,22 @@ fn validate_fill_group_content(
 /// - on a shorthand `c-for` host, control-flow attributes are outside the loop
 ///   while ordinary/meta/template attributes and the body are inside it.
 fn recompute_template_used_variables(template: &mut Template) -> Vec<Token> {
-    let mut used_variables = Vec::new();
-    for element in &mut template.elements {
-        match element {
-            TemplateElement::Expr(expr) => used_variables.extend(expr.used_variables.clone()),
-            TemplateElement::Node(node) => {
-                used_variables.extend(recompute_node_used_variables(node));
+    // This pass calls itself once per nesting level of the tree.
+    crate::stack::with_enough_stack(|| {
+        let mut used_variables = Vec::new();
+        for element in &mut template.elements {
+            match element {
+                TemplateElement::Expr(expr) => used_variables.extend(expr.used_variables.clone()),
+                TemplateElement::Node(node) => {
+                    used_variables.extend(recompute_node_used_variables(node));
+                }
+                TemplateElement::Text(_) => {}
+                TemplateElement::Foreign(_) => {}
             }
-            TemplateElement::Text(_) => {}
-            TemplateElement::Foreign(_) => {}
         }
-    }
-    template.used_variables = used_variables.clone();
-    used_variables
+        template.used_variables = used_variables.clone();
+        used_variables
+    })
 }
 
 fn recompute_node_used_variables(node: &mut Node) -> Vec<Token> {
@@ -3660,20 +3680,23 @@ fn is_control_flow_attribute(attr_name: &str) -> bool {
 /// Collect all statically known loop/fill declarations in a template,
 /// including declarations nested inside template-valued attributes.
 fn collect_template_binding_tokens(template: &Template, context: &ParserContext) -> Vec<Token> {
-    let mut bindings = Vec::new();
-    for element in &template.elements {
-        let TemplateElement::Node(node) = element else {
-            continue;
-        };
-        bindings.extend(node.introduced_variables().clone());
-        for attr in node.attrs() {
-            bindings.extend(context.nested_template_bindings(&attr.token));
+    // This pass calls itself once per nesting level of the tree.
+    crate::stack::with_enough_stack(|| {
+        let mut bindings = Vec::new();
+        for element in &template.elements {
+            let TemplateElement::Node(node) = element else {
+                continue;
+            };
+            bindings.extend(node.introduced_variables().clone());
+            for attr in node.attrs() {
+                bindings.extend(context.nested_template_bindings(&attr.token));
+            }
+            if let Node::WithBody { body, .. } = node {
+                bindings.extend(collect_template_binding_tokens(body, context));
+            }
         }
-        if let Node::WithBody { body, .. } = node {
-            bindings.extend(collect_template_binding_tokens(body, context));
-        }
-    }
-    bindings
+        bindings
+    })
 }
 
 /// Validate loop/fill declarations against the complete lexical context.
@@ -3695,57 +3718,60 @@ fn validate_template_bindings(
     active_bindings: &[String],
     context: &ParserContext,
 ) -> Result<(), ParseError> {
-    for element in &template.elements {
-        let TemplateElement::Node(node) = element else {
-            continue;
-        };
-
-        let tag_name = node.tag_name();
-        let bindings = node.introduced_variables();
-        validate_binding_site(
-            bindings,
-            root_free_names,
-            active_bindings,
-            &format!("tag '<{}>'", tag_name),
-            context,
-        )?;
-
-        let is_shorthand_for = tag_name != C_FOR_TAG
-            && tag_name != C_FILL_TAG
-            && !bindings.is_empty()
-            && node
-                .attrs()
-                .iter()
-                .any(|attr| attr.key.content == C_FOR_TAG);
-        let mut body_bindings = active_bindings.to_vec();
-        body_bindings.extend(
-            bindings
-                .iter()
-                .map(|token| canonical_identifier(&token.content)),
-        );
-
-        for attr in node.attrs() {
-            let nested_bindings = context.nested_template_bindings(&attr.token);
-            let nested_active = if is_shorthand_for && !is_control_flow_attribute(&attr.key.content)
-            {
-                body_bindings.as_slice()
-            } else {
-                active_bindings
+    // This pass calls itself once per nesting level of the tree.
+    crate::stack::with_enough_stack(|| {
+        for element in &template.elements {
+            let TemplateElement::Node(node) = element else {
+                continue;
             };
-            validate_bindings_against_outer_scope(
-                &nested_bindings,
+
+            let tag_name = node.tag_name();
+            let bindings = node.introduced_variables();
+            validate_binding_site(
+                bindings,
                 root_free_names,
-                nested_active,
-                "nested template attribute",
+                active_bindings,
+                &format!("tag '<{}>'", tag_name),
                 context,
             )?;
-        }
 
-        if let Node::WithBody { body, .. } = node {
-            validate_template_bindings(body, root_free_names, &body_bindings, context)?;
+            let is_shorthand_for = tag_name != C_FOR_TAG
+                && tag_name != C_FILL_TAG
+                && !bindings.is_empty()
+                && node
+                    .attrs()
+                    .iter()
+                    .any(|attr| attr.key.content == C_FOR_TAG);
+            let mut body_bindings = active_bindings.to_vec();
+            body_bindings.extend(
+                bindings
+                    .iter()
+                    .map(|token| canonical_identifier(&token.content)),
+            );
+
+            for attr in node.attrs() {
+                let nested_bindings = context.nested_template_bindings(&attr.token);
+                let nested_active =
+                    if is_shorthand_for && !is_control_flow_attribute(&attr.key.content) {
+                        body_bindings.as_slice()
+                    } else {
+                        active_bindings
+                    };
+                validate_bindings_against_outer_scope(
+                    &nested_bindings,
+                    root_free_names,
+                    nested_active,
+                    "nested template attribute",
+                    context,
+                )?;
+            }
+
+            if let Node::WithBody { body, .. } = node {
+                validate_template_bindings(body, root_free_names, &body_bindings, context)?;
+            }
         }
-    }
-    Ok(())
+        Ok(())
+    })
 }
 
 /// Nested templates validate their own lexical structure while they are parsed.
@@ -4976,60 +5002,63 @@ fn extract_fill_nodes(
     inside_control_flow: bool,
     inside_foreign_control: bool,
 ) -> Vec<FillNodeInfo<'_>> {
-    let mut fill_nodes = Vec::new();
-    let body_has_foreign_control = inside_foreign_control
-        || template.elements.iter().any(
-            |element| matches!(element, TemplateElement::Foreign(part) if part.may_control_body),
-        );
+    // This pass calls itself once per level of control flow around a fill.
+    crate::stack::with_enough_stack(|| {
+        let mut fill_nodes = Vec::new();
+        let body_has_foreign_control = inside_foreign_control
+            || template.elements.iter().any(
+                |element| matches!(element, TemplateElement::Foreign(part) if part.may_control_body),
+            );
 
-    for element in &template.elements {
-        match element {
-            TemplateElement::Node(node) => {
-                let tag_name = node.tag_name();
-                if tag_name == C_FILL_TAG {
-                    fill_nodes.push(FillNodeInfo {
-                        node,
-                        inside_for_loop,
-                        inside_control_flow: inside_control_flow || body_has_foreign_control,
-                        inside_foreign_control: body_has_foreign_control,
-                    });
-                } else if CONTROL_FLOW_TAGS.contains(&tag_name) {
-                    // Recursively search inside control flow nodes.
-                    // Only `<c-for>` sets inside_for_loop to true.
-                    // `<c-empty>` does NOT - it renders at most once.
-                    // ALL control flow tags set inside_control_flow to true.
-                    if let Node::WithBody { body, .. } = node {
-                        let nested_inside_for = inside_for_loop || tag_name == C_FOR_TAG;
-                        fill_nodes.extend(extract_fill_nodes(
-                            body,
-                            nested_inside_for,
-                            true,
-                            body_has_foreign_control,
-                        ));
+        for element in &template.elements {
+            match element {
+                TemplateElement::Node(node) => {
+                    let tag_name = node.tag_name();
+                    if tag_name == C_FILL_TAG {
+                        fill_nodes.push(FillNodeInfo {
+                            node,
+                            inside_for_loop,
+                            inside_control_flow: inside_control_flow || body_has_foreign_control,
+                            inside_foreign_control: body_has_foreign_control,
+                        });
+                    } else if CONTROL_FLOW_TAGS.contains(&tag_name) {
+                        // Recursively search inside control flow nodes.
+                        // Only `<c-for>` sets inside_for_loop to true.
+                        // `<c-empty>` does NOT - it renders at most once.
+                        // ALL control flow tags set inside_control_flow to true.
+                        if let Node::WithBody { body, .. } = node {
+                            let nested_inside_for = inside_for_loop || tag_name == C_FOR_TAG;
+                            fill_nodes.extend(extract_fill_nodes(
+                                body,
+                                nested_inside_for,
+                                true,
+                                body_has_foreign_control,
+                            ));
+                        }
+                    } else {
+                        // NOTE: When we come across nested components or regular HTML tags,
+                        // we stop the search and don't go deeper, as these are already part of the content itself,
+                        // not content delimiters. So when we see a nested component or regular HTML tag,
+                        // we can assume that what's inside the component is an implicit "default" slot.
+                        //
+                        // Of course, it could happen that there'd be both content-like tags and <c-fill> tags, e.g.
+                        // ```html
+                        // <c-my-comp>
+                        //   <div>Hello</div>
+                        //   <c-fill name="footer"> </c-fill>
+                        // </c-my-comp>
+                        // ```
+                        // This would be invalid, and we check for it in `validate_fill_exclusivity()`.
                     }
-                } else {
-                    // NOTE: When we come across nested components or regular HTML tags,
-                    // we stop the search and don't go deeper, as these are already part of the content itself,
-                    // not content delimiters. So when we see a nested component or regular HTML tag,
-                    // we can assume that what's inside the component is an implicit "default" slot.
-                    //
-                    // Of course, it could happen that there'd be both content-like tags and <c-fill> tags, e.g.
-                    // ```html
-                    // <c-my-comp>
-                    //   <div>Hello</div>
-                    //   <c-fill name="footer"> </c-fill>
-                    // </c-my-comp>
-                    // ```
-                    // This would be invalid, and we check for it in `validate_fill_exclusivity()`.
+                }
+                _ => {
+                    // Text and Expr don't contain nodes
                 }
             }
-            _ => {
-                // Text and Expr don't contain nodes
-            }
         }
-    }
 
-    fill_nodes
+        fill_nodes
+    })
 }
 
 /// Whether a tag is a component whose `<c-fill>` children fill its slots.

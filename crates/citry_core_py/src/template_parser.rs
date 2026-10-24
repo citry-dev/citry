@@ -122,17 +122,24 @@ pub fn parse_template(
 /// - ValueError: If compilation fails or an unknown language is specified.
 #[pyfunction]
 #[pyo3(signature = (template, lang=None))]
-pub fn compile_template(template: Template, lang: Option<&str>) -> PyResult<String> {
+pub fn compile_template(template: PyRef<'_, Template>, lang: Option<&str>) -> PyResult<String> {
     let lang_enum = lang_from_str(lang)?;
-    compile_template_rust(template, lang_enum).map_err(compile_error_to_py)
+    // The template is borrowed rather than taken by value, so PyO3 does not
+    // clone the whole tree while it converts the argument. The clone here
+    // runs through the parser's stack guard.
+    compile_template_rust((*template).clone(), lang_enum).map_err(compile_error_to_py)
 }
 
 /// Compile a parsed template into the private Python prepared-render node form.
 #[pyfunction(name = "_compile_prepared_template")]
 #[pyo3(signature = (template, lang=None))]
-pub fn compile_prepared_template(template: Template, lang: Option<&str>) -> PyResult<String> {
+pub fn compile_prepared_template(
+    template: PyRef<'_, Template>,
+    lang: Option<&str>,
+) -> PyResult<String> {
     let lang_enum = lang_from_str(lang)?;
-    compile_prepared_template_rust(template, lang_enum).map_err(compile_error_to_py)
+    // Borrowed for the same reason as in `compile_template`.
+    compile_prepared_template_rust((*template).clone(), lang_enum).map_err(compile_error_to_py)
 }
 
 /// Parse one browser expression or listener statement.
