@@ -785,23 +785,28 @@ def test_data_method_signatures_use_component_specific_input_types():
         assert signature.parameters["slots"].default is inspect.Parameter.empty
 
 
-def test_installed_components_skip_the_general_input_type_check():
-    # Citry UI checks its public inputs itself with errors that list the
-    # accepted values, and accepts values its annotations do not name, so
-    # every installed class must have Citry's general check off.
+def test_internal_components_keep_the_general_input_type_check():
+    # Internal components get their inputs only from Citry UI's own
+    # templates, so Citry's general check catches Citry UI's own mistakes
+    # there, and none of them turns it off.
     app = Citry(autodiscover=False)
     installation = app.register_library(citry_ui)
-    checked = [
-        definition.__name__
-        for definition in installation.definitions
-        if installation[definition]._citry_input_types is not False
-    ]
-    assert checked == []
+    internal = [definition for definition in installation.definitions if definition.__name__.startswith("CInternal")]
+    assert internal
+    assert [d.__name__ for d in internal if installation[d]._citry_input_types is False] == []
+
+
+def test_public_components_keep_their_own_input_checks():
+    # Public components check their inputs themselves, and CDisclosure accepts
+    # `heading_level="2"`, which its int Literal annotation does not name, so
+    # it keeps Citry's general check off.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    disclosure = next(installation[d] for d in installation.definitions if d.__name__ == "CDisclosure")
+    assert disclosure._citry_input_types is False
 
     class Page(Component):
         citry = app
-        # A plain attribute passes text, which the heading_level annotation
-        # (an int Literal) does not name.
         template = """
           <c-CDisclosure heading_level="2">
             <c-fill name="title">Title</c-fill>

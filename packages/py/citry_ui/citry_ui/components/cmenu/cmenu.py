@@ -5438,10 +5438,6 @@ class CInternalMenuSurface(LibraryComponent):
     class Slots:
         default: SlotInput[object]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     template = """
       <div
         class="cui-menu"
@@ -5484,10 +5480,6 @@ class CInternalMenuCollection(LibraryComponent):
     class Slots:
         default: SlotInput[object]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -5513,10 +5505,6 @@ class CInternalMenuContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[object]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,

@@ -887,10 +887,6 @@ class CInternalTab(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(
         self,
         kwargs: Kwargs,
@@ -957,10 +953,6 @@ class CInternalTabPanel(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(
         self,
         kwargs: Kwargs,
@@ -1018,10 +1010,6 @@ class CInternalTabsDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTabsDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         # This component runs before CInternalTabs in the parent's deferred
         # queue. It keeps the otherwise-empty declaration ranges alive as the
@@ -1055,10 +1043,6 @@ class CInternalTabs(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,

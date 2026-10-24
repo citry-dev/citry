@@ -1554,10 +1554,6 @@ class CInternalAccordionItems(LibraryComponent):
     class Slots:
         default: SlotInput[CAccordionDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -1583,10 +1579,6 @@ class CInternalAccordionPanelContent(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CAccordionItemDefaultSlotData]
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(
         self,

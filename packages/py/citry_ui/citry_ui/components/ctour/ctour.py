@@ -462,10 +462,6 @@ class CInternalTourDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CTourDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -500,10 +496,6 @@ class CInternalTour(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if not kwargs.registry.steps:
@@ -646,10 +638,6 @@ class CInternalTourStep(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item
