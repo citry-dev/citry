@@ -441,9 +441,9 @@ pub fn slot(tok: Token, required: Option<bool>) -> StaticNamedSlot {
 
 /// Helper function to parse a template and return the first node.
 pub fn parse_first_node(input: &str) -> Result<Node, ParseError> {
-    let template = parse_template(input, None, None)?;
+    let mut template = parse_template(input, None, None)?;
 
-    for element in template.elements {
+    for element in std::mem::take(&mut template.elements) {
         if let TemplateElement::Node(node) = element {
             return Ok(node);
         }
