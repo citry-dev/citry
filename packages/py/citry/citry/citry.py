@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from types import ModuleType  # noqa: TC003 - required by register_library's public runtime annotation
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 from weakref import WeakKeyDictionary, WeakValueDictionary, ref
 
 from citry._class_introspection import _static_class_dict
@@ -67,6 +67,7 @@ from citry.component_registry import (
 from citry.constness import ConstBodyCache
 from citry.extension import ExtensionManager
 from citry.introspection import _new_engine_id
+from citry.lifecycle import no_setup_wait
 from citry.settings import (
     DEFAULT_MAX_COMPONENT_DEPTH,
     DEFAULT_VUE_ASSET_MAX_BYTES,
@@ -81,6 +82,7 @@ from citry.util.routing import normalize_mount_prefix
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator
+    from contextlib import AbstractContextManager
     from types import FrameType
     from weakref import ReferenceType
 
@@ -99,6 +101,12 @@ if TYPE_CHECKING:
     )
     from citry.util.routing import URLRoute
     from citry_core.template_parser import TagRules
+
+_LoadedT = TypeVar("_LoadedT")
+_StoredT = TypeVar("_StoredT")
+# How many times `Citry._load_and_store` loads a value when resets keep
+# arriving while it loads.
+_LOAD_ATTEMPTS = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,14 +265,23 @@ class Citry:
         # Const values; old entries are dropped when the cache is full.
         # See citry/constness.py.
         self._const_body_cache = ConstBodyCache()
-        # Primary component templates are published lazily on the component
-        # class. Keep the cache check, source hooks, and publication atomic so
-        # concurrent first renders cannot compile different CitryTemplate
-        # records for the same class.
+        # Citry stores each class's template, JS, CSS and merged Dependencies
+        # on the class the first time they are needed (see
+        # `_load_and_store`). A load reads and runs the `on_*_loaded` hooks
+        # with no lock held, then takes this lock only to store the result,
+        # so a hook may render or wait for other threads. Resets hold it while
+        # they clear the stored values and move `_asset_revision`.
         self._template_source_lock = threading.RLock()
+        # Moves on every `reset_template()` and `reset_files()`. A load that
+        # saw it move while it ran loads again, so it cannot store what it
+        # read before the reset.
+        self._asset_revision = 0
         self._template_root_class: type[Component] | None = None
         self._standalone_template_cache: OrderedDict[tuple[object, ...], CitryTemplate] = OrderedDict()
         self._standalone_template_lock = threading.RLock()
+        # Moves each time the standalone template cache is cleared (see
+        # `_clear_standalone_template_cache`).
+        self._standalone_template_revision = 0
         self._standalone_template_cache_capacity = 128
 
         # Final, extension-processed message source keyed by the class that
@@ -277,12 +294,20 @@ class Citry:
         # later requests can still use the last valid source and catalog.
         self._messages_reload_fallbacks: WeakKeyDictionary[type, tuple[str | None, str | None]] = WeakKeyDictionary()
         self._messages_source_lock = threading.RLock()
-        self._messages_sources_loading: set[type] = set()
+        # The source units each thread is loading, so a messages hook that
+        # loads the same messages again on its own thread fails clearly
+        # instead of recursing. Two threads may load one source at once.
+        self._messages_sources_loading: set[tuple[type, int]] = set()
 
         # Parse-time validation rules derived from the registered components'
         # Kwargs/Slots declarations (see citry/tag_rules.py). Built on first
         # template parse; invalidated whenever the registry changes.
         self._tag_rules_cache: dict[str, TagRules] | None = None
+        # Guards storing and dropping the rules; building them runs with no
+        # lock held (see `_tag_rules`). The counter moves on every drop, so
+        # a build that saw it move builds again.
+        self._tag_rules_lock = threading.Lock()
+        self._tag_rules_revision = 0
 
         # File-to-component reverse index: absolute file path -> weakrefs to the
         # component classes whose assets resolved to that file. This is what
@@ -397,7 +422,7 @@ class Citry:
         with self._registry._lifecycle.read("read standalone template root"):
             root_class = self._template_root_class if self._registry_ready() else None
         if root_class is None:
-            with self._registry._lifecycle.operation("standalone template root initialization"):
+            with self._registry._lifecycle.operation("standalone template root initialization", setup=True):
                 self._ensure_registry_ready()
                 root_class = self._template_root_class
         if root_class is None:
@@ -406,23 +431,41 @@ class Citry:
         cache_key: tuple[object, ...] = (source, origin, tuple(fingerprints))
         with self._standalone_template_lock:
             cached = self._standalone_template_cache.get(cache_key)
-            if cached is None:
-                template = CitryTemplate(source=source, origin=origin, kind="standalone")
-                template.source = self.extensions.on_template_loaded(
-                    root_class,
-                    source,
-                    template_id=template.template_id,
-                    origin=origin,
-                    template_kind=template.kind,
-                )
-                template.foreign_compile_contexts = contexts
-                self._standalone_template_cache[cache_key] = template
+            if cached is not None:
                 self._standalone_template_cache.move_to_end(cache_key)
-                while len(self._standalone_template_cache) > self._standalone_template_cache_capacity:
-                    self._standalone_template_cache.popitem(last=False)
-            else:
-                template = cached
-                self._standalone_template_cache.move_to_end(cache_key)
+
+        def load() -> CitryTemplate:
+            # The `on_template_loaded` hooks run with no lock held.
+            built = CitryTemplate(source=source, origin=origin, kind="standalone")
+            built.source = self.extensions.on_template_loaded(
+                root_class,
+                source,
+                template_id=built.template_id,
+                origin=origin,
+                template_kind=built.kind,
+            )
+            built.foreign_compile_contexts = contexts
+            return built
+
+        def store(built: CitryTemplate) -> CitryTemplate:
+            # Keep the template another thread stored first, so renders of
+            # one source share one compiled form.
+            kept = self._standalone_template_cache.setdefault(cache_key, built)
+            self._standalone_template_cache.move_to_end(cache_key)
+            while len(self._standalone_template_cache) > self._standalone_template_cache_capacity:
+                self._standalone_template_cache.popitem(last=False)
+            return kept
+
+        template = (
+            cached
+            if cached is not None
+            else self._load_and_store(
+                load,
+                store,
+                self._standalone_template_lock,
+                lambda: self._standalone_template_revision,
+            )
+        )
 
         element = _TemplateElement(
             root_class,
@@ -505,7 +548,9 @@ class Citry:
         self._registry._restore_state(state.registry)
         self._classes_by_id.clear()
         self._classes_by_id.update(state.classes_by_id)
-        self._tag_rules_cache = state.tag_rules_cache
+        with self._tag_rules_lock:
+            self._tag_rules_revision += 1
+            self._tag_rules_cache = state.tag_rules_cache
         self._discovered = state.discovered
         self._library_installations.clear()
         self._library_installations.update(state.library_installations)
@@ -909,7 +954,7 @@ class Citry:
             if restored_dependency_classes:
                 self._merge_component_file_index(failed_state.file_index, restored_dependency_classes)
             if restored_dependency_changed:
-                self._tag_rules_cache = None
+                self._invalidate_tag_rules()
             raise
         finally:
             self._registration_journal = previous_journal
@@ -1002,7 +1047,7 @@ class Citry:
                     for registered_name in names_added
                 )
             self._classes_by_id[comp_cls.class_id] = comp_cls
-            self._tag_rules_cache = None
+            self._invalidate_tag_rules()
             registered_name = name or getattr(comp_cls, "name", None) or comp_cls.__name__
             self.extensions.on_component_registered(registered_name, comp_cls)
             self._clear_standalone_template_cache()
@@ -1096,7 +1141,7 @@ class Citry:
                 # release the class ID so a replacement class can claim it.
                 if not self._registry._has_class(comp_cls) and self._classes_by_id.get(comp_cls.class_id) is comp_cls:
                     self._classes_by_id.pop(comp_cls.class_id, None)
-                self._tag_rules_cache = None
+                self._invalidate_tag_rules()
                 self.extensions.on_component_unregistered(removed_name, comp_cls)
                 # A component can remain registered under another alias, and a
                 # hook may change that answer. Retire its render bodies only
@@ -1142,12 +1187,17 @@ class Citry:
         normalized = _normalize_name(name)
         lifecycle = self._registry._lifecycle
         # The same check as `lifecycle.read()`, written inline because every
-        # template component call runs it.
-        with lifecycle._state_lock:
-            lifecycle.check_read("look up a component")
-            if self._registry_ready():
-                return self._registry._get(normalized)
-        with self._registry._lifecycle.operation("component discovery and registry initialization"):
+        # template component call runs it. While another thread runs the
+        # one-time setup, wait for it with no lock held and check again.
+        while True:
+            with lifecycle._state_lock:
+                waiter = lifecycle.check_read("look up a component")
+                if waiter is None:
+                    if self._registry_ready():
+                        return self._registry._get(normalized)
+                    break
+            lifecycle.wait_for_setup(waiter, "look up a component")
+        with self._registry._lifecycle.operation("component discovery and registry initialization", setup=True):
             self._ensure_registry_ready()
             with self._registry._lifecycle.read("look up a component"):
                 return self._registry._get(normalized)
@@ -1171,7 +1221,7 @@ class Citry:
         with self._registry._lifecycle.read("check component registration"):
             if self._registry_ready():
                 return self._registry._has(normalized)
-        with self._registry._lifecycle.operation("component discovery and registry initialization"):
+        with self._registry._lifecycle.operation("component discovery and registry initialization", setup=True):
             self._ensure_registry_ready()
             with self._registry._lifecycle.read("check component registration"):
                 return self._registry._has(normalized)
@@ -1189,7 +1239,7 @@ class Citry:
         with self._registry._lifecycle.read("read registered components"):
             if self._registry_ready():
                 return self._registry._all()
-        with self._registry._lifecycle.operation("component discovery and registry initialization"):
+        with self._registry._lifecycle.operation("component discovery and registry initialization", setup=True):
             self._ensure_registry_ready()
             with self._registry._lifecycle.read("read registered components"):
                 return self._registry._all()
@@ -1563,14 +1613,18 @@ class Citry:
         """
         lifecycle = self._registry._lifecycle
         # The same check as `lifecycle.read()`, written inline because rendering
-        # runs it several times per component.
-        with lifecycle._state_lock:
-            lifecycle.check_read("look up a component class ID")
-            comp_cls = self._classes_by_id.get(class_id)
-            if comp_cls is None:
-                msg = f"No component class with class_id {class_id!r} is registered with this Citry instance"
-                raise KeyError(msg)
-            return comp_cls
+        # runs it several times per component. While another thread runs the
+        # one-time setup, wait for it with no lock held and check again.
+        while True:
+            with lifecycle._state_lock:
+                waiter = lifecycle.check_read("look up a component class ID")
+                if waiter is None:
+                    comp_cls = self._classes_by_id.get(class_id)
+                    if comp_cls is None:
+                        msg = f"No component class with class_id {class_id!r} is registered with this Citry instance"
+                        raise KeyError(msg)
+                    return comp_cls
+            lifecycle.wait_for_setup(waiter, "look up a component class ID")
 
     @staticmethod
     def _build_cache(spec: CitryCache | str | None) -> CitryCache:
@@ -1688,10 +1742,43 @@ class Citry:
         registered or unregistered.
         """
         with self._registry._lifecycle.read("read tag rules"):
-            if self._registry_ready() and self._tag_rules_cache is not None:
+            ready = self._registry_ready()
+            if ready and self._tag_rules_cache is not None:
                 return self._tag_rules_cache
-        with self._registry._lifecycle.operation("tag-rule construction"):
-            return self._ensure_tag_rules()
+        if not ready:
+            # Discovery and built-ins must finish first: build_tag_rules reads
+            # the whole registry, so rules built from a partial set would make
+            # later template validation depend on thread timing. This is the
+            # one-time setup, which other threads wait for.
+            with self._registry._lifecycle.operation("component discovery and registry initialization", setup=True):
+                self._ensure_registry_ready()
+        # The rules read the components' Kwargs and Slots annotations, so
+        # each thread builds them with no lock held and the first one stored
+        # is kept. A registration during the build moves the counter, and the
+        # build runs again. Rules from a build that saw the counter move are
+        # never stored: unlike a reset, nothing would replace them later.
+        for _attempt in range(_LOAD_ATTEMPTS):
+            started = self._tag_rules_revision
+            rules = build_tag_rules(self)
+            with self._tag_rules_lock:
+                if self._tag_rules_revision == started:
+                    return self._store_tag_rules(rules)
+        # Registrations kept arriving: this parse uses the last rules, and
+        # the next one builds them again.
+        return rules
+
+    def _store_tag_rules(self, rules: dict[str, TagRules]) -> dict[str, TagRules]:
+        """Keep rules another thread stored first, or store ``rules``; the caller holds ``_tag_rules_lock``."""
+        if self._tag_rules_cache is None:
+            self._tag_rules_cache = rules
+        return self._tag_rules_cache
+
+    def _invalidate_tag_rules(self) -> None:
+        """Drop the tag rules after the registry changed, so the next template parse builds them again."""
+        with self._tag_rules_lock:
+            # A build running now sees the counter move and builds again.
+            self._tag_rules_revision += 1
+            self._tag_rules_cache = None
 
     def _ensure_tag_rules(self) -> dict[str, TagRules]:
         """Build and publish complete tag rules while this thread owns the lifecycle."""
@@ -1699,9 +1786,53 @@ class Citry:
         # whole registry, so publishing from a partial set would make later
         # template validation depend on thread timing.
         self._ensure_registry_ready()
-        if self._tag_rules_cache is None:
-            self._tag_rules_cache = build_tag_rules(self)
-        return self._tag_rules_cache
+        with self._tag_rules_lock:
+            cached = self._tag_rules_cache
+        if cached is not None:
+            return cached
+        rules = build_tag_rules(self)
+        with self._tag_rules_lock:
+            return self._store_tag_rules(rules)
+
+    def _load_and_store(
+        self,
+        load: Callable[[], _LoadedT],
+        store: Callable[[_LoadedT], _StoredT],
+        lock: AbstractContextManager[object] | None = None,
+        revision: Callable[[], int] | None = None,
+    ) -> _StoredT:
+        """
+        Load a value Citry keeps after first use, then store the first one finished.
+
+        ``load`` reads the source and runs the extension hooks with no Citry
+        lock held, so a hook may render other components or wait for another
+        thread. ``store`` runs under ``lock`` (the template source lock by
+        default, which resets hold): it keeps a value another thread stored
+        first, or stores this one, and returns what the caller gets. Two threads
+        may therefore both run ``load``, and both get the same result.
+
+        When a reset moves the revision (``_asset_revision`` unless
+        ``revision`` reads another counter) while ``load`` runs, the value
+        may come from the old source, and a hook may have acted on it, so
+        the load runs again from the start; the hooks of the last run act on
+        the new source. After ``_LOAD_ATTEMPTS`` runs the last value is
+        stored anyway, so a stream of resets cannot stall a render.
+        """
+        guard = self._template_source_lock if lock is None else lock
+        current = (lambda: self._asset_revision) if revision is None else revision
+        for attempt in range(1, _LOAD_ATTEMPTS + 1):
+            started = current()
+            value = load()
+            with guard:
+                if current() != started and attempt < _LOAD_ATTEMPTS:
+                    continue
+                return store(value)
+        # The last attempt always returns from the loop.
+        raise AssertionError
+
+    def _bump_asset_revision(self) -> None:
+        """Mark a reset; the caller holds the lock that stores of the values it clears take."""
+        self._asset_revision += 1
 
     def _evict_component_cache(self, comp_cls: type[Component]) -> None:
         """Forget one component class's cached template work (see ``_const_body_cache``)."""
@@ -1801,7 +1932,12 @@ class Citry:
                 thread.
 
         """
-        with self._registry._lifecycle.operation("Citry.clear()", reentrant=False, blocks_nested=True):
+        # A hook that renders during the clear must not wait for another
+        # thread's one-time setup.
+        with (
+            no_setup_wait(),
+            self._registry._lifecycle.operation("Citry.clear()", reentrant=False, blocks_nested=True),
+        ):
             with self.extensions._render_cache_invalidation():
                 self._registry._clear()
                 self._const_body_cache.clear()
@@ -1814,7 +1950,7 @@ class Citry:
                 self._library_components.clear()
                 self._library_definition_identities.clear()
                 self._library_definitions_by_class.clear()
-                self._tag_rules_cache = None
+                self._invalidate_tag_rules()
                 self.extensions.on_citry_cleared()
                 # Re-arm autodiscovery: the next lookup re-runs the dirs scan and
                 # rebuilds the registry. Even though the modules are already
@@ -1834,6 +1970,11 @@ class Citry:
     def _clear_standalone_template_cache(self) -> None:
         """Discard sources compiled against an obsolete component registry."""
         with self._standalone_template_lock:
+            # A standalone load running now loads again rather than store a
+            # template from before the clear. Registration clears this cache,
+            # so it has its own counter: a component class defined on another
+            # thread does not make template, JS or CSS loads run again.
+            self._standalone_template_revision += 1
             self._standalone_template_cache.clear()
 
 

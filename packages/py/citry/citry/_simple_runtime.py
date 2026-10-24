@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from citry._input_types import _check_input_types
 from citry._pure import pure_body_lookup, store_pure_body
+from citry.assets import _TEMPLATE_CACHE
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender, DeferredComponent, _render_slot_value, _render_value
@@ -216,29 +217,35 @@ def _prepared_template(cls: type[Component]) -> tuple[CitryTemplate | None, list
         return cached
     if compiled is None or compiled.prepared_generate is None:
         return None, [], False
+    # The compiled-template hooks run with no lock held, so concurrent first
+    # renders may each run them; the lock only keeps the first result, so
+    # every render uses the same checked nodes.
+    extensions = cls.citry.extensions
+    body = extensions.on_template_foreign_compiled(
+        cls,
+        compiled.prepared_generate(),
+        provider_metadata=compiled.foreign_provider_metadata,
+        template_id=compiled.template_id,
+        origin=compiled.origin,
+        template_kind=compiled.kind,
+    )
+    body = extensions.on_template_compiled(
+        cls,
+        body,
+        template_id=compiled.template_id,
+        origin=compiled.origin,
+        template_kind=compiled.kind,
+    )
+    built = compiled, body, _validate_body(body, cls, compiled)
     with compiled.compile_lock:
         cached = cls.__dict__.get("_citry_simple_template")
         if cached is not None and cached[0] is compiled:
             return cached
-        extensions = cls.citry.extensions
-        body = extensions.on_template_foreign_compiled(
-            cls,
-            compiled.prepared_generate(),
-            provider_metadata=compiled.foreign_provider_metadata,
-            template_id=compiled.template_id,
-            origin=compiled.origin,
-            template_kind=compiled.kind,
-        )
-        body = extensions.on_template_compiled(
-            cls,
-            body,
-            template_id=compiled.template_id,
-            origin=compiled.origin,
-            template_kind=compiled.kind,
-        )
-        cached = compiled, body, _validate_body(body, cls, compiled)
-        cls._citry_simple_template = cached
-        return cached
+        # After a reset the class holds a newer template, whose own entry
+        # this one must not replace.
+        if cls.__dict__.get(_TEMPLATE_CACHE) is compiled:
+            cls._citry_simple_template = built
+        return built
 
 
 def render_simple(element: SimpleElement) -> SimpleRender:

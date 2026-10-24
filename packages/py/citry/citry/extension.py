@@ -39,6 +39,7 @@ from inspect import getattr_static
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol, cast
 from weakref import ReferenceType, WeakSet, ref
 
+from citry._class_introspection import _static_class_namespace_copy
 from citry._nested_declarations import (
     NestedClassDeclaration,
     _compose_nested_declaration_class,
@@ -868,7 +869,14 @@ class Extension:
         """Called after a Component class is unregistered."""
 
     def on_citry_cleared(self, ctx: OnCitryClearedContext) -> None:
-        """Called during ``Citry.clear()`` after its registry is empty."""
+        """
+        Called during ``Citry.clear()`` after its registry is empty.
+
+        Citry calls this hook in the middle of ``Citry.clear()``. Rendering
+        from it raises ``RuntimeError``. Do not make it wait for another
+        thread that renders: that thread can wait for the clear to finish,
+        so both can hang.
+        """
 
     # ----- Component render -----
 
@@ -1043,8 +1051,19 @@ class Extension:
 
     def on_template_loaded(self, ctx: OnTemplateLoadedContext) -> str | None:
         """
-        Called once per class with the template string before it is parsed.
+        Called with a class's template string before it is parsed.
         Return a new string to modify it.
+
+        Citry usually calls this hook once per class, the first time a render
+        needs the template. It can call it again for the same class: once per
+        thread when several threads load the class for the first time at once,
+        and up to three times on each thread when a component on the same
+        ``Citry`` instance is reset (by ``reset_template()``,
+        ``reset_files()``, or a hot reload) while the hook runs. Every render
+        gets the same result, so return the same text for the same input, and
+        make any side effect replace what an earlier call did instead of adding
+        to it. The hook runs with no Citry lock held, so it may render other
+        components.
 
         Raises:
             TypeError: Citry raises it when the hook returns a value that
@@ -1057,18 +1076,36 @@ class Extension:
         self,
         ctx: OnTemplateForeignSpansContext,
     ) -> ForeignSpanSet | None:
-        """Declare UTF-8 source ranges owned by this extension's host engine."""
+        """
+        Declare UTF-8 source ranges owned by this extension's host engine.
+
+        Citry runs this hook with no Citry lock held. When several threads
+        render a template for the first time at once, each may call it, and
+        every render gets the same result, so return the same ranges for
+        the same source.
+        """
 
     def on_messages_loaded(self, ctx: OnMessagesLoadedContext) -> str | None:
         """
-        Called once per source declaration with source-locale Fluent text
-        before compilation. A parent and children that inherit the same
-        messages share this one call.
+        Called with a source declaration's source-locale Fluent text before
+        compilation. A parent and children that inherit the same messages
+        share its result.
 
         Return a new string to replace the source. User extensions run in
         installation order. The built-in i18n extension always runs after
         those transformations, so it compiles the same final string the asset
         loader caches.
+
+        Citry usually calls this hook once per declaration, the first time a
+        render needs the messages. It can call it again for the same
+        declaration: once per thread when several threads load the messages for
+        the first time at once, and up to three times on each thread when a
+        component on the same ``Citry`` instance is reset (by
+        ``reset_template()``, ``reset_files()``, or a hot reload) while the
+        hook runs. Every render gets the same result, so return the same text
+        for the same input, and make any side effect replace what an earlier
+        call did instead of adding to it. The hook runs with no Citry lock
+        held, so it may render other components.
 
         Raises:
             TypeError: Citry raises it when the hook returns a value that
@@ -1079,8 +1116,20 @@ class Extension:
 
     def on_template_compiled(self, ctx: OnTemplateCompiledContext) -> list[BodyItem] | None:
         """
-        Called once per compiled body, with the generated node list. Mutate it
-        in place or return a new list.
+        Called with the node list Citry builds from a component's template,
+        before Citry keeps it for later renders. Citry builds one per template
+        and set of ``Const`` values. Mutate the list in place or return a new
+        list.
+
+        Citry usually calls this hook once per list. It can call it again for
+        the same list: once per thread when several threads render the template
+        for the first time at once, and up to three times on each thread when a
+        component on the same ``Citry`` instance is reset or unregistered, or
+        the instance is cleared, while Citry builds the list. Every render gets
+        the same result, so return the same nodes for the same input, and make
+        any side effect replace what an earlier call did instead of adding to
+        it. The hook runs with no Citry lock held, so it may render other
+        components.
 
         Raises:
             TypeError: Citry raises it when the hook returns a value that
@@ -1101,6 +1150,10 @@ class Extension:
         claim it handles. Core verifies the ledger before general compiled
         hooks run.
 
+        Like [`on_template_compiled`][citry.Extension.on_template_compiled],
+        this hook runs with no Citry lock held and can run more than once
+        for the same node list; every render gets the same result.
+
         Raises:
             TypeError: Citry raises it when the hook returns a value that
                 is not a sequence, such as a ``list``, or ``None``, before
@@ -1110,14 +1163,32 @@ class Extension:
         """
 
     def on_template_reset(self, ctx: OnTemplateResetContext) -> None:
-        """Called after a component class's loaded template is reset."""
+        """
+        Called after a component class's loaded template is reset.
+
+        Citry calls this hook in the middle of the reset. The hook may
+        render components on the same thread. Do not make it wait for
+        another thread that renders, such as by joining a thread or a
+        future: that thread waits for the reset to finish, so both can hang.
+        """
 
     # ----- JS / CSS -----
 
     def on_js_loaded(self, ctx: OnJsLoadedContext) -> str | None:
         """
-        Called once per class with the component's primary JS content (inline
-        or read from ``js_file``). Return a new string to modify it.
+        Called with the component's primary JS content (inline or read from
+        ``js_file``). Return a new string to modify it.
+
+        Citry usually calls this hook once per class, the first time a render
+        needs the JavaScript. It can call it again for the same class: once per
+        thread when several threads load the class for the first time at once,
+        and up to three times on each thread when a component on the same
+        ``Citry`` instance is reset (by ``reset_template()``,
+        ``reset_files()``, or a hot reload) while the hook runs. Every render
+        gets the same result, so return the same text for the same input, and
+        make any side effect replace what an earlier call did instead of adding
+        to it. The hook runs with no Citry lock held, so it may render other
+        components.
 
         Raises:
             TypeError: Citry raises it when the hook returns a value that
@@ -1128,8 +1199,18 @@ class Extension:
 
     def on_css_loaded(self, ctx: OnCssLoadedContext) -> str | None:
         """
-        Called once per class with the component's primary CSS content (inline
-        or read from ``css_file``). Return a new string to modify it.
+        Called with the component's primary CSS content (inline or read from
+        ``css_file``). Return a new string to modify it.
+
+        Citry usually calls this hook once per class, the first time a render
+        needs the CSS. It can call it again for the same class: once per thread
+        when several threads load the class for the first time at once, and up
+        to three times on each thread when a component on the same ``Citry``
+        instance is reset (by ``reset_template()``, ``reset_files()``, or a hot
+        reload) while the hook runs. Every render gets the same result, so
+        return the same text for the same input, and make any side effect
+        replace what an earlier call did instead of adding to it. The hook runs
+        with no Citry lock held, so it may render other components.
 
         Raises:
             TypeError: Citry raises it when the hook returns a value that
@@ -1920,7 +2001,7 @@ class ExtensionManager:
         for klass in reversed(user_cls.__mro__):
             if klass in framework_classes or _SYNTHESIZED_CONFIG_ATTR in vars(klass):
                 continue
-            for name, value in vars(klass).items():
+            for name, value in _static_class_namespace_copy(klass).items():
                 if name.startswith("__") and name.endswith("__"):
                     continue
                 fields[name] = value
@@ -2642,7 +2723,10 @@ class ExtensionManager:
 
         This hook is not declared on the [`Extension`][citry.Extension]
         base. An extension receives it by defining a method named
-        ``on_files_reset``.
+        ``on_files_reset``. Citry calls it in the middle of the reset. The
+        method may render components on the same thread. Do not make it
+        wait for another thread that renders: that thread waits for the
+        reset to finish, so both can hang.
         """
         self.emit(
             "on_files_reset",

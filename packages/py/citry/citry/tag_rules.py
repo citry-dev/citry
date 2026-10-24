@@ -38,6 +38,7 @@ import typing
 from typing import TYPE_CHECKING, Any, get_args, get_origin, get_type_hints
 
 from citry._annotation_introspection import _own_annotations
+from citry._class_introspection import _static_class_namespace_copy
 from citry.slots import SlotInput
 from citry.util.misc import get_fields
 from citry_core.template_parser import TagRules
@@ -141,13 +142,15 @@ def _resolved_schema_annotations(comp_cls: type[Component], schema_cls: type) ->
             raw_annotations.update(candidate_annotations)
 
     module = sys.modules.get(comp_cls.__module__)
-    globalns = dict(vars(module)) if module is not None else {}
+    # Copies of each namespace: another thread may store on a class, or an
+    # import may change a module, while this code reads it.
+    globalns = vars(module).copy() if module is not None else {}
     localns = dict(globalns)
     localns["SlotInput"] = SlotInput
     for candidate in reversed(comp_cls.__mro__):
-        localns.update(vars(candidate))
+        localns.update(_static_class_namespace_copy(candidate))
     for candidate in reversed(schema_cls.__mro__):
-        localns.update(vars(candidate))
+        localns.update(_static_class_namespace_copy(candidate))
     localns[comp_cls.__name__] = comp_cls
     localns[schema_cls.__name__] = schema_cls
 

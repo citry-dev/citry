@@ -88,6 +88,8 @@ class CitryTemplate:
     foreign_prepared: bool = False
     source_offset: int = 0
     root_source: str | None = None
+    # Taken only to store the compiled form and the body caches below; the
+    # compile itself, and the hooks it runs, run with no lock held.
     compile_lock: RLock = field(default_factory=RLock, repr=False, compare=False)
     standalone_bodies: OrderedDict[object, list[Any]] = field(default_factory=OrderedDict, repr=False)
     prepared_standalone_bodies: OrderedDict[object, list[Any]] = field(default_factory=OrderedDict, repr=False)

@@ -474,8 +474,13 @@ generated body list) at body-build time, before the list is cached (in the
 const-body cache, `_const_body`), so the transform is applied once per
 cached body, not per render. May mutate in place or return a new list.
 
-`on_template_loaded` still fires once per class with the template **string**
-before parse.
+`on_template_loaded` usually fires once per class with the template
+**string** before parse.
+
+Both run with no Citry lock held, so concurrent first renders, or a reset
+while one runs, can call them more than once for the same body or class;
+Citry keeps one result (see [`asset_loading.md`](asset_loading.md)
+section 6).
 
 ### 7.5 JS/CSS data methods
 

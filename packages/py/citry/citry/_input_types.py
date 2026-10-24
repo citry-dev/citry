@@ -32,7 +32,7 @@ from weakref import WeakKeyDictionary
 
 import typing_extensions
 
-from citry._class_introspection import _static_class_dict
+from citry._class_introspection import _static_class_dict, _static_class_namespace_copy
 from citry._schema_introspection import _read_schema_fields
 from citry.constness import (
     _is_const_marker,
@@ -408,9 +408,11 @@ def _evaluate_alone(annotation: object, owner: type) -> object:
             pass
     source = annotation if type(annotation) is str else cast("ForwardRef", annotation).__forward_arg__
     module = sys.modules.get(owner.__module__)
-    namespace = dict(vars(module)) if module is not None else {}
+    # Copies, because an import or another thread may change these namespaces
+    # while eval reads them.
+    namespace = vars(module).copy() if module is not None else {}
     try:
-        return eval(source, namespace, dict(_static_class_dict(owner)))  # noqa: S307 - the app's own annotation
+        return eval(source, namespace, _static_class_namespace_copy(owner))  # noqa: S307 - the app's own annotation
     except Exception:  # noqa: BLE001 - a name only imported for type checkers leaves the field unchecked
         return _UNRESOLVED
 

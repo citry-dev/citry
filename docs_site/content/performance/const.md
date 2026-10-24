@@ -63,7 +63,7 @@ choices, and site-wide settings. Do not mark a value that differs on
 almost every render, such as `Const(user.id)`. Each new value adds an
 entry that is never reused and pushes out useful ones.
 
-## See what runs once
+## See what Citry prepares { #see-what-runs-once }
 
 Citry prepares a template part in advance when every value it uses is
 constant:
@@ -82,7 +82,12 @@ content. Constant expressions inside them can still be prepared in
 advance.
 
 Keep template expressions free of side effects. Citry may evaluate a
-constant expression in a branch that the current render does not show.
+constant expression in a branch that the current render does not show. It
+can also evaluate the same expression more than once: when several
+requests render the template with the same constant values for the first
+time, and when a hot reload resets a component while Citry prepares the
+template. Citry keeps one result, so an expression without side effects
+gives the same page either way.
 
 ## Values written in tags
 

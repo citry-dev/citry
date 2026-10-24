@@ -98,7 +98,9 @@ def _register_existing_components(module: ModuleType) -> None:
     """
     from citry.component import Component  # noqa: PLC0415 - importing at module top would cycle
 
-    for value in vars(module).values():
+    # A copy: a component class created while this loop runs (on another
+    # thread, or by an import it triggers) would change the module's globals.
+    for value in vars(module).copy().values():
         if (
             isinstance(value, type)
             and value is not Component
