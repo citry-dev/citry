@@ -111,25 +111,51 @@ def _short_numeric_reference(name: str) -> str | None:
     return f"&{prefix}{significant or '0'}{semicolon}"
 
 
+def _decode_text_numeric_reference(name: str) -> str:
+    """Return the character a browser reads in text from the numeric reference ``name`` (``#106`` or ``#x6A;``)."""
+    reference = _short_numeric_reference(name)
+    # Too many digits to be at or below U+10FFFF.
+    if reference is None:
+        return "\ufffd"
+    is_hex = reference[2:3] in {"x", "X"}
+    code_point = int(reference[3 if is_hex else 2 :].rstrip(";"), 16 if is_hex else 10)
+    # NUL, a surrogate and a value past U+10FFFF read as U+FFFD, as
+    # ``html.unescape`` reads them too.
+    if code_point == 0 or 0xD800 <= code_point <= 0xDFFF or code_point > 0x10FFFF:
+        return "\ufffd"
+    # The HTML standard reads 0x80 to 0x9F as Windows-1252, and keeps the
+    # five codes that Windows-1252 leaves undefined (0x81, 0x8D, 0x8F, 0x90,
+    # 0x9D) as they are; Python's cp1252 codec refuses exactly those five.
+    if 0x80 <= code_point <= 0x9F:
+        try:
+            return bytes([code_point]).decode("cp1252")
+        except UnicodeDecodeError:
+            return chr(code_point)
+    # The browser keeps every other code point, control characters and
+    # noncharacters included, while ``html.unescape`` drops some of them.
+    return chr(code_point)
+
+
 def _decode_text_charref(match: re.Match[str]) -> str:
-    """Decode one character reference as ``html.unescape`` does, reading a long number as the browser does."""
+    """Decode one character reference in text as the browser does."""
     name = match.group(1)
     if name[0] != "#":
         return unescape(match.group(0))
-    reference = _short_numeric_reference(name)
-    return "\ufffd" if reference is None else unescape(reference)
+    return _decode_text_numeric_reference(name)
 
 
 def decode_character_references(html: str) -> str:
     """
-    Decode the character references in ``html`` as Python's ``html.unescape`` does, without its limit on digits.
+    Decode the character references in ``html`` as the browser decodes them in text.
 
-    A numeric reference with more digits than Python converts to an ``int``
-    (such as ``&#`` followed by 5,000 zeros and ``106;``) decodes as the
-    browser reads it instead of raising ``ValueError``. Callers that read an
-    attribute value with these rules get what ``html.unescape`` gave them;
-    ``decode_attribute_entities`` adds the attribute-only rule for legacy
-    names.
+    Named references decode as Python's ``html.unescape`` decodes them.
+    Numeric references follow the browser. A numeric reference that
+    ``html.unescape`` drops, such as the control character ``&#127;`` or
+    the Unicode noncharacter ``&#xfdd0;``, is kept, as the browser keeps
+    it. A reference with more digits than Python's ``int()`` accepts reads
+    as the browser reads it (``&#`` followed by 5,000 zeros and ``106;``
+    gives ``j``) instead of raising ``ValueError``. For an attribute value,
+    use ``decode_attribute_entities``.
     """
     if "&" not in html:
         return html
@@ -139,9 +165,13 @@ def decode_character_references(html: str) -> str:
 def _decode_attribute_charref(match: re.Match[str]) -> str:
     """Decode one character reference the way a browser does inside an attribute value."""
     name = match.group(1)
-    # Numeric references, and names that match exactly, decode as in text.
-    if name[0] == "#" or name in html5:
-        return _decode_text_charref(match)
+    # A numeric reference decodes as ``html.unescape`` reads it.
+    if name[0] == "#":
+        reference = _short_numeric_reference(name)
+        return "\ufffd" if reference is None else unescape(reference)
+    # A name that matches exactly decodes as in text.
+    if name in html5:
+        return unescape(match.group(0))
     # A legacy name without ";" (such as "&copy") decodes from its longest
     # known prefix. Inside an attribute value a browser leaves it as typed
     # when "=" or a letter or digit follows, so "?a=1&copy=2" stays a URL.
@@ -269,9 +299,10 @@ def decode_attribute_entities(html: str) -> str:
     """
     Return the attribute value a browser reads from ``html`` written inside quotes.
 
-    This follows the HTML parser's rules for character references in an
-    attribute value, which differ from text in one way: a legacy reference
-    without ``;`` stays as typed when ``=`` or a letter or digit follows it.
+    This follows the HTML parser's rule for a legacy reference in an
+    attribute value: a named reference written without ``;`` stays as typed
+    when ``=`` or a letter or digit follows it, so ``?a=1&copy=2`` stays a
+    URL.
     """
     if "&" not in html:
         return html
