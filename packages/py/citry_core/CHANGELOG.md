@@ -54,6 +54,11 @@
   holds a control character such as DEL (U+007F) or a Unicode noncharacter
   such as U+FDD0. The browser keeps these characters as written, but both
   functions used to reject the HTML.
+- On Python 3.14, `safe_eval()` of a t-string now gives each
+  `Interpolation` its source text as `expression`, as Python does
+  (`t'{x + 1}'` gives `'x + 1'`). It used to be `''`. A self-documenting
+  interpolation (`{x=}`) that holds a comment now leaves the comment out
+  of its `x=` text, as Python does.
 
 ## v1.8.0
 
