@@ -38,7 +38,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from citry.attrs import format_attrs, merge_attrs
+from citry.attrs import format_attrs, merge_attrs, reject_script_capable_attr_name, validate_html_attr_name
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender
 from citry.client_directives import (
@@ -361,6 +361,12 @@ def _resolve_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any])
     (`` class="btn"``).
     """
     contributions = {key: const_value(value) for key, value in attrs.items()}
+    # Every name reaching this element arrives as a kwarg, whether a template
+    # wrote it, a c-bind mapping or <c-component c-is> passed it on, or Python
+    # code called the element directly, so one check here covers every route.
+    for key in contributions:
+        name = validate_html_attr_name(key, where="<c-element>")
+        reject_script_capable_attr_name(name, tag_name=tag, where="<c-element>")
     for value in contributions.values():
         # A nested-template attribute value resolves to a CitryRender, whose
         # parts may hold not-yet-rendered child components, so it cannot be

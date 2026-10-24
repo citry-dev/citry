@@ -25,7 +25,7 @@ from citry.ext.events.actions import redirect_url_scheme
     ],
 )
 def test_redirect_refuses_non_http_schemes(url: str) -> None:
-    with pytest.raises(ValueError, match="scheme"):
+    with pytest.raises(ValueError, match="scheme|control character"):
         actions.Redirect(url)
 
 

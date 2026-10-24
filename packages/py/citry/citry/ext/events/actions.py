@@ -369,6 +369,11 @@ class Redirect(Action):
         if not isinstance(self.url, str) or not self.url:
             msg = f"actions.Redirect: url must be a non-empty string; got {self.url!r}."
             raise ValueError(msg)
+        # A control character has no place in a URL and would reach the
+        # Location header of a plain form post, so it is refused anywhere.
+        if any(ord(char) < 0x20 or ord(char) == 0x7F for char in self.url):
+            msg = f"actions.Redirect: url contains a control character; got {self.url!r}."
+            raise ValueError(msg)
         scheme = redirect_url_scheme(self.url)
         if scheme is not None and scheme not in REDIRECT_SCHEMES:
             msg = (

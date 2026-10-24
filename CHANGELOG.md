@@ -225,7 +225,8 @@
   a page renders. Each of these raises `ValueError`:
   - `actions.Redirect(url)` with a scheme other than `http:` or `https:`.
     Relative URLs such as `/projects/` still work. Use a full `https:` URL
-    or a path instead.
+    or a path instead. A URL containing a control character, such as a
+    line break, also raises.
   - A `c-bind` mapping key, or a name an `on_attrs_resolved` hook adds,
     that starts with `on`, such as `onclick`, or that is `innerHTML`,
     `outerHTML`, or `srcdoc`. Write such an attribute in the template
@@ -236,6 +237,10 @@
   - `<c-element>` with `is` or `c-is` naming a tag such as `script`,
     `style`, `iframe`, or `textarea`, whose contents the browser reads as
     raw text or code. Write such an element directly in the template.
+  - An attribute passed to `<c-element>`, from a template, `c-bind`,
+    `<c-component c-is>`, or Python code, that starts with `on` or is
+    `innerHTML`, `outerHTML`, or `srcdoc`. Put an event handler on an
+    element written in the template, or use `@click` or `@c-click`.
   - A `css_data()` value without spaces that has a comment, a brace, a
     top-level `;` or `!`, a `<` or backslash outside a string or `url()`,
     or a malformed string or `url()`, and any value containing `</style`
