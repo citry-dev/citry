@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 import citry_ui
-from citry import Citry, Component, Const, Extension, Slot, VueCodeError
+from citry import Citry, Component, Const, Extension, Markup, Slot, VueCodeError
 from citry._vue import events as vue_events
 from citry._vue.capture import (
     PreparedAttribute,
@@ -1586,6 +1586,167 @@ def test_a_fill_passed_through_a_transparent_component_keeps_its_text_in_its_aut
     assert len(lexical_keys) == 1
     assert f"$citryPrepared.{lexical_keys[0]}" in assembly.compile_inputs[root.definition_id].template
     assert "<slot " in assembly.compile_inputs[physical.definition_id].template
+
+
+def _vue_host(html: str) -> str:
+    """Return the Vue host's contents as the server wrote them."""
+    match = re.search(r'<div id="citry-vue-[^"]+">(.*?)</div><script', html, re.DOTALL)
+    assert match is not None, html[:500]
+    return match.group(1)
+
+
+@pytest.mark.parametrize(
+    ("markup", "host"),
+    [
+        (False, "<main><article><!--[--><b>caller:<i>receiver</i></b><!--]--></article></main>"),
+        (
+            True,
+            "<main><article><!--[--><b><!--[--><u>caller</u><!--]-->:"
+            "<i><!--[--><u>receiver</u><!--]--></i></b><!--]--></article></main>",
+        ),
+    ],
+)
+def test_a_fill_shows_its_receivers_fallback_with_the_receivers_values(markup: bool, host: str) -> None:
+    # The fallback is the receiver's, but the caller's fill shows it, so it
+    # is compiled in the caller's template, which reads the receiver's
+    # value from the caller's data.
+    registry = Citry(autodiscover=False)
+
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-slot name="body"><i>{{ label }}</i></c-slot></article>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"label": Markup("<u>receiver</u>") if markup else "receiver"}
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver>
+  <c-fill name="body" fallback="fallback"><b>{{ label }}:{{ fallback }}</b></c-fill>
+</c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"label": Markup("<u>caller</u>") if markup else "caller"}
+
+    assert _vue_host(Caller().render().serialize()) == host
+
+
+def test_a_fallback_shown_by_a_fill_cannot_hold_a_component() -> None:
+    # The caller's template compiles the fallback, but a component call in
+    # it would be recorded in the receiver's data, which that template
+    # does not read.
+    registry = Citry(autodiscover=False)
+
+    class Child(Component):
+        citry = registry
+        template = """
+<b>child</b>
+"""
+
+    class Receiver(Component):
+        citry = registry
+        template = """
+<article><c-slot name="body"><c-Child /></c-slot></article>
+"""
+        js = """
+$component({});
+"""
+
+    class Caller(Component):
+        citry = registry
+        template = """
+<main><c-Receiver><c-fill name="body" fallback="fallback">{{ fallback }}</c-fill></c-Receiver></main>
+"""
+        js = """
+$component({});
+"""
+
+    with pytest.raises(TypeError, match=r"through '<c-fill fallback=\.\.\.>' cannot hold a component"):
+        Caller().render().serialize()
+
+
+def test_a_fill_shown_by_another_component_keeps_its_own_text() -> None:
+    # Author's fill is captured and shown by the transparent Receiver, so
+    # its text is copied into the page's template beside the page's own.
+    # The two values must not share a key in the page's data.
+    registry = Citry(autodiscover=False)
+    declarations: list[Slot] = []
+
+    class Declare(Component):
+        citry = registry
+        name = "declare"
+        template = """
+<c-slot />
+"""
+
+        def template_data(self, kwargs, slots):
+            declarations.append(slots["default"])
+            return {}
+
+        def on_render(self):
+            return ""
+
+    class Receiver(Component):
+        citry = registry
+        name = "receiver"
+        transparent = True
+        template = """
+<div class="receiver">{{ content }}</div>
+"""
+
+        def template_data(self, kwargs, slots):
+            declared = declarations[-1]
+            return {"content": Slot(lambda _ctx: declared())}
+
+    class Author(Component):
+        citry = registry
+        name = "author"
+        template = """
+<c-declare><b>{{ note }}</b></c-declare>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"note": "note"}
+
+    class Frame(Component):
+        citry = registry
+        name = "frame"
+        template = """
+<section><c-slot /></section>
+"""
+        js = """
+$component({});
+"""
+
+    class Page(Component):
+        citry = registry
+        template = """
+<main><c-Frame><c-author /><c-receiver />{{ page_text }}</c-Frame></main>
+"""
+        js = """
+$component({});
+"""
+
+        def template_data(self, kwargs, slots):
+            return {"page_text": "page"}
+
+    host = _vue_host(Page().render().serialize())
+    assert (
+        host == '<main><section><!--[--><!----><div class="receiver"><b>note</b></div> page<!--]--></section></main>'
+    )
 
 
 def test_component_call_preserves_native_vue_props_events_and_refs() -> None:
