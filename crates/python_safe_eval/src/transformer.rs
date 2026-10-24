@@ -260,6 +260,7 @@ use crate::utils::python_ast::{
     attribute, call, get_expr_range, interceptor_call, none_literal, string_literal,
 };
 use regex::Regex;
+use ruff_python_ast::token::TokenKind;
 use ruff_python_ast::visitor::transformer::Transformer;
 use ruff_python_ast::{self as ast, Expr, Stmt};
 use ruff_python_parser::Parsed;
@@ -396,9 +397,25 @@ pub fn transform_expression_string(source: &str) -> Result<TransformResult, Stri
     let wrapped_source = format!("(\n{}\n)", source);
     let wrap_prefix_len = 2; // "(\n" = 2 characters
 
-    let transformer = SandboxTransformer::new(wrap_prefix_len, &wrapped_source);
     let ast =
         parse_expression_with_adjusted_error_ranges(&wrapped_source, source, wrap_prefix_len)?;
+    // The text Python keeps for an interpolation (a t-string's `expression`,
+    // the `x=` of a self-documenting one) is found from the parser's tokens:
+    // they mark where an expression ends and which comments belong to it.
+    // The crate's `extract_comments` scanner reads everything inside an
+    // f-string or t-string as string text, so it cannot.
+    let tokens = ast
+        .tokens()
+        .iter()
+        .map(|token| {
+            (
+                token.kind(),
+                token.start().to_usize(),
+                token.end().to_usize(),
+            )
+        })
+        .collect();
+    let transformer = SandboxTransformer::new(wrap_prefix_len, &wrapped_source, tokens);
 
     // Create a LineIndex to convert byte offsets to line/column positions
     let line_index = LineIndex::from_source_text(&wrapped_source);
@@ -547,10 +564,17 @@ pub struct SandboxTransformer {
     // cannot decode as Python does is written from this text (see
     // `utils::literal_source`).
     source: Rc<str>,
+    // The parser's tokens for `source`, in order, as (kind, start, end) byte
+    // offsets (see `interpolation_expression_text`).
+    tokens: Rc<[(TokenKind, usize, usize)]>,
 }
 
 impl SandboxTransformer {
-    pub fn new(wrap_prefix_len: usize, source: &str) -> Self {
+    pub fn new(
+        wrap_prefix_len: usize,
+        source: &str,
+        tokens: Vec<(TokenKind, usize, usize)>,
+    ) -> Self {
         Self {
             comprehension_variables: RefCell::new(HashSet::new()),
             lambda_variables: RefCell::new(HashSet::new()),
@@ -559,7 +583,87 @@ impl SandboxTransformer {
             used_variables: RefCell::new(Vec::new()),
             wrap_prefix_len,
             source: Rc::from(source),
+            tokens: Rc::from(tokens),
         }
+    }
+
+    /// The text Python stores as a t-string interpolation's `expression`.
+    ///
+    /// It runs from just after the `{` to the `=`, `!`, `:` or `}` that ends
+    /// the expression, so it keeps the whitespace around the expression, a
+    /// backslash line continuation, and the parentheses the parser leaves
+    /// out of the expression's range (`t'{ (x) }'` gives `' (x) '`). The end
+    /// is the first token after the parsed expression that is not a closing
+    /// parenthesis, a comment or a line break, because an `==` or `!=`
+    /// inside the expression does not end it.
+    fn interpolation_expression_text(&self, interpolation: &ast::InterpolatedElement) -> String {
+        let start = interpolation.range.start().to_usize() + 1;
+        let expression_end = interpolation.expression.range().end().to_usize();
+        let mut index = self
+            .tokens
+            .partition_point(|&(_, token_start, _)| token_start < expression_end);
+        while self.tokens.get(index).is_some_and(|&(kind, _, _)| {
+            matches!(
+                kind,
+                TokenKind::Rpar | TokenKind::Comment | TokenKind::NonLogicalNewline
+            )
+        }) {
+            index += 1;
+        }
+        // The closing `}` is always a token; without one, stop before it.
+        let end = self.tokens.get(index).map_or(
+            interpolation.range.end().to_usize() - 1,
+            |&(_, token_start, _)| token_start,
+        );
+        self.text_without_comments(start, end)
+    }
+
+    /// The source between `start` and `end` without the comments written
+    /// directly in it, as Python writes an interpolation's text. A comment
+    /// inside a nested f-string or t-string belongs to that string's own
+    /// text, and Python keeps it there.
+    fn text_without_comments(&self, start: usize, end: usize) -> String {
+        let mut text = String::with_capacity(end.saturating_sub(start));
+        let mut position = start;
+        // How many f-strings or t-strings that started inside the text are
+        // still open.
+        let mut depth = 0usize;
+        let first = self
+            .tokens
+            .partition_point(|&(_, token_start, _)| token_start < start);
+        for &(kind, token_start, token_end) in &self.tokens[first..] {
+            if token_start >= end {
+                break;
+            }
+            match kind {
+                TokenKind::FStringStart | TokenKind::TStringStart => depth += 1,
+                TokenKind::FStringEnd | TokenKind::TStringEnd => depth = depth.saturating_sub(1),
+                TokenKind::Comment if depth == 0 => {
+                    text.push_str(&self.source[position..token_start]);
+                    position = token_end;
+                }
+                _ => {}
+            }
+        }
+        text.push_str(&self.source[position..end]);
+        text
+    }
+
+    /// The text a self-documenting interpolation (`{x=}`) writes before its
+    /// value: the source from after the `{` through the `=` and the
+    /// whitespace after it, without its comments, as Python writes it.
+    fn debug_text_without_comments(
+        &self,
+        interpolation: &ast::InterpolatedElement,
+        debug_text: &ast::DebugText,
+    ) -> String {
+        let start = interpolation.range.start().to_usize() + 1;
+        let end = start + debug_text.as_str().len();
+        // The parser's text is the source slice; if it ever is not, keep it.
+        if self.source.get(start..end) != Some(debug_text.as_str()) {
+            return debug_text.as_str().to_owned();
+        }
+        self.text_without_comments(start, end)
     }
 
     /// The source text of the node at `range`.
@@ -629,6 +733,7 @@ impl SandboxTransformer {
             wrap_prefix_len: self.wrap_prefix_len,
             used_variables: RefCell::new(Vec::new()),
             source: Rc::clone(&self.source),
+            tokens: Rc::clone(&self.tokens),
         }
     }
 
@@ -1385,7 +1490,10 @@ impl Transformer for SandboxTransformer {
                                 // `f'{x=}'` writes its own source text (`x=`) before
                                 // the value, as Python does.
                                 if let Some(debug_text) = &interpolation.debug_text {
-                                    template_parts.push(escape_format_braces(debug_text.as_str()));
+                                    template_parts.push(escape_format_braces(
+                                        &self
+                                            .debug_text_without_comments(interpolation, debug_text),
+                                    ));
                                 }
                                 template_parts.push("{}".to_string());
 
@@ -1452,18 +1560,17 @@ impl Transformer for SandboxTransformer {
                                 template_args.push(string_lit_literal);
                             }
                             ast::InterpolatedStringElement::Interpolation(interpolation) => {
+                                // Read the expression's source text before the
+                                // transform replaces the expression. Python stores
+                                // it as the Interpolation's `expression`; see
+                                // https://docs.python.org/3.14/library/string.templatelib.html#string.templatelib.Interpolation.expression
+                                let expr_text = self.interpolation_expression_text(interpolation);
+
                                 // Transform the expression
                                 self.visit_expr(&mut interpolation.expression);
 
                                 // Use the interpolation expression's range for token info
                                 let expr_range = get_expr_range(&interpolation.expression, range);
-
-                                // Get the expression text (we'll use a placeholder for now)
-                                // In a real implementation, we'd preserve the original expression text from source
-                                // Python docs recommend to use an empty string in manually-created
-                                // Interpolations.
-                                // See https://docs.python.org/3.14/library/string.templatelib.html#string.templatelib.Interpolation.expression
-                                let expr_text = "".to_string(); // TODO: preserve original expression text
 
                                 // Build conversion argument
                                 let conversion_expr = match interpolation_conversion(interpolation)
@@ -1524,7 +1631,8 @@ impl Transformer for SandboxTransformer {
                                 // interpolation, as Python's template does.
                                 if let Some(debug_text) = &interpolation.debug_text {
                                     template_args.push(string_literal(
-                                        debug_text.as_str(),
+                                        &self
+                                            .debug_text_without_comments(interpolation, debug_text),
                                         interpolation.range,
                                     ));
                                 }

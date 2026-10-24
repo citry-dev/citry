@@ -317,6 +317,13 @@
   that many digits, such as `.debounce.<5,000 digits>ms`, now fails with
   the JavaScript safe-integer error, and one written with digits other
   than ASCII `0`-`9` is now an unknown modifier.
+- On Python 3.14, a t-string built in a template expression with the
+  expression sandbox on now gives each `Interpolation` its source text as
+  `expression` (`t'{x + 1}'` gives `'x + 1'`), as it does with the sandbox
+  off. It used to be `''`. With the sandbox on, a self-documenting
+  interpolation that holds a comment, such as `{x # note` followed by a
+  new line and `=}`, now leaves the comment out of its `x=` text, as
+  Python does.
 
 ### Performance
 
