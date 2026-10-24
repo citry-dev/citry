@@ -4095,6 +4095,11 @@ def _materialize_typed(
                 )
 
 
+# Marks the end of a loop's records; a record itself can be any value, which
+# is then rejected as the wrong type.
+_NO_MORE_RECORDS = object()
+
+
 def _materialize(
     operations: tuple[object, ...],
     data: dict[str, object],
@@ -4104,65 +4109,69 @@ def _materialize(
     *,
     preserve_dynamic_text: bool = False,
 ) -> None:
-    for operation in operations:
-        if isinstance(operation, _Static):
-            output.append(operation.html)
-        elif isinstance(operation, _Text):
-            text = escape_to_str(data[operation.key])
-            output.append(PreparedStaticText(text) if preserve_dynamic_text else text)
-        elif isinstance(operation, _Open):
-            # _row_open_html must produce the same text for simple='vue' row
-            # HTML; tests compare both paths byte for byte.
-            output.append(
-                _materialized_open_html(operation, operation.static or resolved_opens[(id(data), id(operation))])
-            )
-            if operation.node.is_self_closing and not operation.node.is_void:
-                output.append(f"</{operation.node.tag}>")
-        elif isinstance(operation, _Close):
-            output.append(f"</{operation.value.tag}>")
-        elif isinstance(operation, _Call):
-            output.append(children[(id(data), operation.key)])
-        elif isinstance(operation, _If):
-            selected_value = data[operation.key]
-            if type(selected_value) is not int:
-                raise AssertionError("leaf branch selection changed type")
-            selected = selected_value
-            if selected >= 0:
-                _materialize(
-                    operation.branches[selected],
-                    data,
-                    resolved_opens,
-                    output,
-                    children,
-                    preserve_dynamic_text=preserve_dynamic_text,
+    """
+    Write a leaf program's output for one set of evaluated data.
+
+    A branch's or loop row's operations are walked on this function's own
+    stack, so Python's call depth does not grow with how deeply control flow
+    nests. Each loop row's body is finished before the next row is read.
+    """
+    # A body entry walks operations against one row of data. A rows entry
+    # holds a loop's remaining records and the body each one renders.
+    bodies: list[tuple[Iterator[object], dict[str, object]] | tuple[Iterator[object], tuple[object, ...], None]] = [
+        (iter(operations), data)
+    ]
+    while bodies:
+        entry = bodies[-1]
+        if len(entry) == 3:
+            records, loop_body, _ = cast("tuple[Iterator[object], tuple[object, ...], None]", entry)
+            record = next(records, _NO_MORE_RECORDS)
+            if record is _NO_MORE_RECORDS:
+                bodies.pop()
+                continue
+            if not isinstance(record, dict):
+                raise TypeError("leaf loop item changed type")
+            bodies.append((iter(loop_body), cast("dict[str, object]", record)))
+            continue
+        remaining, row = cast("tuple[Iterator[object], dict[str, object]]", entry)
+        for operation in remaining:
+            if isinstance(operation, _Static):
+                output.append(operation.html)
+            elif isinstance(operation, _Text):
+                text = escape_to_str(row[operation.key])
+                output.append(PreparedStaticText(text) if preserve_dynamic_text else text)
+            elif isinstance(operation, _Open):
+                # _row_open_html must produce the same text for simple='vue' row
+                # HTML; tests compare both paths byte for byte.
+                output.append(
+                    _materialized_open_html(operation, operation.static or resolved_opens[(id(row), id(operation))])
                 )
-        elif isinstance(operation, _For):
-            records = data[operation.key]
-            if not isinstance(records, list):
-                raise TypeError("leaf loop record changed type")
-            if records:
-                for record in records:
-                    if not isinstance(record, dict):
-                        raise TypeError("leaf loop item changed type")
-                    _materialize(
-                        operation.body,
-                        record,
-                        resolved_opens,
-                        output,
-                        children,
-                        preserve_dynamic_text=preserve_dynamic_text,
-                    )
+                if operation.node.is_self_closing and not operation.node.is_void:
+                    output.append(f"</{operation.node.tag}>")
+            elif isinstance(operation, _Close):
+                output.append(f"</{operation.value.tag}>")
+            elif isinstance(operation, _Call):
+                output.append(children[(id(row), operation.key)])
+            elif isinstance(operation, _If):
+                selected_value = row[operation.key]
+                if type(selected_value) is not int:
+                    raise AssertionError("leaf branch selection changed type")
+                if selected_value >= 0:
+                    bodies.append((iter(operation.branches[selected_value]), row))
+                    break
+            elif isinstance(operation, _For):
+                loop_records = row[operation.key]
+                if not isinstance(loop_records, list):
+                    raise TypeError("leaf loop record changed type")
+                if loop_records:
+                    bodies.append((iter(loop_records), operation.body, None))
+                else:
+                    bodies.append((iter(operation.empty), row))
+                break
             else:
-                _materialize(
-                    operation.empty,
-                    data,
-                    resolved_opens,
-                    output,
-                    children,
-                    preserve_dynamic_text=preserve_dynamic_text,
-                )
+                raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
         else:
-            raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
+            bodies.pop()
 
 
 def _prepared_open(

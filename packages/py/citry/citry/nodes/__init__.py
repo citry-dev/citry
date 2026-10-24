@@ -399,17 +399,60 @@ def collect_fills_from_body(body: Sequence[BodyItem], context: CitryContext, sin
     The parser already rejects most content beside fills; the checks on this
     path are the runtime half of that contract (dynamic fill names make some
     shapes undecidable statically), so the errors mirror the parser's.
+
+    A ``<c-if>`` or ``<c-for>`` contributes the fills of its bodies. Those
+    bodies are walked here, on this function's own stack, rather than through
+    the node's ``collect_fills``, so Python's call depth does not grow with how
+    deeply they nest. A loop's next iteration is read only once the previous
+    body is finished, as ``ForNode.collect_fills`` reads them.
     """
-    for item in body:
-        if isinstance(item, str):
-            if item.strip():
-                msg = (
-                    f"Text cannot appear next to '<c-fill>' tags in the body of "
-                    f"<c-{sink.component_name}>. All other content must be inside the fills."
-                )
-                raise RuntimeError(msg)
-        else:
-            item.collect_fills(context, sink)
+    # Each entry is either one body still being walked, with its context, or
+    # a `<c-for>` whose remaining iterations are read one at a time.
+    stack: list[tuple[Iterator[BodyItem], CitryContext] | Iterator[tuple[list[BodyItem], CitryContext]]] = [
+        (iter(body), context)
+    ]
+    try:
+        while stack:
+            entry = stack[-1]
+            if type(entry) is not tuple:
+                loop = cast("Iterator[tuple[list[BodyItem], CitryContext]]", entry)
+                following = next(loop, None)
+                if following is None:
+                    stack.pop()
+                else:
+                    stack.append((iter(following[0]), following[1]))
+                continue
+            items, items_context = cast("tuple[Iterator[BodyItem], CitryContext]", entry)
+            for item in items:
+                if isinstance(item, str):
+                    if item.strip():
+                        msg = (
+                            f"Text cannot appear next to '<c-fill>' tags in the body of "
+                            f"<c-{sink.component_name}>. All other content must be inside the fills."
+                        )
+                        raise RuntimeError(msg)
+                    continue
+                item_type = type(item)
+                if item_type is IfNode:
+                    branch = cast("IfNode", item).active_branch_body(items_context)
+                    if branch is not None:
+                        stack.append((iter(branch), items_context))
+                        break
+                elif item_type is ForNode:
+                    stack.append(cast("ForNode", item).iter_bodies(items_context))
+                    break
+                else:
+                    item.collect_fills(items_context, sink)
+            else:
+                stack.pop()
+    except BaseException:
+        # Close each loop still open, innermost first, so its `finally`
+        # blocks run as they did when the nested calls ended.
+        for entry in reversed(stack):
+            close = getattr(entry, "close", None)
+            if close is not None:
+                close()
+        raise
 
 
 class _TemplateSlotContent:
