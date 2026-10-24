@@ -14,8 +14,9 @@ use vize_s0::{FxHashSet, String, ToCompactString};
 /// Get slot props expression as raw source (not transformed)
 pub(super) fn get_slot_props(dir: &DirectiveNode<'_>, source: &str) -> Option<String> {
     dir.exp.as_ref().map(|exp| match exp {
-        ExpressionNode::Simple(s) => String::new(s.loc.span.slice(source)),
-        ExpressionNode::Compound(c) => String::new(c.loc.span.slice(source)),
+        // The untransformed text, decoded as Vue reads a directive value.
+        ExpressionNode::Simple(s) => crate::entity::authored_expression_text(source, s.loc.span),
+        ExpressionNode::Compound(c) => crate::entity::authored_expression_text(source, c.loc.span),
     })
 }
 

@@ -132,7 +132,10 @@ pub fn transform_v_model<'a>(
     let value_exp = match &dir.exp {
         Some(exp) => match exp {
             ExpressionNode::Simple(s) => String::new(s.content),
-            ExpressionNode::Compound(c) => String::new(c.loc.span.slice(ctx.source)),
+            // Read back from the source and decoded as Vue reads it (see `entity`).
+            ExpressionNode::Compound(c) => {
+                crate::entity::authored_expression_text(ctx.source, c.loc.span)
+            }
         },
         None => return props,
     };

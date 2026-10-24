@@ -36,7 +36,10 @@ pub fn is_inline_handler(ctx: &CodegenContext, exp: &ExpressionNode<'_>) -> bool
                 return false;
             }
 
-            let content = simple.loc.span.slice(&ctx.source);
+            // The handler shape is judged on the text Vue reads, so a
+            // reference cannot change which kind of handler it is.
+            let content = crate::entity::authored_expression_text(&ctx.source, simple.loc.span);
+            let content = content.as_str();
 
             if crate::steps::expression::is_function_expression(content) {
                 return false;

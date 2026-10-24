@@ -26,7 +26,7 @@ use vize_s2::op::{BindOp, BindingOp, DynamicName, OnOp, VueSyncOp};
 
 use super::cx::{Cx, attr_slice, attr_span};
 use super::directive::{Arg, Directive};
-use super::element::attr_value_text;
+use super::element::directive_value_text;
 use super::expr::{desc, expr_at, filter_expr_at, handler_expr_at};
 
 /// The provenance rule of the same-name expansion.
@@ -72,7 +72,7 @@ pub(crate) fn lower_bind<'a>(
         modifiers.push(modifier);
     }
 
-    let value = match attr_value_text(element, index) {
+    let value = match directive_value_text(cx, element, index) {
         // An authored-blank value (`:x=""`) materializes no expression
         // in the shipped parser (and blocks the same-name expansion,
         // which requires no value position at all) — mirrored exactly,
@@ -174,7 +174,7 @@ pub(crate) fn lower_on<'a>(
     for modifier in &directive.modifiers {
         modifiers.push(modifier);
     }
-    let handler = attr_value_text(element, index)
+    let handler = directive_value_text(cx, element, index)
         .filter(|text| !text.trim().is_empty())
         .map(|text| handler_expr_at(cx, text));
     cx.record(

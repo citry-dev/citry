@@ -14,8 +14,6 @@ use super::{EmitCx, EmitError, UnsupportedReason as Reason};
 enum ContentShape {
     /// The quoted attribute value with its padding.
     Padded,
-    /// The padded value, entity-decoded (bind values).
-    Decoded,
     /// The trimmed source alone.
     Trimmed,
 }
@@ -211,11 +209,6 @@ impl EmitCx<'_> {
         self.prefixed_expr_content(expr, site, ContentShape::Padded)
     }
 
-    /// [`Self::prefixed_expr`] over the entity-decoded bind value.
-    pub(super) fn prefixed_bind_expr(&self, expr: &ExprRef<'_>) -> Result<String, EmitError> {
-        self.prefixed_expr_content(expr, Site::Expression, ContentShape::Decoded)
-    }
-
     /// [`Self::prefixed_expr`] over the trimmed source alone (the
     /// transform trimmed it before the codegen saw it).
     pub(super) fn prefixed_trimmed_expr(
@@ -244,7 +237,6 @@ impl EmitCx<'_> {
         };
         let content = match shape {
             ContentShape::Padded => prefix::node_content(self.source, source, expr.span()),
-            ContentShape::Decoded => prefix::node_content_decoded(self.source, source, expr.span()),
             ContentShape::Trimmed => prefix::Content {
                 text: RawJs::Borrowed(source),
                 offset: Some(0),
@@ -259,14 +251,6 @@ impl EmitCx<'_> {
     pub(super) fn prefixed_js(&self, js: &JsExpr<'_>, site: Site) -> Result<String, EmitError> {
         let content = prefix::node_content(self.source, js.source, js.span);
         prefix::prefix_expression(&self.scope, &content, Some(js), site)
-            .map(|prefixed| self.record_unref(prefixed))
-            .map_err(|_| EmitError::unsupported_at(Reason::PrefixExpressionRejected, js.span))
-    }
-
-    /// [`Self::prefixed_js`] over the entity-decoded bind value.
-    pub(super) fn prefixed_bind_js(&self, js: &JsExpr<'_>) -> Result<String, EmitError> {
-        let content = prefix::node_content_decoded(self.source, js.source, js.span);
-        prefix::prefix_expression(&self.scope, &content, Some(js), Site::Expression)
             .map(|prefixed| self.record_unref(prefixed))
             .map_err(|_| EmitError::unsupported_at(Reason::PrefixExpressionRejected, js.span))
     }

@@ -13,7 +13,7 @@ use vize_s1::Element;
 
 use super::super::cx::{Cx, attr_slice, attr_span};
 use super::super::directive::{Arg, AttrForm, Head};
-use super::super::element::{Analyzed, attr_value_text};
+use super::super::element::{Analyzed, attr_value_text, directive_value_text};
 
 /// One captured `<template v-if>` wrapper key (P2-9 series 5): the
 /// branch key the legacy transform lifts off the wrapper element
@@ -137,7 +137,7 @@ pub(crate) fn capture_wrapper_key<'a>(
             AttrForm::Directive(directive)
                 if directive.head == Head::Bind && directive.arg == Some(Arg::Static("key")) =>
             {
-                let source = match attr_value_text(element, index) {
+                let source = match directive_value_text(cx, element, index) {
                     Some(text) => String::from(text.trim()),
                     // The parser's same-name expansion: a valueless
                     // `:key` reads `key`.
@@ -202,7 +202,7 @@ pub(crate) fn capture_wrapper_attrs<'a>(
                     && directive.arg == Some(Arg::Static("class"))
                     && directive.modifiers.is_empty() =>
             {
-                let source = match attr_value_text(element, index) {
+                let source = match directive_value_text(cx, element, index) {
                     Some(text) if text.trim().is_empty() => continue,
                     Some(text) => String::from(text.trim()),
                     None => String::from("class"),

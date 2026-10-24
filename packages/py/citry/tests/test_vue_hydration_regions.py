@@ -547,6 +547,25 @@ def test_direct_capture_reads_attribute_values_by_the_attribute_rule() -> None:
     assert _prepared_root_markers(('data-x="a&region=b"',)) == (("data-x", "a&region=b"),)
 
 
+def test_directive_values_decode_character_references_as_vue_does() -> None:
+    # Vue decodes a directive value's references before it reads the
+    # JavaScript, so the server writes what the browser computes.
+    engine = Citry(autodiscover=False)
+
+    class Text(Component):
+        citry = engine
+        template = """
+<main><p :data-n="'a &amp; b'.length" v-text="'x &lt; y'"></p></main>
+"""
+        js = """
+$component({});
+"""
+
+    host, admission = _hydrated_host(Text)
+    assert host == '<main><p data-n="5">x &lt; y</p></main>'
+    assert admission.declines == ()
+
+
 def test_spread_attributes_vary_per_row_and_follow_vue_value_rules() -> None:
     engine = Citry(autodiscover=False)
 

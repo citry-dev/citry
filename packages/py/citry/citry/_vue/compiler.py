@@ -43,10 +43,10 @@ def _generated_vue_attr(name: str, value: str) -> str:
     Serialize one compiler-owned Vue attribute without changing its expression.
 
     Every caller builds a call expression or a plain binding value. The native
-    compiler decodes character references in those expressions, so the escaped
-    text compiles back to exactly ``value``. A handler written as statements
-    is compiled from the raw attribute text instead, so authored bindings use
-    ``_authored_vue_attr``.
+    compiler decodes the character references in a directive value, as Vue
+    does, so the escaped text compiles back to exactly ``value``. An authored
+    binding already holds the author's own references, so it is written with
+    ``_authored_vue_attr`` instead.
     """
     return f'{name}="{html.escape(value, quote=True)}"'
 
@@ -92,9 +92,9 @@ def _authored_vue_attr(name: str, value: str) -> str:
     Write one authored Vue binding exactly as its template text reads.
 
     ``value`` is the author's raw attribute text, so Vue reads it the same way
-    it reads the binding on a plain element. Escaping it would break a handler
-    written as statements (``x = a < 3``): the native compiler compiles that
-    form from the raw text and would see ``&lt;`` as code.
+    it reads the binding on a plain element, decoding the author's character
+    references once. Escaping it again would make a written ``&lt;`` arrive
+    as the text ``&lt;`` rather than ``<``.
 
     Raises:
         ValueError: The value holds both quote characters, so no delimiter can
@@ -359,7 +359,7 @@ class VueCompilerDiagnosticsError(ValueError):
 
 
 ORDINARY_TARGET = "ordinary-vnodes/1"
-_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.4"}
+_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.5"}
 _TEXT_ACTION_RULES = {
     "rewrite": {"condense.whitespace"},
     "drop": {"condense.drop-whitespace", "drop.comment", "drop.branch-gap"},

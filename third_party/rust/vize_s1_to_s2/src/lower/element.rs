@@ -157,6 +157,18 @@ pub(crate) fn attr_value_text<'a>(element: &Element<'a>, index: usize) -> Option
         .map(|value| value.content.text)
 }
 
+/// The value text Vue reads from a directive attribute: the authored text
+/// with its character references decoded (see
+/// [`Cx::decoded_directive_value`]). A static attribute value keeps its
+/// authored text, because the emitter decodes those itself.
+pub(crate) fn directive_value_text<'a>(
+    cx: &mut Cx<'a>,
+    element: &Element<'a>,
+    index: usize,
+) -> Option<&'a str> {
+    attr_value_text(element, index).map(|raw| cx.decoded_directive_value(raw))
+}
+
 /// An element's own namespace, entered by tag.
 fn enter_ns(parent: Namespace, tag: &str) -> Namespace {
     if is_svg_tag(tag) {

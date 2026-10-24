@@ -4,8 +4,8 @@ use vize_s0::Span;
 use vize_s2::expr::{ExprRef, JsExpr};
 use vize_s2::op::BindOp;
 
-use super::entity::decode_html_attribute_entities;
 use super::js::{RawJs, js_expr_source};
+use super::prefix::Site;
 use super::props_bind;
 use super::{EmitCx, EmitError};
 
@@ -29,8 +29,8 @@ impl BindValue<'_> {
     /// `generate_expression` over the transform-prefixed value.
     fn emit_prefixed(&self, cx: &mut EmitCx<'_>, bind: &BindOp<'_>) -> Result<(), EmitError> {
         let text = match (self, bind.value) {
-            (Self::Js(js), _) => cx.prefixed_bind_js(js)?,
-            (Self::RawJs(_), Some(expr)) => cx.prefixed_bind_expr(&expr)?,
+            (Self::Js(js), _) => cx.prefixed_js(js, Site::Expression)?,
+            (Self::RawJs(_), Some(expr)) => cx.prefixed_expr(&expr, Site::Expression)?,
             (Self::RawJs(source), None) => {
                 cx.buf.push(source.as_str());
                 return Ok(());
@@ -52,11 +52,8 @@ impl BindValue<'_> {
             return self.emit(cx, bind);
         };
         let raw_source = js_expr_source(js);
-        let decoded = raw_source
-            .as_str()
-            .contains('&')
-            .then(|| decode_html_attribute_entities(raw_source.as_str()));
-        let source = decoded.as_deref().unwrap_or_else(|| raw_source.as_str());
+        // The lowering already decoded the value's character references.
+        let source = raw_source.as_str();
         let source_root = cx.source;
         if let Some((leading, trailing)) =
             authored_value_padding(source_root, bind, raw_source.as_str(), js.span)
@@ -78,13 +75,10 @@ impl BindValue<'_> {
     }
 }
 
+/// The source of a bind value. The lowering already decoded its character
+/// references, as Vue reads a directive value.
 pub(super) fn bind_js_source<'a>(js: &JsExpr<'a>) -> RawJs<'a> {
-    let source = js_expr_source(js);
-    if source.as_str().contains('&') {
-        RawJs::Owned(decode_html_attribute_entities(source.as_str()))
-    } else {
-        source
-    }
+    js_expr_source(js)
 }
 
 pub(super) fn bind_value<'a>(bind: &'a BindOp<'a>) -> Result<BindValue<'a>, EmitError> {

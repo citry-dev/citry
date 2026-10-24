@@ -302,7 +302,8 @@ fn options_api_handler_name(ctx: &CodegenContext, dir: &DirectiveNode<'_>) -> Op
         return None;
     };
 
-    let name = simple.loc.span.slice(&ctx.source).trim();
+    let name = crate::entity::authored_expression_text(&ctx.source, simple.loc.span);
+    let name = name.trim();
     if simple.is_static || !crate::steps::is_simple_identifier(name) {
         return None;
     }

@@ -117,7 +117,9 @@ fn desugar_sync_modifiers<'a>(allocator: &'a Allocator, el: &mut ElementNode<'a>
         // Need an expression to assign back into.
         let value_exp = match &dir.exp {
             Some(ExpressionNode::Simple(s)) => s.content,
-            Some(ExpressionNode::Compound(c)) => c.loc.span.slice(source),
+            Some(ExpressionNode::Compound(c)) => {
+                crate::entity::authored_expression_str(allocator, source, c.loc.span)
+            }
             None => continue,
         };
 

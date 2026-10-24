@@ -175,6 +175,8 @@ fn is_array_literal(expr: &str) -> bool {
 fn expression_source(exp: &ExpressionNode<'_>, source: &str) -> String {
     match exp {
         ExpressionNode::Simple(simple) => simple.content.into(),
-        ExpressionNode::Compound(compound) => String::new(compound.loc.span.slice(source)),
+        ExpressionNode::Compound(compound) => {
+            crate::entity::authored_expression_text(source, compound.loc.span)
+        }
     }
 }

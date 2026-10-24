@@ -210,6 +210,11 @@
 
 ### Fixes
 
+- In a component that uses Vue, a character reference inside a directive
+  value now means what it means in Vue: `@click="msg = 'Tom &amp; Jerry'"`
+  sets `Tom & Jerry`. Citry used to keep `&amp;` in strings written in
+  `@click`, `v-if`, `v-show`, `v-for`, `v-slot`, `v-model` and other
+  directives.
 - A template that nests 50 or more `<c-if>` or `<c-for>` tags now renders.
   It used to fail with `SyntaxError: too many nested parentheses`.
   Templates nested more than about 300 levels raise `RecursionError`

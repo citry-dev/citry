@@ -7,7 +7,7 @@ SHA-256 is
 `13d57e14a66a37b558d10c5a46c6c1deb857ffbbfaa7f99118db584646ca096d`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.4`.
+package as `0.420.0+citry.5`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,7 +16,7 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.4` package version, omits the
+- `Cargo.toml`: records the local `0.420.0+citry.5` package version, omits the
   upstream `emit_for` test target (the published manifest does not contain its
   `vize_atelier_dom` development dependency, and adding it would create a
   cycle), registers the `citry_runtime_directives`,
@@ -59,9 +59,8 @@ Relative to that archive, the Citry delta is:
   `src/emit/style.rs`, `src/emit/html.rs`, `src/emit/outlet.rs`,
   `src/emit/outlet_props.rs`, `src/emit/tpl.rs`, `src/emit/tpl/fragment.rs`,
   `src/emit/vif.rs`, `src/emit/vfor/keys.rs`, `src/emit/hoist/props.rs`, and
-  `src/emit/props_object/bind_pair.rs`) call the attribute versions. Other
-  directive expressions keep their text as written, as `vize_atelier_core`
-  does. Text nodes keep the text rule, as `@vue/compiler-dom` does. Slot
+  `src/emit/props_object/bind_pair.rs`) call the attribute versions. Text
+  nodes keep the text rule, as `@vue/compiler-dom` does. Slot
   names written as `#name`, slot prop names, the attribute names that a
   `<template>` wrapper or a static prop writes, directive names, and
   directive modifiers go through `escape_js_name` (`src/emit/directive.rs`,
@@ -69,6 +68,34 @@ Relative to that archive, the Citry delta is:
   `src/emit/outlet_props.rs`, `src/emit/tpl/fragment.rs`, and
   `src/emit/props_static/hoist_pair.rs`), because HTML never decodes a
   reference in a name.
+- `src/lower/cx.rs`, `src/lower/element.rs`, and the lowering of each
+  directive (`src/lower/binding.rs`, `src/lower/bindop.rs`,
+  `src/lower/forop.rs`, `src/lower/html.rs`, `src/lower/once_memo.rs`,
+  `src/lower/show.rs`, `src/lower/slot.rs`, `src/lower/structural.rs`,
+  `src/lower/structural/wrapper.rs`, `src/lower/sugar.rs`, and
+  `src/lower/vtext.rs`): decode the character references in a directive
+  value by the attribute rule before the value is parsed as JavaScript, as
+  Vue does, so `@click="msg = 'Tom &amp; Jerry'"` assigns `Tom & Jerry` and
+  is read as one expression. `src/lower/leaf.rs` and `src/lower/text/run.rs`
+  decode an interpolation's text by the text rule, as Vue does. Names and
+  dynamic arguments are not decoded. Each decoded value is allocated once,
+  and `Cx` maps any part of it back to the span of the authored value
+  (`decoded_directive_value`, `decoded_interpolation_text`). The decoders
+  for these values (`decode_directive_value` and
+  `decode_interpolation_text` in `src/emit/entity.rs`) read each reference
+  once. The decoders for static text and static attribute values keep the
+  shipped lane's reading of a written `&amp;#40;` and `&amp;#41;` as `(` and
+  `)`, where Vue writes `&#40;` and `&#41;`; that difference is left for a
+  later change.
+- `src/emit/prefix.rs`, `src/emit/cx.rs`, `src/emit/html.rs`,
+  `src/emit/props_value.rs`, `src/emit/props_class.rs`, and
+  `src/emit/style.rs`: read a decoded directive value as it arrives from the
+  lowering, without decoding it again. When the lowering decoded a value,
+  the emitter decodes the quoted value from the template the same way to
+  recover the whitespace around it, which the shipped lane keeps. Without
+  `prefix_identifiers` (Citry always turns it on), event handlers,
+  `v-model`, the `v-on` object, `v-if`, `v-show` and slot parameters still
+  drop that whitespace for a decoded value.
 - `tests/emit_tpl.rs`: adds regression assertions for keyed component and slot
   children inside `v-if` template branches.
 - `tests/citry_runtime_directives.rs`: adds Citry coverage for custom,

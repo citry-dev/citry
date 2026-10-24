@@ -22,7 +22,7 @@ use vize_s1::{Element, SurfaceChild};
 use vize_s2::op::{IfBranch, IfOp, Namespace, Op, Region};
 
 use super::cx::{Cx, attr_slice, attr_span, element_span};
-use super::element::{Analyzed, BranchKind, analyze, attr_value_text, element_core};
+use super::element::{Analyzed, BranchKind, analyze, directive_value_text, element_core};
 use super::expr::expr_at;
 use super::forop::lower_for;
 use super::if_keys;
@@ -213,10 +213,10 @@ fn lower_if_group<'a>(
             None => BranchKind::If,
         };
         let condition = match kind {
-            BranchKind::Else => attr_value_text(element, attr_idx)
+            BranchKind::Else => directive_value_text(cx, element, attr_idx)
                 .and_then(|text| (!text.trim().is_empty()).then(|| expr_at(cx, text))),
             BranchKind::If | BranchKind::ElseIf => {
-                let text = attr_value_text(element, attr_idx);
+                let text = directive_value_text(cx, element, attr_idx);
                 if text.map(str::trim).is_none_or(str::is_empty) {
                     cx.error(
                         attr_span(cx, attr),

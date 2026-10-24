@@ -24,7 +24,10 @@ pub fn get_memo_deps(el: &ElementNode<'_>, source: &str) -> Option<String> {
         {
             return Some(match exp {
                 ExpressionNode::Simple(s) => s.content.into(),
-                ExpressionNode::Compound(c) => String::new(c.loc.span.slice(source)),
+                // Read back from the source and decoded as Vue reads it (see `entity`).
+                ExpressionNode::Compound(c) => {
+                    crate::entity::authored_expression_text(source, c.loc.span)
+                }
             });
         }
     }
