@@ -292,7 +292,6 @@ requires-dist = [
     { name = "citry-core", editable = "packages/py/citry_core" },
     { name = "markupsafe", specifier = ">=2.1" },
     { name = "playwright", marker = "extra == 'ext-preview'", specifier = ">=1.64.1" },
-    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "ty", marker = "extra == 'analysis-ty'", specifier = "==0.0.89" },
     { name = "typing-extensions", specifier = ">=4.10" },
     { name = "tzdata", specifier = ">=2026.3" },
