@@ -1,12 +1,12 @@
 """
 A stored render-cache entry replays only template text that a live template wrote.
 
-The cache backend is shared storage that other processes can write. Replay
-puts some stored strings back into the page and the Vue template as markup:
-text between tags, `<c-raw>` bodies, joined static markup, and `$c-tr` values
-expressions. Each test stores a real entry, changes one of those strings in
-the backend, and checks that the next render ignores the entry and renders
-fresh, as for any other unusable entry.
+Replay puts some stored strings back into the page and the Vue template as
+markup: text between tags, `<c-raw>` bodies, joined static markup, and `$c-tr`
+bindings with their values expressions. Each test stores a real entry,
+changes one of those strings in the backend, and checks that the next render
+ignores the entry and renders fresh, as for any other unusable entry. Values
+that are data, such as a `Markup` value, are outside these checks.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from citry.ext.cache import component_cache_key
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-_INJECTED = "<img src=x onerror=alert(1)>"
+_FOREIGN_MARKUP = '<b data-foreign="1">foreign</b>'
 
 
 def _card(*, template: str, js: str | None = None, messages: str | None = None) -> tuple[type[Component], Any]:
@@ -95,12 +95,12 @@ def test_source_text_that_differs_from_its_span_is_a_miss() -> None:
 
     def edit(part: list[Any]) -> None:
         # Keep the real template source and span; change only the text.
-        part[3] = _INJECTED
+        part[3] = _FOREIGN_MARKUP
 
     _store_then_tamper(card, backend, "source_text", edit)
 
     html = str(card())
-    assert _INJECTED not in html
+    assert _FOREIGN_MARKUP not in html
     assert "Authored text 1" in html
     assert card.calls == [1, 1]  # type: ignore[attr-defined]
 
@@ -110,14 +110,14 @@ def test_source_text_from_an_unknown_template_source_is_a_miss() -> None:
 
     def edit(part: list[Any]) -> None:
         # A self-consistent span over a source no live template has.
-        part[1] = _INJECTED
-        part[2] = [0, len(_INJECTED.encode())]
-        part[3] = _INJECTED
+        part[1] = _FOREIGN_MARKUP
+        part[2] = [0, len(_FOREIGN_MARKUP.encode())]
+        part[3] = _FOREIGN_MARKUP
 
     _store_then_tamper(card, backend, "source_text", edit)
 
     html = str(card())
-    assert _INJECTED not in html
+    assert _FOREIGN_MARKUP not in html
     assert "Authored text 1" in html
     assert card.calls == [1, 1]  # type: ignore[attr-defined]
 
@@ -144,12 +144,12 @@ def test_raw_body_that_differs_from_its_span_is_a_miss() -> None:
     )
 
     def edit(part: list[Any]) -> None:
-        part[3] = _INJECTED
+        part[3] = _FOREIGN_MARKUP
 
     _store_then_tamper(card, backend, "verbatim_html", edit)
 
     html = str(card())
-    assert _INJECTED not in html
+    assert _FOREIGN_MARKUP not in html
     assert card.calls == [1, 1]  # type: ignore[attr-defined]
 
 
@@ -175,10 +175,71 @@ greeting = Hi { $name }
         # The binding's wire record keeps its values expression in one slot;
         # find it by the authored text rather than by position.
         index = binding.index("{ name: who }")
-        binding[index] = "{ name: (globalThis.ran = 1, who) }"
+        binding[index] = "{ name: foreignValue }"
 
     _store_then_tamper(card, backend, "text_value", edit)
 
     html = str(card())
-    assert "globalThis.ran" not in html
+    assert "foreignValue" not in html
+    assert card.calls == [1, 1]  # type: ignore[attr-defined]
+
+
+_TWO_BINDINGS_TEMPLATE = """
+<c-i18n c-client="True" tag="main">
+  <button
+    c-title="tr('greeting', name='S')"
+    $c-tr:greeting[title]="{ name: who }"
+  >x</button>
+  <span
+    c-title="'L'"
+    $c-tr:greeting[title]="useCatalog ? { name: who } : null"
+  >y</span>
+</c-i18n>
+"""
+_TWO_BINDINGS_JS = """
+$component({ data() { return { who: 'A', useCatalog: true } } });
+"""
+_GREETING = """
+# @param {str} $name
+greeting = Hi { $name }
+"""
+
+
+def test_binding_moved_to_an_attribute_no_template_named_is_a_miss() -> None:
+    card, backend = _card(template=_TWO_BINDINGS_TEMPLATE, js=_TWO_BINDINGS_JS, messages=_GREETING)
+
+    moved: list[str] = []
+
+    def edit(part: list[Any]) -> None:
+        # Reuse an expression the template wrote, on an attribute it never bound.
+        for binding in part[-1] if isinstance(part[-1], list) else ():
+            if isinstance(binding, list) and "attribute" in binding:
+                index = binding.index("attribute")
+                binding[index + 1] = "data-foreign"
+                binding[index + 2] = "useCatalog ? { name: who } : null"
+                moved.append(binding[index + 1])
+
+    _store_then_tamper(card, backend, "element_open", edit)
+    assert moved
+
+    html = str(card())
+    assert "data-foreign" not in html
+    assert card.calls == [1, 1]  # type: ignore[attr-defined]
+
+
+def test_text_spelled_from_pieces_of_a_template_is_a_miss() -> None:
+    card, backend = _card(template=_TEXT_TEMPLATE, js=_VUE_JS)
+    source = _TEXT_TEMPLATE.encode()
+
+    def edit(part: list[Any]) -> None:
+        # Each one-byte piece is a real slice of the live template, but no
+        # template wrote a text node at those spans.
+        assert part[1] == _TEXT_TEMPLATE
+        start = source.index(b"Authored")
+        part[2] = [start, start + 1]
+        part[3] = "A"
+
+    _store_then_tamper(card, backend, "source_text", edit)
+
+    str(card())
     assert card.calls == [1, 1]  # type: ignore[attr-defined]

@@ -544,12 +544,32 @@ def test_browser_i18n_binding_directives_keep_names_values_and_errors() -> None:
     assert encoded[direct.message_start_index : direct.message_end_index].decode() == "notice"
     assert encoded[direct.output_start_index : direct.output_end_index].decode() == "aria-label"
     assert encoded[direct.target_start_index : direct.target_end_index].decode() == "title"
-    assert server_dynamic.message == "dynamic"
+    # The `c-` form gives Python data the browser code, so it is an error.
+    assert server_dynamic.message is None
     assert server_dynamic.server_dynamic
-    assert server_dynamic.has_dynamic_arguments
+    assert server_dynamic.error is not None
+    assert "Python data may not set '$c-tr:dynamic[aria-label]'" in server_dynamic.error
     assert malformed.message is None
     assert malformed.error is not None
     assert "non-empty HTML attribute" in malformed.error
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '<div c-$c-tr:x="value"></div>',
+        '<div c-$C-TR:x="value"></div>',
+        '<div c-$c-tr:x="<b>{{ v }}</b>"></div>',
+        "<div c-bind=\"{'$c-tr:x': value}\"></div>",
+        "<div c-bind=\"{'aria-label': label, '$C-Tr:x[aria-label]': True}\"></div>",
+    ],
+)
+def test_browser_i18n_binding_directives_report_python_supplied_bindings(source: str) -> None:
+    directives = browser_i18n_binding_directives(parse_template(source))
+
+    assert [
+        directive.error is not None and "Python data may not set" in directive.error for directive in directives
+    ] == [True]
 
 
 def test_browser_i18n_binding_value_is_an_alpine_expression_host() -> None:

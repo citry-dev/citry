@@ -200,7 +200,12 @@ class BrowserI18nBindCall:
 
 @dataclass(frozen=True, slots=True)
 class BrowserI18nBindingDirective:
-    """One ``$c-tr`` attribute in template source, written directly or with a ``c-`` prefix that the render rejects."""
+    """
+    One ``$c-tr`` attribute in template source.
+
+    It is written directly, with a ``c-`` prefix, or as a key in a literal
+    ``c-bind`` mapping; the render rejects the last two.
+    """
 
     message: str | None
     output: str | None
@@ -2648,6 +2653,15 @@ def _collect_i18n_binding_directives(
         node = element._0
         for attr in node.start_tag.attrs:
             inner = attr.inner_value
+            authored = attr.key.content
+            if authored.startswith("c-") and looks_like_i18n_binding(authored[2:]):
+                # Any `c-$c-tr` name, in any spelling and whatever kind of
+                # value it holds, is Python data choosing browser code, which
+                # the render rejects with `VueCodeError`. Report that before
+                # the name's own spelling rules.
+                start = base_index + attr.key.start_index
+                found.append(_python_i18n_binding_record(authored[2:], start, start + len(authored.encode("utf-8"))))
+                continue
             if attr.kind == HtmlAttrKind.Template:
                 if inner is not None:
                     nested = _nested_template(inner.content, parse_nested)
@@ -2660,20 +2674,18 @@ def _collect_i18n_binding_directives(
                             base_index=base_index + inner.start_index + nested_start,
                         )
                 continue
-            authored = attr.key.content
             if authored == "c-bind" and inner is not None:
                 _collect_spread_i18n_bindings(inner.content, found, base_index + inner.start_index)
                 continue
-            server_dynamic = authored.startswith("c-") and looks_like_i18n_binding(authored[2:])
-            directive = authored[2:] if server_dynamic else authored
+            directive = authored
             if not looks_like_i18n_binding(directive):
                 continue
-            name_start = base_index + attr.key.start_index + (2 if server_dynamic else 0)
+            name_start = base_index + attr.key.start_index
             name_end = name_start + len(directive.encode("utf-8"))
             arguments: tuple[BrowserObjectProperty, ...] = ()
-            dynamic_arguments = server_dynamic
+            dynamic_arguments = False
             has_values_expression = inner is not None and bool(inner.content.strip())
-            if not server_dynamic and inner is not None and inner.content.strip():
+            if inner is not None and inner.content.strip():
                 parsed_values = _browser_object_literal(inner.content, base_index=base_index + inner.start_index)
                 if parsed_values is None:
                     dynamic_arguments = True
@@ -2698,16 +2710,13 @@ def _collect_i18n_binding_directives(
                         arguments,
                         dynamic_arguments,
                         has_values_expression,
-                        server_dynamic,
+                        False,  # noqa: FBT003 - positional dataclass field
                         str(error),
                         name_start + error.start,
                         name_start + error.end,
                     )
                 )
                 continue
-            # The render rejects a `c-$c-tr:` name with `VueCodeError`, because
-            # its Python value would become browser code; report it here too.
-            python_error = _python_i18n_binding_error(directive) if server_dynamic else None
             found.append(
                 BrowserI18nBindingDirective(
                     parsed_name.message,
@@ -2724,10 +2733,10 @@ def _collect_i18n_binding_directives(
                     arguments,
                     dynamic_arguments,
                     has_values_expression,
-                    server_dynamic,
-                    python_error,
-                    None if python_error is None else name_start - 2,
-                    None if python_error is None else name_end,
+                    False,  # noqa: FBT003 - positional dataclass field
+                    None,
+                    None,
+                    None,
                 )
             )
         body = getattr(node, "body", None)
@@ -2741,11 +2750,35 @@ def _collect_i18n_binding_directives(
 
 
 def _python_i18n_binding_error(name: str) -> str:
-    """Explain why Python data may not supply a `$c-tr` binding, in the words the render error uses."""
+    """Explain why Python data may not supply a `$c-tr` binding, with the same fix the render error gives."""
     return (
         f"Python data may not set {name!r}, because a $c-tr binding's value is browser code. "
         "Write the $c-tr binding directly in the template, with any values expression written there too, "
-        "and return those values from js_data()."
+        "and return the data it reads from js_data()."
+    )
+
+
+def _python_i18n_binding_record(name: str, start_index: int, end_index: int) -> BrowserI18nBindingDirective:
+    """Describe a `$c-tr` name that Python data supplies, which the render rejects."""
+    return BrowserI18nBindingDirective(
+        None,
+        None,
+        None,
+        start_index,
+        end_index,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        (),
+        True,  # noqa: FBT003 - positional dataclass field
+        True,  # noqa: FBT003 - positional dataclass field
+        True,  # noqa: FBT003 - positional dataclass field
+        _python_i18n_binding_error(name),
+        start_index,
+        end_index,
     )
 
 
@@ -2762,28 +2795,7 @@ def _collect_spread_i18n_bindings(source: str, found: list[BrowserI18nBindingDir
     end_index = start_index + len(source.encode("utf-8"))
     for key in parsed.keys:
         if isinstance(key, ast.Constant) and type(key.value) is str and looks_like_i18n_binding(key.value):
-            found.append(
-                BrowserI18nBindingDirective(
-                    None,
-                    None,
-                    None,
-                    start_index,
-                    end_index,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    (),
-                    True,  # noqa: FBT003 - positional dataclass field
-                    True,  # noqa: FBT003 - positional dataclass field
-                    True,  # noqa: FBT003 - positional dataclass field
-                    _python_i18n_binding_error(key.value),
-                    start_index,
-                    end_index,
-                )
-            )
+            found.append(_python_i18n_binding_record(key.value, start_index, end_index))
 
 
 def _declarative_handler(source: str, known_names: frozenset[str]) -> tuple[str, int, int] | None:

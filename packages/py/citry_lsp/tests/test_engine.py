@@ -426,6 +426,17 @@ def test_c_tr_malformed_owned_names_are_lsp_errors(tmp_path):
     assert any("non-empty Fluent attribute" in item.message for item in invalid)
 
 
+def test_python_supplied_c_tr_bindings_are_lsp_errors(tmp_path):
+    project, _app_file, _source = _i18n_project(tmp_path)
+    source = """<div c-$c-tr:known="value" c-bind="{'$c-tr:known[title]': True}"></div>"""
+    document = _document(source, project)
+
+    findings = browser_diagnostics(document, project)
+
+    invalid = [item for item in findings if item.code == "citry.i18n.argument-invalid"]
+    assert ["Python data may not set" in item.message for item in invalid] == [True, True]
+
+
 def test_i18n_bind_literal_message_and_output_navigate_to_fluent_definition(tmp_path):
     project, app_file, source = _i18n_project(tmp_path)
     authored = source.replace(

@@ -400,7 +400,21 @@ def prepared_browser_binding(
         raise ValueError("prepared browser binding fallback text needs a values expression")
     value = PreparedBrowserBinding(helper, operand, target, name, values_expression, fallback)
     object.__setattr__(value, "_producer_token", _BROWSER_BINDING_TOKEN)
+    # The render cache replays a stored binding only with a helper, target,
+    # attribute name and values expression that a producer in this process
+    # chose. The binding ID and the kept server text vary per render.
+    _PRODUCED_BROWSER_BINDINGS.add((helper, target, name, values_expression))
     return value
+
+
+# Each distinct binding shape a producer created in this process; it grows
+# with the templates, not with the renders.
+_PRODUCED_BROWSER_BINDINGS: set[tuple[str, str, str | None, str | None]] = set()
+
+
+def is_produced_browser_binding(helper: str, target: str, name: str | None, values_expression: str | None) -> bool:
+    """Return whether a producer in this process created a binding of this shape."""
+    return (helper, target, name, values_expression) in _PRODUCED_BROWSER_BINDINGS
 
 
 def is_authenticated_browser_binding(value: PreparedBrowserBinding) -> bool:
@@ -739,18 +753,19 @@ class StaticRunStructure:
 
 
 # Template text that this process's own compiled templates wrote into a
-# prepared render. The render cache reads entries from a store that other
-# processes can write, so before it replays stored template text it checks
-# that this process produced the same text (`ext/cache/replay.py`). Each set
+# prepared render. The render cache replays stored template text as markup
+# and Vue template source, so it first checks that this process produced the
+# same text (`ext/cache/replay.py`); an entry that another version of a
+# template wrote is then a miss rather than foreign markup. Each set
 # holds one item per distinct piece of template text, so it grows with the
 # templates an app has, not with the number of renders.
-_AUTHORED_TEMPLATE_SOURCES: set[str] = set()
+_AUTHORED_TEMPLATE_SPANS: set[tuple[str, int, int]] = set()
 _AUTHORED_STATIC_RUNS: set[str] = set()
 
 
-def is_authored_template_source(source: str) -> bool:
-    """Return whether a compiled template in this process has this source."""
-    return source in _AUTHORED_TEMPLATE_SOURCES
+def is_authored_template_span(source: str, span: tuple[int, int]) -> bool:
+    """Return whether a compiled template in this process wrote text or a raw block at this exact span."""
+    return (source, span[0], span[1]) in _AUTHORED_TEMPLATE_SPANS
 
 
 def is_authored_static_run(html: str) -> bool:
@@ -873,7 +888,7 @@ PREPARED_CONST_PRECOMPUTE_ADAPTER = PreparedConstPrecomputeAdapter()
 
 class PreparedSourceTextNode(Node):
     def __init__(self, source: str, span: tuple[int, int], text: str) -> None:
-        _AUTHORED_TEMPLATE_SOURCES.add(source)
+        _AUTHORED_TEMPLATE_SPANS.add((source, span[0], span[1]))
         self.source = source
         self.position = span
         self.text = text
@@ -893,7 +908,7 @@ class PreparedSourceTextNode(Node):
 
 class PreparedVerbatimHtmlNode(Node):
     def __init__(self, source: str, span: tuple[int, int], html: str) -> None:
-        _AUTHORED_TEMPLATE_SOURCES.add(source)
+        _AUTHORED_TEMPLATE_SPANS.add((source, span[0], span[1]))
         self.source = source
         self.position = span
         self.html = html
