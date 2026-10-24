@@ -56,7 +56,8 @@ def safe_eval(
         The returned function may raise SecurityError if the expression is unsafe.
 
     Raises:
-        SyntaxError: If the input is not valid Python syntax or contains forbidden constructs.
+        SyntaxError: If the input is not valid Python syntax, contains forbidden constructs,
+            or nests too deeply (more than about 97 chained operators or 65 nested brackets).
 
     Example:
         >>> compiled = safe_eval("my_var + 1")

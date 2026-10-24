@@ -2175,7 +2175,14 @@ the pinned Pyodide/Emscripten tuple. The workflow requires byte-identical
 normalized outputs and checks the actual SDK-reported Emscripten version. It
 uses that SDK's `wasm-opt` to remove the workspace's profiler-only DWARF/debug
 payload before regenerating `RECORD`, then exercises build A in that exact
-Pyodide runtime.
+Pyodide runtime. That run of `scripts/smoke_citry_core.py` also evaluates,
+parses and formats the deepest expressions that `python_safe_eval` accepts.
+It rejects an expression whose depth bound, counted from its tokens, is above
+`MAX_NESTING` in `crates/python_safe_eval/src/nesting.rs`. The WebAssembly
+engine's call stack cannot grow, and this run checks that the parse,
+evaluate and format passes fit in it, so a failure there means that limit is
+too high for Pyodide. The qualify run only accepts a commit on `main`, so
+this check cannot run on a branch before merging.
 
 The repository release controller passes the retained run, artifact ID, and
 archive digest to the same workflow. The worker safely extracts and completely

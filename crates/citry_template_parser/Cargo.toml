@@ -20,6 +20,7 @@ pyo3 = { workspace = true }
 quick-xml = { workspace = true }
 pest = { workspace = true }
 pest_derive = { workspace = true }
+stacker = { workspace = true }
 thiserror = { workspace = true }
 regex = { workspace = true }
 lazy_static = { workspace = true }
