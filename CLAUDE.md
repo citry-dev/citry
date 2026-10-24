@@ -233,6 +233,48 @@ run it at **high or greater** effort. Fold its findings back before delivery.
   render) has tried to break it. Enumerate the cases that would disprove the
   claim and check them; if you cannot check one, say so and mark it unproven.
 
+## Mechanism 7 - a security pass for anything that reaches the browser
+
+Citry turns Python values into HTML, CSS, JavaScript, and browser actions, so
+a feature can let data run in the visitor's browser without anyone noticing.
+When a change adds or alters how a value reaches the page (template syntax,
+attribute or tag handling, a keyword argument, an extension hook, a cached
+render, or an Events action), check its security before delivery, as follows:
+
+1. **Name who first supplies each new input.** For every value the change
+   accepts, say where it first comes from: the template author, the app's
+   Python code, or data from a request or storage. A value the app only
+   passes along counts as its original source. Then say what the browser does
+   with it: shows it as text, parses it as markup, applies it as CSS, runs it,
+   or navigates to it.
+2. **Let data fill in text, never choose code.** Escape a value that data can
+   supply for the place it lands (HTML text, an attribute, CSS, script, or a
+   URL), so the browser treats it as text or data. Data must not choose what
+   the browser runs, loads, or navigates to. When a feature needs such a choice
+   from data, check it against an allowlist, on the server and again in the
+   browser when the browser acts on it.
+3. **Apply one check on every path.** Every way the value can render (with and
+   without Vue, through extensions, and from a cached render) must apply the
+   same check. A check on one path is a hole on the others. Prefer one
+   function, in the Rust crate when the logic lives there, that every path
+   calls.
+4. **Give the independent reviewer (Mechanism 6) a separate security brief.**
+   Ask it to list every route the new input can take to the page and to try to
+   defeat each check in a real browser, with a harmless test value whose effect
+   is easy to see. Its report names each route as safe, author-only by design,
+   or a hole.
+5. **Keep a hole private until its fix ships.** When you find one, stop, tell
+   the maintainer in your report, and do not commit, push, or open anything
+   public that describes it. The maintainer opens a private advisory as
+   [`SECURITY.md`](SECURITY.md) describes, and the fix is built in that
+   advisory's private fork. Sweep for siblings there (Mechanism 3). The fix's
+   regression tests, docs note, and changelog entry stay in the private fix
+   and become public only when the advisory is published, which overrides the
+   usual rule to publish those with the change.
+6. **Say in the docs when an input is author-only.** When a value is trusted
+   because only the template author writes it, the page that documents the
+   API must say so, so app authors know not to pass request data into it.
+
 ## Where new agent knowledge goes
 
 When you discover something worth recording, pick **one** location. All of
