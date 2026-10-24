@@ -215,6 +215,16 @@
   delayed ones with `wait=False`. The newer call no longer waits for its
   delays, and `$loading()` and `citry:events:after` stop reporting it as a
   success.
+- When an Events handler's `Render` replaces its component and also
+  schedules a delayed action with `wait=False`, such as
+  `Dispatch("Form:saved", delay=3, wait=False)`, that action no longer
+  runs once the page has accepted a newer result from the component that
+  replaced it.
+- A delayed `Redirect` with `wait=False` now runs even when the page
+  accepted a newer result for its component first, because it reports a
+  result the server already produced. It is dropped only when its call
+  is superseded, its component is removed, or the page's Vue app shuts
+  down.
 - In a component that uses Vue, a character reference inside a directive
   value now means what it means in Vue: `@click="msg = 'Tom &amp; Jerry'"`
   sets `Tom & Jerry`. Citry used to keep `&amp;` in strings written in

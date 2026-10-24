@@ -1925,6 +1925,158 @@ const remountingRender = {
   prepared: {},
 };
 
+// A bridge whose first call replaces the caller (generation 1) with a new component
+// (generation 2) and then schedules `laterActions`; every later call returns data 2. The host
+// records each page change and stale event.
+const replacingBridge = (laterActions) => {
+  const record = [];
+  const transaction = {};
+  let generation = 1;
+  let bridge;
+  const host = {
+    ...basicHost((source) =>
+      source.generation === generation ? { ...contextFor(`server_${generation}`), descriptor } : null,
+    ),
+    async prepareRender() {
+      return { transaction };
+    },
+    abortRender() {},
+    async commitRender() {
+      bridge.retire({ stableId: "board", generation: 1 }, transaction);
+      generation = 2;
+    },
+    commitState(target, token) {
+      record.push(`state:${target}:${token}`);
+    },
+    dispatchEvent(name) {
+      record.push(`event:${name}`);
+    },
+    redirect(url) {
+      record.push(`redirect:${url}`);
+    },
+    updateUrl(url, mode) {
+      record.push(`url:${mode}:${url}`);
+    },
+    lifecycle(kind, _source, _event, detail) {
+      if (kind === "stale") record.push(`stale:${detail.reason}`);
+      return true;
+    },
+  };
+  let calls = 0;
+  bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) => {
+      calls += 1;
+      const envelope = JSON.parse(init.body);
+      return resultResponse(
+        envelope,
+        calls === 1
+          ? [remountingRender, ...laterActions, { action: "data", value: 1 }]
+          : [{ action: "data", value: 2 }],
+      );
+    },
+  });
+  return { bridge, record };
+};
+
+// Sends the replacing call, then a call from the new component whose result is accepted before the
+// first call's delayed actions are due, and returns what reached the page.
+const newerResultAfterReplacement = async (laterActions) => {
+  const { bridge, record } = replacingBridge(laterActions);
+  assert.equal(await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }), 1);
+  assert.equal(await bridge.send({ source: { stableId: "board", generation: 2 }, handler: "move" }), 2);
+  record.push("newer result applied");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  return record;
+};
+
+const replacedCallerActions = {
+  Dispatch: [{ action: "event", eventName: "old" }, "event:old"],
+  PushUrl: [{ action: "url", url: "/old", mode: "push" }, "url:push:/old"],
+  ReplaceUrl: [{ action: "url", url: "/old", mode: "replace" }, "url:replace:/old"],
+  State: [
+    { action: "state", targetRenderId: "server_7", stateToken: "old-token", publicState: {} },
+    "state:server_7:old-token",
+  ],
+};
+
+for (const [name, [action, applied]] of Object.entries(replacedCallerActions)) {
+  test(`after a Render replaced the caller, a newer result drops a delayed ${name}`, async () => {
+    const record = await newerResultAfterReplacement([{ ...action, delay: 0.3, wait: false }]);
+    assert.deepEqual(record, ["newer result applied", "stale:epoch"]);
+    assert.ok(!record.includes(applied));
+  });
+}
+
+test("after a Render replaced the caller, a delayed Redirect runs even after a newer result", async () => {
+  const record = await newerResultAfterReplacement([{ action: "redirect", url: "/saved", delay: 0.3, wait: false }]);
+  assert.deepEqual(record, ["newer result applied", "redirect:/saved"]);
+});
+
+test("a delayed Redirect runs after a newer result for a caller that is still mounted", async () => {
+  const record = [];
+  const host = {
+    ...basicHost(),
+    redirect(url) {
+      record.push(`redirect:${url}`);
+    },
+    dispatchEvent(name) {
+      record.push(`event:${name}`);
+    },
+    lifecycle(kind, _source, _event, detail) {
+      if (kind === "stale") record.push(`stale:${detail.reason}`);
+      return true;
+    },
+  };
+  let calls = 0;
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    fetch: async (_url, init) => {
+      calls += 1;
+      const envelope = JSON.parse(init.body);
+      return resultResponse(
+        envelope,
+        calls === 1
+          ? [
+              { action: "redirect", url: "/saved", delay: 0.3, wait: false },
+              { action: "event", eventName: "old", delay: 0.3, wait: false },
+              { action: "data", value: 1 },
+            ]
+          : [{ action: "data", value: 2 }],
+      );
+    },
+  });
+  const source = { stableId: "board", generation: 1 };
+  assert.equal(await bridge.send({ source, handler: "move" }), 1);
+  assert.equal(await bridge.send({ source, handler: "move" }), 2);
+  record.push("newer result applied");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  // The newer result drops the event, but the redirect reports a result the server already
+  // produced, so it still runs.
+  assert.deepEqual(record, ["newer result applied", "redirect:/saved", "stale:epoch"]);
+});
+
+test("after a Render replaced the caller, applyActions on the new component counts as a newer result", async () => {
+  const { bridge, record } = replacingBridge([{ action: "event", eventName: "old", delay: 0.3, wait: false }]);
+  assert.equal(await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }), 1);
+  await bridge.applyActions([{ action: "data", value: 3 }], { stableId: "board", generation: 2 });
+  record.push("newer result applied");
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.deepEqual(record, ["newer result applied", "stale:epoch"]);
+});
+
+test("after a Render replaced the caller, delayed actions run when no newer result arrives", async () => {
+  const { bridge, record } = replacingBridge([
+    { action: "event", eventName: "saved", delay: 0.02, wait: false },
+    { action: "url", url: "/saved", mode: "push", delay: 0.02, wait: false },
+  ]);
+  assert.equal(await bridge.send({ source: { stableId: "board", generation: 1 }, handler: "move" }), 1);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.deepEqual(record, ["event:saved", "url:push:/saved"]);
+});
+
 test("delayed actions after a render that remounted the sender still run", async () => {
   const source = { stableId: "board", generation: 1 };
   const record = [];

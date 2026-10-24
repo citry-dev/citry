@@ -353,6 +353,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     callerRenderId?: string;
     stateUpdates?: JsonObject;
     stateAccepted: boolean;
+    // How many results the bridge had accepted at the caller's spot on the page, this call's own
+    // included, when this call's result was accepted (see `acceptedAtSpot`).
+    acceptedAtSpotWhenAccepted?: number;
     settled: boolean;
     // The error the call was cancelled with (superseded, retired, or disposed). Once set, none of
     // the call's remaining actions start.
@@ -365,6 +368,15 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     reject(error: unknown): void;
   };
   const owners = new Map<string, Owner>();
+  // How many results the bridge accepted at each spot on the page (`stableId`), whichever component
+  // instance was mounted there. A call whose own Render replaced the caller compares this count,
+  // because the new component's results raise only the new instance's `acceptedEpoch`.
+  const acceptedAtSpot = new Map<string, number>();
+  const acceptAtSpot = (source: VueEventSource, job: Job): void => {
+    const count = (acceptedAtSpot.get(source.stableId) ?? 0) + 1;
+    acceptedAtSpot.set(source.stableId, count);
+    job.acceptedAtSpotWhenAccepted = count;
+  };
   const queue: Job[] = [];
   let active: Job | null = null;
   // Calls that page code applies with `applyActions` run outside the queue, so `active` never names them.
@@ -453,8 +465,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   };
 
   // Timers of a call whose own Render remounted its sender. The retired sender's timers are
-  // cancelled with it, but this call's response was accepted, so its later actions still run;
-  // only disposing the bridge stops them.
+  // cancelled with it, but this call's response was accepted, so its later actions keep their
+  // timers here. When each fires, `continuationCurrent` drops it if a newer result arrived at the
+  // sender's spot (a redirect still runs). Only disposing the bridge cancels these timers.
   const remountTimers = new Map<ReturnType<typeof globalThis.setTimeout>, (error: unknown) => void>();
   // Timers of `applyActions` calls made without a component, which no component record owns; only
   // disposing the bridge stops them.
@@ -485,14 +498,30 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       });
     });
 
-  const continuationCurrent = (source: VueEventSource, state: Owner, epoch: number, job: Job): void => {
+  const continuationCurrent = (
+    source: VueEventSource,
+    state: Owner,
+    epoch: number,
+    job: Job,
+    survivesNewerResult = false,
+  ): void => {
     // The accepted-result count does not move when a newer call supersedes this one, because the
     // newer call is still waiting in the queue, so the cancellation itself is checked first.
     if (job.cancelError) throw job.cancelError;
-    if (disposed || epoch !== state.acceptedEpoch) {
-      throw stale(disposed ? "disposed" : "epoch");
+    if (disposed) throw stale("disposed");
+    // A redirect reports a result the server already produced, such as "saved, now go to the
+    // list", which a newer result does not replace, so it runs even after one. The other actions
+    // only adjust a page that the newer result has already replaced, so they are dropped.
+    if (!survivesNewerResult && epoch !== state.acceptedEpoch) throw stale("epoch");
+    if (!job.acceptedRemount) {
+      stillCurrent(source, state, survivesNewerResult ? undefined : epoch);
+      return;
     }
-    if (!job.acceptedRemount) stillCurrent(source, state, epoch);
+    // This call's own Render replaced the caller, so the new component's results raise only the
+    // new instance's count; the count for the spot on the page shows them.
+    if (!survivesNewerResult && acceptedAtSpot.get(source.stableId) !== job.acceptedAtSpotWhenAccepted) {
+      throw stale("epoch");
+    }
   };
 
   const validateTargets = (result: EventResult, source: VueEventSource, serverRenderId: string): void => {
@@ -579,7 +608,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     } else if (action.action === "event") {
       // A Render earlier in this response may have remounted the caller, possibly as another
       // component. That retires the calling instance, but the response was accepted, so the event
-      // still goes out, from whatever the page now shows at the caller's place.
+      // still goes out, from whatever the page now shows at the caller's place, unless a newer
+      // result arrived there first.
       continuationCurrent(source, state, epoch, job);
       const followRemount = job.acceptedRemount;
       // The retired instance has no current context, so after a remount only the caller's own
@@ -593,7 +623,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         options.host.dispatchEventGlobal(action.eventName, action.detail);
       else options.host.dispatchEvent(action.eventName, action.detail, source, followRemount);
     } else if (action.action === "redirect") {
-      if (!job.external) continuationCurrent(source, state, epoch, job);
+      if (!job.external) continuationCurrent(source, state, epoch, job, true);
       options.host.redirect(action.url);
     } else {
       if (!job.external) continuationCurrent(source, state, epoch, job);
@@ -830,6 +860,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     if ("attachment" in received) {
       stillCurrent(input.source, state);
       state.acceptedEpoch += 1;
+      acceptAtSpot(input.source, job);
       continuationCurrent(input.source, state, state.acceptedEpoch, job);
       saveAttachment(received.attachment, received.filename);
       return undefined;
@@ -843,10 +874,11 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     stillCurrent(input.source, state);
     validateTargets(result, input.source, context.serverRenderId);
     const preparedResult = options.host.preflightResult?.(result, input.source) ?? { result };
-    // Preflight runs page code, which may supersede this call. Checked before the count moves, so
+    // Preflight runs page code, which may supersede this call. Checked before the counts move, so
     // a cancelled result does not count as a newer result for the component.
     if (job.cancelError) throw job.cancelError;
     state.acceptedEpoch += 1;
+    acceptAtSpot(input.source, job);
     // The server has consumed the dequeued State draft once the complete
     // response/result/target preflight succeeds.  Mark that transaction
     // accepted before interpreting its actions: a later action may fail after
@@ -1058,6 +1090,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       lifecycle("after", source, job.input.handler, { ok: false });
       throw error;
     }
+    // Counted only once the actions will be applied, so a cancelled `applyActions` does not drop
+    // another call's delayed actions.
+    acceptAtSpot(source, job);
     // retire() marks this job when its own Render remounts the source, as it does for a sent call.
     externalJobs.add(job);
     try {
@@ -1132,6 +1167,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
       state.timers.clear();
     }
     owners.clear();
+    acceptedAtSpot.clear();
     for (const timers of [remountTimers, sourcelessTimers]) {
       for (const [timer, reject] of timers) {
         globalThis.clearTimeout(timer);

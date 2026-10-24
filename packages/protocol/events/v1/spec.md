@@ -692,12 +692,61 @@ following action immediately. A data action must remain in the sequence
 because applying it settles the caller's promise.
 
 Only `false` is valid when `wait` is present. A blocking delay preserves order.
-When a delayed action runs, Citry's browser client first checks that the
-calling component is still mounted and that no newer result for it has been
-applied; otherwise it skips a non-blocking action and fires
-`citry:events:stale`, or rejects the caller's promise for a blocking one.
-This check is what keeps a delayed `state` action from replacing newer State
-values and a newer token with older ones.
+When a delayed action is due, Citry's browser client first checks that it
+still applies. If not, it skips a non-blocking action and fires
+`citry:events:stale` with the reason below, or rejects the caller's promise
+for a blocking one.
+
+Two rules decide:
+
+- **A cancelled call changes nothing on the page.** A call is cancelled
+  when a newer call supersedes it under `latestCallWins` (see [Superseded
+  calls](#superseded-calls)), when its caller is removed or replaced by
+  anything except this call's own `render`, or when the client is
+  disposed. None of its delayed actions run, `redirect`
+  included.
+- **A newer result drops the rest of an older one, except a `redirect`.**
+  A redirect reports a result the server already produced, such as
+  "saved, now go to the list", which a newer result does not replace. The
+  other actions only adjust a page that the newer result has already
+  replaced.
+
+The outcome depends on what happened to the calling component after the
+client accepted this call's result:
+
+| What happened | The delayed action |
+|---|---|
+| Nothing: the caller is still mounted and no newer result for it was accepted. | Runs. |
+| A newer result for the caller was accepted. | A `redirect` runs. Every other type is skipped (`epoch`). |
+| The caller was removed, or replaced by anything except this call's own `render`. | Skipped (`retired`). |
+| This call's own `render` replaced the caller, and no newer result was accepted for the component now at that place. | Runs, for an action listed after that `render`. An `event` goes out from the component that replaced the caller. |
+| This call's own `render` replaced the caller, and a newer result was accepted for the component now at that place. | A `redirect` listed after that `render` runs. Every other type is skipped (`epoch`). |
+| A newer call superseded this one under `latestCallWins`. | Skipped (`superseded`). |
+| The client was disposed. | Skipped (`disposed`). A pending delay never fires. |
+
+Details:
+
+- An error result counts as a newer result, like a successful one.
+- Only results for the component at the caller's place count. A result for
+  another component, such as a parent whose `render` then replaced or
+  removed that place, does not. An `event` then fails
+  (`citry:events:error`) if nothing is mounted there.
+- A delayed action listed before this call's own `render` is still waiting
+  when the `render` replaces the caller, so it is skipped (`retired`).
+- When the superseded row applies, it wins over every other row. A call
+  from the component that replaced the caller never supersedes a call
+  from the replaced one.
+- The client sends the next call only after this call's blocking actions
+  finish, so a newer result can arrive during a blocking delay only from
+  page code that calls `Citry.events.applyActions`.
+- A result that holds an action type the client does not know is rejected
+  whole, before any of its actions runs, so no row applies to it.
+- Actions that page code applies with `Citry.events.applyActions` follow
+  the same table, except that a newer result never drops their `url`,
+  `redirect`, or `data` actions.
+
+The check is also what keeps a delayed `state` action from replacing newer
+State values and a newer token with older ones.
 Actions after a redirect race the navigation, so a server should warn when it encodes
 such a list even though the authored order remains unchanged.
 
