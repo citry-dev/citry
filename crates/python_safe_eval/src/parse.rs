@@ -6,16 +6,26 @@ use ruff_python_ast::visitor::source_order::{SourceOrderVisitor, walk_expr};
 use ruff_python_ast::{Expr, ModExpression};
 use ruff_python_parser::{ParseError, ParseErrorType, Parsed};
 
-/// Parse an expression and reject duplicate named arguments before consumers
-/// transform or format it. Ruff's parser leaves this check to its semantic pass.
+use crate::nesting::check_nesting;
+use crate::stack::with_enough_stack;
+
+/// Parse an expression, rejecting one nested too deeply (see
+/// `nesting::MAX_NESTING`) and duplicate named arguments, before consumers
+/// transform or format it. Ruff's parser leaves the duplicate check to its
+/// semantic pass.
 pub fn parse_expression(source: &str) -> Result<Parsed<ModExpression>, ParseError> {
-    let parsed = ruff_python_parser::parse_expression(source)?;
-    let mut checker = KeywordChecker { error: None };
-    checker.visit_expr(&parsed.syntax().body);
-    if let Some(error) = checker.error {
-        return Err(error);
-    }
-    Ok(parsed)
+    // Bound the tree's depth from the tokens first: the passes below, and
+    // dropping the tree, call themselves once per level.
+    check_nesting(source)?;
+    with_enough_stack(|| {
+        let parsed = ruff_python_parser::parse_expression(source)?;
+        let mut checker = KeywordChecker { error: None };
+        checker.visit_expr(&parsed.syntax().body);
+        if let Some(error) = checker.error {
+            return Err(error);
+        }
+        Ok(parsed)
+    })
 }
 
 struct KeywordChecker {
