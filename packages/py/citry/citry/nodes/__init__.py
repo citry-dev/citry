@@ -83,7 +83,6 @@ from citry.attrs import (
     _has_default_attr_formatting,
     _merge_resolved_attrs,
     format_attrs,
-    is_script_capable_attr_name,
     is_vue_code_attr_name,
     is_vue_directive_name,
     merge_attrs,
@@ -1211,19 +1210,12 @@ class ElementAttrsNode(Node):
                 runtime_candidate=runtime_candidate,
             )
             if validate_extension_output:
-                # An `on*` name the author wrote (a literal or `c-on*` attribute)
-                # is already here; the hook may keep it but may not add a new one,
-                # because the browser would run its value as JavaScript.
-                authored_event_handlers = {str.lower(key) for key in resolved if is_script_capable_attr_name(key)}
                 resolved = extensions.on_attrs_resolved(
                     component=component,
                     tag_name=self.tag_name,
                     attrs=resolved,
                     runtime_candidate=runtime_candidate,
                 )
-                for key in resolved:
-                    if is_script_capable_attr_name(key) and str.lower(key) not in authored_event_handlers:
-                        reject_script_capable_attr_name(key, tag_name=self.tag_name, where="an on_attrs_resolved hook")
                 if has_client_props_key(resolved, tag_name=self.tag_name):
                     apply_client_props_contribution(
                         resolved,

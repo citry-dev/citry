@@ -48,7 +48,9 @@ from citry._nested_declarations import (
 from citry._walk import Call, run
 from citry.attrs import (
     hide_template_empty_values,
+    is_script_capable_attr_name,
     is_vue_code_attr_name,
+    reject_script_capable_attr_name,
     restore_template_empty_values,
     vue_code_error,
 )
@@ -1370,10 +1372,12 @@ def _as_attrs_dict(value: object) -> Any:
     Later extensions and the attribute formatter change the dict in place,
     so a read-only mapping becomes a dict before they see it.
     """
-    if isinstance(value, dict):
+    # An exact dict, so a subclass cannot show the checks below different
+    # keys than the attribute formatter later reads.
+    if type(value) is dict:
         return value
     if isinstance(value, Mapping):
-        return dict(value)
+        return dict(value.items())
     return _REJECTED
 
 
@@ -1408,6 +1412,22 @@ def _reject_vue_code_from_attrs_hook(before: Mapping[str, Any], after: Mapping[s
             if previous is value or (type(previous) is type(value) and previous == value):
                 continue
         raise vue_code_error(key, tag_name=tag_name, origin="hook")
+
+
+def _reject_script_capable_from_attrs_hook(
+    before: Mapping[str, Any], after: Mapping[str, Any], *, tag_name: str
+) -> None:
+    """
+    Raise `ValueError` when attribute hooks added a name the browser reads as code.
+
+    A name already present was written in the template, so a hook may keep
+    it or change its value; a new `on*`, `innerHTML`, `outerHTML`, or
+    `srcdoc` name would come from the hook.
+    """
+    written = {str.lower(key) for key in before if isinstance(key, str)}
+    for key in after:
+        if is_script_capable_attr_name(key) and str.lower(key) not in written:
+            reject_script_capable_attr_name(key, tag_name=tag_name, where="an on_attrs_resolved hook")
 
 
 class ExtensionManager:
@@ -2419,6 +2439,7 @@ class ExtensionManager:
                 raise _hook_return_error("on_attrs_resolved", extension, out, target, hint)
             ctx = replace(ctx, attrs=new_attrs)
         _reject_vue_code_from_attrs_hook(before, ctx.attrs, tag_name=tag_name)
+        _reject_script_capable_from_attrs_hook(before, ctx.attrs, tag_name=tag_name)
         if hidden:
             restore_template_empty_values(ctx.attrs, hidden)
         return ctx.attrs
