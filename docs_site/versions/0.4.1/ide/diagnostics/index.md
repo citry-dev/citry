@@ -10,7 +10,7 @@ language server, and editor formatting. The code identifies the condition even
 when a message includes source-specific detail.
 
 The entries below are rendered directly from the versioned
-[`diagnostics/v1` catalog](https://github.com/citry-dev/citry/tree/main/packages/protocol/diagnostics/v1).
+[`diagnostics/v1` catalog](https://github.com/citry-dev/citry/tree/citry@0.4.1/packages/protocol/diagnostics/v1).
 Changing a code, message template, or documentation link requires changing that
 catalog and regenerating its language bindings.
 

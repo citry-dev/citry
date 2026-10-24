@@ -13,6 +13,7 @@ import pytest
 import yaml
 from lxml import html as lxml_html
 
+from docs_site._internal import build as build_module
 from docs_site._internal.build import BuildOutcome, _is_unsafe_output, _replace_output_directory, build_site
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
@@ -1573,3 +1574,34 @@ def test_build_refuses_unsafe_output(tmp_path: Path) -> None:
     # Clearing the content dir itself would delete the sources.
     with pytest.raises(ValueError, match="unsafe output"):
         build_site(config=config, output_dir=content)
+
+
+@pytest.mark.parametrize("detached", [False, True])
+def test_docs_version_build_points_its_links_at_the_release(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    detached: bool,
+) -> None:
+    config, content, _out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "index.md").write_text(
+        "# Home\n\n[Source](https://github.com/citry-dev/citry/blob/main/README.md)\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(build_module, "checkout_release_ref", lambda _root, version: f"citry@{version}")
+    target = tmp_path / "detached" if detached else config.versions_dir / "1.0.0"
+
+    build_site(
+        config=config,
+        output_dir=target if detached else None,
+        docs_version="1.0.0",
+        update_versions_manifest=not detached,
+        minify=False,
+        search=False,
+        social_cards=False,
+    )
+
+    page = (target / "index.html").read_text(encoding="utf-8")
+    # A detached build is build-tag's tagged build, which build-tag rewrites to
+    # the exact tag itself, so only the registered build is rewritten here.
+    expected = "blob/main/README.md" if detached else "blob/citry@1.0.0/README.md"
+    assert expected in page
