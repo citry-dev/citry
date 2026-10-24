@@ -3,7 +3,7 @@ use alloc::vec::Vec as StdVec;
 use vize_s0::String;
 use vize_s2::op::Attribute;
 
-use super::super::js::{escape_js_string, is_valid_js_identifier};
+use super::super::js::{escape_js_attribute_string, is_valid_js_identifier};
 
 /// First-occurrence static attrs as a single-line object, matching
 /// hoisted `JsChildNode::Object` emission.
@@ -70,6 +70,6 @@ fn push_pair(out: &mut String, name: &str, value: &str) {
         out.push('"');
     }
     out.push_str(": \"");
-    out.push_str(escape_js_string(value).as_str());
+    out.push_str(escape_js_attribute_string(value).as_str());
     out.push('"');
 }

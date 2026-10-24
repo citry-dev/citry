@@ -4,7 +4,7 @@
 use vize_s0::{Span, String, ToCompactString};
 use vize_s2::expr::{ExprRef, JsExpr, OpaqueExpr, OpaqueReason};
 
-use super::entity::decode_html_entities;
+use super::entity::{decode_html_attribute_entities, decode_html_entities};
 pub(super) use super::js_comment::RawJs;
 use super::js_comment::line_comment_source_as_block;
 
@@ -111,13 +111,35 @@ fn strip_trailing_block_comments(mut source: &str) -> Option<&str> {
     (stripped.len() < original.len() && !stripped.trim().is_empty()).then_some(stripped)
 }
 
-/// Escape `s` for a JavaScript double-quoted string literal, matching
-/// `vize_atelier_core::codegen::helpers::escape_js_string`.
+/// Escape `s`, text from the template, for a JavaScript double-quoted
+/// string literal. Character references decode by the text rule (see
+/// `decode_html_entities`).
 pub(super) fn escape_js_string(s: &str) -> String {
     if !s.bytes().any(byte_may_need_js_escaping) {
         return String::from(s);
     }
-    let decoded = decode_html_entities(s);
+    escape_decoded_js_string(&decode_html_entities(s))
+}
+
+/// Escape `s`, an attribute value from the template, for a JavaScript
+/// double-quoted string literal. Entities decode by the attribute rule
+/// (see `decode_html_attribute_entities`), as Vue decodes them.
+pub(super) fn escape_js_attribute_string(s: &str) -> String {
+    if !s.bytes().any(byte_may_need_js_escaping) {
+        return String::from(s);
+    }
+    escape_decoded_js_string(&decode_html_attribute_entities(s))
+}
+
+/// Escape `s`, a name from the template such as an attribute, slot, or
+/// directive modifier name, for a JavaScript double-quoted string literal.
+/// HTML never decodes character references in a name, so neither does Vue:
+/// `#a&copy` names the slot `a&copy`.
+pub(super) fn escape_js_name(s: &str) -> String {
+    escape_decoded_js_string(s)
+}
+
+fn escape_decoded_js_string(decoded: &str) -> String {
     let mut result = String::with_capacity(decoded.len());
     for c in decoded.chars() {
         match c {

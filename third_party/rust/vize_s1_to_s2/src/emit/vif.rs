@@ -9,7 +9,7 @@ use super::EmitCx;
 use super::EmitError;
 use super::UnsupportedReason as Reason;
 use super::buf::Buf;
-use super::js::escape_js_string;
+use super::js::escape_js_attribute_string;
 use super::prefix::Site;
 use crate::lower::{BranchKeyKind, IfFacts};
 
@@ -226,7 +226,7 @@ fn branch_key_js(
         None | Some(BranchKeyKind::Static(None)) => Ok(allocated.to_compact_string()),
         Some(BranchKeyKind::Static(Some(value))) => {
             let mut out = String::from("\"");
-            out.push_str(escape_js_string(value.as_str()).as_str());
+            out.push_str(escape_js_attribute_string(value.as_str()).as_str());
             out.push('"');
             Ok(out)
         }

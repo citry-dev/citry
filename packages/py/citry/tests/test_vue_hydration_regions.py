@@ -17,6 +17,8 @@ from dataclasses import replace
 import pytest
 
 from citry import Citry, Component, Markup
+from citry._vue.compiler import NativeCompiler
+from citry._vue.direct_capture import _prepared_root_markers, _source_attribute_reads_instance
 from citry._vue.serialization import HydrationAdmission, VueSerializationPlan, hydration_admission
 from citry.ext.dependencies.types import Script
 
@@ -496,6 +498,53 @@ $component({});
     host, admission = _hydrated_host(Page)
     assert host == "<main><p><!--[--><b>a\x7fb</b><!--]--></p></main>"
     assert admission.declines == ()
+
+
+def test_attribute_values_decode_legacy_references_by_the_attribute_rule() -> None:
+    # A legacy name is a named reference HTML also accepts without `;`, such
+    # as `&copy`. In an attribute value the browser and Vue keep one that `=`
+    # or a letter or digit follows (`&region=eu` in a URL), and decode it
+    # anywhere else in the value (`&copy` at the end). In text it always
+    # decodes.
+    engine = Citry(autodiscover=False)
+
+    class Link(Component):
+        citry = engine
+        template = """
+<main><a href="/search?q=x&region=eu&copy">go</a><p :title="'a&copy=b'">t &copy</p></main>
+"""
+        js = """
+$component({});
+"""
+
+    host, admission = _hydrated_host(Link)
+    assert host == '<main><a href="/search?q=x&amp;region=eu\u00a9">go</a><p title="a&amp;copy=b">t \u00a9</p></main>'
+    assert admission.declines == ()
+
+
+@pytest.mark.parametrize(
+    ("template", "expected"),
+    [
+        ('<p class="a&region=b">t</p>', 'class: "a&region=b"'),
+        ('<div v-for="i in xs" key="a&region=b&copy">t</div>', 'key: "a&region=b\u00a9"'),
+        ('<C label="x&region=1&copy" />', 'label: "x&region=1\u00a9"'),
+        ("<p v-html=\"'x&region=1'\"></p>", "innerHTML: 'x&region=1'"),
+        ('<slot name="s&region=1"></slot>', '_renderSlot(_ctx.$slots, "s&region=1"'),
+        # HTML never decodes a reference in a name.
+        ('<slot data-a&copy="1"></slot>', '"dataA&copy": "1"'),
+        ("<C><template #a&copy>x</template></C>", '"a&copy": _withCtx('),
+    ],
+)
+def test_the_compiler_reads_attribute_values_and_names_as_vue_does(template: str, expected: str) -> None:
+    # Each expected fragment is what @vue/compiler-dom 3.5.44 writes.
+    assert expected in NativeCompiler().compile(template, type_key="T").javascript
+
+
+def test_direct_capture_reads_attribute_values_by_the_attribute_rule() -> None:
+    # Vue reads `a&notb` as `a & notb`. Read as text, `&not` would decode
+    # and give a different expression.
+    assert not _source_attribute_reads_instance(":title", ':title="a&notb"', ("a", "notb"))
+    assert _prepared_root_markers(('data-x="a&region=b"',)) == (("data-x", "a&region=b"),)
 
 
 def test_spread_attributes_vary_per_row_and_follow_vue_value_rules() -> None:

@@ -35,7 +35,7 @@ from citry.citry_render import (
 from citry.citry_template import CitryTemplate
 from citry.client_directives import ComponentTagClientBindingKind
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
-from citry.util.html import Markup, decode_character_references, escape_to_str
+from citry.util.html import Markup, decode_attribute_entities, decode_character_references, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
 from . import native_leaf_json as _native_leaf_json
@@ -3630,7 +3630,9 @@ def _source_attribute_reads_instance(name: str, text: str, allowed_names: Sequen
     # The parser keeps the attribute exactly as written, quoted or not.
     if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}:
         raw = raw[1:-1]
-    return _vue_binding_reads_instance(name, decode_character_references(raw), allowed_names)
+    # Read the value as Vue and the browser read an attribute value:
+    # `&region=` in a URL stays as written, where text would decode `&reg`.
+    return _vue_binding_reads_instance(name, decode_attribute_entities(raw), allowed_names)
 
 
 def _unsafe_dynamic_dom_property(name: str) -> bool:
@@ -3653,7 +3655,7 @@ def _prepared_root_markers(markers: tuple[str, ...]) -> tuple[tuple[str, object]
         name = validate_html_attr_name(match["name"], where="prepared component root marker")
         if not name.casefold().startswith("data-") or _unsafe_dynamic_dom_property(name):
             raise UnsupportedPreparedView(f"prepared root marker {name!r} is unsafe")
-        marker_value: object = True if match["value"] is None else decode_character_references(match["value"])
+        marker_value: object = True if match["value"] is None else decode_attribute_entities(match["value"])
         identity = _html_attr_identity(name)
         if identity not in identities:
             values[name] = marker_value

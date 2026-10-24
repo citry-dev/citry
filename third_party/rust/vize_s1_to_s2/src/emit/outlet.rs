@@ -15,7 +15,7 @@ use super::children::{
     emit_raw_interpolation_or_refuse, emit_to_display_string, is_empty_interpolation,
 };
 use super::hoist::{emit_hoisted_element, is_hoistable};
-use super::js::escape_js_string;
+use super::js::escape_js_attribute_string;
 use super::outlet_props::emit_props;
 use super::prefix::Site;
 use super::slots::is_whitespace_text;
@@ -99,7 +99,7 @@ fn emit_name(cx: &mut EmitCx<'_>, slot: &SlotOp<'_>) -> Result<(), EmitError> {
     match &slot.name {
         DynamicName::Static(name) => {
             cx.buf.push("\"");
-            cx.buf.push(escape_js_string(name).as_str());
+            cx.buf.push(escape_js_attribute_string(name).as_str());
             cx.buf.push("\"");
             Ok(())
         }

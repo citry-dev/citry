@@ -9,7 +9,22 @@ use core::num::IntErrorKind;
 use htmlize::{Context, ENTITIES, ENTITY_MAX_LENGTH, ENTITY_MIN_LENGTH};
 use vize_s0::String;
 
+/// Decode entities in text. A legacy name (a named reference HTML also
+/// accepts without `;`, such as `&copy`) decodes here even before `=` or a
+/// letter or digit, so `&copyX` reads as `©X`.
 pub(super) fn decode_html_entities(source: &str) -> String {
+    decode_html_entities_in(source, Context::General)
+}
+
+/// Decode entities in an attribute value, where a legacy name without `;`
+/// followed by `=` or a letter or digit stays as written, so a URL such as
+/// `?q=x&region=eu` keeps its `&region`. Vue's tokenizer and the browser
+/// read attribute values this way, directive expressions included.
+pub(super) fn decode_html_attribute_entities(source: &str) -> String {
+    decode_html_entities_in(source, Context::Attribute)
+}
+
+fn decode_html_entities_in(source: &str, context: Context) -> String {
     if !source.contains('&') {
         return String::from(source);
     }
@@ -23,7 +38,7 @@ pub(super) fn decode_html_entities(source: &str) -> String {
             index += consumed;
             continue;
         }
-        if let Some((ch, consumed)) = try_decode_entity(&bytes[index..], Context::General) {
+        if let Some((ch, consumed)) = try_decode_entity(&bytes[index..], context) {
             out.push(ch);
             index += consumed;
             continue;
@@ -193,13 +208,33 @@ fn correct_numeric_entity(number: u32) -> char {
 
 #[cfg(test)]
 mod tests {
-    use super::decode_html_entities;
+    use super::{decode_html_attribute_entities, decode_html_entities};
 
     #[test]
     fn decodes_named_entities_like_text_tokenization() {
         assert_eq!(decode_html_entities("&times;"), "\u{00d7}");
         assert_eq!(decode_html_entities("&timesX"), "\u{00d7}X");
         assert_eq!(decode_html_entities("&&amp;"), "&&");
+    }
+
+    #[test]
+    fn decodes_attribute_values_by_the_attribute_rule() {
+        // A legacy name without `;` before `=` or a letter or digit stays as
+        // written in an attribute value, as Vue's tokenizer and the browser
+        // read it; elsewhere it decodes as in text.
+        assert_eq!(
+            decode_html_attribute_entities("/search?q=x&region=eu"),
+            "/search?q=x&region=eu"
+        );
+        assert_eq!(decode_html_attribute_entities("a&copy=b"), "a&copy=b");
+        assert_eq!(decode_html_attribute_entities("&timesX"), "&timesX");
+        assert_eq!(decode_html_attribute_entities("x&copy"), "x\u{a9}");
+        assert_eq!(
+            decode_html_attribute_entities("&copy; &times;"),
+            "\u{a9} \u{d7}"
+        );
+        assert_eq!(decode_html_attribute_entities("&#128;"), "\u{20ac}");
+        assert_eq!(decode_html_entities("x&region=eu"), "x\u{ae}ion=eu");
     }
 
     #[test]

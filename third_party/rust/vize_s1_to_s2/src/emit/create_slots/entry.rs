@@ -6,7 +6,7 @@ use vize_s2::op::{DynamicName, ElementOp, ForOp, IfOp, SlotContentOp};
 
 use crate::emit::buf::Buf;
 use crate::emit::create_slots_walk::{first_slot_template, skip_ops};
-use crate::emit::js::{escape_js_string, expr_source};
+use crate::emit::js::{escape_js_name, expr_source};
 use crate::emit::prefix::Site;
 use crate::emit::slots::emit_template_pieces;
 use crate::emit::vfor;
@@ -276,13 +276,13 @@ fn emit_entry_name(cx: &mut EmitCx<'_>, content: &SlotContentOp<'_>) {
         Some(DynamicName::Static(base)) => {
             cx.buf.push("\"");
             cx.buf
-                .push(escape_js_string(&fold_name(base, &content.modifiers)).as_str());
+                .push(escape_js_name(&fold_name(base, &content.modifiers)).as_str());
             cx.buf.push("\"");
         }
         None => {
             cx.buf.push("\"");
             cx.buf
-                .push(escape_js_string(&fold_name("default", &content.modifiers)).as_str());
+                .push(escape_js_name(&fold_name("default", &content.modifiers)).as_str());
             cx.buf.push("\"");
         }
     }

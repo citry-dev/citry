@@ -210,6 +210,10 @@
 
 ### Fixes
 
+- In a component that uses Vue, an attribute value such as
+  `href="/search?q=x&region=eu"` now keeps `&region=eu` as written, as
+  the browser and Vue do. Citry used to read `&reg` in it as `®`,
+  which broke the link.
 - A `security_csp` or `security_javascript` report now names a component
   for a finding inside that component's outer element, where it said
   "settled render output". It names the innermost component whose outer

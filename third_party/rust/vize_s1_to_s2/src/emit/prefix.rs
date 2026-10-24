@@ -114,7 +114,8 @@ pub(super) fn node_content<'a>(file: &'a str, source: &'a str, span: Span) -> Co
 }
 
 /// [`node_content`] for the bind-value positions the shipped lane
-/// entity-decodes (`bind_js_source`, `innerHTML`).
+/// entity-decodes (`bind_js_source`, `innerHTML`). A directive's value is an
+/// attribute value, so it decodes by the attribute rule.
 pub(super) fn node_content_decoded<'a>(file: &'a str, source: &'a str, span: Span) -> Content<'a> {
     decoded(node_content(file, source, span), source)
 }
@@ -123,7 +124,7 @@ fn decoded<'a>(content: Content<'a>, source: &str) -> Content<'a> {
     if !content.text.as_str().contains('&') {
         return content;
     }
-    let text = super::entity::decode_html_entities(content.text.as_str());
+    let text = super::entity::decode_html_attribute_entities(content.text.as_str());
     let offset = (text.trim() == source).then(|| text.len() - text.trim_start().len());
     Content {
         text: RawJs::Owned(text),
