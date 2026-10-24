@@ -260,9 +260,11 @@ class html_transform:
         name_end, element_end, trusted, executable, has_manager_attribute,
         cids)` for a `script` or `style` element a selected rule looks at, or
         `(rule, tag, attribute, start, end, token_start, cids)` for one
-        attribute or element a rule reports. `cleaned_html` is the page with
-        every omit marker removed, or `None` when there was none. Offsets are
-        UTF-8 byte offsets.
+        attribute or element a rule reports. `cids` holds the element's own
+        `data-cid-*` suffixes, then those of the elements the browser put
+        around it, nearest first. `cleaned_html` is the page with every omit
+        marker removed, or `None` when there was none. Offsets are UTF-8 byte
+        offsets.
 
         Raises `ValueError` for an unknown `javascript` mode, and when the
         check fails inside Rust (the message starts with

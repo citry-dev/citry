@@ -9,6 +9,7 @@ run in Rust (`citry/_output_policy.py`).
 
 from __future__ import annotations
 
+import os
 import re
 import warnings
 
@@ -19,6 +20,14 @@ from citry._csp_validation import _CspRenderValidator
 from citry._javascript_policy import _JavascriptPolicy
 
 COMPONENTS = {"c1": "Card"}
+
+# These tests break the Python tag reader or the Rust call on purpose, so
+# the opt-in comparison with the frozen Python rules would report that
+# break as a difference.
+breaks_one_side = pytest.mark.skipif(
+    os.environ.get(_output_policy.DIFFERENTIAL_ENVIRONMENT_VARIABLE) == "1",
+    reason="the test breaks one side of the comparison on purpose",
+)
 
 
 def _lines(lines: list[str]) -> str:
@@ -43,15 +52,16 @@ def test_strict_csp_reports_handlers_urls_and_raw_elements_in_page_order() -> No
     )
     with pytest.raises(ValueError, match=r"^Citry found") as raised:
         validator.report()
-    # Only the element that carries `data-cid-c1` names the component.
+    # The `<main>` carries `data-cid-c1`, so every finding on it or inside
+    # it names that component.
     assert str(raised.value) == _lines(
         [
             "Citry found 3 strict-CSP incompatibility issue(s):",
             "- Card, attribute 'onclick', settled HTML bytes 18:25: the native inline event attribute 'onclick'; "
             "use a Vue handler or Component.js",
-            "- settled render output, attribute 'href', settled HTML bytes 42:59: a javascript: URL in 'href'; "
+            "- Card, attribute 'href', settled HTML bytes 42:59: a javascript: URL in 'href'; "
             "use a normal URL or a Vue handler",
-            "- settled render output, settled HTML bytes 67:72: a raw <style> element; use Component.css or a "
+            "- Card, settled HTML bytes 67:72: a raw <style> element; use Component.css or a "
             "structured Style dependency",
         ]
     )
@@ -121,14 +131,12 @@ def test_forbid_reports_every_settled_rule_in_page_order() -> None:
             "requires JavaScript",
             "- Card, attribute 'onclick', settled HTML bytes 29:36: the native inline event attribute 'onclick' "
             "remains executable browser code",
-            "- settled render output, attribute 'href', settled HTML bytes 50:62: a javascript: URL in 'href' "
+            "- Card, attribute 'href', settled HTML bytes 50:62: a javascript: URL in 'href' "
             "remains executable browser code",
-            "- settled render output, attribute 'srcdoc', settled HTML bytes 85:99: 'srcdoc' contains an embedded "
+            "- Card, attribute 'srcdoc', settled HTML bytes 85:99: 'srcdoc' contains an embedded "
             "HTML document with executable browser code",
-            "- settled render output, dependency bytes 111:117: a raw executable <script> remains outside Citry's "
-            "dependency policy",
-            "- settled render output, dependency bytes 133:139: a raw Citry browser manifest requires the client "
-            "manager",
+            "- Card, dependency bytes 111:117: a raw executable <script> remains outside Citry's dependency policy",
+            "- Card, dependency bytes 133:139: a raw Citry browser manifest requires the client manager",
         ]
     )
 
@@ -242,6 +250,7 @@ def test_one_read_of_a_page_serves_both_validators() -> None:
         )
 
 
+@breaks_one_side
 def test_strict_serialize_of_a_large_page_builds_no_python_tag_objects(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = Citry(autodiscover=False, security_csp="strict")
 
@@ -276,6 +285,7 @@ def test_strict_serialize_of_a_large_page_builds_no_python_tag_objects(monkeypat
     assert all(event[0] == "element" and event[1] in {"script", "style"} for event in check.events)
 
 
+@breaks_one_side
 @pytest.mark.parametrize("mode", ["warn", "strict"])
 def test_an_internal_error_in_the_output_check_reports_the_page_as_unreadable(
     mode: str, monkeypatch: pytest.MonkeyPatch
@@ -319,3 +329,159 @@ def test_a_caller_error_is_raised_not_reported_as_an_unreadable_page() -> None:
     )
     assert check.error is None
     assert [event[6] for event in check.events] == [True]
+
+
+def _serialize_warnings(page: type[Component]) -> list[str]:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        page().render().serialize(deps_strategy="ignore")
+    # The byte offsets move with the generated component ids, so the
+    # helper writes them as `s:e`; these tests check the component a
+    # finding names.
+    return [re.sub(r"bytes \d+:\d+", "bytes s:e", str(warning.message)) for warning in caught]
+
+
+def test_a_finding_inside_a_component_names_that_component() -> None:
+    app = Citry(autodiscover=False, security_javascript="warn")
+
+    class Card(Component):
+        citry = app
+        template = """
+<div>
+  <a href="javascript:void(0)">x</a>
+</div>
+"""
+
+    assert _serialize_warnings(Card) == [
+        _lines(
+            [
+                "security_javascript='warn' found 1 client behavior requirement(s):",
+                "- Card, attribute 'href', settled HTML bytes s:e: a javascript: URL in 'href' remains "
+                "executable browser code",
+            ]
+        )
+    ]
+
+
+def test_a_finding_inside_a_nested_component_names_the_innermost_one() -> None:
+    app = Citry(autodiscover=False, security_javascript="warn")
+
+    class Inner(Component):
+        citry = app
+        template = """
+<div>
+  <a href="javascript:void(0)">in</a>
+</div>
+"""
+
+    class Outer(Component):
+        citry = app
+        template = """
+<section>
+  <c-Inner />
+</section>
+"""
+
+    assert _serialize_warnings(Outer) == [
+        _lines(
+            [
+                "security_javascript='warn' found 1 client behavior requirement(s):",
+                "- Inner, attribute 'href', settled HTML bytes s:e: a javascript: URL in 'href' remains "
+                "executable browser code",
+            ]
+        )
+    ]
+
+
+def test_a_finding_in_slot_content_names_the_component_that_renders_the_slot() -> None:
+    app = Citry(autodiscover=False, security_javascript="warn")
+
+    class Card(Component):
+        citry = app
+        template = """
+<div>
+  <c-slot />
+</div>
+"""
+
+    class Page(Component):
+        citry = app
+        template = """
+<section>
+  <c-Card>
+    <a href="javascript:void(0)">x</a>
+  </c-Card>
+</section>
+"""
+
+    # The browser puts the link inside the Card's `<div>`, so the report
+    # names Card, not Page, which wrote the link.
+    assert _serialize_warnings(Page) == [
+        _lines(
+            [
+                "security_javascript='warn' found 1 client behavior requirement(s):",
+                "- Card, attribute 'href', settled HTML bytes s:e: a javascript: URL in 'href' remains "
+                "executable browser code",
+            ]
+        )
+    ]
+
+
+def test_an_element_the_browser_moves_out_of_a_component_root_is_not_named_after_it() -> None:
+    app = Citry(autodiscover=False, security_javascript="warn")
+
+    class Paragraph(Component):
+        citry = app
+        # The `<div>` closes the open `<p>`, so the browser puts the link
+        # after the component's root, not inside it.
+        template = """
+<p>text<div><a href="javascript:void(0)">x</a></div></p>
+"""
+
+    assert _serialize_warnings(Paragraph) == [
+        _lines(
+            [
+                "security_javascript='warn' found 1 client behavior requirement(s):",
+                "- settled render output, attribute 'href', settled HTML bytes s:e: a javascript: URL in "
+                "'href' remains executable browser code",
+            ]
+        )
+    ]
+
+
+def test_omit_passes_a_submit_button_inside_a_form() -> None:
+    app = Citry(autodiscover=False, security_javascript="omit")
+
+    class SaveForm(Component):
+        citry = app
+        template = """
+<form action="/save" method="post">
+  <button @click="track()">Save</button>
+</form>
+"""
+
+    # The form submits without JavaScript, so the button has a fallback.
+    assert _serialize_warnings(SaveForm) == []
+
+
+def test_omit_reports_a_button_after_its_form_closed() -> None:
+    app = Citry(autodiscover=False, security_javascript="omit")
+
+    class LateButton(Component):
+        citry = app
+        template = """
+<div>
+  <form action="/save"></form>
+  <button @click="track()">Save</button>
+</div>
+"""
+
+    assert _serialize_warnings(LateButton) == [
+        _lines(
+            [
+                "security_javascript='omit' found 1 client behavior requirement(s):",
+                "- LateButton, settled HTML bytes s:e: this control has a browser handler but no native "
+                "navigation or submission fallback",
+            ]
+        )
+    ]

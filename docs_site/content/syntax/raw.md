@@ -37,7 +37,8 @@ fragment you insert into a page, the content of `<c-raw>` must be complete
 HTML: close every element you open, and write `<` in text as `&lt;`.
 Vue needs to know where the raw HTML starts and ends. Otherwise the render
 fails with an error that gives the block's line and column and says it "is
-not a complete HTML fragment":
+not a complete HTML fragment", or, for a stray `<`, that it "is not
+well-formed HTML":
 
 ```citry-html
 --8<-- "docs_site/snippets/builtin_raw_complete.html"

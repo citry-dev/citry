@@ -214,6 +214,17 @@
   `href="/search?q=x&region=eu"` now keeps `&region=eu` as written, as
   the browser and Vue do. Citry used to read `&reg` in it as `®`,
   which broke the link.
+- A `security_csp` or `security_javascript` report now names a component
+  for a finding inside that component's outer element, where it said
+  "settled render output". It names the innermost component whose outer
+  element contains the reported element in the page the browser builds,
+  so content passed into a slot is reported under the component that
+  renders the slot.
+- With `security_javascript="omit"`, a submit button, an input, a
+  `select`, or a `textarea` inside a `<form>` is no longer reported as a
+  control with no fallback, because the browser can submit the form
+  without JavaScript. A `type="button"` button and an input of type
+  `button` or `reset` are still reported.
 - In a component that uses Vue, a `<c-raw>` block, a `Markup` value, or
   `#c-ignore` contents that self-close an element whose contents the
   browser reads as text, such as `<iframe/>`, `<textarea/>`, or
@@ -321,6 +332,12 @@
   that many digits, such as `.debounce.<5,000 digits>ms`, now fails with
   the JavaScript safe-integer error, and one written with digits other
   than ASCII `0`-`9` is now an unknown modifier.
+- In an interactive component, a `<c-raw>` block or `Markup` value whose
+  HTML writes a character reference the browser reads as text, such as
+  `&copy 2026` without `;`, `&nbsp`, `&#127;` or `&#x80;`, now renders.
+  It used to fail with "is not a complete HTML fragment". Other HTML the
+  browser repairs, such as a stray `<` or an unfinished comment, now
+  fails with "is not well-formed HTML" and names the parse error.
 - On Python 3.14, a t-string built in a template expression with the
   expression sandbox on now gives each `Interpolation` its source text as
   `expression` (`t'{x + 1}'` gives `'x + 1'`), as it does with the sandbox

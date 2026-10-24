@@ -335,8 +335,10 @@ fn javascript_mode(value: Option<&str>) -> PyResult<Option<JavascriptMode>> {
 /// - `(rule, tag, attribute, start, end, token_start, cids)` for each
 ///   attribute or element a rule reports.
 ///
-/// `cleaned_html` is the page with every omit marker removed, or `None`
-/// when there was none. Offsets are UTF-8 byte offsets.
+/// `cids` holds the element's own `data-cid-*` suffixes, then those of the
+/// elements the browser put around it, nearest first. `cleaned_html` is
+/// the page with every omit marker removed, or `None` when there was none.
+/// Offsets are UTF-8 byte offsets.
 ///
 /// Raises `ValueError` for an unknown `javascript` mode, and
 /// `ValueError("citry output check failed: ...")` if the check panics.
