@@ -210,6 +210,12 @@
 
 ### Fixes
 
+- Printing a slot's result in a component and also passing it to a child
+  component tag that prints it now raises "This content is printed in more
+  than one place", naming the component that prints it the second time,
+  before the slot's components render twice. It used to render them twice
+  and then fail with "deferred part vanished", or fail at serialization
+  with "The same rendered component id was encountered more than once".
 - With `@event(latest_wins=True)`, a call that a newer call replaced no
   longer changes the page. Its remaining actions are dropped, including
   delayed ones with `wait=False`. The newer call no longer waits for its

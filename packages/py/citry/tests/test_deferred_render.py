@@ -390,6 +390,191 @@ class TestUnrenderedContentPrintedTwice:
         # twice for one call.
         assert row_renders == []
 
+    @pytest.mark.parametrize(
+        ("print_first", "twice_template"),
+        [
+            (
+                "child",
+                """
+                  <c-Show c-body="body" />
+                  <div>{{ body }}</div>
+                """,
+            ),
+            (
+                "parent",
+                """
+                  <div>{{ body }}</div>
+                  <c-Show c-body="body" />
+                """,
+            ),
+        ],
+    )
+    def test_slot_result_printed_by_a_component_and_its_child_raises(self, render_path, print_first, twice_template):
+        # Twice prints the slot's result itself and passes it to Show, which
+        # prints it too. Whichever print the queue reaches second raises,
+        # naming Show, whose output prints it the second time.
+        del render_path  # the fixture switches the render path
+        c = Citry()
+        row_renders: list[str] = []
+
+        class Row(Component):
+            citry = c
+            template = "<li>row</li>"
+
+            def template_data(self, kwargs, slots):
+                row_renders.append("Row")
+                return {}
+
+        class Show(Component):
+            citry = c
+            template = "<aside>{{ body }}</aside>"
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+        class Twice(Component):
+            citry = c
+            template = twice_template
+
+            def template_data(self, kwargs, slots):
+                return {"body": slots["default"]()}
+
+        class Page(Component):
+            citry = c
+            template = "<c-Twice><c-Row /></c-Twice>"
+
+        expected = (
+            "have not rendered yet, so each would render twice"
+            if print_first == "child"
+            else "can appear only once on the page"
+        )
+        with pytest.raises(
+            RuntimeError,
+            match=rf"Page > Twice > Show:\nThis content is printed in more than one place, but the components inside "
+            rf"it {expected}",
+        ):
+            Page().render().serialize()
+        # When Show's print comes first, Show's output is scanned before Row
+        # renders; when Twice's comes first, Row renders once before Show's
+        # output prints it again. Row never renders twice.
+        assert row_renders == ([] if print_first == "child" else ["Row"])
+
+    def test_text_printed_by_a_component_and_its_child_renders(self, render_path):
+        # Content without components can appear in any number of places.
+        del render_path  # the fixture switches the render path
+        c = Citry()
+
+        class Show(Component):
+            citry = c
+            template = "<aside>{{ body }}</aside>"
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+        class Twice(Component):
+            citry = c
+            template = '<c-Show c-body="body" /><div>{{ body }}</div>'
+
+            def template_data(self, kwargs, slots):
+                return {"body": slots["default"]()}
+
+        class Page(Component):
+            citry = c
+            template = "<c-Twice><b>text</b></c-Twice>"
+
+        html = Page().render().serialize()
+        assert html.count("<b>text</b>") == 2
+
+    @pytest.mark.parametrize("shape", ["return", "yield", "wrap"])
+    def test_on_render_that_keeps_its_received_output_renders(self, render_path, shape):
+        # The hook moves the output it received into its replacement; that
+        # is not the output printed in two places.
+        del render_path  # the fixture switches the render path
+        c = Citry()
+
+        class Leaf(Component):
+            citry = c
+            template = "<i>leaf</i>"
+
+        class Wrap(Component):
+            citry = c
+            template = "<b><c-Leaf /></b>"
+
+            def on_render(self):
+                rendered, _error = yield
+                if shape == "return":
+                    return rendered
+                if shape == "yield":
+                    yield rendered
+                    return None
+                return CitryRender(parts=["<u>", rendered, "</u>"], context=rendered.context)
+
+        class Outer(Component):
+            citry = c
+            template = "<main><c-Wrap /></main>"
+
+        html = Outer().render().serialize()
+        assert html.count("<i") == 1
+        assert ">leaf</i>" in html
+
+    def test_on_render_that_returns_its_received_output_twice_raises(self, render_path):
+        del render_path  # the fixture switches the render path
+        c = Citry()
+
+        class Leaf(Component):
+            citry = c
+            template = "<i>leaf</i>"
+
+        class Wrap(Component):
+            citry = c
+            template = "<b><c-Leaf /></b>"
+
+            def on_render(self):
+                rendered, _error = yield
+                return CitryRender(parts=[rendered, rendered], context=rendered.context)
+
+        class Outer(Component):
+            citry = c
+            template = "<main><c-Wrap /></main>"
+
+        with pytest.raises(RuntimeError, match=r"can appear only once on the page"):
+            Outer().render().serialize()
+
+    def test_simple_vue_slot_content_printed_by_a_component_and_its_child_raises(self, render_path):
+        del render_path  # the fixture switches the render path
+        c = Citry()
+
+        class Tag(Component):
+            citry = c
+            simple = "vue"
+            template = "<em>tag</em>"
+
+        class Show(Component):
+            citry = c
+            template = "<aside>{{ body }}</aside>"
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+        class Twice(Component):
+            citry = c
+            template = """
+              <div>{{ body }}</div>
+              <c-Show c-body="body" />
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"body": slots["default"]()}
+
+        class Page(Component):
+            citry = c
+            template = "<c-Twice><c-Tag /></c-Twice>"
+
+        with pytest.raises(
+            RuntimeError, match=r"Page > Twice > Show:\nThis content is printed in more than one place"
+        ):
+            Page().render().serialize()
+
 
 class TestNestedRenderedHook:
     def test_string_replace_through_nested_tree(self):
