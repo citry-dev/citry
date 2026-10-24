@@ -74,6 +74,7 @@ from .compiler import (
     _generated_event_args,
     _generated_event_modifiers,
     _generated_vue_attr,
+    _guard_template_braces,
     _LocalCallBindingDeclaration,
     _LocalCallDeclaration,
     _LocalCallRunDeclaration,
@@ -2425,7 +2426,8 @@ def assemble_typed_render(
                     )
                     continue
                 if isinstance(part, PreparedSourceText):
-                    output.append(part.text)
+                    # Static text may meet the next part's `{` across a Citry tag.
+                    output.append(_guard_template_braces(part.text))
                     continue
                 if isinstance(part, PreparedVerbatimHtml):
                     parent_tag = element_stack[-1] if element_stack else None
@@ -2481,9 +2483,9 @@ def assemble_typed_render(
                             data_values[attrs_key] = _json_presence_attribute_map(dict(root_markers))
                             _append_static_root_projection(output, part.html, attrs_key, root_openings)
                         else:
-                            output.append(part.html)
+                            output.append(_guard_template_braces(part.html))
                     else:
-                        output.append(part.html)
+                        output.append(_guard_template_braces(part.html))
                     if structure is not None:
                         for operation, tag in structure.tag_transitions:
                             if operation == "open":
@@ -3694,7 +3696,9 @@ def _append_static_root_projection(
     replacement = f'v-bind="$citryPrepared.{attrs_key}"'
     cursor = 0
     for opening in openings:
-        output.append(html[cursor : opening.insert_at])
+        # Each piece of authored text may hold a joined `{{` or meet the next
+        # part's `{`; the piece ends inside a tag, so only a `{{` changes.
+        output.append(_guard_template_braces(html[cursor : opening.insert_at]))
         binding_start = output.byte_length - len(html[opening.start_at : opening.insert_at].encode())
         output.append(" ")
         output.append(replacement)
@@ -3708,7 +3712,7 @@ def _append_static_root_projection(
                 "keyBindingKey": None,
             }
         )
-    output.append(html[cursor:])
+    output.append(_guard_template_braces(html[cursor:]))
 
 
 # The writers below produce the Vue source for one kind of template content.

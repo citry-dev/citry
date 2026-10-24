@@ -221,6 +221,11 @@
 
 ### Fixes
 
+- In a component that uses Vue, a `{` before a Citry tag and a `{` after
+  it, as in `{<c-if cond="True">{ x }}</c-if>`, now show as text, as they
+  do without Vue. Vue used to read the two braces as an interpolation and
+  run the text between them as JavaScript, and a `{` right before a value,
+  as in `{<c-if cond="True">{{ x }}</c-if>`, failed to compile.
 - In a component that uses Vue, a `<c-raw>` block, a `Markup` value, or
   `#c-ignore` contents now renders inside `<c-i18n>`, `<c-provide>`, or
   another transparent component whose content ends up in a component's

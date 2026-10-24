@@ -66,6 +66,7 @@ from .capture import (
     coalesce_prepared_static_nodes,
     static_element_opening,
 )
+from .compiler import _guard_template_braces
 from .direct_capture import (
     _append_element_open,
     _append_opaque_html,
@@ -354,6 +355,14 @@ class _Writer:
 
     def write_copy(self, text: str, span: tuple[int, int]) -> None:
         """Write text that the author wrote at `span`, if it is a copy, mapped byte for byte."""
+        if text.endswith("{") and span[1] > span[0]:
+            # A trailing `{` is written as `&#123;` (`_guard_template_braces`),
+            # so map the text before the brace byte for byte, and map the
+            # reference to the brace.
+            if len(text) > 1:
+                self.write_copy(text[:-1], (span[0], span[1] - 1))
+            self.write_generated(_guard_template_braces("{"), (span[1] - 1, span[1]))
+            return
         start = self.output.byte_length
         self.output.append(text)
         if self.source[span[0] : span[1]] == text.encode():
