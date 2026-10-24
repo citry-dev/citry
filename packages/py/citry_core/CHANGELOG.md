@@ -4,6 +4,8 @@
 
 ### Changed
 
+- **Breaking:** citry-core now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing citry-core 1.8.0.
 - `safe_eval()`, `parse_template()` and `format_template()` now reject an
   expression nested deeper than about 97 chained operators or 65 nested
   brackets, and a template with more than 100,000 `{`. `safe_eval()` and

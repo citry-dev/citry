@@ -17,7 +17,7 @@ the project cards without reloading the page.
 
 ## Requirements
 
-- Python 3.10 through 3.14
+- Python 3.11 through 3.14
 - [uv](https://docs.astral.sh/uv/)
 
 The project accepts Citry 0.6.0 or newer. Its

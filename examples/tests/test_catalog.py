@@ -1,10 +1,6 @@
 import json
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI leg
-    import tomli as tomllib
-
+import tomllib
 from examples._internal.catalog import EXAMPLES_ROOT, load_catalog
 from examples._internal.qualify import interpolate, project_environment
 
@@ -201,7 +197,7 @@ def test_starter_readmes_follow_the_reader_workflow() -> None:
         minimum_citry = citry_requirement.removeprefix("citry>=").split(",", 1)[0]
         for section in common_sections:
             assert section in readme, f"{project.id} is missing the README section {section!r}"
-        assert "Python 3.10 through 3.14" in readme
+        assert "Python 3.11 through 3.14" in readme
         assert f"Citry {minimum_citry}" in readme
         assert "PowerShell" in readme
         assert "https://citry.dev/" in readme

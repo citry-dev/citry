@@ -6,16 +6,11 @@ import re
 import shlex
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
+import tomllib
 import yaml  # type: ignore[import-untyped]
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _WORKFLOWS = _REPO_ROOT / ".github" / "workflows"
@@ -74,7 +69,7 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     assert python["type"] == "choice"
     assert python["required"] is True
     assert python["default"] == "3.14"
-    assert python["options"] == ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    assert python["options"] == ["3.11", "3.12", "3.13", "3.14"]
 
     profile = inputs["install_profile"]
     assert profile["type"] == "choice"

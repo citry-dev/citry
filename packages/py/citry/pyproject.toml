@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "citry"
 version = "0.6.0"
-requires-python = ">=3.10, <4.0"
+requires-python = ">=3.11, <4.0"
 description = "Fully typed frontend framework for Python with server events and compiled Vue interactivity"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
 # package dir, so the link makes the root README local to this package.
@@ -28,7 +28,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -55,9 +54,6 @@ dependencies = [
     # imports. The other symbols used here (`TypeAliasType`, `Unpack`,
     # `override`, and `TypeVar` with a PEP 696 default) all land earlier.
     "typing-extensions>=4.10",
-    # Python 3.11 added tomllib to the standard library. Citry's i18n package
-    # compiler reads pyproject.toml on 3.10 through this compatible backport.
-    "tomli>=2.0; python_version < '3.11'",
     # Citry opens this package directly instead of consulting the host's
     # system zoneinfo search path. LocaleContext records the installed data
     # version, so time-zone conversion and cache identity stay explicit.
@@ -117,8 +113,8 @@ e2e = [
 # Benchmark baselines (docs/design/benchmarking.md), pinned exactly so a bump is
 # a deliberate re-baseline; skipped when absent (tests/conftest.py).
 # django 6.0 requires Python >= 3.12, so the Django comparison baselines only
-# install there; on 3.10/3.11 the suite skips them (the bare pin would otherwise
-# make the whole workspace unresolvable on those versions).
+# install there; on 3.11 the suite skips them (the bare pin would otherwise
+# make the whole workspace unresolvable on that version).
 benchmark = [
     "django==6.0.6; python_version >= '3.12'",
     "django-components==0.152.0; python_version >= '3.12'",

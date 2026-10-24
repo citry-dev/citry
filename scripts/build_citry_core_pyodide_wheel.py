@@ -14,10 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 matrix
-    import tomli as tomllib
+import tomllib
 
 try:
     from scripts import build_constraints
