@@ -395,7 +395,7 @@ extend-markup-names = [
 "**/*.pyi" = [
     "A002",    # `input` mirrors the published parse_template/compile_template parameter name
     "E501",    # mirrored signatures and docstrings can run long in the stub
-    "N801",    # class names mirror Rust submodules/enum variants (html_transform, Node_WithBody)
+    "N801",    # class names mirror Rust submodules (html_transform)
     "N805",    # namespace classes expose module-level functions, so the first arg is not `self`
     "PYI021",  # docstrings in the stub are intentional (IDE hover help)
     "PYI063",  # positional-only params mirror the PyO3 signatures
