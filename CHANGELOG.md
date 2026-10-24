@@ -210,6 +210,11 @@
 
 ### Fixes
 
+- In a component that uses Vue, a `<c-raw>` block, a `Markup` value, or
+  `#c-ignore` contents now renders inside `<c-i18n>`, `<c-provide>`, or
+  another transparent component whose content ends up in a component's
+  slot. Rendering the page used to fail with "prepared opaque HTML values
+  do not match definition declarations".
 - In a component that uses Vue, `&amp;#40;` written in text or an
   attribute value now shows `&#40;`, as the same component without Vue
   does; it used to show `(`. A static `style` with `&quot;` inside a
