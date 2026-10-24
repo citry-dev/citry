@@ -359,7 +359,7 @@ class VueCompilerDiagnosticsError(ValueError):
 
 
 ORDINARY_TARGET = "ordinary-vnodes/1"
-_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.5"}
+_NATIVE_COMPILER_IDENTITY = {"name": "vize_atelier_dom", "version": "0.420.0+citry.6"}
 _TEXT_ACTION_RULES = {
     "rewrite": {"condense.whitespace"},
     "drop": {"condense.drop-whitespace", "drop.comment", "drop.branch-gap"},

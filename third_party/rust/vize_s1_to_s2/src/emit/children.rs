@@ -13,7 +13,7 @@ use super::EmitCx;
 use super::EmitError;
 use super::UnsupportedReason as Reason;
 use super::buf::Buf;
-use super::js::escape_js_string;
+use super::js::{escape_js_name, escape_js_string};
 use super::prefix::Site;
 use crate::lower::TextPart;
 
@@ -230,7 +230,8 @@ pub(super) fn emit_comment_vnode(cx: &mut EmitCx<'_>, comment: &CommentOp<'_>) {
     cx.buf.use_create_comment();
     cx.buf.push(Buf::create_comment_alias());
     cx.buf.push("(\"");
-    cx.buf.push(escape_js_string(comment.content).as_str());
+    // Vue keeps a comment's text as written, character references included.
+    cx.buf.push(escape_js_name(comment.content).as_str());
     cx.buf.push("\")");
 }
 

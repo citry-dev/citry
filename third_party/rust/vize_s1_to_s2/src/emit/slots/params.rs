@@ -2,14 +2,14 @@ use vize_s0::Span;
 use vize_s2::op::{BindingOp, Region, SlotContentOp};
 
 use super::is_slot_template;
-use crate::emit::EmitCx;
 use crate::emit::create_slots_walk::{advance_after_op, slot_content};
 use crate::emit::js::{escape_js_name, is_valid_js_identifier};
 use crate::emit::prefix::Site;
+use crate::emit::{EmitCx, EmitError};
 use crate::pass::walk::PageWalk;
 use crate::pass::{SlotCarrier, SlotName, SlotParams};
 
-pub(super) fn emit_slot_key(cx: &mut EmitCx<'_>, name: &SlotName) {
+pub(super) fn emit_slot_key(cx: &mut EmitCx<'_>, name: &SlotName) -> Result<(), EmitError> {
     match name {
         SlotName::Static { text, .. } if is_valid_js_identifier(text.as_str()) => {
             cx.buf.push(text.as_str());
@@ -22,9 +22,11 @@ pub(super) fn emit_slot_key(cx: &mut EmitCx<'_>, name: &SlotName) {
         SlotName::Dynamic { text } => {
             cx.buf.push("[");
             if cx.prefixing() {
-                let text = cx
-                    .prefixed_text(text.as_str(), Site::Expression)
-                    .unwrap_or_default();
+                // S2 refuses a dynamic name it cannot read as JavaScript,
+                // so Citry compiles the template with `vize_atelier_core`,
+                // which reports an invalid expression, as Vue does, rather
+                // than S2 writing an empty key.
+                let text = cx.prefixed_text(text.as_str(), Site::Expression)?;
                 cx.buf.push(text.as_str());
             } else {
                 cx.buf.push(text.as_str());
@@ -32,6 +34,7 @@ pub(super) fn emit_slot_key(cx: &mut EmitCx<'_>, name: &SlotName) {
             cx.buf.push("]");
         }
     }
+    Ok(())
 }
 
 pub(super) fn group_slot_content<'a>(

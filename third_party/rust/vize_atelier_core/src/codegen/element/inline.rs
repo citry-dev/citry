@@ -255,8 +255,9 @@ pub fn generate_element(ctx: &mut CodegenContext, el: &ElementNode<'_>) {
             } else if let Some(component_name) = static_is {
                 ctx.use_helper(RuntimeHelper::ResolveDynamicComponent);
                 ctx.push(ctx.helper(RuntimeHelper::ResolveDynamicComponent));
+                // The parser decoded the value; escape it for the literal.
                 ctx.push("(\"");
-                ctx.push(component_name);
+                ctx.push(&crate::codegen::helpers::escape_js_string(component_name));
                 ctx.push("\")");
             } else if let Some(builtin) = is_builtin_component(el.tag) {
                 ctx.use_helper(builtin);
