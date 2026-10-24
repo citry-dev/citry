@@ -200,7 +200,7 @@ class BrowserI18nBindCall:
 
 @dataclass(frozen=True, slots=True)
 class BrowserI18nBindingDirective:
-    """One direct or server-dynamic ``$c-tr`` attribute in template source."""
+    """One ``$c-tr`` attribute in template source, written directly or with a ``c-`` prefix that the render rejects."""
 
     message: str | None
     output: str | None
@@ -3332,7 +3332,6 @@ __all__ = [
     "browser_expressions",
     "browser_i18n_bind_calls",
     "browser_i18n_binding_directives",
-    "javascript_tokens",
     "browser_i18n_calls_checkable",
     "browser_i18n_message_calls",
     "browser_i18n_profile_calls",
@@ -3346,6 +3345,7 @@ __all__ = [
     "browser_state_bindings",
     "component_js_i18n_owners",
     "enclosing_vue_loops",
+    "javascript_tokens",
     "mark_literal_findings",
     "python_event_handler_coordinates",
 ]

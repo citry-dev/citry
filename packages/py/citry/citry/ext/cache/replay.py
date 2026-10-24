@@ -30,6 +30,8 @@ from citry._vue.capture import (
     StaticRunStructure,
     is_authenticated_browser_binding,
     is_authenticated_dynamic_element_open,
+    is_authored_static_run,
+    is_authored_template_source,
     prepared_browser_binding,
     prepared_dynamic_element_open,
 )
@@ -63,6 +65,7 @@ from citry.citry_render import (
     RenderPart,
 )
 from citry.client_directives import ComponentTagClientBindingKind
+from citry.ext.i18n.bindings import is_authored_values_expression
 from citry.extension import OnRenderCacheExportContext, RenderCacheInstance
 from citry.util.id import gen_render_id, validate_render_id
 
@@ -422,6 +425,16 @@ def _replay_boundary_artifact(
         if not (not component_root and index == 0) and _source_fingerprint(current_class) not in fingerprints:
             raise CacheArtifactError(f"cached occurrence {index} source contract changed")
         validated_classes[index] = current_class
+    # The stored entry repeats template text that replay puts back into the
+    # page and the Vue template. Text from these live templates, or from any
+    # template this process compiled (a parent's fill, a standalone template),
+    # is the only text an entry may carry; anything else means it was not
+    # written by Citry from these templates, so it is treated as a miss.
+    live_sources = frozenset(
+        template.source
+        for template in (load_template(current) for current in validated_classes.values())
+        if template is not None
+    )
     instance_ids = [boundary.id]
     occupied = {boundary.id}
     for _ in range(1, len(instances)):
@@ -652,7 +665,7 @@ def _replay_boundary_artifact(
             elif type(item) is ArtifactDirectPythonComponentPart:
                 parts.append(DirectPythonComponentRender(build(item.frame), local_ordinal=item.local_ordinal))
             else:
-                parts.append(_apply_typed_replacements(_replay_typed_leaf(item), typed_replacements))
+                parts.append(_apply_typed_replacements(_replay_typed_leaf(item, live_sources), typed_replacements))
         markers = list(saved.root_markers)
         if saved.instance is not None:
             markers.extend(marker_by_instance.get(saved.instance, ()))
@@ -899,13 +912,33 @@ def _replayed_element_metadata(value: object) -> tuple[tuple[str, object], ...]:
     return tuple(pairs)
 
 
-def _replay_typed_leaf(part: ArtifactPart) -> RenderPart:
+def _require_authored_span(source: str, span: tuple[int, int], text: str, live_sources: frozenset[str]) -> None:
+    """Reject stored template text that is not the exact span of a live template."""
+    if source not in live_sources and not is_authored_template_source(source):
+        raise CacheArtifactError("cached template text names a template source this process does not have")
+    # Spans count UTF-8 bytes, the unit the template parser reports.
+    if source.encode("utf-8")[span[0] : span[1]] != text.encode("utf-8"):
+        raise CacheArtifactError("cached template text does not match its template source")
+
+
+def _require_authored_values_expression(expression: str | None) -> None:
+    # A values expression is browser JavaScript, so only one that a template
+    # in this process wrote may come back from the store.
+    if expression is not None and not is_authored_values_expression(expression):
+        raise CacheArtifactError("cached $c-tr values expression was not written by a live template")
+
+
+def _replay_typed_leaf(part: ArtifactPart, live_sources: frozenset[str]) -> RenderPart:
     if type(part) is ArtifactSourceTextPart:
+        _require_authored_span(part.source, part.span, part.text, live_sources)
         return PreparedSourceText(part.source, part.span, part.text)
     if type(part) is ArtifactVerbatimHtmlPart:
+        _require_authored_span(part.source, part.span, part.html, live_sources)
         return PreparedVerbatimHtml(part.source, part.span, part.html)
     if type(part) is ArtifactTextValuePart:
         binding = part.browser_binding
+        if binding is not None:
+            _require_authored_values_expression(binding.values_expression)
         return PreparedTextValue(
             part.source,
             part.span,
@@ -926,6 +959,8 @@ def _replay_typed_leaf(part: ArtifactPart) -> RenderPart:
     if type(part) is ArtifactTrustedHtmlPart:
         return PreparedTrustedHtmlValue(part.html)
     if type(part) is ArtifactElementOpenPart:
+        for value in part.browser_bindings:
+            _require_authored_values_expression(value.values_expression)
         metadata = _thaw_json(part.element_metadata)
         return PreparedElementOpen(
             part.source,
@@ -996,6 +1031,10 @@ def _replay_typed_leaf(part: ArtifactPart) -> RenderPart:
     if type(part) is ArtifactDynamicElementClosePart:
         return PreparedDynamicElementClose(part.tag)
     if type(part) is ArtifactStaticRunPart:
+        # A static run joins template text and opening tags, so the same
+        # block must have come out of this process's own templates.
+        if not is_authored_static_run(part.html):
+            raise CacheArtifactError("cached static markup was not produced by a live template")
         structure = part.structure
         return PreparedStaticRun(
             part.html,
@@ -1031,7 +1070,7 @@ def _replay_typed_leaf(part: ArtifactPart) -> RenderPart:
             operations=(),
             vue_errors=part.vue_errors,
             resolved_opens={},
-            cached_typed_parts=tuple(_replay_typed_leaf(item) for item in part.typed_parts),
+            cached_typed_parts=tuple(_replay_typed_leaf(item, live_sources) for item in part.typed_parts),
             cached_static_parts=part.static_parts,
         )
     raise CacheArtifactError(f"artifact part {type(part).__name__} is not a typed leaf")

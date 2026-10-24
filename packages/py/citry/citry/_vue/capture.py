@@ -738,12 +738,33 @@ class StaticRunStructure:
     tag_transitions: tuple[tuple[str, str], ...] = ()
 
 
+# Template text that this process's own compiled templates wrote into a
+# prepared render. The render cache reads entries from a store that other
+# processes can write, so before it replays stored template text it checks
+# that this process produced the same text (`ext/cache/replay.py`). Each set
+# holds one item per distinct piece of template text, so it grows with the
+# templates an app has, not with the number of renders.
+_AUTHORED_TEMPLATE_SOURCES: set[str] = set()
+_AUTHORED_STATIC_RUNS: set[str] = set()
+
+
+def is_authored_template_source(source: str) -> bool:
+    """Return whether a compiled template in this process has this source."""
+    return source in _AUTHORED_TEMPLATE_SOURCES
+
+
+def is_authored_static_run(html: str) -> bool:
+    """Return whether this process joined this exact block of static template markup."""
+    return html in _AUTHORED_STATIC_RUNS
+
+
 class PreparedStaticRunNode(Node):
     def __init__(
         self,
         html: str,
         root_structure: StaticRunStructure | None = None,
     ) -> None:
+        _AUTHORED_STATIC_RUNS.add(html)
         self._prepared = PreparedStaticRun(html, root_structure)
 
     def render(self, context: CitryContext) -> PreparedStaticRun:  # noqa: ARG002
@@ -852,6 +873,7 @@ PREPARED_CONST_PRECOMPUTE_ADAPTER = PreparedConstPrecomputeAdapter()
 
 class PreparedSourceTextNode(Node):
     def __init__(self, source: str, span: tuple[int, int], text: str) -> None:
+        _AUTHORED_TEMPLATE_SOURCES.add(source)
         self.source = source
         self.position = span
         self.text = text
@@ -871,6 +893,7 @@ class PreparedSourceTextNode(Node):
 
 class PreparedVerbatimHtmlNode(Node):
     def __init__(self, source: str, span: tuple[int, int], html: str) -> None:
+        _AUTHORED_TEMPLATE_SOURCES.add(source)
         self.source = source
         self.position = span
         self.html = html

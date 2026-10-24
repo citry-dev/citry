@@ -280,7 +280,7 @@ _ATTACK = "{ title: (globalThis.ran = 1, 'x') }"
         # The `c-` form, whose Python value used to become the expression.
         ('<span c-$c-tr:dismiss="expression">{{ tr("dismiss", title="t") }}</span>', {"expression": _ATTACK}),
         (
-            '<button c-title="tr(\'dismiss\', title=\'t\')" c-$c-tr:dismiss[title]="expression"></button>',
+            "<button c-title=\"tr('dismiss', title='t')\" c-$c-tr:dismiss[title]=\"expression\"></button>",
             {"expression": _ATTACK},
         ),
         ('<span c-$C-TR:dismiss="expression">{{ tr("dismiss", title="t") }}</span>', {"expression": _ATTACK}),
@@ -289,7 +289,7 @@ _ATTACK = "{ title: (globalThis.ran = 1, 'x') }"
         # A key in a spread mapping, in every spelling the parser reserves.
         ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$c-tr:dismiss": _ATTACK}}),
         (
-            '<button c-title="tr(\'dismiss\', title=\'t\')" c-bind="attrs"></button>',
+            "<button c-title=\"tr('dismiss', title='t')\" c-bind=\"attrs\"></button>",
             {"attrs": {"$c-tr:dismiss[title]": _ATTACK}},
         ),
         ('<span c-bind="attrs">{{ tr("dismiss", title="t") }}</span>', {"attrs": {"$C-TR:dismiss": _ATTACK}}),
@@ -616,3 +616,46 @@ def test_values_expression_reads_character_references_as_an_attribute_value(
     code = "\n".join(compiled)
     assert "() => ({ name: 'a & b' })" in code
     assert "() => ({ name: 'c & d' })" in code
+
+
+def test_null_capable_binding_on_an_absent_attribute_is_dropped() -> None:
+    app = _app()
+
+    class Page(Component):
+        citry = app
+        template = """\
+<c-i18n c-client="True" tag="main">
+  <button c-title="label" $c-tr:save[title]="useCatalog ? {} : null"></button>
+</c-i18n>\
+"""
+        messages = "save = Save"
+
+        def template_data(self, kwargs, slots):
+            # `None` removes the attribute, as a component does when a caller
+            # names the element some other way.
+            return {"label": None}
+
+    rendered, manifest = _prepared_i18n(Page())
+    html = rendered.serialize(deps_strategy="ignore")
+    assert "title=" not in html
+    assert re.search(r"<button\b[^>]*\bdata-citry-i18n-binding=", html) is None
+    assert manifest["requirements"] == []
+
+
+def test_binding_without_a_null_token_on_an_absent_attribute_still_fails() -> None:
+    app = _app()
+
+    class Page(Component):
+        citry = app
+        template = """\
+<c-i18n c-client="True" tag="main">
+  <button c-title="label" $c-tr:save[title]="{}"></button>
+</c-i18n>\
+"""
+        messages = "save = Save"
+
+        def template_data(self, kwargs, slots):
+            return {"label": None}
+
+    with pytest.raises(RuntimeError, match=r"has no final server-rendered 'title' value"):
+        Page().render()

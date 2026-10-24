@@ -382,6 +382,14 @@ class I18nBindingElementAttrsNode(Node):
             target_name = cast("str", declaration.target.name)
             winning_key = next((key for key in resolved if _html_identity(key) == target_name), None)
             if winning_key is None:
+                # A `null`-capable binding already says "this element may keep
+                # what the server rendered". When the server rendered no such
+                # attribute at all (an `aria-labelledby` label, say), there is
+                # nothing to translate, so the binding is dropped. Python only
+                # decided whether the attribute exists; the expression is
+                # still the author's own text and is never emitted.
+                if declaration.allows_untranslated:
+                    continue
                 raise RuntimeError(
                     f"$c-tr:{declaration.message}[{target_name}] has no final server-rendered {target_name!r} value."
                 )
@@ -391,9 +399,7 @@ class I18nBindingElementAttrsNode(Node):
             # text, so its attribute may hold text that no `tr()` produced,
             # such as an author's own label. Every other binding pairs with
             # the exact `tr()` result.
-            untranslated = (
-                capture is None and declaration.allows_untranslated and target_name not in composed
-            )
+            untranslated = capture is None and declaration.allows_untranslated and target_name not in composed
             if untranslated and not isinstance(value, str):
                 raise TypeError(
                     f"$c-tr:{declaration.message}[{target_name}] keeps a server {target_name!r} value that is "
@@ -647,6 +653,9 @@ def _apply_directive(
         raise TypeError(f"{key} must be written in the template; got a {type(value).__name__} value.")
     if expression is not None:
         _validate_values_expression(expression, key=key)
+        # The render cache replays a stored values expression only when a
+        # template in this process wrote the same one.
+        _AUTHORED_VALUES_EXPRESSIONS.add(expression)
     declaration = _Declaration(
         declaration.message,
         declaration.output,
@@ -667,6 +676,16 @@ def _parse_directive(key: str) -> _Declaration:
     else:
         target = I18nBindingTarget("attribute", attribute)
     return _Declaration(parsed.message, parsed.output, target, None)
+
+
+# Every `$c-tr` values expression a template in this process wrote, after
+# the attribute-rule decoding above. It grows with the templates, not the renders.
+_AUTHORED_VALUES_EXPRESSIONS: set[str] = set()
+
+
+def is_authored_values_expression(expression: str) -> bool:
+    """Return whether a template in this process wrote this `$c-tr` values expression."""
+    return expression in _AUTHORED_VALUES_EXPRESSIONS
 
 
 def _may_evaluate_to_null(expression: str) -> bool:

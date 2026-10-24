@@ -1197,7 +1197,7 @@ def test_null_values_keep_the_server_text_through_runtime_transitions(
         )
 
     kept = ("Mine & yours", "Mine & yours", server_text, server_text)
-    translated = ("Save", "Save", "Hello ⁨Ada⁩", "Hello ⁨Ada⁩")
+    translated = ("Save", "Save", "Hello \u2068Ada\u2069", "Hello \u2068Ada\u2069")
     states = [translated, kept, translated, kept] if start_translated else [kept, translated, kept, translated]
     assert read() == states[0], (faults, page.content())
     for expected in states[1:]:

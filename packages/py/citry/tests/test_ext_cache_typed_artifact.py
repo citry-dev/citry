@@ -15,6 +15,7 @@ from citry._vue.capture import (
     PreparedDynamicElementOpen,
     PreparedElementOpen,
     PreparedStaticRun,
+    PreparedStaticRunNode,
     PreparedTextValue,
     PreparedVerbatimHtml,
     StaticRunOpening,
@@ -67,7 +68,19 @@ from citry.ext.cache.replay import (
     _UnsupportedTypedCachePart,
 )
 from citry.ext.events.emission import EXTRA_KEY as EVENTS_EXTRA_KEY
+from citry.ext.i18n import bindings as i18n_bindings
 from citry.extension import RenderCacheWrite, StagedRenderCacheContribution
+
+
+class _AnyTemplateSource(frozenset[str]):
+    """Accept every template source, so these tests check the wire round trip only."""
+
+    def __contains__(self, item: object) -> bool:
+        return True
+
+
+# The span and source checks have their own tests in test_ext_cache_authored_text.py.
+_TEST_SOURCES = _AnyTemplateSource()
 
 
 def _artifact(*parts: object) -> CachedRenderArtifact:
@@ -121,7 +134,7 @@ def test_typed_codec_is_version_one_and_keeps_source_separate_from_values() -> N
 
 def test_verbatim_html_cache_replay_keeps_origin_and_opaque_bytes() -> None:
     value = PreparedVerbatimHtml("<c-raw>a < b {{ x }}</c-raw>", (7, 20), "a < b {{ x }}")
-    assert _replay_typed_leaf(_export_typed_leaf(value)) == value
+    assert _replay_typed_leaf(_export_typed_leaf(value), _TEST_SOURCES) == value
 
 
 def test_typed_codec_rejects_unknown_parts_and_cross_frame_references() -> None:
@@ -258,6 +271,8 @@ def test_typed_codec_rejects_invalid_static_run_offsets() -> None:
 
 
 def test_static_run_tag_transitions_survive_cache_codec_and_replay() -> None:
+    # A compiled template makes this node; the cache replays only runs that one made.
+    PreparedStaticRunNode("<section><textarea>x</textarea></section>")
     value = PreparedStaticRun(
         "<section><textarea>x</textarea></section>",
         StaticRunStructure(
@@ -272,7 +287,7 @@ def test_static_run_tag_transitions_survive_cache_codec_and_replay() -> None:
     decoded = _decode_artifact(_encode_artifact(artifact))
 
     assert decoded == artifact
-    assert _replay_typed_leaf(decoded.frames[0].parts[0]) == value
+    assert _replay_typed_leaf(decoded.frames[0].parts[0], _TEST_SOURCES) == value
 
 
 def test_typed_codec_rejects_malformed_static_run_tag_transitions() -> None:
@@ -444,7 +459,7 @@ def test_typed_codec_rejects_invalid_spans_and_nonfinite_values() -> None:
 def test_typed_leaf_replay_keeps_template_shaped_values_in_the_data_channel() -> None:
     value = PreparedTextValue("{{ value }}", (0, 11), "{{ x }} <script>alert(1)</script>")
 
-    replayed = _replay_typed_leaf(_export_typed_leaf(value))
+    replayed = _replay_typed_leaf(_export_typed_leaf(value), _TEST_SOURCES)
 
     assert replayed == value
     assert replayed.value == "{{ x }} <script>alert(1)</script>"
@@ -453,7 +468,7 @@ def test_typed_leaf_replay_keeps_template_shaped_values_in_the_data_channel() ->
 def test_dynamic_open_replay_runs_the_current_validating_factory() -> None:
     opening = prepared_dynamic_element_open("section", {"title": "{{ data }}"})
 
-    replayed = _replay_typed_leaf(_export_typed_leaf(opening))
+    replayed = _replay_typed_leaf(_export_typed_leaf(opening), _TEST_SOURCES)
 
     assert replayed.tag == "section"
     assert dict(replayed.attrs) == {"title": "{{ data }}"}
@@ -487,7 +502,7 @@ def test_dynamic_open_cache_keeps_authored_vue_source_and_key_separate_from_data
 
     exported = _export_typed_leaf(opening)
     decoded = _decode_artifact(_encode_artifact(_artifact(exported)))
-    replayed = _replay_typed_leaf(decoded.frames[0].parts[0])
+    replayed = _replay_typed_leaf(decoded.frames[0].parts[0], _TEST_SOURCES)
 
     assert replayed.key == "row"
     assert is_authenticated_dynamic_element_open(replayed)
@@ -1504,7 +1519,9 @@ def test_i18n_cache_hit_rebinds_typed_binding_marker_to_fresh_occurrence() -> No
     assert operands == markers
 
 
-def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None:
+def test_prepared_browser_bindings_round_trip_with_data_and_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    # As if a template in this process had written this values expression.
+    monkeypatch.setattr(i18n_bindings, "_AUTHORED_VALUES_EXPRESSIONS", {"state.value"})
     assert is_authenticated_browser_binding(
         prepared_browser_binding(helper="$probe_helper", operand="valid", target="text")
     )
@@ -1550,8 +1567,8 @@ def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None
     )
     value = PreparedTextValue("{{ value }}", (0, 11), 'quoted " text', browser_binding=text)
 
-    replayed_opening = _replay_typed_leaf(_export_typed_leaf(opening))
-    replayed_value = _replay_typed_leaf(_export_typed_leaf(value))
+    replayed_opening = _replay_typed_leaf(_export_typed_leaf(opening), _TEST_SOURCES)
+    replayed_value = _replay_typed_leaf(_export_typed_leaf(value), _TEST_SOURCES)
 
     assert replayed_opening.browser_bindings[0].operand == attribute.operand
     assert replayed_opening.browser_bindings[0].fallback == 'server "title" <b>'
@@ -1574,7 +1591,7 @@ def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None
         is_self_closing=False,
         element_metadata=(),
     )
-    replayed_mixed = _replay_typed_leaf(_export_typed_leaf(mixed))
+    replayed_mixed = _replay_typed_leaf(_export_typed_leaf(mixed), _TEST_SOURCES)
     assert replayed_mixed.attrs == mixed.attrs
 
     control = {
@@ -1598,7 +1615,7 @@ def test_prepared_browser_bindings_round_trip_with_data_and_provenance() -> None
         element_metadata=(),
         control_bindings=(control,),
     )
-    replayed_controlled = _replay_typed_leaf(_export_typed_leaf(controlled))
+    replayed_controlled = _replay_typed_leaf(_export_typed_leaf(controlled), _TEST_SOURCES)
     assert dict(replayed_controlled.control_bindings[0]) == control
 
 

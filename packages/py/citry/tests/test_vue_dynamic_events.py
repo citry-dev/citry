@@ -12,6 +12,17 @@ from citry.ext.cache.replay import _export_typed_leaf, _replay_typed_leaf
 from tests.test_ext_cache_typed_artifact import _artifact
 
 
+class _AnyTemplateSource(frozenset[str]):
+    """Accept every template source, so these tests check the wire round trip only."""
+
+    def __contains__(self, item: object) -> bool:
+        return True
+
+
+# The span and source checks have their own tests in test_ext_cache_authored_text.py.
+_TEST_SOURCES = _AnyTemplateSource()
+
+
 def _assembly(component: type[Component]):
     return assemble_typed_render(
         render_prepared(component()),
@@ -222,4 +233,4 @@ def test_dynamic_cache_replay_rejects_forged_event_metadata() -> None:
 
     decoded = _decode_artifact(json.dumps(wire))
     with pytest.raises(TypeError, match="exact trusted Events fields"):
-        _replay_typed_leaf(decoded.frames[0].parts[0])
+        _replay_typed_leaf(decoded.frames[0].parts[0], _TEST_SOURCES)
