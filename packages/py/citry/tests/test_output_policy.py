@@ -9,6 +9,7 @@ run in Rust (`citry/_output_policy.py`).
 
 from __future__ import annotations
 
+import os
 import re
 import warnings
 
@@ -19,6 +20,14 @@ from citry._csp_validation import _CspRenderValidator
 from citry._javascript_policy import _JavascriptPolicy
 
 COMPONENTS = {"c1": "Card"}
+
+# These tests break the Python tag reader or the Rust call on purpose, so
+# the opt-in comparison with the frozen Python rules would report that
+# break as a difference.
+breaks_one_side = pytest.mark.skipif(
+    os.environ.get(_output_policy.DIFFERENTIAL_ENVIRONMENT_VARIABLE) == "1",
+    reason="the test breaks one side of the comparison on purpose",
+)
 
 
 def _lines(lines: list[str]) -> str:
@@ -241,6 +250,7 @@ def test_one_read_of_a_page_serves_both_validators() -> None:
         )
 
 
+@breaks_one_side
 def test_strict_serialize_of_a_large_page_builds_no_python_tag_objects(monkeypatch: pytest.MonkeyPatch) -> None:
     engine = Citry(autodiscover=False, security_csp="strict")
 
@@ -275,6 +285,7 @@ def test_strict_serialize_of_a_large_page_builds_no_python_tag_objects(monkeypat
     assert all(event[0] == "element" and event[1] in {"script", "style"} for event in check.events)
 
 
+@breaks_one_side
 @pytest.mark.parametrize("mode", ["warn", "strict"])
 def test_an_internal_error_in_the_output_check_reports_the_page_as_unreadable(
     mode: str, monkeypatch: pytest.MonkeyPatch
