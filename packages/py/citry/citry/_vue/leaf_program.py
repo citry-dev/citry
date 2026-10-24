@@ -13,7 +13,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, final, overload
 
 import citry.citry_render as render_module
-from citry._walk import Call, run
+from citry._walk import Call, run, walk
 from citry.attrs import (
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
@@ -1263,10 +1263,12 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
             return
         raise AssertionError(f"unknown simple JSON read expression: {expression.kind}")
 
+    # `visit` and `freeze` are walk generators run by `run`, so Python's call
+    # depth does not grow with how deeply the template nests.
     def visit(
         scoped_operations: tuple[_SimpleJsonOperation, ...],
         local_nodes: dict[str, _SimpleJsonReadNodeBuilder],
-    ) -> None:
+    ) -> Generator[Call, Any, None]:
         for simple in scoped_operations:
             if simple.kind == "text":
                 add_expression(cast("_SimpleJsonExpr", simple.expression), "scalar", local_nodes)
@@ -1283,7 +1285,7 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
                 for condition, body in simple.branches:
                     if condition is not None:
                         add_expression(condition, "truth", local_nodes)
-                    visit(body, local_nodes)
+                    yield Call(visit, body, local_nodes)
             elif simple.kind == "call":
                 # A call passes each value to the child unchanged, as the
                 # ordinary call does. The walk to it must still go through
@@ -1299,49 +1301,68 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
                     iterable.items = new_node()
                 loop_nodes = dict(local_nodes)
                 loop_nodes[cast("str", simple.target)] = iterable.items
-                visit(simple.body, loop_nodes)
+                yield Call(visit, simple.body, loop_nodes)
                 # Empty branches do not introduce the loop variable.
-                visit(simple.empty, local_nodes)
+                yield Call(visit, simple.empty, local_nodes)
 
-    visit(operations, {})
+    run(visit(operations, {}))
 
-    def freeze(node: _SimpleJsonReadNodeBuilder) -> _SimpleJsonReadNode:
-        return _SimpleJsonReadNode(
-            frozenset(node.kinds),
-            tuple((key, freeze(child)) for key, child in node.children.items()),
-            None if node.items is None else freeze(node.items),
-        )
+    def freeze(node: _SimpleJsonReadNodeBuilder) -> Generator[Call, Any, _SimpleJsonReadNode]:
+        children: list[tuple[str, _SimpleJsonReadNode]] = []
+        for key, child in node.children.items():
+            children.append((key, (yield Call(freeze, child))))
+        items = None if node.items is None else (yield Call(freeze, node.items))
+        return _SimpleJsonReadNode(frozenset(node.kinds), tuple(children), items)
 
     return _SimpleJsonReadSet(
-        tuple((name, freeze(node)) for name, node in roots.items()),
+        tuple((name, run(freeze(node))) for name, node in roots.items()),
         _simple_json_loop_targets(operations),
     )
 
 
 def _simple_json_loop_targets(operations: tuple[_SimpleJsonOperation, ...]) -> tuple[str, ...]:
+    """Return every loop variable in ``operations``, in first-seen order."""
+    return run(_loop_targets_walk(operations))
+
+
+def _loop_targets_walk(operations: tuple[_SimpleJsonOperation, ...]) -> Generator[Call, Any, tuple[str, ...]]:
+    """The walk generator behind ``_simple_json_loop_targets``."""
     targets: list[str] = []
     for operation in operations:
         if operation.kind == "for":
             targets.append(cast("str", operation.target))
-            targets.extend(_simple_json_loop_targets(operation.body))
-            targets.extend(_simple_json_loop_targets(operation.empty))
+            targets.extend((yield Call(_loop_targets_walk, operation.body)))
+            targets.extend((yield Call(_loop_targets_walk, operation.empty)))
         elif operation.kind == "if":
             for _condition, body in operation.branches:
-                targets.extend(_simple_json_loop_targets(body))
+                targets.extend((yield Call(_loop_targets_walk, body)))
     return tuple(dict.fromkeys(targets))
 
 
 def _simple_json_nested_operations(
     operations: tuple[_SimpleJsonOperation, ...],
 ) -> Iterator[_SimpleJsonOperation]:
+    """
+    Yield every operation in ``operations``, nested ones included, in source order.
+
+    `walk` drives the nested bodies, so reading the operations does not cost
+    one Python frame per level of nesting.
+    """
+    return walk(_nested_operations_walk(operations))
+
+
+def _nested_operations_walk(
+    operations: tuple[_SimpleJsonOperation, ...],
+) -> Generator[_SimpleJsonOperation | Call, Any, None]:
+    """The walk generator behind ``_simple_json_nested_operations``."""
     for operation in operations:
         yield operation
         if operation.kind == "if":
             for _condition, body in operation.branches:
-                yield from _simple_json_nested_operations(body)
+                yield Call(_nested_operations_walk, body)
         elif operation.kind == "for":
-            yield from _simple_json_nested_operations(operation.body)
-            yield from _simple_json_nested_operations(operation.empty)
+            yield Call(_nested_operations_walk, operation.body)
+            yield Call(_nested_operations_walk, operation.empty)
 
 
 def _simple_json_has_dynamic_attributes(operations: tuple[_SimpleJsonOperation, ...]) -> bool:
