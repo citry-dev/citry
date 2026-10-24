@@ -34,7 +34,7 @@ use crate::utils::line_index::LineIndex;
 ///
 /// let template = parse_template("<my-tag id=\"test\"></my-tag>", None, Some(&rules))?;
 /// ```
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Debug, Clone)]
 pub struct TagRules {
     /// Allowed attributes. List of lists where inner lists mean "one of" (mutually exclusive).

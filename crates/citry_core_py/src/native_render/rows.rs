@@ -759,14 +759,14 @@ impl RowPlan {
     ///
     /// `plain_scalar_types` is Citry's `_simple_json_plain_scalar_types()`,
     /// read again for each row as Python's check does.
-    fn read(
+    fn read<'py>(
         &self,
-        py: Python<'_>,
+        py: Python<'py>,
         variables: &Bound<'_, PyAny>,
         plain_scalar_types: &Bound<'_, PyAny>,
-    ) -> PyResult<Option<NativeRow>> {
+    ) -> PyResult<Option<Bound<'py, NativeRow>>> {
         without_panics(|| match self.read_row(py, variables, plain_scalar_types)? {
-            Ok(row) => Ok(Some(row)),
+            Ok(row) => Ok(Some(super::new_untracked(py, row)?)),
             Err(_reason) => Ok(None),
         })
     }
