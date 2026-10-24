@@ -36,7 +36,6 @@ on:
       - "pnpm-workspace.yaml"
       - "README.md" # the citry wheel's metadata includes the root README
       - ".github/workflows/py--tests.yml"
-      - ".github/actions/**"
       - ".github/workflows/py--citry-ui--publish.yml"
       - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
@@ -70,7 +69,6 @@ on:
       - "pnpm-workspace.yaml"
       - "README.md" # the citry wheel's metadata includes the root README
       - ".github/workflows/py--tests.yml"
-      - ".github/actions/**"
       - ".github/workflows/py--citry-ui--publish.yml"
       - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
@@ -148,13 +146,13 @@ jobs:
       # the other supported Windows and Linux versions.
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
         os: [ubuntu-latest, windows-latest]
         # macOS is a smoke pair (oldest + newest Python) rather than the full
         # matrix, since macOS runners are costly and the maintainer develops on
         # darwin. The publish workflow builds the full macOS wheel set.
         include:
-          - { os: macos-latest, python-version: "3.10" }
+          - { os: macos-latest, python-version: "3.11" }
           - { os: macos-latest, python-version: "3.14" }
 
     steps:
@@ -190,7 +188,7 @@ jobs:
       - name: Install the workspace
         run: uv sync --locked --all-packages
 
-      # The Linux 3.10 cell renders with Citry's Python render path, the one
+      # The Linux 3.11 cell renders with Citry's Python render path, the one
       # PyPy, Pyodide and free-threaded builds use, because no job runs the
       # suite on those interpreters. Every other cell keeps the native path.
       # The option is added here rather than as a matrix key, so the cell's
@@ -203,7 +201,7 @@ jobs:
           -n 4
           --dist loadfile
           --durations 30
-          ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10') && '--python-render-path' || '' }}
+          ${{ (matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11') && '--python-render-path' || '' }}
 
   reload-servers:
     runs-on: ubuntu-latest
@@ -317,16 +315,8 @@ jobs:
       - name: Install the workspace with the e2e group
         run: uv sync --locked --all-packages --group e2e
 
-      - name: Drop the emSign ECC Root CA - G3 from the system certificates
-        uses: ./.github/actions/drop-emsign-g3
-
       - name: Install the chromium browser
         run: uv run --no-sync playwright install --with-deps chromium
-        # Playwright's bundled Node.js still trusts emSign ECC Root CA - G3,
-        # so its downloads use the refreshed system list.
-        env:
-          NODE_OPTIONS: --use-openssl-ca
-          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 
       - name: Set up pnpm for the pinned axe runtime
         uses: pnpm/action-setup@v6
@@ -442,7 +432,7 @@ jobs:
       - name: Build the matching local Citry Core wheel
         run: >-
           uv build --package citry-core --wheel --out-dir dist
-          --config-setting 'maturin.build-args=--features abi3-py310'
+          --config-setting 'maturin.build-args=--features abi3-py311'
 
       # Release qualification runs this same wheel check, so a size or
       # file-list problem shows up on the pull request instead of mid-release.
@@ -500,7 +490,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.14"]
+        python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -686,29 +676,10 @@ jobs:
             --no-index \
             --find-links "$RUNNER_TEMP/wheelhouse" \
             dist/citry_ui-*.whl
-          python -m pip install "playwright==1.61.0"
-
-      - name: Drop the emSign ECC Root CA - G3 from the system certificates
-        # Same check as .github/actions/drop-emsign-g3, written out because
-        # this job tests the installed artifact without checking out the repo.
-        run: |
-          g3=MIICTjCCAdOgAwIBAgIKPPYHqWhwDtqLhDAKBggqhkjOPQQDAzBrMQswCQYDVQQG
-          if grep -RqF "$g3" /etc/ssl/certs/; then
-            sudo apt-get update -qq
-            sudo apt-get install --only-upgrade -y -qq ca-certificates
-          fi
-          if grep -RqF "$g3" /etc/ssl/certs/; then
-            echo "::error::the system certificate list still trusts emSign ECC Root CA - G3"
-            exit 1
-          fi
+          python -m pip install "playwright==1.64.1"
 
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
-        # Playwright's bundled Node.js still trusts emSign ECC Root CA - G3,
-        # so its downloads use the refreshed system list.
-        env:
-          NODE_OPTIONS: --use-openssl-ca
-          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 
       - name: Smoke-test the installed artifact in Chromium
         shell: bash
@@ -787,16 +758,8 @@ jobs:
       - name: Install the workspace with the e2e group
         run: uv sync --locked --all-packages --group e2e
 
-      - name: Drop the emSign ECC Root CA - G3 from the system certificates
-        uses: ./.github/actions/drop-emsign-g3
-
       - name: Install the ${{ matrix.browser }} browser
         run: uv run --no-sync playwright install --with-deps ${{ matrix.browser }}
-        # Playwright's bundled Node.js still trusts emSign ECC Root CA - G3,
-        # so its downloads use the refreshed system list.
-        env:
-          NODE_OPTIONS: --use-openssl-ca
-          SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 
       - name: Run compact Vue and i18n qualification on ${{ matrix.browser }}
         run: >-

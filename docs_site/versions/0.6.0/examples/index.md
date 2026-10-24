@@ -149,7 +149,7 @@ WelcomeCard(name="ada lovelace", accent="#6f42c1")
 
 The examples above are small so they fit on a docs page. To start an
 application, copy one of the
-[starter projects](https://github.com/citry-dev/citry/tree/main/examples){: target="_blank" rel="noopener"}
+[starter projects](https://github.com/citry-dev/citry/tree/citry@0.6.0/examples){: target="_blank" rel="noopener"}
 instead. Each has its own `pyproject.toml`, lockfile, server command, and
 tests.
 

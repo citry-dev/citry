@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **Breaking:** citry-core now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing citry-core 1.8.0.
+- `safe_eval()`, `parse_template()` and `format_template()` now reject an
+  expression nested deeper than about 97 chained operators or 65 nested
+  brackets, and a template with more than 100,000 `{`. `safe_eval()` and
+  `parse_template()` raise `SyntaxError`, and `format_template()` raises
+  `TemplateFormatError`. Much deeper input used to crash the process; input
+  just past these limits used to be accepted, so split it into smaller
+  expressions or templates.
 - **Breaking:** `template_parser.analyze_browser_source()` and
   `template_parser.analyze_component_source()` return objects with named
   fields, `BrowserAnalysis` and `BrowserComponentAnalysis`, instead of
@@ -21,9 +30,19 @@
 - `analyze_browser_source()` now reports text such as `a); (b` as invalid.
   It used to accept text that closes the function Citry wraps around it,
   which Vue rejects.
+- The variant classes of `template_parser.Node` and
+  `template_parser.TemplateElement` are named after their variant:
+  `type(node).__name__` is `"WithBody"`, where it was `"Node_WithBody"`,
+  and `__qualname__` is `"Node.WithBody"`. They carry their docstrings, and
+  the type stub declares them as `Node.WithBody`, `TemplateElement.Text`
+  and so on.
+- A wrong argument type passed to a `citry_core` function raises a
+  `TypeError` with new wording, such as `'int' object is not an instance of
+  'str'`, and names the argument in a note (`while processing 'input'`).
 
 ### Added
 
+- citry-core builds from source on Python 3.15 and free-threaded 3.15.
 - For text that does not parse, `analyze_browser_source()` returns the
   JavaScript parser's first error in `error`, with its message and
   position, and each reference's `written` says whether the code assigns
@@ -73,6 +92,9 @@
 
 - `template_parser.parse_template()` is much faster on large templates: a
   92 KB template that took more than a second now parses in about 10 ms.
+- `template_parser.parse_template()` now reports an error that covers many
+  lines in well under a second. An invalid 20,000-line expression took more
+  than a minute.
 
 ## v1.8.0
 

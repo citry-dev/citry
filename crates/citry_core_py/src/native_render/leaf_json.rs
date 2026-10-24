@@ -33,8 +33,8 @@
 //! conversion then runs for it, raising its own errors (its refusal of a
 //! `citry.Secret`, for example). No Python code runs while Rust writes.
 //!
-//! [`LeafJson`] does not define `__traverse__`, so the cyclic garbage
-//! collector does not track it: it holds Rust strings and the placeholder,
+//! A [`LeafJson`] is created untracked ([`super::new_untracked`]), so the
+//! cyclic garbage collector skips it: it holds Rust strings and the placeholder,
 //! which is a module-level object that never refers to a `_LeafJson`.
 
 use std::collections::HashMap;
@@ -291,7 +291,7 @@ pub fn leaf_values_json<'py>(
             json,
             placeholder: placeholder.clone().unbind(),
         };
-        Ok(Bound::new(py, leaf)?.into_any())
+        Ok(super::new_untracked(py, leaf)?.into_any())
     })
 }
 

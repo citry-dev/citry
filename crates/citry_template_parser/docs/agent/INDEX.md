@@ -83,6 +83,10 @@ Python wrapper together (CLAUDE.md Mechanism 4).
 
 `parse_template(input, lang, user_rules)` builds the tree:
 
+- The grammar's `template` rule always runs through `parse_grammar`, which sizes the stack
+  from how many `{` the source holds (see "Expressions and braces that nest too
+  deeply" in `docs/design/template_grammar.md`). Call it rather than
+  `GrammarParser::parse` for `Rule::template`.
 - An HTML tag stack assembles `WithBody` nodes; a closing tag pops and must
   match the open tag's name under ASCII-case-insensitive HTML identity, else a
   mismatched-tags error. Authored spelling stays in the AST.

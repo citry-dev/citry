@@ -8,13 +8,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+import tomllib
 from packaging.requirements import InvalidRequirement, Requirement
 from packaging.version import InvalidVersion, Version
-
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI leg
-    import tomli as tomllib
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPI_REGISTRY = "https://pypi.org/simple"

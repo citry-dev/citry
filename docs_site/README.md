@@ -448,15 +448,17 @@ flag.
 
 Do not add an `h1` to the post body because the Blog layout supplies it. Start
 with the opening paragraph or an `h2`. Link durable instructions to their
-current Docs, Examples, or Reference owner. A root build publishes the index,
-stable post routes, Markdown companions, search and LLM entries, sitemap data,
-social metadata, and `/blog/feed.xml`. Documentation snapshots produced by the
+current Docs, Examples, or Reference owner. Link to files in this repository
+through a commit SHA or a release tag, never `main`, so the post keeps showing
+what it described; `build-check` fails on a post that links to `main`. A root
+build publishes the index, stable post routes, Markdown companions, search and
+LLM entries, sitemap data, social metadata, and `/blog/feed.xml`. Documentation snapshots produced by the
 current builder keep a root `/blog/` header link but do not copy Blog content.
 Older committed snapshots keep their historical header unchanged.
 
 ## Set up the environment
 
-The docs require Python 3.10 or newer, [uv](https://docs.astral.sh/uv/), the
+The docs require Python 3.11 or newer, [uv](https://docs.astral.sh/uv/), the
 repository's pinned nightly Rust toolchain, and the recursive Git submodules.
 CI currently uses Python 3.14.
 
@@ -865,6 +867,38 @@ uv run --no-sync python -m docs_site versions-check --strict
 It walks selected release tags in temporary Git worktrees and modifies the
 committed version tree. Tags that predate the docs builder are skipped. Selection
 and the publication window are defined in `docs_versions.yml`.
+
+### Pin snapshot links
+
+A snapshot stays published for as long as the site exists, so its links into
+the Citry repository on GitHub must not follow `main`. Before a build moves a
+snapshot into place, it rewrites every link that opens a file, a folder, or a
+raw file download on `main` to the release the snapshot was built from. An API
+reference "source" link becomes `.../blob/citry@X.Y.Z/...#L42`, and a GIF on
+raw.githubusercontent.com loads from `citry@X.Y.Z`.
+
+- `build-tag` and `build-all` run this rewrite from your current checkout after
+  the tagged build finishes, so it also happens when the tag's own docs builder
+  has no rewrite. The links name the tag.
+- Running `build --docs-version X.Y.Z` yourself links to `citry@X.Y.Z` when your
+  checkout is that tag's commit, and to your checkout's commit otherwise. It
+  does not wait for the tag to exist, so a build made from the release commit
+  before tagging links to the commit. A detached build (`-o` with
+  `--no-update-versions-manifest`) is left as built, because that is the form
+  `build-tag` uses before it rewrites the result itself.
+- "Edit this page" links stay on `main`, because an edit is always made there.
+  On an old snapshot they can open a file that has since changed or moved.
+- 0.3.0 and 0.3.1 were built from commits other than their tags, so their links
+  name those commits.
+
+If a snapshot still links to `main`, `versions-check` fails, even without
+`--strict`, with an error naming the file, the line, and the link. It reads
+every text file in the snapshot, so it also finds a link the rewrite does not
+change, such as `commits/main` or one in a script or stylesheet. Change the
+source page to link to a file, folder, or tag, rebuild the version with
+`build-tag`, or fix the link in the snapshot by hand. To change which links
+count, edit `scripts/release_links.py`; the package publish workflows use the
+same patterns.
 
 ## Maintenance workflows
 
