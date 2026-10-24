@@ -1477,7 +1477,10 @@ class _SimpleJsonCodegen:
         operations: tuple[_SimpleJsonOperation, ...],
         local_names: tuple[tuple[str, str], ...],
         indent: int,
-    ) -> list[str]:
+    ) -> Generator[Call, Any, list[str]]:
+        # A walk generator: each branch and loop body's function is written
+        # through the walk driver, so writing the code does not need one Python
+        # call per level of nesting.
         lines: list[str] = []
         pad = " " * indent
         for simple in operations:
@@ -1593,7 +1596,7 @@ class _SimpleJsonCodegen:
                     )
                 )
                 for branch_index, (_condition, body) in enumerate(simple.branches):
-                    branch_function = self._evaluate_function(body, local_names)
+                    branch_function = yield Call(self._evaluate_function, body, local_names)
                     lines.append(f"{pad}if {selected} == {branch_index}:")
                     lines.append(
                         f"{pad}    {branch_function}("
@@ -1608,8 +1611,10 @@ class _SimpleJsonCodegen:
                 rendered_any = self._new_name("rendered_any")
                 loop_value = self._new_name("loop_value")
                 body_locals = (*local_names, (cast("str", simple.target), loop_value))
-                body_function = self._evaluate_function(simple.body, body_locals)
-                empty_function = self._evaluate_function(simple.empty, local_names) if simple.empty else None
+                body_function = yield Call(self._evaluate_function, simple.body, body_locals)
+                empty_function = (
+                    (yield Call(self._evaluate_function, simple.empty, local_names)) if simple.empty else None
+                )
                 lines.extend(
                     (
                         f"{pad}{records} = []",
@@ -1707,12 +1712,16 @@ class _SimpleJsonCodegen:
         local_names: tuple[tuple[str, str], ...] = (),
         *,
         sets_value_context: bool = False,
-    ) -> str:
+    ) -> Generator[Call, Any, str]:
         outer_depth = self._depth
         self._depth = outer_depth + 1
         self.max_depth = max(self.max_depth, self._depth)
         try:
-            return self._write_evaluate_function(operations, local_names, sets_value_context=sets_value_context)
+            return (
+                yield Call(
+                    self._write_evaluate_function, operations, local_names, sets_value_context=sets_value_context
+                )
+            )
         finally:
             self._depth = outer_depth
 
@@ -1722,7 +1731,7 @@ class _SimpleJsonCodegen:
         local_names: tuple[tuple[str, str], ...],
         *,
         sets_value_context: bool,
-    ) -> str:
+    ) -> Generator[Call, Any, str]:
         name = self._new_name("evaluate")
         lines = [
             f"def {name}(context, variables, data, root_data, vue_errors, special, resolved_opens"
@@ -1732,19 +1741,19 @@ class _SimpleJsonCodegen:
             # Branch and loop-body functions run only inside the root function,
             # which already made this same `context` current, and any other
             # code that sets `_VALUE_CONTEXT` resets it before returning.
-            body_lines = self._evaluate_lines(operations, local_names, 4)
+            body_lines = yield Call(self._evaluate_lines, operations, local_names, 4)
             lines.extend(body_lines or ["    pass"])
             self.functions.append("\n".join(lines))
             return name
         lines.extend(("    value_token = _VALUE_CONTEXT.set(context)", "    try:"))
-        body_lines = self._evaluate_lines(operations, local_names, 8)
+        body_lines = yield Call(self._evaluate_lines, operations, local_names, 8)
         lines.extend(body_lines or ["        pass"])
         lines.extend(("    finally:", "        _VALUE_CONTEXT.reset(value_token)"))
         self.functions.append("\n".join(lines))
         return name
 
     def build(self) -> _SimpleJsonProgram:
-        evaluate_root = self._evaluate_function(self._root_operations, sets_value_context=True)
+        evaluate_root = run(self._evaluate_function(self._root_operations, sets_value_context=True))
         source = "\n\n".join(self.functions)
         namespace: dict[str, object] = {
             "_ConstMapping": _ConstMapping,
