@@ -7,7 +7,7 @@ use vize_s0::camelize;
 use vize_s2::op::{BindOp, BindingOp, OnOp, SlotOp};
 
 use super::buf::Buf;
-use super::js::{escape_js_string, is_valid_js_identifier};
+use super::js::{escape_js_attribute_string, escape_js_name, is_valid_js_identifier};
 use super::prefix::Site;
 use super::props::{
     Piece, StaticBindKeyCasing, bind_value, emit_dynamic_bind_pair, pieces, static_bind_key,
@@ -155,7 +155,7 @@ fn emit_props_object(
                 push_camel_key(cx, attr.name);
                 cx.buf.push(": \"");
                 if let Some(value) = attr.value {
-                    cx.buf.push(escape_js_string(value).as_str());
+                    cx.buf.push(escape_js_attribute_string(value).as_str());
                 }
                 cx.buf.push("\"");
             }
@@ -238,7 +238,7 @@ fn push_key(cx: &mut EmitCx<'_>, key: &str) {
         cx.buf.push(key);
     } else {
         cx.buf.push("\"");
-        cx.buf.push(escape_js_string(key).as_str());
+        cx.buf.push(escape_js_name(key).as_str());
         cx.buf.push("\"");
     }
 }

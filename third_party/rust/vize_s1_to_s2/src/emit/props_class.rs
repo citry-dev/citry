@@ -3,7 +3,7 @@
 use vize_s2::expr::JsExpr;
 use vize_s2::op::BindOp;
 
-use super::js::{escape_js_string, js_expr_source};
+use super::js::{escape_js_attribute_string, js_expr_source};
 use super::props_object::Piece;
 use super::props_value::authored_value_padding;
 use super::{EmitCx, EmitError};
@@ -29,14 +29,14 @@ pub(super) fn emit_class_value(
         if before {
             cx.buf.push("\"");
             cx.buf
-                .push(escape_js_string(static_class.value.unwrap_or("")).as_str());
+                .push(escape_js_attribute_string(static_class.value.unwrap_or("")).as_str());
             cx.buf.push("\", ");
             emit_authored_js(cx, js, source.as_str(), authored)?;
         } else {
             emit_authored_js(cx, js, source.as_str(), authored)?;
             cx.buf.push(", \"");
             cx.buf
-                .push(escape_js_string(static_class.value.unwrap_or("")).as_str());
+                .push(escape_js_attribute_string(static_class.value.unwrap_or("")).as_str());
             cx.buf.push("\"");
         }
         cx.buf.push("]");

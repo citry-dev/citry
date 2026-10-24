@@ -8,7 +8,7 @@ use super::super::children::{
     emit_to_display_string, is_empty_interpolation,
 };
 use super::super::hoist::{emit_hoisted_element, is_hoistable};
-use super::super::js::{escape_js_string, is_valid_js_identifier};
+use super::super::js::{escape_js_attribute_string, escape_js_name, is_valid_js_identifier};
 use super::super::prefix::Site;
 use super::super::vnode;
 use super::super::{EmitCx, EmitError, UnsupportedReason as Reason};
@@ -91,7 +91,7 @@ fn emit_fragment_props(
         push_static_key(cx, attr.name.as_str());
         cx.buf.push(": \"");
         cx.buf
-            .push(escape_js_string(attr.value.as_deref().unwrap_or("")).as_str());
+            .push(escape_js_attribute_string(attr.value.as_deref().unwrap_or("")).as_str());
         cx.buf.push("\"");
     }
     if let Some(class) = class {
@@ -140,7 +140,7 @@ fn emit_wrapper_class(cx: &mut EmitCx<'_>, class: &WrapperClass) -> Result<(), E
                 .push(super::super::helper::Helper::NormalizeClass.alias());
             cx.buf.push("([\"");
             cx.buf
-                .push(escape_js_string(static_value.as_str()).as_str());
+                .push(escape_js_attribute_string(static_value.as_str()).as_str());
             cx.buf.push("\", ");
             cx.buf.push(dynamic_source);
             cx.buf.push("])");
@@ -157,7 +157,7 @@ fn emit_wrapper_class(cx: &mut EmitCx<'_>, class: &WrapperClass) -> Result<(), E
         (Some(static_value), None) => {
             cx.buf.push("\"");
             cx.buf
-                .push(escape_js_string(static_value.as_str()).as_str());
+                .push(escape_js_attribute_string(static_value.as_str()).as_str());
             cx.buf.push("\"");
         }
         (None, None) => cx.buf.push("\"\""),
@@ -171,7 +171,7 @@ fn push_static_key(cx: &mut EmitCx<'_>, key: &str) {
         return;
     }
     cx.buf.push("\"");
-    cx.buf.push(escape_js_string(key).as_str());
+    cx.buf.push(escape_js_name(key).as_str());
     cx.buf.push("\"");
 }
 

@@ -7,7 +7,7 @@ SHA-256 is
 `8db1544b90c72dbe51fe237437ff296d59934e44af7b99686f02cf09d0298d4e`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.3`.
+package as `0.420.0+citry.4`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,10 +16,12 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.3` package version, registers
-  the `v_for_unwrapped_runtime_directives`, `event_handler_statements`, and
-  `event_key_modifiers` regression targets, and drops the upstream `davinci`
-  benchmark target because its source is not included here.
+- `Cargo.toml`: records the local `0.420.0+citry.4` package version (the two
+  patched crates share one version, so it moves when either changes),
+  registers the `v_for_unwrapped_runtime_directives`,
+  `event_handler_statements`, and `event_key_modifiers` regression targets,
+  and drops the upstream `davinci` benchmark target because its source is
+  not included here.
 - `src/codegen/element/directives.rs`: emits custom-directive modifier names as
   quoted and escaped JavaScript object keys.
 - `src/codegen/props/v_model.rs`: emits `v-model` modifier names as quoted and

@@ -3,7 +3,7 @@
 use vize_s0::String;
 use vize_s2::op::{Attribute, BindingOp, Op};
 
-use super::super::js::{escape_js_string, js_expr_source};
+use super::super::js::{escape_js_attribute_string, js_expr_source};
 use super::super::prefix::Site;
 use super::super::{EmitCx, EmitError};
 
@@ -48,7 +48,7 @@ pub(super) fn item_key_js(
     for attr in attributes {
         if attr.name == "key" {
             let mut out = String::from("\"");
-            out.push_str(escape_js_string(attr.value.unwrap_or("")).as_str());
+            out.push_str(escape_js_attribute_string(attr.value.unwrap_or("")).as_str());
             out.push('"');
             return Ok(Some(out));
         }

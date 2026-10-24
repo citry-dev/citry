@@ -73,7 +73,7 @@ pub(super) fn emit_resolves(cx: &mut EmitCx<'_>, names: &[&str]) -> bool {
                     .push(kind.non_inline_template_prefix().trim_end_matches('.'));
                 cx.buf.push("[\"");
                 cx.buf
-                    .push(super::js::escape_js_string(binding_name.as_str()).as_str());
+                    .push(super::js::escape_js_name(binding_name.as_str()).as_str());
                 cx.buf.push("\"]");
             }
             None => {
@@ -227,7 +227,7 @@ fn emit_entry(cx: &mut EmitCx<'_>, directive: &VueDirectiveOp<'_>) -> Result<(),
                 cx.buf.push(", ");
             }
             cx.buf.push("\"");
-            cx.buf.push(super::js::escape_js_string(modifier).as_str());
+            cx.buf.push(super::js::escape_js_name(modifier).as_str());
             cx.buf.push("\": true");
         }
         cx.buf.push(" }");

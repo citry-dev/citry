@@ -19,7 +19,7 @@ use super::EmitCx;
 use super::EmitError;
 use super::UnsupportedReason as Reason;
 use super::hoist::is_hoistable;
-use super::js::escape_js_string;
+use super::js::escape_js_attribute_string;
 use super::prefix::Site;
 use super::props_static::PropHoistPosition;
 use crate::lower::{WrapperAttr, WrapperClass, WrapperKey};
@@ -31,7 +31,7 @@ pub(super) fn wrapper_key_js(cx: &EmitCx<'_>, key: &WrapperKey) -> Result<String
             value: Some(value), ..
         } => {
             let mut out = String::from("\"");
-            out.push_str(escape_js_string(value.as_str()).as_str());
+            out.push_str(escape_js_attribute_string(value.as_str()).as_str());
             out.push('"');
             Ok(out)
         }

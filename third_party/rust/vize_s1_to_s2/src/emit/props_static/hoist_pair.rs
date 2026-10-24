@@ -3,7 +3,7 @@ use vize_s2::op::{BindOp, BindingOp};
 
 use super::super::EmitError;
 use super::super::hoist::push_attr_pair;
-use super::super::js::{escape_js_string, is_valid_js_identifier};
+use super::super::js::{escape_js_name, is_valid_js_identifier};
 use super::super::props::{
     Piece, bind_value_is_static_patchless, bind_value_text, static_bind_key,
 };
@@ -269,7 +269,7 @@ impl HoistKey<'_> {
 fn push_key(out: &mut String, key: &str) {
     if !is_valid_js_identifier(key) {
         out.push('"');
-        out.push_str(escape_js_string(key).as_str());
+        out.push_str(escape_js_name(key).as_str());
         out.push('"');
         return;
     }

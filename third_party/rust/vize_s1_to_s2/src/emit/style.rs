@@ -8,7 +8,7 @@ use vize_s2::expr::JsExpr;
 use vize_s2::op::{Attribute, BindOp};
 
 use super::buf::Buf;
-use super::js::{escape_js_string, js_expr_source};
+use super::js::{escape_js_attribute_string, js_expr_source};
 use super::props_value::{BindValue, authored_value_padding};
 use super::{EmitCx, EmitError};
 
@@ -236,8 +236,9 @@ fn emit_declaration(cx: &mut EmitCx<'_>, declaration: &str, emitted: &mut usize)
     }
     *emitted += 1;
     cx.buf.push("\"");
-    cx.buf.push(escape_js_string(key.trim()).as_str());
+    cx.buf.push(escape_js_attribute_string(key.trim()).as_str());
     cx.buf.push("\":\"");
-    cx.buf.push(escape_js_string(value.trim()).as_str());
+    cx.buf
+        .push(escape_js_attribute_string(value.trim()).as_str());
     cx.buf.push("\"");
 }

@@ -4,7 +4,7 @@ use vize_s0::Span;
 use vize_s2::expr::{ExprRef, JsExpr};
 use vize_s2::op::BindOp;
 
-use super::entity::decode_html_entities;
+use super::entity::decode_html_attribute_entities;
 use super::js::{RawJs, js_expr_source};
 use super::props_bind;
 use super::{EmitCx, EmitError};
@@ -55,7 +55,7 @@ impl BindValue<'_> {
         let decoded = raw_source
             .as_str()
             .contains('&')
-            .then(|| decode_html_entities(raw_source.as_str()));
+            .then(|| decode_html_attribute_entities(raw_source.as_str()));
         let source = decoded.as_deref().unwrap_or_else(|| raw_source.as_str());
         let source_root = cx.source;
         if let Some((leading, trailing)) =
@@ -81,7 +81,7 @@ impl BindValue<'_> {
 pub(super) fn bind_js_source<'a>(js: &JsExpr<'a>) -> RawJs<'a> {
     let source = js_expr_source(js);
     if source.as_str().contains('&') {
-        RawJs::Owned(decode_html_entities(source.as_str()))
+        RawJs::Owned(decode_html_attribute_entities(source.as_str()))
     } else {
         source
     }

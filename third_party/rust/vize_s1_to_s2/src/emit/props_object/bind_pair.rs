@@ -2,7 +2,7 @@
 
 use vize_s2::op::{Attribute, BindOp};
 
-use super::super::js::{escape_js_string, push_ident_key};
+use super::super::js::{escape_js_attribute_string, push_ident_key};
 use super::super::props_bind::{self, StaticBindKeyCasing};
 use super::super::{EmitCx, EmitError, props_value, style};
 use super::Piece;
@@ -15,7 +15,7 @@ pub(super) fn emit_static_pair(cx: &mut EmitCx<'_>, attr: &Attribute<'_>) {
     push_ident_key(cx, attr.name);
     cx.buf.push(": \"");
     if let Some(value) = attr.value {
-        cx.buf.push(escape_js_string(value).as_str());
+        cx.buf.push(escape_js_attribute_string(value).as_str());
     }
     cx.buf.push("\"");
 }

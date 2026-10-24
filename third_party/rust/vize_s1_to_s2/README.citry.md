@@ -7,7 +7,7 @@ SHA-256 is
 `13d57e14a66a37b558d10c5a46c6c1deb857ffbbfaa7f99118db584646ca096d`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.3`.
+package as `0.420.0+citry.4`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,13 +16,13 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.3` package version, omits the
+- `Cargo.toml`: records the local `0.420.0+citry.4` package version, omits the
   upstream `emit_for` test target (the published manifest does not contain its
   `vize_atelier_dom` development dependency, and adding it would create a
   cycle), registers the `citry_runtime_directives`,
-  `citry_event_handler_statements`, and `citry_event_key_modifiers`
-  regression targets, and drops the upstream `davinci_storage` benchmark
-  target because its source is not included here.
+  `citry_event_handler_statements`, `citry_event_key_modifiers`, and
+  `citry_attribute_entities` regression targets, and drops the upstream
+  `davinci_storage` benchmark target because its source is not included here.
 - `src/emit/directive.rs`: keeps runtime directive and `v-model` wrappers on a
   single element unwrapped from `<template v-for>`; custom-directive modifier
   names are emitted as quoted and escaped JavaScript object keys.
@@ -46,6 +46,29 @@ Relative to that archive, the Citry delta is:
   the listener and patch flag that `@vue/compiler-dom` writes. The element
   kind is passed down because it decides the handler key that the keyboard
   check reads.
+- `src/emit/entity.rs` and `src/emit/js.rs`: add
+  `decode_html_attribute_entities` and `escape_js_attribute_string`, which
+  decode an attribute value by the HTML attribute rule: a legacy name (a
+  named reference HTML also accepts without `;`) that `=` or a letter or
+  digit follows stays as written, so `href="?q=x&region=eu"` keeps its
+  `&region`. They also add `escape_js_name`, which escapes a name without
+  decoding it. The emitters for static attributes, bound values (`:name`,
+  `v-bind`), `class`, `style`, `key` (on elements, `v-for` rows, and
+  `<template>` wrappers), `v-html`, slot names, and slot props
+  (`src/emit/prefix.rs`, `src/emit/props_value.rs`, `src/emit/props_class.rs`,
+  `src/emit/style.rs`, `src/emit/html.rs`, `src/emit/outlet.rs`,
+  `src/emit/outlet_props.rs`, `src/emit/tpl.rs`, `src/emit/tpl/fragment.rs`,
+  `src/emit/vif.rs`, `src/emit/vfor/keys.rs`, `src/emit/hoist/props.rs`, and
+  `src/emit/props_object/bind_pair.rs`) call the attribute versions. Other
+  directive expressions keep their text as written, as `vize_atelier_core`
+  does. Text nodes keep the text rule, as `@vue/compiler-dom` does. Slot
+  names written as `#name`, slot prop names, the attribute names that a
+  `<template>` wrapper or a static prop writes, directive names, and
+  directive modifiers go through `escape_js_name` (`src/emit/directive.rs`,
+  `src/emit/create_slots/entry.rs`, `src/emit/slots/params.rs`,
+  `src/emit/outlet_props.rs`, `src/emit/tpl/fragment.rs`, and
+  `src/emit/props_static/hoist_pair.rs`), because HTML never decodes a
+  reference in a name.
 - `tests/emit_tpl.rs`: adds regression assertions for keyed component and slot
   children inside `v-if` template branches.
 - `tests/citry_runtime_directives.rs`: adds Citry coverage for custom,
@@ -53,6 +76,10 @@ Relative to that archive, the Citry delta is:
   keyed loop and conditional children, and mixed runtime directives.
 - `tests/citry_event_key_modifiers.rs`: adds Citry coverage for the
   key-modifier rule, compared with the output of `@vue/compiler-dom` 3.5.42.
+- `tests/citry_attribute_entities.rs`: adds Citry coverage for the attribute
+  rule in static, bound, `v-html`, `v-for` key, slot, and component
+  attributes, and for names that stay as written, compared with the output
+  of `@vue/compiler-dom` 3.5.44.
 - `tests/citry_event_handler_statements.rs`: adds Citry coverage for the
   statement rule in event handlers, interpolations, and conditions (with and
   without TypeScript when the `typescript` feature is on), for handlers that

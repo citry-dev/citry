@@ -4,7 +4,7 @@ use vize_s2::op::{BindingOp, Region, SlotContentOp};
 use super::is_slot_template;
 use crate::emit::EmitCx;
 use crate::emit::create_slots_walk::{advance_after_op, slot_content};
-use crate::emit::js::{escape_js_string, is_valid_js_identifier};
+use crate::emit::js::{escape_js_name, is_valid_js_identifier};
 use crate::emit::prefix::Site;
 use crate::pass::walk::PageWalk;
 use crate::pass::{SlotCarrier, SlotName, SlotParams};
@@ -16,7 +16,7 @@ pub(super) fn emit_slot_key(cx: &mut EmitCx<'_>, name: &SlotName) {
         }
         SlotName::Static { text, .. } => {
             cx.buf.push("\"");
-            cx.buf.push(escape_js_string(text.as_str()).as_str());
+            cx.buf.push(escape_js_name(text.as_str()).as_str());
             cx.buf.push("\"");
         }
         SlotName::Dynamic { text } => {

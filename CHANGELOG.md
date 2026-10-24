@@ -210,6 +210,10 @@
 
 ### Fixes
 
+- In a component that uses Vue, an attribute value such as
+  `href="/search?q=x&region=eu"` now keeps `&region=eu` as written, as
+  the browser and Vue do. Citry used to read `&reg` in it as `®`,
+  which broke the link.
 - In a component that uses Vue, a `<c-raw>` block, a `Markup` value, or
   `#c-ignore` contents that self-close an element whose contents the
   browser reads as text, such as `<iframe/>`, `<textarea/>`, or

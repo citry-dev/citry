@@ -3,7 +3,7 @@
 use vize_s2::op::VueHtmlOp;
 
 use super::UnsupportedReason as Reason;
-use super::entity::decode_html_entities;
+use super::entity::decode_html_attribute_entities;
 use super::js::{RawJs, expr_source};
 use super::{EmitCx, EmitError};
 use vize_s0::Span;
@@ -27,7 +27,7 @@ pub(super) fn emit_pair(cx: &mut EmitCx<'_>, html: &VueHtmlOp<'_>) -> Result<(),
             let decoded = raw_source
                 .as_str()
                 .contains('&')
-                .then(|| decode_html_entities(raw_source.as_str()));
+                .then(|| decode_html_attribute_entities(raw_source.as_str()));
             let source = decoded.as_deref().unwrap_or_else(|| raw_source.as_str());
             if let Some((leading, trailing)) =
                 authored_html_padding(cx.source, html.span, raw_source.as_str(), expr.span())
