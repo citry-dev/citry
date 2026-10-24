@@ -1097,7 +1097,7 @@ class TestWrapReceivedOutputInAComponent:
             """
 
         # One output cannot sit in two places on the page.
-        with pytest.raises(RuntimeError, match="encountered more than once"):
+        with pytest.raises(RuntimeError, match="printed in more than one place on the page"):
             self._html(self._outer(app) if nested else Inner)
 
     def test_two_wraps_in_a_row_nest_the_output_twice(self, render_path):
@@ -1171,7 +1171,7 @@ class TestWrapReceivedOutputInAComponent:
         first.parts.append(second)
         second.parts.append(first)
         # Serialization stops at the loop instead of running forever.
-        with pytest.raises(RuntimeError, match="encountered more than once"):
+        with pytest.raises(RuntimeError, match="This rendered output contains itself"):
             first.serialize(deps_strategy="ignore")
 
     def test_a_development_page_does_not_report_the_kept_id_twice(self, render_path):

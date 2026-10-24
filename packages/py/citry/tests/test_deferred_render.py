@@ -11,6 +11,8 @@ subtree is complete, and bubbles dependencies up at finalize time.
 
 # ruff: noqa: ANN
 
+import re
+
 import pytest
 
 from citry import Citry, CitryContext, CitryRender, Component, Markup
@@ -574,6 +576,192 @@ class TestUnrenderedContentPrintedTwice:
             RuntimeError, match=r"Page > Twice > Show:\nThis content is printed in more than one place"
         ):
             Page().render().serialize()
+
+    # What every "printed twice" error ends with, as the author reads it.
+    ADVICE = (
+        "To show it in several places, pass the slot itself instead of calling it, or a component element "
+        "such as MyComponent() instead of MyComponent().render(): each place that prints a slot or an "
+        "element renders its own copy. In an on_render hook, place the output the hook received only once."
+    )
+
+    @staticmethod
+    def _row_and_show(c: Citry) -> tuple[type[Component], type[Component]]:
+        """Return Row, which counts its renders, and Show, which prints its ``body`` input."""
+
+        class Row(Component):
+            citry = c
+            renders = 0
+            template = """
+                <b>row</b>
+            """
+
+            def template_data(self, kwargs, slots):
+                type(self).renders += 1
+                return {}
+
+        class Show(Component):
+            citry = c
+            template = """
+                <aside>{{ body }}</aside>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+        return Row, Show
+
+    @staticmethod
+    def _vue_page(c: Citry) -> type[Component]:
+        # A component with browser code makes the page use Vue.
+        class Counter(Component):
+            citry = c
+            template = """
+                <button @click="count += 1">{{ count }}</button>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"count": 0}
+
+        return Counter
+
+    @pytest.mark.parametrize(
+        ("show_first", "reason"),
+        [
+            (True, "have not rendered yet, so each would render twice."),
+            (False, "can appear only once on the page."),
+        ],
+        ids=["before-the-slot-renders", "after-the-slot-renders"],
+    )
+    def test_the_error_for_a_slot_result_printed_twice_says_what_to_do(self, render_path, show_first, reason):
+        del render_path  # the fixture switches the render path
+        c = Citry()
+        self._row_and_show(c)
+
+        class ShowFirst(Component):
+            citry = c
+            name = "twice"
+            template = """
+                <c-Show c-body="body" />
+                <div>{{ body }}</div>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"body": slots["default"]()}
+
+        class TwiceFirst(Component):
+            citry = c
+            name = "twice_first"
+            template = """
+                <div>{{ body }}</div>
+                <c-Show c-body="body" />
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"body": slots["default"]()}
+
+        class ShowFirstPage(Component):
+            citry = c
+            template = """
+                <c-twice><c-Row /></c-twice>
+            """
+
+        class TwiceFirstPage(Component):
+            citry = c
+            template = """
+                <c-twice_first><c-Row /></c-twice_first>
+            """
+
+        page = ShowFirstPage if show_first else TwiceFirstPage
+        with pytest.raises(RuntimeError) as raised:
+            page().render().serialize()
+        message = str(raised.value).split("\n", 1)[1]
+        assert (
+            message
+            == f"This content is printed in more than one place, but the components inside it {reason} {self.ADVICE}"
+        )
+
+    @pytest.mark.parametrize("vue", [False, True], ids=["static", "vue"])
+    def test_a_rendered_component_printed_twice_says_what_to_do(self, render_path, vue):
+        # Row renders before either place prints it, so the check while the
+        # page renders cannot see the repeat. Serializing the page finds it,
+        # with or without Vue, and that error gives the same advice.
+        del render_path  # the fixture switches the render path
+        c = Citry()
+        row, _show = self._row_and_show(c)
+        counter = self._vue_page(c)
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"body": row().render(), "counter": counter() if vue else ""}
+
+            template = """
+                <main>{{ body }}<div>{{ body }}</div>{{ counter }}</main>
+            """
+
+        with pytest.raises(RuntimeError) as raised:
+            str(Page())
+        assert str(raised.value) == (
+            "One rendered output is printed in more than one place on the page, so the components in it "
+            f"would appear more than once. {self.ADVICE}"
+        )
+
+    @pytest.mark.parametrize("vue", [False, True], ids=["static", "vue"])
+    def test_passing_the_slot_renders_a_copy_in_each_place(self, render_path, vue):
+        del render_path  # the fixture switches the render path
+        c = Citry()
+        row, _show = self._row_and_show(c)
+        counter = self._vue_page(c)
+
+        class Twice(Component):
+            citry = c
+            template = """
+                <c-Show c-body="body" />
+                <div>{{ body }}</div>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"body": slots["default"]}
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"counter": counter() if vue else ""}
+
+            template = """
+                <main><c-Twice><c-Row /></c-Twice>{{ counter }}</main>
+            """
+
+        html = str(Page())
+        body = html[html.index("<main") : html.index("</main>")]
+        assert len(re.findall(r"<b\b[^>]*>row</b>", body)) == 2
+        assert ("citry-vue-" in html) is vue
+        assert row.renders == 2
+
+    @pytest.mark.parametrize("vue", [False, True], ids=["static", "vue"])
+    def test_passing_the_element_renders_a_copy_in_each_place(self, render_path, vue):
+        del render_path  # the fixture switches the render path
+        c = Citry()
+        row, _show = self._row_and_show(c)
+        counter = self._vue_page(c)
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return {"body": row(), "counter": counter() if vue else ""}
+
+            template = """
+                <main><c-Show c-body="body" /><div>{{ body }}</div>{{ counter }}</main>
+            """
+
+        html = str(Page())
+        body = html[html.index("<main") : html.index("</main>")]
+        assert len(re.findall(r"<b\b[^>]*>row</b>", body)) == 2
+        assert ("citry-vue-" in html) is vue
+        assert row.renders == 2
 
 
 class TestNestedRenderedHook:

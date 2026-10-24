@@ -75,6 +75,7 @@ from citry.assets import _TEMPLATE_CACHE, load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement, _PreparedCallMetadata
 from citry.citry_render import (
+    _PRINT_IN_MANY_PLACES_ADVICE,
     _VALUE_CONTEXT,
     CitryRender,
     DeferredComponent,
@@ -1745,13 +1746,11 @@ def _scan_deferred_parts(
 
 _SHARED_UNRENDERED_MESSAGE = (
     "This content is printed in more than one place, but the components inside it have not rendered yet, "
-    "so each would render twice. Print it in one place, or make it once for each place: for a slot, call "
-    "the slot once for each place you print its result."
+    f"so each would render twice. {_PRINT_IN_MANY_PLACES_ADVICE}"
 )
 _SHARED_RENDERED_MESSAGE = (
     "This content is printed in more than one place, but the components inside it can appear only once on "
-    "the page. Print it in one place, or make it once for each place: for a slot, call the slot once for "
-    "each place you print its result."
+    f"the page. {_PRINT_IN_MANY_PLACES_ADVICE}"
 )
 
 

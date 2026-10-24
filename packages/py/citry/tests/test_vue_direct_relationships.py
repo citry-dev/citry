@@ -1087,7 +1087,7 @@ def test_component_run_does_not_hide_duplicate_render_object() -> None:
     rendered.parts.append(child)
     with pytest.raises(
         UnsupportedPreparedView,
-        match=r"has a duplicate #c-key|render occurrence appears more than once",
+        match=r"has a duplicate #c-key",
     ):
         _view(rendered)
 

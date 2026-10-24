@@ -258,6 +258,16 @@ placeholders before the replacement is scanned, because the output moved
 rather than being printed twice. A replacement that holds the received output
 twice still raises, when the replacement is scanned.
 
+The error tells the author how to show content in several places: pass the
+slot or the element, each of which renders again wherever it is printed,
+not its rendered output (`_PRINT_IN_MANY_PLACES_ADVICE` in
+`citry_render.py`). A finished output such as `Row().render()` printed
+twice is caught later, when the page is serialized: by serialization, or
+by the Vue capture on a page that uses Vue. Both raise the same `RuntimeError`
+with the same advice. That advice cannot name a slot or an element for an
+`on_render` replacement that holds the output the hook received twice, so
+it also says to place that output only once.
+
 Where that error goes depends on whose output holds the shared render:
 
 - In a component's own output (the root's or a child's), the error is raised

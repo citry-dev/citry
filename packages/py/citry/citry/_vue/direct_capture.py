@@ -35,6 +35,7 @@ from citry.citry_render import (
 from citry.citry_template import CitryTemplate
 from citry.client_directives import ComponentTagClientBindingKind
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
+from citry.serialize import _REPEATED_RENDER_MESSAGE
 from citry.util.html import Markup, decode_attribute_entities, decode_character_references, escape_to_str
 from citry_core.template_parser import analyze_browser_source
 
@@ -869,7 +870,10 @@ def assemble_typed_render(
         if not (selected_transparent_root or ordinary_component_root) or frame.render_id is None:
             raise UnsupportedPreparedView("prepared component must be a nontransparent component root")
         if frame.render_id in seen_render_ids:
-            raise UnsupportedPreparedView("render occurrence appears more than once")
+            # One rendered output printed in two places, such as
+            # Row().render() printed twice. Serialization raises the same
+            # error for a page without Vue.
+            raise RuntimeError(_REPEATED_RENDER_MESSAGE)
         if occurrence_id in seen_occurrence_ids:
             raise UnsupportedPreparedView("prepared occurrence identity collided")
         seen_render_ids.add(frame.render_id)

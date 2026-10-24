@@ -378,6 +378,63 @@ later in the tag wins.
     [`c-bind`](/syntax/attributes/#c-bind-spread) describes how
     mappings are applied on other tags.
 
+## Show a fill twice { #show-a-fill-in-two-places }
+
+To show the same fill in two places, such as a header and a child
+component, pass the slot rather than its result. In `template_data()`,
+`slots.title` is a [`Slot`][citry.Slot]. Calling it renders the fill and
+returns the result. Printing that result in two places works for text, but
+fails once the fill holds a component:
+
+```citry-html
+<c-Panel>
+  <c-fill name="title">Orders <c-Badge /></c-fill>
+</c-Panel>
+```
+
+```citry
+from citry import Component, SlotInput
+
+
+class Panel(Component):
+    class Slots:
+        title: SlotInput
+
+    def template_data(self, kwargs, slots):
+        # Wrong: calling the slot renders the fill once, and
+        # the template places that one result twice.
+        return {"title": slots.title()}
+
+    template = """
+      <h2>{{ title }}</h2>
+      <c-Summary c-title="title" />
+    """
+```
+
+Rendering the page raises `RuntimeError`: "This content is printed in
+more than one place". `<c-Badge />` rendered once, and one rendered
+component can appear on the page only once.
+
+Pass the `Slot` itself, without calling it. Each place that prints it
+renders the fill again, with its own copy of `<c-Badge />`, and each
+component in the fill runs its `template_data()` once for each place:
+
+```python
+def template_data(self, kwargs, slots):
+    # Right: the header and Summary each render the fill.
+    return {"title": slots.title}
+```
+
+Without a `Slots` class, `slots` is a dict: write `slots["title"]`. If
+`Summary` declares `Kwargs`, type `title` as [`Slot`][citry.Slot], not
+`str`.
+
+The same holds for a component you pass as a value. Pass the
+[element](/concepts/components/#build-now-render-later) `Badge()`, which
+renders again in each place. `Badge().render()` renders once, so writing
+the page raises `RuntimeError`: "One rendered output is printed in more
+than one place on the page".
+
 ## Next steps
 
 - [Provide and inject](/concepts/provide-and-inject/) shares a value with

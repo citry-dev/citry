@@ -497,8 +497,9 @@ def test_a_row_list_printed_again_after_its_first_row_renders_raises_before_rend
             "RuntimeError",
             "An error occurred while rendering components Page > Row > Leaf:\nThis content is printed in more "
             "than one place, but the components inside it have not rendered yet, so each would render twice. "
-            "Print it in one place, or make it once for each place: for a slot, call the slot once for each "
-            "place you print its result.",
+            "To show it in several places, pass the slot itself instead of calling it, or a component element "
+            "such as MyComponent() instead of MyComponent().render(): each place that prints a slot or an "
+            "element renders its own copy. In an on_render hook, place the output the hook received only once.",
         ),
         ["row k0", "leaf k0"],
     )
