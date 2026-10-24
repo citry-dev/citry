@@ -31,6 +31,7 @@ from citry._output_html import scan_output_html
 from ._output_policy_reference import (
     ReferenceCspValidator,
     ReferenceJavascriptPolicy,
+    outcomes_match,
     reference_server_copy_passes_csp,
 )
 
@@ -526,11 +527,19 @@ def _blocks_results(blocks: list[str]) -> list[tuple[object, ...]]:
     return [("blocks", *results)]
 
 
-def _differences(results: list[tuple[object, ...]]) -> list[tuple[object, ...]]:
+def _differences(
+    results: list[tuple[object, ...]],
+    settled: str,
+    pre_extension: str | None = None,
+    component_classes: dict[str, str] = COMPONENT_CLASSES,
+) -> list[tuple[object, ...]]:
+    # The copy reads tags as a flat list, so the comparison allows the two
+    # differences that reading the browser's tree makes (see
+    # `outcomes_match`), and nothing else.
     differences = []
     for result in results:
         *label, real, copy = result
-        if real != copy:
+        if not outcomes_match(real, copy, settled, pre_extension, component_classes):
             differences.append((*label, real, copy))
     return differences
 
@@ -539,7 +548,8 @@ def _mismatch(pieces: list[str], rng_state: object, second: list[str] | None) ->
     rng = random.Random()  # noqa: S311 - a seeded page generator, not a secret
     rng.setstate(rng_state)  # type: ignore[arg-type]
     html = "".join(pieces)
-    return _differences(_scenario_results(html, rng, second=None if second is None else "".join(second)))
+    settled = None if second is None else "".join(second)
+    return _differences(_scenario_results(html, rng, second=settled), html if settled is None else settled, html)
 
 
 def _shrink(pieces: list[str], rng_state: object, second: list[str] | None) -> list[str]:
@@ -581,5 +591,7 @@ def test_rust_output_checks_match_the_python_rules(chunk: int) -> None:
             )
         if page_number % 10 == 0:
             blocks = ["".join(_page(rng, marker=False)) for _ in range(rng.randint(2, 4))]
-            block_differences = _differences(_blocks_results(blocks))
+            # The blocks are checked without component names or omit mode,
+            # so neither allowed difference can occur and no page is needed.
+            block_differences = _differences(_blocks_results(blocks), "", component_classes={})
             assert not block_differences, (blocks, block_differences)

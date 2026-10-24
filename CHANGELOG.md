@@ -210,6 +210,17 @@
 
 ### Fixes
 
+- A `security_csp` or `security_javascript` report now names a component
+  for a finding inside that component's outer element, where it said
+  "settled render output". It names the innermost component whose outer
+  element contains the reported element in the page the browser builds,
+  so content passed into a slot is reported under the component that
+  renders the slot.
+- With `security_javascript="omit"`, a submit button, an input, a
+  `select`, or a `textarea` inside a `<form>` is no longer reported as a
+  control with no fallback, because the browser can submit the form
+  without JavaScript. A `type="button"` button and an input of type
+  `button` or `reset` are still reported.
 - In a component that uses Vue, a `<c-raw>` block, a `Markup` value, or
   `#c-ignore` contents that self-close an element whose contents the
   browser reads as text, such as `<iframe/>`, `<textarea/>`, or

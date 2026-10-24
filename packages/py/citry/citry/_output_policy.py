@@ -39,7 +39,8 @@ DIFFERENTIAL_ENVIRONMENT_VARIABLE = "CITRY_OUTPUT_POLICY_DIFFERENTIAL"
 # and one script or style element is
 #     ("element", tag, token_start, name_start, name_end, element_end,
 #      trusted, executable, has_manager_attribute, cids)
-# where cids are the element's `data-cid-*` suffixes in attribute order.
+# where cids are the element's own `data-cid-*` suffixes in attribute order,
+# then those of the elements the browser put around it, nearest first.
 OutputEvent = tuple[Any, ...]
 
 
@@ -195,7 +196,13 @@ def check_output_html(
 
 
 def own_instance(cids: tuple[str, ...], component_classes: dict[str, str]) -> str | None:
-    """Return the first `data-cid-*` suffix on an element that names a known component."""
+    """
+    Return the `data-cid-*` suffix of the nearest known component that contains an element, or None.
+
+    `cids` lists the element's own suffixes first, then those of the
+    elements that contain it, nearest first, so the first known one is
+    the nearest component.
+    """
     return next((cid for cid in cids if cid in component_classes), None)
 
 
