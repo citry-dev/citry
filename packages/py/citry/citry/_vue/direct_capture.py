@@ -38,7 +38,13 @@ from citry.client_directives import ComponentTagClientBindingKind
 from citry.component_registry import BUILTIN_COMPONENT_NAMES
 from citry.components.mark import repeated_mark_name_error, validate_mark_name
 from citry.serialize import _REPEATED_RENDER_MESSAGE
-from citry.util.html import Markup, decode_attribute_entities, decode_character_references, escape_to_str
+from citry.util.html import (
+    UNSAFE_DYNAMIC_ELEMENT_TAGS,
+    Markup,
+    decode_attribute_entities,
+    decode_character_references,
+    escape_to_str,
+)
 from citry_core.template_parser import analyze_browser_source
 
 from . import native_leaf_json as _native_leaf_json
@@ -3320,10 +3326,10 @@ def assemble_typed_render(
                         raise UnsupportedPreparedView(
                             f"dynamic element opening contains unsafe prepared attributes: {invalid_attrs!r}"
                         )
-                    if part.tag.lower() in {"script", "style", "template"}:
-                        raise UnsupportedPreparedView(
-                            "dynamic script/style/template elements are unsupported in prepared Vue"
-                        )
+                    # `<c-element>` refuses these tags before this point; the same
+                    # list guards any other producer of a dynamic element.
+                    if part.tag.lower() in UNSAFE_DYNAMIC_ELEMENT_TAGS:
+                        raise UnsupportedPreparedView(f"a dynamic <{part.tag}> element is unsupported in prepared Vue")
                     source_targets = {
                         _html_attr_identity(target): attr.name
                         for attr in part.authored_attrs

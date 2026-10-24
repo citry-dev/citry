@@ -83,9 +83,11 @@ from citry.attrs import (
     _has_default_attr_formatting,
     _merge_resolved_attrs,
     format_attrs,
+    is_event_handler_attr_name,
     is_vue_code_attr_name,
     is_vue_directive_name,
     merge_attrs,
+    reject_event_handler_attr_name,
     reject_vue_code_attr_name,
     template_attr_value,
     validate_html_attr_name,
@@ -1209,12 +1211,19 @@ class ElementAttrsNode(Node):
                 runtime_candidate=runtime_candidate,
             )
             if validate_extension_output:
+                # An `on*` name the author wrote (a literal or `c-on*` attribute)
+                # is already here; the hook may keep it but may not add a new one,
+                # because the browser would run its value as JavaScript.
+                authored_event_handlers = {str.lower(key) for key in resolved if is_event_handler_attr_name(key)}
                 resolved = extensions.on_attrs_resolved(
                     component=component,
                     tag_name=self.tag_name,
                     attrs=resolved,
                     runtime_candidate=runtime_candidate,
                 )
+                for key in resolved:
+                    if is_event_handler_attr_name(key) and str.lower(key) not in authored_event_handlers:
+                        reject_event_handler_attr_name(key, tag_name=self.tag_name, where="an on_attrs_resolved hook")
                 if has_client_props_key(resolved, tag_name=self.tag_name):
                     apply_client_props_contribution(
                         resolved,
@@ -1326,6 +1335,7 @@ class ElementAttrsNode(Node):
                     # would remove a listener written in the template. A key
                     # that passes is cached below, so repeat renders skip this.
                     reject_vue_code_attr_name(resolved_key, tag_name=self.tag_name, origin="c-bind")
+                    reject_event_handler_attr_name(resolved_key, tag_name=self.tag_name, where="c-bind")
                     if looks_like_i18n_binding(resolved_key):
                         if context._simple_scope is not None:
                             msg = (
@@ -2123,6 +2133,7 @@ class ComponentNode(Node):
                     if self.name == "element":
                         resolved_bound_key = validate_html_attr_name(bound_key, where="c-bind on <c-element>")
                         _reject_reserved_events_attr(resolved_bound_key, tag_name="c-element")
+                        reject_event_handler_attr_name(resolved_bound_key, tag_name="c-element", where="c-bind")
                     elif not isinstance(bound_key, str):
                         msg = (
                             f"c-bind on <c-{self.name}> must use string kwarg names, "

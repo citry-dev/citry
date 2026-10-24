@@ -19,6 +19,26 @@
     return;
   }
 
+  // A redirect navigates the whole page, and a `javascript:` or `data:` URL would run in it, so
+  // only http(s) and relative URLs are followed. The server refuses other schemes when it builds
+  // the action (`actions.Redirect`); this repeats the check for a result the page did not get
+  // from that code. The scheme is read as the URL parser reads it: leading and trailing C0
+  // controls and spaces are stripped and tab, CR, and LF are removed anywhere first.
+  const redirectScheme = url => {
+    const text = url.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, "");
+    const match = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(text);
+    return match ? match[1].toLowerCase() : null;
+  };
+  const navigateToRedirect = url => {
+    const scheme = typeof url === "string" ? redirectScheme(url) : "";
+    if (scheme !== null && scheme !== "http" && scheme !== "https") {
+      console.error("[Citry] refused a redirect to a URL with the " + JSON.stringify(scheme) +
+        " scheme; a redirect follows only http:, https:, and relative URLs.");
+      return;
+    }
+    global.location.assign(url);
+  };
+
   const apps = new Map();
   // Vue plugins the page registered with `Citry.vue.use()`, in registration order. Citry installs
   // each one on every Vue app it creates, because the page never gets to call `app.use` itself.
@@ -301,7 +321,7 @@
       if (typeof action.delay === "number" && action.delay > 0)
         await new Promise(resolve => setTimeout(resolve, action.delay * 1000));
       if (action.action === "data") data = action.value;
-      else if (action.action === "redirect") global.location.assign(action.url);
+      else if (action.action === "redirect") navigateToRedirect(action.url);
       else if (action.action === "url") global.history[action.mode === "push" ? "pushState" : "replaceState"](global.history.state, "", action.url);
       else if (action.action === "event") {
         if (action.target !== undefined) throw new Error("Citry.events.applyActions needs a mounted component for targeted Event actions.");
@@ -3874,7 +3894,7 @@
           kind, identity, live ? liveRootElements(mounted.component) : [], event, extra);
       },
       promptReload,
-      redirect(url) { global.location.assign(url); },
+      redirect(url) { navigateToRedirect(url); },
       updateUrl(url, mode) { global.history[mode === "push" ? "pushState" : "replaceState"]({}, "", url); },
       takePendingState(source, handlerName) {
         const mounted = ownedApp.mounted.get(source.stableId);

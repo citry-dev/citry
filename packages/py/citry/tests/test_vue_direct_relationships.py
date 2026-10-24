@@ -2922,7 +2922,7 @@ def test_empty_component_loop_with_c_bind_stays_on_general_path() -> None:
     assert not any(isinstance(part, DirectCallRunRender) for part in rendered.parts)
 
 
-@pytest.mark.parametrize("tag", ["section", "textarea", "title", "my-widget"])
+@pytest.mark.parametrize("tag", ["section", "h2", "my-widget"])
 def test_dynamic_element_uses_definition_scoped_native_alias(tag: str) -> None:
     registry = Citry(autodiscover=False)
 
@@ -3553,7 +3553,7 @@ def test_dynamic_element_rejects_bare_object_event_binding() -> None:
         render_prepared_direct(App())
 
 
-@pytest.mark.parametrize("tag", ["script", "style", "template"])
+@pytest.mark.parametrize("tag", ["script", "STYLE", "template", "textarea", "iframe"])
 def test_dynamic_element_rejects_unsafe_or_semantically_different_raw_tags(tag: str) -> None:
     registry = Citry(autodiscover=False)
 
@@ -3564,12 +3564,9 @@ def test_dynamic_element_rejects_unsafe_or_semantically_different_raw_tags(tag: 
         def template_data(self, kwargs, slots):
             return {"tag": tag}
 
-    with pytest.raises(UnsupportedPreparedView, match="script/style/template"):
-        assemble_typed_render(
-            render_prepared_direct(App()),
-            revision=0,
-            tag_for_type=lambda key: "x-" + key.lower().replace("_", "-"),
-        )
+    # `<c-element>` refuses the tag while it renders, before any Vue output.
+    with pytest.raises(ValueError, match=rf"cannot render a <{tag}> element"):
+        render_prepared_direct(App())
 
 
 def test_dynamic_element_tag_revision_keeps_alias_shape_and_changes_definition_identity() -> None:

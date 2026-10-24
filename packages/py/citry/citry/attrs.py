@@ -56,7 +56,16 @@ StyleValue: TypeAlias = "str | StyleDict | Sequence[StyleValue]"
 """A ``style`` attribute value: inline CSS string, ``StyleDict``, or a list of those."""
 
 _ASCII_LOWER_TRANSLATION = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
-_INVALID_HTML_ATTR_NAME_CHARS = frozenset(" \t\n\r=/><")
+# One character the HTML spec does not allow in an attribute name: a control
+# character (C0, DEL, C1), whitespace, a quote, `>`, `/`, `=`, `<`, the BOM,
+# a lone surrogate, or a noncharacter. The browser's tokenizer splits or
+# drops a name at several of these (a form feed ends a name, for example),
+# so a name that passed a prefix check could arrive as a different name.
+_INVALID_HTML_ATTR_NAME_CHAR = re.compile(
+    r"[\x00-\x20\x7f-\x9f\"'/<=>\ufeff\ud800-\udfff\ufdd0-\ufdef"
+    + "".join(rf"\U{plane:04x}fffe\U{plane:04x}ffff" for plane in range(17))
+    + "]"
+)
 
 
 # Vue reads a name starting with one of these as a directive or binding:
@@ -206,6 +215,32 @@ def reject_vue_code_attr_name(
         raise vue_code_error(cast("str", name), tag_name=tag_name, origin=origin, hint=hint)
 
 
+def is_event_handler_attr_name(name: object) -> bool:
+    """Return whether a browser would read this attribute name as an inline event handler."""
+    # Every HTML event-handler attribute starts with "on", in any letter case.
+    # `str.lower`/`str.__getitem__` read the real text even from a str subclass.
+    return isinstance(name, str) and str.lower(str.__getitem__(name, slice(2))) == "on"
+
+
+def reject_event_handler_attr_name(name: object, *, tag_name: str, where: str) -> None:
+    """
+    Raise `ValueError` when render-time data sets an inline event handler name.
+
+    A browser runs the value of `onclick` and the like as JavaScript, so an
+    attribute name from data, such as a `c-bind` mapping key or one an
+    `on_attrs_resolved` hook adds, may not start with `on`. A name the author
+    wrote in the template, including a `c-on*` attribute, never reaches this
+    check, so an author-written inline handler keeps working.
+    """
+    if is_event_handler_attr_name(name):
+        msg = (
+            f"{where} sets {name!r} on <{tag_name}>. An attribute name from data may not start with 'on', "
+            "because the browser runs the value of an inline event handler such as onclick as JavaScript. "
+            "Write the listener in the template, with @click on a Vue page or an Events binding such as @c-click."
+        )
+        raise ValueError(msg)
+
+
 def _html_attr_identity(name: str) -> str:
     """Return HTML identity without erasing case-sensitive Citry payloads."""
     if type(name) is str and len(name) <= 256:
@@ -311,7 +346,7 @@ def is_unchanged_template_value(value: object, written: object) -> bool:
 @lru_cache(maxsize=512)
 def _is_valid_exact_html_attr_name(name: str) -> bool:
     """Cache validation for ordinary strings without retaining arbitrary objects."""
-    return bool(name) and not any(char in _INVALID_HTML_ATTR_NAME_CHARS for char in name) and "{#" not in name
+    return bool(name) and _INVALID_HTML_ATTR_NAME_CHAR.search(name) is None and "{#" not in name
 
 
 def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str:
@@ -335,7 +370,8 @@ def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str
     if not is_valid:
         msg = (
             f"{where} contains invalid HTML attribute name {name!r}. Attribute names must be non-empty and "
-            "cannot contain whitespace, '=', '/', '>', '<', or the template-comment opener '{#'."
+            "cannot contain whitespace or other control characters, quotes, '=', '/', '>', '<', a byte-order "
+            "mark, a Unicode noncharacter, or the template-comment opener '{#'."
         )
         raise ValueError(msg)
     return name

@@ -25,6 +25,7 @@ from citry._vue.capture import (
 from citry._walk import Call, run
 from citry.attrs import (
     merge_attrs,
+    reject_event_handler_attr_name,
     reject_vue_code_attr_name,
     template_attr_value,
     validate_html_attr_name,
@@ -269,6 +270,7 @@ class I18nBindingElementAttrsNode(Node):
                 for key, value in raw.items():
                     resolved_key = validate_html_attr_name(key, where=f"c-bind on <{self.original.tag_name}>")
                     reject_vue_code_attr_name(resolved_key, tag_name=self.original.tag_name, origin="c-bind")
+                    reject_event_handler_attr_name(resolved_key, tag_name=self.original.tag_name, where="c-bind")
                     if _apply_directive(
                         declarations,
                         resolved_key,

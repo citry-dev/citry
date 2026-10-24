@@ -276,12 +276,9 @@ def test_trusted_html_rejects_raw_text_and_rcdata_contexts() -> None:
         def template_data(self, kwargs, slots):
             return {"tag": "textarea"}
 
-    with pytest.raises(UnsupportedPreparedView, match=r"<c-raw> cannot sit inside <\w+>.*holds text, not HTML"):
-        assemble_typed_render(
-            render_prepared(DynamicRcdataRaw()),
-            revision=0,
-            tag_for_type=lambda _key: "x-dynamic-rcdata",
-        )
+    # `<c-element>` refuses a text-only tag such as <textarea> while it renders.
+    with pytest.raises(ValueError, match=r"cannot render a <textarea> element"):
+        render_prepared(DynamicRcdataRaw())
 
 
 def test_opaque_html_rejects_component_and_slot_placement_under_foreign_content() -> None:
@@ -2324,7 +2321,7 @@ def test_repeated_receiver_fills_allocate_distinct_caller_bindings() -> None:
     assert [root.prepared_data[key] for key in sorted(root.prepared_data) if key.startswith("citryText")] == ["A", "B"]
 
 
-@pytest.mark.parametrize("name", ["innerHTML", "outerHTML", "textContent", "innerText", "onClick"])
+@pytest.mark.parametrize("name", ["innerHTML", "outerHTML", "textContent", "innerText"])
 def test_dynamic_dom_properties_and_listeners_are_rejected_before_compilation(name: str) -> None:
     registry = Citry(autodiscover=False, extensions=[])
 
@@ -2342,6 +2339,22 @@ def test_dynamic_dom_properties_and_listeners_are_rejected_before_compilation(na
             revision=0,
             tag_for_type=lambda type_key: f"citry-component-{type_key.split('_', 1)[0].lower()}",
         )
+
+
+def test_inline_event_handler_from_a_mapping_is_rejected_while_rendering() -> None:
+    registry = Citry(autodiscover=False, extensions=[])
+
+    class Page(Component):
+        citry = registry
+        template = '<div c-bind="attrs">safe fallback</div>'
+
+        def template_data(self, kwargs, slots):
+            return {"attrs": {"onClick": "globalThis.marker = 1"}}
+
+    # The shared mapping rule refuses the name while the template renders,
+    # before the prepared Vue checks see it.
+    with pytest.raises(ValueError, match=r"may not set an attribute name\s+that starts with 'on'"):
+        render_prepared(Page())
 
 
 @pytest.mark.parametrize("authored_key", ['key="browser"', ':key="browserKey"'])

@@ -49,7 +49,7 @@ from citry.client_directives import (
 from citry.component import Component
 from citry.component_registry import _VALID_NAME_RE, NotRegistered
 from citry.constness import _ConstMapping, _restore_const_identities, const_value
-from citry.util.html import Markup
+from citry.util.html import UNSAFE_DYNAMIC_ELEMENT_TAGS, Markup
 from citry_core.template_parser import HTML_VOID_ELEMENTS
 
 if TYPE_CHECKING:
@@ -323,6 +323,15 @@ def _validate_tag_name(tag: Any) -> None:
         msg = (
             f"<c-element>: {tag!r} is not a valid HTML tag name. "
             f"Must start with a letter and contain only letters, digits, hyphens, underscores, or dots."
+        )
+        raise ValueError(msg)
+    # The HTML tokenizer folds ASCII letters in a tag name; `lower()` folds at
+    # least those, and a name it folds further is only refused, never let through.
+    if tag.lower() in UNSAFE_DYNAMIC_ELEMENT_TAGS:
+        msg = (
+            f"<c-element> cannot render a <{tag}> element: the browser runs, loads, or reads the contents of "
+            "that tag in a way escaping cannot protect. Choose the tag from a fixed list in your code, and "
+            "write a <script>, <style>, or similar element directly in the template."
         )
         raise ValueError(msg)
 

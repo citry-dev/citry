@@ -22,6 +22,7 @@ from citry.attrs import (
     format_attrs,
     is_unchanged_template_value,
     merge_attrs,
+    reject_event_handler_attr_name,
     reject_vue_code_attr_name,
     template_attr_value,
     validate_html_attr_name,
@@ -3926,6 +3927,7 @@ def _spread_with_source_attrs(
             for key, value in resolved.items():
                 name = validate_html_attr_name(key, where=f"c-bind on <{node.tag}>")
                 reject_vue_code_attr_name(name, tag_name=node.tag, origin="c-bind")
+                reject_event_handler_attr_name(name, tag_name=node.tag, where="c-bind")
                 _reject_dynamic_translation_binding(name, tag_name=node.tag)
                 _reject_reserved_events_attr(name, tag_name=node.tag)
                 items.append((name, const_value(value)))
@@ -4059,6 +4061,7 @@ def _root_spread_plan(node: PreparedElementOpenNode, keys: tuple[str, ...]) -> t
             # here sends the row there so it raises the same error.
             validate_html_attr_name(name, where=f"c-bind on <{node.tag}>")
             reject_vue_code_attr_name(name, tag_name=node.tag, origin="c-bind")
+            reject_event_handler_attr_name(name, tag_name=node.tag, where="c-bind")
             _reject_dynamic_translation_binding(name, tag_name=node.tag)
             _reject_reserved_events_attr(name, tag_name=node.tag)
         if any(is_client_props_key(name, tag_name=node.tag) for name in names):
