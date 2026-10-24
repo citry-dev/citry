@@ -10,7 +10,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, final, overload
 
 import citry.citry_render as render_module
 from citry.attrs import (
@@ -84,6 +84,7 @@ if TYPE_CHECKING:
     from typing import Protocol, TypeAlias
 
     from citry.citry_context import CitryContext
+    from citry.nodes import BodyItem
 
     # A generated row HTML writer, called as (data, resolved_opens, row_html, row_marks).
     _RowHtmlWrite: TypeAlias = Callable[[dict[str, object], dict[Any, Any], list[str | None], list[int]], None]
@@ -1382,6 +1383,23 @@ def _simple_vue_spread_hooks_supported(extensions: Any) -> bool:
     return True
 
 
+# The deepest nesting of branch and loop bodies the generated evaluator and
+# row writer emit. Each body is one generated function that calls the next,
+# so each level costs a Python frame. A deeper template raises ValueError
+# while generating, and its leaf uses the Python evaluator and the general
+# row path instead, which walk any depth on their own stacks. 16 also stays
+# well under CPython's limits of 20 nested blocks and 100 indentation levels.
+_MAX_GENERATED_NESTING = 16
+
+
+def _enter_generated_body(depth: int) -> int:
+    """Return the next body's nesting depth, or refuse one past the limit."""
+    if depth >= _MAX_GENERATED_NESTING:
+        msg = f"leaf program nests more than {_MAX_GENERATED_NESTING} bodies deep for generated code"
+        raise ValueError(msg)
+    return depth + 1
+
+
 class _SimpleJsonCodegen:
     """Build a cached evaluator for the deliberately small JSON expression subset."""
 
@@ -1389,6 +1407,8 @@ class _SimpleJsonCodegen:
         self.operations: list[object] = []
         self.functions: list[str] = []
         self.counter = 0
+        # How many generated functions the one being written is nested in.
+        self._depth = 0
         self._root_operations = operations
         self._read_set = _simple_json_read_set(operations)
         self.readset_preflight_root = self._readset_preflight_function()
@@ -1678,6 +1698,20 @@ class _SimpleJsonCodegen:
         *,
         sets_value_context: bool = False,
     ) -> str:
+        outer_depth = self._depth
+        self._depth = _enter_generated_body(outer_depth)
+        try:
+            return self._write_evaluate_function(operations, local_names, sets_value_context=sets_value_context)
+        finally:
+            self._depth = outer_depth
+
+    def _write_evaluate_function(
+        self,
+        operations: tuple[_SimpleJsonOperation, ...],
+        local_names: tuple[tuple[str, str], ...],
+        *,
+        sets_value_context: bool,
+    ) -> str:
         name = self._new_name("evaluate")
         lines = [
             f"def {name}(context, variables, data, root_data, vue_errors, special, resolved_opens"
@@ -1760,6 +1794,8 @@ class _RowHtmlWriterCodegen:
         # so the source text stays the same from run to run.
         self.namespace: dict[str, object] = {}
         self.counter = 0
+        # How many generated functions the one being written is nested in.
+        self._depth = 0
 
     def _new_name(self, prefix: str) -> str:
         self.counter += 1
@@ -1773,6 +1809,14 @@ class _RowHtmlWriterCodegen:
         return name, f"{name}_id"
 
     def _function(self, operations: tuple[_SimpleJsonOperation, ...]) -> str:
+        outer_depth = self._depth
+        self._depth = _enter_generated_body(outer_depth)
+        try:
+            return self._write_function(operations)
+        finally:
+            self._depth = outer_depth
+
+    def _write_function(self, operations: tuple[_SimpleJsonOperation, ...]) -> str:
         # Each branch and loop body is its own function, as in the evaluator,
         # so a deeply nested template never hits Python's nested-block limit.
         name = self._new_name("write")
@@ -2051,6 +2095,35 @@ def _simple_json_readset_is_plain(variables: object, read_set: _SimpleJsonReadSe
 
 
 def _simple_json_read_node_is_plain(value: object, plan: _SimpleJsonReadNode) -> bool:
+    """
+    Return whether ``value`` has only the plain JSON shapes ``plan`` reads.
+
+    The plan nests as deeply as the template's paths and loops do, so its
+    children and list items are checked on this function's own stack rather
+    than by calling it again for each level.
+    """
+    pending: list[tuple[object, _SimpleJsonReadNode]] = [(value, plan)]
+    while pending:
+        node_value, node_plan = pending.pop()
+        if not _simple_json_read_value_is_plain(node_value, node_plan):
+            return False
+        if node_plan.children:
+            if type(node_value) is not dict:
+                return False
+            mapping = cast("dict[object, object]", node_value)
+            for key, child in node_plan.children:
+                if not dict.__contains__(mapping, key):
+                    return False
+                pending.append((dict.__getitem__(mapping, key), child))
+        if node_plan.items is not None:
+            if type(node_value) is not list:
+                return False
+            pending.extend((item, node_plan.items) for item in cast("list[object]", node_value))
+    return True
+
+
+def _simple_json_read_value_is_plain(value: object, plan: _SimpleJsonReadNode) -> bool:
+    """Check one value against the reads ``plan`` makes of it, without its children or items."""
     value_type = type(value)
     plain_scalar_types = _simple_json_plain_scalar_types() if "scalar" in plan.kinds else frozenset()
     if "scalar" in plan.kinds:
@@ -2084,21 +2157,6 @@ def _simple_json_read_node_is_plain(value: object, plan: _SimpleJsonReadNode) ->
             if type(name) is not str or item_type not in {str, int, bool, type(None), float}:
                 return False
             if item_type is float and not math.isfinite(cast("float", item)):
-                return False
-    if plan.children:
-        if value_type is not dict:
-            return False
-        mapping = cast("dict[object, object]", value)
-        for key, child in plan.children:
-            if not dict.__contains__(mapping, key):
-                return False
-            if not _simple_json_read_node_is_plain(dict.__getitem__(mapping, key), child):
-                return False
-    if plan.items is not None:
-        if value_type is not list:
-            return False
-        for item in cast("list[object]", value):
-            if not _simple_json_read_node_is_plain(item, plan.items):
                 return False
     return True
 
@@ -3285,214 +3343,326 @@ def _evaluate_inner(
     special: dict[tuple[int, str], RenderPart],
     resolved_opens: dict[tuple[int, int], PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen],
 ) -> None:
-    for operation in operations:
-        if isinstance(operation, _Static):
-            continue
-        if isinstance(operation, _Text):
-            try:
-                text_value = operation.node.resolve_value(context)
-            except Exception as error:
-                _attach_error(error, operation.node, context)
-                raise
-            if not isinstance(text_value, str):
-                special[(id(data), operation.key)] = text_value
-                if isinstance(text_value, CitryRender) and text_value.context is not context:
-                    from citry.component_render import _contains_deferred, _merge_dependencies  # noqa: PLC0415
+    """
+    Evaluate a leaf program's operations into ``data``.
 
-                    if not _contains_deferred(text_value):
-                        _merge_dependencies(context, text_value.context)
-            else:
-                data[operation.key] = text_value
-        elif isinstance(operation, _Open):
-            if operation.static is not None:
+    A branch's or loop row's operations are evaluated on this function's own
+    stack, so Python's call depth does not grow with how deeply control flow
+    nests. Each body frame makes its context current while it runs, and an
+    error passes out through the frames innermost first: each loop frame
+    closes its loop and adds its ``<c-for>``'s template position, as the
+    nested evaluator did.
+    """
+    root = _LeafBodyFrame(operations, context, data, set_value_context=False)
+    frames: list[_LeafBodyFrame | _LeafLoopFrame] = [root]
+    try:
+        while frames:
+            frame = frames[-1]
+            if type(frame) is _LeafLoopFrame:
+                loop_frame = frame
+                try:
+                    following = _next_leaf_row(loop_frame)
+                except Exception as error:
+                    frames.pop()
+                    _attach_error(error, loop_frame.operation.node, loop_frame.context)
+                    raise
+                if following is not None:
+                    frames.append(following)
+                    continue
+                frames.pop()
+                _finish_leaf_loop(loop_frame)
                 continue
-            if operation.fixed_attrs is not None:
-                try:
-                    open_value: PreparedElementOpen | dict[str, object] = {
-                        name: resolved
-                        for name, attr in operation.fixed_attrs
-                        if (resolved := const_value(attr.resolve(context))) is not None and resolved is not False
-                    }
-                    # Fixed attributes record the same dict for data and for
-                    # the opening; the spread branch below may record a
-                    # _SpreadResolvedOpen instead, hence the wider type.
-                    resolved_open: PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen = open_value
-                except Exception as error:
-                    _attach_error(error, operation.node, context)
-                    raise
-            elif operation.spread_renderer is not None and _spread_passthrough_is_live(
-                operation.spread_renderer, context, operation.node
-            ):
-                try:
-                    resolved, extension_validated = operation.node._resolve_for_output(context)
-                    projected_attrs = (
-                        _spread_project_attrs(operation.node, resolved)
-                        if type(operation.spread_renderer) is I18nBindingElementAttrsNode
-                        else None
-                    )
-                    if projected_attrs is not None:
-                        open_value = projected_attrs
-                        resolved_open = _SpreadResolvedOpen(resolved, context, extension_validated)
-                    else:
-                        fallback_value = operation.node._prepared_from_resolved(
-                            resolved,
-                            context=context,
-                            extension_validated=extension_validated,
-                        )
-                        open_value = _spread_data_attrs(operation.node, fallback_value)
-                        resolved_open = fallback_value
-                    if vue_render_active():
-                        _reject_executable_dynamic_attrs(open_value, tag=operation.node.tag)
-                    validation_error = _validate_data_attrs(open_value, tag=operation.node.tag)
-                    if validation_error is not None:
-                        vue_errors.append(validation_error)
-                except Exception as error:
-                    _attach_error(error, operation.node, context)
-                    raise
-            else:
-                if operation.renderer is None:
-                    raise AssertionError("general leaf attribute plan lost its renderer")
-                try:
-                    rendered_open = operation.renderer.render(context)
-                except Exception as error:
-                    _attach_error(error, operation.node, context)
-                    raise
-                if not isinstance(rendered_open, PreparedElementOpen):
-                    raise TypeError("leaf browser program attribute produced structured output")
-                validation_error = _validate_open(rendered_open)
-                if validation_error is not None:
-                    vue_errors.append(validation_error)
-                resolved_open = rendered_open
-                open_value = rendered_open
+            body_frame = cast("_LeafBodyFrame", frame)
+            context = body_frame.context
+            data = body_frame.data
+            for operation in body_frame.operations:
+                if isinstance(operation, _Static):
+                    continue
+                if isinstance(operation, _Text):
+                    try:
+                        text_value = operation.node.resolve_value(context)
+                    except Exception as error:
+                        _attach_error(error, operation.node, context)
+                        raise
+                    if not isinstance(text_value, str):
+                        special[(id(data), operation.key)] = text_value
+                        if isinstance(text_value, CitryRender) and text_value.context is not context:
+                            from citry.component_render import _contains_deferred, _merge_dependencies  # noqa: PLC0415
 
-            resolved_opens.setdefault((id(data), id(operation)), resolved_open)
-            if operation.attrs_key is not None:
-                if isinstance(open_value, PreparedElementOpen):
-                    attrs = (
-                        _spread_data_attrs(operation.node, open_value)
-                        if operation.node._has_spread
-                        else dict(open_value.data_attrs)
-                    )
-                else:
-                    attrs = open_value
-                # Vue must set the same attribute text Python's HTML writes.
-                data[operation.attrs_key] = _vue_attribute_map(attrs)
-            if operation.key_key is not None:
-                if not isinstance(resolved_open, PreparedElementOpen):
-                    raise AssertionError("prepared key metadata requires a structured opening")
-                metadata = dict(resolved_open.element_metadata)
-                data[operation.key_key] = metadata["key"]
-            if operation.control_key is not None:
-                control_value = (
-                    ",".join(str(binding["id"]) for binding in resolved_open.control_bindings)
-                    if isinstance(resolved_open, PreparedElementOpen)
-                    else ""
-                )
-                data[operation.control_key] = control_value
-            if operation.runtime_events_key is not None:
-                runtime_events_value = (
-                    ",".join(
-                        str(binding["id"])
-                        for binding in (*resolved_open.runtime_event_bindings, *resolved_open.runtime_poll_bindings)
-                    )
-                    if isinstance(resolved_open, PreparedElementOpen)
-                    else ""
-                )
-                data[operation.runtime_events_key] = runtime_events_value
-            if isinstance(resolved_open, PreparedElementOpen) and (
-                resolved_open.event_bindings or resolved_open.runtime_event_bindings
-            ):
-                events = root_data.setdefault("eventBindings", {})
-                if not isinstance(events, dict):
-                    raise AssertionError("leaf event binding container changed type")
-                for binding in resolved_open.event_bindings:
-                    binding_id = str(binding["id"])
-                    serialized = dict(binding)
-                    previous = events.setdefault(binding_id, serialized)
-                    if previous != serialized:
-                        raise ValueError("one leaf event binding id has conflicting metadata")
-                for binding in resolved_open.runtime_event_bindings:
-                    binding_id = str(binding["id"])
-                    serialized = dict(binding)
-                    previous = events.setdefault(binding_id, serialized)
-                    if previous != serialized:
-                        raise ValueError("one leaf runtime event binding id has conflicting metadata")
-            if isinstance(resolved_open, PreparedElementOpen) and (
-                resolved_open.poll_bindings or resolved_open.runtime_poll_bindings
-            ):
-                polls = root_data.setdefault("pollBindings", {})
-                if not isinstance(polls, dict):
-                    raise AssertionError("leaf poll binding container changed type")
-                for binding in resolved_open.poll_bindings:
-                    polls[str(binding["id"])] = dict(binding)
-                for binding in resolved_open.runtime_poll_bindings:
-                    binding_id = str(binding["id"])
-                    serialized = dict(binding)
-                    previous = polls.setdefault(binding_id, serialized)
-                    if previous != serialized:
-                        raise ValueError("one leaf runtime poll binding id has conflicting metadata")
-            if isinstance(resolved_open, PreparedElementOpen) and resolved_open.control_bindings:
-                controls = root_data.setdefault("controlBindings", {})
-                if not isinstance(controls, dict):
-                    raise AssertionError("leaf control binding container changed type")
-                for binding in resolved_open.control_bindings:
-                    controls[str(binding["id"])] = dict(binding)
-        elif isinstance(operation, _Close):
-            continue
-        elif isinstance(operation, _If):
-            try:
-                body = operation.node.active_branch_body(context)
-            except Exception as error:
-                _attach_error(error, operation.node, context)
-                raise
-            selected = next((index for index, branch in enumerate(operation.node.branches) if branch[2] is body), -1)
-            data[operation.key] = selected
-            if selected >= 0:
-                _evaluate(
-                    operation.branches[selected],
-                    context,
-                    data,
-                    root_data,
-                    vue_errors,
-                    special,
-                    resolved_opens,
-                )
-        elif isinstance(operation, _For):
-            records: list[dict[str, object]] = []
-            rendered_any = False
-            try:
-                for _body, child_context in operation.node.iter_bodies(context):
-                    if child_context is context:
-                        _evaluate(
-                            operation.empty,
-                            context,
-                            data,
-                            root_data,
-                            vue_errors,
-                            special,
-                            resolved_opens,
-                        )
+                            if not _contains_deferred(text_value):
+                                _merge_dependencies(context, text_value.context)
+                    else:
+                        data[operation.key] = text_value
+                elif isinstance(operation, _Open):
+                    if operation.static is not None:
                         continue
-                    rendered_any = True
-                    record: dict[str, object] = {}
-                    records.append(record)
-                    _evaluate(
-                        operation.body,
-                        child_context,
-                        record,
-                        root_data,
-                        vue_errors,
-                        special,
-                        resolved_opens,
+                    if operation.fixed_attrs is not None:
+                        try:
+                            open_value: PreparedElementOpen | dict[str, object] = {
+                                name: resolved
+                                for name, attr in operation.fixed_attrs
+                                if (resolved := const_value(attr.resolve(context))) is not None
+                                and resolved is not False
+                            }
+                            # Fixed attributes record the same dict for data and for
+                            # the opening; the spread branch below may record a
+                            # _SpreadResolvedOpen instead, hence the wider type.
+                            resolved_open: PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen = open_value
+                        except Exception as error:
+                            _attach_error(error, operation.node, context)
+                            raise
+                    elif operation.spread_renderer is not None and _spread_passthrough_is_live(
+                        operation.spread_renderer, context, operation.node
+                    ):
+                        try:
+                            resolved, extension_validated = operation.node._resolve_for_output(context)
+                            projected_attrs = (
+                                _spread_project_attrs(operation.node, resolved)
+                                if type(operation.spread_renderer) is I18nBindingElementAttrsNode
+                                else None
+                            )
+                            if projected_attrs is not None:
+                                open_value = projected_attrs
+                                resolved_open = _SpreadResolvedOpen(resolved, context, extension_validated)
+                            else:
+                                fallback_value = operation.node._prepared_from_resolved(
+                                    resolved,
+                                    context=context,
+                                    extension_validated=extension_validated,
+                                )
+                                open_value = _spread_data_attrs(operation.node, fallback_value)
+                                resolved_open = fallback_value
+                            if vue_render_active():
+                                _reject_executable_dynamic_attrs(open_value, tag=operation.node.tag)
+                            validation_error = _validate_data_attrs(open_value, tag=operation.node.tag)
+                            if validation_error is not None:
+                                vue_errors.append(validation_error)
+                        except Exception as error:
+                            _attach_error(error, operation.node, context)
+                            raise
+                    else:
+                        if operation.renderer is None:
+                            raise AssertionError("general leaf attribute plan lost its renderer")
+                        try:
+                            rendered_open = operation.renderer.render(context)
+                        except Exception as error:
+                            _attach_error(error, operation.node, context)
+                            raise
+                        if not isinstance(rendered_open, PreparedElementOpen):
+                            raise TypeError("leaf browser program attribute produced structured output")
+                        validation_error = _validate_open(rendered_open)
+                        if validation_error is not None:
+                            vue_errors.append(validation_error)
+                        resolved_open = rendered_open
+                        open_value = rendered_open
+
+                    resolved_opens.setdefault((id(data), id(operation)), resolved_open)
+                    if operation.attrs_key is not None:
+                        if isinstance(open_value, PreparedElementOpen):
+                            attrs = (
+                                _spread_data_attrs(operation.node, open_value)
+                                if operation.node._has_spread
+                                else dict(open_value.data_attrs)
+                            )
+                        else:
+                            attrs = open_value
+                        # Vue must set the same attribute text Python's HTML writes.
+                        data[operation.attrs_key] = _vue_attribute_map(attrs)
+                    if operation.key_key is not None:
+                        if not isinstance(resolved_open, PreparedElementOpen):
+                            raise AssertionError("prepared key metadata requires a structured opening")
+                        metadata = dict(resolved_open.element_metadata)
+                        data[operation.key_key] = metadata["key"]
+                    if operation.control_key is not None:
+                        control_value = (
+                            ",".join(str(binding["id"]) for binding in resolved_open.control_bindings)
+                            if isinstance(resolved_open, PreparedElementOpen)
+                            else ""
+                        )
+                        data[operation.control_key] = control_value
+                    if operation.runtime_events_key is not None:
+                        runtime_events_value = (
+                            ",".join(
+                                str(binding["id"])
+                                for binding in (
+                                    *resolved_open.runtime_event_bindings,
+                                    *resolved_open.runtime_poll_bindings,
+                                )
+                            )
+                            if isinstance(resolved_open, PreparedElementOpen)
+                            else ""
+                        )
+                        data[operation.runtime_events_key] = runtime_events_value
+                    if isinstance(resolved_open, PreparedElementOpen) and (
+                        resolved_open.event_bindings or resolved_open.runtime_event_bindings
+                    ):
+                        events = root_data.setdefault("eventBindings", {})
+                        if not isinstance(events, dict):
+                            raise AssertionError("leaf event binding container changed type")
+                        for binding in resolved_open.event_bindings:
+                            binding_id = str(binding["id"])
+                            serialized = dict(binding)
+                            previous = events.setdefault(binding_id, serialized)
+                            if previous != serialized:
+                                raise ValueError("one leaf event binding id has conflicting metadata")
+                        for binding in resolved_open.runtime_event_bindings:
+                            binding_id = str(binding["id"])
+                            serialized = dict(binding)
+                            previous = events.setdefault(binding_id, serialized)
+                            if previous != serialized:
+                                raise ValueError("one leaf runtime event binding id has conflicting metadata")
+                    if isinstance(resolved_open, PreparedElementOpen) and (
+                        resolved_open.poll_bindings or resolved_open.runtime_poll_bindings
+                    ):
+                        polls = root_data.setdefault("pollBindings", {})
+                        if not isinstance(polls, dict):
+                            raise AssertionError("leaf poll binding container changed type")
+                        for binding in resolved_open.poll_bindings:
+                            polls[str(binding["id"])] = dict(binding)
+                        for binding in resolved_open.runtime_poll_bindings:
+                            binding_id = str(binding["id"])
+                            serialized = dict(binding)
+                            previous = polls.setdefault(binding_id, serialized)
+                            if previous != serialized:
+                                raise ValueError("one leaf runtime poll binding id has conflicting metadata")
+                    if isinstance(resolved_open, PreparedElementOpen) and resolved_open.control_bindings:
+                        controls = root_data.setdefault("controlBindings", {})
+                        if not isinstance(controls, dict):
+                            raise AssertionError("leaf control binding container changed type")
+                        for binding in resolved_open.control_bindings:
+                            controls[str(binding["id"])] = dict(binding)
+                elif isinstance(operation, _Close):
+                    continue
+                elif isinstance(operation, _If):
+                    try:
+                        body = operation.node.active_branch_body(context)
+                    except Exception as error:
+                        _attach_error(error, operation.node, context)
+                        raise
+                    selected = next(
+                        (index for index, branch in enumerate(operation.node.branches) if branch[2] is body), -1
                     )
-            except Exception as error:
-                _attach_error(error, operation.node, context)
+                    data[operation.key] = selected
+                    if selected >= 0:
+                        frames.append(_LeafBodyFrame(operation.branches[selected], context, data))
+                        break
+                elif isinstance(operation, _For):
+                    loop_frame = _LeafLoopFrame(operation, context, data)
+                    # The loop's first row is read here, as the nested evaluator read
+                    # it inside its `try`; the frame joins the stack once it has
+                    # started, so an error gets this node's position only once.
+                    try:
+                        loop_frame.iterations = operation.node.iter_bodies(context)
+                        first = _next_leaf_row(loop_frame)
+                    except Exception as error:
+                        _attach_error(error, operation.node, context)
+                        raise
+                    if first is not None:
+                        frames.append(loop_frame)
+                        frames.append(first)
+                        break
+                    _finish_leaf_loop(loop_frame)
+                else:
+                    raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
+
+            else:
+                frames.pop()
+                body_frame.finish()
+    except BaseException as error:
+        _unwind_leaf_frames(frames, error)
+        raise
+
+
+@final
+class _LeafBodyFrame:
+    """One body of a leaf program being evaluated against one context and row."""
+
+    __slots__ = ("context", "data", "operations", "value_token")
+
+    def __init__(
+        self,
+        operations: tuple[object, ...],
+        context: CitryContext,
+        data: dict[str, object],
+        *,
+        set_value_context: bool = True,
+    ) -> None:
+        self.operations = iter(operations)
+        self.context = context
+        self.data = data
+        # The root body runs inside `_evaluate`, which already made its
+        # context current; every nested body sets its own, as `_evaluate`
+        # did for each call.
+        self.value_token = _VALUE_CONTEXT.set(context) if set_value_context else None
+
+    def finish(self) -> None:
+        if self.value_token is not None:
+            _VALUE_CONTEXT.reset(self.value_token)
+            self.value_token = None
+
+
+@final
+class _LeafLoopFrame:
+    """A ``<c-for>`` whose rows are being evaluated, one row at a time."""
+
+    __slots__ = ("context", "data", "iterations", "operation", "records", "rendered_any")
+
+    def __init__(self, operation: _For, context: CitryContext, data: dict[str, object]) -> None:
+        self.operation = operation
+        self.context = context
+        self.data = data
+        self.iterations: Iterator[tuple[list[BodyItem], CitryContext]] | None = None
+        self.records: list[dict[str, object]] = []
+        self.rendered_any = False
+
+
+def _next_leaf_row(loop_frame: _LeafLoopFrame) -> _LeafBodyFrame | None:
+    """Read the loop's next row and return the body frame that evaluates it."""
+    iterations = cast("Iterator[tuple[list[BodyItem], CitryContext]]", loop_frame.iterations)
+    following = next(iterations, None)
+    if following is None:
+        return None
+    child_context = following[1]
+    if child_context is loop_frame.context:
+        # `iter_bodies` yields the surrounding context for the empty branch.
+        return _LeafBodyFrame(loop_frame.operation.empty, loop_frame.context, loop_frame.data)
+    loop_frame.rendered_any = True
+    record: dict[str, object] = {}
+    loop_frame.records.append(record)
+    return _LeafBodyFrame(loop_frame.operation.body, child_context, record)
+
+
+def _finish_leaf_loop(loop_frame: _LeafLoopFrame) -> None:
+    """Store a finished loop's records, as the nested evaluator did after its loop."""
+    operation = loop_frame.operation
+    loop_frame.data[operation.key] = loop_frame.records
+    if not loop_frame.rendered_any and not operation.empty:
+        loop_frame.data[operation.key] = []
+
+
+def _unwind_leaf_frames(frames: list[_LeafBodyFrame | _LeafLoopFrame], error: BaseException) -> None:
+    """
+    Take an error out through every frame still open, innermost first.
+
+    A body frame resets its value context. A loop frame closes its loop and
+    adds its ``<c-for>``'s position. Adding a position can replace the error
+    with a clearer one, which then passes through the frames that remain.
+    """
+    while frames:
+        frame = frames.pop()
+        if type(frame) is _LeafBodyFrame:
+            frame.finish()
+            continue
+        loop_frame = cast("_LeafLoopFrame", frame)
+        close = getattr(loop_frame.iterations, "close", None)
+        if close is not None:
+            close()
+        if isinstance(error, Exception):
+            try:
+                _attach_error(error, loop_frame.operation.node, loop_frame.context)
+            except Exception as replacement:
+                _unwind_leaf_frames(frames, replacement)
                 raise
-            data[operation.key] = records
-            if not rendered_any and not operation.empty:
-                data[operation.key] = []
-        else:
-            raise TypeError(f"unknown leaf operation: {type(operation).__name__}")
 
 
 def _attach_error(error: Exception, node: Node, context: CitryContext | None) -> None:
@@ -3995,104 +4165,133 @@ def typed_leaf_parts(value: PreparedLeafProgram) -> list[RenderPart]:
     return output
 
 
+@final
+class _TypedLoopFrame:
+    """A ``<c-for>`` whose rows ``_materialize_typed`` is writing, one row at a time."""
+
+    __slots__ = ("body", "output", "parent_output", "records", "run_call", "run_type")
+
+    def __init__(
+        self,
+        records: Iterator[object],
+        body: tuple[object, ...],
+        output: list[RenderPart],
+        parent_output: list[RenderPart],
+        run_call: object,
+        run_type: str | None,
+    ) -> None:
+        self.records = records
+        self.body = body
+        self.output = output
+        self.parent_output = parent_output
+        self.run_call = run_call
+        self.run_type = run_type
+
+
 def _materialize_typed(
     operations: tuple[object, ...],
     data: dict[str, object],
-    root_data: dict[str, object],
+    root_data: dict[str, object],  # noqa: ARG001 - part of the shared materializer signature
     special: dict[tuple[int, str], RenderPart],
     resolved_opens: dict[tuple[int, int], PreparedElementOpen | dict[str, object] | _SpreadResolvedOpen],
     output: list[RenderPart],
     call_runs: dict[str, str] | None = None,
 ) -> None:
-    for operation in operations:
-        if isinstance(operation, _Static):
-            output.append(operation.typed)
-        elif isinstance(operation, _Text):
-            special_value = special.get((id(data), operation.key))
-            if special_value is not None:
-                output.append(special_value)
-            else:
-                output.append(
-                    PreparedTextValue(
-                        operation.node.source,
-                        operation.node.position,
-                        data[operation.key],
-                    )
-                )
-        elif isinstance(operation, _Open):
-            resolved = operation.static or resolved_opens[(id(data), id(operation))]
-            output.append(_prepared_open(operation, resolved))
-            if operation.node.is_self_closing and not operation.node.is_void:
-                end = operation.node.position[1]
-                output.append(PreparedElementClose(operation.node.source, (end, end), operation.node.tag))
-        elif isinstance(operation, _Close):
-            output.append(operation.value)
-        elif isinstance(operation, _Call):
-            output.append(special[(id(data), operation.key)])
-        elif isinstance(operation, _If):
-            selected_value = data[operation.key]
-            if type(selected_value) is not int:
-                raise AssertionError("leaf branch selection changed type")
-            selected = selected_value
-            if selected >= 0:
-                _materialize_typed(
-                    operation.branches[selected],
-                    data,
-                    root_data,
-                    special,
-                    resolved_opens,
-                    output,
-                    call_runs,
-                )
-        elif isinstance(operation, _For):
-            records = data[operation.key]
-            if not isinstance(records, list):
-                raise TypeError("leaf loop record changed type")
-            run_call = operation.body[0] if len(operation.body) == 1 else None
-            run_type = (
-                call_runs.get(run_call.key)
-                if call_runs and isinstance(run_call, _Call) and len(operation.node.branches) == 1
-                else None
-            )
-            # A loop whose whole body is one keyed call is kept together, as
-            # ForNode.render keeps it for an ordinary parent, so the browser
-            # gets one loop over the children rather than one call each.
-            loop_output: list[RenderPart] = output if run_type is None else []
-            if records:
-                for record in records:
-                    if not isinstance(record, dict):
-                        raise TypeError("leaf loop item changed type")
-                    _materialize_typed(
-                        operation.body,
-                        record,
-                        root_data,
-                        special,
-                        resolved_opens,
-                        loop_output,
-                        call_runs,
-                    )
-            else:
-                _materialize_typed(
-                    operation.empty,
-                    data,
-                    root_data,
-                    special,
-                    resolved_opens,
-                    loop_output,
-                    call_runs,
-                )
-            if run_type is not None:
+    """
+    Write a leaf program's typed output for one set of evaluated data.
+
+    Branches and loop rows are walked on this function's own stack, so
+    Python's call depth does not grow with how deeply control flow nests.
+    Each loop row's body is finished before the next row is read, and a loop
+    kept together as a call run is wrapped once all its rows are written.
+    """
+    frames: list[tuple[Iterator[object], dict[str, object], list[RenderPart]] | _TypedLoopFrame] = [
+        (iter(operations), data, output)
+    ]
+    while frames:
+        frame = frames[-1]
+        if type(frame) is _TypedLoopFrame:
+            record = next(frame.records, _NO_MORE_RECORDS)
+            if record is not _NO_MORE_RECORDS:
+                if not isinstance(record, dict):
+                    raise TypeError("leaf loop item changed type")
+                frames.append((iter(frame.body), cast("dict[str, object]", record), frame.output))
+                continue
+            frames.pop()
+            if frame.run_type is not None:
                 from citry.citry_context import CitryContext  # noqa: PLC0415
 
                 from .direct import DirectCallRunRender  # noqa: PLC0415
 
-                output.append(
+                frame.parent_output.append(
                     DirectCallRunRender(
-                        CitryRender(parts=loop_output, context=CitryContext()),
-                        call_node=cast("_Call", run_call).node,
-                        child_type_key=run_type,
+                        CitryRender(parts=frame.output, context=CitryContext()),
+                        call_node=cast("_Call", frame.run_call).node,
+                        child_type_key=frame.run_type,
                     )
                 )
+            continue
+        remaining, row, row_output = cast("tuple[Iterator[object], dict[str, object], list[RenderPart]]", frame)
+        for operation in remaining:
+            if isinstance(operation, _Static):
+                row_output.append(operation.typed)
+            elif isinstance(operation, _Text):
+                special_value = special.get((id(row), operation.key))
+                if special_value is not None:
+                    row_output.append(special_value)
+                else:
+                    row_output.append(
+                        PreparedTextValue(
+                            operation.node.source,
+                            operation.node.position,
+                            row[operation.key],
+                        )
+                    )
+            elif isinstance(operation, _Open):
+                resolved = operation.static or resolved_opens[(id(row), id(operation))]
+                row_output.append(_prepared_open(operation, resolved))
+                if operation.node.is_self_closing and not operation.node.is_void:
+                    end = operation.node.position[1]
+                    row_output.append(PreparedElementClose(operation.node.source, (end, end), operation.node.tag))
+            elif isinstance(operation, _Close):
+                row_output.append(operation.value)
+            elif isinstance(operation, _Call):
+                row_output.append(special[(id(row), operation.key)])
+            elif isinstance(operation, _If):
+                selected_value = row[operation.key]
+                if type(selected_value) is not int:
+                    raise AssertionError("leaf branch selection changed type")
+                if selected_value >= 0:
+                    frames.append((iter(operation.branches[selected_value]), row, row_output))
+                    break
+            elif isinstance(operation, _For):
+                loop_records = row[operation.key]
+                if not isinstance(loop_records, list):
+                    raise TypeError("leaf loop record changed type")
+                run_call = operation.body[0] if len(operation.body) == 1 else None
+                run_type = (
+                    call_runs.get(run_call.key)
+                    if call_runs and isinstance(run_call, _Call) and len(operation.node.branches) == 1
+                    else None
+                )
+                # A loop whose whole body is one keyed call is kept together, as
+                # ForNode.render keeps it for an ordinary parent, so the browser
+                # gets one loop over the children rather than one call each.
+                loop_output: list[RenderPart] = row_output if run_type is None else []
+                if loop_records:
+                    frames.append(
+                        _TypedLoopFrame(
+                            iter(loop_records), operation.body, loop_output, row_output, run_call, run_type
+                        )
+                    )
+                else:
+                    # The empty branch is written once, then the loop finishes
+                    # exactly as it does after its last row.
+                    frames.append(_TypedLoopFrame(iter(()), (), loop_output, row_output, run_call, run_type))
+                    frames.append((iter(operation.empty), row, loop_output))
+                break
+        else:
+            frames.pop()
 
 
 # Marks the end of a loop's records; a record itself can be any value, which
