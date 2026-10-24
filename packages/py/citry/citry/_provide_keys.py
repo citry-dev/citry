@@ -47,10 +47,11 @@ from citry._class_introspection import (
 )
 from citry._component_graph import _build_node, _collect_sources, _foreign_options, _nested_content
 from citry._component_introspection import _group_registrations, _loaded_python_file
+from citry._walk import Call, run
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement, parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Mapping
+    from collections.abc import Callable, Generator, Iterator, Mapping
 
     from citry._component_graph import _Source
     from citry.citry import Citry
@@ -530,7 +531,7 @@ def _source_facts(engine: Citry, source: _Source) -> _TemplateFacts | None:
         except (SyntaxError, ValueError, RecursionError):
             return None
 
-    _walk(template, (), facts, parse_nested, owner=False)
+    run(_walk(template, (), facts, parse_nested, owner=False))
     return None if facts.unreadable else facts
 
 
@@ -541,7 +542,7 @@ def _walk(
     parse_nested: Callable[[str], object | None],
     *,
     owner: str | None | Literal[False],
-) -> None:
+) -> Generator[Call, Any, None]:
     """
     Record the tags, slots and ``<c-provide>`` keys in one template body.
 
@@ -560,9 +561,9 @@ def _walk(
         body = getattr(node, "body", None)
         if lower == "c-fill" and owner is not False:
             frame = _Frame("fill", owner=owner, slot=_name_attribute(attrs, "default"))
-            _walk_attributes(attrs, (*context, frame), facts, parse_nested, component=False)
+            (yield Call(_walk_attributes, attrs, (*context, frame), facts, parse_nested, component=False))
             if body is not None:
-                _walk(body, (*context, frame), facts, parse_nested, owner=False)
+                (yield Call(_walk, body, (*context, frame), facts, parse_nested, owner=False))
             continue
         # Content directly in a component's body, outside any `<c-fill>`, is
         # its default slot content.
@@ -572,28 +573,28 @@ def _walk(
                 # A `<c-slot>` written in another component's body passes this
                 # component's slot content into that component's default slot.
                 facts.slots.append((_name_attribute(attrs, "default"), here))
-                _walk_attributes(attrs, here, facts, parse_nested, component=False)
+                (yield Call(_walk_attributes, attrs, here, facts, parse_nested, component=False))
                 if body is not None:
                     # Fallback content renders in place of the slot.
-                    _walk(body, here, facts, parse_nested, owner=False)
+                    (yield Call(_walk, body, here, facts, parse_nested, owner=False))
                 continue
-            _walk_attributes(attrs, context, facts, parse_nested, component=False)
+            (yield Call(_walk_attributes, attrs, context, facts, parse_nested, component=False))
             if body is not None:
                 # `<c-if>` and `<c-for>` inside a component's body still hold its fills.
-                _walk(body, context, facts, parse_nested, owner=owner)
+                (yield Call(_walk, body, context, facts, parse_nested, owner=owner))
             continue
         if lower == "c-provide":
             key = _static_attribute(attrs, "key")
             if key is not None:
                 facts.provide_keys.add(key)
-            _walk_attributes(attrs, here, facts, parse_nested, component=True)
+            (yield Call(_walk_attributes, attrs, here, facts, parse_nested, component=True))
             if body is not None:
-                _walk(body, (*here, _Frame("provide", key=key)), facts, parse_nested, owner=False)
+                (yield Call(_walk, body, (*here, _Frame("provide", key=key)), facts, parse_nested, owner=False))
             continue
         if not lower.startswith("c-") or lower == "c-element":
-            _walk_attributes(attrs, here, facts, parse_nested, component=False)
+            (yield Call(_walk_attributes, attrs, here, facts, parse_nested, component=False))
             if body is not None:
-                _walk(body, here, facts, parse_nested, owner=False)
+                (yield Call(_walk, body, here, facts, parse_nested, owner=False))
             continue
         target: str | None = lower[len("c-") :]
         if lower == "c-component":
@@ -602,14 +603,14 @@ def _walk(
             target = None if spread else _static_attribute(attrs, "is")
             target = target.lower() if target is not None else None
             if target is None and facts.builtin:
-                _walk_attributes(attrs, here, facts, parse_nested, component=False)
+                (yield Call(_walk_attributes, attrs, here, facts, parse_nested, component=False))
                 if body is not None:
-                    _walk(body, here, facts, parse_nested, owner=False)
+                    (yield Call(_walk, body, here, facts, parse_nested, owner=False))
                 continue
         facts.sites.append((target, here))
-        _walk_attributes(attrs, here, facts, parse_nested, component=True)
+        (yield Call(_walk_attributes, attrs, here, facts, parse_nested, component=True))
         if body is not None:
-            _walk(body, here, facts, parse_nested, owner=target)
+            (yield Call(_walk, body, here, facts, parse_nested, owner=target))
 
 
 def _walk_attributes(
@@ -619,7 +620,7 @@ def _walk_attributes(
     parse_nested: Callable[[str], object | None],
     *,
     component: bool,
-) -> None:
+) -> Generator[Call, Any, None]:
     """Walk markup written inside attribute values, such as ``c-footer="<>...</>"``."""
     for attr in attrs:
         inner = attr.inner_value
@@ -632,7 +633,7 @@ def _walk_attributes(
         # A component receives the rendered markup as an input and may place
         # it anywhere, so the keys around it are unknown.
         inner_context = (*context, _Frame("opaque")) if component else context
-        _walk(nested, inner_context, facts, parse_nested, owner=False)
+        (yield Call(_walk, nested, inner_context, facts, parse_nested, owner=False))
 
 
 def _static_attribute(attrs: Any, name: str) -> str | None:
