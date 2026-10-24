@@ -62,8 +62,11 @@ def test_too_many_braces_raise_syntax_error() -> None:
 
 
 def _run(code: str) -> subprocess.CompletedProcess[str]:
+    # The code goes in on stdin rather than with `-c`: it can hold an
+    # expression of 100 KB or more, longer than a Windows command line allows.
     return subprocess.run(
-        [sys.executable, "-c", textwrap.dedent(code)],
+        [sys.executable, "-"],
+        input=textwrap.dedent(code),
         capture_output=True,
         text=True,
         timeout=300,
