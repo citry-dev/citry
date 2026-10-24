@@ -1,16 +1,18 @@
 //! Browser-state-aware facts for settled HTML security validation.
 
+use std::borrow::Cow;
+use std::cell::{Cell, RefCell};
 use std::convert::Infallible;
 
 use html5ever::tendril::StrTendril;
 use html5ever::tokenizer::states::RawKind;
 use html5ever::tokenizer::{Doctype, Tag, TagKind, Token, TokenSink, TokenSinkResult};
 use html5ever::tree_builder::create_element;
-use html5ever::tree_builder::TreeBuilder;
-use html5ever::{namespace_url, ns, Attribute, LocalName, ParseOpts, QualName};
+use html5ever::tree_builder::{ElementFlags, NodeOrText, QuirksMode, TreeBuilder, TreeSink};
+use html5ever::{namespace_url, ns, Attribute, ExpandedName, LocalName, ParseOpts, QualName};
 use html5gum::emitters::callback::{Callback, CallbackEmitter, CallbackEvent};
 use html5gum::{Emitter, Error, ForwardingEmitter, Span, State, Tokenizer};
-use markup5ever_rcdom::{Handle, RcDom};
+use markup5ever_rcdom::{Handle, NodeData, RcDom};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputAttribute {
@@ -36,9 +38,255 @@ pub struct OutputTag {
 }
 
 /// Receives each start tag's facts as soon as the start tag ends at its `>`,
-/// with the index
-/// the tag keeps in the returned facts when it is a `script` or `style`.
-pub(crate) type StartTagObserver<'a> = dyn FnMut(&OutputTag, Option<usize>) + 'a;
+/// with the index the tag keeps in the returned facts when it is a `script`
+/// or `style`, and where the browser put the element the tag made.
+pub(crate) type StartTagObserver<'a> = dyn FnMut(&OutputTag, Option<usize>, &TagContext) + 'a;
+
+/// Where the browser put the element a start tag made. It is read from the
+/// tree the parser builds, so an implied end tag or a misnested tag moves
+/// the element the way it moves in the browser.
+#[derive(Default)]
+pub(crate) struct TagContext {
+    // The element this start tag inserted, or `None` when the parser did
+    // not insert one (an ignored tag, or a scan that does not track this).
+    element: Option<Handle>,
+    // The parser tied the element to the form its form pointer names (the
+    // last `<form>` not yet closed by `</form>`), even when the element
+    // lands outside that form in the tree.
+    parser_form_owner: bool,
+}
+
+impl TagContext {
+    /// Whether a `<form>` owns the element, as the browser decides it for an
+    /// element the parser creates, so a submit button or field can submit
+    /// that form without JavaScript.
+    ///
+    /// The answer is read when the parser inserts the element. When the
+    /// parser later moves an element it did not tie to a form, as it does
+    /// for a misnested formatting end tag such as `</b>`, the browser
+    /// recomputes the owner and this answer can be stale.
+    pub(crate) fn has_form_owner(&self) -> bool {
+        if self.parser_form_owner {
+            return true;
+        }
+        let Some(element) = &self.element else {
+            return false;
+        };
+        // Only an HTML element can belong to a form; a `<button>` inside
+        // `<svg>` is an SVG element that does nothing on its own.
+        if !matches!(&element.data, NodeData::Element { name, .. } if name.ns == ns!(html)) {
+            return false;
+        }
+        // An element the parser did not tie to a form gets the nearest
+        // `<form>` that contains it when it is inserted. This happens, for
+        // example, after a `</form>` inside a still-open element clears the
+        // form pointer.
+        let mut node = parent_of(element);
+        while let Some(current) = node {
+            match &current.data {
+                NodeData::Element { name, .. }
+                    if name.ns == ns!(html) && name.local.as_ref() == "form" =>
+                {
+                    return true;
+                }
+                // A template's contents are a separate document, so a form
+                // outside the template does not own what is inside it.
+                NodeData::Document => return false,
+                _ => {}
+            }
+            node = parent_of(&current);
+        }
+        false
+    }
+
+    /// The `data-cid-*` suffixes of the elements that contain this one,
+    /// nearest element first, and one element's suffixes in attribute
+    /// order. An element inside a `<template>` counts the template and what
+    /// contains it. Like [`TagContext::has_form_owner`], this is read when the
+    /// parser inserts the element, so a later move is not seen.
+    pub(crate) fn ancestor_cids(&self) -> Vec<String> {
+        let mut cids = Vec::new();
+        let Some(element) = &self.element else {
+            return cids;
+        };
+        let mut node = parent_of(element);
+        while let Some(current) = node {
+            if let NodeData::Element { attrs, .. } = &current.data {
+                for attr in attrs.borrow().iter() {
+                    let name = attr.name.local.as_ref();
+                    if let Some(suffix) = ascii_lower(name).strip_prefix("data-cid-") {
+                        cids.push(suffix.to_owned());
+                    }
+                }
+            }
+            node = parent_of(&current);
+        }
+        cids
+    }
+}
+
+fn ascii_lower(value: &str) -> Cow<'_, str> {
+    if value.bytes().any(|byte| byte.is_ascii_uppercase()) {
+        Cow::Owned(value.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(value)
+    }
+}
+
+/// The node's parent in the tree the parser built, if it has one.
+fn parent_of(node: &Handle) -> Option<Handle> {
+    // The parent is a weak pointer kept in a `Cell`, so take it out, upgrade
+    // it, and put it back.
+    let weak = node.parent.take()?;
+    let parent = weak.upgrade();
+    node.parent.set(Some(weak));
+    parent
+}
+
+/// The DOM the output check builds, which also remembers the element each
+/// start tag made, so the check can read where the browser put it.
+#[derive(Default)]
+pub(crate) struct TrackingSink {
+    dom: RcDom,
+    // The element the latest `create_element` made, cleared before each
+    // start tag is processed.
+    last_created: RefCell<Option<Handle>>,
+    // Whether the parser tied that element to the form its form pointer
+    // names.
+    form_associated: Cell<bool>,
+}
+
+impl TreeSink for TrackingSink {
+    type Handle = Handle;
+    type Output = RcDom;
+    type ElemName<'a> = ExpandedName<'a>;
+
+    fn finish(self) -> RcDom {
+        self.dom
+    }
+
+    fn parse_error(&self, msg: Cow<'static, str>) {
+        self.dom.parse_error(msg);
+    }
+
+    fn get_document(&self) -> Handle {
+        self.dom.get_document()
+    }
+
+    fn elem_name<'a>(&'a self, target: &'a Handle) -> ExpandedName<'a> {
+        self.dom.elem_name(target)
+    }
+
+    fn create_element(&self, name: QualName, attrs: Vec<Attribute>, flags: ElementFlags) -> Handle {
+        let template = flags.template;
+        let element = self.dom.create_element(name, attrs, flags);
+        if template {
+            // The parser puts a template's children in a separate fragment
+            // that has no parent. Pointing the fragment at its template lets
+            // the walk up from an element inside a `<template>` reach the
+            // component around it. html5ever and RcDom reach the fragment
+            // only through `get_template_contents` and never read its
+            // parent, and the tree is dropped after the scan.
+            if let NodeData::Element {
+                template_contents, ..
+            } = &element.data
+            {
+                if let Some(contents) = template_contents.borrow().as_ref() {
+                    contents.parent.set(Some(std::rc::Rc::downgrade(&element)));
+                }
+            }
+        }
+        *self.last_created.borrow_mut() = Some(element.clone());
+        self.form_associated.set(false);
+        element
+    }
+
+    fn create_comment(&self, text: StrTendril) -> Handle {
+        self.dom.create_comment(text)
+    }
+
+    fn create_pi(&self, target: StrTendril, data: StrTendril) -> Handle {
+        self.dom.create_pi(target, data)
+    }
+
+    fn append(&self, parent: &Handle, child: NodeOrText<Handle>) {
+        self.dom.append(parent, child);
+    }
+
+    fn append_based_on_parent_node(
+        &self,
+        element: &Handle,
+        prev_element: &Handle,
+        child: NodeOrText<Handle>,
+    ) {
+        self.dom
+            .append_based_on_parent_node(element, prev_element, child);
+    }
+
+    fn append_doctype_to_document(
+        &self,
+        name: StrTendril,
+        public_id: StrTendril,
+        system_id: StrTendril,
+    ) {
+        self.dom
+            .append_doctype_to_document(name, public_id, system_id);
+    }
+
+    fn get_template_contents(&self, target: &Handle) -> Handle {
+        self.dom.get_template_contents(target)
+    }
+
+    fn same_node(&self, x: &Handle, y: &Handle) -> bool {
+        self.dom.same_node(x, y)
+    }
+
+    fn set_quirks_mode(&self, mode: QuirksMode) {
+        self.dom.set_quirks_mode(mode);
+    }
+
+    fn append_before_sibling(&self, sibling: &Handle, new_node: NodeOrText<Handle>) {
+        self.dom.append_before_sibling(sibling, new_node);
+    }
+
+    fn add_attrs_if_missing(&self, target: &Handle, attrs: Vec<Attribute>) {
+        self.dom.add_attrs_if_missing(target, attrs);
+    }
+
+    fn associate_with_form(
+        &self,
+        target: &Handle,
+        form: &Handle,
+        nodes: (&Handle, Option<&Handle>),
+    ) {
+        // The parser calls this when it creates a control while its form
+        // pointer (the last `<form>` not yet closed by `</form>`) is set,
+        // which makes that form the control's owner even if the control
+        // lands outside it. Only the element the current start tag made
+        // counts, because the flag is read for that tag.
+        if self
+            .last_created
+            .borrow()
+            .as_ref()
+            .is_some_and(|created| std::rc::Rc::ptr_eq(created, target))
+        {
+            self.form_associated.set(true);
+        }
+        self.dom.associate_with_form(target, form, nodes);
+    }
+
+    fn remove_from_parent(&self, target: &Handle) {
+        self.dom.remove_from_parent(target);
+    }
+
+    fn reparent_children(&self, node: &Handle, new_parent: &Handle) {
+        self.dom.reparent_children(node, new_parent);
+    }
+
+    fn is_mathml_annotation_xml_integration_point(&self, handle: &Handle) -> bool {
+        self.dom.is_mathml_annotation_xml_integration_point(handle)
+    }
+}
 
 struct ScannerCallback<'a, S> {
     sink: &'a mut S,
@@ -58,18 +306,54 @@ struct ScannerCallback<'a, S> {
 
 trait ScannerSink: TokenSink {
     fn has_unacknowledged_self_closing(&self) -> bool;
+    /// Forget the element the previous start tag made.
+    fn begin_start_tag(&self) {}
+    /// Where the browser put the element the start tag named `name` made,
+    /// or an empty context when this scan does not track elements.
+    fn tag_context(&self, _name: &str) -> TagContext {
+        TagContext::default()
+    }
+}
+
+fn has_unacknowledged_self_closing(dom: &RcDom) -> bool {
+    // html5ever 0.29's TreeBuilder emits this exact diagnostic after it
+    // processes a self-closing flag in the element's actual namespace.
+    // The regression tests below deliberately pin that dependency contract.
+    dom.errors
+        .borrow()
+        .iter()
+        .any(|error| error.as_ref() == "Unacknowledged self-closing tag")
 }
 
 impl ScannerSink for TreeBuilder<Handle, RcDom> {
     fn has_unacknowledged_self_closing(&self) -> bool {
-        // html5ever 0.29's TreeBuilder emits this exact diagnostic after it
-        // processes a self-closing flag in the element's actual namespace.
-        // The regression tests below deliberately pin that dependency contract.
-        self.sink
-            .errors
-            .borrow()
-            .iter()
-            .any(|error| error.as_ref() == "Unacknowledged self-closing tag")
+        has_unacknowledged_self_closing(&self.sink)
+    }
+}
+
+impl ScannerSink for TreeBuilder<Handle, TrackingSink> {
+    fn has_unacknowledged_self_closing(&self) -> bool {
+        has_unacknowledged_self_closing(&self.sink.dom)
+    }
+
+    fn begin_start_tag(&self) {
+        *self.sink.last_created.borrow_mut() = None;
+        self.sink.form_associated.set(false);
+    }
+
+    fn tag_context(&self, name: &str) -> TagContext {
+        // Only the element this tag made counts. The parser may have made
+        // none (an ignored tag), it turns `<image>` into `<img>`, and inside
+        // `<svg>` it gives some names capitals (`foreignObject`).
+        let element = self.sink.last_created.borrow().clone().filter(|element| {
+            matches!(&element.data, NodeData::Element { name: qual, .. }
+                if qual.local.as_ref().eq_ignore_ascii_case(name)
+                    || (name == "image" && qual.local.as_ref() == "img"))
+        });
+        TagContext {
+            parser_form_owner: element.is_some() && self.sink.form_associated.get(),
+            element,
+        }
     }
 }
 
@@ -278,9 +562,17 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                         boundary.stack.push(name.to_owned());
                     }
                 }
+                let mut context = TagContext::default();
                 if let Some(mut tag) = self.current_tag.take() {
                     tag.self_closing = self_closing;
+                    let name = tag.name.as_ref().to_owned();
+                    self.sink.begin_start_tag();
                     self.sink_token(Token::TagToken(tag));
+                    // Only the observer reads the context, so a scan without
+                    // one skips the lookup.
+                    if self.observer.is_some() {
+                        context = self.sink.tag_context(&name);
+                    }
                     // The tree builder asks the tokenizer to change state
                     // after a start tag only when it will read that
                     // element's contents as text (`<iframe>`, `<textarea>`,
@@ -301,7 +593,7 @@ impl<S: ScannerSink> Callback<Infallible, usize> for ScannerCallback<'_, S> {
                     let raw = matches!(fact.name.as_str(), "script" | "style");
                     let keep = raw || self.observer.is_none();
                     if let Some(observer) = self.observer.as_deref_mut() {
-                        observer(&fact, raw.then_some(self.facts.len()));
+                        observer(&fact, raw.then_some(self.facts.len()), &context);
                     }
                     if keep {
                         self.facts.push(fact);
@@ -516,8 +808,7 @@ pub(crate) fn scan_output_html_with(
     input: &str,
     observer: &mut StartTagObserver<'_>,
 ) -> Vec<OutputTag> {
-    let dom = RcDom::default();
-    let mut builder = TreeBuilder::new(dom, ParseOpts::default().tree_builder);
+    let mut builder = TreeBuilder::new(TrackingSink::default(), ParseOpts::default().tree_builder);
     let mut facts = Vec::new();
     let emitter = ScannerEmitter {
         inner: CallbackEmitter::new(ScannerCallback {

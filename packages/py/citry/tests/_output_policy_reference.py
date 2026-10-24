@@ -5,10 +5,11 @@ Rust runs these rules for `serialize()` (`citry/_output_policy.py`). This
 copy keeps the Python version they replaced, so a test can compare the two
 on the same input: `test_output_policy_differential.py` on generated pages,
 and, with `CITRY_OUTPUT_POLICY_DIFFERENTIAL=1`, every check that any test
-suite runs. It reads tags with the Python wrapper of the same Rust
-tokenizer, because only the rules moved, and it keeps its own copy of
-every helper the rules use, so the comparison never checks Rust against
-itself.
+suite runs. Both comparisons go through `outcomes_match`, which allows only the
+two differences that reading the browser's tree makes on purpose. It
+reads tags with the Python wrapper of the same Rust tokenizer, because
+only the rules moved, and it keeps its own copy of every helper the rules
+use, so the comparison never checks Rust against itself.
 
 Do not edit this copy to match a Rust bug. When a rule changes on
 purpose, change both copies the same way, or delete this copy and its
@@ -17,6 +18,7 @@ comparison test.
 
 from __future__ import annotations
 
+import dataclasses
 import html as html_module
 import re
 import traceback
@@ -835,21 +837,244 @@ def _outcome(call: Callable[[], object]) -> tuple[tuple[object, ...], BaseExcept
         return ("error", type(error), str(error)), error
 
 
+# ---------------------------------------------------------------------------
+# What the comparison ignores on purpose
+# ---------------------------------------------------------------------------
+
+# This copy reads tags as a flat list, so it never sees which elements
+# enclose a tag. The Rust check reads the tree the browser builds, so it
+# makes two changes on purpose, and the comparison allows exactly those:
+#
+# 1. A finding on an element without a known component of its own names
+#    the nearest known component that contains it, where this copy gives
+#    the name for an element with no component (the name "settled render
+#    output", or what `component_classes` maps the empty id to). When this
+#    copy names any other component, Rust must name the same one. So a
+#    Rust walk that picks the wrong ancestor passes here; the Rust unit
+#    tests on that walk catch it.
+# 2. Rust does not report a submit button, an input not of type `button`
+#    or `reset`, a select, or a textarea that a `<form>` owns, because the
+#    form gives it a fallback. Rust may leave out such a handler-only
+#    finding that this copy reports, but only when a `<form>` start tag
+#    comes before the control in the page, and it never adds one. Every
+#    other handler-only finding must match.
+#
+# Everything else must match exactly: the findings, their order and
+# offsets, the result, and whether a check warns or raises.
+_GENERIC_OWNER = "settled render output"
+_HANDLER_ONLY_DETAIL = "this control has a browser handler but no native navigation or submission fallback"
+_REPORT_PREFIXES = ("Citry found ", "security_javascript=")
+_REPORT_LINE = re.compile(r"- (?P<component>.*?)(?P<rest>(?: \(|, |: ).*)", re.DOTALL)
+_REPORT_SPAN = re.compile(r", (?P<kind>settled HTML|pre-extension HTML) bytes (?P<start>\d+):")
+_REPORT_COUNT = re.compile(r" found (\d+) ")
+
+
+class _Pages:
+    """The pages a comparison's findings point into, and the names this copy gives an element with no component."""
+
+    def __init__(self, settled: str, pre_extension: str | None, component_classes: Mapping[str, str]) -> None:
+        self._pages = {
+            "settled HTML": settled,
+            "pre-extension HTML": settled if pre_extension is None else pre_extension,
+        }
+        self._controls: dict[str, dict[int, bool]] = {}
+        # The rules look up a missing id as the empty one, so a test
+        # registry that names the empty id gives that name to elements
+        # with no component.
+        self.unowned = frozenset({_GENERIC_OWNER, component_classes.get("", _GENERIC_OWNER)})
+
+    def may_have_form_fallback(self, range_kind: str, start: int | None) -> bool:
+        """Say whether the control whose tag name starts at `start` would submit an enclosing form."""
+        page = self._pages.get(range_kind)
+        if page is None or start is None:
+            return False
+        if page not in self._controls:
+            self._controls[page] = _form_controls(page)
+        return self._controls[page].get(start, False)
+
+
+def _form_controls(page: str) -> dict[int, bool]:
+    # Each control's tag name start, and whether a form could own it and
+    # give it a fallback. Only a form that starts earlier in the page can
+    # contain a control or be the one the parser ties it to. A button of
+    # type `button`, and an input of type `button` or `reset`, never
+    # submits a form, so its verdict cannot depend on one.
+    controls: dict[int, bool] = {}
+    form_seen = False
+    try:
+        template = scan_output_html(page)
+    except Exception:  # noqa: BLE001 - an unreadable page has no controls to excuse
+        return controls
+    for node in template.elements:
+        tag = node.start_tag.name.content.translate(_ASCII_LOWER)
+        kind = _attribute_map(node.start_tag.attrs).get("type", "").translate(_ASCII_LOWER)
+        form_seen = form_seen or tag == "form"
+        controls[node.start_tag.name.start_index] = form_seen and (
+            (tag == "button" and kind != "button")
+            or (tag == "input" and kind not in {"button", "reset"})
+            or tag in {"select", "textarea"}
+        )
+    return controls
+
+
+def _is_findings(value: list[Any]) -> bool:
+    return bool(value) and all(dataclasses.is_dataclass(item) and hasattr(item, "component") for item in value)
+
+
+def _finding_matches(real: Any, copy: Any, pages: _Pages) -> bool:
+    if type(real) is not type(copy):
+        return False
+    # Only a finding this copy gives no component may name one on the
+    # Rust side.
+    component = real.component if copy.component in pages.unowned else copy.component
+    return dataclasses.replace(copy, component=component) == real
+
+
+def _finding_may_be_left_out(copy: Any, pages: _Pages) -> bool:
+    return getattr(copy, "rule", None) == "handler-only-control" and pages.may_have_form_fallback(
+        copy.range_kind, copy.start_index
+    )
+
+
+def _line_matches(real: str, copy: str, pages: _Pages) -> bool:
+    real_parts, copy_parts = _REPORT_LINE.fullmatch(real), _REPORT_LINE.fullmatch(copy)
+    if real_parts is None or copy_parts is None:
+        return real == copy
+    if copy_parts["component"] not in pages.unowned and copy_parts["component"] != real_parts["component"]:
+        return False
+    return real_parts["rest"] == copy_parts["rest"]
+
+
+def _line_may_be_left_out(copy: str, pages: _Pages) -> bool:
+    span = _REPORT_SPAN.search(copy)
+    return (
+        _HANDLER_ONLY_DETAIL in copy
+        and span is not None
+        and pages.may_have_form_fallback(span["kind"], int(span["start"]))
+    )
+
+
+def _report_matches(real: str, copy: str, pages: _Pages) -> bool:
+    real_header, *real_lines = real.split("\n")
+    copy_header, *copy_lines = copy.split("\n")
+    # Each header counts its own lines, which differ when Rust leaves some
+    # out, so the count is checked against the lines and the rest of the
+    # header must match.
+    for header, lines in ((real_header, real_lines), (copy_header, copy_lines)):
+        count = _REPORT_COUNT.search(header)
+        if count is None or int(count[1]) != len(lines):
+            return real == copy
+    if _REPORT_COUNT.sub(" found N ", real_header) != _REPORT_COUNT.sub(" found N ", copy_header):
+        return False
+    return _aligned(
+        real_lines,
+        copy_lines,
+        lambda one, other: _line_matches(one, other, pages),
+        lambda line: _line_may_be_left_out(line, pages),
+    )
+
+
+def _report_may_be_left_out(value: object, pages: _Pages) -> bool:
+    # A warning whose every line Rust may leave out disappears on its side.
+    if not (isinstance(value, tuple) and value[:1] == ("RuntimeWarning",)):
+        return False
+    message = value[-1]
+    if not (len(value) == 2 and isinstance(message, str) and message.startswith(_REPORT_PREFIXES)):
+        return False
+    return all(_line_may_be_left_out(line, pages) for line in message.split("\n")[1:])
+
+
+def _aligned(
+    real: list[Any],
+    copy: list[Any],
+    matches: Callable[[Any, Any], bool],
+    may_be_left_out: Callable[[Any], bool],
+) -> bool:
+    # Rust keeps this copy's order and only leaves items out, so each Rust
+    # item must match the next copy item, after skipping copy items that
+    # Rust may leave out. Matching greedily is enough because each item
+    # that may be left out carries its own byte offset, so it never also
+    # matches a later Rust item.
+    index = 0
+    for item in real:
+        while index < len(copy) and not matches(item, copy[index]) and may_be_left_out(copy[index]):
+            index += 1
+        if index == len(copy) or not matches(item, copy[index]):
+            return False
+        index += 1
+    return all(may_be_left_out(item) for item in copy[index:])
+
+
+def _matches(real: object, copy: object, pages: _Pages) -> bool:
+    if isinstance(real, list) and isinstance(copy, list):
+        if _is_findings(real) or _is_findings(copy):
+            return _aligned(
+                real,
+                copy,
+                lambda one, other: _finding_matches(one, other, pages),
+                lambda item: _finding_may_be_left_out(item, pages),
+            )
+        return _aligned(
+            real,
+            copy,
+            lambda one, other: _matches(one, other, pages),
+            lambda item: _report_may_be_left_out(item, pages),
+        )
+    if isinstance(real, tuple) and isinstance(copy, tuple):
+        return len(real) == len(copy) and all(
+            _matches(one, other, pages) for one, other in zip(real, copy, strict=True)
+        )
+    if isinstance(real, str) and isinstance(copy, str) and copy.startswith(_REPORT_PREFIXES):
+        return _report_matches(real, copy, pages)
+    return real == copy
+
+
+def outcomes_match(
+    real: object,
+    copy: object,
+    settled: str,
+    pre_extension: str | None = None,
+    component_classes: Mapping[str, str] | None = None,
+) -> bool:
+    """
+    Say whether a Rust outcome matches this copy's, allowing only the two differences described above.
+
+    Args:
+        real: What the Rust check returned, raised, or warned, in any
+            nesting of lists and tuples.
+        copy: The same for this copy.
+        settled: The page the settled-HTML offsets point into.
+        pre_extension: The page the pre-extension offsets point into,
+            when it differs from `settled`.
+        component_classes: The component names the checks were given.
+
+    """
+    return _matches(real, copy, _Pages(settled, pre_extension, component_classes or {}))
+
+
 def compare_calls(
     label: str,
     validator: Any,
     copy: Any,
     real_call: Callable[[], object],
     copy_call: Callable[[], object],
+    html: str = "",
+    component_classes: Mapping[str, str] | None = None,
 ) -> object:
-    """Run one check on both sides and fail when the findings, result, or error differ."""
+    """
+    Run one check on both sides and fail when the findings, result, or error differ.
+
+    `html` is the page the check reads. The findings' offsets point into
+    it, and the comparison reads its controls to tell which handler-only
+    findings Rust may leave out (see `outcomes_match`).
+    """
     real_before = len(validator._findings)
     copy_before = len(copy._findings)
     copy_outcome, _ = _outcome(copy_call)
     real_outcome, real_error = _outcome(real_call)
     real_new = validator._findings[real_before:]
     copy_new = copy._findings[copy_before:]
-    if real_outcome != copy_outcome or real_new != copy_new:
+    if not outcomes_match((real_outcome, real_new), (copy_outcome, copy_new), html, None, component_classes):
         stack = "".join(traceback.format_stack(limit=8))
         msg = (
             f"{label}: the Rust output check differs from the Python rules\n"
@@ -897,6 +1122,8 @@ def _wrap(cls: type, name: str) -> None:
             copy,
             lambda: real_method(self, html, **kwargs),
             lambda: getattr(copy, name)(html, **copy_kwargs),
+            html,
+            kwargs.get("component_classes"),
         )
 
     setattr(cls, name, compared)
@@ -907,5 +1134,6 @@ __all__ = [
     "ReferenceJavascriptPolicy",
     "compare_calls",
     "install_differential_checks",
+    "outcomes_match",
     "reference_server_copy_passes_csp",
 ]

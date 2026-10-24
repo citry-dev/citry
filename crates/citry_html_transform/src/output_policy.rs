@@ -23,7 +23,7 @@ use std::collections::HashSet;
 
 use html5ever::data::NAMED_ENTITIES;
 
-use crate::output_scanner::{scan_output_html, scan_output_html_with, OutputTag};
+use crate::output_scanner::{scan_output_html, scan_output_html_with, OutputTag, TagContext};
 
 /// Which of the two checks of one page runs.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -113,8 +113,10 @@ pub struct RawElement {
     /// An attribute name starts with `data-citry`, which marks one of
     /// Citry's browser manifests (the data its browser manager reads).
     pub has_manager_attribute: bool,
-    /// The suffixes of the element's `data-cid-*` attributes, in attribute
-    /// order. Python names the first one it knows as the component.
+    /// The suffixes of the raw element's own `data-cid-*` attributes, in
+    /// attribute order, then those of the elements that contain it in the
+    /// browser's tree, nearest first. Python names the first one it knows as the
+    /// component, so a finding inside a component's outer tag names it.
     pub cids: Vec<String>,
 }
 
@@ -165,8 +167,11 @@ pub fn check_output_html(html: &str, options: &OutputPolicyOptions<'_>) -> Outpu
         events: Vec::new(),
         pending_raw: Vec::new(),
         marker_spans: Vec::new(),
+        tag_cids: None,
     };
-    let raw_facts = scan_output_html_with(html, &mut |tag, raw_index| state.visit(tag, raw_index));
+    let raw_facts = scan_output_html_with(html, &mut |tag, raw_index, context| {
+        state.visit(tag, raw_index, context)
+    });
     // A raw element's end tag arrives after its start tag was reported, so
     // the element's end is filled in once the whole page has been read.
     for (event_index, fact_index) in std::mem::take(&mut state.pending_raw) {
@@ -190,26 +195,46 @@ struct CheckState<'a, 'o> {
     // (index in `events`, index in the scanner's raw facts)
     pending_raw: Vec<(usize, usize)>,
     marker_spans: Vec<(usize, usize)>,
+    // The current tag's own `data-cid-*` suffixes followed by those of the
+    // elements around it, worked out the first time an event needs them.
+    tag_cids: Option<Vec<String>>,
 }
 
 impl CheckState<'_, '_> {
-    fn visit(&mut self, tag: &OutputTag, raw_index: Option<usize>) {
+    fn visit(&mut self, tag: &OutputTag, raw_index: Option<usize>, context: &TagContext) {
         let name = ascii_lower(&tag.name);
         let is_script = name == "script";
         let is_raw = is_script || name == "style";
+        self.tag_cids = None;
         match self.options.pass {
             PolicyPass::PreExtension => {
                 if let (true, Some(raw_index)) = (is_raw, raw_index) {
-                    self.push_raw(tag, &name, raw_index, false, false);
+                    self.push_raw(tag, context, &name, raw_index, false, false);
                 }
             }
-            PolicyPass::Settled => self.visit_settled(tag, &name, is_script, is_raw, raw_index),
+            PolicyPass::Settled => {
+                self.visit_settled(tag, context, &name, is_script, is_raw, raw_index);
+            }
         }
+    }
+
+    /// The `cids` an event on this tag carries: its own `data-cid-*`
+    /// suffixes, then those of the elements the browser put around it,
+    /// nearest first, so Python names the innermost known component.
+    fn cids(&mut self, tag: &OutputTag, context: &TagContext) -> Vec<String> {
+        self.tag_cids
+            .get_or_insert_with(|| {
+                let mut cids = component_ids(tag);
+                cids.extend(context.ancestor_cids());
+                cids
+            })
+            .clone()
     }
 
     fn visit_settled(
         &mut self,
         tag: &OutputTag,
+        context: &TagContext,
         name: &str,
         is_script: bool,
         is_raw: bool,
@@ -232,7 +257,14 @@ impl CheckState<'_, '_> {
                 .attributes
                 .iter()
                 .any(|attr| ascii_lower(&attr.name).starts_with("data-citry"));
-            self.push_raw(tag, name, raw_index, trusted, has_manager_attribute);
+            self.push_raw(
+                tag,
+                context,
+                name,
+                raw_index,
+                trusted,
+                has_manager_attribute,
+            );
         }
 
         // The decoded value of each attribute's first occurrence, which the
@@ -253,7 +285,8 @@ impl CheckState<'_, '_> {
             let url_attribute = is_url_attribute(name, &attr_name);
             if self.options.csp {
                 if is_native_event_attribute(&attr_name) {
-                    self.push_finding(
+                    self.push_finding_in(
+                        context,
                         Rule::CspNativeEvent,
                         tag,
                         name,
@@ -267,7 +300,8 @@ impl CheckState<'_, '_> {
                         decoded.get_or_insert_with(|| decode_html_attribute(raw_value)),
                     )
                 {
-                    self.push_finding(
+                    self.push_finding_in(
+                        context,
                         Rule::CspJavascriptUrl,
                         tag,
                         name,
@@ -284,7 +318,8 @@ impl CheckState<'_, '_> {
                 activation_attrs.push(attr_name.clone());
                 match mode {
                     JavascriptMode::Warn | JavascriptMode::Forbid => {
-                        self.push_finding(
+                        self.push_finding_in(
+                            context,
                             Rule::JsBrowserAttribute,
                             tag,
                             name,
@@ -297,7 +332,8 @@ impl CheckState<'_, '_> {
                         let values =
                             first_values.get_or_insert_with(|| first_attribute_values(tag));
                         if is_omit_hazard(&attr_name, values) {
-                            self.push_finding(
+                            self.push_finding_in(
+                                context,
                                 Rule::JsStaticFallback,
                                 tag,
                                 name,
@@ -310,7 +346,8 @@ impl CheckState<'_, '_> {
                 }
             }
             if is_native_event_attribute(&attr_name) {
-                self.push_finding(
+                self.push_finding_in(
+                    context,
                     Rule::JsNativeHandler,
                     tag,
                     name,
@@ -324,7 +361,8 @@ impl CheckState<'_, '_> {
                     decoded.get_or_insert_with(|| decode_html_attribute(raw_value)),
                 )
             {
-                self.push_finding(
+                self.push_finding_in(
+                    context,
                     Rule::JsJavascriptUrl,
                     tag,
                     name,
@@ -340,7 +378,8 @@ impl CheckState<'_, '_> {
                     decoded.get_or_insert_with(|| decode_html_attribute(raw_value)),
                 )
             {
-                self.push_finding(
+                self.push_finding_in(
+                    context,
                     Rule::JsEmbeddedDocument,
                     tag,
                     name,
@@ -354,8 +393,15 @@ impl CheckState<'_, '_> {
             && (!activation_attrs.is_empty() || has_managed_handler)
         {
             let values = first_values.get_or_insert_with(|| first_attribute_values(tag));
-            if is_handler_only_control(name, values, &activation_attrs, has_managed_handler) {
-                self.push_finding(
+            if is_handler_only_control(
+                name,
+                values,
+                &activation_attrs,
+                has_managed_handler,
+                context.has_form_owner(),
+            ) {
+                self.push_finding_in(
+                    context,
                     Rule::JsHandlerOnlyControl,
                     tag,
                     name,
@@ -425,12 +471,14 @@ impl CheckState<'_, '_> {
     fn push_raw(
         &mut self,
         tag: &OutputTag,
+        context: &TagContext,
         name: &str,
         raw_index: usize,
         trusted: bool,
         has_manager_attribute: bool,
     ) {
         let executable = name == "script" && raw_script_is_executable(tag);
+        let cids = self.cids(tag, context);
         self.pending_raw.push((self.events.len(), raw_index));
         self.events.push(PolicyEvent::RawElement(RawElement {
             tag: name.to_owned(),
@@ -441,12 +489,13 @@ impl CheckState<'_, '_> {
             trusted,
             executable,
             has_manager_attribute,
-            cids: component_ids(tag),
+            cids,
         }));
     }
 
-    fn push_finding(
+    fn push_finding_in(
         &mut self,
+        context: &TagContext,
         rule: Rule,
         tag: &OutputTag,
         name: &str,
@@ -454,6 +503,7 @@ impl CheckState<'_, '_> {
         start: usize,
         end: usize,
     ) {
+        let cids = self.cids(tag, context);
         self.events.push(PolicyEvent::Finding(Finding {
             rule,
             tag: name.to_owned(),
@@ -461,7 +511,7 @@ impl CheckState<'_, '_> {
             start,
             end,
             token_start: tag.start,
-            cids: component_ids(tag),
+            cids,
         }));
     }
 }
@@ -662,13 +712,17 @@ fn is_omit_hazard(name: &str, values: &HashMap<Cow<'_, str>, Cow<'_, str>>) -> b
 /// Whether a control has a browser handler but nothing the browser does
 /// without JavaScript, such as following a link or submitting a form.
 ///
-/// Whether the control sits inside a `<form>` is not known here, so a
-/// control without a `form` attribute counts as outside one.
+/// `inside_form` says a `<form>` owns the control, as the browser decides
+/// it. A submit button, an input not of type `button` or `reset`, a
+/// `select`, or a `textarea` then has the form as its fallback. A non-empty
+/// `form` attribute counts as a fallback too; the check does not look up
+/// the form it names.
 fn is_handler_only_control(
     tag: &str,
     values: &HashMap<Cow<'_, str>, Cow<'_, str>>,
     activation_attrs: &[Cow<'_, str>],
     has_managed_handler: bool,
+    inside_form: bool,
 ) -> bool {
     // A Citry-managed handler is marked on the element by the omit marker,
     // while an authored Vue handler, including the object form
@@ -687,15 +741,15 @@ fn is_handler_only_control(
             let button_type = values
                 .get("type")
                 .map_or(Cow::Borrowed("submit"), |value| ascii_lower(value));
-            button_type == "button" || (button_type == "submit" && !present("form"))
+            button_type == "button" || (button_type == "submit" && !inside_form && !present("form"))
         }
         "input" => {
             let input_type = values
                 .get("type")
                 .map_or(Cow::Borrowed("text"), |value| ascii_lower(value));
-            matches!(input_type.as_ref(), "button" | "reset") || !present("form")
+            matches!(input_type.as_ref(), "button" | "reset") || (!inside_form && !present("form"))
         }
-        "select" | "textarea" => !present("form"),
+        "select" | "textarea" => !inside_form && !present("form"),
         _ => matches!(tag, "div" | "span" | "section"),
     }
 }
@@ -1236,10 +1290,40 @@ mod tests {
                     0,
                     &["q"]
                 ),
-                finding(Rule::CspJavascriptUrl, "a", Some("href"), (51, 68), 42, &[]),
-                finding(Rule::JsJavascriptUrl, "a", Some("href"), (51, 68), 42, &[]),
-                finding(Rule::CspJavascriptUrl, "a", Some("href"), (75, 87), 42, &[]),
-                finding(Rule::JsJavascriptUrl, "a", Some("href"), (75, 87), 42, &[]),
+                // The `<a>` sits inside the `<p>`, so it carries the `<p>`'s
+                // component id after its own (it has none).
+                finding(
+                    Rule::CspJavascriptUrl,
+                    "a",
+                    Some("href"),
+                    (51, 68),
+                    42,
+                    &["q"]
+                ),
+                finding(
+                    Rule::JsJavascriptUrl,
+                    "a",
+                    Some("href"),
+                    (51, 68),
+                    42,
+                    &["q"]
+                ),
+                finding(
+                    Rule::CspJavascriptUrl,
+                    "a",
+                    Some("href"),
+                    (75, 87),
+                    42,
+                    &["q"]
+                ),
+                finding(
+                    Rule::JsJavascriptUrl,
+                    "a",
+                    Some("href"),
+                    (75, 87),
+                    42,
+                    &["q"]
+                ),
             ]
         );
         assert_eq!(&html.as_bytes()[18..25], b"onclick");
@@ -1489,6 +1573,144 @@ mod tests {
                 &[0],
                 Some("m"),
             );
+        }
+    }
+
+    fn warn_findings(html: &str) -> Vec<(Rule, Vec<String>)> {
+        check(
+            html,
+            PolicyPass::Settled,
+            false,
+            Some(JavascriptMode::Warn),
+            None,
+            &[],
+            None,
+        )
+        .events
+        .into_iter()
+        .filter_map(|event| match event {
+            PolicyEvent::Finding(finding) => Some((finding.rule, finding.cids)),
+            PolicyEvent::RawElement(_) => None,
+        })
+        .collect()
+    }
+
+    fn handler_only_controls(html: &str) -> Vec<String> {
+        check(
+            html,
+            PolicyPass::Settled,
+            false,
+            Some(JavascriptMode::Omit),
+            None,
+            &[],
+            None,
+        )
+        .events
+        .into_iter()
+        .filter_map(|event| match event {
+            PolicyEvent::Finding(finding) if finding.rule == Rule::JsHandlerOnlyControl => {
+                Some(finding.tag)
+            }
+            _ => None,
+        })
+        .collect()
+    }
+
+    #[test]
+    fn a_finding_carries_the_component_ids_of_the_elements_the_browser_put_around_it() {
+        let cases: [(&str, &[&str]); 10] = [
+            // Nested components: the innermost one comes first.
+            (
+                "<div data-cid-outer><section data-cid-inner><a onclick=x>a</a></section></div>",
+                &["inner", "outer"],
+            ),
+            // An element inside `<svg>` keeps the HTML elements around it.
+            ("<div data-cid-x><svg><a onclick=x></a></svg></div>", &["x"]),
+            // Inside `<svg>` the parser spells some names with capitals.
+            (
+                "<div data-cid-x><svg><foreignObject onclick=x></foreignObject></svg></div>",
+                &["x"],
+            ),
+            // The parser keeps a template's children apart from the page,
+            // but they still belong to the component around the template.
+            (
+                "<div data-cid-x><template><a onclick=x>a</a></template></div>",
+                &["x"],
+            ),
+            (
+                "<div data-cid-x><template data-cid-t><template><a onclick=x>a</a></template></template></div>",
+                &["t", "x"],
+            ),
+            // A `<div>` closes the open `<p>`, so the link is not inside it.
+            ("<p data-cid-x>text<div><a onclick=x>a</a></div>", &[]),
+            // A second `<li>` closes the first.
+            ("<ul><li data-cid-x>a<li><a onclick=x>b</a></ul>", &[]),
+            // A closed component does not own what follows it.
+            ("<div data-cid-x></div><a onclick=x>after</a>", &[]),
+            // The parser moves a link written inside a table out before it.
+            (
+                "<table data-cid-t><a onclick=x>x</a><tr><td>c</td></tr></table>",
+                &[],
+            ),
+            // A misnested `</b>` leaves the link outside the `<b>`.
+            ("<b data-cid-x><p>a</b><a onclick=x>b</a>", &[]),
+        ];
+        for (html, expected) in cases {
+            let expected: Vec<String> = expected.iter().map(|cid| (*cid).to_owned()).collect();
+            assert_eq!(
+                warn_findings(html),
+                [(Rule::JsNativeHandler, expected)],
+                "{html}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_control_the_parser_puts_in_an_open_form_has_a_fallback() {
+        // The form submits without JavaScript, so these are not reported.
+        for html in [
+            "<form action=/s><button @click=go>Save</button></form>",
+            "<form><div><button @click=go>Save</button></div></form>",
+            "<form><input @click=go name=q></form>",
+            "<form><select @change=go></select><textarea @input=go></textarea></form>",
+            // Inside a table, the form is closed at once but still owns the
+            // controls the parser inserts until `</form>`.
+            "<table><form><tr><td><button @click=go>Save</button></td></tr></form></table>",
+            // A `form` attribute names the form that owns the button.
+            "<form id=other></form><form><button form=other @click=go>x</button></form>",
+            // `</form>` inside the `<div>` clears the parser's form pointer,
+            // but the `<div>` stays in the form. The browser gives a control
+            // that the parser did not tie to a form the nearest form that
+            // contains it.
+            "<form><div></form><button @click=go>x</button></div>",
+            // The `</div>` closes the form element but leaves the parser's
+            // form pointer set, so the pointer ties the button to the form
+            // although the button lands after it.
+            "<div><form></div><button @click=go>x</button>",
+            // A form inside a template owns the controls inside it.
+            "<template><form><button @click=go>x</button></form></template>",
+            // Known limit: the `</b>` later moves the `<div>` out of the
+            // form, which leaves the button without an owner in the
+            // browser, but the check reads the owner when the parser
+            // inserts the button.
+            "<b><form><div></form><button @click=go>x</button></b>",
+        ] {
+            assert_eq!(handler_only_controls(html), Vec::<String>::new(), "{html}");
+        }
+        // These still have no fallback.
+        for html in [
+            "<button @click=go>Save</button>",
+            // The form was closed before the button.
+            "<form action=/s></form><button @click=go>Save</button>",
+            // A `type=button` button never submits.
+            "<form><button type=button @click=go>x</button></form>",
+            // A template's contents are a separate document, so the form
+            // around the template does not own the button.
+            "<form><template><button @click=go>x</button></template></form>",
+            // A `<button>` inside `<svg>` is an SVG element, not a control.
+            "<form><svg><button @click=go>x</button></svg></form>",
+        ] {
+            assert_eq!(handler_only_controls(html), ["button"], "{html}");
         }
     }
 }
