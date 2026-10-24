@@ -17,7 +17,8 @@ class TabsAlignmentAndOrientation(Component):
         <c-CTabs
           default_value="planets"
           aria_label="Observatory target categories"
-          :align="align" :orientation="orientation"
+          :align="align"
+          :orientation="orientation"
         >
           <c-CTab value="stars">
             Stars

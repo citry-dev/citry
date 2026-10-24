@@ -15,11 +15,31 @@ class CardMedia(Component):
               role="img"
               aria-label="A round table beside a sunlit arched window"
             >
-              <rect width="360" height="190" fill="#d9c5a3" />
+              <rect
+                width="360"
+                height="190"
+                fill="#d9c5a3"
+              />
               <path d="M220 170V70a58 58 0 0 1 116 0v100" fill="#8da7a0" />
-              <circle cx="278" cy="70" r="38" fill="#f7e7a7" opacity=".8" />
-              <ellipse cx="105" cy="135" rx="72" ry="18" fill="#7a4e32" />
-              <path d="M84 135v42M126 135v42" stroke="#513523" stroke-width="8" />
+              <circle
+                cx="278"
+                cy="70"
+                r="38"
+                fill="#f7e7a7"
+                opacity=".8"
+              />
+              <ellipse
+                cx="105"
+                cy="135"
+                rx="72"
+                ry="18"
+                fill="#7a4e32"
+              />
+              <path
+                d="M84 135v42M126 135v42"
+                stroke="#513523"
+                stroke-width="8"
+              />
             </svg>
           </c-fill>
           <c-fill name="header"><h2>Breakfast nook</h2></c-fill>

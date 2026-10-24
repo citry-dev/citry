@@ -9,7 +9,11 @@ class ExpansionModes(Component):
       <section class="expansion-modes" aria-label="Accordion expansion modes">
         <article>
           <h2>One section, always open</h2>
-          <c-CAccordion value="roots" c-collapsible="False" variant="soft">
+          <c-CAccordion
+            value="roots"
+            c-collapsible="False"
+            variant="soft"
+          >
             <c-CAccordionItem value="roots">
               <c-fill name="title">Root network</c-fill>
               <c-fill name="default">Roots trade nutrients with underground fungi.</c-fill>
@@ -22,7 +26,11 @@ class ExpansionModes(Component):
         </article>
         <article>
           <h2>Several sections</h2>
-          <c-CAccordion c-value="('cedar', 'hemlock')" multiple variant="soft">
+          <c-CAccordion
+            c-value="('cedar', 'hemlock')"
+            multiple
+            variant="soft"
+          >
             <c-CAccordionItem value="cedar">
               <c-fill name="title">Western red cedar</c-fill>
               <c-fill name="default">Scale-like leaves stay green through winter.</c-fill>

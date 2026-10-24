@@ -10,7 +10,8 @@ class ControlledListbox(Component):
         <c-CListbox
           label="Review status"
           value="draft"
-          :value="value" :onValueChange="(next) => value = next"
+          :value="value"
+          :onValueChange="(next) => value = next"
         >
           <c-CListboxOption value="draft">Draft</c-CListboxOption>
           <c-CListboxOption value="review">Ready for review</c-CListboxOption>

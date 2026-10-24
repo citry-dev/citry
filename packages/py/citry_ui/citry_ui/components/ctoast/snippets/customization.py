@@ -9,7 +9,11 @@ citry.register_library(citry_ui)
 class CustomizedToast(Component):
     template = """
       <section class="toast-theme">
-        <c-CToastRegion class_="polar-toast" c-items="items" c-duration_ms="0" />
+        <c-CToastRegion
+          class_="polar-toast"
+          c-items="items"
+          c-duration_ms="0"
+        />
       </section>
     """
 

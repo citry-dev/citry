@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class StepperAtAGlance(Component):
     template = """
-      <c-CStepper label="Account setup" c-active="1" variant="soft">
+      <c-CStepper
+        label="Account setup"
+        c-active="1"
+        variant="soft"
+      >
         <c-CStep>Profile</c-CStep>
         <c-CStep>Security</c-CStep>
         <c-CStep>Review</c-CStep>

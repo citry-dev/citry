@@ -1,12 +1,16 @@
-# ruff: noqa: E501 - Vue expression remains readable in the public example
-
 from citry import Component
 
 
 class ControlledColorPicker(Component):
     template = """
       <section >
-        <c-CColorPicker label="Controlled accent" :value="color" :open="open" :onValueChange="(next)=>color=next" :onOpenChange="(next)=>open=next" />
+        <c-CColorPicker
+          label="Controlled accent"
+          :value="color"
+          :open="open"
+          :onValueChange="(next)=>color=next"
+          :onOpenChange="(next)=>open=next"
+        />
         <output v-text="color">#7f56d9</output>
       </section>
     """

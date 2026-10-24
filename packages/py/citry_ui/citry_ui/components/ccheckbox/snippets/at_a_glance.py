@@ -12,7 +12,11 @@ class CheckboxAtAGlance(Component):
           <h2>Woodland observations</h2>
         </header>
         <div class="botanical-checklist__grid">
-          <c-CCheckbox name="observed" value="fern" checked>
+          <c-CCheckbox
+            name="observed"
+            value="fern"
+            checked
+          >
             Lady fern unfurled
           </c-CCheckbox>
           <c-CCheckbox name="observed" value="moss">
@@ -21,7 +25,11 @@ class CheckboxAtAGlance(Component):
               Check the shaded side of fallen trunks.
             </c-fill>
           </c-CCheckbox>
-          <c-CCheckbox name="observed" value="lichen" variant="outline">
+          <c-CCheckbox
+            name="observed"
+            value="lichen"
+            variant="outline"
+          >
             Reindeer lichen present
           </c-CCheckbox>
           <c-CCheckbox disabled>

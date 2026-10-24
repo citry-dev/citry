@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from typing import Any
 
 import citry_ui
@@ -48,10 +46,13 @@ class CommandActions(Component):
         <c-CCommandPalette
           label="Draft commands"
           c-entries="commands"
-          :open="open" :onOpenChange="(value,detail)=>{
+          :open="open"
+          :onOpenChange="(value,detail)=>{
               events.push(`open:${value}:${detail.reason}`);
               open=value;
-            }" :onQueryChange="(value,detail)=>events.push(`query:${value}:${detail.reason}`)" :onAction="(value,detail)=>{
+            }"
+          :onQueryChange="(value,detail)=>events.push(`query:${value}:${detail.reason}`)"
+          :onAction="(value,detail)=>{
               events.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
               if (moveFocus) $refs.focusTarget.focus();
               if (throwNext) { throwNext=false; throw new Error('Application action failed'); }

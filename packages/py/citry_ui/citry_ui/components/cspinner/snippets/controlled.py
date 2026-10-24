@@ -12,7 +12,8 @@ class ControlledSpinner(Component):
         <c-CRow>
           <c-CSpinner
             label="Refreshing orbital catalog"
-            :intent="intent" :size="size"
+            :intent="intent"
+            :size="size"
           />
           <span>Refreshing orbital catalog</span>
         </c-CRow>

@@ -23,7 +23,14 @@ class TreeGridAtAGlance(Component):
     def template_data(self, _kwargs, _slots):
         return {"columns": COLUMNS, "rows": ROWS}
 
-    template = '<c-CTreeGrid c-columns="columns" c-rows="rows" label="Account hierarchy" c-expanded="[\'north\']" />'
+    template = """
+      <c-CTreeGrid
+        c-columns="columns"
+        c-rows="rows"
+        label="Account hierarchy"
+        c-expanded="['north']"
+      />
+    """
 
 
 preview = TreeGridAtAGlance()

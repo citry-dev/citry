@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -19,7 +17,12 @@ class AvatarVariants(Component):
           <div>
             <strong>{{ variant }}</strong>
             <c-for each="size in sizes">
-              <c-CAvatar #c-key="f'{variant}-{size}'" c-variant="variant" c-size="size" c-alt="f'{variant} {size} guide'">MF</c-CAvatar>
+              <c-CAvatar
+                #c-key="f'{variant}-{size}'"
+                c-variant="variant"
+                c-size="size"
+                c-alt="f'{variant} {size} guide'"
+              >MF</c-CAvatar>
             </c-for>
           </div>
         </c-for>

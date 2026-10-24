@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 from citry_ui import CDataGridColumn, CDataGridRow
@@ -16,7 +14,10 @@ class ControlledDataGrid(Component):
           c-rows="rows"
           label="Controlled members"
           selection="multiple"
-          :sort="sort" :selected="selected" :onSortChange="(next)=>sort=next" :onSelectionChange="(next)=>selected=next"
+          :sort="sort"
+          :selected="selected"
+          :onSortChange="(next)=>sort=next"
+          :onSelectionChange="(next)=>selected=next"
         />
       </section>
     """

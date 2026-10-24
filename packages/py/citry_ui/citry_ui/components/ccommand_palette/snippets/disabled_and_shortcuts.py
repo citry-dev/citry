@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 from typing import Any
 
 import citry_ui
@@ -44,7 +42,11 @@ class DisabledAndShortcuts(Component):
           label="Deployment commands"
           c-entries="commands"
           size="lg"
-          :open="open" :disabled="disabled" :loop="loop" :onOpenChange="(value)=>open=value" :onAction="(value)=>last=value"
+          :open="open"
+          :disabled="disabled"
+          :loop="loop"
+          :onOpenChange="(value)=>open=value"
+          :onAction="(value)=>last=value"
         />
         <output aria-live="polite">Action: <span v-text="last">none</span></output>
       </section>

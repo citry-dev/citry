@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class SkeletonPrimitives(Component):
     template = """
-      <div class="skeleton-primitives" aria-label="Loading archive specimens" aria-busy="true">
+      <div
+        class="skeleton-primitives"
+        aria-label="Loading archive specimens"
+        aria-busy="true"
+      >
         <c-CSkeleton width="10rem" height="5rem" />
         <c-CSkeleton kind="circle" width="3rem" />
         <c-CSkeleton kind="text" width="12rem" />

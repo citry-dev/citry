@@ -9,15 +9,22 @@ class MultiSelectStates(Component):
     template = """
       <c-CCol>
         <c-CMultiSelect
-          c-options="options" placeholder="Choose" c-value="['active', 'paused']" readonly
+          c-options="options"
+          placeholder="Choose"
+          c-value="['active', 'paused']"
+          readonly
           c-trigger_attrs="{'aria-label':'Read-only state'}"
         />
         <c-CMultiSelect
-          c-options="options" placeholder="Choose" disabled
+          c-options="options"
+          placeholder="Choose"
+          disabled
           c-trigger_attrs="{'aria-label':'Disabled state'}"
         />
         <c-CMultiSelect
-          c-options="options" placeholder="Choose" invalid
+          c-options="options"
+          placeholder="Choose"
+          invalid
           c-trigger_attrs="{'aria-label':'Invalid state'}"
         />
       </c-CCol>

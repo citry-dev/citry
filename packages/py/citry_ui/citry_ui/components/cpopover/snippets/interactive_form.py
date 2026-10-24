@@ -22,7 +22,11 @@ class InteractivePopover(Component):
           <c-fill name="default">
             <form id="orbit-form">
               <label for="orbit-label">Label</label>
-              <input id="orbit-label" name="label" value="Perijove pass" />
+              <input
+                id="orbit-label"
+                name="label"
+                value="Perijove pass"
+              />
               <label for="orbit-detail">Detail</label>
               <textarea id="orbit-detail" name="detail">Closest approach before sunrise.</textarea>
             </form>

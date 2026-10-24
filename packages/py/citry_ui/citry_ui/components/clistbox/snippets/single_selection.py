@@ -6,7 +6,12 @@ citry.register_library(citry_ui)
 
 class SingleSelection(Component):
     template = """
-      <c-CListbox label="Density" value="comfortable" mandatory variant="outline">
+      <c-CListbox
+        label="Density"
+        value="comfortable"
+        mandatory
+        variant="outline"
+      >
         <c-CListboxOption value="compact">Compact</c-CListboxOption>
         <c-CListboxOption value="comfortable">Comfortable</c-CListboxOption>
         <c-CListboxOption value="spacious">Spacious</c-CListboxOption>

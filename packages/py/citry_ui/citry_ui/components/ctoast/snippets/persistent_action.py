@@ -1,5 +1,3 @@
-# ruff: noqa: E501 - embedded Citry templates remain readable as authored HTML
-
 import citry_ui
 from citry import Component, citry
 
@@ -14,7 +12,11 @@ class PersistentToastAction(Component):
           closeOnAction: false, durationMs: 0, intent: 'warn'
         }]">Show persistent action</c-CButton>
         <output v-text="result"></output>
-        <c-CToastRegion :items="items" :onAction="() => result = 'Retry requested'" :onDismiss="id => items = items.filter(item => item.id !== id)" />
+        <c-CToastRegion
+          :items="items"
+          :onAction="() => result = 'Retry requested'"
+          :onDismiss="id => items = items.filter(item => item.id !== id)"
+        />
       </section>
     """
     js = """

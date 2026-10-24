@@ -10,7 +10,11 @@ class FlowSemanticRoots(Component):
         <c-CRow tag="nav" c-attrs="{'aria-label': 'Ceramics notebook'}">
           <a href="#clay">Clay</a><a href="#glaze">Glaze</a><a href="#kilns">Kilns</a>
         </c-CRow>
-        <c-CCol tag="ol" gap="sm" class_="flow-semantics__list">
+        <c-CCol
+          tag="ol"
+          gap="sm"
+          class_="flow-semantics__list"
+        >
           <li>Wedge the porcelain.</li>
           <li>Center it on the wheel.</li>
           <li>Pull the walls evenly.</li>

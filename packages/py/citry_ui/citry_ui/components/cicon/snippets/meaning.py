@@ -18,7 +18,11 @@ class IconMeaning(Component):
         <article>
           <h2>Icon stands alone</h2>
           <div class="icon-meaning__weather">
-            <c-CIcon name="leaf" size="lg" label="Good growing conditions" />
+            <c-CIcon
+              name="leaf"
+              size="lg"
+              label="Good growing conditions"
+            />
           </div>
           <code>role="img" aria-label="Good growing conditions"</code>
         </article>

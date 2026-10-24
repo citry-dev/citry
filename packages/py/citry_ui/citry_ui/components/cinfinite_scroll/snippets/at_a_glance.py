@@ -12,7 +12,9 @@ class InfiniteScrollAtAGlance(Component):
             aria_label="Activity feed"
             action_name="feed_action"
             c-auto="False"
-            :loading="loading" :hasMore="hasMore" :onLoadMore="loadNextPage"
+            :loading="loading"
+            :hasMore="hasMore"
+            :onLoadMore="loadNextPage"
           >
             <ol>
               <li>Created the project</li>

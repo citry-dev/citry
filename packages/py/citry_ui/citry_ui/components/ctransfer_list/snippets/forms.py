@@ -9,7 +9,11 @@ class TransferListForm(Component):
       <form
         @submit.prevent="result=[...new window.FormData($event.target).getAll('reviewers')].join(' → ')"
       >
-        <c-CTransferList name="reviewers" c-required="True" c-value="['ada']">
+        <c-CTransferList
+          name="reviewers"
+          c-required="True"
+          c-value="['ada']"
+        >
           <c-CTransferListItem value="ada" label="Ada" />
           <c-CTransferListItem value="grace" label="Grace" />
           <c-CTransferListItem value="katherine" label="Katherine" />

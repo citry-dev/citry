@@ -10,7 +10,9 @@ class InfiniteScrollVirtualList(Component):
         <c-CInfiniteScroll
           aria_label="Audit log"
           c-auto="False"
-          :loading="loading" :hasMore="hasMore" :onLoadMore="loadSnapshot"
+          :loading="loading"
+          :hasMore="hasMore"
+          :onLoadMore="loadSnapshot"
         >
           <div :hidden="expanded">
             <c-CVirtualList aria_label="Loaded audit records" c-viewport_size="180">

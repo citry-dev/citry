@@ -33,7 +33,8 @@ class ReactiveImage(Component):
           alt="Live survey frame from Northstar Ridge"
           c-width="1280"
           c-height="720"
-          :src="source" :onStatusChange="(detail)=>{
+          :src="source"
+          :onStatusChange="(detail)=>{
               callbacks++;
               status=detail.status;
               selected=redact(detail.current_src || detail.src);

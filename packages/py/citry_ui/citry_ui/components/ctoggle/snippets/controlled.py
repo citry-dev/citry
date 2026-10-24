@@ -11,7 +11,8 @@ class ControlledToggle(Component):
         <c-CToggleGroup
           label="Observation view"
           value="sky"
-          :value="view" :onValueChange="(next) => view = next"
+          :value="view"
+          :onValueChange="(next) => view = next"
         >
           <c-CToggle value="sky">Sky</c-CToggle>
           <c-CToggle value="spectrum">Spectrum</c-CToggle>

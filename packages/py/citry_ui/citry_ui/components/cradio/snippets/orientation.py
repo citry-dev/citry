@@ -14,7 +14,11 @@ class RadioOrientation(Component):
             <c-CRadio value="autumn">Autumn</c-CRadio>
           </c-fill>
         </c-CRadioGroup>
-        <c-CRadioGroup name="season-horizontal" value="spring" orientation="horizontal">
+        <c-CRadioGroup
+          name="season-horizontal"
+          value="spring"
+          orientation="horizontal"
+        >
           <c-fill name="label">Horizontal</c-fill>
           <c-fill name="default">
             <c-CRadio value="spring">Spring</c-CRadio>

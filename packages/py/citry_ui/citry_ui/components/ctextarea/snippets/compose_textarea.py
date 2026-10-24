@@ -17,7 +17,11 @@ class ComposeTextarea(Component):
 
         <div>
           <label for="quick-sketch">Quick sketch notes</label>
-          <c-CTextarea id="quick-sketch" name="quick_sketch" rows="3" />
+          <c-CTextarea
+            id="quick-sketch"
+            name="quick_sketch"
+            rows="3"
+          />
         </div>
       </section>
     """

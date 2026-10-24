@@ -11,12 +11,17 @@ class AvatarReactive(Component):
       >
         <c-CAvatar
           alt="Moonfen lookout"
-          :src="source" :onStatusChange="detail => status = detail.status"
+          :src="source"
+          :onStatusChange="detail => status = detail.status"
         >ML</c-CAvatar>
         <p>Status: <strong v-text="status">fallback</strong></p>
         <div class="avatar-reactive__actions">
           <c-CButton size="sm" @click="source = '/missing-lookout-a.png'">Try missing image</c-CButton>
-          <c-CButton size="sm" variant="outline" @click="source = null">Use fallback</c-CButton>
+          <c-CButton
+            size="sm"
+            variant="outline"
+            @click="source = null"
+          >Use fallback</c-CButton>
         </div>
       </div>
     """

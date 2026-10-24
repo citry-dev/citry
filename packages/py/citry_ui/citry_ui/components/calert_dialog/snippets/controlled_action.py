@@ -9,7 +9,8 @@ class ControlledArchive(Component):
       <section >
         <c-CAlertDialog
           id="archive-record"
-          :open="open" :onOpenChange="(next, detail) => {
+          :open="open"
+          :onOpenChange="(next, detail) => {
               if (detail.returnValue === 'action') {
                 pending = true;
                 result = 'Archiving...';
@@ -30,7 +31,11 @@ class ControlledArchive(Component):
           <c-fill name="title">Archive this record?</c-fill>
           <c-fill name="description">It will leave the active workspace.</c-fill>
           <c-fill name="cancel" data="{cancel_attrs}">
-            <c-CButton c-attrs="cancel_attrs" variant="outline" :disabled="pending">Cancel</c-CButton>
+            <c-CButton
+              c-attrs="cancel_attrs"
+              variant="outline"
+              :disabled="pending"
+            >Cancel</c-CButton>
           </c-fill>
           <c-fill name="action" data="{action_attrs}">
             <c-CButton c-attrs="action_attrs" :loading="pending">Archive</c-CButton>

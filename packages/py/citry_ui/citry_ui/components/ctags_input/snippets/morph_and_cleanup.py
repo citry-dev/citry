@@ -55,7 +55,8 @@ class TagsInputMorphAndCleanup(Component):
               c-value="baseline"
               input_value="unfinished"
               c-input_attrs="{'aria-label':'Morph labels'}"
-              :value="controlled ? tags : null" :onValueChange="(next)=>{
+              :value="controlled ? tags : null"
+              :onValueChange="(next)=>{
                   if (controlled) tags=next;
                 }"
             />

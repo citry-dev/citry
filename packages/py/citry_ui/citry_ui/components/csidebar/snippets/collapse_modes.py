@@ -7,13 +7,27 @@ citry.register_library(citry_ui)
 class SidebarCollapseModes(Component):
     template = """
       <div class="sidebar-modes">
-        <c-CSidebar label="Rail example" c-collapsed="True" collapsible="rail" size="sm">
+        <c-CSidebar
+          label="Rail example"
+          c-collapsed="True"
+          collapsible="rail"
+          size="sm"
+        >
           <strong>Rail content remains available.</strong>
         </c-CSidebar>
-        <c-CSidebar label="Offcanvas example" c-collapsed="True" collapsible="offcanvas" size="sm">
+        <c-CSidebar
+          label="Offcanvas example"
+          c-collapsed="True"
+          collapsible="offcanvas"
+          size="sm"
+        >
           <strong>The panel starts hidden.</strong>
         </c-CSidebar>
-        <c-CSidebar label="Permanent example" collapsible="none" size="sm">
+        <c-CSidebar
+          label="Permanent example"
+          collapsible="none"
+          size="sm"
+        >
           <strong>No toggle is rendered.</strong>
         </c-CSidebar>
       </div>
