@@ -408,6 +408,13 @@
   type checks on its other fields when the module has no `from __future__
   import annotations`. Every field used to accept any value from the
   browser.
+- An `on_render` hook that passes the output it received to another
+  component, such as `return Frame(body=result)`, now works when the
+  component is used inside another component's template, on a page
+  rendered without Vue. This also works for an `on_component_rendered`
+  hook that wraps `ctx.render`, and when the component, or one around it,
+  is cached. Turning the page into HTML used to raise `RuntimeError: The
+  same rendered component id was encountered more than once`.
 
 ### Performance
 
