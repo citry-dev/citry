@@ -193,8 +193,11 @@ few allowances:
 - A field's own default value always passes, so `tags: list[str] = ()`
   works when the input is left out. A non-empty tuple such as `("a",)`
   still fails, and so does a wrong value from a `default_factory`.
-- `Literal["a", "b"]` accepts only those values, and `type[Row]` accepts
-  the class `Row` or a subclass.
+- `Literal["a", "b"]` accepts those values, and also a value of a `str` or
+  `int` subclass that equals one, such as a `StrEnum` member or
+  `Markup("a")`. A `bool` never matches an `int` member: `True` does not
+  pass for `Literal[1]`, and `1` does not pass for `Literal[True]`.
+- `type[Row]` accepts the class `Row` or a subclass.
 
 Citry skips an annotation it cannot test while the page runs: `Any`,
 `object`, a type variable, a `Protocol` without `@runtime_checkable`, and a

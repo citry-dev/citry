@@ -148,7 +148,8 @@
   `class Lint:`, or pass
   `Citry(lint=LintSettings(check_input_types=False))`. If you use Citry
   UI, upgrade it at the same time: earlier Citry UI releases reject some
-  valid inputs under this check.
+  valid inputs under this check. A value that equals a `Literal` member,
+  such as a `StrEnum` member or `Markup("sm")`, passes the check.
 
   ```python
   class Card(Component):
