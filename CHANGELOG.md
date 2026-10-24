@@ -221,21 +221,26 @@
   `requires-python = ">=3.10"`, raise it to `">=3.11"` before upgrading,
   or uv and other lockfile tools cannot pick this release.
 
-- **Breaking:** values chosen while a page renders can no longer reach a
-  place the browser runs. Each of these now raises `ValueError`:
-  - `actions.Redirect(url)` with a scheme other than `http:` or `https:`;
-    relative URLs still work, as with Django's `HttpResponseRedirect`, and
-    the browser refuses such a redirect too.
+- **Breaking:** Citry now checks more values that your code passes while
+  a page renders. Each of these raises `ValueError`:
+  - `actions.Redirect(url)` with a scheme other than `http:` or `https:`.
+    Relative URLs such as `/projects/` still work. Use a full `https:` URL
+    or a path instead.
   - A `c-bind` mapping key, or a name an `on_attrs_resolved` hook adds,
-    that starts with `on`, such as `onclick`. Handlers you write in the
-    template, such as `onclick="..."` or `c-onclick="..."`, still work.
-  - An attribute name from data that contains a control character, a
-    quote, a byte-order mark, or a Unicode noncharacter.
-  - `<c-element c-is="...">` naming a tag such as `script`, `style`,
-    `iframe`, or `textarea`, whose contents escaping cannot protect.
-  - A `css_data()` value with a comment, a brace, a top-level `!`, a
-    backslash outside a quoted string, or a malformed string or `url()`. Quoted font names, `rgb()`, `calc()`, and
-    `url()` values, SVG data URLs included, still work.
+    that starts with `on`, such as `onclick`, or that is `innerHTML`,
+    `outerHTML`, or `srcdoc`. Write such an attribute in the template
+    instead, such as `onclick="..."`, `@click`, or `@c-click`.
+  - An attribute name from data that contains whitespace, a control
+    character, a quote, a byte-order mark, or a Unicode noncharacter.
+    Rename the key.
+  - `<c-element>` with `is` or `c-is` naming a tag such as `script`,
+    `style`, `iframe`, or `textarea`, whose contents the browser reads as
+    raw text or code. Write such an element directly in the template.
+  - A `css_data()` value without spaces that has a comment, a brace, a
+    top-level `;` or `!`, a `<` or backslash outside a string or `url()`,
+    or a malformed string or `url()`, and any value containing `</style`
+    or `<!--`. `rgb()`, `calc()`, and `url()` values, SVG data URLs
+    included, still work.
 - **Breaking:** a component input of the wrong type now raises
   `TypeError` when the component renders, in development and in
   production. Fix the value or widen the annotation; to keep the old

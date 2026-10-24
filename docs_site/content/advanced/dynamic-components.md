@@ -165,13 +165,15 @@ A tag name starts with a letter, followed by letters, digits, hyphens,
 underscores, or dots. Custom elements such as `my-widget` and SVG names
 such as `clipPath` work. Any other value raises `ValueError`.
 
-`<c-element>` also refuses tags whose contents the browser runs, loads,
-or reads as raw text, in any letter case: `script`, `style`, `base`,
-`meta`, `link`, `iframe`, `frame`, `frameset`, `object`, `embed`,
-`applet`, `plaintext`, `xmp`, `noembed`, `noframes`, `noscript`, `title`,
-`textarea`, and `template`. Escaping cannot protect the body of such an
-element. Pick the tag from a fixed list in your code, and write one of
-these elements directly in the template when you need it.
+`<c-element>` also raises `ValueError`, in any letter case, for a tag the
+browser handles in a special way: it runs or loads the element, reads its
+contents as raw text, or changes how it reads the rest of the page. These
+are `script`, `style`, `base`, `meta`, `link`, `iframe`, `frame`,
+`frameset`, `object`, `embed`, `applet`, `plaintext`, `xmp`, `noembed`,
+`noframes`, `noscript`, `title`, `textarea`, and `template`. Citry
+escapes an element's body as HTML text, which does not fit these tags.
+When you need one, write it directly in the template, for example in a
+`c-if` branch.
 
 Void elements are recognized in any letter case, so `BR` renders compact
 `<BR/>` and rejects a body, just like `br`.

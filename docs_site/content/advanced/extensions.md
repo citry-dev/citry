@@ -147,13 +147,14 @@ Never pass user input to the `Markup()` constructor. Return it as a plain
 page's HTML, and Citry uses that as it is.
 
 Hooks that return a template, script, stylesheet, or the page's HTML,
-such as `on_template_loaded`, `on_template_compiled`, `on_js_loaded`,
-`on_css_loaded`, and `on_serialize`, hand Citry code that the browser
-runs. Build those results from your extension's own text, never from
-request data. An `on_attrs_resolved` hook may change attribute values,
-but it may not add an inline event handler such as `onclick`; Citry
-raises `ValueError` if it does. A hook may change the value of a handler
-the template already has, so never put request data into such a value.
+such as `on_template_loaded`, `on_js_loaded`, `on_css_loaded`, and
+`on_serialize`, give Citry code that the server or the browser runs.
+Build those results from your extension's own text, never from request
+data. An `on_attrs_resolved` hook may change attribute values, but it may
+not add an inline event handler such as `onclick`, or `innerHTML`,
+`outerHTML`, or `srcdoc`; Citry raises `ValueError` if it does. A hook
+may change the value of a handler the template already has, so never
+put request data into a handler's value.
 
 ### Handle a failed render
 

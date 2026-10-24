@@ -191,15 +191,20 @@ Each value must be a string, a finite number (not a boolean), or `None`,
 which leaves the property empty. Any other value, such as a `bool` or a
 `list`, raises `ValueError` when the component renders. A key must
 be a string that is valid as the name of a custom property, without the
-leading `--`. Citry quotes a string that contains spaces,
-unless it starts with a CSS function such as `calc(...)` or `rgba(...)`.
-It reads each value the way the browser's CSS parser does and raises
-`ValueError` for one that could break out of its declaration: a top-level
-`;` or `!`, a brace, an unbalanced bracket, a comment, a backslash
-outside a quoted string, an unclosed or
-malformed string or `url()`, a `<` outside a string or `url()`, or a
-`</style` end tag anywhere. A quoted font name, `rgb(...)`, `calc(...)`,
-and `url(...)`, including an SVG data URL, keep working.
+leading `--`.
+
+A string value with a space is sent as one quoted CSS string, unless it
+starts with a CSS function such as `calc(...)` or `rgba(...)`, so it
+cannot hold a font list or a keyword such as `!important`. Any other
+string is used as written, and Citry raises `ValueError` when it has:
+
+- a `;`, `!`, brace, comment, `<`, or backslash outside a string or
+  `url()`;
+- an unbalanced bracket;
+- a malformed string or `url()`.
+
+A value containing `</style` or `<!--` always raises. `rgb(...)`,
+`calc(...)`, and `url(...)` values work, including SVG data URLs.
 
 To use data in a stylesheet, pass it through `css_data()`, not through
 `{{ }}` inside a `<style>` element you write in the template. The same

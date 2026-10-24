@@ -260,12 +260,13 @@ class Events:
 When a plain HTML form posts to the handler's URL, the same action becomes a
 real HTTP redirect. See [Event routes](/events/routes/).
 
-The URL must be an `http:` or `https:` URL, or a relative one such as
+The URL must use `http:` or `https:`, or be relative, such as
 `/projects/` or `?page=2`. Any other scheme raises `ValueError` when you
-build the action, and the browser refuses it too, as Django's
-`HttpResponseRedirect` does. A URL from the request, such as a `next`
-parameter, may still point to another site, so check it against your own
-paths if that matters.
+create the action. If such a redirect reaches the browser another way,
+such as through `Citry.events.applyActions()`, the browser logs an error
+and stays on the page. A URL taken from the request, such as a `next`
+parameter, can still point to another site. Check it against your own
+paths before you redirect to it.
 
 ## `PushUrl`, `ReplaceUrl` { #change-the-url }
 

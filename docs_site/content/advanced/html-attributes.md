@@ -206,13 +206,6 @@ mapping.
 Citry's own `@c-` and `:c-` Events bindings are the exception: a mapping
 may set them. See [Bind events in templates](/events/bindings/).
 
-A mapping also may not set an inline event handler, a name that starts
-with `on` in any letter case, such as `onclick`, because the browser runs
-its value as JavaScript. That raises `ValueError`, and so does an
-`on_attrs_resolved` extension hook that adds such a name. An inline
-handler you write in the template, such as `onclick="..."` or
-`c-onclick="handler"`, keeps working, because you chose to run that code.
-
 Vue bindings written on a component tag, such as `@click` on
 `<c-ActionButton>`, do not reach the component's Python `attrs` input. Vue
 passes them to the component as props or listeners, or adds them to its
@@ -224,23 +217,34 @@ for the component-boundary rules, and
 [Attributes](/syntax/attributes/) for static, dynamic, and spread
 values in templates.
 
+## Write handlers in the template
+
+`c-bind` refuses a name that starts with `on`, in any letter case, such
+as `onclick`, and the names `innerHTML`, `outerHTML`, and `srcdoc`. The
+browser reads those values as code or markup. It raises `ValueError`, and
+so does an `on_attrs_resolved` hook that adds such a name. Write the
+attribute in the template instead, such as `onclick="..."`, `@click` on a
+Vue page, or `@c-click`. An attribute you write in the template, including
+`c-onclick="handler"`, keeps working because you chose its name. Its value
+still runs as JavaScript, so choose that value in your own code.
+
+!!! warning "Choose values the browser runs"
+
+    Citry escapes every attribute value, but it does not check what the
+    value means. Some attributes hold code or a page the browser loads,
+    such as `href`, `src`, `srcdoc`, and inline handlers. When such a
+    value comes from request data, choose it in your own code or check it
+    before you use it.
+
 ## Less common cases
 
 ### Invalid names
 
 An attribute name must be a string. Any other key raises `TypeError`. A
-name that is empty, or contains whitespace or another control character, a
-quote, `=`, `/`, `>`, `<`, a byte-order mark, a Unicode noncharacter, or
-`{#`, raises `ValueError`. `c-bind` checks names the same way when it adds
+name that is empty, or contains whitespace, a control character, a quote,
+`=`, `/`, `>`, `<`, a byte-order mark, a lone surrogate, a Unicode
+noncharacter, or `{#`, raises `ValueError`. `c-bind` checks names the same way when it adds
 a mapping to an element.
-
-### Values the browser runs
-
-Citry escapes every attribute value, but it does not check what a value
-means. A `javascript:` URL in `href` or `src`, an `<iframe>` `srcdoc`, or a
-value you pass to an inline handler runs in the page when it comes from
-your users. Choose these values in your own code, or check them, as you
-would in Vue, Jinja, or Django.
 
 ### Escape `Markup` values
 
