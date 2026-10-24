@@ -1,4 +1,4 @@
-use pest::error::{InputLocation, LineColLocation};
+use pest::error::{ErrorVariant, InputLocation, LineColLocation};
 use pyo3::prelude::*;
 use thiserror::Error;
 
@@ -10,7 +10,7 @@ use crate::grammar::Rule;
 /// Indices are half-open UTF-8 byte offsets in the complete template source.
 /// Pest position errors have an empty range. Line and column values are
 /// 1-based, matching Pest's rendered diagnostics.
-#[pyclass(frozen)]
+#[pyclass(from_py_object, frozen)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseDiagnostic {
     /// Stable identifier for the broad failure category.
@@ -86,10 +86,7 @@ pub enum ParseError {
 impl ParseError {
     /// Helper function to create a ParseError with position information from a span
     pub fn from_span(span: pest::Span, message: String) -> ParseError {
-        ParseError::Syntax(pest::error::Error::new_from_span(
-            pest::error::ErrorVariant::CustomError { message },
-            span,
-        ))
+        ParseError::Syntax(error_from_span(ErrorVariant::CustomError { message }, span))
     }
 
     /// Return stable, machine-readable details without changing display text.
@@ -127,6 +124,80 @@ impl ParseError {
             },
         }
     }
+}
+
+/// Build the error `pest::error::Error::new_from_span` builds for `span`, in
+/// time that grows only with the input's length.
+///
+/// Pest renders an error with the first and last line of its span. To find
+/// the last one, it walks every line of the span, and each step searches
+/// from the ends of the whole input, so a span over many lines of a long
+/// template took time that grows with the line count times the input length.
+/// The error depends only on the span's first and last lines and on its first
+/// and last characters, so a span over three or more lines is rebuilt on a
+/// copy holding just those two lines. It is then given its real byte range
+/// and its start and end line and column, which pest computes in one pass
+/// each.
+fn error_from_span(variant: ErrorVariant<Rule>, span: pest::Span) -> pest::error::Error<Rule> {
+    let input = span.get_input();
+    let (start, end) = (span.start(), span.end());
+    // The first line is the one holding `start`, including its `\n`.
+    let first_line_start = input[..start].rfind('\n').map_or(0, |index| index + 1);
+    let first_line_end = input[start..]
+        .find('\n')
+        .map_or(input.len(), |index| start + index + 1);
+    // Pest's line walk ends on the line holding `end`, or on the line of the
+    // last character when `end` is the end of the input.
+    let last_probe = if end < input.len() {
+        end
+    } else {
+        input
+            .char_indices()
+            .next_back()
+            .map_or(0, |(index, _)| index)
+    };
+    let last_line_start = input[..last_probe].rfind('\n').map_or(0, |index| index + 1);
+    // A span over one or two lines already costs only a few passes over the
+    // input, so pest builds it directly.
+    if last_line_start <= first_line_end {
+        return pest::error::Error::new_from_span(variant, span);
+    }
+    let last_line_end = input[last_line_start..]
+        .find('\n')
+        .map_or(input.len(), |index| last_line_start + index + 1);
+
+    // The copy keeps the span's first and last character, so pest makes the
+    // same choice about showing whitespace, and the same two lines.
+    let first_line = &input[first_line_start..first_line_end];
+    let copy = format!("{first_line}{}", &input[last_line_start..last_line_end]);
+    let copy_span = pest::Span::new(
+        &copy,
+        start - first_line_start,
+        first_line.len() + (end - last_line_start),
+    )
+    .expect("the copied span lies on the same character boundaries");
+    let mut error = pest::error::Error::new_from_span(variant, copy_span);
+
+    // The byte range and the start and end line and column describe the real
+    // input, computed the way `new_from_span` computes them. An end just after a `\n` points at
+    // that `\n`, one column past the last character of its line.
+    let line_col = |offset: usize| {
+        pest::Position::new(input, offset)
+            .expect("span offsets are character boundaries")
+            .line_col()
+    };
+    let mut end_line_col = line_col(end);
+    if end_line_col.1 == 1 {
+        let before_end = input[..end]
+            .char_indices()
+            .next_back()
+            .map_or(0, |(index, _)| index);
+        let (line, column) = line_col(before_end);
+        end_line_col = (line, column + 1);
+    }
+    error.location = InputLocation::Span((start, end));
+    error.line_col = LineColLocation::Span(line_col(start), end_line_col);
+    error
 }
 
 pub fn assert_rule(pair: &pest::iterators::Pair<Rule>, rule: Rule) -> Result<(), ParseError> {

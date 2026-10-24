@@ -62,7 +62,9 @@ class CommandPaletteEnvironment(Component):
             '--cui-command-palette-inline-size':'min(42rem, calc(100dvi - 1rem))',
             '--cui-command-palette-row-min-block-size':'3rem',
           }"
-          :open="open" :size="size" :onOpenChange="(value)=>open=value"
+          :open="open"
+          :size="size"
+          :onOpenChange="(value)=>open=value"
         />
         <p>
           Inspect sm, md, and lg at 200% and 400% zoom, narrow and wide widths,

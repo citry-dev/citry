@@ -1,4 +1,4 @@
-# ruff: noqa: ANN001, ANN201, E501 - public template stays readable
+# ruff: noqa: ANN001, ANN201 - public template stays readable
 
 import citry_ui
 from citry import Component, citry
@@ -21,7 +21,19 @@ class TreeGridCustomCells(Component):
             ],
         }
 
-    template = """<c-CTreeGrid c-columns="columns" c-rows="rows" label="Initiatives" c-expanded="['quality']"><c-fill name="cell" data="{ column, cell }"><strong c-if="column.key == 'score'">{{ cell.value }}%</strong><span c-else>{{ cell.value }}</span></c-fill></c-CTreeGrid>"""
+    template = """
+      <c-CTreeGrid
+        c-columns="columns"
+        c-rows="rows"
+        label="Initiatives"
+        c-expanded="['quality']"
+      >
+        <c-fill name="cell" data="{ column, cell }">
+          <strong c-if="column.key == 'score'">{{ cell.value }}%</strong>
+          <span c-else>{{ cell.value }}</span>
+        </c-fill>
+      </c-CTreeGrid>
+    """
 
 
 preview = TreeGridCustomCells()

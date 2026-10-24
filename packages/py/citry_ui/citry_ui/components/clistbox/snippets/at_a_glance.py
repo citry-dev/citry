@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class ListboxAtAGlance(Component):
     template = """
-      <c-CListbox label="Choose a workspace" value="atlas" variant="soft">
+      <c-CListbox
+        label="Choose a workspace"
+        value="atlas"
+        variant="soft"
+      >
         <c-CListboxOption value="atlas">
           <c-fill name="default">Atlas research</c-fill>
           <c-fill name="description">12 collaborators</c-fill>

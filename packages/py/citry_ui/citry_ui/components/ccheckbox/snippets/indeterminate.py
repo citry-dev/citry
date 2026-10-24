@@ -11,7 +11,8 @@ class IndeterminateCheckbox(Component):
       >
         <c-CCheckbox
           variant="outline"
-          :checked="all" :indeterminate="mixed"
+          :checked="all"
+          :indeterminate="mixed"
           @input="setAll($event.target.checked)"
         >
           <c-fill name="default">All survey habitats</c-fill>

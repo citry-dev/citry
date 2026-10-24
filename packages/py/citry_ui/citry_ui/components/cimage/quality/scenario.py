@@ -224,7 +224,8 @@ def image_states_component(app: Citry) -> type[Component]:
                       'reactive client-props callback native-events isolated-scope dispatch '
                       + 'rapid supersession stale-events redacted cached shadow-root',
                   }"
-                  :src="reactiveSource" :onStatusChange="(detail)=>{
+                  :src="reactiveSource"
+                  :onStatusChange="(detail)=>{
                       reactiveCallbacks++;
                       reactiveStatus=detail.status;
                       reactiveSelected=redact(detail.current_src || detail.src);

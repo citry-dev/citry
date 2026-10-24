@@ -481,24 +481,67 @@ class CInternalCascader(LibraryComponent):
         }
 
     template = """
-      <div class="cui-cascader" c-id="root_id" c-bind="root_attrs" data-citry-ui-part="cascader">
-        <button type="button" c-id="trigger_id" c-disabled="disabled" c-aria-label="aria_label" c-aria-labelledby="aria_labelledby" aria-haspopup="tree" c-aria-controls="popup_id" c-aria-expanded="'true' if open else 'false'" data-citry-ui-part="trigger">
+      <div
+        class="cui-cascader"
+        c-id="root_id"
+        c-bind="root_attrs"
+        data-citry-ui-part="cascader"
+      >
+        <button
+          type="button"
+          c-id="trigger_id"
+          c-disabled="disabled"
+          c-aria-label="aria_label"
+          c-aria-labelledby="aria_labelledby"
+          aria-haspopup="tree"
+          c-aria-controls="popup_id"
+          c-aria-expanded="'true' if open else 'false'"
+          data-citry-ui-part="trigger"
+        >
           <span data-citry-ui-part="value">{{ tr('citry-ui-cascader-placeholder') if catalog_placeholder and not joined else display }}</span>
           <span aria-hidden="true" data-citry-ui-part="indicator">⌄</span>
         </button>
-        <div c-id="popup_id" c-hidden="not open" data-citry-ui-part="popup">
-          <ul role="tree" c-aria-labelledby="trigger_id" c-hidden="not roots" data-citry-cascader-column data-level="1" data-citry-ui-part="tree">
+        <div
+          c-id="popup_id"
+          c-hidden="not open"
+          data-citry-ui-part="popup"
+        >
+          <ul
+            role="tree"
+            c-aria-labelledby="trigger_id"
+            c-hidden="not roots"
+            data-citry-cascader-column
+            data-level="1"
+            data-citry-ui-part="tree"
+          >
             <c-for each="entry in root_entries"><c-CInternalCascaderOption #c-key="entry['option'].key" c-bind="entry" c-root_id="root_id" c-selected="value" c-level="1" /></c-for>
           </ul>
           <c-for each="parent in groups"><c-CInternalCascaderGroup #c-key="parent.key" c-parent="parent" c-root_id="root_id" c-selected="value" /></c-for>
-          <p c-if="not roots" data-citry-ui-part="empty" c-$c-tr:citry-ui-cascader-empty="True if catalog_empty else None">{{ tr('citry-ui-cascader-empty') if catalog_empty else labels['empty'] }}</p>
+          <p
+            c-if="not roots"
+            data-citry-ui-part="empty"
+            c-$c-tr:citry-ui-cascader-empty="True if catalog_empty else None"
+          >{{ tr('citry-ui-cascader-empty') if catalog_empty else labels['empty'] }}</p>
         </div>
         <span data-citry-ui-part="inputs" hidden>
           <c-for each="segment in value"><input type="hidden" c-name="name" c-value="segment" c-form="form" c-disabled="disabled or name is None" /></c-for>
         </span>
-        <span hidden aria-hidden="true" c-$c-tr:citry-ui-cascader-placeholder="True">{{ tr('citry-ui-cascader-placeholder') }}</span>
-        <span hidden aria-hidden="true" c-$c-tr:citry-ui-cascader-selected="True">{{ tr('citry-ui-cascader-selected', path=joined) }}</span>
-        <span data-citry-ui-part="status" role="status" aria-live="polite" aria-atomic="true">{{ status }}</span>
+        <span
+          hidden
+          aria-hidden="true"
+          c-$c-tr:citry-ui-cascader-placeholder="True"
+        >{{ tr('citry-ui-cascader-placeholder') }}</span>
+        <span
+          hidden
+          aria-hidden="true"
+          c-$c-tr:citry-ui-cascader-selected="True"
+        >{{ tr('citry-ui-cascader-selected', path=joined) }}</span>
+        <span
+          data-citry-ui-part="status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >{{ status }}</span>
       </div>
     """
 
@@ -557,7 +600,11 @@ class CInternalCascaderOption(LibraryComponent):
         }
 
     template = """
-      <li c-bind="attrs" #c-key="option.value" data-citry-ui-part="option">
+      <li
+        c-bind="attrs"
+        #c-key="option.value"
+        data-citry-ui-part="option"
+      >
         <div data-citry-ui-part="option-row"><span data-citry-ui-part="option-label">{{ option.label }}</span><span c-if="has_children" aria-hidden="true" data-citry-ui-part="option-indicator">&#8250;</span></div>
       </li>
     """
@@ -593,7 +640,14 @@ class CInternalCascaderGroup(LibraryComponent):
         }
 
     template = """
-      <ul c-id="group_id" role="group" c-hidden="not active" data-citry-cascader-column c-data-level="level" data-citry-ui-part="group">
+      <ul
+        c-id="group_id"
+        role="group"
+        c-hidden="not active"
+        data-citry-cascader-column
+        c-data-level="level"
+        data-citry-ui-part="group"
+      >
         <c-for each="entry in entries"><c-CInternalCascaderOption #c-key="entry['option'].key" c-bind="entry" c-root_id="root_id" c-selected="selected" c-level="level" /></c-for>
       </ul>
     """

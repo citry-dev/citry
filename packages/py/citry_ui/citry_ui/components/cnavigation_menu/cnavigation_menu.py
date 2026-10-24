@@ -814,7 +814,11 @@ class CNavigationMenuLink(LibraryComponent):
         }
 
     template = """
-      <li class="cui-navigation-menu__link-item" c-bind="attrs" data-citry-ui-part="link-item">
+      <li
+        class="cui-navigation-menu__link-item"
+        c-bind="attrs"
+        data-citry-ui-part="link-item"
+      >
         <a
           c-bind="link_attrs"
           c-href="href"

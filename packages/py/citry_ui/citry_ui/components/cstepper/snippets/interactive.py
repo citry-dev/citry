@@ -11,7 +11,8 @@ class InteractiveStepper(Component):
           label="Publication workflow"
           c-active="1"
           interactive
-          :active="active" :onActiveChange="(next) => active = next"
+          :active="active"
+          :onActiveChange="(next) => active = next"
         >
           <c-CStep>Draft</c-CStep>
           <c-CStep>Review</c-CStep>

@@ -13,7 +13,12 @@ class TagCustomization(Component):
       }
     """
     template = """
-      <c-CTagGroup label="Forest filters" class_="forest-tags" selection_mode="multiple" c-value="['fern']">
+      <c-CTagGroup
+        label="Forest filters"
+        class_="forest-tags"
+        selection_mode="multiple"
+        c-value="['fern']"
+      >
         <c-CTag value="fern">Fern</c-CTag>
         <c-CTag value="moss">Moss</c-CTag>
         <c-CTag value="river">River</c-CTag>

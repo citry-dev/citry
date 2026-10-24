@@ -20,7 +20,11 @@ class SplitButtonForms(Component):
         >
           <label>
             Accession name
-            <input name="specimen" value="Alpine gentian" required />
+            <input
+              name="specimen"
+              value="Alpine gentian"
+              required
+            />
           </label>
           <div class="split-button-forms__actions">
             <c-CSplitButton
@@ -60,7 +64,11 @@ class SplitButtonForms(Component):
         >
           <label>
             Secondary accession
-            <input name="secondary-specimen" value="Sea thrift" required />
+            <input
+              name="secondary-specimen"
+              value="Sea thrift"
+              required
+            />
           </label>
         </form>
 

@@ -15,7 +15,12 @@ class CustomizedListbox(Component):
       }
     """
     template = """
-      <c-CListbox label="Finish" value="copper" class_="copper-listbox" variant="outline">
+      <c-CListbox
+        label="Finish"
+        value="copper"
+        class_="copper-listbox"
+        variant="outline"
+      >
         <c-CListboxOption value="copper">
           <c-fill name="start"><span aria-hidden="true">◆</span></c-fill>
           <c-fill name="default">Burnished copper</c-fill>

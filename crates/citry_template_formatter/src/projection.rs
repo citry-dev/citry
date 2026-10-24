@@ -34,6 +34,7 @@ use crate::html::{
     ContainerKind, EdgeKind, GapContext, WhitespaceClass, classify_gap, container_kind_for_tag,
 };
 use crate::layout::{ItemEdges, analyze_elements};
+use crate::python::with_enough_stack;
 
 /// How much the projection is willing to ignore.
 ///
@@ -614,6 +615,15 @@ fn project_expression(expr: &Expr, mode: ProjectionCapability) -> Result<String,
 /// Comments are carried separately because they are not part of the tree, so
 /// comparing trees alone would let a provider drop one unnoticed.
 fn project_python(source: &str, kind: &'static str) -> Result<AttrValueProjection, ContractError> {
+    // The tree comparison and its `Debug` text call themselves once per tree
+    // level, so they need the same stack guarantee as formatting.
+    with_enough_stack(|| project_python_on_stack(source, kind))
+}
+
+fn project_python_on_stack(
+    source: &str,
+    kind: &'static str,
+) -> Result<AttrValueProjection, ContractError> {
     let parsed = parse_expression(source).map_err(|error| ContractError::Python {
         kind,
         message: error.to_string(),

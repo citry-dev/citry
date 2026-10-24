@@ -54,7 +54,8 @@ class TabsControlledSelection(Component):
         <c-CTabs
           default_value="mercury"
           aria_label="Planetary briefing topics"
-          :value="current" :onValueChange="(value, detail) => {
+          :value="current"
+          :onValueChange="(value, detail) => {
               requested = value;
               requestSource = detail.source;
               if (applyRequests) {

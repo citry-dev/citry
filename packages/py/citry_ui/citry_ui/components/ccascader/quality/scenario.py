@@ -12,12 +12,22 @@ def cascader_states_component(app: Citry) -> type[Component]:
           <section class="citry-ui-quality-stack" data-quality-cascader-ready >
             <h1>Cascader states</h1>
             <form>
-              <c-CCascader id="quality-cascader" name="place" c-open="True" c-value="['world','europe','prague']" c-attrs="quality_attrs">
+              <c-CCascader
+                id="quality-cascader"
+                name="place"
+                c-open="True"
+                c-value="['world','europe','prague']"
+                c-attrs="quality_attrs"
+              >
                 <c-CCascaderOption value="world" label="A very long world category label">
                   <c-CCascaderOption value="europe" label="Europe"><c-CCascaderOption value="prague" label="Prague" /><c-CCascaderOption value="berlin" label="Berlin" /></c-CCascaderOption>
                   <c-CCascaderOption value="arabic" label="الشرق الأوسط"><c-CCascaderOption value="amman" label="عمّان" /></c-CCascaderOption>
                 </c-CCascaderOption>
-                <c-CCascaderOption value="offline" label="Unavailable path" c-disabled="True" />
+                <c-CCascaderOption
+                  value="offline"
+                  label="Unavailable path"
+                  c-disabled="True"
+                />
               </c-CCascader>
             </form>
           </section>

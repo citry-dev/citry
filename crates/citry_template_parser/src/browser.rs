@@ -148,7 +148,7 @@ macro_rules! python_record_repr {
 /// `for (open of list)`); `open.count = 1` writes a field and leaves it
 /// false. The slot-pattern analysis reuses this struct for the names a
 /// pattern declares, and there `written` is always false.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserReference {
     #[pyo3(get)]
@@ -174,7 +174,7 @@ python_record_repr!(BrowserReference {
 /// `end` are UTF-8 byte offsets into the authored text with
 /// `start <= end <= len(text)`; an error at the end of the text, such as an
 /// unfinished `open &&`, has an empty range there.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserSyntaxDiagnostic {
     #[pyo3(get)]
@@ -195,7 +195,7 @@ python_record_repr!(BrowserSyntaxDiagnostic {
 ///
 /// `error` is set exactly when `valid` is false, and `references` is empty
 /// then, so a caller never sees names from text that does not parse.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserAnalysis {
     #[pyo3(get)]
@@ -347,7 +347,7 @@ pub fn analyze_browser_binding_pattern(source: &str) -> BrowserBindingPatternAna
 /// `name` is the context field, one of `COMPONENT_CONTEXT_NAMES`;
 /// `local_name` is the variable it is bound to; `references` are the byte
 /// ranges where the code reads that variable.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentBinding {
     #[pyo3(get)]
@@ -371,7 +371,7 @@ python_record_repr!(BrowserComponentBinding {
 });
 
 /// One root-unresolved `$component` call authenticated by OXC semantics.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentCall {
     #[pyo3(get)]
@@ -401,7 +401,7 @@ python_record_repr!(BrowserComponentCall {
 });
 
 /// One statically named public binding declared by Vue Options.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserPublicName {
     #[pyo3(get)]
@@ -446,7 +446,7 @@ python_record_repr!(BrowserPublicName {
 ///
 /// `state` is `absent` (the options name nothing there), `complete` (every
 /// name is listed), or `unknown`, with `unknown_reason` saying why.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserOptionsSection {
     #[pyo3(get)]
@@ -478,7 +478,7 @@ python_record_repr!(BrowserOptionsSection {
 /// `written` is true when the code assigns to or updates the member itself,
 /// as in `this.open = false` or `this.count++`; `this.open.count = 1`
 /// writes a field of the member and leaves it false.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentMemberReference {
     #[pyo3(get)]
@@ -505,7 +505,7 @@ python_record_repr!(BrowserComponentMemberReference {
 ///
 /// The span covers the string literal of an array entry or the key of an
 /// object entry, as authored.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserEmitName {
     #[pyo3(get)]
@@ -522,7 +522,7 @@ python_record_repr!(BrowserEmitName { name, start, end });
 ///
 /// `name` is the key as Vue registers it (`iff`, `my-dir`, `myDir`), and the
 /// span covers the key as authored, quotes included.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserDirectiveName {
     #[pyo3(get)]
@@ -541,7 +541,7 @@ python_record_repr!(BrowserDirectiveName { name, start, end });
 /// groups of six, `emits_sections`, `directives_sections`, `inherit_attrs`)
 /// skip a call with no argument or a spread argument, so they can be
 /// shorter than `component_calls`.
-#[pyclass(frozen, eq, hash)]
+#[pyclass(from_py_object, frozen, eq, hash)]
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct BrowserComponentAnalysis {
     #[pyo3(get)]

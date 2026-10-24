@@ -12,7 +12,7 @@ Helpers for Vue-like class/style merging on HTML elements.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L348" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.4.6/packages/py/citry/citry/attrs.py#L348" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -63,7 +63,7 @@ the same. An empty class or style is omitted.</li>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L260" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.4.6/packages/py/citry/citry/attrs.py#L260" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -110,7 +110,7 @@ override does not move an attribute.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L132" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.4.6/packages/py/citry/citry/attrs.py#L132" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -156,7 +156,7 @@ removes a class added earlier.</li>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L183" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.4.6/packages/py/citry/citry/attrs.py#L183" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -205,7 +205,7 @@ property entirely, even if set earlier.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/attrs.py#L231" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.4.6/packages/py/citry/citry/attrs.py#L231" target="_blank" rel="noopener">
 View source
 </a>
 

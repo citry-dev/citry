@@ -35,19 +35,25 @@ class ApplicationShortcut(Component):
           </select>
         </label>
         <label>Unrelated input <input type="text" value="Mod+K stays editable here" /></label>
-        <div contenteditable="true" role="textbox" aria-label="Editable application note">
+        <div
+          contenteditable="true"
+          role="textbox"
+          aria-label="Editable application note"
+        >
           Contenteditable shortcut exclusion
         </div>
 
         <c-CCommandPalette
           label="Workspace commands"
           c-entries="workspace_commands"
-          :open="workspaceOpen" :onOpenChange="(value)=>workspaceOpen=value"
+          :open="workspaceOpen"
+          :onOpenChange="(value)=>workspaceOpen=value"
         />
         <c-CCommandPalette
           label="Help commands"
           c-entries="help_commands"
-          :open="helpOpen" :onOpenChange="(value)=>helpOpen=value"
+          :open="helpOpen"
+          :onOpenChange="(value)=>helpOpen=value"
         />
         <output>Handled app shortcuts: <span v-text="opens">0</span></output>
       </section>

@@ -14,11 +14,19 @@ class TourTargets(Component):
             <c-CButton c-attrs="activator_attrs">Explain actions</c-CButton>
           </c-fill>
           <c-fill name="default">
-            <c-CTourStep value="filter" target_id="tour-filter" placement="bottom-start">
+            <c-CTourStep
+              value="filter"
+              target_id="tour-filter"
+              placement="bottom-start"
+            >
               <c-fill name="title">Narrow the results</c-fill>
               <c-fill name="default">Choose filters before exporting.</c-fill>
             </c-CTourStep>
-            <c-CTourStep value="export" target_id="tour-export" placement="inline-end">
+            <c-CTourStep
+              value="export"
+              target_id="tour-export"
+              placement="inline-end"
+            >
               <c-fill name="title">Export the current view</c-fill>
               <c-fill name="default">The export respects the active filters.</c-fill>
             </c-CTourStep>

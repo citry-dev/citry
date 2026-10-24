@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class DescribedRadios(Component):
     template = """
-      <c-CRadioGroup name="soil" value="loam" class_="radio-described">
+      <c-CRadioGroup
+        name="soil"
+        value="loam"
+        class_="radio-described"
+      >
         <c-fill name="label">Soil blend</c-fill>
         <c-fill name="default">
           <c-CRadio value="loam">

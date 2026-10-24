@@ -12,12 +12,21 @@ def form_collection_states_component(app: Citry) -> type[Component]:
           <section class="citry-ui-quality-stack" data-quality-form-collection-ready>
             <h1>Form Collection states</h1>
             <form>
-              <c-CFormCollection label="Localized contacts" action_name="contact_action" c-min_items="1" c-attrs="quality_attrs">
+              <c-CFormCollection
+                label="Localized contacts"
+                action_name="contact_action"
+                c-min_items="1"
+                c-attrs="quality_attrs"
+              >
                 <c-CFormCollectionItem value="long" label="A very long contact label that wraps safely">
                   <label>Email <input name="contacts[long][email]" type="email" required /></label>
                 </c-CFormCollectionItem>
                 <c-CFormCollectionItem value="rtl" label="Arabic contact"><div dir="rtl"><label>البريد <input name="contacts[rtl][email]" /></label></div></c-CFormCollectionItem>
-                <c-CFormCollectionItem value="fixed" label="Fixed contact" c-disabled="True"><label>Email <input name="contacts[fixed][email]" /></label></c-CFormCollectionItem>
+                <c-CFormCollectionItem
+                  value="fixed"
+                  label="Fixed contact"
+                  c-disabled="True"
+                ><label>Email <input name="contacts[fixed][email]" /></label></c-CFormCollectionItem>
               </c-CFormCollection>
             </form>
           </section>

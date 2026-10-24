@@ -78,6 +78,7 @@ from docs_site._internal.release_notes import (
 )
 from docs_site._internal.seo import generate_seo_files
 from docs_site._internal.site_nav import load_site_nav
+from docs_site._internal.snapshot_links import checkout_release_ref, pin_snapshot_links
 from docs_site._internal.social_cards import generate_social_cards
 from docs_site._internal.static_deps import (
     CITRY_MOUNT_PREFIX,
@@ -250,6 +251,14 @@ def build_site(
         outcome.output_dir = target_dir
         if outcome.failed:
             return outcome
+        # A snapshot stays published for as long as the site exists, so its
+        # GitHub links must name the release it was built from, not main.
+        # A detached build is the controller's tagged build (build-tag and
+        # build-all), and the controller rewrites it to the exact tag itself.
+        if update_versions_manifest:
+            ref = checkout_release_ref(config.repo_root, docs_version)
+            if ref:
+                pin_snapshot_links(staged_dir, ref)
         _replace_output_directory(staged_dir, target_dir)
 
     if update_versions_manifest:

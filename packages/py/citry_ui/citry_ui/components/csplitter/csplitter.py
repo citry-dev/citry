@@ -731,7 +731,11 @@ class CInternalSplitter(LibraryComponent):
         }
 
     template = """
-      <div class="cui-splitter" c-bind="attrs" data-citry-ui-part="splitter">
+      <div
+        class="cui-splitter"
+        c-bind="attrs"
+        data-citry-ui-part="splitter"
+      >
         <c-for each="item in items">
           <c-if cond="item['kind'] == 'panel'">
             <c-CInternalSplitterPanel
@@ -811,7 +815,12 @@ class CInternalSplitterPanel(LibraryComponent):
         }
 
     template = """
-      <div class="cui-splitter__panel" #c-key="morph_key" c-bind="attrs" data-citry-ui-part="panel">
+      <div
+        class="cui-splitter__panel"
+        #c-key="morph_key"
+        c-bind="attrs"
+        data-citry-ui-part="panel"
+      >
         {{ content }}
       </div>
     """
@@ -868,8 +877,16 @@ class CInternalSplitterHandle(LibraryComponent):
         c-data-handle-index="index"
         data-citry-ui-part="handle"
       >
-        <span class="cui-splitter__handle-line" aria-hidden="true" data-citry-ui-part="handle-line"></span>
-        <span class="cui-splitter__handle-grip" aria-hidden="true" data-citry-ui-part="handle-grip"></span>
+        <span
+          class="cui-splitter__handle-line"
+          aria-hidden="true"
+          data-citry-ui-part="handle-line"
+        ></span>
+        <span
+          class="cui-splitter__handle-grip"
+          aria-hidden="true"
+          data-citry-ui-part="handle-grip"
+        ></span>
       </div>
     """
 

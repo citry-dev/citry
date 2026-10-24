@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class MandatoryToggle(Component):
     template = """
-      <c-CToggleGroup label="Coordinate system" value="equatorial" c-mandatory="True">
+      <c-CToggleGroup
+        label="Coordinate system"
+        value="equatorial"
+        c-mandatory="True"
+      >
         <c-CToggle value="equatorial">Equatorial</c-CToggle>
         <c-CToggle value="galactic">Galactic</c-CToggle>
       </c-CToggleGroup>

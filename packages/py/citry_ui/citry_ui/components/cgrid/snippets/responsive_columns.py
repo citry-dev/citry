@@ -15,7 +15,11 @@ class GridResponsiveColumns(Component):
       <section class="grid-columns" aria-labelledby="grid-columns-title">
         <h2 id="grid-columns-title">Crystal systems</h2>
         <p>Resize the preview to watch one column become two, then four.</p>
-        <c-CGrid sm="2" lg="4" gap="sm">
+        <c-CGrid
+          sm="2"
+          lg="4"
+          gap="sm"
+        >
           <c-for each="system in systems">
             <div class="grid-columns__cell">{{ system }}</div>
           </c-for>

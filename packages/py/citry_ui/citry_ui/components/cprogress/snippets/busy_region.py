@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class BusyRegionProgress(Component):
     template = """
-      <section class="progress-busy" aria-busy="true" aria-describedby="reef-progress">
+      <section
+        class="progress-busy"
+        aria-busy="true"
+        aria-describedby="reef-progress"
+      >
         <h2>Reconstructing the reef map</h2>
         <p>Existing survey results remain visible while the new contour layer loads.</p>
         <c-CProgress

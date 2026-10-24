@@ -15,12 +15,20 @@ def splitter_states_component(app: Citry) -> type[Component]:
               <c-CSplitterPanel id="nav" label="Navigation">Navigation</c-CSplitterPanel>
               <c-CSplitterPanel id="main" label="Main content">Main content</c-CSplitterPanel>
             </c-CSplitter>
-            <c-CSplitter c-sizes="[20, 45, 35]" variant="soft" size="sm">
+            <c-CSplitter
+              c-sizes="[20, 45, 35]"
+              variant="soft"
+              size="sm"
+            >
               <c-CSplitterPanel id="one" label="First panel">First</c-CSplitterPanel>
               <c-CSplitterPanel id="two" label="Second panel">Second</c-CSplitterPanel>
               <c-CSplitterPanel id="three" label="Third panel">Third</c-CSplitterPanel>
             </c-CSplitter>
-            <c-CSplitter orientation="vertical" c-sizes="[35, 65]" size="lg">
+            <c-CSplitter
+              orientation="vertical"
+              c-sizes="[35, 65]"
+              size="lg"
+            >
               <c-CSplitterPanel id="top" label="Top panel">Top</c-CSplitterPanel>
               <c-CSplitterPanel id="bottom" label="Bottom panel">Bottom</c-CSplitterPanel>
             </c-CSplitter>

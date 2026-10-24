@@ -9,7 +9,11 @@ class RadioAtAGlance(Component):
       <section class="radio-glance">
         <h2>Plan the garden path</h2>
         <p>Choose the habitat the path should pass through.</p>
-        <c-CRadioGroup name="habitat" value="woodland" orientation="horizontal">
+        <c-CRadioGroup
+          name="habitat"
+          value="woodland"
+          orientation="horizontal"
+        >
           <c-fill name="label">Habitat</c-fill>
           <c-fill name="default">
             <c-CRadio value="woodland">Woodland</c-CRadio>

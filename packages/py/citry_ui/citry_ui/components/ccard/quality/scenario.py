@@ -30,7 +30,11 @@ def card_states_component(app: Citry) -> type[Component]:
                 </c-CCard>
               </c-for>
               <c-for each="size in sizes">
-                <c-CCard #c-key="size" c-size="size" variant="outline">
+                <c-CCard
+                  #c-key="size"
+                  c-size="size"
+                  variant="outline"
+                >
                   <c-fill name="header"><h2>{{ size }} Card</h2></c-fill>
                   <c-fill name="default">Size changes spacing only.</c-fill>
                 </c-CCard>

@@ -219,7 +219,10 @@ def scroll_area_states_component(app: Citry) -> type[Component]:
                   'data-quality-states':
                     'configuration controlled release invalid repair smooth-owned disabled-axis reflections'
                 }"
-                :axis="axis" :scrollbarWidth="width" :scrollbarGutter="gutter" :overscroll="overscroll"
+                :axis="axis"
+                :scrollbarWidth="width"
+                :scrollbarGutter="gutter"
+                :overscroll="overscroll"
               >
                 <div class="scroll-area-quality__large-content">
                   Reactive configuration subject

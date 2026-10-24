@@ -15,7 +15,11 @@ class AlertCustomization(Component):
         </article>
         <article class="alert-themes__radio">
           <h2>Radio observatory</h2>
-          <c-CAlert class_="radio-success" intent="success" variant="outline">
+          <c-CAlert
+            class_="radio-success"
+            intent="success"
+            variant="outline"
+          >
             The receiver array is synchronized.
           </c-CAlert>
         </article>

@@ -18,14 +18,23 @@ def file_input_states_component(app: Citry) -> type[Component]:
                 <c-fill name="description">One document.</c-fill>
                 <c-fill name="error">Choose a document.</c-fill>
               </c-CField>
-              <c-CDropTarget label="Multiple evidence" name="evidence" multiple variant="soft">
+              <c-CDropTarget
+                label="Multiple evidence"
+                name="evidence"
+                multiple
+                variant="soft"
+              >
                 Drop files here or browse
               </c-CDropTarget>
               <button type="reset">Reset files</button>
             </form>
             <c-CRow>
               <c-CFileInput c-attrs="{'aria-label': 'Small file'}" size="sm" />
-              <c-CFileInput c-attrs="{'aria-label': 'Large file'}" size="lg" variant="plain" />
+              <c-CFileInput
+                c-attrs="{'aria-label': 'Large file'}"
+                size="lg"
+                variant="plain"
+              />
             </c-CRow>
             <fieldset disabled>
               <legend>Disabled</legend>

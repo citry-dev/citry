@@ -13,7 +13,8 @@ class DisclosureFormsAndFocus(Component):
       >
         <c-CDisclosure
           open
-          :open="notificationOpen" :onOpenChange="(next) => notificationOpen = next"
+          :open="notificationOpen"
+          :onOpenChange="(next) => notificationOpen = next"
         >
           <c-fill name="title">Notification settings</c-fill>
           <c-fill name="default">
@@ -21,7 +22,11 @@ class DisclosureFormsAndFocus(Component):
               <c-CField>
                 <c-fill name="label">Notification email</c-fill>
                 <c-fill name="default">
-                  <c-CInput name="notification-email" type="email" value="ops@example.com" />
+                  <c-CInput
+                    name="notification-email"
+                    type="email"
+                    value="ops@example.com"
+                  />
                 </c-fill>
                 <c-fill name="description">Edits survive closing and reopening.</c-fill>
               </c-CField>

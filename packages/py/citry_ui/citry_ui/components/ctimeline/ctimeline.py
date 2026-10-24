@@ -358,7 +358,11 @@ class CInternalTimeline(LibraryComponent):
         }
 
     template = """
-      <ol class="cui-timeline" c-bind="attrs" data-citry-ui-part="timeline">
+      <ol
+        class="cui-timeline"
+        c-bind="attrs"
+        data-citry-ui-part="timeline"
+      >
         <c-for each="item in items">
           <c-CInternalTimelineItem
             #c-key="item['index']"
@@ -424,11 +428,20 @@ class CInternalTimelineItem(LibraryComponent):
         }
 
     template = """
-      <li class="cui-timeline__item" #c-key="morph_key" c-bind="attrs" data-citry-ui-part="item">
+      <li
+        class="cui-timeline__item"
+        #c-key="morph_key"
+        c-bind="attrs"
+        data-citry-ui-part="item"
+      >
         <c-if cond="opposite is not None">
           <div class="cui-timeline__opposite" data-citry-ui-part="opposite">{{ opposite }}</div>
         </c-if>
-        <div class="cui-timeline__track" aria-hidden="true" data-citry-ui-part="track">
+        <div
+          class="cui-timeline__track"
+          aria-hidden="true"
+          data-citry-ui-part="track"
+        >
           <span class="cui-timeline__before" data-citry-ui-part="before"></span>
           <span class="cui-timeline__indicator" data-citry-ui-part="indicator">
             <c-if cond="indicator is not None">{{ indicator }}</c-if>

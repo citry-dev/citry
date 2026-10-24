@@ -11,7 +11,11 @@ class SelectAtAGlance(Component):
         <c-fill name="label">Workspace</c-fill>
         <c-fill name="description">Choose where new observations belong.</c-fill>
         <c-fill name="default">
-          <c-CSelect c-options="options" placeholder="Choose a workspace" value="atlas" />
+          <c-CSelect
+            c-options="options"
+            placeholder="Choose a workspace"
+            value="atlas"
+          />
         </c-fill>
       </c-CField>
     """

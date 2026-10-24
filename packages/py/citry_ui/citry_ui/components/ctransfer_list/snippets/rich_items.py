@@ -13,7 +13,11 @@ class TransferListRichItems(Component):
         <c-CTransferListItem value="design" label="Design systems team">
           <strong>Design systems</strong><br /><small>Components, tokens, and accessibility</small>
         </c-CTransferListItem>
-        <c-CTransferListItem value="security" label="Security team" c-disabled="True">
+        <c-CTransferListItem
+          value="security"
+          label="Security team"
+          c-disabled="True"
+        >
           <strong>Security</strong><br /><small>Managed by policy</small>
         </c-CTransferListItem>
       </c-CTransferList>

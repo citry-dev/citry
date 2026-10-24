@@ -111,7 +111,11 @@ class ContextMenuLayersAndRoots(Component):
 
           <c-CMenu>
             <c-fill name="activator" data="{ activator_attrs }">
-              <c-CButton size="sm" variant="outline" c-attrs="activator_attrs">
+              <c-CButton
+                size="sm"
+                variant="outline"
+                c-attrs="activator_attrs"
+              >
                 Open sibling Menu
               </c-CButton>
             </c-fill>

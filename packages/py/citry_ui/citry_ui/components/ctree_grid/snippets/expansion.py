@@ -24,7 +24,14 @@ class TreeGridExpansion(Component):
             ],
         }
 
-    template = '<c-CTreeGrid c-columns="columns" c-rows="rows" label="Project plan" c-expanded="[\'launch\']" />'
+    template = """
+      <c-CTreeGrid
+        c-columns="columns"
+        c-rows="rows"
+        label="Project plan"
+        c-expanded="['launch']"
+      />
+    """
 
 
 preview = TreeGridExpansion()

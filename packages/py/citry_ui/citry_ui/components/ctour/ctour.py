@@ -595,8 +595,18 @@ class CInternalTour(LibraryComponent):
           data-citry-tour-dialog
           data-citry-ui-part="dialog"
         >
-          <div class="cui-tour__spotlight" hidden aria-hidden="true" data-citry-ui-part="spotlight"></div>
-          <div class="cui-tour__surface" c-data-size="size" data-placement="center" data-citry-ui-part="surface">
+          <div
+            class="cui-tour__spotlight"
+            hidden
+            aria-hidden="true"
+            data-citry-ui-part="spotlight"
+          ></div>
+          <div
+            class="cui-tour__surface"
+            c-data-size="size"
+            data-placement="center"
+            data-citry-ui-part="surface"
+          >
             <button
               type="button"
               c-hidden="not dismissible"
@@ -680,10 +690,18 @@ class CInternalTourStep(LibraryComponent):
       >
         <c-if cond="media is not None"><div data-citry-ui-part="media">{{ media }}</div></c-if>
         <header data-citry-ui-part="header">
-          <h2 c-id="title_id" tabindex="-1" data-citry-ui-part="title">{{ title }}</h2>
+          <h2
+            c-id="title_id"
+            tabindex="-1"
+            data-citry-ui-part="title"
+          >{{ title }}</h2>
         </header>
         <div c-id="description_id" data-citry-ui-part="description">{{ content }}</div>
-        <span c-hidden="not arrow" aria-hidden="true" data-citry-ui-part="arrow"></span>
+        <span
+          c-hidden="not arrow"
+          aria-hidden="true"
+          data-citry-ui-part="arrow"
+        ></span>
         <footer data-citry-ui-part="footer">
           <div data-citry-ui-part="progress-group">
             <c-if cond="catalog['progress']">

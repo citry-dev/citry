@@ -451,20 +451,58 @@ class CTreeGrid(LibraryComponent):
         }
 
     template = """
-      <div class="cui-tree-grid" c-id="root_id" c-bind="attrs" c-data-density="density" c-data-selection="selection" c-data-disabled="'' if disabled else None" c-aria-disabled="'true' if disabled else 'false'" data-citry-ui-part="tree-grid">
+      <div
+        class="cui-tree-grid"
+        c-id="root_id"
+        c-bind="attrs"
+        c-data-density="density"
+        c-data-selection="selection"
+        c-data-disabled="'' if disabled else None"
+        c-aria-disabled="'true' if disabled else 'false'"
+        data-citry-ui-part="tree-grid"
+      >
         <div c-if="has_toolbar" data-citry-ui-part="toolbar"><c-slot name="toolbar" /></div>
-        <span role="status" aria-live="polite" aria-atomic="true" data-citry-ui-part="status"></span>
+        <span
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-citry-ui-part="status"
+        ></span>
         <div data-citry-ui-part="viewport">
-          <table c-bind="table_attrs" role="treegrid" c-aria-label="label" c-aria-disabled="'true' if disabled else 'false'" c-aria-rowcount="row_count + 1" c-aria-colcount="column_count" data-citry-ui-part="table">
+          <table
+            c-bind="table_attrs"
+            role="treegrid"
+            c-aria-label="label"
+            c-aria-disabled="'true' if disabled else 'false'"
+            c-aria-rowcount="row_count + 1"
+            c-aria-colcount="column_count"
+            data-citry-ui-part="table"
+          >
             <c-if cond="has_caption"><caption data-citry-ui-part="caption"><c-slot name="caption" /></caption></c-if>
             <colgroup><c-for each="column in columns"><col c-style="{'width': f'{column.source.width}px'}" /></c-for></colgroup>
             <thead data-citry-ui-part="header"><tr aria-rowindex="1"><c-for each="column in columns"><th c-bind="column.header_attrs" c-aria-colindex="column.index + 1" c-data-column-key="column.source.key" c-data-column-index="column.index" c-data-align="column.source.align" tabindex="-1" data-citry-ui-part="header-cell"><c-slot name="header" c-column="column.source" c-column_index="column.index">{{ column.source.label }}</c-slot></th></c-for></tr></thead>
             <tbody data-citry-ui-part="body">
               <c-for each="row in rows"><tr #c-key="row.source.key" c-bind="row.attrs" c-hidden="not row.visible" c-inert="True if not row.visible else None" c-aria-rowindex="row.index + 2" c-aria-level="row.level" c-aria-posinset="row.position" c-aria-setsize="row.set_size" c-aria-expanded="('true' if row.expanded else 'false') if row.branch else None" c-aria-selected="('true' if row.selected else 'false') if selection != 'none' else None" c-aria-disabled="'true' if row.source.disabled else 'false'" c-data-row-key="row.source.key" c-data-label="row.source.label" c-data-parent-key="row.parent_key" c-data-level="row.level" c-data-expanded="'' if row.expanded else None" c-data-selected="'' if row.selected else None" c-data-disabled="'' if row.source.disabled else None" data-citry-tree-grid-row data-citry-ui-part="row">
                 <c-for each="cell in row.cells"><td c-bind="cell.attrs" c-aria-colindex="cell.index + 1" c-data-row-key="row.source.key" c-data-column-key="cell.column.key" c-data-column-index="cell.index" c-data-align="cell.column.align" c-tabindex="0 if row.index == 0 and cell.index == 0 and not disabled else -1" data-citry-ui-part="cell">
-                  <div c-if="cell.index == 0" c-style="{'--cui-tree-grid-level': row.level}" data-citry-ui-part="hierarchy">
-                    <button c-if="row.branch" type="button" tabindex="-1" c-disabled="disabled or row.source.disabled" c-aria-label="tr('citry-ui-tree-grid-collapse', row=row.source.label) if row.expanded and catalog['collapse'] else tr('citry-ui-tree-grid-expand', row=row.source.label) if catalog['expand'] else labels['collapse'].format(row=row.source.label) if row.expanded else labels['expand'].format(row=row.source.label)" data-citry-tree-grid-expander data-citry-ui-part="expander"><span aria-hidden="true">&#8250;</span></button>
-                    <span c-if="not row.branch" aria-hidden="true" data-citry-ui-part="indent"></span>
+                  <div
+                    c-if="cell.index == 0"
+                    c-style="{'--cui-tree-grid-level': row.level}"
+                    data-citry-ui-part="hierarchy"
+                  >
+                    <button
+                      c-if="row.branch"
+                      type="button"
+                      tabindex="-1"
+                      c-disabled="disabled or row.source.disabled"
+                      c-aria-label="tr('citry-ui-tree-grid-collapse', row=row.source.label) if row.expanded and catalog['collapse'] else tr('citry-ui-tree-grid-expand', row=row.source.label) if catalog['expand'] else labels['collapse'].format(row=row.source.label) if row.expanded else labels['expand'].format(row=row.source.label)"
+                      data-citry-tree-grid-expander
+                      data-citry-ui-part="expander"
+                    ><span aria-hidden="true">&#8250;</span></button>
+                    <span
+                      c-if="not row.branch"
+                      aria-hidden="true"
+                      data-citry-ui-part="indent"
+                    ></span>
                     <span data-citry-ui-part="cell-content"><c-slot name="cell" c-row="row.source" c-column="cell.column" c-cell="cell.source" c-row_index="row.index" c-column_index="cell.index" c-level="row.level" c-expanded="row.expanded" c-selected="row.selected">{{ cell.source.value }}</c-slot></span>
                   </div>
                   <span c-if="cell.index != 0" data-citry-ui-part="cell-content"><c-slot name="cell" c-row="row.source" c-column="cell.column" c-cell="cell.source" c-row_index="row.index" c-column_index="cell.index" c-level="row.level" c-expanded="row.expanded" c-selected="row.selected">{{ cell.source.value }}</c-slot></span>

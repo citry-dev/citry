@@ -78,6 +78,8 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
+- **Breaking:** citry-lsp now requires Python 3.11 or newer. On Python
+  3.10, pip keeps installing citry-lsp 0.2.0.
 - citry-lsp now requires Citry 0.7.0 or later, which provides the
   custom-directive, `inheritAttrs`, and parser-error checks listed above.
   Installing this citry-lsp upgrades Citry when needed. An earlier

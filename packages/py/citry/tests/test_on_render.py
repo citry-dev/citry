@@ -9,6 +9,9 @@ each yield receives the settled ``(result, error)``, and the generator may
 replace the output, catch a child's error, or raise.
 """
 
+import re
+import warnings
+
 import pytest
 
 from citry import Citry, CitryRender, Component, Extension, Markup
@@ -880,3 +883,366 @@ class TestOnRenderInteractivePage:
         template = assembly.compile_inputs[occurrence.definition_id].template
         assert template == '<citry-opaque-html :record="$citryPrepared.opaqueHtml.citryOpaque0"></citry-opaque-html>'
         assert occurrence.prepared_data["opaqueHtml"] == {"citryOpaque0": {"html": "<s>x</s>", "nodeCount": 1}}
+
+
+def _named_cids(html: str) -> str:
+    """Replace each generated ``data-cid-*`` id with c0, c1, ... in order of first use."""
+    names: dict[str, str] = {}
+
+    def name(match: re.Match[str]) -> str:
+        return f"data-cid-{names.setdefault(match.group(1), f'c{len(names)}')}"
+
+    return re.sub(r"data-cid-(\w+)", name, html)
+
+
+# Outer > Inner, where Inner's on_render hook passes its output to Frame.
+_NESTED = (
+    '<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2=""> <p data-cid-c2="">inner</p> </section> </main>'
+)
+
+
+class TestWrapReceivedOutputInAComponent:
+    """A hook that passes the output it received to another component."""
+
+    @staticmethod
+    def _components(app: Citry) -> tuple[type[Component], type[Component]]:
+        class Frame(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+            template = """
+                <section>{{ body }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+
+            def on_render(self):
+                result, _error = yield
+                return Frame(body=result)
+
+            template = """
+                <p>inner</p>
+            """
+
+        return Frame, Inner
+
+    @staticmethod
+    def _outer(app: Citry) -> type[Component]:
+        class Outer(Component):
+            citry = app
+            template = """
+                <main><c-Inner /></main>
+            """
+
+        return Outer
+
+    @staticmethod
+    def _html(root: type[Component]) -> str:
+        return " ".join(_named_cids(root().render().serialize(deps_strategy="ignore")).split())
+
+    def test_the_kept_output_keeps_the_components_marker_on_its_own(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+        _frame, inner = self._components(app)
+        # Frame's section carries Frame's marker and Inner's, because the
+        # section is the root of Inner's output now; the kept <p> still
+        # carries Inner's own marker.
+        assert self._html(inner) == '<section data-cid-c0="" data-cid-c1=""> <p data-cid-c1="">inner</p> </section>'
+
+    def test_nested_inside_another_component_it_writes_the_same_html(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+        _frame, inner = self._components(app)
+        alone = self._html(inner)
+        nested = self._html(self._outer(app))
+        assert nested == _NESTED
+        # The same markup as alone, with each id renamed past Outer's.
+        shifted = re.sub(r"data-cid-c(\d+)", lambda m: f"data-cid-c{int(m.group(1)) + 1}", alone)
+        assert nested == f'<main data-cid-c0=""> {shifted} </main>'
+
+    def test_a_yielded_wrapper_works_nested_too(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+
+        class Frame(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+            template = """
+                <section>{{ body }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+
+            def on_render(self):
+                result, _error = yield
+                yield Frame(body=result)
+
+            template = """
+                <p>inner</p>
+            """
+
+        assert self._html(self._outer(app)) == _NESTED
+
+    @pytest.mark.parametrize(
+        ("inner_cached", "outer_cached"),
+        [(True, False), (False, True)],
+        ids=["inner-cached", "outer-cached"],
+    )
+    def test_a_cache_hit_writes_the_same_html(self, inner_cached, outer_cached):
+        app = Citry(autodiscover=False)
+
+        class Frame(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+            template = """
+                <section>{{ body }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+
+            class Cache:
+                enabled = inner_cached
+
+            def on_render(self):
+                result, _error = yield
+                return Frame(body=result)
+
+            template = """
+                <p>inner</p>
+            """
+
+        class Outer(Component):
+            citry = app
+
+            class Cache:
+                enabled = outer_cached
+
+            template = """
+                <main><c-Inner /></main>
+            """
+
+        # The first render stores the output; the second one replays it.
+        first = self._html(Outer)
+        assert self._html(Outer) == first == _NESTED
+
+    def test_an_on_component_rendered_hook_can_wrap_the_output_too(self, render_path):
+        del render_path  # the fixture switches the render path
+        frames: list[type[Component]] = []
+
+        class WrapInner(Extension):
+            name = "wrap_inner"
+
+            def on_component_rendered(self, ctx):
+                if type(ctx.component).__name__ == "Inner":
+                    return frames[0](body=ctx.render).render()
+                return None
+
+        app = Citry(autodiscover=False, extensions=[WrapInner])
+
+        class Frame(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+            template = """
+                <section>{{ body }}</section>
+            """
+
+        frames.append(Frame)
+
+        class Inner(Component):
+            citry = app
+            template = """
+                <p>inner</p>
+            """
+
+        assert self._html(self._outer(app)) == _NESTED
+
+    @pytest.mark.parametrize("nested", [False, True], ids=["alone", "nested"])
+    def test_the_same_output_placed_twice_is_still_an_error(self, render_path, nested):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+
+        class Pair(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"first": kwargs["first"], "second": kwargs["second"]}
+
+            template = """
+                <section>{{ first }}{{ second }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+
+            def on_render(self):
+                result, _error = yield
+                return Pair(first=result, second=result)
+
+            template = """
+                <p>inner</p>
+            """
+
+        # One output cannot sit in two places on the page.
+        with pytest.raises(RuntimeError, match="encountered more than once"):
+            self._html(self._outer(app) if nested else Inner)
+
+    def test_two_wraps_in_a_row_nest_the_output_twice(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+
+        class Frame(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+            template = """
+                <section>{{ body }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+
+            def on_render(self):
+                result, _error = yield
+                # The second wrap receives the first one's output.
+                result, _error = yield Frame(body=result)
+                return Frame(body=result)
+
+            template = """
+                <p>inner</p>
+            """
+
+        # The inner section is the first wrap's Frame: it carries its own
+        # marker and Inner's, because it was Inner's output root.
+        assert self._html(self._outer(app)) == (
+            '<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2="">'
+            ' <section data-cid-c3="" data-cid-c2=""> <p data-cid-c2="">inner</p> </section>'
+            " </section> </main>"
+        )
+
+    def test_two_components_side_by_side_each_keep_their_output(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+        self._components(app)
+
+        class Outer(Component):
+            citry = app
+            template = """
+                <main><c-Inner /><c-Inner /></main>
+            """
+
+        assert self._html(Outer) == (
+            '<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2=""> <p data-cid-c2="">inner</p> </section>'
+            ' <section data-cid-c3="" data-cid-c4=""> <p data-cid-c4="">inner</p> </section> </main>'
+        )
+
+    def test_output_that_contains_itself_is_an_error(self):
+        app = Citry(autodiscover=False)
+
+        class First(Component):
+            citry = app
+            template = """
+                <p>first</p>
+            """
+
+        class Second(Component):
+            citry = app
+            template = """
+                <p>second</p>
+            """
+
+        first = First().render()
+        second = Second().render()
+        first.parts.append(second)
+        second.parts.append(first)
+        # Serialization stops at the loop instead of running forever.
+        with pytest.raises(RuntimeError, match="encountered more than once"):
+            first.serialize(deps_strategy="ignore")
+
+    def test_a_development_page_does_not_report_the_kept_id_twice(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False, mode="development")
+
+        class Frame(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+            template = """
+                <section>{{ body }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+
+            def on_render(self):
+                result, _error = yield
+                return Frame(body=result)
+
+            template = """
+                <p id="intro">inner</p>
+            """
+
+        with warnings.catch_warnings():
+            # The <p> is written once, so its id must not be reported as repeated.
+            warnings.simplefilter("error", RuntimeWarning)
+            html = self._html(self._outer(app))
+        assert html.count('id="intro"') == 1
+
+    def test_the_kept_output_keeps_its_css_variables_marker(self, render_path):
+        del render_path  # the fixture switches the render path
+        app = Citry(autodiscover=False)
+
+        class Frame(Component):
+            citry = app
+
+            def template_data(self, kwargs, slots):
+                return {"body": kwargs["body"]}
+
+            template = """
+                <section>{{ body }}</section>
+            """
+
+        class Inner(Component):
+            citry = app
+
+            def on_render(self):
+                result, _error = yield
+                return Frame(body=result)
+
+            def css_data(self, kwargs, slots):
+                return {"tone": "red"}
+
+            template = """
+                <p>inner</p>
+            """
+
+            css = """
+                p { color: var(--tone); }
+            """
+
+        html = self._html(self._outer(app))
+        found = re.search(r"data-ccss-[0-9a-f]{32}", html)
+        assert found is not None
+        marker = found.group()
+        # The marker that css_data's variables target stays on the kept <p>.
+        assert html == (
+            f'<main data-cid-c0=""> <section data-cid-c1="" data-cid-c2="" {marker}="">'
+            f' <p data-cid-c2="" {marker}="">inner</p> </section> </main>'
+        )

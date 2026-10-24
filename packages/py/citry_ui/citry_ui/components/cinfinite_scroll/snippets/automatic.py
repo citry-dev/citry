@@ -13,7 +13,9 @@ class InfiniteScrollAutomatic(Component):
         <c-CInfiniteScroll
           aria_label="Search results"
           c-style="{'max-block-size': '12rem', 'overflow': 'auto', 'overflow-anchor': 'none', 'padding-inline-end': '0.25rem'}"
-          :loading="loading" :hasMore="hasMore" :onLoadMore="loadNextPage"
+          :loading="loading"
+          :hasMore="hasMore"
+          :onLoadMore="loadNextPage"
         >
           <ol>
             <li>Search result 1</li><li>Search result 2</li><li>Search result 3</li><li>Search result 4</li>

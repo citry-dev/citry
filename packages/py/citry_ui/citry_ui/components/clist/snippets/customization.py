@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class ListCustomization(Component):
     template = """
-      <c-CList class_="violet-list" label="Nebula catalog" variant="surface">
+      <c-CList
+        class_="violet-list"
+        label="Nebula catalog"
+        variant="surface"
+      >
         <c-CListItem href="/nebula/orion" c-current="True">Orion Nebula</c-CListItem>
         <c-CListItem href="/nebula/lagoon">Lagoon Nebula</c-CListItem>
       </c-CList>

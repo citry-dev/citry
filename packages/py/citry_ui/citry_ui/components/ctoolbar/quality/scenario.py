@@ -14,10 +14,19 @@ def toolbar_states_component(app: Citry) -> type[Component]:
             <c-CToolbar label="Plain tools">
               <c-CButton>Cut</c-CButton><c-CButton>Copy</c-CButton><c-CButton>Paste</c-CButton>
             </c-CToolbar>
-            <c-CToolbar label="Soft tools" variant="soft" size="sm">
+            <c-CToolbar
+              label="Soft tools"
+              variant="soft"
+              size="sm"
+            >
               <c-CToggle>Bold</c-CToggle><c-CToggle>Italic</c-CToggle><c-CToggle>Underline</c-CToggle>
             </c-CToolbar>
-            <c-CToolbar label="Vertical tools" orientation="vertical" variant="outline" size="lg">
+            <c-CToolbar
+              label="Vertical tools"
+              orientation="vertical"
+              variant="outline"
+              size="lg"
+            >
               <c-CButton>North</c-CButton><c-CButton c-disabled="True">Center</c-CButton><c-CButton>South</c-CButton>
             </c-CToolbar>
             <div dir="rtl">

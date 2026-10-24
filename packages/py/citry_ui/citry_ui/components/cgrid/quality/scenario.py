@@ -28,7 +28,11 @@ def grid_container_states_component(app: Citry) -> type[Component]:
               Fluid Container
             </c-CContainer>
 
-            <c-CGrid sm="2" lg="4" c-attrs="{'data-quality-state': 'responsive-equal'}">
+            <c-CGrid
+              sm="2"
+              lg="4"
+              c-attrs="{'data-quality-state': 'responsive-equal'}"
+            >
               <c-for each="item in items">
                 <article class="grid-quality__cell">Specimen {{ item }}</article>
               </c-for>
@@ -41,14 +45,31 @@ def grid_container_states_component(app: Citry) -> type[Component]:
             </c-CGrid>
 
             <c-CGrid cols="12" c-attrs="{'data-quality-state': 'asymmetric'}">
-              <c-CGridItem span="12" md="8" class_="grid-quality__cell">Main record</c-CGridItem>
-              <c-CGridItem span="12" md="4" class_="grid-quality__cell">Index</c-CGridItem>
+              <c-CGridItem
+                span="12"
+                md="8"
+                class_="grid-quality__cell"
+              >Main record</c-CGridItem>
+              <c-CGridItem
+                span="12"
+                md="4"
+                class_="grid-quality__cell"
+              >Index</c-CGridItem>
             </c-CGrid>
 
-            <c-CGrid tag="ul" sm="2" class_="grid-quality__list" c-attrs="{'data-quality-state': 'semantic-list'}">
+            <c-CGrid
+              tag="ul"
+              sm="2"
+              class_="grid-quality__list"
+              c-attrs="{'data-quality-state': 'semantic-list'}"
+            >
               <c-CGridItem tag="li">
                 Silicates
-                <c-CGrid cols="2" gap="xs" c-attrs="{'data-quality-state': 'nested'}">
+                <c-CGrid
+                  cols="2"
+                  gap="xs"
+                  c-attrs="{'data-quality-state': 'nested'}"
+                >
                   <span>Quartz</span><span>Feldspar</span>
                 </c-CGrid>
               </c-CGridItem>

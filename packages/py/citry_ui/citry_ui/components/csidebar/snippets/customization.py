@@ -6,7 +6,12 @@ citry.register_library(citry_ui)
 
 class SidebarCustomization(Component):
     template = """
-      <c-CSidebar label="Custom navigation" variant="floating" side="inline-end" c-class_="['ocean-sidebar']">
+      <c-CSidebar
+        label="Custom navigation"
+        variant="floating"
+        side="inline-end"
+        c-class_="['ocean-sidebar']"
+      >
         <c-fill name="toggle"><c-CIcon name="menu" /></c-fill>
         <c-fill name="header"><strong>Ocean lab</strong></c-fill>
         <c-fill name="default"><p>Public variables and parts customize the stable landmark.</p></c-fill>

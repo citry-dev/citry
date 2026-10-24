@@ -313,7 +313,11 @@ class CCarousel(LibraryComponent):
             data-citry-ui-part="next"
           ><span aria-hidden="true">&#x2192;</span></button>
         </div>
-        <div tabindex="0" data-citry-carousel-viewport data-citry-ui-part="viewport">
+        <div
+          tabindex="0"
+          data-citry-carousel-viewport
+          data-citry-ui-part="viewport"
+        >
           <div data-citry-ui-part="track"><c-slot required /></div>
         </div>
         <div

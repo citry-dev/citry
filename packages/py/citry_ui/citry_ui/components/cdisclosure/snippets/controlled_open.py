@@ -24,7 +24,11 @@ class ControlledDisclosure(Component):
           <input type="checkbox" v-model="accept" />
           Accept trigger requests
         </label>
-        <div class="controlled-disclosure__controls" role="group" aria-label="Disclosure owner controls">
+        <div
+          class="controlled-disclosure__controls"
+          role="group"
+          aria-label="Disclosure owner controls"
+        >
           <button type="button" @click="controlled=true; open=true">Show</button>
           <button type="button" @click="controlled=true; open=false">Hide</button>
           <button type="button" @click="controlled=false">Release control</button>

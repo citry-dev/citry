@@ -578,7 +578,11 @@ class CSelect(LibraryComponent):
           data-citry-ui-part="control"
         >
           <span data-citry-ui-part="value">{{ selected_label }}</span>
-          <span class="cui-select__indicator" aria-hidden="true" data-citry-ui-part="indicator"></span>
+          <span
+            class="cui-select__indicator"
+            aria-hidden="true"
+            data-citry-ui-part="indicator"
+          ></span>
         </button>
         <select
           class="cui-select__native"

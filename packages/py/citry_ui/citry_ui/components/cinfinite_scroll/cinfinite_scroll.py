@@ -216,20 +216,42 @@ class CInfiniteScroll(LibraryComponent):
         }
 
     template = """
-      <div ref="root" class="cui-infinite-scroll" c-id="root_id" c-bind="root_attrs" data-citry-ui-part="infinite-scroll">
+      <div
+        ref="root"
+        class="cui-infinite-scroll"
+        c-id="root_id"
+        c-bind="root_attrs"
+        data-citry-ui-part="infinite-scroll"
+      >
         <div c-aria-busy="content_busy" data-citry-ui-part="content">{{ content }}</div>
-        <div data-citry-ui-part="status" role="status" aria-live="polite" aria-atomic="true">
+        <div
+          data-citry-ui-part="status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           <span c-hidden="not show_loading" c-$c-tr:citry-ui-infinite-scroll-loading="True if catalog['loading'] else None">{{ tr('citry-ui-infinite-scroll-loading') if catalog['loading'] else labels['loading'] }}</span>
           <span c-hidden="not show_error" c-$c-tr:citry-ui-infinite-scroll-error="True if catalog['error'] else None">{{ tr('citry-ui-infinite-scroll-error') if catalog['error'] else labels['error'] }}</span>
           <span c-hidden="not show_end" c-$c-tr:citry-ui-infinite-scroll-end="True if catalog['end'] else None">{{ tr('citry-ui-infinite-scroll-end') if catalog['end'] else labels['end'] }}</span>
         </div>
-        <button c-type="button_type" c-name="action_name" c-value="action_value" c-disabled="button_disabled"
-          c-hidden="not show_action" c-formnovalidate="True if action_name is not None else None"
-          data-citry-infinite-scroll-action data-citry-ui-part="action">
+        <button
+          c-type="button_type"
+          c-name="action_name"
+          c-value="action_value"
+          c-disabled="button_disabled"
+          c-hidden="not show_action"
+          c-formnovalidate="True if action_name is not None else None"
+          data-citry-infinite-scroll-action
+          data-citry-ui-part="action"
+        >
           <span c-hidden="error" c-$c-tr:citry-ui-infinite-scroll-load-more="True if catalog['load_more'] else None">{{ tr('citry-ui-infinite-scroll-load-more') if catalog['load_more'] else labels['load_more'] }}</span>
           <span c-hidden="not error" c-$c-tr:citry-ui-infinite-scroll-retry="True if catalog['retry'] else None">{{ tr('citry-ui-infinite-scroll-retry') if catalog['retry'] else labels['retry'] }}</span>
         </button>
-        <span data-citry-infinite-scroll-sentinel data-citry-ui-part="sentinel" aria-hidden="true"></span>
+        <span
+          data-citry-infinite-scroll-sentinel
+          data-citry-ui-part="sentinel"
+          aria-hidden="true"
+        ></span>
       </div>
     """
 

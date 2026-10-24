@@ -24,7 +24,11 @@ class ButtonLoadingStates(Component):
         </article>
 
         <div class="button-loading__positions">
-          <c-CButton loading loading_pos="start" variant="outline">
+          <c-CButton
+            loading
+            loading_pos="start"
+            variant="outline"
+          >
             <c-fill name="start">
               <span aria-hidden="true">✿</span>
             </c-fill>
@@ -35,7 +39,11 @@ class ButtonLoadingStates(Component):
           <c-CButton loading loading_pos="center">
             Mapping the trail
           </c-CButton>
-          <c-CButton loading loading_pos="end" variant="outline">
+          <c-CButton
+            loading
+            loading_pos="end"
+            variant="outline"
+          >
             <c-fill name="default">
               Tracing migration
             </c-fill>
@@ -51,7 +59,11 @@ class ButtonLoadingStates(Component):
               Pressing specimen
             </c-fill>
           </c-CButton>
-          <c-CButton disabled intent="neutral" variant="outline">
+          <c-CButton
+            disabled
+            intent="neutral"
+            variant="outline"
+          >
             Trail unavailable
           </c-CButton>
         </div>

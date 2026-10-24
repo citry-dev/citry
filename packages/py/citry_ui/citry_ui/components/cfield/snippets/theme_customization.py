@@ -26,7 +26,11 @@ class FieldThemeCustomization(Component):
               Lantern marker
             </c-fill>
             <c-fill name="default">
-              <c-CInput name="night_marker" value="Missing" variant="filled" />
+              <c-CInput
+                name="night_marker"
+                value="Missing"
+                variant="filled"
+              />
             </c-fill>
             <c-fill name="error">
               Mark the nearest visible lantern.

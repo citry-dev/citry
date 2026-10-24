@@ -94,7 +94,8 @@ def dialog_states_component(app: Citry) -> type[Component]:
               id="quality-persistent-dialog"
               c-dismissible="False"
               size="lg"
-              :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
+              :open="controlledOpen"
+              :onOpenChange="(open) => controlledOpen = open"
             >
               <c-fill
                 name="activator"

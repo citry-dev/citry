@@ -11,7 +11,8 @@ class TreeMultipleSelection(Component):
           label="Specimens"
           selection_mode="multiple"
           c-selected="['alder']"
-          :selected="selected" :onSelectionChange="(next) => selected = next"
+          :selected="selected"
+          :onSelectionChange="(next) => selected = next"
         >
           <c-CTreeItem value="alder" label="Alder" />
           <c-CTreeItem value="birch" label="Birch" />

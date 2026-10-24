@@ -62,7 +62,8 @@ def alert_dialog_states_component(app: Citry) -> type[Component]:
                 '--cui-alert-dialog-radius': '1.25rem',
                 '--cui-alert-dialog-border-color': '#8b5cf6'
               }"
-              :open="controlledOpen" :onOpenChange="(open) => controlledOpen = open"
+              :open="controlledOpen"
+              :onOpenChange="(open) => controlledOpen = open"
             >
               <c-fill name="activator" data="{activator_attrs}">
                 <c-CButton c-attrs="activator_attrs" variant="outline">

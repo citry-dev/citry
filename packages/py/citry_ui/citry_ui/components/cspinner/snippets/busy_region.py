@@ -6,7 +6,11 @@ citry.register_library(citry_ui)
 
 class SpinnerBusyRegion(Component):
     template = """
-      <section class="spinner-busy" aria-busy="true" aria-describedby="star-chart-status">
+      <section
+        class="spinner-busy"
+        aria-busy="true"
+        aria-describedby="star-chart-status"
+      >
         <c-CRow>
           <c-CSpinner label="Updating star chart" c-attrs="{'id': 'star-chart-status'}" />
           <strong>Updating the star chart</strong>

@@ -14,7 +14,11 @@ class CustomizedFiles(Component):
       }
     """
     template = """
-      <c-CDropTarget label="Botanical records" class_="evidence-drop" size="lg">
+      <c-CDropTarget
+        label="Botanical records"
+        class_="evidence-drop"
+        size="lg"
+      >
         CSV, PDF, or field images
       </c-CDropTarget>
     """

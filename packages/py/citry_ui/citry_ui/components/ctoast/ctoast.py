@@ -386,7 +386,11 @@ class CToastRegion(LibraryComponent):
               data-citry-ui-part="toast"
             >
               <div class="cui-toast__content" data-citry-ui-part="content">
-                <div c-id="message['titleId']" class="cui-toast__title" data-citry-ui-part="title">
+                <div
+                  c-id="message['titleId']"
+                  class="cui-toast__title"
+                  data-citry-ui-part="title"
+                >
                   {{ message['title'] }}
                 </div>
                 <c-if cond="message['description']">
@@ -400,7 +404,11 @@ class CToastRegion(LibraryComponent):
               <c-if cond="message['actionLabel'] or message['dismissible']">
                 <div class="cui-toast__actions" data-citry-ui-part="actions">
                   <c-if cond="message['actionLabel']">
-                    <button type="button" data-citry-toast-action data-citry-ui-part="action">
+                    <button
+                      type="button"
+                      data-citry-toast-action
+                      data-citry-ui-part="action"
+                    >
                       {{ message['actionLabel'] }}
                     </button>
                   </c-if>
