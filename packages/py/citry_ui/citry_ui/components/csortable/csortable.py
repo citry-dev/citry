@@ -484,9 +484,19 @@ class CInternalSortable(LibraryComponent):
         data-citry-ui-part="sortable"
       >
         <ol
-          c-aria-label="tr('citry-ui-sortable-label') if catalog_label else label"
-          c-$c-tr:citry-ui-sortable-label[aria-label]="True if catalog_label else None"
-          data-citry-sortable-items data-citry-ui-part="items"
+          c-if="catalog_label"
+          c-aria-label="tr('citry-ui-sortable-label')"
+          $c-tr:citry-ui-sortable-label[aria-label]
+          data-citry-sortable-items
+          data-citry-ui-part="items"
+        >
+          <c-for each="item in items"><c-CInternalSortableItem c-item="item" c-name="name" c-form="form" c-disabled="disabled" c-catalog_handle="catalog_handle" /></c-for>
+        </ol>
+        <ol
+          c-else
+          c-aria-label="label"
+          data-citry-sortable-items
+          data-citry-ui-part="items"
         >
           <c-for each="item in items"><c-CInternalSortableItem c-item="item" c-name="name" c-form="form" c-disabled="disabled" c-catalog_handle="catalog_handle" /></c-for>
         </ol>
@@ -533,19 +543,27 @@ class CInternalSortableItem(LibraryComponent):
             "root_disabled": kwargs.disabled,
             "name": kwargs.name,
             "form": kwargs.form,
-            "catalog_handle_attr": True if kwargs.catalog_handle else None,
-            "handle_values_expression": (
-                "{ item: $el.closest('[data-citry-sortable-item]').dataset.label }" if kwargs.catalog_handle else None
-            ),
+            "catalog_handle": kwargs.catalog_handle,
         }
 
     template = """
       <li class="cui-sortable__item" #c-key="morph_key" c-bind="attrs" c-id="item_id" c-data-label="label" data-citry-sortable-item data-citry-ui-part="item">
         <button
-          type="button" c-disabled="button_disabled"
-          c-aria-label="tr('citry-ui-sortable-handle', item=label) if catalog_handle_attr else handle_label"
-          c-$c-tr:citry-ui-sortable-handle[aria-label]="handle_values_expression"
-          data-citry-sortable-handle data-citry-ui-part="handle"
+          c-if="catalog_handle"
+          type="button"
+          c-disabled="button_disabled"
+          c-aria-label="tr('citry-ui-sortable-handle', item=label)"
+          $c-tr:citry-ui-sortable-handle[aria-label]
+          data-citry-sortable-handle
+          data-citry-ui-part="handle"
+        ><c-if cond="handle is not None">{{ handle }}</c-if><c-else><span aria-hidden="true">⠿</span></c-else></button>
+        <button
+          c-else
+          type="button"
+          c-disabled="button_disabled"
+          c-aria-label="handle_label"
+          data-citry-sortable-handle
+          data-citry-ui-part="handle"
         ><c-if cond="handle is not None">{{ handle }}</c-if><c-else><span aria-hidden="true">⠿</span></c-else></button>
         <div data-citry-ui-part="content">{{ content }}</div>
         <input c-if="name is not None" type="hidden" c-name="name" c-form="form" c-value="value" c-disabled="root_disabled" data-citry-sortable-input />

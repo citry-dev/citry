@@ -157,7 +157,6 @@ class _TourRow(TypedDict):
     progress: str
     progress_current: str
     progress_total: str
-    progress_values: str
     step_positions: list[int]
     # Each wrapper Slot ignores the data it is rendered with and passes the
     # step's own slot data to the authored slot, so it accepts any data.
@@ -534,7 +533,6 @@ class CInternalTour(LibraryComponent):
                     ),
                     "progress_current": str(index + 1),
                     "progress_total": str(total),
-                    "progress_values": f"{{ current: '{index + 1}', total: '{total}' }}",
                     "step_positions": list(range(total)),
                     "title": Slot(
                         lambda ctx, d=declaration, sd=slot_data: d.title(sd, provides=dict(ctx.provides or {}))
@@ -598,10 +596,22 @@ class CInternalTour(LibraryComponent):
           <div class="cui-tour__spotlight" hidden aria-hidden="true" data-citry-ui-part="spotlight"></div>
           <div class="cui-tour__surface" c-data-size="size" data-placement="center" data-citry-ui-part="surface">
             <button
+              c-if="catalog['close']"
               type="button"
               c-hidden="not dismissible"
-              c-aria-label="tr('citry-ui-tour-close') if catalog['close'] else labels['close']"
-              c-$c-tr:citry-ui-tour-close[aria-label]="True if catalog['close'] else None"
+              c-aria-label="tr('citry-ui-tour-close')"
+              $c-tr:citry-ui-tour-close[aria-label]
+              data-citry-tour-action="close"
+              data-citry-ui-part="close"
+            >
+              <c-if cond="close is not None">{{ close }}</c-if>
+              <c-else><span aria-hidden="true">&times;</span></c-else>
+            </button>
+            <button
+              c-else
+              type="button"
+              c-hidden="not dismissible"
+              c-aria-label="labels['close']"
               data-citry-tour-action="close"
               data-citry-ui-part="close"
             >
@@ -688,7 +698,7 @@ class CInternalTourStep(LibraryComponent):
           <div data-citry-ui-part="progress-group">
             <c-if cond="catalog['progress']">
               <span
-                c-$c-tr:citry-ui-tour-progress="progress_values"
+                $c-tr:citry-ui-tour-progress
                 aria-live="polite"
                 data-citry-ui-part="progress"
               >{{ tr('citry-ui-tour-progress', current=progress_current, total=progress_total) }}</span>
@@ -702,29 +712,57 @@ class CInternalTourStep(LibraryComponent):
           </div>
           <div data-citry-ui-part="actions">
             <button
+              c-if="catalog['skip']"
               type="button"
               c-hidden="not skippable"
-              c-$c-tr:citry-ui-tour-skip="True if catalog['skip'] else None"
+              $c-tr:citry-ui-tour-skip
               data-citry-tour-action="skip"
-            >{{ tr('citry-ui-tour-skip') if catalog['skip'] else labels['skip'] }}</button>
+            >{{ tr('citry-ui-tour-skip') }}</button>
             <button
+              c-else
+              type="button"
+              c-hidden="not skippable"
+              data-citry-tour-action="skip"
+            >{{ labels['skip'] }}</button>
+            <button
+              c-if="catalog['previous']"
               type="button"
               c-hidden="is_first"
-              c-$c-tr:citry-ui-tour-previous="True if catalog['previous'] else None"
+              $c-tr:citry-ui-tour-previous
               data-citry-tour-action="previous"
-            >{{ tr('citry-ui-tour-previous') if catalog['previous'] else labels['previous'] }}</button>
+            >{{ tr('citry-ui-tour-previous') }}</button>
             <button
+              c-else
+              type="button"
+              c-hidden="is_first"
+              data-citry-tour-action="previous"
+            >{{ labels['previous'] }}</button>
+            <button
+              c-if="catalog['next']"
               type="button"
               c-hidden="is_last"
-              c-$c-tr:citry-ui-tour-next="True if catalog['next'] else None"
+              $c-tr:citry-ui-tour-next
               data-citry-tour-action="next"
-            >{{ tr('citry-ui-tour-next') if catalog['next'] else labels['next'] }}</button>
+            >{{ tr('citry-ui-tour-next') }}</button>
             <button
+              c-else
+              type="button"
+              c-hidden="is_last"
+              data-citry-tour-action="next"
+            >{{ labels['next'] }}</button>
+            <button
+              c-if="catalog['finish']"
               type="button"
               c-hidden="not is_last"
-              c-$c-tr:citry-ui-tour-finish="True if catalog['finish'] else None"
+              $c-tr:citry-ui-tour-finish
               data-citry-tour-action="finish"
-            >{{ tr('citry-ui-tour-finish') if catalog['finish'] else labels['finish'] }}</button>
+            >{{ tr('citry-ui-tour-finish') }}</button>
+            <button
+              c-else
+              type="button"
+              c-hidden="not is_last"
+              data-citry-tour-action="finish"
+            >{{ labels['finish'] }}</button>
           </div>
         </footer>
       </section>

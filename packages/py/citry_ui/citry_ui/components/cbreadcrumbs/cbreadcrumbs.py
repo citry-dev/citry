@@ -180,11 +180,53 @@ class CBreadcrumbs(LibraryComponent):
             "list_attrs": list_attrs,
         }
 
+    # The catalog default and a caller's label render as two authored <nav>
+    # elements, so a caller's label never carries a browser translation.
     template = """
       <nav
+        c-if="catalog_label"
         class="cui-breadcrumbs"
-        c-aria-label="tr('citry-ui-breadcrumbs-label') if catalog_label else label"
-        c-$c-tr:citry-ui-breadcrumbs-label[aria-label]="True if catalog_label else None"
+        c-aria-label="tr('citry-ui-breadcrumbs-label')"
+        $c-tr:citry-ui-breadcrumbs-label[aria-label]
+        c-data-size="size"
+        c-data-wrap="'' if wrap else None"
+        c-bind="attrs"
+        data-citry-ui-part="breadcrumbs"
+      >
+        <ol c-bind="list_attrs" data-citry-ui-part="list">
+          <li c-for="resolved in items" data-citry-ui-part="item">
+            <c-slot
+              name="item"
+              c-item="resolved.item"
+              c-index="resolved.index"
+              c-is_current="resolved.is_current"
+              c-attrs="resolved.attrs"
+            >
+              <c-if cond="resolved.item.href is not None">
+                <a c-bind="resolved.attrs" data-citry-ui-part="link">
+                  {{ resolved.item.label }}
+                </a>
+              </c-if>
+              <c-else>
+                <span c-bind="resolved.attrs" data-citry-ui-part="current">
+                  {{ resolved.item.label }}
+                </span>
+              </c-else>
+            </c-slot>
+            <c-if cond="not resolved.is_current">
+              <span aria-hidden="true" data-citry-ui-part="separator">
+                <c-slot name="separator" c-index="resolved.index">
+                  {{ separator }}
+                </c-slot>
+              </span>
+            </c-if>
+          </li>
+        </ol>
+      </nav>
+      <nav
+        c-else
+        class="cui-breadcrumbs"
+        c-aria-label="label"
         c-data-size="size"
         c-data-wrap="'' if wrap else None"
         c-bind="attrs"

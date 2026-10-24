@@ -345,6 +345,10 @@ class CCalendar(LibraryComponent):
             "fixedWeeks": kwargs.fixed_weeks,
             "unavailableMessage": unavailable_message,
             "catalogUnavailableMessage": catalog["unavailable_message"],
+            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            "catalogLabel": snapshot["catalog_label"],
+            "catalogPreviousLabel": snapshot["catalog_previous_label"],
+            "catalogNextLabel": snapshot["catalog_next_label"],
             "variant": kwargs.variant,
             "size": kwargs.size,
             "locale": context.locale,
@@ -401,7 +405,7 @@ class CCalendar(LibraryComponent):
         c-data-empty="'' if not value else None"
         c-data-variant="variant"
         c-data-size="size"
-        c-$c-tr:citry-ui-calendar-label[aria-label]="True if catalog_label else None"
+        $c-tr:citry-ui-calendar-label[aria-label]="catalogLabel ? {} : null"
         c-bind="attrs"
         data-citry-ui-part="calendar"
       >
@@ -410,7 +414,7 @@ class CCalendar(LibraryComponent):
             class="cui-calendar__navigation"
             type="button"
             c-aria-label="tr('citry-ui-calendar-previous-month') if catalog_previous_label else previous_label"
-            c-$c-tr:citry-ui-calendar-previous-month[aria-label]="True if catalog_previous_label else None"
+            $c-tr:citry-ui-calendar-previous-month[aria-label]="catalogPreviousLabel ? {} : null"
             data-citry-ui-part="previous"
           >
             <span class="cui-calendar__arrow" aria-hidden="true">&lsaquo;</span>
@@ -426,7 +430,7 @@ class CCalendar(LibraryComponent):
             class="cui-calendar__navigation"
             type="button"
             c-aria-label="tr('citry-ui-calendar-next-month') if catalog_next_label else next_label"
-            c-$c-tr:citry-ui-calendar-next-month[aria-label]="True if catalog_next_label else None"
+            $c-tr:citry-ui-calendar-next-month[aria-label]="catalogNextLabel ? {} : null"
             data-citry-ui-part="next"
           >
             <span class="cui-calendar__arrow" aria-hidden="true">&rsaquo;</span>
@@ -459,7 +463,7 @@ class CCalendar(LibraryComponent):
           c-disabled="disabled"
           c-readonly="readonly"
           c-aria-label="tr('citry-ui-calendar-label') if catalog_label else label"
-          c-$c-tr:citry-ui-calendar-label[aria-label]="True if catalog_label else None"
+          $c-tr:citry-ui-calendar-label[aria-label]="catalogLabel ? {} : null"
           c-aria-labelledby="labelled_by"
           c-aria-describedby="described_by"
           c-aria-errormessage="error_message"

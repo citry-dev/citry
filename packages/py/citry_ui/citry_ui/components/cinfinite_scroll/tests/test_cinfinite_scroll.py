@@ -46,7 +46,15 @@ def test_schema_registration_and_server_fallback() -> None:
         "style",
         "attrs",
     ]
-    assert [item.name for item in fields(CInfiniteScroll.JsData)] == ["serverDefaults"]
+    # The catalog flags tell each `$c-tr` binding whether to translate or keep a caller's label.
+    assert [item.name for item in fields(CInfiniteScroll.JsData)] == [
+        "serverDefaults",
+        "catalogLoading",
+        "catalogError",
+        "catalogEnd",
+        "catalogLoadMore",
+        "catalogRetry",
+    ]
     assert CInfiniteScroll in citry_ui.COMPONENTS
     html = _render(
         '<form><c-CInfiniteScroll id="feed" aria_label="Feed" action_name="feed_action"><ol><li>A</li></ol></c-CInfiniteScroll></form>',

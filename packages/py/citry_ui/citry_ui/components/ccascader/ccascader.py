@@ -491,13 +491,18 @@ class CInternalCascader(LibraryComponent):
             <c-for each="entry in root_entries"><c-CInternalCascaderOption #c-key="entry['option'].key" c-bind="entry" c-root_id="root_id" c-selected="value" c-level="1" /></c-for>
           </ul>
           <c-for each="parent in groups"><c-CInternalCascaderGroup #c-key="parent.key" c-parent="parent" c-root_id="root_id" c-selected="value" /></c-for>
-          <p c-if="not roots" data-citry-ui-part="empty" c-$c-tr:citry-ui-cascader-empty="True if catalog_empty else None">{{ tr('citry-ui-cascader-empty') if catalog_empty else labels['empty'] }}</p>
+          <p
+            c-if="not roots and catalog_empty"
+            data-citry-ui-part="empty"
+            $c-tr:citry-ui-cascader-empty
+          >{{ tr('citry-ui-cascader-empty') }}</p>
+          <p c-elif="not roots" data-citry-ui-part="empty">{{ labels['empty'] }}</p>
         </div>
         <span data-citry-ui-part="inputs" hidden>
           <c-for each="segment in value"><input type="hidden" c-name="name" c-value="segment" c-form="form" c-disabled="disabled or name is None" /></c-for>
         </span>
-        <span hidden aria-hidden="true" c-$c-tr:citry-ui-cascader-placeholder="True">{{ tr('citry-ui-cascader-placeholder') }}</span>
-        <span hidden aria-hidden="true" c-$c-tr:citry-ui-cascader-selected="True">{{ tr('citry-ui-cascader-selected', path=joined) }}</span>
+        <span hidden aria-hidden="true" $c-tr:citry-ui-cascader-placeholder>{{ tr('citry-ui-cascader-placeholder') }}</span>
+        <span hidden aria-hidden="true" $c-tr:citry-ui-cascader-selected>{{ tr('citry-ui-cascader-selected', path=joined) }}</span>
         <span data-citry-ui-part="status" role="status" aria-live="polite" aria-atomic="true">{{ status }}</span>
       </div>
     """

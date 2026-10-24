@@ -87,7 +87,6 @@ class CTagsInputInvalidDetail(TypedDict):
 class _ResolvedTag:
     value: str
     remove_label: str
-    values_expression: str
 
 
 _VARIANTS = ("outline", "filled", "plain")
@@ -546,7 +545,6 @@ class CTagsInput(LibraryComponent):
                 remove_label=self.i18n.tr("citry-ui-tags-input-remove", value=value)
                 if catalog_messages["remove_label"]
                 else cast("str", messages.remove_label).format(value=value),
-                values_expression="{ value: " + json.dumps(value, ensure_ascii=False) + " }",
             )
             for value in values
         )
@@ -677,6 +675,8 @@ class CTagsInput(LibraryComponent):
         self._snapshot(kwargs)
         return self._cui_tags_input_data
 
+    # A remove button's catalog default keeps the value the server passed to
+    # tr(); a caller's own label renders the unbound c-else button.
     template = """
       <div
         class="cui-tags-input"
@@ -722,8 +722,18 @@ class CTagsInput(LibraryComponent):
             >
               <span data-citry-ui-part="tag-label">{{ tag.value }}</span>
               <button
-                c-aria-label="tr('citry-ui-tags-input-remove', value=tag.value) if catalog_remove_label else tag.remove_label"
-                c-$c-tr:citry-ui-tags-input-remove[aria-label]="tag.values_expression if catalog_remove_label else None"
+                c-if="catalog_remove_label"
+                c-aria-label="tr('citry-ui-tags-input-remove', value=tag.value)"
+                $c-tr:citry-ui-tags-input-remove[aria-label]
+                c-data-value="tag.value"
+                c-disabled="disabled or readonly"
+                type="button"
+                tabindex="-1"
+                data-citry-ui-part="remove"
+              >&#215;</button>
+              <button
+                c-else
+                c-aria-label="tag.remove_label"
                 c-data-value="tag.value"
                 c-disabled="disabled or readonly"
                 type="button"

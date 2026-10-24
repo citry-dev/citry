@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `CPagination` control labels and `CTable`'s status announcement now
+  follow a language switch in the browser, and a label you pass to a
+  component stays as you wrote it while browser i18n is active.
 - A component that checks its rendered fills, such as `CDisclosure`'s
   title, now reads a numeric character reference with thousands of digits
   (`&#` followed by 5,000 zeros and `106;`) instead of raising
@@ -11,6 +14,10 @@
 
 ### Changed
 
+- Citry UI components write their `$c-tr` translation bindings in the
+  template, which the next Citry release requires. Earlier Citry UI
+  releases fail to render under that release, so upgrade Citry UI and
+  Citry together.
 - Citry UI components work with Citry's new check that raises
   `TypeError` for an input of the wrong type, and accept the same values
   as before, such as `heading_level="2"`. Earlier Citry UI releases

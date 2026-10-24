@@ -441,6 +441,9 @@ class CNumberInput(LibraryComponent):
             },
             "describedby": described_by,
             "errormessage": error_message,
+            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            "catalogIncrementLabel": catalog["increment_label"],
+            "catalogDecrementLabel": catalog["decrement_label"],
         }
         self._cui_number_input_snapshot = snapshot
         return snapshot
@@ -472,7 +475,7 @@ class CNumberInput(LibraryComponent):
             c-hidden="not show_controls"
             c-disabled="disabled or readonly"
             c-aria-label="tr('citry-ui-number-input-decrement') if catalog_decrement_label else decrement_label"
-            c-$c-tr:citry-ui-number-input-decrement[aria-label]="True if catalog_decrement_label else None"
+            $c-tr:citry-ui-number-input-decrement[aria-label]="catalogDecrementLabel ? {} : null"
             data-citry-ui-part="decrement"
           ><span aria-hidden="true">&minus;</span></button>
           <input
@@ -505,7 +508,7 @@ class CNumberInput(LibraryComponent):
             c-hidden="not show_controls"
             c-disabled="disabled or readonly"
             c-aria-label="tr('citry-ui-number-input-increment') if catalog_increment_label else increment_label"
-            c-$c-tr:citry-ui-number-input-increment[aria-label]="True if catalog_increment_label else None"
+            $c-tr:citry-ui-number-input-increment[aria-label]="catalogIncrementLabel ? {} : null"
             data-citry-ui-part="increment"
           ><span aria-hidden="true">+</span></button>
         </div>

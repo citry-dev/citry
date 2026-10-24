@@ -442,12 +442,13 @@ Choose between two server ownership paths:
 1. when the Citry UI default is in use, call `tr()` and add `$c-tr` only when
    that destination needs a browser continuation; or
 2. when the caller explicitly supplies the prop or slot, use it unchanged and
-   emit no Citry UI catalog binding.
+   keep the browser from translating it: the binding's values expression
+   returns `null`, or the override branch has no binding (see item 5).
 
 Determine that choice from raw prop or slot presence, not truthiness or equality
-with the English source text. Do not leave `$c-tr` on the caller-override path,
-because a later locale change would replace the caller's value with the Citry
-UI default.
+with the English source text. A binding that translates on the caller-override
+path would replace the caller's value with the Citry UI default after a locale
+change.
 
 For each new family, and for each existing family during the migration, add an
 i18n section to the design package and complete this audit before runtime work:
@@ -544,42 +545,37 @@ i18n section to the design package and complete this audit before runtime work:
    </span>
    ```
 
-   `$c-tr` has the same three server-authoring forms as other dynamic
-   attributes. Prefer the
-   direct form above when the binding is fixed in the template. Use
-   `c-$c-tr:<message>[<attribute>]="browser_values_expression"` when Python
-   supplies the raw Vue named-values expression. A `c-bind` mapping may
-   supply the complete key and value when server logic chooses or omits the
-   binding:
+   Write every `$c-tr` binding and its values expression in the template,
+   because the expression is browser JavaScript. When the catalog default and
+   a caller override share one element, return the ownership decision from
+   `js_data()` and let the expression return `null` on the override path:
 
    ```html
    <button
-     c-aria-label="tr('citry-ui-toast-dismiss', title=toast.title)"
-     c-$c-tr:citry-ui-toast-dismiss[aria-label]="browser_values_expression"
+     c-aria-label="tr('citry-ui-dialog-close') if catalog_close_label else close_label"
+     $c-tr:citry-ui-dialog-close[aria-label]="catalogCloseLabel ? {} : null"
    >
    ```
 
-   ```html
-   <button
-     c-bind="{
-       'aria-label': tr('citry-ui-toast-dismiss', title=toast.title),
-       '$c-tr:citry-ui-toast-dismiss[aria-label]':
-           '{ title: toast.title }',
-     }"
-   >
-   ```
+   While the expression returns `null`, the element keeps its server-rendered
+   value, so a caller's label stays fixed through locale switches. Only a
+   written `null` token lets the server accept a value that `tr()` did not
+   produce; a `tr()` value must still name the same message. Return exactly
+   `null`: `undefined`, for example from a misspelled `js_data()` key, also
+   keeps the server value but is reported in development mode. When the
+   override path renders no target attribute at all, a binding that can return
+   `null` is dropped.
 
-   All three forms resolve once in template source order. The last declaration
-   for the same text or HTML-attribute destination wins even if it names a
-   different message. In a server-dynamic or `c-bind` contribution,
-   `None`/`False` removes that destination, `True` enables it without a reactive
-   values expression, and a string supplies the reactive values expression.
-   An empty string also means no reactive values expression, but prefer `True`
-   because it makes the presence-only intent explicit.
-   Direct and `c-$c-tr` names receive earlier template diagnostics; a key
-   produced by `c-bind` receives the same message/output/target and browser
-   expression checks when the mapping resolves. Never use the flexible forms
-   to leave a default catalog binding on an explicit-override path.
+   A component without its own Vue instance (no `js` or `js_data()`) has no
+   browser data to read, so it picks between two authored elements with
+   `c-if`/`c-else`: the catalog branch carries the binding and the override
+   branch carries none. Inside a `c-for` loop, use the same split.
+
+   Rendering raises `VueCodeError` for a binding named by Python data: a
+   `c-$c-tr:` attribute, a `$c-tr` key in a `c-bind` mapping, or one added by
+   an `on_attrs_resolved` hook. The last declaration for the same text or
+   HTML-attribute destination wins even if it names a different message. Never
+   leave a default catalog binding that can translate an explicit override.
 
    In `$c-tr:<message>.<fluent-output>[<html-attribute>]`, the dot selects a
    Fluent message attribute and brackets select the HTML attribute to update.

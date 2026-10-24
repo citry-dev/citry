@@ -168,6 +168,9 @@ class CSidebar(LibraryComponent):
                 "size": kwargs.size,
                 "sticky": kwargs.sticky,
             },
+            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            "catalogExpandLabel": uses_catalog_default(self, "expand_label"),
+            "catalogCollapseLabel": uses_catalog_default(self, "collapse_label"),
         }
 
     template = """
@@ -202,13 +205,13 @@ class CSidebar(LibraryComponent):
           <span
             class="cui-sidebar__toggle-label"
             c-hidden="not collapsed"
-            c-$c-tr:citry-ui-sidebar-expand="True if catalog_expand_label else None"
+            $c-tr:citry-ui-sidebar-expand="catalogExpandLabel ? {} : null"
             data-citry-ui-part="toggle-label"
           >{{ tr('citry-ui-sidebar-expand') if catalog_expand_label else expand_label }}</span>
           <span
             class="cui-sidebar__toggle-label"
             c-hidden="collapsed"
-            c-$c-tr:citry-ui-sidebar-collapse="True if catalog_collapse_label else None"
+            $c-tr:citry-ui-sidebar-collapse="catalogCollapseLabel ? {} : null"
             data-citry-ui-part="toggle-label"
           >{{ tr('citry-ui-sidebar-collapse') if catalog_collapse_label else collapse_label }}</span>
         </button>

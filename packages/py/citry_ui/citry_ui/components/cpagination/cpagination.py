@@ -1,7 +1,5 @@
 """Finite native-link or client-owned Pagination navigation."""
 
-# ruff: noqa: E501 - Citry template expressions stay on their owning attribute lines.
-
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -233,6 +231,11 @@ class CPagination(LibraryComponent):
             )
         if kwargs.show_edges:
             items.append(self._control("last", pages, page, pages, href, str(labels["last_label"]), kwargs.disabled))
+        for item in items:
+            # The template picks the control whose literal `$c-tr` binding
+            # matches this kind, or the unbound control for a caller's label.
+            if item["kind"] != "ellipsis":
+                item["binding"] = item["kind"] if catalog[f"{item['kind']}_label"] else None
         self._pagination_data: dict[str, object] = {
             "pages": pages,
             "page": page,
@@ -277,11 +280,6 @@ class CPagination(LibraryComponent):
             "kind": kind,
             "page": target,
             "formatted_page": formatted_page,
-            "values_expression": (
-                f'{{ page: $i18n.format.number({target}, {{ format: "citry-ui-pagination-page" }}) }}'
-                if kind == "page"
-                else None
-            ),
             "label": label,
             "text": str(target) if kind == "page" else texts[kind],
             "current": kind == "page" and target == page,
@@ -300,6 +298,8 @@ class CPagination(LibraryComponent):
             "serverDefaults": {key: self._pagination_data[key] for key in ("page", "disabled", "variant", "size")},
         }
 
+    # Each pagination control's catalog default has one literal $c-tr binding
+    # in its own c-if branch; a caller's own label renders the unbound branch.
     template = """
       <nav
         class="cui-pagination"
@@ -309,7 +309,7 @@ class CPagination(LibraryComponent):
         c-data-variant="variant"
         c-data-size="size"
         c-aria-label="tr('citry-ui-pagination-label') if catalog_label else label"
-        c-$c-tr:citry-ui-pagination-label[aria-label]="True if catalog_label else None"
+        $c-tr:citry-ui-pagination-label[aria-label]="catalog_label ? {} : null"
       >
         <ul data-citry-ui-part="list">
           <c-for each="item in items">
@@ -319,13 +319,64 @@ class CPagination(LibraryComponent):
               </c-if>
               <c-elif cond="item['href'] is not None">
                 <a
+                  c-if="item['binding'] == 'page'"
                   c-href="item['href']"
-                  c-aria-label="tr('citry-ui-pagination-page', page=item['formatted_page']) if item['kind'] == 'page' and catalog_page_label else tr('citry-ui-pagination-previous') if item['kind'] == 'previous' and catalog_previous_label else tr('citry-ui-pagination-next') if item['kind'] == 'next' and catalog_next_label else tr('citry-ui-pagination-first') if item['kind'] == 'first' and catalog_first_label else tr('citry-ui-pagination-last') if item['kind'] == 'last' and catalog_last_label else item['label']"
-                  c-$c-tr:citry-ui-pagination-page[aria-label]="item['values_expression'] if item['kind'] == 'page' and catalog_page_label else None"
-                  c-$c-tr:citry-ui-pagination-previous[aria-label]="True if item['kind'] == 'previous' and catalog_previous_label else None"
-                  c-$c-tr:citry-ui-pagination-next[aria-label]="True if item['kind'] == 'next' and catalog_next_label else None"
-                  c-$c-tr:citry-ui-pagination-first[aria-label]="True if item['kind'] == 'first' and catalog_first_label else None"
-                  c-$c-tr:citry-ui-pagination-last[aria-label]="True if item['kind'] == 'last' and catalog_last_label else None"
+                  c-aria-label="tr('citry-ui-pagination-page', page=item['formatted_page'])"
+                  $c-tr:citry-ui-pagination-page[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</a>
+                <a
+                  c-elif="item['binding'] == 'previous'"
+                  c-href="item['href']"
+                  c-aria-label="tr('citry-ui-pagination-previous')"
+                  $c-tr:citry-ui-pagination-previous[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</a>
+                <a
+                  c-elif="item['binding'] == 'next'"
+                  c-href="item['href']"
+                  c-aria-label="tr('citry-ui-pagination-next')"
+                  $c-tr:citry-ui-pagination-next[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</a>
+                <a
+                  c-elif="item['binding'] == 'first'"
+                  c-href="item['href']"
+                  c-aria-label="tr('citry-ui-pagination-first')"
+                  $c-tr:citry-ui-pagination-first[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</a>
+                <a
+                  c-elif="item['binding'] == 'last'"
+                  c-href="item['href']"
+                  c-aria-label="tr('citry-ui-pagination-last')"
+                  $c-tr:citry-ui-pagination-last[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</a>
+                <a
+                  c-else
+                  c-href="item['href']"
+                  c-aria-label="item['label']"
                   c-aria-current="'page' if item['current'] else None"
                   c-data-page="item['page']"
                   c-data-kind="item['kind']"
@@ -335,13 +386,69 @@ class CPagination(LibraryComponent):
               </c-elif>
               <c-else>
                 <button
+                  c-if="item['binding'] == 'page'"
                   type="button"
-                  c-aria-label="tr('citry-ui-pagination-page', page=item['formatted_page']) if item['kind'] == 'page' and catalog_page_label else tr('citry-ui-pagination-previous') if item['kind'] == 'previous' and catalog_previous_label else tr('citry-ui-pagination-next') if item['kind'] == 'next' and catalog_next_label else tr('citry-ui-pagination-first') if item['kind'] == 'first' and catalog_first_label else tr('citry-ui-pagination-last') if item['kind'] == 'last' and catalog_last_label else item['label']"
-                  c-$c-tr:citry-ui-pagination-page[aria-label]="item['values_expression'] if item['kind'] == 'page' and catalog_page_label else None"
-                  c-$c-tr:citry-ui-pagination-previous[aria-label]="True if item['kind'] == 'previous' and catalog_previous_label else None"
-                  c-$c-tr:citry-ui-pagination-next[aria-label]="True if item['kind'] == 'next' and catalog_next_label else None"
-                  c-$c-tr:citry-ui-pagination-first[aria-label]="True if item['kind'] == 'first' and catalog_first_label else None"
-                  c-$c-tr:citry-ui-pagination-last[aria-label]="True if item['kind'] == 'last' and catalog_last_label else None"
+                  c-aria-label="tr('citry-ui-pagination-page', page=item['formatted_page'])"
+                  $c-tr:citry-ui-pagination-page[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  c-disabled="item['disabled']"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</button>
+                <button
+                  c-elif="item['binding'] == 'previous'"
+                  type="button"
+                  c-aria-label="tr('citry-ui-pagination-previous')"
+                  $c-tr:citry-ui-pagination-previous[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  c-disabled="item['disabled']"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</button>
+                <button
+                  c-elif="item['binding'] == 'next'"
+                  type="button"
+                  c-aria-label="tr('citry-ui-pagination-next')"
+                  $c-tr:citry-ui-pagination-next[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  c-disabled="item['disabled']"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</button>
+                <button
+                  c-elif="item['binding'] == 'first'"
+                  type="button"
+                  c-aria-label="tr('citry-ui-pagination-first')"
+                  $c-tr:citry-ui-pagination-first[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  c-disabled="item['disabled']"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</button>
+                <button
+                  c-elif="item['binding'] == 'last'"
+                  type="button"
+                  c-aria-label="tr('citry-ui-pagination-last')"
+                  $c-tr:citry-ui-pagination-last[aria-label]
+                  c-aria-current="'page' if item['current'] else None"
+                  c-data-page="item['page']"
+                  c-data-kind="item['kind']"
+                  c-data-current="'' if item['current'] else None"
+                  c-disabled="item['disabled']"
+                  data-citry-ui-part="control"
+                >{{ item['text'] }}</button>
+                <button
+                  c-else
+                  type="button"
+                  c-aria-label="item['label']"
                   c-aria-current="'page' if item['current'] else None"
                   c-data-page="item['page']"
                   c-data-kind="item['kind']"

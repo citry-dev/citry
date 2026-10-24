@@ -261,7 +261,12 @@ class CCarousel(LibraryComponent):
                 "draggable": snapshot["draggable"],
                 "variant": snapshot["variant"],
                 "size": snapshot["size"],
-            }
+            },
+            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            "catalogPreviousLabel": snapshot["catalog_previous_label"],
+            "catalogNextLabel": snapshot["catalog_next_label"],
+            "catalogPickerLabel": snapshot["catalog_picker_label"],
+            "catalogRoleDescription": snapshot["catalog_role_description"],
         }
 
     def on_render(self) -> Any:
@@ -284,7 +289,7 @@ class CCarousel(LibraryComponent):
         role="region"
         c-aria-label="label"
         c-aria-roledescription="tr('citry-ui-carousel-role') if catalog_role_description else role_description"
-        c-$c-tr:citry-ui-carousel-role[aria-roledescription]="True if catalog_role_description else None"
+        $c-tr:citry-ui-carousel-role[aria-roledescription]="catalogRoleDescription ? {} : null"
         c-data-index="index"
         c-data-orientation="orientation"
         c-data-loop="'' if loop else None"
@@ -299,7 +304,7 @@ class CCarousel(LibraryComponent):
           <button
             type="button"
             c-aria-label="tr('citry-ui-carousel-previous') if catalog_previous_label else previous_label"
-            c-$c-tr:citry-ui-carousel-previous[aria-label]="True if catalog_previous_label else None"
+            $c-tr:citry-ui-carousel-previous[aria-label]="catalogPreviousLabel ? {} : null"
             c-disabled="disabled or (index == 0 and not loop)"
             data-citry-carousel-previous
             data-citry-ui-part="previous"
@@ -307,7 +312,7 @@ class CCarousel(LibraryComponent):
           <button
             type="button"
             c-aria-label="tr('citry-ui-carousel-next') if catalog_next_label else next_label"
-            c-$c-tr:citry-ui-carousel-next[aria-label]="True if catalog_next_label else None"
+            $c-tr:citry-ui-carousel-next[aria-label]="catalogNextLabel ? {} : null"
             c-disabled="disabled"
             data-citry-carousel-next
             data-citry-ui-part="next"
@@ -320,7 +325,7 @@ class CCarousel(LibraryComponent):
           c-hidden="not indicators"
           role="group"
           c-aria-label="tr('citry-ui-carousel-picker') if catalog_picker_label else picker_label"
-          c-$c-tr:citry-ui-carousel-picker[aria-label]="True if catalog_picker_label else None"
+          $c-tr:citry-ui-carousel-picker[aria-label]="catalogPickerLabel ? {} : null"
           data-citry-carousel-indicators
           data-citry-ui-part="indicators"
         ></div>
@@ -771,12 +776,26 @@ class CCarouselSlide(LibraryComponent):
 
     template = """
       <div
+        c-if="catalog_role_description"
         class="cui-carousel__slide"
         c-bind="attrs"
         role="group"
         c-aria-label="label"
-        c-aria-roledescription="tr('citry-ui-carousel-slide-role') if catalog_role_description else role_description"
-        c-$c-tr:citry-ui-carousel-slide-role[aria-roledescription]="True if catalog_role_description else None"
+        c-aria-roledescription="tr('citry-ui-carousel-slide-role')"
+        $c-tr:citry-ui-carousel-slide-role[aria-roledescription]
+        c-data-value="value"
+        c-data-index="index"
+        c-data-active="'' if active else None"
+        data-citry-carousel-slide
+        data-citry-ui-part="slide"
+      ><c-slot required /></div>
+      <div
+        c-else
+        class="cui-carousel__slide"
+        c-bind="attrs"
+        role="group"
+        c-aria-label="label"
+        c-aria-roledescription="role_description"
         c-data-value="value"
         c-data-index="index"
         c-data-active="'' if active else None"

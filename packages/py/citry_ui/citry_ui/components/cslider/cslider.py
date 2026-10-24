@@ -489,6 +489,9 @@ def _snapshot(component: LibraryComponent, kwargs: Any, *, is_range: bool) -> di
         "ariaLabelledby": single_aria_labelledby,
         "rangeLabelledby": [lower_labelledby, upper_labelledby] if is_range else [],
         "fieldLabelId": field.label_id if field is not None else None,
+        # The range thumbs' `$c-tr` bindings read these: `null` keeps a caller's own label.
+        "catalogLowerLabel": lower_catalog,
+        "catalogUpperLabel": upper_catalog,
     }
     setattr(component, cache_name, snapshot)
     return snapshot
@@ -512,13 +515,13 @@ _SLIDER_TEMPLATE = """
       c-if="is_range"
       class="cui-slider__visually-hidden"
       c-id="lower_label_id"
-      c-$c-tr:citry-ui-range-slider-lower="True if catalog_lower_label else None"
+      $c-tr:citry-ui-range-slider-lower="catalogLowerLabel ? {} : null"
     >{{ tr('citry-ui-range-slider-lower') if catalog_lower_label else lower_label }}</span>
     <span
       c-if="is_range"
       class="cui-slider__visually-hidden"
       c-id="upper_label_id"
-      c-$c-tr:citry-ui-range-slider-upper="True if catalog_upper_label else None"
+      $c-tr:citry-ui-range-slider-upper="catalogUpperLabel ? {} : null"
     >{{ tr('citry-ui-range-slider-upper') if catalog_upper_label else upper_label }}</span>
     <input
       c-id="lower_id"

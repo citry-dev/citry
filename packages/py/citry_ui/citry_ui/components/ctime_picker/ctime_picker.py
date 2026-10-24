@@ -467,6 +467,9 @@ class CTimePicker(LibraryComponent):
         self._cui_time_picker_data = {
             "serverDefaults": {key: value for key, value in client_data.items() if key in prop_names},
             **{key: value for key, value in client_data.items() if key not in prop_names},
+            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            "catalogPickerLabel": catalog["picker_label"],
+            "catalogClearLabel": catalog["clear_label"],
         }
         self._cui_time_picker_snapshot = snapshot
         return snapshot
@@ -540,7 +543,7 @@ class CTimePicker(LibraryComponent):
               </button>
             </c-fill>
             <c-fill name="title">
-              <span c-$c-tr:citry-ui-time-picker-label="True if catalog_picker_label else None">{{ tr('citry-ui-time-picker-label') if catalog_picker_label else picker_label }}</span>
+              <span $c-tr:citry-ui-time-picker-label="catalogPickerLabel ? {} : null">{{ tr('citry-ui-time-picker-label') if catalog_picker_label else picker_label }}</span>
             </c-fill>
             <c-fill name="default">
               <c-CListbox
@@ -563,7 +566,7 @@ class CTimePicker(LibraryComponent):
             class="cui-time-picker__clear"
             type="button"
             c-aria-label="tr('citry-ui-time-picker-clear') if catalog_clear_label else clear_label"
-            c-$c-tr:citry-ui-time-picker-clear[aria-label]="True if catalog_clear_label else None"
+            $c-tr:citry-ui-time-picker-clear[aria-label]="catalogClearLabel ? {} : null"
             c-hidden="not clearable or required or not value"
             c-disabled="disabled or readonly"
             data-citry-ui-part="clear"

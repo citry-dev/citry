@@ -328,6 +328,10 @@ class CEditable(LibraryComponent):
             "serverSize": kwargs.size,
             "placeholder": placeholder,
             "catalogPlaceholder": catalog_placeholder,
+            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            "catalogEditLabel": catalog_edit_label,
+            "catalogSubmitLabel": catalog_submit_label,
+            "catalogCancelLabel": catalog_cancel_label,
             "externalDescribedBy": external_described_by,
             "externalErrorMessage": external_error_message,
         }
@@ -399,7 +403,7 @@ class CEditable(LibraryComponent):
             class="cui-editable__action cui-editable__edit"
             type="button"
             c-aria-label="tr('citry-ui-editable-edit') if catalog_edit_label else edit_label"
-            c-$c-tr:citry-ui-editable-edit[aria-label]="True if catalog_edit_label else None"
+            $c-tr:citry-ui-editable-edit[aria-label]="catalogEditLabel ? {} : null"
             c-disabled="disabled or readonly"
             data-citry-ui-part="edit-action"
           ><span aria-hidden="true">&#9998;</span></button>
@@ -431,7 +435,7 @@ class CEditable(LibraryComponent):
               class="cui-editable__action cui-editable__submit"
               type="button"
               c-aria-label="tr('citry-ui-editable-save') if catalog_submit_label else submit_label"
-              c-$c-tr:citry-ui-editable-save[aria-label]="True if catalog_submit_label else None"
+              $c-tr:citry-ui-editable-save[aria-label]="catalogSubmitLabel ? {} : null"
               c-disabled="disabled or readonly"
               data-citry-ui-part="submit-action"
             ><span aria-hidden="true">&#10003;</span></button>
@@ -439,7 +443,7 @@ class CEditable(LibraryComponent):
               class="cui-editable__action cui-editable__cancel"
               type="button"
               c-aria-label="tr('citry-ui-editable-cancel') if catalog_cancel_label else cancel_label"
-              c-$c-tr:citry-ui-editable-cancel[aria-label]="True if catalog_cancel_label else None"
+              $c-tr:citry-ui-editable-cancel[aria-label]="catalogCancelLabel ? {} : null"
               c-disabled="disabled or readonly"
               data-citry-ui-part="cancel-action"
             ><span aria-hidden="true">&#10005;</span></button>

@@ -733,13 +733,10 @@ class CDataGrid(LibraryComponent):
             "editors": editors,
             "lc": catalog["loading"],
             "ll": labels["loading"],
-            "lb": {"$c-tr:citry-ui-data-grid-loading": True if catalog["loading"] else None},
             "ec": catalog["empty"],
             "el": labels["empty"],
-            "eb": {"$c-tr:citry-ui-data-grid-empty": True if catalog["empty"] else None},
             "xc": catalog["error"],
             "xl": labels["error"],
-            "xb": {"$c-tr:citry-ui-data-grid-error": True if catalog["error"] else None},
             "labels": labels,
             "catalog": catalog,
             "attrs": root_attrs,
@@ -905,7 +902,9 @@ class CDataGrid(LibraryComponent):
                   <td c-colspan="column_count" data-citry-ui-part="empty">
                     <c-slot name="empty">
                       <div role="status" aria-live="polite">
-                        <span c-bind="eb">{{ tr('citry-ui-data-grid-empty') if ec else el }}</span>
+                        <span
+                          $c-tr:citry-ui-data-grid-empty="serverDefaults.catalog.empty ? {} : null"
+                        >{{ tr('citry-ui-data-grid-empty') if ec else el }}</span>
                       </div>
                     </c-slot>
                   </td>
@@ -915,7 +914,9 @@ class CDataGrid(LibraryComponent):
                 <td c-colspan="column_count" data-citry-ui-part="loading">
                   <c-slot name="loading">
                     <div role="status" aria-live="polite">
-                      <span c-bind="lb">{{ tr('citry-ui-data-grid-loading') if lc else ll }}</span>
+                      <span
+                        $c-tr:citry-ui-data-grid-loading="serverDefaults.catalog.loading ? {} : null"
+                      >{{ tr('citry-ui-data-grid-loading') if lc else ll }}</span>
                     </div>
                   </c-slot>
                 </td>
@@ -924,7 +925,9 @@ class CDataGrid(LibraryComponent):
                 <td c-colspan="column_count" data-citry-ui-part="error">
                   <c-slot name="error">
                     <div role="status" aria-live="polite">
-                      <span c-bind="xb">{{ tr('citry-ui-data-grid-error') if xc else xl }}</span>
+                      <span
+                        $c-tr:citry-ui-data-grid-error="serverDefaults.catalog.error ? {} : null"
+                      >{{ tr('citry-ui-data-grid-error') if xc else xl }}</span>
                     </div>
                   </c-slot>
                 </td>

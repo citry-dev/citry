@@ -452,6 +452,8 @@ class CDateRange(LibraryComponent):
             "clearLabel": clear_label,
             "unavailableMessage": unavailable_message,
             "catalog": catalog,
+            # The range `$c-tr` bindings read this: `null` keeps a caller's own label.
+            "catalogRangeLabel": snapshot["catalog_range_label"],
             "variant": kwargs.variant,
             "size": kwargs.size,
             "locale": context.locale,
@@ -503,13 +505,13 @@ class CDateRange(LibraryComponent):
         c-data-empty="'' if not start else None"
         c-data-variant="variant"
         c-data-size="size"
-        c-$c-tr:citry-ui-date-range-label[aria-label]="True if catalog_range_label else None"
+        $c-tr:citry-ui-date-range-label[aria-label]="catalogRangeLabel ? {} : null"
         c-bind="attrs"
         data-citry-ui-part="date-range"
       >
         <div class="cui-date-range__fallback" data-citry-ui-part="fallback-group">
           <label class="cui-date-range__fallback-field">
-            <span c-$c-tr:citry-ui-date-range-start-label="True if catalog_start_label else None">{{ tr('citry-ui-date-range-start-label') if catalog_start_label else start_label }}</span>
+            <span $c-tr:citry-ui-date-range-start-label="catalog.start_label ? {} : null">{{ tr('citry-ui-date-range-start-label') if catalog_start_label else start_label }}</span>
             <input
               c-id="start_id"
               c-name="start_name"
@@ -528,7 +530,7 @@ class CDateRange(LibraryComponent):
             />
           </label>
           <label class="cui-date-range__fallback-field">
-            <span c-$c-tr:citry-ui-date-range-end-label="True if catalog_end_label else None">{{ tr('citry-ui-date-range-end-label') if catalog_end_label else end_label }}</span>
+            <span $c-tr:citry-ui-date-range-end-label="catalog.end_label ? {} : null">{{ tr('citry-ui-date-range-end-label') if catalog_end_label else end_label }}</span>
             <input
               c-id="end_id"
               c-name="end_name"
@@ -576,7 +578,7 @@ class CDateRange(LibraryComponent):
               </button>
             </c-fill>
             <c-fill name="title">
-              <span c-$c-tr:citry-ui-date-range-label="True if catalog_range_label else None">{{ tr('citry-ui-date-range-label') if catalog_range_label else range_label }}</span>
+              <span $c-tr:citry-ui-date-range-label="catalogRangeLabel ? {} : null">{{ tr('citry-ui-date-range-label') if catalog_range_label else range_label }}</span>
             </c-fill>
             <c-fill name="default">
               <c-CCalendar
@@ -610,7 +612,7 @@ class CDateRange(LibraryComponent):
             class="cui-date-range__clear"
             type="button"
             c-aria-label="tr('citry-ui-date-range-clear') if catalog_clear_label else clear_label"
-            c-$c-tr:citry-ui-date-range-clear[aria-label]="True if catalog_clear_label else None"
+            $c-tr:citry-ui-date-range-clear[aria-label]="catalog.clear_label ? {} : null"
             c-hidden="not clearable or required or not start"
             c-disabled="disabled or readonly"
             data-citry-ui-part="clear"

@@ -11,6 +11,7 @@ import sys
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 import yaml
 from citry_ui_i18n._generate_catalog import render_component_catalog
 
@@ -250,3 +251,376 @@ def test_package_format_profiles_load_from_source_and_compiled_artifacts() -> No
         assert formatter.number(Decimal("1234.5"), format="citry-ui-slider") == "1,234.5"
         assert formatter.number(Decimal("3.5"), format="citry-ui-rating") == "3.5"
         assert formatter.number(Decimal(8), format="citry-ui-tags-input-maximum") == "8"
+
+
+def _null_form_render(markup: str) -> tuple[str, dict[str, str | None], dict[str, bool]]:
+    """Render under a client provider; return the HTML, each binding's values expression, and the catalog flags."""
+    app = _configured_app()
+
+    class Page(Component):
+        citry = app
+        template = f'<c-i18n tag="section" c-client="True">{markup}</c-i18n>'
+
+    html = str(Page())
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
+    assert match is not None
+    manifest = json.loads(match.group(1))["manifest"]
+    expressions = {
+        binding["message"]: binding.get("values_expression")
+        for requirement in manifest["extensions"]["i18n"]["payload"]["requirements"]
+        for binding in requirement["bindings"]
+    }
+    # The js_data flags each `$c-tr` expression reads to choose between
+    # translating and keeping the caller's own label.
+    flags = {
+        key: value
+        for occurrence in manifest["occurrences"]
+        for key, value in occurrence["serverData"].items()
+        if key.startswith("catalog") and type(value) is bool
+    }
+    return html, expressions, flags
+
+
+def _assert_null_form(default: str, override: str, message: str, flag: str, caller_text: str) -> None:
+    _html, expressions, flags = _null_form_render(default)
+    assert expressions[message] == f"{flag} ? {{}} : null"
+    assert flags[flag] is True
+    html, expressions, flags = _null_form_render(override)
+    # The binding stays, but its flag is false, so the browser keeps the caller's text.
+    assert expressions[message] == f"{flag} ? {{}} : null"
+    assert flags[flag] is False
+    assert caller_text in html
+
+
+def test_null_form_infinite_scroll_keeps_a_caller_label() -> None:
+    _assert_null_form(
+        "<c-CInfiniteScroll />",
+        '<c-CInfiniteScroll loading_label="Fetching rows" />',
+        "citry-ui-infinite-scroll-loading",
+        "catalogLoading",
+        ">Fetching rows</span>",
+    )
+
+
+def test_null_form_number_input_keeps_a_caller_label() -> None:
+    _assert_null_form(
+        "<c-CNumberInput />",
+        '<c-CNumberInput increment_label="Add one" />',
+        "citry-ui-number-input-increment",
+        "catalogIncrementLabel",
+        'aria-label="Add one"',
+    )
+
+
+def test_null_form_sidebar_keeps_a_caller_label() -> None:
+    _assert_null_form(
+        '<c-CSidebar label="Site">x</c-CSidebar>',
+        '<c-CSidebar label="Site" expand_label="Open menu">x</c-CSidebar>',
+        "citry-ui-sidebar-expand",
+        "catalogExpandLabel",
+        ">Open menu</span>",
+    )
+
+
+def test_null_form_tag_keeps_a_caller_label() -> None:
+    _assert_null_form(
+        '<c-CTagGroup label="Tags" removable><c-CTag value="a">A</c-CTag></c-CTagGroup>',
+        '<c-CTagGroup label="Tags" removable remove_label="Drop"><c-CTag value="a">A</c-CTag></c-CTagGroup>',
+        "citry-ui-tag-remove",
+        "catalogRemoveLabel",
+        ">Drop</span>",
+    )
+
+
+def test_null_form_time_picker_keeps_a_caller_label() -> None:
+    _assert_null_form(
+        "<c-CTimePicker />",
+        '<c-CTimePicker clear_label="Wipe time" />',
+        "citry-ui-time-picker-clear",
+        "catalogClearLabel",
+        'aria-label="Wipe time"',
+    )
+
+
+def test_null_form_range_slider_keeps_a_caller_label() -> None:
+    _assert_null_form(
+        "<c-CRangeSlider />",
+        '<c-CRangeSlider lower_label="Minimum price" />',
+        "citry-ui-range-slider-lower",
+        "catalogLowerLabel",
+        ">Minimum price</span>",
+    )
+
+
+def _null_form_manifest(template: str, kwargs: dict[str, object]) -> tuple[str, dict[str, object]]:
+    app = _configured_app()
+
+    class Page(Component):
+        citry = app
+
+        def template_data(self, _kwargs, slots):
+            return {"kw": kwargs}
+
+    Page.template = f'<c-i18n tag="section" c-client="True">{template}</c-i18n>'
+    html = str(Page())
+    match = re.search(
+        r'<script type="application/json" data-citry-vue-document="[^"]*"[^>]*>(.*?)</script>', html, re.DOTALL
+    )
+    assert match is not None
+    return html, json.loads(match.group(1))["manifest"]
+
+
+def _null_form_flag(manifest: dict[str, object], path: str) -> object:
+    # The flag lives in the browser data of the occurrence that owns it.
+    for occurrence in manifest["occurrences"]:
+        value: object = occurrence["serverData"]
+        for part in path.split("."):
+            if not isinstance(value, dict) or part not in value:
+                break
+            value = value[part]
+        else:
+            return value
+    raise AssertionError(f"no occurrence sends {path!r}")
+
+
+@pytest.mark.parametrize(
+    ("template", "base", "message", "flag", "override"),
+    [
+        (
+            '<c-CCalendar c-bind="kw" />',
+            {},
+            "citry-ui-calendar-previous-month",
+            "catalogPreviousLabel",
+            {"previous_label": "Mine"},
+        ),
+        (
+            '<c-CColorPicker label="Brand color" c-bind="kw" />',
+            {},
+            "citry-ui-color-picker-hue",
+            "serverDefaults.catalog.hue",
+            {"hue_label": "Mine"},
+        ),
+        (
+            '<c-CCommandPalette label="Commands" c-bind="kw" />',
+            {"entries": (citry_ui.CCommandPaletteCommand(value="open", label="Open"),)},
+            "citry-ui-command-palette-close",
+            "catalogCloseLabel",
+            {"close_label": "Mine"},
+        ),
+        (
+            '<c-CDatePicker name="arrival" c-bind="kw" />',
+            {},
+            "citry-ui-date-picker-clear",
+            "catalog.clear_label",
+            {"clear_label": "Mine"},
+        ),
+        (
+            '<c-CDateRange start_name="start" end_name="end" c-bind="kw" />',
+            {},
+            "citry-ui-date-range-label",
+            "catalogRangeLabel",
+            {"range_label": "Mine"},
+        ),
+        (
+            '<c-CDialog c-bind="kw"><c-fill name="title">T</c-fill><c-fill name="default">B</c-fill></c-CDialog>',
+            {},
+            "citry-ui-dialog-close",
+            "catalogCloseLabel",
+            {"close_label": "Mine"},
+        ),
+        (
+            '<c-CDrawer c-bind="kw"><c-fill name="title">T</c-fill><c-fill name="default">B</c-fill></c-CDrawer>',
+            {},
+            "citry-ui-drawer-close",
+            "catalogCloseLabel",
+            {"close_label": "Mine"},
+        ),
+        (
+            '<c-CEditable value="Atlas" name="title" c-bind="kw" />',
+            {},
+            "citry-ui-editable-edit",
+            "catalogEditLabel",
+            {"edit_label": "Mine"},
+        ),
+    ],
+)
+def test_null_form_binding_follows_the_catalog_flag_in_browser_data(
+    template: str, base: dict[str, object], message: str, flag: str, override: dict[str, object]
+) -> None:
+    for extra, uses_catalog in (({}, True), (override, False)):
+        html, manifest = _null_form_manifest(template, {**base, **extra})
+        bindings = [
+            binding
+            for requirement in manifest["extensions"]["i18n"]["payload"]["requirements"]
+            for binding in requirement["bindings"]
+            if binding["message"] == message
+        ]
+        # The binding is written in the template, so it exists in both
+        # branches; the browser data decides whether it translates.
+        assert bindings, html
+        assert all(binding["values_expression"] == f"{flag} ? {{}} : null" for binding in bindings)
+        assert _null_form_flag(manifest, flag) is uses_catalog
+        if not uses_catalog:
+            # The caller's own label is what the server renders and what
+            # `null` keeps in the browser.
+            assert "Mine" in html
+
+
+def _bindings_for(manifest: dict[str, object], message: str) -> list[dict[str, object]]:
+    payload = manifest["extensions"]["i18n"]["payload"]  # type: ignore[index]
+    return [
+        binding
+        for requirement in payload["requirements"]
+        for binding in requirement["bindings"]
+        if binding["message"] == message
+    ]
+
+
+@pytest.mark.parametrize(
+    ("template", "kwargs", "message", "attribute"),
+    [
+        # Another element names the calendar, so it renders no aria-label.
+        (
+            '<c-CCalendar c-bind="kw" />',
+            {"attrs": {"aria-labelledby": "heading"}},
+            "citry-ui-calendar-label",
+            "aria-label",
+        ),
+        (
+            '<c-CDateRange start_name="start" end_name="end" c-bind="kw" />',
+            {"attrs": {"aria-labelledby": "heading"}},
+            "citry-ui-date-range-label",
+            "aria-label",
+        ),
+        # `None` removes the role description.
+        (
+            '<c-CCarousel label="Obs" c-bind="kw">'
+            '<c-CCarouselSlide value="a" label="A">a</c-CCarouselSlide>'
+            "</c-CCarousel>",
+            {"role_description": None},
+            "citry-ui-carousel-role",
+            "aria-roledescription",
+        ),
+    ],
+)
+def test_null_form_binding_on_an_attribute_the_component_left_out_is_dropped(
+    template: str, kwargs: dict[str, object], message: str, attribute: str
+) -> None:
+    html, manifest = _null_form_manifest(template, kwargs)
+    # The render succeeds, and nothing is left to translate on that attribute.
+    assert not [
+        binding
+        for binding in _bindings_for(manifest, message)
+        if binding["target"] == {"kind": "attribute", "name": attribute}
+    ], html
+
+
+_TOUR = (
+    '<c-CTour c-open="True" c-bind="kw"><c-fill name="default">'
+    '<c-CTourStep value="a"><c-fill name="title">T1</c-fill><c-fill name="default">D1</c-fill></c-CTourStep>'
+    "</c-fill></c-CTour>"
+)
+
+
+@pytest.mark.parametrize(
+    ("template", "base", "message", "values", "override", "caller_text"),
+    [
+        (
+            '<c-CTable c-rows="()" state="loading" c-bind="kw" />',
+            {"columns": (citry_ui.CTableColumn("name", "Name"),)},
+            "citry-ui-table-loading",
+            {},
+            {"loading_label": "Fetching"},
+            ">Fetching</span>",
+        ),
+        (
+            '<c-CBreadcrumbs c-bind="kw" />',
+            {"items": (CBreadcrumbItem("Home", "/"), CBreadcrumbItem("Here"))},
+            "citry-ui-breadcrumbs-label",
+            {},
+            {"label": "Page location"},
+            'aria-label="Page location"',
+        ),
+        (_TOUR, {}, "citry-ui-tour-close", {}, {"close_label": "Quit"}, 'aria-label="Quit"'),
+        (
+            '<c-CToastRegion c-duration_ms="0" c-bind="kw" />',
+            {"items": (citry_ui.CToastMessage(id="a", title="Saved"),)},
+            "citry-ui-toast-dismiss",
+            {"title": {"type": "str", "value": "Saved"}},
+            {"messages": citry_ui.CToastMessages(dismiss_label="Close {title}")},
+            'aria-label="Close Saved"',
+        ),
+        (
+            '<c-CTagsInput name="t" c-bind="kw" />',
+            {"value": ("red",), "input_attrs": {"aria-label": "Tags"}},
+            "citry-ui-tags-input-remove",
+            {"value": {"type": "str", "value": "red"}},
+            {"messages": citry_ui.CTagsInputMessages(remove_label="Drop {value}")},
+            'aria-label="Drop red"',
+        ),
+    ],
+)
+def test_bare_binding_renders_only_on_the_catalog_branch(
+    template: str,
+    base: dict[str, object],
+    message: str,
+    values: dict[str, object],
+    override: dict[str, object],
+    caller_text: str,
+) -> None:
+    html, manifest = _null_form_manifest(template, base)
+    bindings = _bindings_for(manifest, message)
+    # The catalog branch's binding has no browser expression: the browser
+    # translates again with the values the server passed to tr().
+    assert bindings, html
+    assert all("values_expression" not in binding for binding in bindings)
+    assert bindings[0]["values"] == values
+    html, manifest = _null_form_manifest(template, {**base, **override})
+    # The caller's own label renders the branch without a binding.
+    assert _bindings_for(manifest, message) == []
+    assert caller_text in html
+
+
+_TRANSFER = '<c-CTransferList name="r" c-bind="kw"><c-CTransferListItem value="a" label="Ada" /></c-CTransferList>'
+
+
+@pytest.mark.parametrize(
+    ("template", "base", "message", "flag", "override", "caller_text"),
+    [
+        (_TRANSFER, {}, "citry-ui-transfer-list-add", "catalog.add", {"add_label": "Move in"}, ">Move in</button>"),
+        (
+            '<c-CDataGrid c-rows="()" label="Grid" c-bind="kw" />',
+            {"columns": (citry_ui.CDataGridColumn("name", "Name"),)},
+            "citry-ui-data-grid-empty",
+            "serverDefaults.catalog.empty",
+            {"empty_label": "Nothing yet"},
+            ">Nothing yet</span>",
+        ),
+        (
+            '<c-CToastRegion c-items="()" c-bind="kw" />',
+            {},
+            "citry-ui-toast-region",
+            "catalogLabel",
+            {"label": "Alerts"},
+            'aria-label="Alerts"',
+        ),
+    ],
+)
+def test_null_form_binding_keeps_a_caller_label_in_more_families(
+    template: str,
+    base: dict[str, object],
+    message: str,
+    flag: str,
+    override: dict[str, object],
+    caller_text: str,
+) -> None:
+    for extra, uses_catalog in (({}, True), (override, False)):
+        html, manifest = _null_form_manifest(template, {**base, **extra})
+        bindings = _bindings_for(manifest, message)
+        assert bindings, html
+        assert all(binding["values_expression"] == f"{flag} ? {{}} : null" for binding in bindings)
+        assert _null_form_flag(manifest, flag) is uses_catalog
+        if not uses_catalog:
+            assert caller_text in html

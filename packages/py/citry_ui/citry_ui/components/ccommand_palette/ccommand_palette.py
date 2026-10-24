@@ -705,6 +705,11 @@ class CCommandPalette(LibraryComponent):
             "titleId": data["title_id"],
             "inputId": data["input_id"],
             "listboxId": data["listbox_id"],
+            # The `$c-tr` bindings read these: `null` keeps a caller's own label.
+            "catalogCloseLabel": data["catalog_close_label"],
+            "catalogSearchLabel": data["catalog_search_label"],
+            "catalogPlaceholder": data["catalog_placeholder"],
+            "catalogEmptyLabel": data["catalog_empty_label"],
         }
 
     def on_render(self) -> Any:
@@ -770,7 +775,7 @@ class CCommandPalette(LibraryComponent):
               <button
                 type="button"
                 c-aria-label="tr('citry-ui-command-palette-close') if catalog_close_label else close_label"
-                c-$c-tr:citry-ui-command-palette-close[aria-label]="True if catalog_close_label else None"
+                $c-tr:citry-ui-command-palette-close[aria-label]="catalogCloseLabel ? {} : null"
                 data-citry-command-palette-close
                 data-citry-ui-part="command-palette-close"
               >
@@ -784,7 +789,7 @@ class CCommandPalette(LibraryComponent):
                 data-citry-ui-part="command-palette-search-label"
               >
                 <span
-                  c-$c-tr:citry-ui-command-palette-search-label="True if catalog_search_label else None"
+                  $c-tr:citry-ui-command-palette-search-label="catalogSearchLabel ? {} : null"
                 >{{ tr('citry-ui-command-palette-search-label') if catalog_search_label else search_label }}</span>
               </label>
               <input
@@ -797,7 +802,7 @@ class CCommandPalette(LibraryComponent):
                 disabled
                 c-value="query"
                 c-placeholder="tr('citry-ui-command-palette-placeholder') if catalog_placeholder else placeholder"
-                c-$c-tr:citry-ui-command-palette-placeholder[placeholder]="True if catalog_placeholder else None"
+                $c-tr:citry-ui-command-palette-placeholder[placeholder]="catalogPlaceholder ? {} : null"
                 c-aria-controls="listbox_id"
                 c-aria-expanded="aria_expanded"
                 aria-autocomplete="list"
@@ -995,7 +1000,7 @@ class CCommandPalette(LibraryComponent):
             >
               <c-slot name="empty">
                 <span
-                  c-$c-tr:citry-ui-command-palette-empty="True if catalog_empty_label else None"
+                  $c-tr:citry-ui-command-palette-empty="catalogEmptyLabel ? {} : null"
                 >{{ tr('citry-ui-command-palette-empty') if catalog_empty_label else empty_label }}</span>
               </c-slot>
             </div>
