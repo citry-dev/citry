@@ -642,10 +642,6 @@ class CInternalSplitterDeclarations(LibraryComponent):
     class Slots:
         default: SlotInput[CSplitterDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def on_render(self) -> Any:
         result, error = yield
         if error is not None:
@@ -676,10 +672,6 @@ class CInternalSplitter(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         panels = kwargs.registry.panels
@@ -779,10 +771,6 @@ class CInternalSplitterPanel(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         panel = kwargs.declaration
         slot_data: CSplitterPanelDefaultSlotData = {
@@ -842,10 +830,6 @@ class CInternalSplitterHandle(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         minimum = max(kwargs.before.min_size, kwargs.pair_total - kwargs.after.max_size)

@@ -104,12 +104,17 @@ each `LibraryComponent` class, after its methods and its `template`, `js`, and
 `css` assets. Do not put source messages at the top of the class beside its
 input schemas.
 
-Each Citry UI component checks its public inputs itself, with an error that
-names the input and the accepted values (for example "Tabs loop must be a
-bool, got 'x'."), and some accept values their annotations do not name, such
-as `heading_level="2"`. Citry's general input type check would replace those
-messages and reject such values, so each definition, including the internal
-ones, turns it off with a nested `Lint` class after its input schemas:
+Citry's general input type check rejects an input whose type does not match
+its annotation, or a value outside a listed choice (a `Literal`), with a
+`TypeError` that names the input and the expected type.
+
+- **Internal components** (`CInternal*`) keep it on. Their inputs come only
+  from Citry UI's own templates, so a failure there is a Citry UI bug.
+- **Public components** turn it off for now with a nested `Lint` class after
+  their input schemas. Their own checks name the input and the accepted
+  values, and some accept values their annotations do not name, such as
+  `CDisclosure`'s `heading_level="2"`, or a `str` subclass such as a
+  `StrEnum` member where the annotation is a `Literal` of strings.
 
 ```python
 class CTabs(LibraryComponent):
