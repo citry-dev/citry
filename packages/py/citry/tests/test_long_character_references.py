@@ -6,6 +6,9 @@ Python refuses to convert a string of more than 4,300 decimal digits to an
 A browser reads such a reference without that limit: leading zeros do not
 count, and a value past U+10FFFF reads as U+FFFD. Each decoder these tests
 cover must read such a reference without raising, as the browser does.
+
+The file also checks that a numeric reference in text keeps the control
+characters and noncharacters a browser keeps.
 """
 
 from __future__ import annotations
@@ -59,7 +62,7 @@ def test_long_numeric_references_decode_as_the_browser_reads_them(source: str, e
 
 @pytest.mark.parametrize(
     "source",
-    ["&#106;", "&#x6A", "&#1114111;", "&#1114112;", "&#9999999;", "&#128;", "&#0;", "&#55296;", "&amp; &copy &bogus;"],
+    ["&#106;", "&#x6A", "&#1114112;", "&#9999999;", "&#128;", "&#0;", "&#55296;", "&amp; &copy &bogus;"],
 )
 def test_short_references_decode_as_html_unescape_does(source: str) -> None:
     assert decode_character_references(source) == html.unescape(source)
@@ -237,3 +240,51 @@ def test_a_static_textarea_with_a_long_reference_in_an_attribute_renders() -> No
         """
 
     assert "<textarea" in Note().render().serialize()
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        # Control characters and noncharacters stay, as the browser keeps them.
+        ("&#127;", "\x7f"),
+        ("&#1;&#x8;&#xb;&#x1f;", "\x01\x08\x0b\x1f"),
+        ("&#xfdd0;&#xfffe;&#x1ffff;&#1114111;", "\ufdd0\ufffe\U0001ffff\U0010ffff"),
+        # 0x80 to 0x9F read as Windows-1252, except the five codes it leaves
+        # undefined, which stay.
+        ("&#x80;&#x9f;", "\u20ac\u0178"),
+        ("&#x81;&#x8d;&#x8f;&#x90;&#x9d;", "\x81\x8d\x8f\x90\x9d"),
+        # NUL, a surrogate, and a value past U+10FFFF read as U+FFFD.
+        ("&#0;&#xd800;&#x110000;", "\ufffd" * 3),
+        ("&#13;", "\r"),
+    ],
+)
+def test_numeric_references_in_text_decode_as_the_browser_reads_them(source: str, expected: str) -> None:
+    assert decode_character_references(source) == expected
+
+
+def test_an_interactive_component_keeps_a_control_character_from_markup(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A Markup value without tags becomes text. A static page writes it as is and
+    # the browser keeps U+007F and U+FDD0, so the interactive page must too.
+    def render_page() -> str:
+        app = Citry(autodiscover=False)
+
+        class Live(Component):
+            citry = app
+
+            def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+                return {"text": Markup("a&#127;b&#xfdd0;c")}
+
+            template = """
+                <main><p>{{ text }}</p></main>
+            """
+            js = """
+                $component({});
+            """
+
+        return Live().render().serialize()
+
+    rust, python = render_both(render_page, monkeypatch)
+    for result in (rust.result, python.result):
+        page = str(result)
+        assert '"hydrate":true' in page, page[:300]
+        assert "<p>a\x7fb\ufdd0c</p>" in page
