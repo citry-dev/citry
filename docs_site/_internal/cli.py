@@ -10,7 +10,7 @@ The ``citry-docs`` command line.
 - ``assemble``: assemble the multi-version deploy artifact (current version at
   the root, committed snapshots under ``/v/``).
 - ``versions-check``: validate the committed ``versions/`` tree (manifest,
-  aliases, build stamps, cross-version links) without building.
+  aliases, build stamps, cross-version links, links to ``main``) without building.
 - ``build-all``: bootstrap / disaster-recovery rebuild of every version selected
   by ``docs_versions.yml`` (walks the git tags in throwaway worktrees).
 - ``build-tag``: build one release snapshot from its exact git tag in a
@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from docs_site._internal.build import _replace_output_directory, build_site
+from docs_site._internal.snapshot_links import pin_snapshot_links
 from docs_site._internal.ui_library_projection import copy_ui_library_api_sources, load_ui_library_catalog
 from docs_site._internal.versioning import (
     BUILD_INFO_NAME,
@@ -424,6 +425,11 @@ def _make_build_one(repo_root: Path, ref_map: dict[str, str]) -> Callable[[str, 
                     )
                 if not (staged_dir / BUILD_INFO_NAME).is_file():
                     raise RuntimeError("docs build succeeded without writing a version build stamp")
+                # A snapshot stays published for as long as the site exists, so
+                # its GitHub links must name the tag it was built from, not main.
+                # The tag's own builder may predate this rewrite, so this
+                # checkout's code does it after every tagged build.
+                pin_snapshot_links(staged_dir, ref)
                 _replace_output_directory(staged_dir, version_dir)
             return "built"
         finally:

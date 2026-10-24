@@ -12,7 +12,7 @@ The route table a web framework mounts, and the request/response types handlers 
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L155" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L155" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -65,7 +65,7 @@ the handler answers 405 for the rest.</p>
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L193" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L193" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -96,7 +96,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L199" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L199" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -127,7 +127,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L200" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L200" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -158,7 +158,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L201" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L201" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -189,7 +189,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L202" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L202" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -220,7 +220,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L203" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L203" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -251,7 +251,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L204" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L204" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -291,7 +291,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L84" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L84" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -385,7 +385,7 @@ environ, or Django's <code>HttpRequest</code>.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L109" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L109" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -416,7 +416,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L110" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L110" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -447,7 +447,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L111" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L111" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -478,7 +478,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L112" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L112" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -509,7 +509,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L113" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L113" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -540,7 +540,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L114" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L114" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -571,7 +571,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L115" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L115" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -611,7 +611,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L126" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L126" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -678,7 +678,7 @@ name.
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L144" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L144" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -709,7 +709,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L145" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L145" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -740,7 +740,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L146" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L146" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -771,7 +771,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L147" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L147" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -802,7 +802,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L150" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L150" target="_blank" rel="noopener">
 View source
 </a>
 
@@ -842,7 +842,7 @@ View source
 
 <div class="doc-object">
 
-<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/main/packages/py/citry/citry/util/routing.py#L45" target="_blank" rel="noopener">
+<a class="doc-source-link" href="https://github.com/citry-dev/citry/blob/citry@0.6.0/packages/py/citry/citry/util/routing.py#L45" target="_blank" rel="noopener">
 View source
 </a>
 

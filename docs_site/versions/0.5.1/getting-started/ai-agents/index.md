@@ -31,7 +31,7 @@ Check the result in a browser and run the project tests.
 
 ## Using agent instructions in projects
 
-For a hands-on example, see the [Citry starter projects](https://github.com/citry-dev/citry/tree/main/examples/starters){: target="_blank" rel="noopener"}.
+For a hands-on example, see the [Citry starter projects](https://github.com/citry-dev/citry/tree/citry@0.5.1/examples/starters){: target="_blank" rel="noopener"}.
 
 Each project includes `AGENTS.md` with project-specific paths, documentation pointers, and
 verification commands. Their `CLAUDE.md` imports that file for Claude Code.

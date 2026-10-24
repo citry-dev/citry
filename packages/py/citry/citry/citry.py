@@ -1956,16 +1956,22 @@ class Citry:
                 # rebuilds the registry. Even though the modules are already
                 # imported, the scan re-registers their components.
                 self._discovered = False
-                # A shared backend may not want a full wipe; the built-in
-                # in-memory cache supports it. The revision guard remains held
-                # so new keys cannot be stored before this clear finishes.
-                cache_clear = getattr(self.cache, "clear", None)
-                if callable(cache_clear):
-                    cache_clear()
-                # This engine skips re-checking keys it recently saw stored;
-                # after a wipe that memory is wrong, so the next render must
-                # write its assets again.
-                _forget_stored_keys(self)
+            # The backend is the application's own code, often a network
+            # call, so it is wiped after the invalidation released its lock:
+            # renders building cache keys do not wait for it. The invalidation
+            # has already moved the revision, which every render key includes,
+            # so an entry stored meanwhile under the old revision is never
+            # read; an entry stored meanwhile under the new revision may be
+            # wiped too, which only costs a rebuild.
+            # A shared backend may not want a full wipe; the built-in
+            # in-memory cache supports it.
+            cache_clear = getattr(self.cache, "clear", None)
+            if callable(cache_clear):
+                cache_clear()
+            # This engine skips re-checking keys it recently saw stored;
+            # after a wipe that memory is wrong, so the next render must
+            # write its assets again.
+            _forget_stored_keys(self)
 
     def _clear_standalone_template_cache(self) -> None:
         """Discard sources compiled against an obsolete component registry."""
