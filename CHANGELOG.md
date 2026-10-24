@@ -221,6 +221,10 @@
 
 ### Fixes
 
+- In a component that uses Vue, a Vue expression holding an unpaired
+  surrogate escape, such as `v-text="'a\ud800b'"`, no longer makes the
+  server write U+FFFD and the escape's hex digits into the page. Vue now
+  writes that value in the browser instead.
 - In a component that uses Vue, a `{` before a Citry tag and a `{` after
   it, as in `{<c-if cond="True">{ x }}</c-if>`, now show as text, as they
   do without Vue. Vue used to read the two braces as an interpolation and

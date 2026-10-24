@@ -40,8 +40,8 @@ use vize_atelier_core::{DirectiveNode, ElementNode, ExpressionNode, PropNode, Te
 use vize_atelier_dom::Allocator;
 
 use crate::{
-    DynamicElement, Edit, ElementMetadata, UnchangedSourceSpan, hash, map_action_to_original,
-    parse_generated_template, unchanged_source_spans,
+    DynamicElement, Edit, ElementMetadata, UnchangedSourceSpan, hash, key_name, literal_text,
+    map_action_to_original, parse_generated_template, unchanged_source_spans,
 };
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -432,7 +432,8 @@ fn render_body<'a, 'b>(
                         && callee_name(&call.callee) == Some("_resolveComponent")
                         && let Some(Argument::StringLiteral(tag)) = call.arguments.first()
                     {
-                        components.insert(id.name.to_string(), tag.value.to_string());
+                        let tag = literal_text(tag).ok_or("unsupported_render_shape")?;
+                        components.insert(id.name.to_string(), tag.to_owned());
                     }
                 }
             }
@@ -578,7 +579,9 @@ impl JsReader {
                     | "_createBlock" => self.vnode(arguments),
                     "_createCommentVNode" => {
                         Ok(JsNode::Comment(match argument_expression(arguments, 0) {
-                            Some(Expression::StringLiteral(text)) => text.value.to_string(),
+                            Some(Expression::StringLiteral(text)) => literal_text(text)
+                                .ok_or("unsupported_render_shape")?
+                                .to_owned(),
                             None => String::new(),
                             Some(_) => return Err("unsupported_render_shape"),
                         }))
@@ -623,7 +626,9 @@ impl JsReader {
                 }
             }
             Expression::StringLiteral(tag) => Ok(JsNode::Element {
-                tag: tag.value.to_string(),
+                tag: literal_text(tag)
+                    .ok_or("unsupported_render_shape")?
+                    .to_owned(),
                 props: props()?,
                 patch_flag,
                 dynamic_props,
@@ -709,9 +714,11 @@ impl JsReader {
             // Citry names slots with a quoted literal in brackets, which
             // the render emits as a computed string key.
             let name = match (&property.key, property.computed) {
-                (key, false) => key.static_name(),
+                (key, false) => key_name(key),
                 (key, true) => match key.as_expression().map(unwrap_expression) {
-                    Some(Expression::StringLiteral(literal)) => Some(literal.value.as_str().into()),
+                    Some(Expression::StringLiteral(literal)) => {
+                        literal_text(literal).map(Into::into)
+                    }
                     _ => None,
                 },
             }
@@ -771,8 +778,11 @@ fn collect_props(props: Option<&Expression<'_>>, output: &mut JsProps) -> Result
             for property in &object.properties {
                 if let ObjectPropertyKind::ObjectProperty(property) = property
                     && !property.computed
-                    && let Some(name) = property.key.static_name()
+                    && property.key.static_name().is_some()
                 {
+                    // A key holding a lone surrogate has no name the plan
+                    // can write, so the plan stops there.
+                    let name = key_name(&property.key).ok_or("unsupported_render_shape")?;
                     output.keys.push(name.to_string());
                 }
             }
@@ -817,7 +827,9 @@ fn dynamic_props(value: Option<&Expression<'_>>) -> Result<Option<Vec<String>>, 
             .elements
             .iter()
             .map(|element| match element {
-                ArrayExpressionElement::StringLiteral(key) => Ok(key.value.to_string()),
+                ArrayExpressionElement::StringLiteral(key) => literal_text(key)
+                    .map(str::to_owned)
+                    .ok_or("unsupported_render_shape"),
                 _ => Err("unsupported_render_shape"),
             })
             .collect::<Result<Vec<_>, _>>()
@@ -1520,6 +1532,33 @@ mod tests {
         hydration: &'static str,
     ) -> AttributeRow {
         (text.to_owned(), kind, key.map(str::to_owned), hydration)
+    }
+
+    #[test]
+    fn a_string_literal_holding_a_lone_surrogate_stops_the_plan() {
+        // oxc stores such a literal's value in its own encoding, so a tag,
+        // a component name or a comment read from it would be wrong; the
+        // plan treats the render as one it cannot read.
+        let render = |body: &str| format!("function render(_ctx, _cache) {{ {body} }}");
+        for (body, shape) in [
+            (r#"return _createElementVNode("p", null, "x")"#, "element"),
+            (
+                r#"return _createElementVNode("p\ud800", null, "x")"#,
+                "unknown",
+            ),
+            (r#"return _createCommentVNode("a")"#, "empty"),
+            (r#"return _createCommentVNode("a\udc00")"#, "unknown"),
+            (
+                r#"const _component_x = _resolveComponent("x\ud800"); return _createVNode(_component_x)"#,
+                "unknown",
+            ),
+            (
+                r#"return _createElementVNode("p", { "a\ud800": 1 }, "x")"#,
+                "unknown",
+            ),
+        ] {
+            assert_eq!(root_shape(&render(body)), shape, "{body}");
+        }
     }
 
     #[test]

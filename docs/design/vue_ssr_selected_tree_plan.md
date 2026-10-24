@@ -446,7 +446,11 @@ them, and hydration attaches them.
 Expressions are limited to what JSON data can answer:
 
 - string, number, `true`/`false`, `null`, `undefined` and `void` literals,
-  and a negated number literal;
+  and a negated number literal. A string literal holding an unpaired
+  surrogate, such as `'\ud800'`, is left to the browser, because neither
+  the server nor the page's UTF-8 HTML can hold its value: printed, it is
+  declined as `text-value`; read as a key or tested, it is a browser-only
+  value;
 - array literals and object literals with fixed keys, such as the
   `["card", { open: x }]` a static `class` beside a `:class` compiles to.
   An object's keys are listed in JavaScript's order: array-index keys
