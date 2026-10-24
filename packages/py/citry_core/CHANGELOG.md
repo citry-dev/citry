@@ -41,6 +41,10 @@
   `<plaintext/>`, because the browser ignores the `/` and reads everything
   after the tag as that element's text. The same tags self-closed inside
   SVG or MathML are still accepted.
+- `template_parser.compile_template()` now returns code Python can run for
+  a template that nests 50 or more `<c-if>` or `<c-for>` tags. It used to
+  return one statement that Python rejected with `SyntaxError: too many
+  nested parentheses`.
 - A template that contains a NUL character now compiles to Python code that
   runs. `template_parser.compile_template()` used to write the raw NUL, which
   Python refuses in source code.

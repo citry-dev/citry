@@ -210,6 +210,10 @@
 
 ### Fixes
 
+- A template that nests 50 or more `<c-if>` or `<c-for>` tags now renders.
+  It used to fail with `SyntaxError: too many nested parentheses`.
+  Templates nested more than about 300 levels raise `RecursionError`
+  instead, and much deeper ones can crash the process.
 - In a component that uses Vue, an attribute value such as
   `href="/search?q=x&region=eu"` now keeps `&region=eu` as written, as
   the browser and Vue do. Citry used to read `&reg` in it as `®`,

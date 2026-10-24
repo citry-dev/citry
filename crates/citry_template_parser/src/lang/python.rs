@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::ops::Range;
 
 use python_safe_eval::transformer::{
     parse_expression_with_adjusted_error_ranges, transform_expression_string,
@@ -179,15 +180,12 @@ impl LangImpl for PythonLang {
     //
     // The body is kept as a list, so it can be optimized at runtime by replacing
     // nodes with their result as text, if we find that they are static.
+    //
+    // A template whose single statement would nest more than
+    // `BRACKET_BUDGET` brackets also gets earlier `_nN = ...` statements;
+    // see `compile_with_bracket_budget`.
     fn compile(&self, args: Vec<LangSpecArgument>) -> Result<String, String> {
-        let mut final_code = String::new();
-        final_code.push_str("def generate_template():\n");
-        final_code.push_str("    body = ");
-        final_code.push_str(&format_list(&args));
-        final_code.push('\n');
-        final_code.push_str("    return body\n");
-
-        Ok(final_code)
+        compile_with_bracket_budget(args, BRACKET_BUDGET)
     }
 }
 
@@ -224,8 +222,369 @@ fn _extract_free_variables_from_comp_expr(
         .collect())
 }
 
-/// Format a single `LangSpecArgument` as a Python string representation.
-fn format_lang_spec_arg(arg: &LangSpecArgument) -> String {
+// #########################################################
+// PRINTING THE GENERATED FUNCTION
+// #########################################################
+//
+// The compiler hands the printer one tree of `LangSpecArgument` values, and
+// that tree nests as deep as the template does: every `<c-if>` adds four
+// open brackets (the `IfNode(` call, the branches tuple, the branch tuple
+// and the body list). CPython refuses to compile a statement that holds more
+// than 200 open brackets at once, so a single `body = [...]` assignment
+// cannot hold a deep template.
+//
+// The printer therefore keeps every statement within a bracket budget. A
+// template whose deepest point fits the budget prints as the single
+// `body = [...]` assignment. For a deeper template, the printer
+// moves some subtrees into local variables (`_n1`, `_n2`, ...) that earlier
+// statements assign, and writes the variable's name where the subtree was.
+// Each new statement starts again at zero open brackets.
+//
+// The passes below walk the tree with loops over a flat node list and
+// explicit work lists, not recursion, so walking a deeper template needs no
+// more Rust stack. (Dropping the tree afterwards still recurses, as the
+// derived `Drop` of `LangSpecArgument` does everywhere.)
+
+/// The most open brackets one generated statement may hold.
+///
+/// CPython's tokenizer rejects the 201st nested bracket ("too many nested
+/// parentheses"). Half of that leaves room for a later change to the node
+/// shapes, and still lets templates up to about 24 nested `<c-if>` print as
+/// one `body = [...]` statement.
+const BRACKET_BUDGET: usize = 100;
+
+/// CPython's own limit, checked once more on every finished statement.
+const PYTHON_MAX_OPEN_BRACKETS: usize = 200;
+
+/// One node of the `LangSpecArgument` tree, with what the printer learned
+/// about it.
+struct PrintNode<'a> {
+    arg: &'a LangSpecArgument,
+    /// The node's children. They sit next to each other in the node list,
+    /// in source order, and always after their parent.
+    children: Range<usize>,
+    /// The most brackets this subtree holds open at once inside its
+    /// statement, once the moves already chosen below it are applied.
+    depth: usize,
+    /// True when the subtree calls a constructor (holds a `Struct`).
+    /// Python runs constructors, which can raise, so their order matters.
+    calls_constructor: bool,
+    /// True when some node below this one, in the same statement, moves out.
+    holds_move: bool,
+    /// True when this subtree is assigned to a local variable in an
+    /// earlier statement.
+    moves_out: bool,
+    /// The `_nN` number of the local variable, once one is given.
+    local_number: usize,
+}
+
+impl<'a> PrintNode<'a> {
+    fn new(arg: &'a LangSpecArgument) -> Self {
+        PrintNode {
+            arg,
+            children: 0..0,
+            depth: 0,
+            calls_constructor: false,
+            holds_move: false,
+            moves_out: false,
+            local_number: 0,
+        }
+    }
+}
+
+/// The child values of a container argument, in the order Python evaluates
+/// them. Leaves have none.
+fn child_args(arg: &LangSpecArgument) -> &[LangSpecArgument] {
+    match arg {
+        LangSpecArgument::Tuple(elements) | LangSpecArgument::List(elements) => elements,
+        LangSpecArgument::Struct(struct_arg) => &struct_arg.arguments,
+        LangSpecArgument::Variable(_)
+        | LangSpecArgument::UnsafeString(_)
+        | LangSpecArgument::SafeString(_)
+        | LangSpecArgument::Int(_)
+        | LangSpecArgument::Bool(_) => &[],
+    }
+}
+
+/// Print the `generate_template()` function for `args`, keeping each
+/// statement within `budget` open brackets.
+///
+/// `PythonLang::compile` always passes [`BRACKET_BUDGET`]. Tests pass small
+/// budgets to see the moved-out form on small templates.
+pub(crate) fn compile_with_bracket_budget(
+    args: Vec<LangSpecArgument>,
+    budget: usize,
+) -> Result<String, String> {
+    // A budget of zero could not even hold the `body` list itself.
+    let budget = budget.max(1);
+    let root = LangSpecArgument::List(args);
+    let mut nodes = flatten(&root);
+    choose_moves_by_depth(&mut nodes, budget);
+    keep_construction_order(&mut nodes);
+    let statements = statement_order(&mut nodes);
+
+    let mut code = String::from("def generate_template():\n");
+    for &statement_root in &statements {
+        // The root node is the `body` list. Every other statement assigns
+        // one moved-out subtree to its local variable.
+        if statement_root == 0 {
+            code.push_str("    body = ");
+        } else {
+            code.push_str("    _n");
+            code.push_str(&nodes[statement_root].local_number.to_string());
+            code.push_str(" = ");
+        }
+        write_statement(&nodes, statement_root, &mut code)?;
+        code.push('\n');
+    }
+    code.push_str("    return body\n");
+    Ok(code)
+}
+
+/// List every node of the tree, each parent before its children, so the
+/// later passes can walk it by index.
+fn flatten(root: &LangSpecArgument) -> Vec<PrintNode<'_>> {
+    let mut nodes = vec![PrintNode::new(root)];
+    // Visiting nodes in list order and appending each one's children at the
+    // end keeps every family of siblings together, in source order.
+    let mut next = 0;
+    while next < nodes.len() {
+        let first_child = nodes.len();
+        for child in child_args(nodes[next].arg) {
+            nodes.push(PrintNode::new(child));
+        }
+        nodes[next].children = first_child..nodes.len();
+        next += 1;
+    }
+    nodes
+}
+
+/// Pass 1, part one: decide which subtrees must move out so that no statement opens
+/// more than `budget` brackets.
+///
+/// The pass works from the leaves up. A child that already opens `budget`
+/// brackets would push its parent past the budget, so it moves out and
+/// counts as a plain name (no brackets) in the parent. Deciding bottom-up
+/// moves the fewest subtrees: a top-down rule would move every ancestor on
+/// the deep path.
+fn choose_moves_by_depth(nodes: &mut [PrintNode<'_>], budget: usize) {
+    // Children always come after their parent, so walking the list
+    // backwards finishes every child before its parent.
+    for index in (0..nodes.len()).rev() {
+        let children = nodes[index].children.clone();
+        let mut calls_constructor = matches!(nodes[index].arg, LangSpecArgument::Struct(_));
+        if children.is_empty() {
+            // A node with no children opens no brackets, except an empty
+            // `()`, `[]` or argument-less call, which opens one.
+            nodes[index].depth = usize::from(!matches!(
+                nodes[index].arg,
+                LangSpecArgument::Variable(_)
+                    | LangSpecArgument::UnsafeString(_)
+                    | LangSpecArgument::SafeString(_)
+                    | LangSpecArgument::Int(_)
+                    | LangSpecArgument::Bool(_)
+            ));
+            nodes[index].calls_constructor = calls_constructor;
+            continue;
+        }
+        let mut deepest_child = 0;
+        let mut holds_move = false;
+        for child in children {
+            calls_constructor |= nodes[child].calls_constructor;
+            // This node adds one bracket around its children, so a child at
+            // the budget is one too many.
+            if nodes[child].depth >= budget {
+                nodes[child].moves_out = true;
+            }
+            if nodes[child].moves_out {
+                holds_move = true;
+            } else {
+                deepest_child = deepest_child.max(nodes[child].depth);
+                holds_move |= nodes[child].holds_move;
+            }
+        }
+        nodes[index].depth = deepest_child + 1;
+        nodes[index].calls_constructor = calls_constructor;
+        nodes[index].holds_move = holds_move;
+    }
+}
+
+/// Pass 1, part two: move out the earlier constructor calls that a move
+/// would otherwise reorder.
+///
+/// Python builds a nested expression from the inside out and from left to
+/// right, and some node constructors raise (`ComponentNode` rejects a
+/// malformed `<c-mark>`, for example). A moved-out subtree now runs before
+/// the statement that uses it. So every sibling to its left that calls a
+/// constructor, at every level of the same statement, must also move out,
+/// or it would run too late. Values that only hold numbers, strings and
+/// names can stay, because building them has no effect anyone can see.
+fn keep_construction_order(nodes: &mut [PrintNode<'_>]) {
+    let mut pending = vec![0];
+    while let Some(index) = pending.pop() {
+        if !nodes[index].holds_move {
+            continue;
+        }
+        let children = nodes[index].children.clone();
+        // Everything left of the last child that moves out (or holds a
+        // move) runs before that move in the original single statement.
+        let Some(last_with_move) = children
+            .clone()
+            .rev()
+            .find(|&child| nodes[child].moves_out || nodes[child].holds_move)
+        else {
+            continue;
+        };
+        for sibling in &mut nodes[children.start..last_with_move] {
+            // The whole sibling moves, even when it holds moves of its own:
+            // its own constructor must also run before the later move.
+            if sibling.calls_constructor {
+                sibling.moves_out = true;
+            }
+        }
+        // A moved child starts its own statement, which needs the same
+        // rule, and a child that holds a move needs it one level down.
+        for child in children {
+            if nodes[child].moves_out || nodes[child].holds_move {
+                pending.push(child);
+            }
+        }
+    }
+}
+
+/// Pass 2, part one: put the statements in the order Python must run them,
+/// and number the local variables in that order.
+///
+/// A moved-out subtree is assigned before the statement that uses it, and
+/// moved-out subtrees of the same statement keep their left-to-right order.
+/// Moves nested inside a moved subtree come right before that subtree's own
+/// statement. The order depends only on the tree, so the output is the same
+/// on every run.
+fn statement_order(nodes: &mut [PrintNode<'_>]) -> Vec<usize> {
+    let mut order = Vec::new();
+    // Each entry is a statement whose earlier statements are still being
+    // written: its root, its moved-out subtrees, and how many are done.
+    let mut open_statements = vec![(0, moves_in_statement(nodes, 0), 0)];
+    while let Some((root, moves, done)) = open_statements.last_mut() {
+        if let Some(&next_move) = moves.get(*done) {
+            *done += 1;
+            let nested_moves = moves_in_statement(nodes, next_move);
+            open_statements.push((next_move, nested_moves, 0));
+        } else {
+            order.push(*root);
+            open_statements.pop();
+        }
+    }
+    // The `body` statement comes last and keeps its own name.
+    for (number, &root) in order.iter().enumerate() {
+        if root != 0 {
+            nodes[root].local_number = number + 1;
+        }
+    }
+    order
+}
+
+/// The subtrees that move out of the statement rooted at `root`, from left
+/// to right. Subtrees nested inside one of them belong to its statement.
+fn moves_in_statement(nodes: &[PrintNode<'_>], root: usize) -> Vec<usize> {
+    let mut moves = Vec::new();
+    let mut pending = vec![root];
+    while let Some(index) = pending.pop() {
+        if index != root && nodes[index].moves_out {
+            moves.push(index);
+            continue;
+        }
+        if nodes[index].holds_move {
+            // Pushed in reverse, so the leftmost child is visited first.
+            pending.extend(nodes[index].children.clone().rev());
+        }
+    }
+    moves
+}
+
+/// One piece of a statement still to be written.
+enum Step {
+    Node(usize),
+    Separator,
+    Close(&'static str),
+}
+
+/// Pass 2, part two: write the expression of one statement into `code`.
+///
+/// Moved-out subtrees are written as their `_nN` name. For a template that
+/// needs no moves, the text is the same, byte for byte, as printing every
+/// child inline in one `body = [...]` statement.
+fn write_statement(nodes: &[PrintNode<'_>], root: usize, code: &mut String) -> Result<(), String> {
+    let mut open_brackets = 0;
+    let mut most_open_brackets = 0;
+    let mut steps = vec![Step::Node(root)];
+    while let Some(step) = steps.pop() {
+        let index = match step {
+            Step::Node(index) => index,
+            Step::Separator => {
+                code.push_str(", ");
+                continue;
+            }
+            Step::Close(text) => {
+                code.push_str(text);
+                open_brackets -= 1;
+                continue;
+            }
+        };
+        let node = &nodes[index];
+        if index != root && node.moves_out {
+            code.push_str("_n");
+            code.push_str(&node.local_number.to_string());
+            continue;
+        }
+        // Non-empty lists and tuples end with a trailing comma, so a tuple
+        // with one item stays a tuple: `(a,)`, not `(a)`.
+        let (open, close) = match node.arg {
+            LangSpecArgument::Tuple(elements) if elements.is_empty() => ("()", ""),
+            LangSpecArgument::List(elements) if elements.is_empty() => ("[]", ""),
+            LangSpecArgument::Tuple(_) => ("(", ",)"),
+            LangSpecArgument::List(_) => ("[", ",]"),
+            LangSpecArgument::Struct(struct_arg) => {
+                // A call such as `IfNode(source, ..., ("x",))`.
+                code.push_str(&struct_arg.name);
+                ("(", ")")
+            }
+            leaf => {
+                code.push_str(&format_leaf(leaf));
+                continue;
+            }
+        };
+        code.push_str(open);
+        most_open_brackets = most_open_brackets.max(open_brackets + 1);
+        if close.is_empty() {
+            continue;
+        }
+        open_brackets += 1;
+        steps.push(Step::Close(close));
+        // Pushed in reverse, so the children come out in source order with
+        // a separator between each pair.
+        for (position, child) in node.children.clone().enumerate().rev() {
+            steps.push(Step::Node(child));
+            if position > 0 {
+                steps.push(Step::Separator);
+            }
+        }
+    }
+    // Pass 1 keeps every statement within the budget, so with the real
+    // budget this only fires on a bug in this printer. Failing here names the bug, instead of
+    // handing Python code it would reject with a confusing message.
+    if most_open_brackets > PYTHON_MAX_OPEN_BRACKETS {
+        return Err(format!(
+            "internal error: a generated statement nests {most_open_brackets} \
+             brackets, more than the {PYTHON_MAX_OPEN_BRACKETS} CPython allows. \
+             This is a Citry bug; please report it with the template."
+        ));
+    }
+    Ok(())
+}
+
+/// Format an argument that holds no other arguments.
+pub(crate) fn format_leaf(arg: &LangSpecArgument) -> String {
     match arg {
         LangSpecArgument::Variable(name) => name.clone(),
         LangSpecArgument::UnsafeString(content) => escape_text_in_triple_quotes(content),
@@ -245,53 +604,10 @@ fn format_lang_spec_arg(arg: &LangSpecArgument) -> String {
                 "False".to_string()
             }
         }
-        // Format a list of strings as a Python tuple, e.g. `(a, b,)`
-        // Always includes trailing comma to ensure single-item tuples are valid: `(a,)` not `(a)`
-        LangSpecArgument::Tuple(elements) => {
-            let items: Vec<String> = elements.iter().map(format_lang_spec_arg).collect();
-            let tuple_str = if items.is_empty() {
-                "()".to_string()
-            } else {
-                format!("({},)", items.join(", "))
-            };
-            tuple_str
-        }
-        // Format a list of strings as a Python list, e.g. `[a, b,]`
-        // Always includes trailing comma for consistency
-        LangSpecArgument::List(elements) => format_list(elements),
-        // Generate function / instance call, e.g.
-        // ```py
-        // NodeClass(
-        //    source,
-        //    (start, end),
-        //    (HtmlAttr(...), HtmlAttr(...), ...),
-        //    [body_item1, body_item2, ...],
-        //    ("var1", "var2", ...),
-        //    ("introduced_var1", "introduced_var2", ...),
-        // )
-        // ```
-        LangSpecArgument::Struct(struct_arg) => {
-            let items: Vec<String> = struct_arg
-                .arguments
-                .iter()
-                .map(format_lang_spec_arg)
-                .collect();
-            format!("{}({})", struct_arg.name, items.join(", "))
+        LangSpecArgument::Tuple(_) | LangSpecArgument::List(_) | LangSpecArgument::Struct(_) => {
+            unreachable!("containers are written by write_statement")
         }
     }
-}
-
-/// Format a vector of `LangSpecArgument` as a Python list.
-///
-/// Converts each `LangSpecArgument` to its Python string representation.
-fn format_list(args: &[LangSpecArgument]) -> String {
-    let items: Vec<String> = args.iter().map(format_lang_spec_arg).collect();
-    let list_str = if items.is_empty() {
-        "[]".to_string()
-    } else {
-        format!("[{},]", items.join(", "))
-    };
-    list_str
 }
 
 /// Extract variable tokens from a Python AST comprehension target.
