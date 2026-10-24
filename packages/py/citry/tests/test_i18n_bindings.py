@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from markupsafe import Markup
@@ -14,6 +15,7 @@ from citry._vue.direct_capture import assemble_typed_render
 from citry._vue.events import default_events_producer
 from citry.citry_render import CitryRender
 from citry.ext.i18n.usage import CLIENT_CONTEXT_KEY, EXTRA_KEY
+from citry_core import _rust
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -579,3 +581,38 @@ def test_malformed_owned_name_is_rejected_when_i18n_is_unconfigured() -> None:
 
     with pytest.raises(ValueError, match="non-empty message ID"):
         Page().render()
+
+
+def test_values_expression_reads_character_references_as_an_attribute_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # An authored `$c-tr:` value is an attribute value, so `&amp;` in it means
+    # `&` in the browser, for a text target and an attribute target alike.
+    compiled: list[str] = []
+    compile_vue = _rust.vue._compile_vue
+
+    def record(*args: Any) -> str:
+        result = compile_vue(*args)
+        compiled.append(json.loads(result)["code"])
+        return result
+
+    monkeypatch.setattr(_rust.vue, "_compile_vue", record)
+    app = _app()
+
+    class Page(Component):
+        citry = app
+        template = """\
+<c-i18n c-client="True" tag="main">
+  <span $c-tr:greeting="{ name: 'a &amp; b' }">{{ tr("greeting", name="x") }}</span>
+  <span
+    $c-tr:greeting[title]="{ name: 'c &amp; d' }"
+    c-title="tr('greeting', name='y')"
+  >t</span>
+</c-i18n>\
+"""
+        messages = "# @param {str} $name\ngreeting = Hello { $name }"
+
+    Page().render().serialize()
+    code = "\n".join(compiled)
+    assert "() => ({ name: 'a & b' })" in code
+    assert "() => ({ name: 'c & d' })" in code

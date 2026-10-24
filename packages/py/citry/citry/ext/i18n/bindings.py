@@ -37,7 +37,7 @@ from citry.client_directives import (
 )
 from citry.constness import const_value
 from citry.nodes import ElementAttrsNode, ExprNode, Node, StaticHtmlAttr, _reject_reserved_events_attr
-from citry.util.html import Markup, decode_character_references
+from citry.util.html import Markup, decode_attribute_entities, decode_character_references
 
 from .usage import CLIENT_CONTEXT_KEY
 
@@ -640,7 +640,9 @@ def _apply_directive(
     if value is True:
         expression = None
     elif type(value) is str:
-        expression = value.strip() or None
+        # A `$c-tr:` value is an attribute value, which Vue reads with its
+        # character references decoded, so `'a &amp; b'` means `'a & b'`.
+        expression = decode_attribute_entities(value).strip() or None
     else:
         raise TypeError(f"{key} must be written in the template; got a {type(value).__name__} value.")
     if expression is not None:

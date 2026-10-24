@@ -2522,7 +2522,9 @@ def assemble_typed_render(
                             )
                         operand_key = data_key("Binding", part.source, part.span, data_owner_id)
                         data_values[operand_key] = _browser_binding_operand(text_browser_binding)
-                        thunk = _browser_binding_thunk(text_browser_binding)
+                        # The compiler decodes an interpolation's references, as
+                        # Vue does, so escape the expression to keep its text.
+                        thunk = _browser_binding_thunk(text_browser_binding, escape_text=True)
                         output.append(f"{{{{ {text_browser_binding.helper}($citryPrepared.{operand_key}{thunk}) }}}}")
                     continue
                 if isinstance(part, (PreparedTrustedHtmlValue, Markup)):
@@ -3887,11 +3889,13 @@ def _browser_binding_operand(binding: PreparedBrowserBinding) -> object:
     return {"id": operand, "fallback": binding.fallback}
 
 
-def _browser_binding_thunk(binding: PreparedBrowserBinding) -> str:
+def _browser_binding_thunk(binding: PreparedBrowserBinding, *, escape_text: bool = False) -> str:
     """Write the helper's optional second argument, the template-authored values function."""
     if binding.values_expression is None:
         return ""
-    return f", () => ({binding.values_expression})"
+    # An attribute caller escapes the whole helper call itself; text needs it here.
+    expression = escape(binding.values_expression, quote=False) if escape_text else binding.values_expression
+    return f", () => ({expression})"
 
 
 def _append_element_open(
