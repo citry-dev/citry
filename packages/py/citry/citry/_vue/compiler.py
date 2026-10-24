@@ -14,11 +14,12 @@ from typing import TYPE_CHECKING, TypedDict
 
 from typing_extensions import NotRequired, Self
 
+from citry._walk import Call, run
 from citry.client_directives import _ONCE_MEMO_HINT
 from citry_core import _rust
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Mapping
+    from collections.abc import Callable, Generator, Iterator, Mapping
 
 from .capture import prepared_spread_index
 from .prepared import (
@@ -1309,14 +1310,12 @@ def definition_templates(view: PreparedView, *, tag_for_type: Callable[[str], st
     if any(re.fullmatch(r"[a-z][a-z0-9.-]*-[a-z0-9.-]+", tag) is None for tag in tags.values()):
         raise ValueError("component tag mapping returned an unsafe custom-element name")
 
-    def render_nodes(nodes: tuple[PreparedNode, ...], owner_id: str) -> str:
+    def render_nodes(nodes: tuple[PreparedNode, ...], owner_id: str) -> Generator[Call, str, str]:
+        # A generator walk (see `citry._walk`): each nested fill is rendered
+        # with `yield Call(...)`, so this walk uses the same number of Python
+        # frames however deep the view nests.
         output: list[str] = []
-
-        def render(current_nodes: tuple[PreparedNode, ...]) -> None:
-            for node in current_nodes:
-                render_one(node)
-
-        def render_one(node: PreparedNode) -> None:
+        for node in nodes:
             if isinstance(node, Html):
                 if node.source != "template":
                     raise ValueError("only explicitly template-authored HTML may be compiled")
@@ -1327,7 +1326,7 @@ def definition_templates(view: PreparedView, *, tag_for_type: Callable[[str], st
                 fill = node.selected
                 if any(isinstance(child, SlotOutlet) for child in fill.children):
                     raise ValueError("nested ownership transitions need the generated fallback bridge")
-                body = render_nodes(fill.children, fill.lexical_owner_id or owner_id)
+                body = yield Call(render_nodes, fill.children, fill.lexical_owner_id or owner_id)
                 if fill.lexical_owner_id == owner_id:
                     output.append(f'<slot name="{node.site_id}">{body}</slot>')
                 else:
@@ -1341,22 +1340,18 @@ def definition_templates(view: PreparedView, *, tag_for_type: Callable[[str], st
                 for candidate in _walk_slots(child_definition.children):
                     fill = candidate.selected
                     if fill.lexical_owner_id == owner_id:
-                        slots.append(
-                            f"<template v-slot:['{candidate.site_id}']>"
-                            f"{render_nodes(fill.children, owner_id)}</template>"
-                        )
+                        fill_html = yield Call(render_nodes, fill.children, owner_id)
+                        slots.append(f"<template v-slot:['{candidate.site_id}']>{fill_html}</template>")
                 output.append(f'<{tag} citry-id="{escaped_id}" key="{escaped_id}">' + "".join(slots) + f"</{tag}>")
             else:
                 # This path composes whole-definition templates, where an element,
                 # a local call, or a forwarded slot has no compiled form yet. Name
                 # the node instead of failing later on a missing attribute.
                 raise TypeError(f"prepared node {type(node).__name__} has no definition-template form")
-
-        render(nodes)
         return "".join(output)
 
     return {
-        definition.id: render_nodes(definition.children, occurrence.id)
+        definition.id: run(render_nodes(definition.children, occurrence.id))
         for occurrence in view.occurrences
         for definition in (definitions[occurrence.definition_id],)
     }
@@ -1376,7 +1371,10 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
         parts.append(value)
         byte_position += len(value.encode())
 
-    def render(current_nodes: tuple[PreparedNode, ...]) -> None:
+    def render(current_nodes: tuple[PreparedNode, ...]) -> Generator[Call, None, None]:
+        # A generator walk (see `citry._walk`): each nested fill or fallback is
+        # rendered with `yield Call(...)`, so this walk uses the same number of
+        # Python frames however deep the view nests.
         for node in current_nodes:
             if isinstance(node, Html):
                 if node.source != "template":
@@ -1466,7 +1464,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 opening_end = byte_position
                 for fill in node.fills:
                     append(f"<template v-slot:['{fill.site_id}']>")
-                    render(fill.children)
+                    yield Call(render, fill.children)
                     append("</template>")
                 append(f"</{node.component_tag}>")
                 local_calls.append(
@@ -1487,7 +1485,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
                 )
                 if node.fallback:
                     append(f"<template v-else-if=\"$citryPrepared.selectedSlots[{node.site_id!r}] === 'fallback'\">")
-                    render(node.fallback)
+                    yield Call(render, node.fallback)
                     append("</template>")
             elif isinstance(node, ForwardedSlot):
                 slot_key = _next_slot_key(slot_key_scopes)
@@ -1497,7 +1495,7 @@ def definition_compile_input(nodes: tuple[PreparedNode, ...]) -> DefinitionCompi
             else:
                 raise TypeError(f"unsupported prepared node {type(node).__name__}")
 
-    render(nodes)
+    run(render(nodes))
     return DefinitionCompileInput("".join(parts), tuple(local_calls), tuple(element_bindings))
 
 

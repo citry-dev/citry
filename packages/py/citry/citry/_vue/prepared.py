@@ -514,11 +514,24 @@ def _component_call_refs(
     occurrences: dict[str, PreparedOccurrence],
     placement_parent: str,
 ) -> Iterator[tuple[str, str]]:
-    for node in nodes:
+    # Nested fills, selected slots and fallbacks are walked with a stack rather
+    # than a generator per level, so this walk uses the same number of Python
+    # frames however deep the view nests. Each entry carries the data and
+    # placement parent its nodes are read with, and refs come out in document
+    # order.
+    pending: list[tuple[Iterator[PreparedNode], dict[str, object], str]] = [
+        (iter(nodes), prepared_data, placement_parent)
+    ]
+    while pending:
+        current_nodes, current_data, current_parent = pending[-1]
+        node = next(current_nodes, None)
+        if node is None:
+            pending.pop()
+            continue
         if isinstance(node, ComponentCall):
-            yield node.occurrence_id, placement_parent
+            yield node.occurrence_id, current_parent
         elif isinstance(node, LocalComponentCall):
-            calls = prepared_data.get("calls")
+            calls = current_data.get("calls")
             if type(calls) is not dict or node.local_id not in calls:
                 raise ValueError(f"preparedData is missing local component call: {node.local_id}")
             binding = calls[node.local_id]
@@ -531,42 +544,64 @@ def _component_call_refs(
             if type(bound_parent) is not str:
                 raise TypeError("prepared local component call parentId must be an exact string")
             yield child_id, bound_parent
-            for fill in node.fills:
-                yield from _component_call_refs(fill.children, prepared_data, occurrences, child_id)
+            # The fills come next, in order, before this node's siblings.
+            pending.append((_chain_children(fill.children for fill in node.fills), current_data, child_id))
         elif isinstance(node, SlotOutlet):
-            lexical_data = prepared_data
+            lexical_data = current_data
             if node.selected.lexical_owner_id is not None:
                 lexical_data = occurrences[node.selected.lexical_owner_id].prepared_data
-            yield from _component_call_refs(node.selected.children, lexical_data, occurrences, node.receiver_id)
+            pending.append((iter(node.selected.children), lexical_data, node.receiver_id))
         elif isinstance(node, PreparedSlotOutlet):
-            yield from _component_call_refs(node.fallback, prepared_data, occurrences, placement_parent)
+            pending.append((iter(node.fallback), current_data, current_parent))
+
+
+def _chain_children(groups: Iterator[tuple[PreparedNode, ...]]) -> Iterator[PreparedNode]:
+    """Read several node tuples one after another, as one iterator."""
+    for group in groups:
+        yield from group
 
 
 def _ownership_refs(
     nodes: tuple[PreparedNode, ...],
 ) -> Iterator[tuple[str, str | None, str | None]]:
-    for node in nodes:
+    # A stack of node iterators keeps the number of Python frames the same
+    # however deep the view nests; refs come out in document order.
+    pending = [iter(nodes)]
+    while pending:
+        node = next(pending[-1], None)
+        if node is None:
+            pending.pop()
+            continue
         if isinstance(node, SlotOutlet):
             yield (
                 node.receiver_id,
                 node.selected.lexical_owner_id,
                 node.selected.result_owner_id,
             )
-            yield from _ownership_refs(node.selected.children)
+            pending.append(iter(node.selected.children))
 
 
 def _slot_outlets(nodes: tuple[PreparedNode, ...]) -> Iterator[SlotOutlet]:
-    for node in nodes:
+    pending = [iter(nodes)]
+    while pending:
+        node = next(pending[-1], None)
+        if node is None:
+            pending.pop()
+            continue
         if isinstance(node, SlotOutlet):
             yield node
-            yield from _slot_outlets(node.selected.children)
+            pending.append(iter(node.selected.children))
 
 
 def _prepared_slot_outlets(nodes: tuple[PreparedNode, ...]) -> Iterator[PreparedSlotOutlet]:
-    for node in nodes:
+    pending = [iter(nodes)]
+    while pending:
+        node = next(pending[-1], None)
+        if node is None:
+            pending.pop()
+            continue
         if isinstance(node, PreparedSlotOutlet):
             yield node
-            yield from _prepared_slot_outlets(node.fallback)
+            pending.append(iter(node.fallback))
         elif isinstance(node, LocalComponentCall):
-            for fill in node.fills:
-                yield from _prepared_slot_outlets(fill.children)
+            pending.append(_chain_children(fill.children for fill in node.fills))
