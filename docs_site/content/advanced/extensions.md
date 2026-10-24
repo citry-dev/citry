@@ -448,6 +448,59 @@ app = Citry(
 An instance can belong to only one `Citry` instance. Create a new one for
 each, or pass the class.
 
+## Make hooks safe to rerun { #hooks-that-run-twice }
+
+Citry runs the hooks that load a component's template, JavaScript, CSS, or
+messages once per component class, the first time a render needs them:
+`on_template_loaded`, `on_js_loaded`, `on_css_loaded`, and
+`on_messages_loaded`. The hooks that see a template as Citry compiles it,
+`on_template_foreign_spans`, `on_template_compiled`, and
+`on_template_foreign_compiled`, also run once per class, or once per set
+of `Const` values for the two compiled hooks.
+
+On a server with several threads, these hooks can run again for the same
+class. They run once per thread when several requests render the class for
+the first time at the same moment, and up to three times when a hot reload
+resets a component while the hook runs. Every render gets the same result,
+so every page shows the same output. Anything else the hook does, such as
+adding to a list, happens once per run.
+
+A hook that adds to a list leaves one entry per run:
+
+```python
+class AssetLog(Extension):
+    name = "asset_log"
+
+    def __init__(self):
+        self.scripts = []
+
+    def on_js_loaded(self, ctx):
+        # Wrong: a second run adds a second entry.
+        self.scripts.append(ctx.content)
+```
+
+Data about one render belongs on the component's config, as
+[Store data per render](#store-data-per-render) shows. Data about a
+component class stays the same for every render, so the extension can keep
+it. Store it under the class, so a later run replaces the entry:
+
+```python
+class AssetLog(Extension):
+    name = "asset_log"
+
+    def __init__(self):
+        self.scripts = {}
+
+    def on_js_loaded(self, ctx):
+        # Right: a second run replaces the entry.
+        self.scripts[ctx.component_class] = ctx.content
+```
+
+Return the same result for the same input as well. When several threads
+run a hook at once, Citry keeps the result of the run that finishes first,
+so a hook that returns different text on different runs makes the page
+depend on which thread finished first.
+
 ## Related reference
 
 - [`Extension`][citry.Extension]

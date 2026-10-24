@@ -23,7 +23,8 @@ use vize_s2::expr::{ExprRef, OpaqueExpr, OpaqueReason, VueFilterExpr};
 use super::cx::Cx;
 
 /// Trim `text` and return the trimmed slice with its authored span.
-/// Trimming keeps the slice a source slice, so spans stay exact.
+/// Trimming keeps a source slice a source slice, so its span stays exact; a
+/// decoded value reports the span of its whole authored text.
 pub(crate) fn trimmed<'a>(cx: &Cx<'a>, text: &'a str) -> (&'a str, Span) {
     let slice = text.trim();
     (slice, cx.span_of(slice))

@@ -923,7 +923,7 @@ class TestConcurrentLoading:
         assert template is not None
         assert template.generate is not None
 
-    def test_concurrent_first_load_publishes_one_template_record(self):
+    def test_concurrent_first_loads_share_one_template_record(self):
         class CountLoads(Extension):
             name = "count_loads"
 
@@ -966,7 +966,10 @@ class TestConcurrentLoading:
         assert errors == []
         assert len(template_ids) == thread_count
         assert len(set(template_ids)) == 1
-        assert extension.template_ids == [template_ids[0]]
+        # Each thread may run the hook; every thread gets the record stored
+        # first, which is one of those the hook saw.
+        assert 1 <= len(extension.template_ids) <= thread_count
+        assert template_ids[0] in extension.template_ids
 
 
 class TestDirsValidation:

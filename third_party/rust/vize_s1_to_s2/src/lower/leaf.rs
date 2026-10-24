@@ -81,7 +81,8 @@ pub(crate) fn lower_text<'a>(
 fn lower_interpolation<'a>(cx: &mut Cx<'a>, node: &Interpolation<'a>, out: &mut Vec<'a, Op<'a>>) {
     let id = cx.mint_op();
     let span = Span::new(cx.offset(node.open.text), cx.token_span(&node.close).end);
-    let expression = filter_expr_at(cx, node.content.text);
+    let text = cx.decoded_interpolation_text(node.content.text);
+    let expression = filter_expr_at(cx, text);
     cx.record(
         "lower.interpolation",
         id,

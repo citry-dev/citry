@@ -166,4 +166,27 @@ mod tests {
 
         assert_eq!(result, expected);
     }
+
+    #[test]
+    fn test_positions_after_crlf_non_ascii_and_in_nested_templates() {
+        // Each token's line and column comes from an index of the whole
+        // source. Lock the cases where that index has to count with care: a
+        // line after `\r\n` and after a lone `\r` (which does not end a
+        // line), characters of several bytes earlier on the same line, and a
+        // template inside an attribute value, which shares the index.
+        let source =
+            "a\r\n\u{e9}\u{20ac} {{ x }}\r<p c-body=\"<b>{{ y }}</b>\">\u{1f600}{{ z }}</p>";
+        let template = parse_template(source, None, None).unwrap();
+        let positions: Vec<(String, usize, (usize, usize))> = template
+            .used_variables
+            .iter()
+            .map(|token| (token.content.clone(), token.start_index, token.line_col))
+            .collect();
+        let expected = [("x", 12, (2, 7)), ("z", 51, (2, 43)), ("y", 34, (2, 29))];
+        let expected: Vec<(String, usize, (usize, usize))> = expected
+            .iter()
+            .map(|(name, start, line_col)| (name.to_string(), *start, *line_col))
+            .collect();
+        assert_eq!(positions, expected);
+    }
 }

@@ -872,11 +872,14 @@ class TemplateHtmlAttr(HtmlAttr):
         template_record: CitryTemplate | None,
     ) -> Callable[[], list[Any]]:
         """
-        Compile the nested template for the current render mode, once per mode.
+        Return the nested template's body generator for the current render mode, compiling it on first use.
 
         Both ``resolve`` and the ``simple=True`` template check call this, so
         whichever runs first compiles the body and the other reuses it. The
-        extension hooks therefore see each nested body once per mode.
+        compile runs the compiled-template hooks and may start component
+        discovery, so it runs with no lock held: two threads making the first
+        render at once may each compile and run the hooks, and both get the
+        generator stored first.
         """
         from citry._vue.capture import prepared_render_active  # noqa: PLC0415
         from citry.component_render import _compile_nested_template  # noqa: PLC0415
@@ -885,27 +888,22 @@ class TemplateHtmlAttr(HtmlAttr):
         generator = self._generators.get(prepared)
         if generator is not None:
             return generator
+        # The nested template is validated like any other: the parse gets
+        # the rules derived from the registered components' declarations.
+        user_rules = component_class.citry._tag_rules() if component_class is not None else None
+        compiled = _compile_nested_template(
+            self.template,
+            user_rules,
+            component_class,
+            root_source=self.source if self.foreign_spans else None,
+            source_offset=self.source_offset,
+            foreign_spans=self.foreign_spans,
+            provider_metadata=(template_record.foreign_provider_metadata if template_record is not None else None),
+            template_id=(template_record.template_id if template_record is not None else None),
+            origin=(template_record.origin if template_record is not None else None),
+        )
         with self._compile_lock:
-            generator = self._generators.get(prepared)
-            if generator is None:
-                # The nested template is validated like any other: the parse gets
-                # the rules derived from the registered components' declarations.
-                user_rules = component_class.citry._tag_rules() if component_class is not None else None
-                generator = _compile_nested_template(
-                    self.template,
-                    user_rules,
-                    component_class,
-                    root_source=self.source if self.foreign_spans else None,
-                    source_offset=self.source_offset,
-                    foreign_spans=self.foreign_spans,
-                    provider_metadata=(
-                        template_record.foreign_provider_metadata if template_record is not None else None
-                    ),
-                    template_id=(template_record.template_id if template_record is not None else None),
-                    origin=(template_record.origin if template_record is not None else None),
-                )
-                self._generators[prepared] = generator
-        return generator
+            return self._generators.setdefault(prepared, compiled)
 
     @override
     def resolve(self, context: CitryContext) -> CitryRender:

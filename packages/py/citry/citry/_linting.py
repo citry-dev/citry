@@ -8,7 +8,11 @@ import typing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, cast, get_args, get_origin
 
-from citry._class_introspection import _safe_class_import_path, _static_class_dict, _static_class_mro
+from citry._class_introspection import (
+    _safe_class_import_path,
+    _static_class_mro,
+    _static_class_namespace_copy,
+)
 from citry._nested_declarations import _active_nested_class_declarations
 from citry._schema_introspection import _format_annotation
 from citry.introspection import _is_utf8_string
@@ -578,7 +582,7 @@ def _component_lint_overrides(component_class: type) -> _ComponentLintOverrides:
         public_values: dict[str, object] = {}
         public_owners: dict[str, type] = {}
         for candidate in reversed(_static_class_mro(lint_class)):
-            for name, value in _static_class_dict(candidate).items():
+            for name, value in _static_class_namespace_copy(candidate).items():
                 if name.startswith("_"):
                     continue
                 public_values[name] = value

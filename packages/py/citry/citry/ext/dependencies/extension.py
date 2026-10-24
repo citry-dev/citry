@@ -384,17 +384,41 @@ class DependenciesExtension(Extension):
         if cached is not None:
             return cached
 
-        merged = self._resolve_branch(comp_cls, comp_cls, set())
-        type.__setattr__(comp_cls, _DEPENDENCIES_CACHE_ATTR, merged)
-        return merged
+        def load() -> tuple[CitryDependencies, dict[type, CitryDependencies]]:
+            # The merge calls the class's Dependencies entries, which may be
+            # user functions, so it runs with no lock. It records the merged
+            # result of each component class it passes, stored together below.
+            merged_classes: dict[type, CitryDependencies] = {}
+            merged = self._resolve_branch(comp_cls, comp_cls, set(), merged_classes)
+            return merged, merged_classes
+
+        def store(loaded: tuple[CitryDependencies, dict[type, CitryDependencies]]) -> CitryDependencies:
+            # Keep a result another thread stored first, so every caller
+            # gets the same object for a class.
+            merged, merged_classes = loaded
+            for component_class, class_merged in merged_classes.items():
+                if _cached_dependencies(component_class) is None:
+                    type.__setattr__(component_class, _DEPENDENCIES_CACHE_ATTR, class_merged)
+            # The `Component` base itself is never stored, so it returns its
+            # own merge.
+            stored = _cached_dependencies(comp_cls)
+            return merged if stored is None else stored
+
+        return comp_cls.citry._load_and_store(load, store)
 
     def _resolve_branch(
         self,
         branch: type,
         bound_component: type[Component],
         visiting: set[type],
+        merged_classes: dict[type, CitryDependencies],
     ) -> CitryDependencies:
-        """Resolve one component or plain definition branch for a bound component."""
+        """
+        Resolve one component or plain definition branch for a bound component.
+
+        Each component class merged on the way is added to
+        ``merged_classes``, for the caller to store.
+        """
         # Imported here, not at module load: this module is imported while the
         # default Citry instance is being constructed (the built-in extension
         # spec), which happens before component.py can be imported.
@@ -412,7 +436,7 @@ class DependenciesExtension(Extension):
             cached = _cached_dependencies(branch)
             if cached is not None:
                 return cached
-            return self._resolve_branch(branch, branch, visiting)
+            return self._resolve_branch(branch, branch, visiting, merged_classes)
 
         record = next(
             (
@@ -451,13 +475,13 @@ class DependenciesExtension(Extension):
             for base in bases:
                 if not isinstance(base, type) or base is object:
                     continue
-                merged = merged + self._resolve_branch(base, bound_component, visiting)
+                merged = merged + self._resolve_branch(base, bound_component, visiting, merged_classes)
             merged = merged + own
         finally:
             visiting.remove(branch)
 
         if isinstance(branch, type) and issubclass(branch, Component) and branch is not Component:
-            type.__setattr__(branch, _DEPENDENCIES_CACHE_ATTR, merged)
+            merged_classes[branch] = merged
         return merged
 
     def _build_own(

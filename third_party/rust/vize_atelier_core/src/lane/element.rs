@@ -218,14 +218,17 @@ fn process_element_props<'a>(ctx: &mut TransformContext<'a>, el: &mut Box<'a, El
         if let Some(PropNode::Directive(dir)) = el.props.get(idx) {
             // Get value expression
             let (value_exp, raw_value_exp) = match &dir.exp {
+                // The update handler assigns to the untransformed value, read
+                // back from the source and decoded as Vue reads it, so
+                // `v-model="m['&amp;']"` writes to `m['&']`.
                 Some(ExpressionNode::Simple(s)) if !s.content.trim().is_empty() => (
                     String::new(s.content),
-                    String::new(s.loc.span.slice(ctx.source)),
+                    crate::entity::authored_expression_text(ctx.source, s.loc.span),
                 ),
                 Some(ExpressionNode::Compound(c))
                     if !c.loc.span.slice(ctx.source).trim().is_empty() =>
                 {
-                    let text = String::new(c.loc.span.slice(ctx.source));
+                    let text = crate::entity::authored_expression_text(ctx.source, c.loc.span);
                     (text.clone(), text)
                 }
                 _ => {
@@ -529,6 +532,21 @@ pub fn transform_interpolation<'a>(
     interp: &mut Box<'a, InterpolationNode<'a>>,
 ) {
     ctx.helper(RuntimeHelper::ToDisplayString);
+
+    // The parser keeps an interpolation's text as written, while Vue decodes
+    // its character references by the text rule before it reads the
+    // JavaScript, so `{{ 'a &amp; b' }}` shows `a & b`.
+    if let ExpressionNode::Simple(simple) = &mut interp.content
+        && simple.content.contains('&')
+    {
+        let decoded = crate::entity::decode_html_text_entities(simple.content);
+        if decoded.as_str() != simple.content {
+            simple.content = ctx.allocator.alloc_str(decoded.as_str());
+            // Drop the retained parse, which read the text as written, so the
+            // expression is parsed again from the decoded text.
+            simple.js_ast = None;
+        }
+    }
 
     // Process the expression to add _ctx. prefix and/or strip TypeScript if needed
     if ctx.options.prefix_identifiers || ctx.options.is_ts {

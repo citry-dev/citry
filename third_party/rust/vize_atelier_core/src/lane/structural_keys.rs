@@ -19,7 +19,9 @@ pub(super) fn extract_key_value_str(
             }
             Some(match expression {
                 ExpressionNode::Simple(simple) => simple.content.into(),
-                ExpressionNode::Compound(compound) => String::new(compound.loc.span.slice(source)),
+                ExpressionNode::Compound(compound) => {
+                    crate::entity::authored_expression_text(source, compound.loc.span)
+                }
             })
         }
     }

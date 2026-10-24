@@ -97,7 +97,7 @@ fn traverse_node_guarded<'a>(ctx: &mut TransformContext<'a>, node: &mut Template
     let structural_result = if let TemplateChildNode::Element(el) = node {
         profile!(
             "atelier.transform.check_structural",
-            take_structural_directive(el, ctx.source)
+            take_structural_directive(ctx.allocator, el, ctx.source)
         )
     } else {
         None
@@ -195,7 +195,8 @@ fn traverse_node_guarded<'a>(ctx: &mut TransformContext<'a>, node: &mut Template
                     let source = match &for_node.source {
                         ExpressionNode::Simple(exp) => exp.content,
                         ExpressionNode::Compound(c) => {
-                            compound_source = vize_s0::String::new(c.loc.span.slice(ctx.source));
+                            compound_source =
+                                crate::entity::authored_expression_text(ctx.source, c.loc.span);
                             compound_source.as_str()
                         }
                     };
@@ -294,7 +295,8 @@ fn traverse_node_guarded<'a>(ctx: &mut TransformContext<'a>, node: &mut Template
                 let source = match &for_node.source {
                     ExpressionNode::Simple(exp) => exp.content,
                     ExpressionNode::Compound(c) => {
-                        compound_source = vize_s0::String::new(c.loc.span.slice(ctx.source));
+                        compound_source =
+                            crate::entity::authored_expression_text(ctx.source, c.loc.span);
                         compound_source.as_str()
                     }
                 };

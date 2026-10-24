@@ -215,6 +215,11 @@
   delayed ones with `wait=False`. The newer call no longer waits for its
   delays, and `$loading()` and `citry:events:after` stop reporting it as a
   success.
+- In a component that uses Vue, a character reference inside a directive
+  value now means what it means in Vue: `@click="msg = 'Tom &amp; Jerry'"`
+  sets `Tom & Jerry`. Citry used to keep `&amp;` in strings written in
+  `@click`, `v-if`, `v-show`, `v-for`, `v-slot`, `v-model` and other
+  directives.
 - A template that nests 50 or more `<c-if>` or `<c-for>` tags now renders.
   It used to fail with `SyntaxError: too many nested parentheses`.
   Templates nested more than about 300 levels raise `RecursionError`
@@ -358,9 +363,39 @@
   interpolation that holds a comment, such as `{x # note` followed by a
   new line and `=}`, now leaves the comment out of its `x=` text, as
   Python does.
+- A render no longer hangs when an extension's load or compile hook, a
+  function in a component's `Dependencies` class, or a function marked
+  `Const` renders another component while another thread resets a
+  template or files, as a hot reload does.
+- A slow load hook, such as a template preprocessor in
+  `on_template_loaded`, no longer holds up renders of other components.
+  When several threads render a component for the first time at once,
+  such a hook can run once per thread, and every render gets the same
+  result
+  ([details](https://citry.dev/advanced/extensions/#hooks-that-run-twice)).
+- A hot reload that arrives while Citry loads a component's template,
+  JS, CSS, or messages, or prepares its template for `Const` values, no
+  longer leaves the old content in use.
+- Without `initialize()`, renders that start on several threads at once
+  no longer fail with `CitryLifecycleInProgress`: renders on other threads
+  wait for the first one to finish discovery. A render inside a module
+  import or a reset hook still raises instead of waiting while another
+  thread runs discovery, and so does a wait longer than a minute
+  ([details](https://citry.dev/advanced/component-discovery/#initialize-before-starting-worker-threads)).
+  Call `initialize()` at startup to avoid the wait.
+- On free-threaded Python, a component's first render fails less often
+  with `RuntimeError: dictionary changed size during iteration` when
+  another thread renders at the same time.
+- On Python 3.14, an Events `State` class with one annotation that does not
+  resolve (such as a type imported only for type checkers) now keeps the
+  type checks on its other fields when the module has no `from __future__
+  import annotations`. Every field used to accept any value from the
+  browser.
 
 ### Performance
 
+- Large templates parse much faster: a 92 KB template that took more than
+  a second to parse now takes about 10 ms.
 - Pages that repeat a component many times render up to about 9% faster
   on the server.
 - `serialize()` with `security_csp` or `security_javascript` set is much

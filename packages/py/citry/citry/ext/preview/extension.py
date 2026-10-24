@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from weakref import WeakKeyDictionary
 
+from citry._class_introspection import _static_class_namespace_copy
 from citry.ext.preview.types import Layout, PreviewError, Variant, Viewport, _text, variant
 from citry.extension import _SYNTHESIZED_CONFIG_ATTR, Extension, ExtensionConfig
 
@@ -145,7 +146,7 @@ class PreviewExtension(Extension):
                     # Use the manager's own marker so defaults never count as authored content.
                     if base in self.Config.__mro__ or _SYNTHESIZED_CONFIG_ATTR in vars(base):
                         continue
-                    for name in _FIELDS & vars(base).keys():
+                    for name in _FIELDS & _static_class_namespace_copy(base).keys():
                         owners.setdefault(name, base)
         self._owners[ctx.component_class] = owners
 

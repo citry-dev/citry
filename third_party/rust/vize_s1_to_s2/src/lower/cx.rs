@@ -18,6 +18,7 @@
 //! total.
 //! [`S2Folio`]: vize_s2::folio::S2Folio
 
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use vize_davinci::diagnostic::{Diagnostic, Severity, Stage};
@@ -62,6 +63,13 @@ pub(crate) struct Cx<'a> {
     pub features: super::features::LoweringFeatures,
     custom_element_patterns: Vec<String>,
     custom_element_predicate: Option<fn(&str) -> bool>,
+    /// Directive values and interpolation text whose character references
+    /// were decoded at intake (see [`Self::decoded_directive_value`]), keyed
+    /// by where each decoded copy starts in memory, with its length and the
+    /// span of the authored text it came from. The copies are not source
+    /// slices, so span lookups for them land here. A map keyed by address
+    /// keeps each lookup logarithmic on a page with many decoded values.
+    decoded_values: BTreeMap<usize, (usize, Span)>,
 }
 
 impl<'a> Cx<'a> {
@@ -95,6 +103,7 @@ impl<'a> Cx<'a> {
             features: super::features::LoweringFeatures::EMPTY,
             custom_element_patterns: custom_element_patterns.to_vec(),
             custom_element_predicate,
+            decoded_values: BTreeMap::new(),
         }
     }
 
@@ -238,6 +247,8 @@ impl<'a> Cx<'a> {
     pub(crate) fn offset(&self, slice: &str) -> u32 {
         match self.block.offset_of(slice) {
             Some(offset) => offset,
+            // A decoded value starts where its authored text does.
+            None if let Some(span) = self.decoded_value_span(slice) => span.start,
             None => {
                 debug_assert!(
                     false,
@@ -249,10 +260,68 @@ impl<'a> Cx<'a> {
     }
 
     pub(crate) fn span_of(&self, slice: &str) -> Span {
-        self.block.span_of(slice).unwrap_or_else(|| {
-            let start = self.offset(slice);
-            Span::new(start, start.saturating_add(slice.len() as u32))
-        })
+        if let Some(span) = self.block.span_of(slice) {
+            return span;
+        }
+        // Any part of a decoded value maps to the whole authored text:
+        // decoding changes lengths, so no finer mapping is exact.
+        if let Some(span) = self.decoded_value_span(slice) {
+            return span;
+        }
+        let start = self.offset(slice);
+        Span::new(start, start.saturating_add(slice.len() as u32))
+    }
+
+    /// The text Vue reads from a directive value written as `raw`.
+    ///
+    /// Vue decodes the character references in a directive value by the
+    /// HTML attribute rule before it reads the value as JavaScript, so
+    /// `@click="msg = 'Tom &amp; Jerry'"` assigns `Tom & Jerry` and holds no
+    /// `;`. A value whose decoded text is the same comes back as the source
+    /// slice itself. Otherwise the decoded copy is allocated and remembered,
+    /// so [`Self::span_of`] still reports the authored value's span for it.
+    /// Names and dynamic arguments never come here: HTML does not decode
+    /// them.
+    pub(crate) fn decoded_directive_value(&mut self, raw: &'a str) -> &'a str {
+        if !raw.contains('&') {
+            return raw;
+        }
+        let decoded = crate::emit::entity::decode_directive_value(raw);
+        self.remember_decoded(raw, decoded)
+    }
+
+    /// The text Vue reads from an interpolation written as `raw`: Vue decodes
+    /// its character references by the HTML text rule, so `{{ 'a &amp; b' }}`
+    /// shows `a & b`. Otherwise as [`Self::decoded_directive_value`].
+    pub(crate) fn decoded_interpolation_text(&mut self, raw: &'a str) -> &'a str {
+        if !raw.contains('&') {
+            return raw;
+        }
+        let decoded = crate::emit::entity::decode_interpolation_text(raw);
+        self.remember_decoded(raw, decoded)
+    }
+
+    /// Return `raw` when `decoded` equals it, else an allocated copy of
+    /// `decoded` whose span lookups report `raw`'s span.
+    fn remember_decoded(&mut self, raw: &'a str, decoded: String) -> &'a str {
+        if decoded.as_str() == raw {
+            return raw;
+        }
+        let span = self.span_of(raw);
+        let text: &'a str = self.allocator.alloc_str(decoded.as_str());
+        self.decoded_values
+            .insert(text.as_ptr() as usize, (text.len(), span));
+        text
+    }
+
+    /// The authored span of a decoded directive value that `slice` lies in.
+    fn decoded_value_span(&self, slice: &str) -> Option<Span> {
+        let start = slice.as_ptr() as usize;
+        let end = start + slice.len();
+        // The copy that holds `slice` is the one that starts at or closest
+        // before it.
+        let (base, (len, span)) = self.decoded_values.range(..=start).next_back()?;
+        (end <= base + len).then_some(*span)
     }
 
     /// The span of a token's own text (`leading` excluded; a `Missing`

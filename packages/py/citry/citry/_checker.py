@@ -2980,7 +2980,10 @@ def _stored_entry(namespace: object, name: str) -> tuple[bool, object]:
     """
     if not _is_one_of(type(namespace), (dict, MappingProxyType)):
         return False, None
-    for key, value in cast("Mapping[object, object]", namespace).items():
+    # Loop over a copy: another thread may store on the class or module
+    # meanwhile, and a dict that changes size during the loop raises.
+    entries = cast("dict[object, object] | MappingProxyType[object, object]", namespace).copy()
+    for key, value in entries.items():
         if type(key) is str and key == name:
             return True, value
     return False, None

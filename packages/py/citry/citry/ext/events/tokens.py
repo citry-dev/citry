@@ -52,9 +52,11 @@ import sys
 import time
 from dataclasses import dataclass, fields
 from types import UnionType
-from typing import TYPE_CHECKING, Any, Union, cast, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Any, ForwardRef, Union, cast, get_args, get_origin, get_type_hints
 from weakref import WeakKeyDictionary
 
+from citry._annotation_introspection import _own_annotations
+from citry._class_introspection import _static_class_namespace_copy
 from citry._vue.json_data import _secret_key_path
 
 if TYPE_CHECKING:
@@ -747,7 +749,7 @@ def _resolve_hints(state_cls: type) -> dict[str, Any]:
     cached = _HINT_CACHE.get(state_cls)
     if cached is None:
         try:
-            cached = get_type_hints(state_cls)
+            cached = _class_type_hints(state_cls)
         except (NameError, TypeError):
             # Resolving the whole class at once failed because one field's
             # annotation will not resolve (for example a type imported only under
@@ -756,6 +758,25 @@ def _resolve_hints(state_cls: type) -> dict[str, Any]:
             cached = _resolve_hints_per_field(state_cls)
         _HINT_CACHE[state_cls] = cached
     return cached
+
+
+# How many times to read a class's type hints when another thread changes a
+# namespace during the read.
+_TYPE_HINT_ATTEMPTS = 5
+
+
+def _class_type_hints(state_cls: type) -> dict[str, Any]:
+    """Return ``get_type_hints(state_cls)``, read again when a namespace changes during the read."""
+    for _attempt in range(_TYPE_HINT_ATTEMPTS - 1):
+        try:
+            return get_type_hints(state_cls)
+        except RuntimeError:
+            # get_type_hints reads each class namespace live, so on
+            # free-threaded Python a store on the class meanwhile raises
+            # "dictionary changed size during iteration". The store is done
+            # by the next read.
+            continue
+    return get_type_hints(state_cls)
 
 
 def _resolve_hints_per_field(state_cls: type) -> dict[str, Any]:
@@ -774,8 +795,11 @@ def _resolve_hints_per_field(state_cls: type) -> dict[str, Any]:
     for klass in reversed(state_cls.__mro__):
         module = sys.modules.get(klass.__module__)
         global_ns = getattr(module, "__dict__", {})
-        local_ns = dict(vars(klass))
-        for name, annotation in klass.__dict__.get("__annotations__", {}).items():
+        local_ns = _static_class_namespace_copy(klass)
+        # Read through the helper: on Python 3.14 a class body without
+        # `from __future__ import annotations` keeps no `__annotations__`
+        # entry, only a function that builds it.
+        for name, annotation in _own_annotations(klass).items():
             try:
                 resolved[name] = _resolve_annotation(annotation, global_ns, local_ns)
             except Exception:  # noqa: BLE001
@@ -787,6 +811,10 @@ def _resolve_hints_per_field(state_cls: type) -> dict[str, Any]:
 
 def _resolve_annotation(annotation: Any, global_ns: dict[str, Any], local_ns: dict[str, Any]) -> Any:
     """Resolve one possibly-stringized annotation to a type in the State's namespace."""
+    # On Python 3.14, an annotation whose name did not resolve arrives as a
+    # ForwardRef holding the source text.
+    if isinstance(annotation, ForwardRef):
+        annotation = annotation.__forward_arg__
     if not isinstance(annotation, str):
         return annotation
 

@@ -32,6 +32,7 @@ pub mod lang {
 pub mod parser;
 pub mod parser_context;
 pub mod utils {
+    pub(crate) mod line_index;
     pub mod pest;
     pub(crate) mod template_fragment;
 }

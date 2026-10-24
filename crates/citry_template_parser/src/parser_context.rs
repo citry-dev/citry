@@ -11,6 +11,7 @@ use crate::error::ParseError;
 use crate::foreign::ForeignSpan;
 use crate::grammar::Rule;
 use crate::lang::lang::LangImpl;
+use crate::utils::line_index::LineIndex;
 
 /// Attribute validation rules for special tags
 ///
@@ -124,6 +125,9 @@ pub struct ParserContext {
     /// must still point into this source rather than displaying the substring
     /// as a separate template.
     root_source: Rc<String>,
+    /// Line starts of `root_source`, so each token's line and column is a
+    /// lookup rather than a scan from the start of the template.
+    line_index: Rc<LineIndex>,
     /// Statically known loop/fill bindings declared inside nested-template
     /// attribute values, keyed by the absolute span of the containing attr.
     ///
@@ -147,6 +151,7 @@ impl ParserContext {
             lang: Rc::clone(lang),
             user_rules: Rc::clone(user_rules),
             root_source: Rc::new(String::new()),
+            line_index: Rc::new(LineIndex::new("")),
             nested_template_bindings: Rc::new(RefCell::new(HashMap::new())),
             foreign_spans: Rc::new(Vec::new()),
             claimed_foreign: Rc::new(RefCell::new(HashSet::new())),
@@ -161,6 +166,7 @@ impl ParserContext {
     ) -> Self {
         let mut context = Self::new(lang, user_rules);
         context.root_source = Rc::new(source.to_string());
+        context.line_index = Rc::new(LineIndex::new(source));
         context
     }
 
@@ -178,7 +184,9 @@ impl ParserContext {
                 "Projected template offset {source_offset} is not a UTF-8 boundary"
             ))
         })?;
-        let (line, col) = position.line_col();
+        // `position` only checks that the offset is a character boundary; the
+        // index gives the same line and column without scanning the source.
+        let (line, col) = context.line_index.line_col(root_source, position.pos());
         context.index_offset = source_offset;
         context.line_offset = line.saturating_sub(1);
         context.col_offset = col.saturating_sub(1);
@@ -204,6 +212,7 @@ impl ParserContext {
             // Language implementation is inherited from the parent context via Rc (no cloning).
             lang: Rc::clone(&self.lang),
             root_source: Rc::clone(&self.root_source),
+            line_index: Rc::clone(&self.line_index),
             nested_template_bindings: Rc::clone(&self.nested_template_bindings),
             foreign_spans: Rc::clone(&self.foreign_spans),
             claimed_foreign: Rc::clone(&self.claimed_foreign),
@@ -366,14 +375,13 @@ impl ParserContext {
                 "Invalid UTF-8 token range in root template: {start}..{end}"
             ))
         })?;
-        let position = pest::Position::new(source, start).ok_or_else(|| {
-            ParseError::Value(format!("Invalid token start in root template: {start}"))
-        })?;
+        // `get` above already checked that `start` is a character boundary,
+        // which is all the index needs.
         Ok(Token {
             content: content.to_string(),
             start_index: start,
             end_index: end,
-            line_col: position.line_col(),
+            line_col: self.line_index.line_col(source, start),
         })
     }
 

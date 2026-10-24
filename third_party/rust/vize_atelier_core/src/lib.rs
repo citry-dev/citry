@@ -12,6 +12,7 @@
 //! that all other Vize compilers build upon.
 
 pub mod codegen;
+pub mod entity;
 pub mod runtime_helpers;
 #[macro_use]
 pub mod test_macros;

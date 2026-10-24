@@ -12,7 +12,7 @@ use vize_s2::op::{BindingOp, VueMemoOp, VueOnceOp};
 use super::binding::defer;
 use super::cx::{Cx, attr_slice, attr_span};
 use super::directive::Directive;
-use super::element::attr_value_text;
+use super::element::{attr_value_text, directive_value_text};
 use super::expr::{desc, expr_at};
 
 /// Bare `v-once` (no argument, modifier, or value) → `vue.once`.
@@ -57,7 +57,7 @@ pub(crate) fn lower_memo<'a>(
 ) -> Option<BindingOp<'a>> {
     let attr = &element.open.attrs[index];
     let span = attr_span(cx, attr);
-    let text = attr_value_text(element, index)
+    let text = directive_value_text(cx, element, index)
         .map(str::trim)
         .filter(|text| !text.is_empty());
     if directive.arg.is_some() || !directive.modifiers.is_empty() || text.is_none() {

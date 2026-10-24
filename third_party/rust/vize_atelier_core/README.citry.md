@@ -7,7 +7,7 @@ SHA-256 is
 `8db1544b90c72dbe51fe237437ff296d59934e44af7b99686f02cf09d0298d4e`; the
 upstream repository is <https://github.com/ubugeeei-prod/vize> at commit
 `b7b308966c9baf4aa32d053448dc6d5ace6359c2`. Citry identifies the patched
-package as `0.420.0+citry.4`.
+package as `0.420.0+citry.5`.
 
 The registry archive's `Cargo.toml.orig` is preserved byte-for-byte as
 `Cargo.upstream.toml`, because Cargo reserves `Cargo.toml.orig` when building
@@ -16,12 +16,35 @@ commit.
 
 Relative to that archive, the Citry delta is:
 
-- `Cargo.toml`: records the local `0.420.0+citry.4` package version (the two
+- `Cargo.toml`: records the local `0.420.0+citry.5` package version (the two
   patched crates share one version, so it moves when either changes),
   registers the `v_for_unwrapped_runtime_directives`,
   `event_handler_statements`, and `event_key_modifiers` regression targets,
-  and drops the upstream `davinci` benchmark target because its source is
-  not included here.
+  depends on `htmlize` 1.1.0 (already a dependency of `vize_armature`) for
+  `src/entity.rs`, and drops the upstream `davinci` benchmark target because
+  its source is not included here.
+- `src/entity.rs` and `src/lib.rs`: add `authored_expression_text` and
+  `authored_expression_str`, which return the text Vue reads from an
+  expression written in the template: a directive value decoded by the
+  HTML attribute rule, and an interpolation's text by the text rule.
+- `src/lane/element.rs` (`transform_interpolation`): decodes an
+  interpolation's character references by the text rule, which the parser
+  leaves as written, so `{{ 'a &amp; b' }}` shows `a & b` as in Vue.
+- `src/codegen/expression/generate.rs`, `src/codegen/props/events.rs`,
+  `src/codegen/props/v_model.rs`, `src/codegen/slots/params.rs`,
+  `src/lane/context.rs`, `src/lane/element.rs`,
+  `src/lane/patterned_template.rs`, `src/lane/structural.rs`,
+  `src/lane/structural_keys.rs`, `src/lane/traverse.rs`,
+  `src/steps/expression.rs`, `src/steps/legacy.rs`, `src/steps/text.rs`,
+  `src/steps/v_memo.rs`, `src/steps/v_model.rs`, and `src/steps/v_slot.rs`:
+  where a step reads an expression back from the template source by its
+  span, it reads it through `authored_expression_text`, so it sees the
+  decoded text that the parser hands over for a simple expression.
+  Arguments and other names stay as written. Only the slot-parameter and
+  `v-model` update-handler read-backs changed output in testing; the other
+  read-backs decode too, so a compound expression that reaches one reads
+  the same text, though no test input reached them. `take_structural_directive` takes the allocator for the
+  decoded copy.
 - `src/codegen/element/directives.rs`: emits custom-directive modifier names as
   quoted and escaped JavaScript object keys.
 - `src/codegen/props/v_model.rs`: emits `v-model` modifier names as quoted and

@@ -133,6 +133,7 @@ from citry.util.misc import get_fields, is_generator, to_dict
 from citry_core.template_parser import ForeignSpan, ParseOptions, compile_template, parse_template
 
 if TYPE_CHECKING:
+    from collections import OrderedDict
     from collections.abc import Callable, Iterator, Mapping, Sequence
     from contextlib import AbstractContextManager
 
@@ -454,40 +455,38 @@ def _compute_simple_vue_admission(
         extension_key,
     )
     # The plan is stored on the loaded template, so a rebuilt admission for an
-    # unchanged template and extension set reuses it and on_template_compiled
-    # runs once per plan.
-    with compiled.compile_lock:
-        cached_plan = compiled.prepared_standalone_bodies.get(plan_key)
-        if cached_plan is None:
-            generated = compiled.prepared_generate()
-            foreign_resolved = extensions.on_template_foreign_compiled(
-                component_class,
-                generated,
-                provider_metadata=compiled.foreign_provider_metadata,
-                template_id=compiled.template_id,
-                origin=compiled.origin,
-                template_kind=compiled.kind,
-            )
-            transformed = extensions.on_template_compiled(
-                component_class,
-                foreign_resolved,
-                template_id=compiled.template_id,
-                origin=compiled.origin,
-                template_kind=compiled.kind,
-            )
-            typed = coalesce_prepared_static_nodes(transformed)
-            compiled_leaf = compile_leaf_program(typed, allow_static_only=True, allow_calls=True)
-            cached_plan = (
-                [compiled_leaf]
-                if compiled_leaf is not None and compiled_leaf.static_instance_free_template_supported()
-                else []
-            )
-            compiled.prepared_standalone_bodies[plan_key] = cached_plan
-            compiled.prepared_standalone_bodies.move_to_end(plan_key)
-            while len(compiled.prepared_standalone_bodies) > 64:
-                compiled.prepared_standalone_bodies.popitem(last=False)
-        else:
-            compiled.prepared_standalone_bodies.move_to_end(plan_key)
+    # unchanged template and extension set reuses it. The hooks run with no
+    # lock held, so concurrent first renders may each run them once.
+
+    # Bound here, where the check above has narrowed it to a generator.
+    prepared_generate = compiled.prepared_generate
+
+    def build_plan() -> list[Any]:
+        generated = prepared_generate()
+        foreign_resolved = extensions.on_template_foreign_compiled(
+            component_class,
+            generated,
+            provider_metadata=compiled.foreign_provider_metadata,
+            template_id=compiled.template_id,
+            origin=compiled.origin,
+            template_kind=compiled.kind,
+        )
+        transformed = extensions.on_template_compiled(
+            component_class,
+            foreign_resolved,
+            template_id=compiled.template_id,
+            origin=compiled.origin,
+            template_kind=compiled.kind,
+        )
+        typed = coalesce_prepared_static_nodes(transformed)
+        compiled_leaf = compile_leaf_program(typed, allow_static_only=True, allow_calls=True)
+        return (
+            [compiled_leaf]
+            if compiled_leaf is not None and compiled_leaf.static_instance_free_template_supported()
+            else []
+        )
+
+    cached_plan = _template_cached_body(compiled, compiled.prepared_standalone_bodies, plan_key, build_plan)
     if len(cached_plan) != 1:
         # `#c-ignore` keeps its contents through the component's own Vue
         # instance, which a simple component does not have. Name it, because
@@ -2452,40 +2451,26 @@ def _render_one(
                         build,
                         visible_names=visible_names,
                         format_key=("vue-prepared", is_tracing()),
+                        template_id=compiled.template_id,
                     )
                 else:
                     # The ABC token keeps a later ComponentLike registration
                     # from reusing text a constant value was written as.
                     prepared_key = (signature, visible_names, is_tracing(), abc.get_cache_token())
-                    with compiled.compile_lock:
-                        cached_body = compiled.prepared_standalone_bodies.get(prepared_key)
-                        if cached_body is None:
-                            cached_body = build()
-                            compiled.prepared_standalone_bodies[prepared_key] = cached_body
-                            while len(compiled.prepared_standalone_bodies) > 64:
-                                compiled.prepared_standalone_bodies.popitem(last=False)
-                        compiled.prepared_standalone_bodies.move_to_end(prepared_key)
-                        body = cached_body
+                    body = _template_cached_body(compiled, compiled.prepared_standalone_bodies, prepared_key, build)
             elif template_override is not None:
                 # One transparent class serves every standalone source. Its
                 # body cache must therefore include the immutable template
                 # record rather than using the class-keyed shared cache.
                 standalone_key = (signature, visible_names, abc.get_cache_token())
-                with compiled.compile_lock:
-                    cached_body = compiled.standalone_bodies.get(standalone_key)
-                    if cached_body is None:
-                        cached_body = build()
-                        compiled.standalone_bodies[standalone_key] = cached_body
-                        compiled.standalone_bodies.move_to_end(standalone_key)
-                        while len(compiled.standalone_bodies) > 64:
-                            compiled.standalone_bodies.popitem(last=False)
-                    body = cached_body
+                body = _template_cached_body(compiled, compiled.standalone_bodies, standalone_key, build)
             else:
                 body = citry_instance._const_body_cache.get_or_build(
                     comp_cls,
                     signature,
                     build,
                     visible_names=visible_names,
+                    template_id=compiled.template_id,
                 )
 
         # 7. Walk the body into a parts list and wrap it in a CitryRender. Any nested
@@ -2868,52 +2853,92 @@ def _get_compiled_template(
     if template is None:
         return None
     current_generate = template.prepared_generate if prepared else template.generate
-    if current_generate is None:
+    if current_generate is not None:
+        return template
+    # Compiling runs the `on_template_foreign_spans` hooks and may import
+    # component modules (the tag rules start discovery), so it runs with no
+    # lock held. Two threads making the first render at once may both
+    # compile; the lock only stores the first result, which both then use.
+    try:
         with template.compile_lock:
-            current_generate = template.prepared_generate if prepared else template.generate
-            if current_generate is not None:
-                return template
-            try:
+            foreign_prepared = template.foreign_prepared
+        if not foreign_prepared:
+            spans, metadata = comp_cls.citry.extensions.on_template_foreign_spans(
+                comp_cls,
+                template.source,
+                template_id=template.template_id,
+                origin=template.origin,
+                template_kind=template.kind,
+                foreign_compile_contexts=template.foreign_compile_contexts,
+            )
+            with template.compile_lock:
                 if not template.foreign_prepared:
-                    spans, metadata = comp_cls.citry.extensions.on_template_foreign_spans(
-                        comp_cls,
-                        template.source,
-                        template_id=template.template_id,
-                        origin=template.origin,
-                        template_kind=template.kind,
-                        foreign_compile_contexts=template.foreign_compile_contexts,
-                    )
                     template.foreign_spans = spans
                     template.foreign_provider_metadata = metadata
                     template.foreign_prepared = True
-                compile_prepared = prepared
-                if prepared and template.foreign_spans:
-                    from citry._vue.capture import vue_render_active  # noqa: PLC0415
+        compile_prepared = prepared
+        if prepared and template.foreign_spans:
+            from citry._vue.capture import vue_render_active  # noqa: PLC0415
 
-                    if vue_render_active():
-                        raise TypeError("prepared Vue rendering does not yet support foreign template spans")
-                    # Static serialization still preserves the established
-                    # foreign-provider hook contract. Its selected output is
-                    # ordinary trusted HTML and never enters the Vue compiler.
-                    compile_prepared = False
-                generate = _compile_template(
-                    template,
-                    comp_cls.citry._tag_rules(),
-                    prepared=compile_prepared,
-                )
-                _check_declared_slots(comp_cls, template)
-                if prepared:
+            if vue_render_active():
+                raise TypeError("prepared Vue rendering does not yet support foreign template spans")
+            # Static serialization still preserves the established
+            # foreign-provider hook contract. Its selected output is
+            # ordinary trusted HTML and never enters the Vue compiler.
+            compile_prepared = False
+        generate = _compile_template(
+            template,
+            comp_cls.citry._tag_rules(),
+            prepared=compile_prepared,
+        )
+        _check_declared_slots(comp_cls, template)
+        with template.compile_lock:
+            if prepared:
+                if template.prepared_generate is None:
                     template.prepared_generate = generate
-                    # Typed nodes are now the normal compiled representation;
-                    # keep the established public compiled-template accessor
-                    # pointed at that same immutable generator.
-                    template.generate = generate
-                else:
-                    template.generate = generate
-            except Exception as err:
-                set_template_origin_error_message(err, template.origin)
-                raise
+                # Typed nodes are now the normal compiled representation;
+                # keep the established public compiled-template accessor
+                # pointed at that same immutable generator.
+                template.generate = template.prepared_generate
+            elif template.generate is None:
+                template.generate = generate
+    except Exception as err:
+        set_template_origin_error_message(err, template.origin)
+        raise
     return template
+
+
+# How many bodies one template keeps in each of its own body caches.
+_TEMPLATE_BODY_CACHE_LIMIT = 64
+
+
+def _template_cached_body(
+    template: CitryTemplate,
+    bodies: OrderedDict[object, list[Any]],
+    key: object,
+    build: Callable[[], list[Any]],
+) -> list[Any]:
+    """
+    Return the body ``bodies`` keeps for ``key``, building it on first use.
+
+    ``build()`` runs the compiled-template hooks and evaluates ``Const``
+    expressions, which may render other components, so it runs with no
+    lock held. Two threads may both build one key; both get the body stored
+    first. A reset replaces a template's ``CitryTemplate`` instead of
+    changing it, so a body stored on one is never stale.
+    """
+    with template.compile_lock:
+        body = bodies.get(key)
+        if body is not None:
+            bodies.move_to_end(key)
+            return body
+    built = build()
+    with template.compile_lock:
+        body = bodies.setdefault(key, built)
+        bodies.move_to_end(key)
+        while len(bodies) > _TEMPLATE_BODY_CACHE_LIMIT:
+            bodies.popitem(last=False)
+        return body
 
 
 def _check_declared_slots(comp_cls: type[Component], template: CitryTemplate) -> None:
