@@ -22,6 +22,7 @@ from citry._vue.capture import (
     prepared_browser_binding,
     prepared_render_active,
 )
+from citry._walk import Call, run
 from citry.attrs import (
     merge_attrs,
     reject_vue_code_attr_name,
@@ -42,7 +43,7 @@ from citry.util.html import Markup, decode_character_references
 from .usage import CLIENT_CONTEXT_KEY
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
 
     from citry.citry_context import CitryContext
     from citry.component import Component
@@ -451,7 +452,11 @@ class I18nBoundExprNode(Node):
 def compile_template_bindings(nodes: list[Any], *, component_name: str) -> list[Any]:
     """Wrap literal final HTML destinations and reject direct non-HTML placement."""
     ordinal = [0]
-    return _transform_body(nodes, component_name=component_name, ordinal=ordinal)
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests. Each nested body is
+    # transformed completely where it is reached, so binding ordinals are
+    # numbered in the same order as before.
+    return run(_transform_body(nodes, component_name=component_name, ordinal=ordinal))
 
 
 def reject_translation_binding_key(key: object, *, tag_name: str) -> None:
@@ -462,29 +467,23 @@ def reject_translation_binding_key(key: object, *, tag_name: str) -> None:
         )
 
 
-def _transform_body(nodes: list[Any], *, component_name: str, ordinal: list[int]) -> list[Any]:
+def _transform_body(nodes: list[Any], *, component_name: str, ordinal: list[int]) -> Generator[Call, Any, list[Any]]:
     from citry.nodes import ComponentNode, FillNode, ForNode, IfNode, SlotNode  # noqa: PLC0415
 
     result = list(nodes)
     for item in result:
         if isinstance(item, ComponentNode):
             _reject_direct_structural(item.attrs, tag_name=f"c-{item.name}")
-            item.body = _transform_body(item.body, component_name=component_name, ordinal=ordinal)
+            item.body = yield Call(_transform_body, item.body, component_name=component_name, ordinal=ordinal)
         elif isinstance(item, (SlotNode, FillNode)):
             _reject_direct_structural(item.attrs, tag_name=type(item).__name__.removesuffix("Node").lower())
-            item.body = _transform_body(item.body, component_name=component_name, ordinal=ordinal)
+            item.body = yield Call(_transform_body, item.body, component_name=component_name, ordinal=ordinal)
         elif isinstance(item, (IfNode, ForNode)):
             branches = []
             for branch in item.branches:
                 _reject_direct_structural(branch[1], tag_name="c-if/c-for control-flow branch")
-                branches.append(
-                    (
-                        branch[0],
-                        branch[1],
-                        _transform_body(branch[2], component_name=component_name, ordinal=ordinal),
-                        branch[3],
-                    )
-                )
+                transformed = yield Call(_transform_body, branch[2], component_name=component_name, ordinal=ordinal)
+                branches.append((branch[0], branch[1], transformed, branch[3]))
             item.branches = tuple(branches)
 
     index = 0

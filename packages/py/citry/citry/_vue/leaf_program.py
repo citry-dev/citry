@@ -2213,6 +2213,13 @@ def _simple_json_plain_scalar_types() -> frozenset[type[object]]:
 
 def _evaluation_only_operations(operations: tuple[object, ...]) -> tuple[object, ...]:
     """Drop static materialization visits while retaining dynamic branch/loop decisions."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(_evaluation_only_walk(operations))
+
+
+def _evaluation_only_walk(operations: tuple[object, ...]) -> Generator[Call, Any, tuple[object, ...]]:
+    """The walk generator behind ``_evaluation_only_operations``."""
     selected: list[object] = []
     for operation in operations:
         if isinstance(operation, (_Static, _Close)):
@@ -2220,22 +2227,14 @@ def _evaluation_only_operations(operations: tuple[object, ...]) -> tuple[object,
         if isinstance(operation, _Open) and operation.static is not None:
             continue
         if isinstance(operation, _If):
-            selected.append(
-                _If(
-                    operation.node,
-                    operation.key,
-                    tuple(_evaluation_only_operations(branch) for branch in operation.branches),
-                )
-            )
+            branches: list[tuple[object, ...]] = []
+            for branch in operation.branches:
+                branches.append((yield Call(_evaluation_only_walk, branch)))
+            selected.append(_If(operation.node, operation.key, tuple(branches)))
         elif isinstance(operation, _For):
-            selected.append(
-                _For(
-                    operation.node,
-                    operation.key,
-                    _evaluation_only_operations(operation.body),
-                    _evaluation_only_operations(operation.empty),
-                )
-            )
+            body = yield Call(_evaluation_only_walk, operation.body)
+            empty = yield Call(_evaluation_only_walk, operation.empty)
+            selected.append(_For(operation.node, operation.key, body, empty))
         else:
             selected.append(operation)
     return tuple(selected)
