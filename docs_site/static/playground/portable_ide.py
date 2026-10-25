@@ -1,6 +1,14 @@
 # Generated from packages/py/citry/citry/_portable_ide.py
 # by docs_site/_internal/frontend/scripts/build.mjs. Do not edit.
-"""Small parser-owned IDE rules shared by native and browser transports."""
+"""
+Small parser-owned IDE rules shared by native and browser transports.
+
+The docs playground copies this file into its browser Worker, which installs
+`citry-core` and not `citry`. This file must therefore import only the
+standard library and `citry_core`. `docs_site/tests/test_playground_analysis.py`
+loads the generated copy the way the Worker does and fails if it imports
+`citry`.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement, parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection
+    from collections.abc import Callable, Collection, Iterator
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,12 +124,20 @@ def template_tag_uses(
 ) -> tuple[TemplateTagUse, ...]:
     """Return exact tag tokens from a template and its nested templates."""
     uses: list[TemplateTagUse] = []
-    _collect_template_tags(
-        template,
-        uses,
-        parse_nested=parse_nested,
-        base_index=0,
-    )
+    # Each entry reads one template's tags and yields the templates nested
+    # in it. Walking them from a list keeps the number of Python frames the
+    # same however deep the templates nest, without any `citry` helper:
+    # the browser playground loads this file with `citry_core` alone.
+    pending = [_collect_template_tags(template, uses, parse_nested=parse_nested, base_index=0)]
+    while pending:
+        nested = next(pending[-1], None)
+        if nested is None:
+            pending.pop()
+            continue
+        nested_template, nested_base_index = nested
+        pending.append(
+            _collect_template_tags(nested_template, uses, parse_nested=parse_nested, base_index=nested_base_index)
+        )
     return tuple(sorted(uses, key=lambda use: (use.start_index, use.end_index)))
 
 
@@ -166,7 +182,13 @@ def _collect_template_tags(
     *,
     parse_nested: Callable[[str], object],
     base_index: int,
-) -> None:
+) -> Iterator[tuple[object, int]]:
+    """
+    Record one template's tags in ``uses`` and yield each nested template with the byte offset where its source starts.
+
+    The caller walks a yielded template before it asks for the next one, so
+    tags are recorded in the same order as a recursive walk.
+    """
     elements = getattr(template, "elements", None)
     if type(elements) is not list:
         msg = "template must expose parser elements"
@@ -197,12 +219,7 @@ def _collect_template_tags(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_template_tags(
-                body,
-                uses,
-                parse_nested=parse_nested,
-                base_index=base_index,
-            )
+            yield body, base_index
         for attr in node.start_tag.attrs:
             if attr.inner_value is None or not _is_nested_template_attr(attr):
                 continue
@@ -210,12 +227,7 @@ def _collect_template_tags(
             if nested is None:
                 continue
             nested_template, nested_start = nested
-            _collect_template_tags(
-                nested_template,
-                uses,
-                parse_nested=parse_nested,
-                base_index=base_index + attr.inner_value.start_index + nested_start,
-            )
+            yield nested_template, base_index + attr.inner_value.start_index + nested_start
 
 
 def _is_nested_template_attr(attr: Any) -> bool:
