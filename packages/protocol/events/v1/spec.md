@@ -791,9 +791,10 @@ Details:
   sent with `wait: false` does not wait for the queue.
 - A detached call's own delayed actions follow the same rows: a newer
   result from a queued call skips them, except a `redirect`. A skipped
-  blocking action rejects the call's promise, as for any call. A detached
-  action without a delay always runs, even when a queued result was
-  accepted while the actions before it ran.
+  blocking action rejects the call's promise, as for any call. A newer
+  result never skips a detached call's actions that have no delay, even one
+  accepted while the actions before them ran. The `retired`, `superseded`
+  and `disposed` rows still apply to them.
 - A result that holds an action type the client does not know is rejected
   whole, before any of its actions runs, so no row applies to it.
 - Actions that page code applies with `Citry.events.applyActions` follow

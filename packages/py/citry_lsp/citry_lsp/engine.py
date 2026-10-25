@@ -9652,7 +9652,8 @@ _COMPONENT_CONTEXT_SPECS = {
             "(name: CitryServerEventName, args?: Record<string, unknown>, "
             "opts?: {timeout?: number; wait?: boolean}) => Promise<unknown>"
         ),
-        "Call one of this component's declared server event handlers, like `component.$sendEvent`.",
+        "Call one of this component's declared server event handlers, like `component.$sendEvent`. "
+        "`wait: false` sends the call at once and needs a handler declared with `@event(detached=True)`.",
         f"{_BROWSER_APIS_URL}#send-event",
     ),
     "loading": _BrowserApiSpec(

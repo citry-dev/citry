@@ -227,7 +227,8 @@ actions take (see [Action lists](#return-several-actions-in-order)).
 
 In exchange, a detached handler must leave the page and State as they are.
 It may read State and return data, a `Dispatch`, a `Redirect`, a
-`PushUrl` or `ReplaceUrl`, or a `Download`. These calls fail:
+`PushUrl` or `ReplaceUrl`, or a `Download` (which also needs
+`bundle=False`). These calls fail:
 
 - The handler returns a component or `actions.Render`, or changes State:
   the `$sendEvent` Promise rejects with a `handler_error`, and the server
@@ -236,10 +237,10 @@ It may read State and return data, a `Dispatch`, a `Redirect`, a
 - `wait: false` on a handler without `detached=True` rejects the Promise
   with a `TypeError` before anything is sent.
 
-The handler reads the State the server last saw. Changes the browser has
-not sent yet stay in the browser for the next call to a handler that is
-not detached, so pass text the user is still typing as an argument, as
-above.
+The handler reads State from the token the browser sends with the call.
+Changes the browser has not sent yet are not in it: they stay in the
+browser for the next call to a handler that is not detached, so pass text
+the user is still typing as an argument, as above.
 
 The server may run a detached call while another call from the same page
 is running, so do not let the handler rely on what that call writes.

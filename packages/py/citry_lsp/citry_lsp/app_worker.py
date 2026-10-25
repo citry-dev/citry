@@ -433,8 +433,9 @@ def _event_sources(component_class: type) -> dict[str, object]:
             "data_class": _class_source(handler.data_schema),
         }
         # The editor lets `wait: false` through only for these handlers, as the browser does.
+        # An older citry in the app's environment has no `detached` option, so read it softly.
         options = event_options(func)
-        if options is not None and options.detached:
+        if getattr(options, "detached", False) is True:
             record["detached"] = True
         handlers.append(record)
     if info.state_cls is None or info.state_meta is None:

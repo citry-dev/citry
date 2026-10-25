@@ -915,6 +915,48 @@ def test_check_types_reports_findings_with_file_positions(tmp_path):
     assert typed[3]["range"]["source_kind"] == "file"
 
 
+def test_check_types_allows_wait_false_in_a_template_only_for_a_detached_handler(tmp_path):
+    tsc = Path(_command()[0])
+    (tmp_path / "app.py").write_text(
+        """from pathlib import Path
+from citry import Citry, Component
+from citry.ext.events import event
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+class Card(Component):
+    citry = engine
+    template_file = 'card.html'
+    js_file = 'card.js'
+    class Events:
+        def save(self):
+            return None
+
+        @event(detached=True)
+        def peek(self):
+            return None
+""",
+        encoding="utf-8",
+    )
+    (tmp_path / "card.js").write_text("$component({});\n", encoding="utf-8")
+    (tmp_path / "card.html").write_text(
+        """<button @click="$sendEvent('peek', {}, {wait: false})">A</button>"""
+        """<button @click="$sendEvent('save', {}, {wait: false})">B</button>""",
+        encoding="utf-8",
+    )
+    node = shutil.which("node")
+    assert node is not None
+    result = _run_check(tmp_path, [str(tsc.parent), str(Path(node).parent), "/usr/bin", "/bin"])
+
+    payload = json.loads(result.stdout)
+    typed = [item for item in payload["findings"] if item["code"].startswith("citry.typescript.")]
+    # Only the call to `save`, which is not detached, is reported.
+    [finding] = typed
+    card = (tmp_path / "card.html").resolve()
+    # TypeScript points at the `wait` key of the second call.
+    html = (tmp_path / "card.html").read_text(encoding="utf-8")
+    column = html.index("wait", html.index("'save'")) + 1
+    assert finding["origin"] == f"{card!s}:1:{column}", typed
+
+
 def test_check_types_says_what_to_install_without_node(tmp_path):
     (tmp_path / "app.py").write_text(_APP, encoding="utf-8")
     for name, source in (("lane.js", _LANE_JS), ("lane.html", _LANE_HTML), ("card.html", _CARD_HTML)):

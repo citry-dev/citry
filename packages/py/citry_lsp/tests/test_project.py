@@ -801,3 +801,68 @@ def test_runtime_compatibility_matches_the_declared_dependency_floor():
     assert project_module._supported_citry_version(f"{minimum}.post1")
     assert not project_module._supported_citry_version(f"{minimum}rc1")
     assert not project_module._supported_citry_version(f"{minimum}.dev1")
+
+
+@pytest.mark.parametrize(("flag", "detached"), [({}, False), ({"detached": True}, True)])
+def test_source_event_records_carry_the_detached_flag(tmp_path, flag, detached):
+    handler = {
+        "name": "peek",
+        "method_name": "peek",
+        "module": "app",
+        "qualname": "Card.Events.peek",
+        "file": (tmp_path / "app.py").as_posix(),
+        **flag,
+    }
+    [record], _state, _classes = project_module._source_event_info({"handlers": [handler], "state": []}, "app.Card")
+    assert record.detached is detached
+
+
+def test_source_event_records_reject_a_detached_flag_that_is_not_true(tmp_path):
+    handler = {
+        "name": "peek",
+        "method_name": "peek",
+        "module": "app",
+        "qualname": "Card.Events.peek",
+        "file": (tmp_path / "app.py").as_posix(),
+        "detached": False,
+    }
+    with pytest.raises(ValueError, match="invalid detached flag"):
+        project_module._source_event_info({"handlers": [handler], "state": []}, "app.Card")
+
+
+def test_worker_reads_the_detached_flag_from_an_older_citry_without_it(tmp_path, monkeypatch):
+    (tmp_path / "detached_app.py").write_text(
+        dedent(
+            """
+            from citry import Citry, Component
+            from citry.ext.events import event
+            engine = Citry(autodiscover=False)
+            class Card(Component):
+                citry = engine
+                template = "<p>card</p>"
+                class Events:
+                    @event(detached=True)
+                    def peek(self):
+                        return None
+                    @event(bundle=False)
+                    def save(self):
+                        return None
+            """
+        ),
+        encoding="utf8",
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    card = __import__("detached_app").Card
+    handlers = app_worker._event_sources(card)["handlers"]
+    assert [handler.get("detached") for handler in handlers] == [True, None]
+
+    # citry 0.6.0's options record has no `detached` field; the worker must not fail on it.
+    class OldOptions:
+        __slots__ = ("bundle",)
+
+        def __init__(self) -> None:
+            self.bundle = False
+
+    monkeypatch.setattr(app_worker, "event_options", lambda _func: OldOptions())
+    handlers = app_worker._event_sources(card)["handlers"]
+    assert [handler.get("detached") for handler in handlers] == [None, None]

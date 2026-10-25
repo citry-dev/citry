@@ -143,6 +143,10 @@ export interface VueEventSend {
   options?: unknown;
 }
 
+/** Name a value for an error message without a step that could throw on it, as JSON.stringify can. */
+const describeValue = (value: unknown): string =>
+  typeof value === "string" ? JSON.stringify(value) : typeof value === "number" ? String(value) : `a ${typeof value}`;
+
 /** The `opts` values the bridge keeps after `checkSendOptions` accepted them. */
 interface CheckedSendOptions {
   timeout?: number;
@@ -167,7 +171,7 @@ const checkSendOptions = (value: unknown): CheckedSendOptions | undefined => {
   }
   const { timeout, wait } = value as { timeout?: unknown; wait?: unknown };
   if (wait !== undefined && wait !== true && wait !== false)
-    throw new TypeError(`Citry Events option 'wait' must be true or false; got ${String(JSON.stringify(wait))}.`);
+    throw new TypeError(`Citry Events option 'wait' must be true or false; got ${describeValue(wait)}.`);
   if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0))
     throw new Error("Citry Events timeout must be a positive finite number.");
   const checked: CheckedSendOptions = {};
@@ -691,9 +695,9 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
         const seconds = typeof action.delay === "number" ? action.delay : 0;
         const delayed = seconds > 0;
         if (delayed) await delay(seconds * 1000, state, job);
-        // A detached call runs beside the queue, so a queued result can be accepted while its earlier
-        // actions run. That result only replaces the page an action waits on, so a detached action
-        // without a delay still runs; one that waited on a delay follows the usual newer-result rule.
+        // A detached result renders nothing and changes no State, so a queued result accepted between
+        // its actions does not replace it, and its actions without a delay still run. An action that
+        // waited on a delay follows the usual newer-result rule.
         const actionEpoch = job.detachedHandler && !delayed ? state.acceptedEpoch : epoch;
         await applyOne(
           action,

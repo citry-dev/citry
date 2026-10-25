@@ -27,6 +27,7 @@ import pytest
 
 from citry import Citry, Component
 from citry.ext.events import actions, event
+from citry.ext.events import dispatcher as dispatcher_module
 from citry.ext.events.dispatcher import (
     CAPABILITIES_BASELINE_V1,
     CallEvent,
@@ -2750,23 +2751,45 @@ class TestDetachedHandlers:
         assert reason in logged
         assert "remove detached=True" in logged
 
-    def test_a_state_action_added_by_an_extension_names_the_extension_in_the_log(self, caplog):
-        class AddsState(Extension):
-            name = "adds_state"
+    @pytest.mark.parametrize("kind", ["state", "render"])
+    def test_an_action_added_by_an_extension_blames_the_extension(self, caplog, kind):
+        added = {
+            "state": {"action": "state", "targetRenderId": "i1", "stateToken": "token", "publicState": {}},
+            "render": {"action": "render", "target": "render:i1", "swap": "replace", "html": "<p>x</p>"},
+        }[kind]
+
+        class AddsAction(Extension):
+            name = "adds_action"
 
             def on_event_result(self, ctx):
-                return [
-                    {"action": "state", "targetRenderId": "i1", "stateToken": "token", "publicState": {}},
-                    *ctx.actions,
-                ]
+                return [added, *ctx.actions]
 
-        c = _citry(extensions=[AddsState])
+        c = _citry(extensions=[AddsAction])
         board = self._board(c)
         with caplog.at_level(logging.ERROR, logger="citry"):
             [item] = _dispatch(c, self._call(board, "peek"))["results"]
         assert item["error"]["code"] == "handler_error"
         logged = "\n".join(str(record.exc_info[1]) for record in caplog.records if record.exc_info)
-        assert "its result holds a 'state' action, which an on_event_result extension may have added" in logged
+        assert f"its result holds a {kind!r} action, which an on_event_result extension added" in logged
+        assert f"Change that extension to leave a detached handler's result without a {kind!r} action" in logged
+
+    def test_a_render_from_a_detached_handler_is_refused_before_it_is_built(self, monkeypatch):
+        c = _citry()
+        board = self._board(c)
+        encoded = []
+        original = dispatcher_module.encode_actions
+
+        def spy(*args, **kwargs):
+            encoded.append(args[0])
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(dispatcher_module, "encode_actions", spy)
+        [item] = _dispatch(c, self._call(board, "redraw"))["results"]
+        assert item["error"]["code"] == "handler_error"
+        # The render never reached the encoder, so no nested render or State token was produced.
+        assert encoded == []
+        assert _dispatch(c, self._call(board, "peek"))["results"][0]["ok"] is True
+        assert len(encoded) == 1
 
     @pytest.mark.parametrize("updates", [{"moves": 5}, {}])
     def test_state_updates_are_rejected_before_the_handler_runs(self, updates):

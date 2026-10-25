@@ -2669,6 +2669,11 @@ test("send options accept only timeout and a boolean wait, and reject before act
     bridge.send({ source, handler: "move", options: { wait: "no" } }),
     (error) => error instanceof TypeError && /option 'wait' must be true or false; got "no"/.test(error.message),
   );
+  // A value JSON cannot write still gets the option's own error, not one from formatting it.
+  await assert.rejects(
+    bridge.send({ source, handler: "move", options: { wait: 10n } }),
+    (error) => error instanceof TypeError && /option 'wait' must be true or false; got a bigint/.test(error.message),
+  );
   await assert.rejects(
     bridge.send({ source, handler: "move", options: { timout: 5 } }),
     /unknown option 'timout'; the options are 'timeout' and 'wait'/,

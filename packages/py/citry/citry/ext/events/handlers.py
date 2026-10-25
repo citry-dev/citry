@@ -345,12 +345,13 @@ def event(
             the app's other calls, with
             ``$sendEvent(name, args, {wait: false})``. In exchange, the
             handler must not render or change State: it may return data,
-            dispatch an event, redirect, or update the URL, and it may read
-            State. A detached handler that renders or changes State fails
-            with a ``handler_error``. It reads the State the server last
-            saw: browser State changes not yet sent stay in the browser for
-            the next call to a handler that is not detached, so pass values
-            the user is still editing as arguments. Its calls can run on
+            dispatch an event, redirect, update the URL, or return a
+            ``Download``, and it may read State. A detached handler that
+            renders or changes State fails with a ``handler_error``. It
+            reads State from the token the browser sends with the call:
+            browser State changes not yet sent stay in the browser for the
+            next call to a handler that is not detached, so pass values the
+            user is still editing as arguments. Its calls can run on
             the server at the same time as the app's other calls, so do not
             rely on what those calls write. Off by default.
 

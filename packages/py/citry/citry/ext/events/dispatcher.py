@@ -389,7 +389,8 @@ def _detached_render_message(plan: _CallPlan) -> str:
     return (
         f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} is declared with"
         f" @event(detached=True) but returned actions.Render (or a component). A detached handler may"
-        f" return data, dispatch an event, redirect, or update the URL; remove detached=True to render."
+        f" return data, dispatch an event, redirect, update the URL, or return a Download; remove"
+        f" detached=True to render."
     )
 
 
@@ -1169,18 +1170,17 @@ class EventsDispatcher:
             return
         kinds = {action.get("action") for action in wire_actions}
         label = f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__}"
-        if "render" in kinds:
-            # Only an on_event_result extension can add one this late.
-            raise ValueError(_detached_render_message(plan))
-        if "state" in kinds:
-            # Handler code cannot build a state action itself, so an
-            # on_event_result extension added it after the handler ran.
-            msg = (
-                f"{label} is declared with @event(detached=True), but its result holds a 'state' action,"
-                f" which an on_event_result extension may have added. A detached result cannot carry a"
-                f" State token."
-            )
-            raise ValueError(msg)
+        # The handler's own renders were refused before encoding, and handler
+        # code cannot build a state action, so an on_event_result extension
+        # added whatever is found here.
+        for kind in ("render", "state"):
+            if kind in kinds:
+                msg = (
+                    f"{label} is declared with @event(detached=True), but its result holds a {kind!r}"
+                    f" action, which an on_event_result extension added. Change that extension to leave"
+                    f" a detached handler's result without a {kind!r} action."
+                )
+                raise ValueError(msg)
         if self._state_changed(plan):
             msg = (
                 f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} is declared with"
