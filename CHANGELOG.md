@@ -494,6 +494,10 @@
 
 ### Performance
 
+- With a shared cache such as Redis, a render no longer asks the cache
+  about every component's JS and CSS and every served `Dependencies`
+  file. Each process asks about each one at most once a minute, so if the
+  cache drops a served file, it can take up to a minute to come back.
 - Large templates parse much faster: a 92 KB template that took more than
   a second to parse now takes about 10 ms.
 - Citry now reports a template error that covers many lines, such as an

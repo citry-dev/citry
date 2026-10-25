@@ -6,15 +6,19 @@ import re
 import pytest
 
 from citry import Citry, Component, Extension, InMemoryCache, Markup
+from citry import cache as citry_cache
 from citry._inline_assets import normalize_inline_asset
+from citry.cache import _store_unless_matched
 from citry.ext.dependencies import Script, Style
 from citry.ext.dependencies.routes import script_url
 from citry.ext.dependencies.scripts import (
     component_script_hash,
+    gen_asset_cache_key,
     gen_cache_key,
     gen_component_cache_key,
     get_component_script,
 )
+from citry.util.routing import match_route
 
 PAGE_TEMPLATE = "<html><head><title>t</title></head><body><p>hi</p></body></html>"
 
@@ -980,7 +984,7 @@ class TestScriptCacheLifecycle:
         assert calls == {"js": 1, "css": 1}
 
     @pytest.mark.parametrize("script_type", ["js", "css"])
-    def test_class_capture_repairs_evicted_shared_cache(self, script_type):
+    def test_class_capture_repairs_evicted_shared_cache(self, script_type, monkeypatch):
         c = Citry()
 
         class Card(Component):
@@ -998,10 +1002,40 @@ class TestScriptCacheLifecycle:
         c.cache.delete(stable_key)
         c.cache.delete(versioned_key)
 
-        repaired = get_component_script(script_type, Card)
+        # This process saw both entries stored moments ago, so within the
+        # recheck interval it trusts that and does not ask the backend again.
+        assert get_component_script(script_type, Card) == expected
+        assert not c.cache.has(stable_key)
+        assert not c.cache.has(versioned_key)
 
-        assert repaired == expected
+        # Once the interval has passed, the next use asks again and writes
+        # both entries back.
+        monkeypatch.setattr(citry_cache, "_STORED_KEY_RECHECK_SECONDS", 0.0)
+        assert get_component_script(script_type, Card) == expected
         assert c.cache.has(stable_key)
+        assert c.cache.has(versioned_key)
+
+    @pytest.mark.parametrize("script_type", ["js", "css"])
+    def test_a_request_for_an_evicted_version_writes_it_back_at_once(self, script_type):
+        # A read that finds the versioned entry gone makes this process
+        # forget its record, so the route's repair writes the entry again
+        # without waiting for the recheck interval.
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            js = "console.log('card');"
+            css = ".card { color: red; }"
+
+        c.set_mounted_prefix("/citry")
+        content_hash = component_script_hash(script_type, Card)
+        assert content_hash is not None
+        versioned_key = gen_component_cache_key(Card.class_id, script_type, content_hash)
+        c.cache.delete(versioned_key)
+
+        matched = match_route(c.urls, script_url(Card, script_type, content_hash).removeprefix("/citry/"))
+        assert matched is not None
+        assert matched.route.handler(None, **matched.params).status == 200
         assert c.cache.has(versioned_key)
 
     def test_reset_files_evicts_and_repopulates(self, tmp_path):
@@ -1201,3 +1235,127 @@ class TestScriptCacheLifecycle:
         assert c.cache.has(gen_cache_key(Styled.class_id, "css"))
         assert not c.cache.has(gen_cache_key(Plain.class_id, "js"))
         assert not c.cache.has(gen_cache_key(Plain.class_id, "css"))
+
+
+class _CountingCache(InMemoryCache):
+    """An in-memory backend that records each key Citry reads, checks or writes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.reads: list[str] = []
+        self.writes: list[str] = []
+
+    def get(self, key: str) -> str | None:
+        self.reads.append(key)
+        return super().get(key)
+
+    def has(self, key: str) -> bool:
+        # InMemoryCache.has reads through get; ask the parent's get directly
+        # so one check counts once.
+        self.reads.append(key)
+        return InMemoryCache.get(self, key) is not None
+
+    def set(self, key: str, value: str, ttl: float | None = None) -> None:
+        self.writes.append(key)
+        super().set(key, value, ttl)
+
+
+class TestCacheRoundTrips:
+    """Class scripts and served files cost a backend round trip once per recheck interval, not once per render."""
+
+    def test_repeated_renders_ask_the_backend_about_each_entry_once(self, tmp_path):
+        (tmp_path / "theme.css").write_text(".theme { color: teal; }")
+        cache = _CountingCache()
+        c = Citry(dirs=[tmp_path], cache=cache)
+        c.set_mounted_prefix("/citry")
+
+        class Card(Component):
+            citry = c
+            template = """
+                <p class="card">card</p>
+            """
+            css = """
+                .card { color: red; }
+            """
+
+            class Dependencies:
+                css = "theme.css"
+                local_files = "serve"
+
+        for _ in range(5):
+            html = str(Card())
+        assert "/citry/asset/" in html
+        # Every entry was read or checked once and written once across five
+        # renders: the class's stylesheet under its versioned and its stable
+        # key, and the served file.
+        entry_reads = [key for key in cache.reads if key.startswith("citry:") and ":vue-" not in key]
+        entry_writes = [key for key in cache.writes if key.startswith("citry:") and ":vue-" not in key]
+        assert len(entry_reads) == 3
+        assert sorted(entry_reads) == sorted(set(entry_reads))
+        assert sorted(entry_writes) == sorted(entry_reads)
+
+    def test_the_stable_key_is_compared_once_per_class_version(self, monkeypatch):
+        # A value another worker wrote is kept within the recheck interval,
+        # a new class version is compared at once, and after the interval
+        # the stored value is compared and rewritten.
+        cache = InMemoryCache()
+        # The record keeps a weak reference to its owner, as to an engine.
+        owner = Citry()
+        _store_unless_matched(owner, cache, "key", "one", "v1")
+        cache.set("key", "foreign")
+        _store_unless_matched(owner, cache, "key", "one", "v1")
+        assert cache.get("key") == "foreign"
+        _store_unless_matched(owner, cache, "key", "two", "v2")
+        assert cache.get("key") == "two"
+        cache.set("key", "foreign")
+        monkeypatch.setattr(citry_cache, "_STORED_KEY_RECHECK_SECONDS", 0.0)
+        _store_unless_matched(owner, cache, "key", "two", "v2")
+        assert cache.get("key") == "two"
+
+    def test_reset_files_writes_the_class_entries_again_at_once(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            css = """
+                .card { color: red; }
+            """
+
+        stable_key = gen_cache_key(Card.class_id, "css")
+        assert get_component_script("css", Card) is not None
+        assert c.cache.has(stable_key)
+        # reset_files deletes the entries and makes this process forget it
+        # saw them stored, so the next use writes them without waiting.
+        Card.reset_files()
+        assert not c.cache.has(stable_key)
+        assert get_component_script("css", Card) is not None
+        assert c.cache.has(stable_key)
+
+    def test_a_request_for_an_evicted_served_file_404s_until_this_process_renders_again(self, tmp_path):
+        (tmp_path / "theme.css").write_text(".theme { color: teal; }")
+        c = Citry(dirs=[tmp_path])
+        c.set_mounted_prefix("/citry")
+
+        class Card(Component):
+            citry = c
+            template = """
+                <p class="card">card</p>
+            """
+
+            class Dependencies:
+                css = "theme.css"
+                local_files = "serve"
+
+        html = str(Card())
+        found = re.search(r'href="/citry/(asset/[0-9a-f]{12}\.css)"', html)
+        assert found is not None
+        file_name = found.group(1).removeprefix("asset/")
+        c.cache.delete(gen_asset_cache_key(file_name))
+
+        matched = match_route(c.urls, found.group(1))
+        assert matched is not None
+        assert matched.route.handler(None, **matched.params).status == 404
+        # The miss made this process forget its record, so its next render
+        # writes the file back without waiting for the recheck interval.
+        str(Card())
+        assert matched.route.handler(None, **matched.params).status == 200

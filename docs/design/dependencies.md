@@ -267,8 +267,22 @@ advertised component URL has substantive content to serve.
 class-level object. Generated class-script URLs include it, so old and new
 workers sharing a cache cannot overwrite the payload named by one another's
 pages. The stable keys remain for compatibility with unversioned URLs. A read
-through one of those URLs validates the stored payload against the class in
-that worker and repairs a mismatch before returning its local version.
+through one of those URLs returns the worker's local version and rewrites the
+stored payload when it differs, at most once a minute.
+
+A render does not ask the backend about these entries every time. Each engine
+remembers which keys it saw stored, and asks again at most once a minute
+(`_STORED_KEY_RECHECK_SECONDS` in `cache.py`). The versioned key and a served
+`Dependencies` file are named by their content, so if the backend has the
+key, it has that content, and the check is a `has` (`_store_if_missing`). The stable
+key's value changes with the class, so its check reads the value back and
+rewrites it when it differs (`_store_unless_matched`). The cost of the saving:
+if the backend drops an entry, a process that saw it stored writes it back on
+its first render after that interval. A request that finds a versioned key
+missing makes its process forget the key and write it back at once. A request
+that finds a served file missing makes its process forget the key, so that
+process's next render writes the file again; other workers can answer 404 for
+it for up to a minute.
 
 `<vars_hash>` is the first 32 hexadecimal characters of the SHA-256 digest of
 the canonical variables JSON. Identical data across instances of the same
