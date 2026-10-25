@@ -616,7 +616,7 @@ text, ints and bools first, so a page reaches only `not_utf8` and
 | NaN or infinity | `non_finite`; Python raises its error. |
 | An int outside the 64-bit range | `big_int`; Python writes it, under its own digit limit. A page reaches it through an attribute whose value is an int with more digits than that limit, which the leaf program keeps as an int; Python's JSON writer then raises its `ValueError`, as without Rust. |
 | A str or dict key with a lone surrogate | `not_utf8`; Python writes it as JSON escapes. An output that writes HTML then fails on the same character, as without Rust. A page reaches it through text such as `'\ud800'`. |
-| A container that holds itself, or nesting deeper than 200 | `cycle` or `too_deep`; Python raises its error for the cycle, and writes the deep data unless the recursion limit stops it. |
+| A container that holds itself, or nesting deeper than 200 | `cycle` or `too_deep`; Python raises its error for the cycle, and writes the deep data. |
 | Leaf data with an `opaqueHtml` or `calls` key | `value_read_key`, decided in Python before Rust runs. No page reaches it. |
 | A placeholder with no JSON for its key, a value Rust wrote with no placeholder in the item, a leaf occurrence whose `preparedData` is not an exact dict, an item key that is not a str, or a `natives` entry that is neither a `_NativeRow` nor a `_LeafJson` | `ValueError` from `_encode_occurrences`; a Citry bug, never user input. |
 | An item holding a placeholder written without Rust's JSON | `TypeError` from JSON encoding, which refuses the placeholder. |
@@ -625,8 +625,6 @@ text, ints and bools first, so a page reaches only `not_utf8` and
 
 Accepted differences, none of which changes output:
 
-- With a very low recursion limit, Rust writes data up to 200 levels
-  deep that Python's conversion would refuse with `RecursionError`.
 - `PreparedOccurrence` equality includes `prepared_data`, and every
   placeholder is the same object, so two such occurrences whose leaf values
   differ would compare equal. Nothing compares them on this path.
