@@ -54,6 +54,10 @@
 
 ### Fixed
 
+- The `SyntaxError` for a misplaced `<c-elif>`, `<c-else>` or `<c-empty>`
+  now always lists the tags it may follow in the same order, for example
+  `<c-if>, <c-elif>` for `<c-else>`. The order used to change from one run
+  to the next.
 - `template_parser.parse_template()` and `compile_template()` handle
   templates nested hundreds of tags deep, and invalid expressions, on threads
   with small stacks, such as threads started after a small
