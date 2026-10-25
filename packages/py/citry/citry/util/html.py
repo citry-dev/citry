@@ -35,9 +35,11 @@ from html import unescape
 from html.entities import html5
 from html.parser import HTMLParser
 from types import BuiltinFunctionType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup, escape
+
+from citry.util import deep_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -365,122 +367,8 @@ def script_json(value: object, *, sort_keys: bool = False, ensure_ascii: bool = 
         # against the recursion limit, and later CPython versions against a
         # fixed limit of their own, so deep enough data stops it. Writing the
         # same text with a stack uses a fixed number of frames.
-        text = _json_text_with_stack(value, sort_keys=sort_keys, ensure_ascii=ensure_ascii)
+        text = deep_json.dumps(value, sort_keys=sort_keys, ensure_ascii=ensure_ascii)
     return text.replace("<", "\\u003c")
-
-
-def _json_text_with_stack(value: object, *, sort_keys: bool, ensure_ascii: bool) -> str:
-    """
-    Write the text ``json.dumps`` writes for ``script_json``'s arguments, with a stack instead of nested calls.
-
-    It follows the standard library's encoder step by step and writes each
-    scalar with ``json.dumps`` itself. For the exact JSON types and their
-    plain subclasses that Citry passes, it writes the same text and raises
-    the same errors as ``json.dumps``. Values that change how they are read,
-    such as a dict subclass whose ``items()`` returns lists, can differ, as
-    can the notes Python 3.14 adds to an error and, on PyPy, the text for a
-    dict subclass and the error for keys that cannot be sorted.
-    """
-    encode_str = json.encoder.encode_basestring_ascii if ensure_ascii else json.encoder.encode_basestring
-    pieces: list[str] = []
-    # The ids of the containers being written, so a container that holds
-    # itself raises the encoder's own error rather than looping.
-    markers: set[int] = set()
-    # Each entry is a container being written: its id, whether it is a dict,
-    # its items still to write, and whether one has been written yet.
-    pending: list[list[Any]] = []
-    while True:
-        container = _json_container_entry(value, markers, sort_keys=sort_keys)
-        if container is None:
-            pieces.append(_json_scalar_text(value, encode_str))
-        elif container[2] is None:
-            # An empty container, which the encoder writes before it checks for a loop.
-            pieces.append("{}" if container[1] else "[]")
-        else:
-            pieces.append("{" if container[1] else "[")
-            pending.append(container)
-        # Move on to the next item of the innermost container that has one.
-        while pending:
-            current = pending[-1]
-            entry = next(current[2], _END_OF_JSON_ITEMS)
-            if entry is _END_OF_JSON_ITEMS:
-                pending.pop()
-                markers.remove(current[0])
-                pieces.append("}" if current[1] else "]")
-                continue
-            if current[3]:
-                pieces.append(",")
-            current[3] = True
-            if current[1]:
-                key, value = cast("tuple[object, object]", entry)
-                pieces.append(_json_key_text(key, encode_str))
-                pieces.append(":")
-            else:
-                value = entry
-            break
-        else:
-            return "".join(pieces)
-
-
-# Marks the end of a container's items in `_json_text_with_stack`.
-_END_OF_JSON_ITEMS = object()
-
-
-def _json_container_entry(value: object, markers: set[int], *, sort_keys: bool) -> list[Any] | None:
-    """
-    Start writing a list, tuple or dict, or return None for any other value.
-
-    The returned entry holds the container's id, whether it is a dict, an
-    iterator over its items (None for an empty container), and whether an
-    item has been written yet.
-    """
-    # The encoder tests str, None, True, False, int and float first, and
-    # none of them is a list, tuple or dict, so testing those here first
-    # gives the same order.
-    is_dict = isinstance(value, dict)
-    if not is_dict and not isinstance(value, (list, tuple)):
-        return None
-    # The encoder reads a list's or tuple's items before it checks for
-    # emptiness, and a dict's stored size, which a subclass cannot change.
-    items: list[Any] = [] if is_dict else list(cast("list[object]", value))
-    if (dict.__len__(cast("dict[object, object]", value)) if is_dict else len(items)) == 0:
-        return [id(value), is_dict, None, False]
-    if id(value) in markers:
-        raise ValueError("Circular reference detected")
-    markers.add(id(value))
-    if is_dict:
-        items = list(cast("dict[object, object]", value).items())
-        if sort_keys:
-            items.sort()
-    return [id(value), is_dict, iter(items), False]
-
-
-def _json_scalar_text(value: object, encode_str: Callable[[str], str]) -> str:
-    """Write one value that is not a container, as the encoder does."""
-    if isinstance(value, str):
-        return encode_str(value)
-    if value is None or value is True or value is False or isinstance(value, (int, float)):
-        # The standard encoder writes these, and raises for a float it refuses.
-        return json.dumps(value, allow_nan=False)
-    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
-
-
-def _json_key_text(key: object, encode_str: Callable[[str], str]) -> str:
-    """Write one dict key, as the encoder does."""
-    if isinstance(key, str):
-        return encode_str(key)
-    if isinstance(key, float):
-        # A float key is written as its JSON number, inside quotes.
-        return encode_str(json.dumps(key, allow_nan=False))
-    if key is True:
-        return '"true"'
-    if key is False:
-        return '"false"'
-    if key is None:
-        return '"null"'
-    if isinstance(key, int):
-        return encode_str(int.__repr__(key))
-    raise TypeError(f"keys must be str, int, float, bool or None, not {key.__class__.__name__}")
 
 
 __all__ = [

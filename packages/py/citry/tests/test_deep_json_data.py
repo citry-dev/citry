@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import random
 import re
 import sys
 from contextlib import contextmanager
@@ -19,8 +20,10 @@ from typing import TYPE_CHECKING
 import pytest
 
 from citry import Citry, Component, Const, Secret
+from citry._vue import prepared, serialization
 from citry._vue.json_data import _DIRECT_JSON_DEPTH, _copy_evaluated_json, _json_plain, _secret_key_path
-from citry.util.html import _json_text_with_stack, script_json
+from citry.util import deep_json
+from citry.util.html import script_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -164,20 +167,18 @@ def test_copy_evaluated_json_copies_deep_data_in_bounded_frames() -> None:
 )
 @pytest.mark.parametrize("sort_keys", [False, True])
 @pytest.mark.parametrize("ensure_ascii", [False, True])
-def test_json_text_with_stack_writes_what_json_dumps_writes(
-    value: object, sort_keys: bool, ensure_ascii: bool
-) -> None:
+def test_deep_json_dumps_writes_what_json_dumps_writes(value: object, sort_keys: bool, ensure_ascii: bool) -> None:
     if sort_keys and isinstance(value, dict) and len({type(key) for key in value}) > 1:
         # Keys of several types cannot be sorted, and both raise the same error.
         with pytest.raises(TypeError, match="not supported between instances"):
             json.dumps(value, sort_keys=True)
         with pytest.raises(TypeError, match="not supported between instances"):
-            _json_text_with_stack(value, sort_keys=True, ensure_ascii=ensure_ascii)
+            deep_json.dumps(value, sort_keys=True, ensure_ascii=ensure_ascii)
         return
     expected = json.dumps(
         value, allow_nan=False, separators=(",", ":"), sort_keys=sort_keys, ensure_ascii=ensure_ascii
     )
-    assert _json_text_with_stack(value, sort_keys=sort_keys, ensure_ascii=ensure_ascii) == expected
+    assert deep_json.dumps(value, sort_keys=sort_keys, ensure_ascii=ensure_ascii) == expected
 
 
 @pytest.mark.parametrize(
@@ -189,19 +190,17 @@ def test_json_text_with_stack_writes_what_json_dumps_writes(
         (_cycle_at(3), ValueError, "Circular reference detected"),
     ],
 )
-def test_json_text_with_stack_raises_what_json_dumps_raises(
-    value: object, error: type[Exception], message: str
-) -> None:
+def test_deep_json_dumps_raises_what_json_dumps_raises(value: object, error: type[Exception], message: str) -> None:
     with pytest.raises(error, match=message):
         json.dumps(value, allow_nan=False)
     with pytest.raises(error, match=message):
-        _json_text_with_stack(value, sort_keys=False, ensure_ascii=True)
+        deep_json.dumps(value, sort_keys=False, ensure_ascii=True)
 
 
-def test_json_text_with_stack_writes_deep_data_in_bounded_frames() -> None:
+def test_deep_json_dumps_writes_deep_data_in_bounded_frames() -> None:
     value = _nested(DEEP, "</b>")
     with _frames_left(150):
-        text = _json_text_with_stack(value, sort_keys=True, ensure_ascii=True)
+        text = deep_json.dumps(value, sort_keys=True, ensure_ascii=True)
     assert text == json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
@@ -267,3 +266,194 @@ def test_a_deep_c_for_chain_renders_with_little_stack_left() -> None:
         html = render_below(200)
     # Vue's server render shows the one row's value inside the host.
     assert re.match(r'<div id="citry-vue-[0-9a-f]+">7</div><script', html)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"b": [1, 2.5, -0.0, 1e300, 12345678901234567890], "a": {"x": null, "y": true, "z": false}}',
+        '  [ "\\u00e9\\ud83d\\ude00", "\\n\\t\\"", "", [], {} ]  ',
+        '{"a": 1, "a": 2}',
+        "[NaN, Infinity, -Infinity]",
+        '"plain"',
+        "-3",
+    ],
+)
+def test_deep_json_loads_reads_what_json_loads_reads(text: str) -> None:
+    # `repr` compares NaN, which never equals itself, and the sign of -0.0.
+    assert repr(deep_json.loads(text)) == repr(json.loads(text))
+    assert repr(deep_json.loads(text.encode("utf-16"))) == repr(json.loads(text.encode("utf-16")))
+    pairs: list[object] = []
+    constants: list[str] = []
+
+    def keep_pairs(items: list[tuple[str, object]]) -> object:
+        pairs.append(items)
+        return ("object", items)
+
+    def keep_constant(name: str) -> object:
+        constants.append(name)
+        return name
+
+    ours = deep_json.loads(text, object_pairs_hook=keep_pairs, parse_constant=keep_constant)
+    ours_calls = (list(pairs), list(constants))
+    pairs.clear()
+    constants.clear()
+    assert ours == json.loads(text, object_pairs_hook=keep_pairs, parse_constant=keep_constant)
+    # The hooks run for the same objects and constants, in the same order.
+    assert ours_calls == (pairs, constants)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["", "[1,]", '{"a" 1}', '{"a": 1,}', "[1 2]", '"\\x"', '"a', "tru", "[1]x", "﻿[1]", "{1: 2}", "01"],
+)
+def test_deep_json_loads_refuses_what_json_loads_refuses(text: str) -> None:
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(text)
+    with pytest.raises(json.JSONDecodeError):
+        deep_json.loads(text)
+
+
+def test_deep_json_loads_reads_deep_text_in_bounded_frames() -> None:
+    text = "[" * DEEP + '{"k": 1}' + "]" * DEEP
+    with _frames_left(150):
+        value = deep_json.loads(text)
+    expected = json.loads(text)
+    assert value == expected
+
+
+def _deep_data_page(*, vue: bool) -> type[Component]:
+    engine = Citry(autodiscover=False)
+
+    class DeepData(Component):
+        citry = engine
+
+        def js_data(self, kwargs, slots):
+            # Nested deeper than the frames left, so a walk that used one
+            # frame per level would fail.
+            return {"deep": _nested(DEEP, "bottom")}
+
+        def template_data(self, kwargs, slots):
+            return {"label": "deep"}
+
+        template = """
+<p>{{ label }}</p>
+"""
+
+    if vue:
+        DeepData.js = """
+$component({});
+"""
+    return DeepData
+
+
+@pytest.mark.parametrize("vue", [False, True])
+def test_deep_js_data_renders_with_little_stack_left(vue: bool) -> None:
+    page = _deep_data_page(vue=vue)
+    page().render().serialize()  # the first render compiles and caches outside the limit
+    with _frames_left(300):
+        html = page().render().serialize()
+    assert "deep" in html
+
+
+def test_prepared_server_data_is_copied_the_same_way_at_any_depth(monkeypatch: pytest.MonkeyPatch) -> None:
+    value = {"rows": [{"b": (1, 2.5), "a": "é"}, None], "n": True}
+    expected = prepared._detach_object(value, "server_data")
+    # The standard round trip stops on deep data on some interpreters, so
+    # the test stops it itself to check the copy that replaces it.
+    real_dumps = json.dumps
+
+    def dumps_without_frames(data: object, **kwargs: object) -> str:
+        if isinstance(data, (dict, list, tuple)):
+            raise RecursionError
+        return real_dumps(data, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(json, "dumps", dumps_without_frames)
+    copy = prepared._detach_object(value, "server_data")
+    assert copy == expected
+    assert repr(copy) == repr(expected)
+
+
+def test_prepared_server_data_that_holds_itself_is_refused() -> None:
+    loop: list[object] = []
+    loop.append(loop)
+    # The key check stops at the loop, and the encoder then reports it.
+    with pytest.raises(ValueError, match="Circular reference detected"):
+        prepared._detach_object({"loop": loop}, "server_data")
+
+
+def test_prepared_server_data_with_a_bad_key_deep_down_is_refused() -> None:
+    with pytest.raises(TypeError, match="contains a non-string object key"):
+        prepared._detach_object({"deep": _nested(DEEP, {1: "x"})}, "server_data")
+
+
+class _Text(str):
+    __slots__ = ()
+
+
+class _Number(float):
+    def __repr__(self) -> str:
+        return "a number"
+
+
+def test_prepared_server_data_fallback_copies_subclasses_as_the_round_trip_does(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    value = {"t": _Text("text"), "n": _Number(2.5), "rows": ((1, True), [None, -0.0])}
+    expected = prepared._detach_object(value, "server_data")
+    real_dumps = json.dumps
+
+    def dumps_without_frames(data: object, **kwargs: object) -> str:
+        if isinstance(data, (dict, list, tuple)):
+            raise RecursionError
+        return real_dumps(data, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(json, "dumps", dumps_without_frames)
+    copy = prepared._detach_object(value, "server_data")
+    assert repr(copy) == repr(expected)
+    assert type(copy["t"]) is str
+    assert type(copy["n"]) is float
+
+
+def _random_json_value(rng: random.Random, depth: int) -> object:
+    roll = rng.random()
+    if depth > 4 or roll < 0.4:
+        scalars = [None, True, False, 0, -12, 2**70, 1.5, -0.0, 1e-7, "", "a\u00e9\n", "\ud83d\ude00"]
+        return rng.choice(scalars)
+    if roll < 0.7:
+        return {rng.choice("abcde"): _random_json_value(rng, depth + 1) for _ in range(rng.randrange(4))}
+    return [_random_json_value(rng, depth + 1) for _ in range(rng.randrange(4))]
+
+
+def test_deep_json_loads_matches_json_loads_on_random_documents() -> None:
+    rng = random.Random(393)  # noqa: S311 - a seeded fixture, not a secret
+    for _ in range(300):
+        value = _random_json_value(rng, 0)
+        text = json.dumps(value, indent=rng.choice([None, 1]), ensure_ascii=rng.random() < 0.5)
+        assert repr(deep_json.loads(text)) == repr(json.loads(text))
+        # A damaged copy is refused by both or read the same by both.
+        cut = rng.randrange(len(text) + 1)
+        damaged = text[:cut] + rng.choice(["", ",", "]", "\u0661", " x"]) + text[cut + 1 :]
+        if re.search(r"\\u(?![0-9a-fA-F]{4})", damaged):
+            # A broken `\u` escape is the one case PyPy's own decoder reads
+            # differently (see `deep_json`); skip it so the test holds there.
+            continue
+        try:
+            expected = repr(json.loads(damaged))
+        except json.JSONDecodeError:
+            with pytest.raises(json.JSONDecodeError):
+                deep_json.loads(damaged)
+        else:
+            assert repr(deep_json.loads(damaged)) == expected
+
+
+def test_a_vue_fragment_mount_reads_deep_prepared_data_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_loads = json.loads
+
+    def loads_without_frames(text: object, **kwargs: object) -> object:
+        raise RecursionError
+
+    text = json.dumps({"deep": _nested(DEEP, "bottom")})
+    expected = real_loads(text)
+    monkeypatch.setattr(json, "loads", loads_without_frames)
+    assert serialization._loads_own_json(text) == expected

@@ -331,6 +331,10 @@
   expression into smaller ones.
 - A template that nests 50 or more `<c-if>` or `<c-for>` tags now renders.
   It used to fail with `SyntaxError: too many nested parentheses`.
+- `js_data()` nested about 1,000 levels or deeper no longer raises
+  `RecursionError` while Citry copies it. `js_data()` that holds itself,
+  and has no other bad key, now raises `ValueError: Circular reference
+  detected`.
 - In a component that uses Vue, `<c-for>` tags nested a few hundred deep,
   each with a `<c-empty>`, no longer raise `RecursionError` while Citry
   writes the data Vue receives, on Python 3.11 and PyPy or when your web
