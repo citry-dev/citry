@@ -21,6 +21,11 @@
   calls `onOpenChange(false, ...)` with reason `"ancestor"` once while the
   dialog stays closed, and again after the dialog has been shown and
   closed.
+- `citry check --types` and the Citry editor extension no longer
+  report an error for `heading_level="2"` on `CAccordion` and
+  `CDisclosure`.
+- `CCalendar`, `CDatePicker`, and `CDateRange` now accept
+  `first_day_of_week="1"`, where they used to raise `TypeError`.
 
 ### Changed
 
@@ -31,6 +36,9 @@
   as before, such as `heading_level="2"`. Earlier Citry UI releases
   reject some valid inputs under that check, so upgrade Citry UI and
   Citry together.
+- `heading_level` on `CAccordion` and `CDisclosure` now accepts only
+  `2` to `6` and the same numbers as text, so `"02"` and `2.0` raise
+  `ValueError`.
 
 ## [0.3.0] - 2026-10-19
 

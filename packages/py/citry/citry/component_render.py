@@ -75,6 +75,7 @@ from citry.assets import _TEMPLATE_CACHE, load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement, _PreparedCallMetadata
 from citry.citry_render import (
+    _PRINT_IN_MANY_PLACES_ADVICE,
     _VALUE_CONTEXT,
     CitryRender,
     DeferredComponent,
@@ -1184,7 +1185,10 @@ def _settle_render(
                 root_generator,
             )
         )
-    stack.extend(reversed(_scan_deferred(root_render, child_depth)))
+    # Shared by every scan of this run, so content printed in two places is
+    # caught even when two components' outputs print it.
+    scans = _QueueScans()
+    stack.extend(reversed(_scan_deferred(root_render, child_depth, scans)))
 
     root_result = root_render
 
@@ -1238,7 +1242,11 @@ def _settle_render(
                 depth=task.depth,
             )
         )
-        stack.extend(reversed(_scan_deferred(new_render, task.depth + 1)))
+        # The replacement may hold the output it replaces (a hook that
+        # returns or wraps what it received); that output moved, so its lists
+        # are not printed twice.
+        scans.forget(old)
+        stack.extend(reversed(_scan_deferred(new_render, task.depth + 1, scans)))
 
     def settle(task: _FinalizeTask, error: Exception | None) -> CitryRender | None:
         # Settle a component whose subtree has finished rendering (or, when
@@ -1400,7 +1408,7 @@ def _settle_render(
                 depth=depth,
             )
         )
-        stack.extend(reversed(_scan_deferred(child.render, depth + 1)))
+        stack.extend(reversed(_scan_deferred(child.render, depth + 1, scans)))
 
     while stack:
         task = stack.pop()
@@ -1585,21 +1593,94 @@ class _InitialRender(NamedTuple):
     cache_hit: bool = False
 
 
+class _QueueScans:
+    """
+    What the scans of one render queue run have reached, to catch content printed in two places.
+
+    The render queue (the loop in ``_settle_render``) scans each component's
+    output for the child components still to render. One render printed in
+    two places, by one template or by a component and a child it passes the
+    value to, reaches the same parts list twice; queueing its components
+    twice would render each of them twice, and the second render would find
+    its place taken. A copied parts list holds the same placeholders, so the
+    placeholders are tracked too. The values keep each list and placeholder
+    alive for the run, so an ``id`` is never reused while it is remembered.
+    """
+
+    __slots__ = ("placeholders", "walked")
+
+    def __init__(self) -> None:
+        # Each entered parts list.
+        self.walked: dict[int, list[RenderPart]] = {}
+        # Each queued placeholder (a DeferredComponent or a row of a call
+        # run), with the parts list it was queued from.
+        self.placeholders: dict[int, tuple[object, list[RenderPart]]] = {}
+
+    def forget(self, render: CitryRender) -> None:
+        """
+        Forget the lists and placeholders reachable from ``render``.
+
+        An ``on_render`` hook may return or wrap the output it received. The
+        replacement moves that output rather than printing it a second time,
+        so its lists are scanned again as new.
+        """
+        pending: list[CitryRender] = [render]
+        seen: set[int] = set()
+        while pending:
+            current = pending.pop()
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            self.walked.pop(id(current.parts), None)
+            for part in current.parts:
+                if type(part) is str:
+                    continue
+                if isinstance(part, DeferredComponent) or type(part) is _DeferredRunRow:
+                    self.placeholders.pop(id(part), None)
+                elif isinstance(part, CitryRender):
+                    pending.append(part)
+
+
+def _shared_content_error(message: str, parent_context: CitryContext) -> RuntimeError:
+    """Build the error for content printed in two places, naming the component whose output prints it."""
+    error = RuntimeError(message)
+    # Name the component whose output prints it, as a render error from
+    # that component would. Raised while a component's output is queued,
+    # this error skips on_render error handling, as the nesting-depth error
+    # does: it is a mistake in the code, and a fallback would hide it.
+    # (Raised from an on_render replacement, it goes to that component's own
+    # hook or extensions first, then to its ancestors, like any error in that
+    # output.)
+    set_component_error_message(error, _component_path(parent_context.component))
+    return error
+
+
 def _scan_deferred_parts(
     parts: list[RenderPart],
     parent_context: CitryContext,
     tasks: list[_RenderTask | _ContextMergeTask | _RunTask],
     depth: int,
+    scans: _QueueScans | None = None,
 ) -> bool:
     """Append child work in source order at ``depth``, merging contexts after their children."""
+    if scans is None:
+        scans = _QueueScans()
     initial_count = len(tasks)
     stack: list[tuple[Iterator[tuple[int, RenderPart]], list[RenderPart], CitryContext, int]] = [
         (iter(enumerate(parts)), parts, parent_context, initial_count)
     ]
-    # The parts lists this scan has entered. One render printed in two places
-    # reaches its list twice; queueing its components twice would render each
-    # of them twice, and the second render would find its place taken.
-    walked = {id(parts)}
+    scans.walked.setdefault(id(parts), parts)
+
+    def queue_placeholder(placeholder: object, in_parts: list[RenderPart]) -> None:
+        # A placeholder queued again from another list sits in a copy of a
+        # list the run already scanned; rendering it again would find its
+        # place taken. Repeated within one list, as an extension hook may
+        # do, it renders at each of its positions.
+        queued = scans.placeholders.get(id(placeholder))
+        if queued is not None and queued[1] is not in_parts:
+            raise _shared_content_error(_SHARED_UNRENDERED_MESSAGE, parent_context)
+        scans.placeholders[id(placeholder)] = (placeholder, in_parts)
+
     while stack:
         entries, current_parts, context, task_count = stack[-1]
         try:
@@ -1614,6 +1695,7 @@ def _scan_deferred_parts(
         if type(part) is str:
             continue
         if isinstance(part, DeferredComponent):
+            queue_placeholder(part, current_parts)
             tasks.append(_RenderTask(part, _DeferredComponentPosition(current_parts, i, context), depth))
         elif type(part) is _DeferredRunRow:
             # Rows of one run next to each other would each get a task, one
@@ -1634,6 +1716,8 @@ def _scan_deferred_parts(
             # Skip the rows just taken, so the walk resumes after them.
             for _ in range(end - i - 1):
                 next(entries)
+            for row in rows:
+                queue_placeholder(row, current_parts)
             tasks.append(_RunTask(run, current_parts, tuple(rows), tuple(positions), 0, context, depth))
         elif type(part) is SimpleVueRecord:
             # A root simple='vue' render holds its called children in its
@@ -1644,37 +1728,37 @@ def _scan_deferred_parts(
         else:
             unwrapped = part
             if isinstance(unwrapped, CitryRender):
-                if id(unwrapped.parts) in walked:
-                    # A finished render printed twice gives the queue nothing
-                    # to render, so only a render whose components are still
-                    # waiting is an error.
+                if id(unwrapped.parts) in scans.walked:
+                    # Components still waiting to render would render twice.
                     if _contains_deferred(unwrapped):
-                        error = RuntimeError(_SHARED_UNRENDERED_MESSAGE)
-                        # Name the component whose output prints it, as a
-                        # render error from that component would.
-                        set_component_error_message(error, _component_path(parent_context.component))
-                        # Raised while a component's output is queued, this
-                        # error skips on_render error handling, as the
-                        # nesting-depth error does: it is a mistake in the
-                        # code, and a fallback would hide it. (Raised from an
-                        # on_render replacement, it goes to that component's
-                        # own hook or extensions first, then to its
-                        # ancestors, like any error in that output.)
-                        raise error
+                        raise _shared_content_error(_SHARED_UNRENDERED_MESSAGE, parent_context)
+                    # Content whose components already rendered, printed
+                    # again, would put them on the page twice, whichever
+                    # output prints it. Content without components can
+                    # appear anywhere.
+                    if _holds_components(unwrapped.parts):
+                        raise _shared_content_error(_SHARED_RENDERED_MESSAGE, parent_context)
                     continue
-                walked.add(id(unwrapped.parts))
+                scans.walked[id(unwrapped.parts)] = unwrapped.parts
                 stack.append((iter(enumerate(unwrapped.parts)), unwrapped.parts, unwrapped.context, len(tasks)))
     return len(tasks) > initial_count
 
 
 _SHARED_UNRENDERED_MESSAGE = (
     "This content is printed in more than one place, but the components inside it have not rendered yet, "
-    "so each would render twice. Print it in one place, or make it once for each place: for a slot, call "
-    "the slot once for each place you print its result."
+    f"so each would render twice. {_PRINT_IN_MANY_PLACES_ADVICE}"
+)
+_SHARED_RENDERED_MESSAGE = (
+    "This content is printed in more than one place, but the components inside it can appear only once on "
+    f"the page. {_PRINT_IN_MANY_PLACES_ADVICE}"
 )
 
 
-def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _ContextMergeTask | _RunTask]:
+def _scan_deferred(
+    render: CitryRender,
+    depth: int,
+    scans: _QueueScans | None = None,
+) -> list[_RenderTask | _ContextMergeTask | _RunTask]:
     """
     Find the child components inside ``render`` that still need rendering.
 
@@ -1696,18 +1780,20 @@ def _scan_deferred(render: CitryRender, depth: int) -> list[_RenderTask | _Conte
     component whose template wrote it), which is where the child's
     dependencies belong (see docs/design/component_slots.md section 8).
 
-    One render can appear in ``render`` more than once, for example a slot's
-    result that the template prints twice. The scan enters each parts list
-    once. When it reaches a list a second time and every component in it has
-    rendered, it skips the list; when the list still holds components waiting
-    to render, it raises ``RuntimeError``, because queueing them again would
-    render each one twice. The scan compares lists by identity and remembers
-    them only for one call, so a copy of a list that holds the same
-    placeholders, or one list reached from the outputs of two components, is
-    not caught here.
+    One render can appear more than once, for example a slot's result that
+    the template prints twice, or prints once and passes to a child that
+    prints it too. ``scans`` remembers, for the whole queue run, the parts
+    lists entered and the placeholders queued (see ``_QueueScans``). The
+    scan raises ``RuntimeError`` when it reaches a list a second time while
+    components in it still wait to render, when it reaches a list again
+    whose components already rendered (they would appear twice on the
+    page), or when it would queue a placeholder a second time from another
+    list, as a copied list does. It skips a list reached again that holds
+    no components. Without ``scans``, the scan remembers only its own
+    call.
     """
     tasks: list[_RenderTask | _ContextMergeTask | _RunTask] = []
-    _scan_deferred_parts(render.parts, render.context, tasks, depth)
+    _scan_deferred_parts(render.parts, render.context, tasks, depth, scans)
     return tasks
 
 
@@ -1776,6 +1862,27 @@ def _render_selection(render: CitryRender) -> tuple[set[str], set[int]]:
                 render_ids.add(render_id)
             pending.extend(current.parts)
     return render_ids, object_ids
+
+
+def _holds_components(parts: list[RenderPart]) -> bool:
+    """Whether a parts list holds a rendered component, including a ``simple='vue'`` record."""
+    pending: list[list[RenderPart]] = [parts]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        for part in current:
+            if type(part) is str:
+                continue
+            if type(part) is SimpleVueRecord:
+                return True
+            if isinstance(part, CitryRender):
+                if part.frame.render_id is not None:
+                    return True
+                pending.append(part.parts)
+    return False
 
 
 def _render_ids_from_parts(parts: list[RenderPart]) -> set[str]:
@@ -2814,6 +2921,11 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
             )
         ]
     if isinstance(value, CitryRender):
+        if value.context is context and value.frame.is_component_root and value.frame.render_id == component.id:
+            # The hook returned the output it received (or an earlier
+            # replacement): it is already this component's content, not a
+            # second occurrence of the component inside itself.
+            return [CitryRender(parts=list(value.parts), context=context)]
         # An already-rendered subtree is inlined; its collected data is
         # copied into this render.
         if value.context is not context:

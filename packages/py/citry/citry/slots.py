@@ -319,8 +319,18 @@ class Slot(Generic[TSlotData]):
 
         result = invoke()
         if session is not None and direct_source is None:
-            from citry._vue.direct import wrap_python_composition_result  # noqa: PLC0415
+            from citry._vue.direct import (  # noqa: PLC0415
+                bind_received_output,
+                receiving_context,
+                wrap_python_composition_result,
+            )
 
+            # The slot may hold the output an on_render hook received; the
+            # component printing it here must get it as content the hook's
+            # component wrote, not as a second copy of that component.
+            receiver = receiving_context()
+            if receiver is not None:
+                result = bind_received_output(result, receiver)
             return wrap_python_composition_result(result)
         return result
 

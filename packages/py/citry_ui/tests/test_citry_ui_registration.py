@@ -797,9 +797,8 @@ def test_internal_components_keep_the_general_input_type_check():
 
 
 def test_public_components_keep_their_own_input_checks():
-    # Public components check their inputs themselves, and CDisclosure accepts
-    # `heading_level="2"`, which its int Literal annotation does not name, so
-    # it keeps Citry's general check off.
+    # Public components check their own inputs and keep Citry's general check
+    # off; CDisclosure still renders `heading_level="2"` with it off.
     app = Citry(autodiscover=False)
     installation = app.register_library(citry_ui)
     disclosure = next(installation[d] for d in installation.definitions if d.__name__ == "CDisclosure")
@@ -816,6 +815,52 @@ def test_public_components_keep_their_own_input_checks():
 
     html = Page().render().serialize(deps_strategy="ignore")
     assert '<h2 class="cui-disclosure__heading"' in html
+
+
+_FILLS = '<c-fill name="title">T</c-fill><c-fill name="default">B</c-fill>'
+_DISCLOSURE = f"<c-CDisclosure {{}}>{_FILLS}</c-CDisclosure>"
+_ACCORDION = f'<c-CAccordion {{}}><c-CAccordionItem value="a">{_FILLS}</c-CAccordionItem></c-CAccordion>'
+_CALENDAR = "<c-CCalendar {} />"
+
+
+@pytest.mark.parametrize(
+    ("name", "tag", "inputs", "valid"),
+    [
+        ("CDisclosure", _DISCLOSURE, 'heading_level="2"', True),
+        ("CDisclosure", _DISCLOSURE, 'c-heading_level="2"', True),
+        ("CDisclosure", _DISCLOSURE, 'heading_level="7"', False),
+        ("CAccordion", _ACCORDION, 'heading_level="2"', True),
+        ("CAccordion", _ACCORDION, 'c-heading_level="2"', True),
+        ("CAccordion", _ACCORDION, 'heading_level="7"', False),
+        ("CCalendar", _CALENDAR, 'first_day_of_week="1"', True),
+        ("CCalendar", _CALENDAR, 'c-first_day_of_week="1"', True),
+        ("CCalendar", _CALENDAR, 'first_day_of_week="8"', False),
+        ("CDatePicker", "<c-CDatePicker {} />", 'first_day_of_week="1"', True),
+        ("CDatePicker", "<c-CDatePicker {} />", 'first_day_of_week="8"', False),
+        ("CDateRange", "<c-CDateRange {} />", 'first_day_of_week="1"', True),
+        ("CDateRange", "<c-CDateRange {} />", 'first_day_of_week="8"', False),
+    ],
+)
+def test_digit_inputs_pass_citrys_general_input_check(name, tag, inputs, valid):
+    # These inputs are annotated with both the numbers and their text, so
+    # with Citry's general check on, both spellings render and a value
+    # outside the list fails that check before the component's own.
+    app = Citry(autodiscover=False)
+    installation = app.register_library(citry_ui)
+    component = next(installation[d] for d in installation.definitions if d.__name__ == name)
+    # Registration sets this flag with `type.__setattr__`, so the test does
+    # the same. Each case registers its own app, so no other test sees it.
+    type.__setattr__(component, "_citry_input_types", True)
+
+    class Page(Component):
+        citry = app
+        template = tag.format(inputs)
+
+    if valid:
+        Page().render().serialize(deps_strategy="ignore")
+    else:
+        with pytest.raises(TypeError, match=r"heading_level|first_day_of_week"):
+            Page().render()
 
 
 def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():

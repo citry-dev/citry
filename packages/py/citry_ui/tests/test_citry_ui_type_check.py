@@ -1,18 +1,27 @@
-"""Citry UI's component JavaScript, Vue templates, and template Python have no `citry check --types` findings."""
+"""Citry UI's components pass `citry check --types`, and the editor accepts their documented input forms."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 import citry_ui
+from citry_lsp.engine import DocumentState
+from citry_lsp.project import load_project
+from citry_lsp.semantic import semantic_diagnostics
+from citry_lsp.type_analysis import TyAnalyzer
 from citry_lsp.typescript import TypeScriptUnavailableError, find_typescript_compiler
+
+if TYPE_CHECKING:
+    from lsprotocol import types
 
 # The Node workspace installs TypeScript here. Only the repository check job
 # installs the Node workspace; elsewhere the test skips unless `tsc` is on PATH.
@@ -105,3 +114,65 @@ def test_citry_ui_components_have_no_typescript_or_ty_findings(tmp_path):
     assert reports == {"app_without_i18n": "", "app_with_i18n": ""}, "\n".join(
         f"TypeScript or ty findings in Citry UI ({module}):\n{report}" for module, report in reports.items() if report
     )
+
+
+# A page that passes the heading level and the week start both as template
+# text and as numbers, plus one value of each kind that names no level or day.
+_FILLS = '<c-fill name="title">T</c-fill><c-fill name="default">B</c-fill>'
+_DIGIT_INPUTS_PAGE = f"""<c-CDisclosure heading_level="2">{_FILLS}</c-CDisclosure>
+<c-CDisclosure c-heading_level="2">{_FILLS}</c-CDisclosure>
+<c-CDisclosure heading_level="7">{_FILLS}</c-CDisclosure>
+<c-CAccordion heading_level="4"><c-CAccordionItem value="a">{_FILLS}</c-CAccordionItem></c-CAccordion>
+<c-CAccordion heading_level="1"><c-CAccordionItem value="a">{_FILLS}</c-CAccordionItem></c-CAccordion>
+<c-CCalendar first_day_of_week="1" />
+<c-CCalendar c-first_day_of_week="7" />
+<c-CCalendar first_day_of_week="8" />
+<c-CDatePicker first_day_of_week="1" />
+<c-CDateRange first_day_of_week="0" />
+"""
+# The lines of `_DIGIT_INPUTS_PAGE` that pass a value outside the list.
+_INVALID_LINES = (2, 4, 7, 9)
+
+_DIGIT_INPUTS_APP = """import citry_ui
+from pathlib import Path
+from citry import Citry, Component
+
+engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)
+engine.register_library(citry_ui)
+
+
+class Page(Component):
+    citry = engine
+    template_file = "page.html"
+"""
+
+
+def test_the_editor_accepts_digit_inputs_as_text_or_numbers(tmp_path):
+    # A template attribute always passes text, so the editor must accept
+    # `heading_level="2"` as readily as `c-heading_level="2"`, and still
+    # flag a value that names no heading level or weekday.
+    (tmp_path / "app.py").write_text(_DIGIT_INPUTS_APP, encoding="utf-8")
+    template_file = tmp_path / "page.html"
+    template_file.write_text(_DIGIT_INPUTS_PAGE, encoding="utf-8")
+    # Registering every Citry UI component can take longer than the editor's
+    # startup limit on a busy machine. A timeout would load the project
+    # without its registry, and the assertion below would fail.
+    project = load_project(tmp_path, "app:engine", timeout=300)
+    assert project.status.mode == "registry", project.status.message
+    document = DocumentState(template_file.as_uri(), "citry-html", _DIGIT_INPUTS_PAGE, 1)
+    document.update(_DIGIT_INPUTS_PAGE, 1, project)
+
+    async def check() -> tuple[types.Diagnostic, ...]:
+        analyzer = TyAnalyzer(tmp_path)
+        try:
+            return await semantic_diagnostics(analyzer, document, project, {document.uri: document})
+        finally:
+            await analyzer.close()
+
+    # A plain `asyncio.run` keeps this package's tests free of an async
+    # pytest plugin.
+    findings = asyncio.run(check())
+
+    lines = _DIGIT_INPUTS_PAGE.splitlines()
+    flagged = [(item.code, lines[item.range.start.line]) for item in findings]
+    assert flagged == [("citry.python.invalid-assignment", lines[index]) for index in _INVALID_LINES]
