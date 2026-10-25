@@ -291,12 +291,29 @@ _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 @cache
 def compile_route_pattern(path: str) -> re.Pattern[str]:
-    """Compile a route path into a regex: ``{name}`` matches any characters except ``/``."""
+    """
+    Compile a route path into a regex: ``{name}`` matches any run of characters except ``/``.
+
+    When a parameter is followed immediately by a literal character, that
+    character is also excluded from the run. So ``{a}.{b}`` compiles to two
+    groups that each stop at the next ``.``, rather than two open-ended runs
+    whose boundary the engine has to search for. The search is what makes a
+    pattern such as ``cache/{class_id}.{script_type}`` take time that grows
+    with the square of the path length on an input that never matches; with
+    the boundary fixed, every path is matched in one left-to-right pass.
+    Every parameter Citry's own routes place before a literal (a ``.`` or a
+    ``/``) holds a hash or an identifier that never contains that literal, so
+    the matched values are unchanged.
+    """
     pattern = ""
     last_end = 0
     for match in _PARAM_RE.finditer(path):
         pattern += re.escape(path[last_end : match.start()])
-        pattern += f"(?P<{match.group(1)}>[^/]+)"
+        # The character right after the parameter, if it is an ordinary
+        # literal, bounds the run so adjacent parameters cannot overlap.
+        after = path[match.end() : match.end() + 1]
+        excluded = "/" + after if after and after not in "{/" else "/"
+        pattern += f"(?P<{match.group(1)}>[^{re.escape(excluded)}]+)"
         last_end = match.end()
     pattern += re.escape(path[last_end:])
     return re.compile(f"^{pattern}$")
