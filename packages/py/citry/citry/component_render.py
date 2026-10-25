@@ -121,6 +121,7 @@ from citry.nodes import (
     SlotNode,
     StaticHtmlAttr,
     TemplateHtmlAttr,
+    _CarriedStopIteration,
 )
 from citry.slots import Slot
 from citry.util.exception import (
@@ -136,7 +137,7 @@ from citry_core.template_parser import ForeignSpan, ParseOptions, compile_templa
 
 if TYPE_CHECKING:
     from collections import OrderedDict
-    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
     from contextlib import AbstractContextManager
 
     from citry._vue.direct import DirectExecutionFrame
@@ -3330,21 +3331,24 @@ class _BodyFrame:
 @final
 class _NodeFrame:
     """
-    An ``IfNode`` or ``ForNode`` whose bodies the body renderer is rendering.
+    An ``IfNode``, ``ForNode`` or ``SlotNode`` whose bodies the body renderer is rendering.
 
-    Every body's parts go into ``parts``. When ``bodies`` runs out,
-    ``finish`` wraps them into the node's part, which joins ``outer``, the
-    frame of the body that holds the node.
+    Every body's parts go into ``parts``: the node's own list when its steps
+    pass one, otherwise a new one. When ``bodies`` runs out, ``finish``
+    wraps them into the node's part, which joins ``outer``, the frame of the
+    body that holds the node. ``wraps_errors`` says how an error leaves it
+    (see ``_unwind_body_frames``).
     """
 
-    __slots__ = ("bodies", "finish", "node", "outer", "parts")
+    __slots__ = ("bodies", "finish", "node", "outer", "parts", "wraps_errors")
 
     def __init__(self, node: BodyItem, steps: BodySteps, outer: _BodyFrame) -> None:
         self.node = node
         self.bodies = steps.bodies
         self.finish = steps.finish
         self.outer = outer
-        self.parts: list[RenderPart] = []
+        self.parts: list[RenderPart] = [] if steps.parts is None else steps.parts
+        self.wraps_errors = steps.wraps_errors
 
 
 def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[RenderPart]:
@@ -3366,14 +3370,16 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
     already-rendered value embedded in the middle can still be read later. Joining
     happens in ``CitryRender.serialize()``.
 
-    ``<c-if>`` and ``<c-for>`` nodes render their bodies on this function's own
-    stack, so Python's call depth
-    does not grow with how deeply they nest. Each one adds a ``_NodeFrame``
-    and one ``_BodyFrame`` per body, and its part is wrapped exactly as its
-    ``render`` would wrap it. An error raised inside passes out through every
-    frame in turn, innermost first: each body frame resets the value context,
-    and each node frame closes its loop and adds its node's template position,
-    in the same order as their ``render`` methods.
+    ``<c-if>`` and ``<c-for>`` nodes, and a ``<c-slot>`` that renders its
+    own fallback, render their bodies on this function's own stack, so
+    Python's call depth does not grow with how deeply they nest. Each one
+    adds a ``_NodeFrame`` and one ``_BodyFrame`` per body, and its part is
+    wrapped exactly as its ``render`` would wrap it. An error raised inside
+    passes out through every frame in turn, innermost first: each body frame
+    resets the value context, and each node frame closes its loop (or, for a
+    slot, raises the error inside the slot's ``with`` blocks, which add the
+    slot to the error's component path) and adds its node's template
+    position, in the same order as their ``render`` methods.
     """
     root = _BodyFrame(body, context, [])
     # Body and node frames alternate above the root: a node frame's bodies
@@ -3389,6 +3395,9 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
             direct_prepared = frame.direct_prepared
             tracing = frame.tracing
             pushed = False
+            # A StopIteration a slot's fallback carried out, raised below,
+            # outside the `except`, so its context stays the one it had.
+            stopped: StopIteration | None = None
             for item in frame.items:
                 if isinstance(item, str):
                     if direct_prepared:
@@ -3400,7 +3409,7 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                 item_type = type(item)
                 part: RenderPart
                 try:
-                    if item_type is IfNode or item_type is ForNode:
+                    if item_type is IfNode or item_type is ForNode or item_type is SlotNode:
                         steps = item._render_steps(frame_context)  # type: ignore[attr-defined]
                         if type(steps) is BodySteps:
                             node_frame = _NodeFrame(item, steps, frame)
@@ -3420,6 +3429,9 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                             part = steps
                     else:
                         part = item.render(frame_context)
+                except _CarriedStopIteration as carried:
+                    stopped = carried.stop
+                    break
                 except Exception as err:
                     _attach_template_position(err, item, frame_context)
                     raise
@@ -3440,6 +3452,11 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                 ):
                     _merge_dependencies(frame_context, part.context)
                 parts.append(part)
+            if stopped is not None:
+                # Template code or the slot hook raised this StopIteration; it
+                # passes on as it would out of a Slot call.
+                _attach_template_position(stopped, item, frame_context)
+                raise stopped
             if pushed:
                 continue
 
@@ -3458,10 +3475,17 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
                     continue
                 stack.pop()
                 part = node_frame.finish(node_frame.parts)
+            except _CarriedStopIteration as carried:
+                stack.pop()
+                stopped = carried.stop
             except Exception as err:
                 stack.pop()
                 _attach_template_position(err, node_frame.node, outer.context)
                 raise
+            if stopped is not None:
+                # Raised outside the `except`, as above.
+                _attach_template_position(stopped, node_frame.node, outer.context)
+                raise stopped
             _add_rendered_part(part, node_frame.node, outer)
     except BaseException as err:
         _unwind_body_frames(stack, err)
@@ -3470,7 +3494,7 @@ def _render_body(body: Sequence[BodyItem], context: CitryContext) -> list[Render
 
 def _add_rendered_part(part: RenderPart, item: BodyItem, frame: _BodyFrame) -> None:
     """
-    Add a finished ``<c-if>`` or ``<c-for>`` part to the body that holds it.
+    Add a finished ``<c-if>``, ``<c-for>`` or ``<c-slot>`` fallback part to the body that holds it.
 
     These are the same steps the main loop in ``_render_body`` takes, inline,
     for every other node's part; the two must stay alike.
@@ -3492,9 +3516,12 @@ def _unwind_body_frames(stack: list[_BodyFrame | _NodeFrame], err: BaseException
     A body frame resets its value context. A node frame closes its loop, so
     the loop's ``finally`` blocks run now, and adds its node's template
     position, as the node's ``render`` does when an error passes out of it.
-    Adding a position can replace the error with a clearer one; the
-    replacement is raised from the original and passes through the frames
-    that remain.
+    A slot's fallback instead gets the error thrown in where it waits for
+    its body, so the ``with`` blocks it holds there see the error as they
+    would around a ``Slot`` call; one of them adds the slot to the error's
+    component path. Adding a position can replace the error with a clearer
+    one; the replacement is raised from the original and passes through the
+    frames that remain.
     """
     while stack:
         frame = stack.pop()
@@ -3502,9 +3529,26 @@ def _unwind_body_frames(stack: list[_BodyFrame | _NodeFrame], err: BaseException
             _VALUE_CONTEXT.reset(frame.value_token)
             continue
         node_frame = cast("_NodeFrame", frame)
-        close = getattr(node_frame.bodies, "close", None)
-        if close is not None:
-            close()
+        if node_frame.wraps_errors:
+            raised = _throw_into(node_frame.bodies, err)
+            if raised is not err:
+                # A `with` block in the steps raised a different error, which
+                # continues outward as it would from a `Slot` call: through
+                # this node's position and every frame that remains.
+                if isinstance(raised, Exception):
+                    try:
+                        _attach_template_position(raised, node_frame.node, node_frame.outer.context)
+                    except Exception as replacement:
+                        _unwind_body_frames(stack, replacement)
+                        raise
+                _unwind_body_frames(stack, raised)
+                raise raised
+            # The same error, now with the slot on its component path; it
+            # gets this node's position below, as any node's error does.
+        else:
+            close = getattr(node_frame.bodies, "close", None)
+            if close is not None:
+                close()
         if isinstance(err, Exception):
             try:
                 _attach_template_position(err, node_frame.node, node_frame.outer.context)
@@ -3513,6 +3557,41 @@ def _unwind_body_frames(stack: list[_BodyFrame | _NodeFrame], err: BaseException
                 # `err` itself; it passes through the frames that remain.
                 _unwind_body_frames(stack, replacement)
                 raise
+
+
+def _throw_into(bodies: Iterator[Any], err: BaseException) -> BaseException:
+    """
+    Throw ``err`` into a node's ``bodies`` generator, and return the error that comes out.
+
+    The generator is paused at the ``yield`` that handed out the body the
+    error left, so its ``with`` blocks exit with the error, as they would
+    if the body had rendered inside them. Citry's own steps always raise
+    here. If the generator finishes or yields again instead, it has dropped
+    the error, and this returns a ``RuntimeError`` caused by it.
+    """
+    generator = cast("Generator[Any, None, None]", bodies)
+    try:
+        generator.throw(err)
+    except StopIteration:
+        # The generator finished without raising: it dropped the error.
+        pass
+    except _CarriedStopIteration as carried:
+        # Template code raised this StopIteration inside the body.
+        return carried.stop
+    except BaseException as raised:  # noqa: BLE001 - the caller raises whatever comes out
+        return raised
+    else:
+        # It yielded again and still holds its scopes; close it so they are
+        # left now, not whenever it is collected.
+        try:
+            generator.close()
+        except _CarriedStopIteration as carried:
+            return carried.stop
+        except BaseException as raised:  # noqa: BLE001 - the caller raises whatever comes out
+            return raised
+    replacement = RuntimeError("Citry internal error: a template node's renderer dropped an error raised in its body")
+    replacement.__cause__ = err
+    return replacement
 
 
 def _attach_template_position(err: Exception, node: BodyItem, context: CitryContext) -> None:

@@ -2,10 +2,11 @@
 Rendering a deeper template does not need more Python frames.
 
 The body renderer, fill collection and the Vue leaf program walk nested
-``<c-if>``, ``<c-for>`` and ``c-if=`` bodies on their own stacks, and the
-generated leaf code stops at a fixed nesting depth. So the deepest Python
-call stack during a render stays the same however deeply control flow
-nests. Each case renders once to compile, then measures the second render
+``<c-if>``, ``<c-for>`` and ``c-if=`` bodies, and the fallback bodies of
+``<c-slot>`` tags nobody fills, on their own stacks, and the generated
+leaf code stops at a fixed nesting depth. So the deepest Python call stack
+during a render stays the same however deeply control flow and fallbacks
+nest. Each case renders once to compile, then measures the second render
 with a profile hook that records the deepest stack. The peak at depth 128
 may be at most 20 frames above the peak at depth 32. A first render, which
 also compiles the component and walks its template several times, is
@@ -19,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from citry import Citry, Component, Const
+from citry import Citry, Component, Const, Extension
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -49,6 +50,10 @@ SHAPES: dict[str, Callable[[int], str]] = {
     "leaf_if_attributes": lambda d: '<p c-if="flag">' * d + "{{ n }}" + "</p>" * d,
     "components": lambda d: "<c-Row />" + "<c-Card>" * d + "{{ n }}" + "</c-Card>" * d,
     "simple_components": lambda d: "<c-Row />" + "<c-Label>" * d + "{{ n }}" + "</c-Label>" * d,
+    # A `<c-slot>` nobody fills renders its own body, its fallback.
+    "slot_fallbacks": lambda d: (
+        "<c-Row />" + "".join(f'<c-slot name="s{level}">' for level in range(d)) + "{{ n }}" + "</c-slot>" * d
+    ),
     "fills_under_control_flow": lambda d: (
         "<c-Row />"
         + '<c-Card><c-fill name="default"><c-if cond="flag">' * d
@@ -249,3 +254,41 @@ def test_first_renders_of_const_and_simple_vue_templates_use_the_same_python_sta
         peaks.append(_peak_frames(root, first_render=True, count_generated=not simple_vue))
     shallow, deep = peaks
     assert deep - shallow <= ALLOWED_GROWTH, f"{shape}: {shallow} frames at depth {SHALLOW}, {deep} at {DEEP}"
+
+
+class _SlotHook(Extension):
+    """An `on_slot_rendered` hook that keeps each result as it is."""
+
+    name = "slot_hook"
+
+    def on_slot_rendered(self, ctx: Any) -> None:
+        return None
+
+
+@pytest.mark.parametrize("setting", ["slot_hook", "development"])
+def test_nested_fallbacks_stay_flat_with_a_slot_hook_and_in_development_mode(setting: str, render_path: str) -> None:
+    # Either setting adds work around each slot: an `on_slot_rendered` hook
+    # runs on every slot's result, and development mode installs Citry's
+    # own development extensions.
+    def build(depth: int) -> type[Component]:
+        app = Citry(extensions=[_SlotHook]) if setting == "slot_hook" else Citry(mode="development")
+
+        class Row(Component):
+            citry = app
+            template = """
+                <li>r</li>
+            """
+
+        class Root(Component):
+            citry = app
+
+            def template_data(self, kwargs: Any, slots: Any) -> dict[str, Any]:
+                return {"flag": True, "n": 1, "items": [1]}
+
+        del Row
+        Root.template = SHAPES["slot_fallbacks"](depth)
+        return Root
+
+    shallow = _peak_frames(build(SHALLOW))
+    deep = _peak_frames(build(DEEP))
+    assert deep - shallow <= ALLOWED_GROWTH, f"{setting}: {shallow} frames at depth {SHALLOW}, {deep} at {DEEP}"

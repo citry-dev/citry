@@ -587,3 +587,52 @@ def test_an_error_from_the_slot_hook_matches_the_snapshot(
     _assert_no_fallback_is_left_paused()
     key = "hook_error" if hook is _FailingSlotHook else "hook_stop_iteration"
     _check(f"{key}/{render_path}", _recorded_error(caught.value))
+
+
+def _paused_at_yield(handle: Callable[[BaseException], BaseException | None]) -> Any:
+    """A body generator paused at its `yield`, which passes a thrown error to `handle`."""
+
+    def bodies() -> Any:
+        try:
+            yield ([], None)
+        except BaseException as err:
+            replacement = handle(err)
+            if replacement is not None:
+                raise replacement from err
+
+    generator = bodies()
+    next(generator)
+    return generator
+
+
+def test_throwing_into_body_steps_returns_the_error_that_comes_out() -> None:
+    err = KeyError("inner")
+    # Raised again unchanged.
+    assert component_render._throw_into(_paused_at_yield(lambda e: e), err) is err
+    # Replaced by another error.
+    replacement = component_render._throw_into(_paused_at_yield(lambda _e: ValueError("other")), err)
+    assert type(replacement) is ValueError
+    assert replacement.__cause__ is err
+    # Swallowed: the generator ends instead of raising.
+    swallowed = component_render._throw_into(_paused_at_yield(lambda _e: None), err)
+    assert type(swallowed) is RuntimeError
+    assert swallowed.__cause__ is err
+    # Yields again: also dropped, and the generator is closed.
+    left: list[str] = []
+
+    def yields_again() -> Any:
+        try:
+            yield ([], None)
+        except KeyError:
+            try:
+                yield ([], None)
+            finally:
+                left.append("closed")
+
+    again = yields_again()
+    next(again)
+    assert type(component_render._throw_into(again, err)) is RuntimeError
+    assert left == ["closed"]
+    # A KeyboardInterrupt passes through like any other error.
+    interrupt = KeyboardInterrupt()
+    assert component_render._throw_into(_paused_at_yield(lambda e: e), interrupt) is interrupt
