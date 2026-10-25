@@ -481,7 +481,9 @@ class CAccordion(LibraryComponent):
     class Slots:
         default: SlotInput[CAccordionDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # heading_level allows 2 to 6 as a number or as text. Citry's error would
+    # print all 10 values twice; Citry UI's says it in one line. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

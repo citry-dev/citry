@@ -162,7 +162,7 @@ def test_root_and_item_attrs_reach_concrete_elements() -> None:
             '<c-CTree label="Files"><c-CTreeItem value="bad id" label="Bad" /></c-CTree>',
             "ASCII whitespace",
         ),
-        (_tree('variant="raised"'), "variant must be one of"),
+        (_tree('variant="raised"'), r"CTree\.Kwargs\.variant expects Literal\["),
     ],
 )
 def test_invalid_family_inputs_fail(template: str, message: str) -> None:

@@ -218,9 +218,9 @@ def test_command_link_and_item_regions_keep_exact_accessible_relationships():
 @pytest.mark.parametrize(
     ("root_inputs", "message"),
     [
-        ("open=1", "open must be a bool"),
-        ('placement="left"', "placement must be one of"),
-        ('size="xl"', "size must be one of"),
+        ("open=1", r"CMenu\.Kwargs\.open expects bool"),
+        ('placement="left"', r"CMenu\.Kwargs\.placement expects Literal"),
+        ('size="xl"', r"CMenu\.Kwargs\.size expects Literal"),
         ('id="two words"', "cannot contain ASCII whitespace"),
     ],
 )
@@ -238,12 +238,12 @@ def test_menu_rejects_invalid_root_inputs(root_inputs: str, message: str):
         ),
         (
             '<c-CMenuCheckboxItem value="x" c-checked="1">X</c-CMenuCheckboxItem>',
-            "checked must be false, true, or 'mixed'",
+            r"CMenuCheckboxItem\.Kwargs\.checked expects bool \| Literal\['mixed'\]",
         ),
         (
             '<c-CMenuSubmenu value="x" intent="quiet"><c-fill name="label">X</c-fill>'
             '<c-fill name="default"><c-CMenuItem>Y</c-CMenuItem></c-fill></c-CMenuSubmenu>',
-            "intent must be one of",
+            r"CMenuSubmenu\.Kwargs\.intent expects Literal",
         ),
     ],
 )

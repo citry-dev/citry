@@ -224,9 +224,9 @@ changes structure or presentation without a Card initializer.
 ## 5. State model
 
 Card has no interactive or controlled state. The render state is the product of
-valid `tag`, `variant`, `size`, and optional-slot presence. Invalid enum values
-raise `ValueError`; non-string enum values raise `TypeError`; invalid attrs use
-the shared attribute validation errors. Supplying no slot raises `ValueError`.
+valid `tag`, `variant`, `size`, and optional-slot presence. An enum value
+outside its literals, or of the wrong type, raises Citry's input-check
+`TypeError`; invalid attrs use the shared attribute validation errors. Supplying no slot raises `ValueError`.
 Supplying a nonempty part-attrs mapping for an absent destination also raises
 `ValueError`. `header_attrs` has a destination when `header` or
 `header_actions` exists; `footer_attrs` has one when `footer` or `actions`

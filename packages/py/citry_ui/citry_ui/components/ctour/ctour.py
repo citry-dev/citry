@@ -265,10 +265,6 @@ class CTour(LibraryComponent):
         activator: SlotInput[CTourActivatorSlotData] | None = None
         close: SlotInput[CTourCloseSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tour_snapshot", None)
         if cached is not None:
@@ -425,10 +421,6 @@ class CTourStep(LibraryComponent):
         title: SlotInput[CTourStepTitleSlotData]
         default: SlotInput[CTourStepDefaultSlotData]
         media: SlotInput[CTourStepMediaSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         if "title" not in self.raw_slots or "default" not in self.raw_slots:

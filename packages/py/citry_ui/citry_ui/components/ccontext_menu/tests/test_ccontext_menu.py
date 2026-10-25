@@ -233,10 +233,10 @@ def test_target_accepts_safe_native_semantics_but_root_does_not() -> None:
 @pytest.mark.parametrize(
     ("inputs", "error"),
     [
-        ('aria_label=""', "must be a string"),
+        ('aria_label=""', r"CContextMenu\.Kwargs\.aria_label expects str, got bool"),
         ('aria_label="Actions" id="bad id"', "ASCII whitespace"),
-        ('aria_label="Actions" size="xl"', "size must be one of"),
-        ('aria_label="Actions" c-open="1"', "open must be a bool"),
+        ('aria_label="Actions" size="xl"', r"CContextMenu\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"),
+        ('aria_label="Actions" c-open="1"', r"CContextMenu\.Kwargs\.open expects bool"),
     ],
 )
 def test_invalid_structural_inputs_fail_synchronously(inputs: str, error: str) -> None:

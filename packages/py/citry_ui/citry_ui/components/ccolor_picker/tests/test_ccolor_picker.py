@@ -56,8 +56,8 @@ def test_schema_registration_normalization_native_fallback_and_swatches() -> Non
     ("attrs", "swatches", "match"),
     [
         ('value="red"', (), "#rgb or #rrggbb"),
-        ('format="lab"', (), "format must be one of"),
-        ('c-open="1"', (), "open must be a bool"),
+        ('format="lab"', (), r"CColorPicker\.Kwargs\.format expects Literal\['hex', 'rgb', 'hsl'\]"),
+        ('c-open="1"', (), r"CColorPicker\.Kwargs\.open expects bool"),
         ('selected_label="Selected"', (), "must contain"),
         ("", [CColorSwatch("#fff", "White"), CColorSwatch("#ffffff", "Again")], "duplicated"),
         ("", [CColorSwatch("nope", "Bad")], "#rgb or #rrggbb"),

@@ -834,10 +834,6 @@ class CMenu(LibraryComponent):
         activator: SlotInput[CMenuActivatorSlotData]
         default: SlotInput[CMenuDefaultSlotData]
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         return _build_menu_root_snapshot(self, kwargs)
 
@@ -4161,10 +4157,6 @@ class CMenuCheckboxItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         snapshot = _item_snapshot(self, "CMenuCheckboxItem", kwargs, kind="checkbox")
         snapshot["indicator"] = _resolve_registered_icon(self.citry, "check", "CMenuCheckboxItem indicator")
@@ -4899,10 +4891,6 @@ class CMenuSubmenu(LibraryComponent):
         start: SlotInput[CMenuSubmenuStartSlotData] | None = None
         description: SlotInput[CMenuSubmenuDescriptionSlotData] | None = None
         end: SlotInput[CMenuSubmenuEndSlotData] | None = None
-
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_menu_submenu_snapshot", None)
