@@ -154,8 +154,8 @@ interface CheckedSendOptions {
  * Check the `opts` a page passed to `$sendEvent` or `Citry.events.send` and copy the values the
  * bridge reads, so a caller that changes its object while the call waits in line changes nothing.
  *
- * `wait` is `true` (the default) or `false`. `send` accepts `false` only for a handler declared
- * `@event(detached=True)`, because it needs the handler's descriptor to tell.
+ * `wait` is `true` (the default) or `false`. This function checks only the type: `send` checks that
+ * the handler is declared `@event(detached=True)`, because only `send` has the handler's descriptor.
  */
 const checkSendOptions = (value: unknown): CheckedSendOptions | undefined => {
   if (value === undefined) return undefined;
@@ -167,7 +167,7 @@ const checkSendOptions = (value: unknown): CheckedSendOptions | undefined => {
   }
   const { timeout, wait } = value as { timeout?: unknown; wait?: unknown };
   if (wait !== undefined && wait !== true && wait !== false)
-    throw new TypeError("Citry Events option 'wait' must be true or false.");
+    throw new TypeError(`Citry Events option 'wait' must be true or false; got ${String(JSON.stringify(wait))}.`);
   if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0))
     throw new Error("Citry Events timeout must be a positive finite number.");
   const checked: CheckedSendOptions = {};
@@ -186,9 +186,9 @@ const queuedHandlerError = (handler: string): TypeError =>
   new TypeError(
     `Citry Events option 'wait: false' needs a detached handler, and '${handler}' is not one. Calls ` +
       "from one Vue app are sent one at a time, in order, because each render and State change builds " +
-      "on the one before it. Declare the handler with @event(detached=True) if it never renders or " +
-      "changes State. To replace an older call to the same handler instead, declare it with " +
-      "@event(latest_wins=True).",
+      "on the one before it. Remove 'wait: false', or declare the handler with @event(detached=True) " +
+      "if it never renders or changes State. To replace an older call to the same handler instead, " +
+      "declare it with @event(latest_wins=True).",
   );
 
 export interface VueEventActivity {
@@ -344,8 +344,8 @@ const saveAttachment = (blob: Blob, filename: string): void => {
 
 /**
  * Create the prepared-tree bridge. Queued calls go out one at a time. A call made with
- * `wait: false` to a detached handler goes out at once, outside the queue. A `wait: false` action
- * runs on its own, so a callback that sends a new call cannot wait on itself.
+ * `wait: false` to a detached handler goes out at once, outside the queue. An action the server
+ * marked `wait: false` runs on its own, so a callback that sends a new call cannot wait on itself.
  */
 export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
   const reportableFailures = new WeakSet<object>();
@@ -382,6 +382,8 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     cancelError?: Error;
     // How many of the call's `wait: false` actions are scheduled and have not finished yet.
     noWaitPending: number;
+    // The handler is declared `@event(detached=True)`; set once the call is sent.
+    detachedHandler?: boolean;
     cancelled: Promise<never>;
     cancel(error: Error): void;
     resolve(value: JsonValue | undefined): void;
@@ -686,12 +688,18 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     for (const [index, action] of result.actions.entries()) {
       if (hoisted.has(index)) continue;
       const run = async () => {
-        if (typeof action.delay === "number" && action.delay > 0) await delay(action.delay * 1000, state, job);
+        const seconds = typeof action.delay === "number" ? action.delay : 0;
+        const delayed = seconds > 0;
+        if (delayed) await delay(seconds * 1000, state, job);
+        // A detached call runs beside the queue, so a queued result can be accepted while its earlier
+        // actions run. That result only replaces the page an action waits on, so a detached action
+        // without a delay still runs; one that waited on a delay follows the usual newer-result rule.
+        const actionEpoch = job.detachedHandler && !delayed ? state.acceptedEpoch : epoch;
         await applyOne(
           action,
           source,
           state,
-          epoch,
+          actionEpoch,
           (value) => {
             data = value;
           },
@@ -712,7 +720,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
             if (!(error instanceof VueEventCancellation)) {
               lifecycle("error", source, job.input.handler, { error: activityError(error) as JsonObject });
             }
-            console.error("[Citry] applying a wait:false Vue event action failed:", error);
+            console.error("[Citry] applying a Vue event action marked wait: false failed:", error);
           })
           .finally(() => {
             job.noWaitPending -= 1;
@@ -739,6 +747,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     // A detached handler can neither replace the caller's HTML nor its State, so its result never
     // counts as a newer result for the caller, whether the call went out queued or not.
     const detachedHandler = handlerOptions.detached === true;
+    job.detachedHandler = detachedHandler;
     job.callerRenderId = context.serverRenderId;
     job.lifecycleStarted = true;
     if (!lifecycle("before", input.source, input.handler))
@@ -754,7 +763,7 @@ export const createVueEventsBridge = (options: VueEventsBridgeOptions) => {
     const routes = configuredEventRoutes(runtimeConfig.url ?? "", configuredEndpoint, options.eventBaseUrl);
     if (useGet && input.stateUpdates !== undefined) throw new Error("GET events cannot send pending State updates.");
     // A detached handler returns no new State token, so pending browser State writes stay pending
-    // for the next queued call instead of riding on this one and being lost.
+    // for the next call to a handler that is not detached instead of riding on this one and being lost.
     const taken =
       useGet || detachedHandler
         ? undefined

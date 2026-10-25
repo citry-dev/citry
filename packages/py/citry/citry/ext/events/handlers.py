@@ -310,7 +310,9 @@ def event(
     which itself falls back to ``extensions_defaults["events"]`` and then the
     built-in defaults. The queue knobs ``latest_wins``, ``bundle`` and
     ``detached`` are the exception: they exist per handler only, so a call
-    site that needs different queue semantics names a different handler.
+    site that needs different queue semantics names a different handler. A
+    detached handler also needs the call site to pass ``wait: false``; a
+    call without it waits its turn.
 
     Args:
         func: The handler, when used as a bare ``@event`` (no arguments).
@@ -340,16 +342,17 @@ def event(
             travel alone, e.g. a slow export that fast toggles should not
             wait on.
         detached: Let browser code call this handler without waiting for
-            the component's other calls, with
+            the app's other calls, with
             ``$sendEvent(name, args, {wait: false})``. In exchange, the
             handler must not render or change State: it may return data,
             dispatch an event, redirect, or update the URL, and it may read
-            State. A detached handler that returns a render or a State
-            change, or changes State, fails with a ``handler_error``, and a
-            call that sends browser State changes to it fails with
-            ``invalid_args``. Its calls can run on the server at the same
-            time as the component's other calls, so make the handler safe
-            to run alongside them. Off by default.
+            State. A detached handler that renders or changes State fails
+            with a ``handler_error``. It reads the State the server last
+            saw: browser State changes not yet sent stay in the browser for
+            the next call to a handler that is not detached, so pass values
+            the user is still editing as arguments. Its calls can run on
+            the server at the same time as the app's other calls, so do not
+            rely on what those calls write. Off by default.
 
     Returns:
         The handler itself (the decorator only attaches the configuration).
@@ -369,8 +372,8 @@ def event(
                     return {"words": count_words(data.doc_id)}
 
                 @event(detached=True)
-                def spell_check(self, state: DocState) -> dict:
-                    return {"typos": find_typos(state.title)}
+                def spell_check(self, data: SpellCheckIn) -> dict:
+                    return {"typos": find_typos(data.text)}
         ```
 
     Raises:

@@ -218,7 +218,8 @@ browser. This is Citry's own reactive object, filled from the component's
 
 Assigning a whole field that the browser may change updates the page at
 once, and sends the new value with the component's next event call that is
-not a `GET`. Validate it on the server like any user input.
+not a `GET` and not to a handler declared with `@event(detached=True)`.
+Validate it on the server like any user input.
 
 - Nested values, and fields not listed as browser-writable, are read-only.
 - Fields that are not public do not appear on `$state`.
@@ -280,11 +281,11 @@ The optional third argument takes these options:
 | Option | Meaning |
 | --- | --- |
 | `timeout` | Milliseconds to wait for the server before the call fails. Overrides the page default. |
-| `wait` | `true`, the default, waits for this app's earlier calls. `false` sends the call at once; only a detached handler accepts it. |
+| `wait` | `true`, the default, waits for this app's earlier calls. `false` sends the call at once. Only a handler declared with `@event(detached=True)` accepts it. |
 
 Calls from one Vue app go to the server one at a time, in order, because
 each server render builds on the one before it. A handler declared with
-`@event(detached=True)` never renders or changes State, so a call to it
+`@event(detached=True)` must not render or change State, so a call to it
 can skip ahead with `wait: false`
 ([details](/events/actions/#skip-the-queue-for-a-read-only-call)). For any
 other handler, `wait: false` rejects the Promise with a `TypeError`. To let
@@ -500,7 +501,7 @@ name the component as Citry last saw it.
 | --- | --- |
 | `superseded` | A newer call to the same handler replaced this one, so the actions of this call that have not started yet are dropped, delayed ones included. This happens only for a handler declared with `@event(latest_wins=True)`. |
 | `retired` | The component was removed or replaced before the call finished. |
-| `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. This also happens when the call's own Render replaced the component and the page then accepted a newer result for the new component. A delayed redirect is never dropped for this reason. |
+| `epoch` | The page accepted a newer result for the component first, so the rest of this one was dropped. This also happens when the call's own Render replaced the component and the page then accepted a newer result for the new component. A delayed redirect is never dropped for this reason. A result from a handler declared with `@event(detached=True)` never counts as newer. |
 | `disposed` | The page's Vue app was shut down. |
 | `version` | The server no longer accepts the State this page holds, usually because the app was deployed or its signing secret changed after the page loaded. |
 

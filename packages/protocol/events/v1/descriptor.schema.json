@@ -64,7 +64,7 @@
         },
         "detached": {
           "const": true,
-          "description": "Present only when the browser may send calls to this handler outside its queue. The handler never renders or changes State."
+          "description": "Present only when the browser may send calls to this handler outside the app's call queue. The handler never renders or changes State."
         }
       }
     }

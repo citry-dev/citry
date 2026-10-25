@@ -33,6 +33,7 @@ from citry.analysis import (
 )
 from citry.assets import _find_pair_declaration
 from citry.ext.events.extension import _component_events_info
+from citry.ext.events.handlers import event_options
 
 try:
     from citry._wire_classes import slot_data_wire_classes
@@ -423,16 +424,19 @@ def _event_sources(component_class: type) -> dict[str, object]:
         source_file = Path(source_name).resolve()
         if not source_file.is_file() or qualname.rsplit(".", 1)[-1] != handler.method_name:
             return {"handlers": None, "state": None}
-        handlers.append(
-            {
-                "name": wire_name,
-                "method_name": handler.method_name,
-                "module": module_name,
-                "qualname": qualname,
-                "file": source_file.as_posix(),
-                "data_class": _class_source(handler.data_schema),
-            }
-        )
+        record: dict[str, object] = {
+            "name": wire_name,
+            "method_name": handler.method_name,
+            "module": module_name,
+            "qualname": qualname,
+            "file": source_file.as_posix(),
+            "data_class": _class_source(handler.data_schema),
+        }
+        # The editor lets `wait: false` through only for these handlers, as the browser does.
+        options = event_options(func)
+        if options is not None and options.detached:
+            record["detached"] = True
+        handlers.append(record)
     if info.state_cls is None or info.state_meta is None:
         state: list[dict[str, object]] | None = []
     else:

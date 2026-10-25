@@ -1869,8 +1869,8 @@ close a script tag.
 
 `componentClasses` carries handler names and browser hints. Each handler has
 `httpMethod`; the optional non-default hints are `usesState: true`,
-`debounceMilliseconds`, `throttleMilliseconds`, `latestCallWins: true`, and
-`allowBatching: false`. `writableStateFields` carries a narrowed
+`debounceMilliseconds`, `throttleMilliseconds`, `latestCallWins: true`,
+`allowBatching: false`, and `detached: true`. `writableStateFields` carries a narrowed
 `State._model` capability in declaration order. It is omitted when `_model`
 equals `_public`, while an explicit empty list means all public State is
 read-only.

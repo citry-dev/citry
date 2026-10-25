@@ -496,27 +496,29 @@ returned. So a call that skipped ahead could come back built on a page or a
 State that no longer exists.
 
 A handler that never renders and never changes State has neither problem.
-Its author declares it detached, and the manifest marks it with
+The app author declares it detached (in Python,
+`@event(detached=True)`), and the manifest marks it with
 `detached: true` (see [Component classes](#component-classes)). Browser code
 may then send a call to it at once, outside the queue:
 
 ```js
-const typos = await this.$sendEvent("spellCheck", {}, {wait: false});
+const typos = await this.$sendEvent("spell_check", {}, {wait: false});
 ```
 
 The browser still gives the call the next `sendSequence` value, and the call
 carries the State token the browser holds when it sends it. The server may
-read State from that token. These rules hold for every call to a detached
-handler, whether the browser sent it at once or queued it:
+read State from that token. In this document, a **detached call** is any
+call to a detached handler, whether the browser sent it at once or queued
+it. These rules hold for every detached call:
 
 - The result never contains a `render` or a `state` action. A server answers
-  `handler_error` instead when the handler returns one, or when it changes
-  State. The browser rejects the whole result, before any action runs, if
-  one arrives anyway.
-- The call carries no `stateUpdates`. A server answers `invalid_args`
-  when it does, because the result returns no token, so the changes would be
-  lost. The browser keeps unsent State changes for the next call to a
-  handler that is not detached.
+  `handler_error` instead when the result would hold one, or when the
+  handler changes State. The browser rejects the whole result, before any
+  action runs, if one arrives anyway.
+- The call carries no `stateUpdates`, not even an empty object. A server
+  answers `invalid_args` when a call carries them, because the result
+  returns no token, so the changes would be lost. The browser keeps unsent
+  State changes for the next call to a handler that is not detached.
 - Its result never counts as a newer result for the caller (see [Order and
   timing](#order-and-timing)), because it cannot replace the caller's HTML
   or State.
@@ -524,8 +526,14 @@ handler, whether the browser sent it at once or queued it:
 The server keeps no order between a detached call and the caller's other
 calls: it may run them at the same time. Only `wait: false` takes a call out
 of the queue; a call to a detached handler sent without it waits its turn
-like any other. A handler that is not detached refuses `wait: false` in the
-browser before anything is sent.
+like any other. The browser refuses `wait: false` for a handler that is not
+detached, before anything is sent.
+
+The browser trusts the `detached` mark in the manifest it holds. If a deploy
+removes `detached=True` from a handler while a page still shows the old
+manifest, that page may send the handler a call outside the queue. The
+server then runs it as an ordinary call, so it may render or change State;
+the browser rejects such a result whole, and the call's promise rejects.
 
 ### Envelope limits
 
@@ -780,9 +788,12 @@ Details:
 - The client sends the next queued call only after this call's blocking
   actions finish, so a newer result can arrive during a blocking delay only
   from page code that calls `Citry.events.applyActions`. A detached call
-  does not wait for the queue, but its result never counts as newer.
+  sent with `wait: false` does not wait for the queue.
 - A detached call's own delayed actions follow the same rows: a newer
-  result from a queued call skips them, except a `redirect`.
+  result from a queued call skips them, except a `redirect`. A skipped
+  blocking action rejects the call's promise, as for any call. A detached
+  action without a delay always runs, even when a queued result was
+  accepted while the actions before it ran.
 - A result that holds an action type the client does not know is rejected
   whole, before any of its actions runs, so no row applies to it.
 - Actions that page code applies with `Citry.events.applyActions` follow
@@ -809,8 +820,13 @@ an older call changes nothing more on the page:
   when the older call has already finished and only its `wait: false`
   actions are still waiting on their delays.
 
-Supersession takes effect when the newer call is queued, so the older
-call's actions are dropped even if the newer call then fails.
+On a [detached handler](#detached-calls) that also has `latestCallWins`,
+the same rules cover calls sent with `wait: false`: a newer call, queued or
+not, supersedes them, and one in flight is abandoned.
+
+Supersession takes effect when the newer call is queued or, with
+`wait: false`, sent, so the older call's actions are dropped even if the
+newer call then fails.
 
 If the older call has not finished, its promise rejects with reason
 `superseded`, Citry's browser client reports no success for it, and the
@@ -828,10 +844,6 @@ What supersession does not change:
 - Only a call from the same component instance supersedes. After a
   `render` replaced the component, a call from the new instance does not
   supersede one from the old instance.
-- On a [detached handler](#detached-calls), a newer call supersedes the
-  older calls to that handler from the same instance, whether they were
-  sent at once or queued. A detached call in flight is abandoned like a
-  queued one.
 - Actions that page code applies itself, with `Citry.events.applyActions`,
   are never superseded.
 

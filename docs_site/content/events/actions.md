@@ -190,46 +190,59 @@ fail.
 An `@c-*` attribute in a template does not receive the value. To let browser
 code react to such a call, return `actions.Dispatch` instead.
 
-### Skip the queue for a read-only call { #skip-the-queue-for-a-read-only-call }
+## Skip the call queue { #skip-the-queue-for-a-read-only-call }
 
-Calls from one component go to the server one at a time, so a slow call
+Calls from one Vue app go to the server one at a time, so a slow call
 holds up the ones after it. A handler that only reads, such as a spell
-check while the user types, can run beside them. Declare it with
+check while the user types, can skip the line. Declare it with
 [`@event(detached=True)`][citry.ext.events.event]:
 
 ```python
 from citry.ext.events import event
 
 
+class SpellCheckIn:
+    text: str
+
+
 class Events:
     @event(detached=True)
-    def spell_check(self, state: DocState):
-        return {"typos": find_typos(state.text)}
+    def spell_check(self, data: SpellCheckIn):
+        return {"typos": find_typos(data.text)}
 ```
 
-Then pass `wait: false` to send the call at once:
+Declaring the handler is not enough on its own: a call without
+`wait: false` still waits its turn. Pass it where you send the call:
 
 ```js
 const result = await this.$sendEvent(
   "spell_check",
-  {},
+  {text: this.draft},
   {wait: false},
 );
 ```
 
-In exchange, a detached handler must leave the page and State as they are.
-It may read State and return data, a `Dispatch`, a `Redirect`, or a URL
-change. These cases fail instead:
+This `wait` is an option of `$sendEvent`. It is not the `wait=False` that
+actions take (see [Action lists](#return-several-actions-in-order)).
 
-- The handler renders, or changes State: the call fails with a
-  `handler_error`, and the server log names the handler.
-- The browser has State changes it has not sent yet: they stay in the
-  browser and go with the next call to a handler that is not detached.
+In exchange, a detached handler must leave the page and State as they are.
+It may read State and return data, a `Dispatch`, a `Redirect`, a
+`PushUrl` or `ReplaceUrl`, or a `Download`. These calls fail:
+
+- The handler returns a component or `actions.Render`, or changes State:
+  the `$sendEvent` Promise rejects with a `handler_error`, and the server
+  log names the handler. The handler has already run, so anything it
+  saved stays saved.
 - `wait: false` on a handler without `detached=True` rejects the Promise
   with a `TypeError` before anything is sent.
 
-The server can run a detached call at the same time as the component's
-other calls, so make sure the handler is safe to run alongside them.
+The handler reads the State the server last saw. Changes the browser has
+not sent yet stay in the browser for the next call to a handler that is
+not detached, so pass text the user is still typing as an argument, as
+above.
+
+The server may run a detached call while another call from the same page
+is running, so do not let the handler rely on what that call writes.
 
 ## `Redirect` to a page { #redirect-to-a-page }
 

@@ -2670,7 +2670,7 @@ class TestEpochEchoOnRejections:
 class TestDetachedHandlers:
     """``@event(detached=True)``: the handler may read State but never render or change it."""
 
-    def _board(self, c, *, extensions_answer=None):
+    def _board(self, c, *, runs=None):
         class BoardState:
             moves: int = 0
 
@@ -2685,6 +2685,8 @@ class TestDetachedHandlers:
             class Events:
                 @event(detached=True)
                 def peek(self, state):
+                    if runs is not None:
+                        runs.append("peek")
                     return [actions.Dispatch("board:peeked"), {"moves": state.moves}]
 
                 @event(detached=True)
@@ -2725,7 +2727,7 @@ class TestDetachedHandlers:
         ("handler", "reason"),
         [
             ("bump", "but changed State"),
-            ("redraw", "but returned a 'render' action"),
+            ("redraw", "but returned actions.Render (or a component)"),
         ],
     )
     def test_a_render_or_a_state_change_becomes_handler_error(self, caplog, handler, reason):
@@ -2748,7 +2750,7 @@ class TestDetachedHandlers:
         assert reason in logged
         assert "remove detached=True" in logged
 
-    def test_an_extension_cannot_add_a_state_action_to_a_detached_result(self):
+    def test_a_state_action_added_by_an_extension_names_the_extension_in_the_log(self, caplog):
         class AddsState(Extension):
             name = "adds_state"
 
@@ -2760,14 +2762,22 @@ class TestDetachedHandlers:
 
         c = _citry(extensions=[AddsState])
         board = self._board(c)
-        [item] = _dispatch(c, self._call(board, "peek"))["results"]
-        assert item["ok"] is False
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [item] = _dispatch(c, self._call(board, "peek"))["results"]
         assert item["error"]["code"] == "handler_error"
+        logged = "\n".join(str(record.exc_info[1]) for record in caplog.records if record.exc_info)
+        assert "its result holds a 'state' action, which an on_event_result extension may have added" in logged
 
-    def test_state_updates_are_rejected_before_the_handler_runs(self):
+    @pytest.mark.parametrize("updates", [{"moves": 5}, {}])
+    def test_state_updates_are_rejected_before_the_handler_runs(self, updates):
         c = _citry()
-        board = self._board(c)
-        [item] = _dispatch(c, self._call(board, "peek", stateUpdates={"moves": 5}))["results"]
+        runs = []
+        board = self._board(c, runs=runs)
+        [item] = _dispatch(c, self._call(board, "peek", stateUpdates=updates))["results"]
+        assert runs == []
+        # The same call without updates does reach the handler.
+        assert _dispatch(c, self._call(board, "peek"))["results"][0]["ok"] is True
+        assert runs == ["peek"]
         assert item == {
             "ok": False,
             "sendSequence": 3,
@@ -2776,7 +2786,16 @@ class TestDetachedHandlers:
                 "code": "invalid_args",
                 "message": (
                     "The call carries state updates, but event 'peek' on component 'Board' is declared"
-                    " with @event(detached=True), which cannot change State."
+                    " with @event(detached=True), so it cannot change State. Send the State updates with"
+                    " a call to a handler that is not detached."
                 ),
             },
         }
+
+    def test_async_dispatch_holds_a_detached_handler_to_the_same_rules(self):
+        c = _citry()
+        board = self._board(c)
+        envelope = _envelope(self._call(board, "bump"), self._call(board, "peek"))
+        bump, peek = asyncio.run(EventsDispatcher().dispatch_async(envelope, _ctx(c)))["results"]
+        assert bump["error"]["code"] == "handler_error"
+        assert [action["action"] for action in peek["actions"]] == ["event", "data"]

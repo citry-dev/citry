@@ -2667,7 +2667,7 @@ test("send options accept only timeout and a boolean wait, and reject before act
   );
   await assert.rejects(
     bridge.send({ source, handler: "move", options: { wait: "no" } }),
-    (error) => error instanceof TypeError && /option 'wait' must be true or false/.test(error.message),
+    (error) => error instanceof TypeError && /option 'wait' must be true or false; got "no"/.test(error.message),
   );
   await assert.rejects(
     bridge.send({ source, handler: "move", options: { timout: 5 } }),
@@ -2928,4 +2928,108 @@ test("retiring the caller or disposing the bridge cancels a detached call in fli
     assert.deepEqual(setup.record, []);
     assert.deepEqual(staleReasons(setup.lifecycle), [reason]);
   }
+});
+
+test("a queued result accepted between a detached result's actions does not drop the later ones", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const moveGate = gate();
+  const peekGate = gate();
+  const record = [];
+  const host = {
+    ...basicHost(() => ({ ...contextFor(), descriptor: detachedDescriptor() })),
+    dispatchEvent(name) {
+      record.push(`event:${name}`);
+    },
+  };
+  // A custom transport may settle both responses in the same tick, unlike the browser's fetch.
+  const bridge = bridgeModule.createVueEventsBridge({
+    endpoint: "/events",
+    host,
+    transport: () => ({
+      async send(envelope) {
+        const call = envelope.calls[0];
+        await (call.handlerName === "move" ? moveGate.promise : peekGate.promise);
+        const actions =
+          call.handlerName === "move"
+            ? [{ action: "data", value: "moved" }]
+            : [
+                { action: "event", eventName: "first" },
+                { action: "event", eventName: "second" },
+                { action: "data", value: "peeked" },
+              ];
+        return {
+          protocol: "citry-events/1",
+          requestId: envelope.requestId,
+          results: [{ ok: true, sendSequence: call.sendSequence, actions }],
+        };
+      },
+    }),
+  });
+  const move = bridge.send({ source, handler: "move" });
+  const peek = bridge.send({ source, handler: "peek", options: { wait: false } });
+  await sleep(5);
+  peekGate.open();
+  moveGate.open();
+  assert.deepEqual(await Promise.all([move, peek]), ["moved", "peeked"]);
+  assert.deepEqual(record, ["event:first", "event:second"]);
+});
+
+test("a queued call to a detached handler never counts as a newer result", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const setup = detachedBridge({
+    answers: {
+      move: () => [
+        { action: "event", eventName: "moved", delay: 0.05, wait: false },
+        { action: "data", value: 1 },
+      ],
+      peek: () => [{ action: "data", value: 2 }],
+    },
+  });
+  assert.equal(await setup.bridge.send({ source, handler: "move" }), 1);
+  // Sent without `wait: false`, so it waits its turn, and its result still leaves the delayed
+  // event of the earlier call alone.
+  assert.equal(await setup.bridge.send({ source, handler: "peek" }), 2);
+  await sleep(80);
+  assert.deepEqual(setup.record, ["event:moved"]);
+});
+
+test("a queued call to a detached handler still rejects a State action", async () => {
+  const setup = detachedBridge({
+    answers: {
+      move: () => [],
+      peek: () => [{ action: "state", targetRenderId: "server_1", stateToken: "token_2", publicState: {} }],
+    },
+  });
+  await assert.rejects(
+    setup.bridge.send({ source: { stableId: "board", generation: 1 }, handler: "peek" }),
+    /detached handler 'peek' returned a 'state' action/,
+  );
+  assert.deepEqual(setup.record, []);
+});
+
+test("latestCallWins on a detached handler supersedes across queued and wait: false calls", async () => {
+  const source = { stableId: "board", generation: 1 };
+  const moveGate = gate();
+  let peeks = 0;
+  const setup = detachedBridge({
+    peek: { latestCallWins: true },
+    answers: {
+      move: () => [],
+      peek: () => {
+        peeks += 1;
+        return [{ action: "data", value: peeks }];
+      },
+    },
+    gates: { move: [moveGate.promise] },
+  });
+  // The queued `peek` waits behind `move`; the newer `wait: false` one replaces it before it is sent.
+  const move = setup.bridge.send({ source, handler: "move" });
+  const queued = setup.bridge.send({ source, handler: "peek" });
+  queued.catch(() => {});
+  const detached = setup.bridge.send({ source, handler: "peek", options: { wait: false } });
+  await assert.rejects(queued, /superseded/);
+  assert.equal(await detached, 1);
+  moveGate.open();
+  await move;
+  assert.equal(peeks, 1);
 });

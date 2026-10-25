@@ -6,9 +6,9 @@
 
 - A handler declared with `@event(detached=True)` can be called with
   `$sendEvent(name, args, {wait: false})`, so a read-only call such as a
-  spell check no longer waits behind the component's slower calls. A
-  detached handler may return data, events, redirects, and URL changes, but
-  not a render or a State change
+  spell check no longer waits behind the app's slower calls. A detached
+  handler may return data, `Dispatch`, `Redirect`, and URL changes, but not
+  a render or a State change
   ([details](https://citry.dev/events/actions/#skip-the-queue-for-a-read-only-call)).
 - When `template_data()` builds its result through a helper, you can list
   its keys in `Lint.template_data_keys`. `citry check` and the editor then

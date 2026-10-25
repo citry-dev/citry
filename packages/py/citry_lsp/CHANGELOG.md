@@ -6,6 +6,9 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Added
 
+- The editor accepts `$sendEvent(name, args, {wait: false})` for a handler
+  declared with `@event(detached=True)`, and still reports `wait: false`
+  for any other handler.
 - The editor reports a misspelled directive, such as `c-iff` for `c-if`,
   with the severity your application's `rule_misspelled_directive` sets.
 - Before your application loads, the editor uses the severity a

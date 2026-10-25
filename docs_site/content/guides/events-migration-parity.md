@@ -221,7 +221,7 @@ State or event data names.
 |---|---|---|---|---|---|---|
 | HTTP calls | Native view | Message POST | Call POST | Command POST | Fetch to the batch or per-event route | **v1** |
 | Send pending writes with a call | Your code | Action queue | All public data | Command body | Pending State writes travel with the next call | **v1** |
-| Call order | Host order | Optional serial cache | Client queue | One command at a time | One Vue app sends its calls one at a time, in order | **v1** |
+| Call order | Host order | Optional serial cache | Client queue | One command at a time | One Vue app sends its calls one at a time, in order; a `wait: false` call to an `@event(detached=True)` handler skips the line | **v1** |
 | Ignore stale responses | Your code | Epoch | Old-value/focus checks | Session State | Epoch check, plus optional `latest_wins` | **v1** |
 | Send one call on its own | Your code | - | - | - | `@event(bundle=False)` uses the per-event route | **v1** |
 | Custom transport | Custom view | - | HTTP/WS internals | htmx | Register a transport | **v1** |
