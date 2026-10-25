@@ -80,42 +80,9 @@ _DJANGO_PROJECT = object()
 _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
-class _DotFreeSegmentConverter:
-    """A path segment part without ``/`` or ``.``, for a parameter followed by a literal ``.``."""
-
-    regex = r"[^/.]+"
-
-    def to_python(self, value: str) -> str:
-        return value
-
-    def to_url(self, value: str) -> str:
-        return value
-
-
-_DOT_FREE_CONVERTER = "citry_dotfree"
-_converter_registered = False
-
-
 def _to_django_path(path: str) -> str:
-    """
-    Convert citry's ``{param}`` placeholders to Django path converters.
-
-    A parameter followed by a literal ``.`` uses a converter that stops at
-    the ``.``, the same rule `compile_route_pattern` applies, so adjacent
-    parameters match in one pass. Every other parameter uses ``<str:...>``.
-    """
-    global _converter_registered  # noqa: PLW0603 - Django keeps one converter table per process
-    if not _converter_registered:
-        from django.urls import register_converter  # noqa: PLC0415
-
-        register_converter(_DotFreeSegmentConverter, _DOT_FREE_CONVERTER)
-        _converter_registered = True
-
-    def convert(match: re.Match[str]) -> str:
-        followed_by_dot = path[match.end() : match.end() + 1] == "."
-        return f"<{_DOT_FREE_CONVERTER if followed_by_dot else 'str'}:{match.group(1)}>"
-
-    return _PARAM_RE.sub(convert, path)
+    """Convert citry's ``{param}`` placeholders to Django's ``<str:param>``."""
+    return _PARAM_RE.sub(r"<str:\1>", path)
 
 
 def _build_request(request: Any) -> RouteRequest:

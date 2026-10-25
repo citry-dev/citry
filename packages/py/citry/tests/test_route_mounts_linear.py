@@ -4,9 +4,8 @@ Every mount resolves a cache-script path in one pass.
 The two `cache/...` routes place parameters next to each other with a `.`
 between them. On each adapter, a valid path resolves to the script handler
 with the right parts, and a long path that never matches is rejected
-quickly rather than by searching every way to split the dots. Django gets
-its own converter (`_DotFreeSegmentConverter`); the other mounts share
-`compile_route_pattern`. Inputs are ordinary: a real class-id-shaped
+quickly rather than by searching every way to split the dots. Every mount,
+Django's `re_path` routes included, uses `compile_route_pattern`. Inputs are ordinary: a real class-id-shaped
 string, and a long run of `.`-separated parts for the no-match case.
 """
 
@@ -56,14 +55,14 @@ def test_shared_matcher_rejects_a_long_cache_path_quickly() -> None:
     assert time.perf_counter() - start < _BOUND_SECONDS
 
 
-def test_django_converter_resolves_and_rejects_in_one_pass() -> None:
+def test_django_resolver_resolves_and_rejects_in_one_pass() -> None:
     django = pytest.importorskip("django")
     from django.conf import settings
 
     if not settings.configured:
         settings.configure(ALLOWED_HOSTS=["*"])
         django.setup()
-    from django.urls import URLPattern, URLResolver, include, path
+    from django.urls import URLResolver, include, path
 
     from citry.contrib.django import urlpatterns
 
@@ -85,7 +84,6 @@ def test_django_converter_resolves_and_rejects_in_one_pass() -> None:
     start = time.perf_counter()
     assert resolve("citry/cache/" + _LONG_NO_MATCH) is None
     assert time.perf_counter() - start < _BOUND_SECONDS
-    assert isinstance(patterns[0], (URLPattern, URLResolver))
 
 
 def test_flask_mount_serves_a_cache_path_and_rejects_a_long_one_quickly() -> None:
