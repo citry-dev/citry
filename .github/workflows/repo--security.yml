@@ -1,0 +1,159 @@
+# This workflow checks the locked Python, Rust and JavaScript dependencies
+# against published security advisories.
+#
+# Each job reads a lockfile and asks an advisory database whether a locked
+# version is affected, so none of them builds or installs the project. The
+# Rust job also downloads the crate manifests that `cargo metadata` needs.
+# Each job takes about a minute, and none blocks or waits on another
+# workflow. A pull request runs them only when it changes a lockfile, a
+# manifest or this workflow, so ordinary pull requests add no runner time;
+# pushes to main and the weekly run audit everything.
+#
+# What fails:
+# - Python and JavaScript: an advisory in a dependency that ships to users
+#   (the runtime dependencies and extras of each published Python package,
+#   and `pnpm audit --prod`). Dev, docs and benchmark tooling is audited
+#   too, but only reported.
+# - Rust: any advisory, because nearly everything in Cargo.lock ships in
+#   the citry-core wheel (the only exception is a test-only crate).
+#   Accepted exceptions live in deny.toml, each with its reason and
+#   tracking issue.
+#
+# The weekly run catches advisories published after a lockfile last
+# changed. When it fails, it opens a tracking issue, or comments on the one
+# already open, so the failure reaches someone.
+name: Security
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    paths:
+      - "uv.lock"
+      - "pyproject.toml"
+      - "packages/py/*/pyproject.toml"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/*/Cargo.toml"
+      - "third_party/rust/**"
+      - "deny.toml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+      - "**/package.json"
+      - ".github/workflows/repo--security.yml"
+  schedule:
+    - cron: "0 7 * * 1" # Mondays, 07:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+
+permissions:
+  contents: read
+
+jobs:
+  python-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          prune-cache: true
+          version: "0.13.5"
+
+      # `uv audit` reads uv.lock and checks it against the OSV database.
+      # It is a preview command in uv 0.13, hence the flag. The root project's
+      # `docs` and `social-cards` extras build the docs site, which does not
+      # ship, so they are left to the report below.
+      - name: Audit shipped Python dependencies
+        run: >-
+          uv audit --frozen --preview-features audit-command
+          --no-dev --no-default-groups --no-extra docs --no-extra social-cards
+
+      - name: Report on dev, docs and benchmark tooling
+        # Report even when the shipped audit failed, so both lists show.
+        if: always()
+        run: |
+          if ! uv audit --frozen --preview-features audit-command > audit.txt 2>&1; then
+            cat audit.txt
+            echo "::warning title=Python dev tooling advisories::uv audit found advisories in dev, docs or benchmark dependencies; see the log."
+          fi
+
+  rust-audit:
+    runs-on: ubuntu-latest
+    env:
+      # cargo-deny only reads the dependency graph (`cargo metadata`), which
+      # the preinstalled stable toolchain can do, so the pinned nightly from
+      # rust-toolchain.toml is not installed.
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The vendored ruff crates are workspace dependencies, so
+          # `cargo metadata` needs their manifests.
+          submodules: recursive
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: Check the Rust dependencies against RustSec
+        run: cargo deny check advisories
+
+  js-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # `pnpm audit` reads pnpm-lock.yaml, so nothing is installed.
+      - name: Audit shipped JavaScript dependencies
+        run: pnpm audit --prod
+
+      - name: Report on dev tooling
+        # Report even when the shipped audit failed, so both lists show.
+        if: always()
+        run: |
+          if ! pnpm audit > audit.txt 2>&1; then
+            cat audit.txt
+            echo "::warning title=JavaScript dev tooling advisories::pnpm audit found advisories in dev dependencies; see the log."
+          fi
+
+  report:
+    # Only the weekly run opens an issue: a pull request shows its own
+    # failure, and a push to main is already visible on the commit.
+    if: failure() && github.event_name == 'schedule'
+    needs: [python-audit, rust-audit, js-audit]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open a tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Weekly dependency audit failed"
+          printf 'The weekly dependency audit failed. The run names the advisory and the affected package, or the error that stopped the audit:\n\n%s\n' "$RUN_URL" > body.md
+          # Comment on the open tracking issue when there is one, so a second
+          # advisory is not lost behind the first.
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
+          fi

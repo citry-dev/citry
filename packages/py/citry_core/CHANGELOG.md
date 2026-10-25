@@ -54,6 +54,9 @@
 
 ### Fixed
 
+- `html_transform.transform_html()` stays fast on a tag with thousands of
+  attributes when it tracks added attributes. Such a tag used to take time
+  that grew with the square of the attribute count.
 - `template_parser.parse_template()` and `compile_template()` handle
   templates nested hundreds of tags deep, and invalid expressions, on threads
   with small stacks, such as threads started after a small

@@ -23,7 +23,7 @@ repository = "https://github.com/citry-dev/citry"
 [workspace.dependencies]
 python_safe_eval = { path = "crates/python_safe_eval", version = "=1.0.0" }
 pyo3 = { version = "0.30.1", features = ["extension-module"] }
-quick-xml = "0.38.3"
+quick-xml = "0.41.0"
 html5gum = { version = "=0.8.4", features = ["tree-builder"] }
 html5ever = "=0.29.0"
 pest = "2.8.3"

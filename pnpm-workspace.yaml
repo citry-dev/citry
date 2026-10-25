@@ -8,3 +8,10 @@ packages:
   - packages/js/*
   - packages/protocol/*/v1/js
   - packages/py/citry_ui/storybook
+
+# Versions forced past published security advisories, where the package
+# that depends on them has not updated its range yet. The security workflow
+# (.github/workflows/repo--security.yml) reports any that come back.
+overrides:
+  brace-expansion@>=4.0.0 <5.0.12: 5.0.12
+  brace-expansion@<1.1.21: 1.1.21
