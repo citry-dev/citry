@@ -138,9 +138,16 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
             "cache/{class_id}.{vars_hash}.{script_type}",
             handler=serve_cached_script,
             name="citry_cached_script_vars",
+            # A class id and a hash never hold a dot, so each stops at the next one.
+            dotless_params=frozenset({"class_id", "vars_hash"}),
         ),
         # Component JS/CSS scripts from `Component.js`/`Component.css`, e.g. `cache/abc123.js`
-        URLRoute("cache/{class_id}.{script_type}", handler=serve_cached_script, name="citry_cached_script"),
+        URLRoute(
+            "cache/{class_id}.{script_type}",
+            handler=serve_cached_script,
+            name="citry_cached_script",
+            dotless_params=frozenset({"class_id"}),
+        ),
         # Dependencies extension assets from `Component.dependencies.js/css`, e.g. `asset/abc123.css`
         URLRoute("asset/{file_name}", handler=serve_asset, name="citry_asset"),
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_client_runtime"),

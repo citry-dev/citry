@@ -188,7 +188,7 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
             from citry.util.routing import compile_route_pattern  # noqa: PLC0415
 
-            pattern = compile_route_pattern(full_path).pattern
+            pattern = compile_route_pattern(full_path, route.dotless_params).pattern
             patterns.append(re_path(pattern, _make_view(route), name=route.name))
         else:
             patterns.append(django_path(full_path, _make_view(route), name=route.name))

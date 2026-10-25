@@ -202,6 +202,11 @@ class URLRoute:
     name: str | None = None
     methods: tuple[str, ...] = ("GET",)
     extra: dict[str, Any] = field(default_factory=dict)
+    # Path parameters whose values never hold a `.`; each matches up to the
+    # next `.` instead of the next `/`. Citry's own routes use this for a
+    # value that sits right before a literal `.`, so a path is matched in one
+    # pass instead of by trying every way to split it at the dots.
+    dotless_params: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if self.handler is not None and self.children:
@@ -290,30 +295,18 @@ _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 @cache
-def compile_route_pattern(path: str) -> re.Pattern[str]:
+def compile_route_pattern(path: str, dotless_params: frozenset[str] = frozenset()) -> re.Pattern[str]:
     """
-    Compile a route path into a regex: ``{name}`` matches any run of characters except ``/``.
+    Compile a route path into a regex: ``{name}`` matches any characters except ``/``.
 
-    When a parameter is followed immediately by a literal character, that
-    character is also excluded from the run. So ``{a}.{b}`` compiles to two
-    groups that each stop at the next ``.``, rather than two open-ended runs
-    whose boundary the engine has to search for. The search is what makes a
-    pattern such as ``cache/{class_id}.{script_type}`` take time that grows
-    with the square of the path length on an input that never matches; with
-    the boundary fixed, every path is matched in one left-to-right pass.
-    Every parameter Citry's own routes place before a literal (a ``.`` or a
-    ``/``) holds a hash or an identifier that never contains that literal, so
-    the matched values are unchanged.
+    A parameter named in ``dotless_params`` also excludes ``.``.
     """
     pattern = ""
     last_end = 0
     for match in _PARAM_RE.finditer(path):
         pattern += re.escape(path[last_end : match.start()])
-        # The character right after the parameter, if it is an ordinary
-        # literal, bounds the run so adjacent parameters cannot overlap.
-        after = path[match.end() : match.end() + 1]
-        excluded = "/" + after if after and after not in "{/" else "/"
-        pattern += f"(?P<{match.group(1)}>[^{re.escape(excluded)}]+)"
+        characters = "[^/.]" if match.group(1) in dotless_params else "[^/]"
+        pattern += f"(?P<{match.group(1)}>{characters}+)"
         last_end = match.end()
     pattern += re.escape(path[last_end:])
     return re.compile(f"^{pattern}$")
@@ -329,7 +322,7 @@ def match_route(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
     ``cache/{class_id}.{script_type}``).
     """
     for full_path, route in flatten_routes(routes):
-        match = compile_route_pattern(full_path).match(path)
+        match = compile_route_pattern(full_path, route.dotless_params).match(path)
         if match is not None:
             return MatchedRoute(route=route, full_path=full_path, params=match.groupdict())
     return None
