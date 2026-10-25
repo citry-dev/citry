@@ -411,6 +411,31 @@ def test_client_text_placement_and_disabled_state_reconcile(page):
     assert errors == []
 
 
+def test_client_disable_reports_the_close_and_re_enabling_keeps_it_closed(page, settle_timers):
+    errors = _load(page)
+    _europa_trigger(page).focus()
+    page.wait_for_function("document.querySelector('#europa-tooltip').matches(':popover-open')")
+
+    # Disabling the open tooltip closes it, and the owner did not ask for
+    # that, so it hears about it once.
+    page.evaluate("window.__state.disabled = true")
+    page.wait_for_function("!document.querySelector('#europa-tooltip').matches(':popover-open')")
+    page.wait_for_function("window.__tooltipRequest?.reason === 'disabled'")
+    assert page.evaluate("window.__tooltipRequest") == {
+        "nextOpen": False,
+        "reason": "disabled",
+        "controlled": False,
+        "forced": True,
+    }
+
+    # Enabling it again, with focus still on the trigger, leaves it closed:
+    # the disable ended that open, and the reader opens it again.
+    page.evaluate("window.__state.disabled = false")
+    settle_timers()
+    assert not _europa(page).evaluate("element => element.matches(':popover-open')")
+    assert errors == []
+
+
 def test_closing_last_tooltip_removes_shared_document_listeners(page):
     _load(page)
     trigger = _europa_trigger(page)
