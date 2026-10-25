@@ -228,7 +228,11 @@ impl Walk<'_> {
                         }
                         continue;
                     }
-                    if !self.visit_children(child, open_id, false) {
+                    // This calls itself once per level of the parsed tree, so each level
+                    // runs through the stack guard.
+                    if !crate::stack::with_enough_stack(|| {
+                        self.visit_children(child, open_id, false)
+                    }) {
                         return false;
                     }
                     match self.expected.get(self.position) {

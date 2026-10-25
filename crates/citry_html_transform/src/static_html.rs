@@ -303,7 +303,11 @@ fn allowed(node: &Handle, usage: StaticHtmlUse, element_count: &mut usize) -> bo
             children
                 .iter()
                 .chain(node.children.borrow().iter())
-                .all(|child| allowed(child, usage, element_count))
+                // This calls itself once per level of the parsed tree, so each
+                // level runs through the stack guard.
+                .all(|child| {
+                    crate::stack::with_enough_stack(|| allowed(child, usage, element_count))
+                })
         }
         _ => false,
     }
@@ -315,7 +319,10 @@ fn same_tree(actual: &Handle, expected: &Handle) -> bool {
     let same_children = |a: &Handle, b: &Handle| {
         let a = a.children.borrow();
         let b = b.children.borrow();
-        a.len() == b.len() && a.iter().zip(b.iter()).all(|(a, b)| same_tree(a, b))
+        a.len() == b.len()
+            && a.iter()
+                .zip(b.iter())
+                .all(|(a, b)| crate::stack::with_enough_stack(|| same_tree(a, b)))
     };
     match (&actual.data, &expected.data) {
         (NodeData::Text { contents: a }, NodeData::Text { contents: b }) => {

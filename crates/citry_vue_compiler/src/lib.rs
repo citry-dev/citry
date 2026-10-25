@@ -23,6 +23,7 @@ use vize_s1::{SurfaceChild, SurfaceTree};
 
 mod hydration;
 pub mod server_render;
+mod stack;
 
 pub use hydration::{
     HydrationAnchor, HydrationAttribute, HydrationElement, HydrationPlan, HydrationPlanStatus,
@@ -346,6 +347,13 @@ fn component_call_tags(request: &CompileRequest) -> HashSet<String> {
 }
 
 pub fn compile(request: CompileRequest) -> CompileArtifact {
+    // Vue's compiler calls itself once per nesting level inside code Citry
+    // does not own, and the hydration plan walks its output the same way, so
+    // the whole compile gets enough stack. A definition compiles once.
+    stack::with_large_stack(|| compile_on_stack(request))
+}
+
+fn compile_on_stack(request: CompileRequest) -> CompileArtifact {
     let allocator = Allocator::new();
     let call_tags = component_call_tags(&request);
     let (root, parse_errors) = parse_generated_template(&allocator, &request.template, &call_tags);

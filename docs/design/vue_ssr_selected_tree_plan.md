@@ -526,10 +526,21 @@ component's whole render, and when it is the page's root.
 A declined part becomes a shell as described above: the error travels up
 to the nearest element whose own attributes were written, and that element
 is written as a shell. With no such element, the page mounts in the browser
-(`host-root`). Render code nested deeper than 200 vnode or expression
-levels is not read, and
-output nested deeper than 256 levels is not written; both are declined
-like any other part.
+(`host-root`). Render code nested deeper than 2,048 vnode or expression
+levels is not read, and output nested deeper than 2,048 levels is not
+written; both are declined like any other part. A template at the nesting
+limits planned in #272 (512 nested tags, 256 of them control flow) reads
+about 770 levels and writes about 1,300. Each level of reading and writing
+runs through a stack guard (`citry_vue_compiler/src/stack.rs`), so these
+caps stop much deeper input rather than protecting the stack. A page whose
+data nests deeper than 2,048 levels mounts in the browser (`manifest`).
+
+The writer also declines an element nested more than 400 elements deep
+inside the host. Chrome's HTML parser nests at most 513 elements, counting
+`<html>`, and writes deeper ones as siblings. html5ever, which the checks
+use, follows the HTML standard, which sets no such limit, so the page would
+not have the structure Vue hydrates. The 400 leaves about 110 levels for
+the page's own elements around the host.
 
 ## Checking the server's HTML against Vue
 

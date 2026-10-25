@@ -89,6 +89,16 @@ pub struct ServerRenderProgram {
     root: Node,
 }
 
+impl Drop for ServerRenderProgram {
+    fn drop(&mut self) {
+        // Freeing the tree calls itself once per level the reader built, up
+        // to `MAX_READ_DEPTH`. Python frees a program on whatever thread
+        // drops it, so the whole tree is freed with enough stack.
+        let root = std::mem::replace(&mut self.root, Node::Null);
+        crate::stack::with_stack_for_freeing(|| drop(root));
+    }
+}
+
 impl ServerRenderProgram {
     /// Whether the whole render function was read (used by tests and
     /// diagnostics; a partly read program is still usable).
@@ -138,6 +148,12 @@ enum Node {
 
 impl Node {
     fn fully_supported(&self) -> bool {
+        // The tree is up to `MAX_READ_DEPTH` levels deep, and Python asks
+        // this from any thread.
+        crate::stack::with_enough_stack(|| self.every_part_read())
+    }
+
+    fn every_part_read(&self) -> bool {
         match self {
             Node::Unsupported(_) => false,
             Node::Element {
@@ -278,6 +294,10 @@ enum Expr {
 
 impl Expr {
     fn fully_supported(&self) -> bool {
+        crate::stack::with_enough_stack(|| self.every_part_read())
+    }
+
+    fn every_part_read(&self) -> bool {
         match self {
             Expr::Unsupported(_) => false,
             Expr::Member(object, _)
@@ -303,6 +323,16 @@ impl Expr {
 /// it) into a program. `dynamic_elements` maps the compiler's tag aliases
 /// for `<component :is>` elements back to their real tags.
 pub fn read_program(
+    code: &str,
+    dynamic_elements: &[(String, String)],
+) -> Result<ServerRenderProgram, &'static str> {
+    // The JavaScript parser calls itself once per nested call in the render
+    // code, inside code that cannot be guarded level by level. A program is
+    // read once per definition, so the whole read gets enough stack.
+    crate::stack::with_large_stack(|| read_program_on_stack(code, dynamic_elements))
+}
+
+fn read_program_on_stack(
     code: &str,
     dynamic_elements: &[(String, String)],
 ) -> Result<ServerRenderProgram, &'static str> {
@@ -418,10 +448,17 @@ struct Reader {
     depth: Cell<usize>,
 }
 
-/// Deeper render code (a long chain of interpolations or `v-else-if`
-/// branches) is left unread, so neither reading nor running a program can
-/// overflow a thread's stack; the part is built in the browser.
-const MAX_READ_DEPTH: usize = 200;
+/// How deep the reader follows nested vnode and expression calls before it
+/// leaves the rest unread for the browser to build.
+///
+/// A plain element costs one level and an element with `v-if` or `v-for`
+/// two, so the render code of a template at the nesting limits planned in
+/// #272 (512 nested tags, 256 of them control flow) reads about 770 levels
+/// deep (measured). Each level runs through `with_enough_stack`, so the cap
+/// does not protect the stack. It stops much deeper render code, such as a
+/// chain of thousands of interpolations, and it bounds the depth of the
+/// tree that `ServerRenderProgram`'s `Drop` frees.
+const MAX_READ_DEPTH: usize = 2048;
 
 impl Reader {
     /// Read one vnode-producing expression. `locals` are the parameters of
@@ -431,7 +468,7 @@ impl Reader {
             return Node::Unsupported("nesting-depth");
         }
         self.depth.set(self.depth.get() + 1);
-        let node = self.read_node(expression, locals);
+        let node = crate::stack::with_enough_stack(|| self.read_node(expression, locals));
         self.depth.set(self.depth.get() - 1);
         node
     }
@@ -789,7 +826,7 @@ impl Reader {
             return Expr::Unsupported("nesting-depth");
         }
         self.depth.set(self.depth.get() + 1);
-        let expr = self.read_expr(expression, locals);
+        let expr = crate::stack::with_enough_stack(|| self.read_expr(expression, locals));
         self.depth.set(self.depth.get() - 1);
         expr
     }
@@ -1129,6 +1166,12 @@ struct SlotBinding<'a> {
 }
 
 fn eval<'a>(expr: &'a Expr, instance: &Instance<'a>, locals: &Scope<'a>) -> Val<'a> {
+    // An expression nests as deep as the reader read it, and each level
+    // calls this once.
+    crate::stack::with_enough_stack(|| eval_expr(expr, instance, locals))
+}
+
+fn eval_expr<'a>(expr: &'a Expr, instance: &Instance<'a>, locals: &Scope<'a>) -> Val<'a> {
     match expr {
         Expr::Undefined => Val::Undefined,
         Expr::Null => Val::Null,
@@ -1427,6 +1470,11 @@ enum Parts {
 /// array, or the keys of an object whose values are truthy, joined with
 /// spaces and trimmed.
 fn normalize_class(value: &Val<'_>, parts: Parts) -> Result<String, &'static str> {
+    // A class array may nest as deep as the page's data.
+    crate::stack::with_enough_stack(|| normalize_class_on_stack(value, parts))
+}
+
+fn normalize_class_on_stack(value: &Val<'_>, parts: Parts) -> Result<String, &'static str> {
     // Vue builds the text with a space after every non-empty part and trims
     // the result, so a part's own surrounding spaces survive in the middle.
     let mut output = String::new();
@@ -1501,6 +1549,14 @@ type StyleEntries<'a> = Vec<(Cow<'a, str>, Val<'a>)>;
 /// The declarations `normalizeStyle` gives a value, in JavaScript's key
 /// order, or `None` when it gives nothing (a number, `null`).
 fn style_entries<'a>(
+    value: &Val<'a>,
+    parts: Parts,
+) -> Result<Option<StyleEntries<'a>>, &'static str> {
+    // A style array may nest as deep as the page's data.
+    crate::stack::with_enough_stack(|| style_entries_on_stack(value, parts))
+}
+
+fn style_entries_on_stack<'a>(
     value: &Val<'a>,
     parts: Parts,
 ) -> Result<Option<StyleEntries<'a>>, &'static str> {
@@ -2125,12 +2181,82 @@ pub struct RenderRequest<'a> {
 /// Render a page's host content for hydration and check how the browser
 /// parses it.
 pub fn render_for_hydration(request: &RenderRequest<'_>) -> HydrationRender {
-    let Ok(manifest) = serde_json::from_str::<ManifestInput>(request.manifest_json) else {
-        return HydrationRender {
-            reason: Some("manifest"),
-            ..HydrationRender::default()
-        };
-    };
+    // serde_json reads up to 128 nested arrays and objects with one call per
+    // level, more than a small thread holds in a debug build.
+    crate::stack::with_stack_for_data(|| render_page(request))
+}
+
+fn render_page(request: &RenderRequest<'_>) -> HydrationRender {
+    match serde_json::from_str::<ManifestInput>(request.manifest_json) {
+        Ok(manifest) => render_manifest(request, manifest),
+        // serde_json stops at 128 nested arrays and objects, and a page's
+        // data nests about two levels for each `<c-for>` around it. Parsing,
+        // reading and freeing deeper data call themselves once per level
+        // inside serde_json, so the page is rendered with enough stack for
+        // data up to `MAX_MANIFEST_DEPTH` deep.
+        Err(error)
+            if error.to_string().starts_with("recursion limit exceeded")
+                && json_depth(request.manifest_json) <= MAX_MANIFEST_DEPTH =>
+        {
+            crate::stack::with_large_stack(|| {
+                let mut deserializer = serde_json::Deserializer::from_str(request.manifest_json);
+                deserializer.disable_recursion_limit();
+                match ManifestInput::deserialize(&mut deserializer)
+                    .and_then(|manifest| deserializer.end().map(|()| manifest))
+                {
+                    Ok(manifest) => render_manifest(request, manifest),
+                    Err(_) => manifest_declined(),
+                }
+            })
+        }
+        Err(_) => manifest_declined(),
+    }
+}
+
+/// How deep a page's manifest may nest and still be rendered on the server.
+/// The data of a template at the nesting limits planned in #272 nests about
+/// 520 levels (256 nested `<c-for>` tags); deeper data makes the page mount
+/// in the browser. The count includes the manifest's own three outer levels.
+const MAX_MANIFEST_DEPTH: usize = 2048;
+
+fn manifest_declined() -> HydrationRender {
+    HydrationRender {
+        reason: Some("manifest"),
+        ..HydrationRender::default()
+    }
+}
+
+/// The deepest nesting of arrays and objects in JSON text, counted without
+/// parsing it, so the check itself uses no stack per level.
+fn json_depth(text: &str) -> usize {
+    let mut depth = 0usize;
+    let mut deepest = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for byte in text.bytes() {
+        if in_string {
+            match byte {
+                _ if escaped => escaped = false,
+                b'\\' => escaped = true,
+                b'"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'[' | b'{' => {
+                depth += 1;
+                deepest = deepest.max(depth);
+            }
+            b']' | b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    deepest
+}
+
+fn render_manifest(request: &RenderRequest<'_>, manifest: ManifestInput) -> HydrationRender {
     // The browser runtime refuses a `js_data` key that starts with `$` or `_`
     // (`installServerKey` in client.js), because those names belong to Vue and
     // Citry, `$citryPrepared` among them. The page mounts in the browser so the
@@ -2290,10 +2416,34 @@ struct Cx {
     at_root: bool,
 }
 
-/// Deep nesting would recurse past a small thread stack; a part nested
-/// deeper is declined like any other, so its nearest element becomes a
-/// shell (or the page mounts in the browser when there is none).
-const MAX_DEPTH: usize = 256;
+/// How deep the writer goes in nested components, nodes and elements before
+/// it declines the part, so its nearest element becomes a shell (or the page
+/// mounts in the browser when there is none).
+///
+/// An element costs two levels (its node and its children) and `v-if` or
+/// `v-for` on it one more, so a template at the nesting limits planned in
+/// #272 (512 nested tags, 256 of them control flow) writes about 1,300
+/// levels deep (measured). Each level runs through `with_enough_stack`, so
+/// the cap does not protect the stack; it stops much deeper output.
+/// `MAX_ELEMENT_DEPTH` usually stops nested elements first.
+const MAX_DEPTH: usize = 2048;
+
+/// How many elements deep the writer nests inside the host before it
+/// declines the part into a shell.
+///
+/// Chrome's HTML parser nests at most 513 elements, counting `<html>`, and
+/// writes deeper ones as siblings (measured: a host inside `<body>` holds
+/// at most 510 nested `<div>` elements), so the page would not have the
+/// structure Vue hydrates. html5ever, which the checks use, follows the
+/// HTML standard, which sets no such limit. This leaves about 110 levels for the page's own elements around
+/// the host.
+const MAX_ELEMENT_DEPTH: usize = 400;
+
+/// How many elements deep a page may nest and still use the token check
+/// rather than one full parse of the page. A warm thread answers the token
+/// check from stored answers, so up to this depth it stays the faster check;
+/// a first page this deep costs about 15 ms once per thread (release build).
+const TOKEN_CHECK_DEPTH: usize = 256;
 
 const VOID_TAGS: [&str; 14] = [
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
@@ -2527,7 +2677,8 @@ impl<'a> Writer<'a> {
         self.depth += 1;
         let instance = Rc::new(Instance { occurrence, slots });
         let nodes_before = self.nodes_written;
-        let result = self.node(&program.root, &instance, &None, cx);
+        let result =
+            crate::stack::with_enough_stack(|| self.node(&program.root, &instance, &None, cx));
         self.depth -= 1;
         result?;
         if self.nodes_written == nodes_before {
@@ -2555,7 +2706,10 @@ impl<'a> Writer<'a> {
             return Err(Fail::new("nesting-depth", "render", component));
         }
         self.depth += 1;
-        let result = self.write_node(node, instance, locals, cx);
+        // Every nested element and component reaches its children through
+        // here, so this guard covers each level of the writer.
+        let result =
+            crate::stack::with_enough_stack(|| self.write_node(node, instance, locals, cx));
         self.depth -= 1;
         result
     }
@@ -2715,7 +2869,7 @@ impl<'a> Writer<'a> {
         if !valid_tag || UNWRITTEN_TAGS.contains(&tag) {
             return Err(Fail::new("unsupported-tag", tag, component));
         }
-        if self.depth >= MAX_DEPTH {
+        if self.depth >= MAX_DEPTH || self.open.len() >= MAX_ELEMENT_DEPTH {
             return Err(Fail::new("nesting-depth", tag, component));
         }
         if parser_moves(&self.open, tag) {
@@ -2788,6 +2942,13 @@ impl<'a> Writer<'a> {
         self.element_count += 1;
         self.depth += 1;
         self.open.push(tag);
+        if self.open.len() > TOKEN_CHECK_DEPTH {
+            // The token check parses one probe for each stack of open tags
+            // it has not seen, each as deep as that stack, so a thread's
+            // first deep page costs time that grows with the square of its
+            // depth. One full parse of the page is cheaper there.
+            self.needs_full_parse = true;
+        }
         let inner = Cx { at_root: false };
         let mut result = match children {
             Children::None => match &v_text {
@@ -3328,7 +3489,7 @@ impl<'a> StaticWriter<'a> {
             return;
         }
         self.depth += 1;
-        self.write_node(node, instance, locals);
+        crate::stack::with_enough_stack(|| self.write_node(node, instance, locals));
         self.depth -= 1;
     }
 
@@ -4661,8 +4822,13 @@ mod tests {
     }
 
     #[test]
-    fn deep_render_code_is_left_unread_instead_of_overflowing_the_stack() {
-        let template = format!("<p>{}</p>", "{{ $citryPrepared.t }}".repeat(2_000));
+    fn render_code_past_the_read_cap_is_left_to_the_browser() {
+        // Each interpolation adds one level to the chain of `+` Vue's
+        // compiler emits, so twice the cap is well past it.
+        let template = format!(
+            "<p>{}</p>",
+            "{{ $citryPrepared.t }}".repeat(2 * super::MAX_READ_DEPTH)
+        );
         let result = root(&template, json!({"t": "x"}));
         assert_eq!(html(&result), r#"<p data-allow-mismatch="children"></p>"#);
         assert_eq!(declines(&result), [("nesting-depth", "text", Some("p"))]);

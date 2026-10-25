@@ -12,6 +12,8 @@ written host HTML and the recorded decision.
 """
 
 import re
+import threading
+from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
@@ -1568,3 +1570,87 @@ $component({});
     assert "\ufffd" not in host
     assert host == '<main data-allow-mismatch="children"><p></p><p>x</p><p>e\xe9f</p></main>'
     assert _declines(_admission(rendered)) == [("text-value", "title", "shell", "main", "Card")]
+
+
+# The nesting limits planned in #272: 512 nested tags, 256 of them control
+# flow. The server writes elements up to 400 deep inside the host, because
+# Chrome's parser moves elements nested past about 510 out of their parents.
+_TAG_NESTING = 512
+_LOGIC_NESTING = 256
+_ELEMENT_NESTING = 400
+
+
+def _nested_page(template: str) -> type[Component]:
+    engine = Citry(autodiscover=False)
+
+    def template_data(self: Component, kwargs: object, slots: object) -> dict[str, object]:
+        return {"n": 7, "rows": [1]}
+
+    return type(
+        "Deep",
+        (Component,),
+        {"citry": engine, "template": template, "js": "\n$component({});\n", "template_data": template_data},
+    )
+
+
+def _around_divs(opening: Callable[[int], str], closing: str, divs: int) -> str:
+    """Nest `_LOGIC_NESTING` levels of ``opening`` around ``divs`` nested `<div>` elements."""
+    return (
+        "".join(opening(level) for level in range(_LOGIC_NESTING))
+        + "<div>" * divs
+        + "{{ n }}"
+        + "</div>" * divs
+        + closing * _LOGIC_NESTING
+    )
+
+
+_DEEP_TEMPLATES = {
+    "elements": "<div>" * _ELEMENT_NESTING + "{{ n }}" + "</div>" * _ELEMENT_NESTING,
+    # `<c-if>` writes no element, so all 512 tags fit.
+    "c-if tags": _around_divs(lambda _level: '<c-if cond="n">', "</c-if>", _TAG_NESTING - _LOGIC_NESTING),
+    "c-if attributes": _around_divs(lambda _level: '<div c-if="n">', "</div>", _ELEMENT_NESTING - _LOGIC_NESTING),
+    # Each level needs its own loop variable.
+    "c-for attributes": _around_divs(
+        lambda level: f'<div c-for="row{level} in rows">', "</div>", _ELEMENT_NESTING - _LOGIC_NESTING
+    ),
+}
+
+
+@pytest.mark.parametrize("template", list(_DEEP_TEMPLATES.values()), ids=list(_DEEP_TEMPLATES))
+def test_deep_templates_are_written_whole_on_the_server(template: str) -> None:
+    host, admission = _hydrated_host(_nested_page(template))
+
+    # Vue adopts every level: nothing is left for the browser to build.
+    assert admission.declines == ()
+    assert "data-allow-mismatch" not in host
+    assert ">7<" in host
+
+
+def test_elements_nested_past_what_browsers_parse_become_a_shell() -> None:
+    page = _nested_page("<main>" + "<div>" * _TAG_NESTING + "{{ n }}" + "</div>" * _TAG_NESTING + "</main>")
+
+    host, admission = _hydrated_host(page)
+
+    # The page still hydrates; Vue builds the deepest part in the browser.
+    assert [item.code for item in admission.declines] == ["nesting-depth"]
+    assert host.count('data-allow-mismatch="children"') == 1
+    # The 401st element would pass the cap, so its parent, `<main>` and 399
+    # `<div>` elements down, is the shell.
+    assert host[: host.index("data-allow-mismatch")].count("<div") == _ELEMENT_NESTING - 1
+
+
+def test_a_deep_template_renders_on_a_thread_with_a_small_stack() -> None:
+    # Threads other than the main one get 512 KiB of stack on macOS. Vue's
+    # compiler and the server renderer run on the thread that renders. The
+    # nested elements send flat data, so only those two steps go deep.
+    page = _nested_page(_DEEP_TEMPLATES["elements"])
+    results: list[tuple[str, HydrationAdmission]] = []
+    previous = threading.stack_size(512 * 1024)
+    try:
+        thread = threading.Thread(target=lambda: results.append(_hydrated_host(page)))
+        thread.start()
+        thread.join()
+    finally:
+        threading.stack_size(previous)
+    assert len(results) == 1
+    assert results[0][1].declines == ()

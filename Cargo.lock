@@ -366,6 +366,7 @@ dependencies = [
  "html5gum",
  "markup5ever_rcdom",
  "quick-xml",
+ "stacker",
 ]
 
 [[package]]
@@ -453,6 +454,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "stacker",
  "vize_atelier_core",
  "vize_atelier_dom",
  "vize_s1",
