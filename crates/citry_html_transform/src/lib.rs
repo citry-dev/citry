@@ -10,6 +10,7 @@ pub mod hydration_structure;
 pub mod marker;
 pub mod output_policy;
 pub mod output_scanner;
+mod stack;
 pub mod static_html;
 pub mod transformer;
 

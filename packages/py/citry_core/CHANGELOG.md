@@ -61,6 +61,13 @@
   now always lists the tags it may follow in the same order, for example
   `<c-if>, <c-elif>` for `<c-else>`. The order used to change from one run
   to the next.
+- The Vue compiler and the server renderer that writes a Vue component's
+  HTML handle templates nested hundreds of tags deep on threads with small
+  stacks, where they used to crash the process. The server now writes elements nested up
+  to 400 deep inside a component's host, where it used to leave content
+  past about 130 nested elements for the browser to build. Pages whose data
+  nests up to 2,048 levels are written on the server too, where they used
+  to mount in the browser.
 - `template_parser.parse_template()` and `compile_template()` handle
   templates nested hundreds of tags deep, and invalid expressions, on threads
   with small stacks, such as threads started after a small
