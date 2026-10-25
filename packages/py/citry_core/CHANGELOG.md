@@ -61,6 +61,10 @@
   now always lists the tags it may follow in the same order, for example
   `<c-if>, <c-elif>` for `<c-else>`. The order used to change from one run
   to the next.
+- In a component that uses Vue, the server now writes an element inside
+  `v-pre` that has an attribute such as `:x="y"`, a `:` followed by a
+  lowercase name. Its parent used to be left for the browser to build, so
+  the page showed the element without that attribute until Vue ran.
 - The Vue compiler and the server renderer that writes a Vue component's
   HTML handle templates nested hundreds of tags deep on threads with small
   stacks, where they used to crash the process. The server now writes elements nested up

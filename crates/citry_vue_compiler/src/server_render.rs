@@ -1920,15 +1920,11 @@ fn client_attribute(tag: &str, key: &str, value: &Val<'_>) -> Result<Option<Stri
             _ => Err("unsupported-attribute"),
         };
     }
-    let bytes = key.as_bytes();
-    if key.is_empty()
-        || !bytes[0].is_ascii_lowercase()
-        || !bytes.iter().all(|byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b':')
-        })
-    {
+    if !is_plain_attribute_name(key) {
         // Upper case (`tabIndex`), `.prop`/`^attr` modifiers and unusual
-        // names take paths the server does not model.
+        // names such as `@click` take paths the server does not model;
+        // browsers disagree on whether `setAttribute` accepts `@` and `#`
+        // names.
         return Err("unsupported-attribute");
     }
     match (tag, key) {
@@ -3073,14 +3069,7 @@ impl<'a> Writer<'a> {
     /// full parse, which compares every attribute.
     fn check_attributes(&mut self, attributes: &[(String, String)]) {
         for (index, (name, value)) in attributes.iter().enumerate() {
-            let bytes = name.as_bytes();
-            let plain_name = bytes.first().is_some_and(u8::is_ascii_lowercase)
-                && bytes.iter().all(|byte| {
-                    byte.is_ascii_lowercase()
-                        || byte.is_ascii_digit()
-                        || matches!(byte, b'-' | b'_' | b':')
-                });
-            if !plain_name
+            if !is_plain_attribute_name(name)
                 || name == "data-allow-mismatch"
                 || value.contains(['\0', '\r'])
                 || attributes[..index]
@@ -3731,11 +3720,34 @@ impl<'a> StaticWriter<'a> {
     }
 }
 
+/// Whether `name` is an attribute the server writes the way Vue's client
+/// sets it, and the tokenizer reads as written: lowercase letters, digits,
+/// `-`, `_` and `:`, starting with a letter or with `:` and a letter.
+///
+/// A `v-pre` element keeps Vue syntax as plain attributes, such as `:x`.
+/// `:` means nothing to Vue's `patchProp` and no element has a member of
+/// that name, so Vue sets it with `setAttribute`, and hydration keeps the
+/// server's text for it, as for any plain attribute. The hydration writer
+/// and the token check both use this rule.
+fn is_plain_attribute_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let starts_like_a_name = bytes.first().is_some_and(u8::is_ascii_lowercase)
+        || (bytes.first() == Some(&b':') && bytes.get(1).is_some_and(u8::is_ascii_lowercase));
+    starts_like_a_name
+        && bytes.iter().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b':')
+        })
+}
+
 /// Whether the HTML tokenizer reads `name` as one attribute name exactly as
 /// written (SVG attributes such as `viewBox` keep their capital letters).
 fn is_static_attribute_name(name: &str) -> bool {
     let bytes = name.as_bytes();
-    bytes.first().is_some_and(u8::is_ascii_alphabetic)
+    // The tokenizer also reads a name that starts with `:`, such as the `:x`
+    // a `v-pre` element keeps, as written.
+    let starts_like_a_name = bytes.first().is_some_and(u8::is_ascii_alphabetic)
+        || (bytes.first() == Some(&b':') && bytes.get(1).is_some_and(u8::is_ascii_alphabetic));
+    starts_like_a_name
         && bytes
             .iter()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b':' | b'.'))
@@ -4819,6 +4831,52 @@ mod tests {
             html(&inherited),
             r#"<p data-allow-mismatch="children"></p>"#
         );
+    }
+
+    #[test]
+    fn a_v_pre_elements_colon_attribute_is_written_as_text() {
+        // Vue sets a `:x` kept as written under `v-pre` with
+        // `setAttribute`, and hydration keeps the server's text for it, so
+        // the element is written instead of leaving its parent to Vue.
+        let table = root(
+            "<main><table v-pre><tr><td><b :x='y' title='t'>A</b></td></tr></table></main>",
+            json!({}),
+        );
+        assert_eq!(
+            html(&table),
+            r#"<main><table><tbody><tr><td><b :x="y" title="t">A</b></td></tr></tbody></table></main>"#
+        );
+        assert!(declines(&table).is_empty());
+        let div = root("<main><div v-pre><b :x='y'>B</b></div></main>", json!({}));
+        assert_eq!(html(&div), r#"<main><div><b :x="y">B</b></div></main>"#);
+        assert!(declines(&div).is_empty());
+        // Browsers disagree on whether `setAttribute` accepts a name
+        // starting with `@`, so that part is still left to the browser; the
+        // shell's contents keep `:x`.
+        let at = root(
+            "<main><div v-pre><b :x='y' @click='go'>C</b></div></main>",
+            json!({}),
+        );
+        assert_eq!(
+            declines(&at),
+            [("unsupported-attribute", "@click", Some("div"))]
+        );
+        assert_eq!(
+            html(&at),
+            r#"<main><div data-allow-mismatch="children"><b :x="y">C</b></div></main>"#
+        );
+    }
+
+    #[test]
+    fn plain_attribute_names_include_a_leading_colon() {
+        for name in ["x", "data-x", "v-on:click", ":x", ":x:y", ":x-1"] {
+            assert!(super::is_plain_attribute_name(name), "{name}");
+        }
+        for name in [
+            "", ":", "::x", ":_x", ":X", "X", "tabIndex", "@click", "#h", ".x", "^x", ":x.prop",
+        ] {
+            assert!(!super::is_plain_attribute_name(name), "{name}");
+        }
     }
 
     #[test]

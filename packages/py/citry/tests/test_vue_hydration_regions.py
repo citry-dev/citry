@@ -1654,3 +1654,13 @@ def test_a_deep_template_renders_on_a_thread_with_a_small_stack() -> None:
         threading.stack_size(previous)
     assert len(results) == 1
     assert results[0][1].declines == ()
+
+
+def test_a_v_pre_elements_colon_attribute_is_written_on_the_server() -> None:
+    # Vue sets `:x` with `setAttribute` and hydration keeps the server's
+    # text, so the server writes it instead of leaving the element's parent
+    # for Vue to build.
+    page = _v_pre_page("<main><table v-pre><tr><td><b :x='y' title='t'>A</b></td></tr></table></main>", {})
+    rendered, admission = _hydrated_host(page)
+    assert rendered == '<main><table><tbody><tr><td><b :x="y" title="t">A</b></td></tr></tbody></table></main>'
+    assert admission.declines == ()
