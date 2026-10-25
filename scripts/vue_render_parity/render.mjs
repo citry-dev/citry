@@ -9,7 +9,8 @@
 // (`citry/_vue/client.js`) that decide what a render creates: the compiler
 // helpers (`compilerRuntime`), the component options that expose
 // `$citryPrepared` and each `js_data` key on the instance, and the
-// `citry-opaque-html` component. Pieces copied from client.js say so.
+// `citry-opaque-html` component. Pieces copied from client.js say so; the
+// opaque HTML record check is read from client.js and run as it is.
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -161,23 +162,47 @@ function runtimeForDynamicElements(entries) {
   return Object.freeze(runtime);
 }
 
+// The record check is client.js's own `checkOpaqueHtmlRecord`, read from its
+// source and run here, so a record the browser accepts is never refused here.
+// `clientDefinition` throws when it cannot find a definition, so renaming
+// either definition or changing its first line stops this script with an
+// error.
+const clientSource = readFileSync(new URL("packages/py/citry/citry/_vue/client.js", root), "utf8");
+
+function clientDefinition(start) {
+  const begin = clientSource.indexOf(start);
+  if (begin < 0 || clientSource.indexOf(start, begin + 1) >= 0) {
+    throw new Error(`client.js must define exactly one ${JSON.stringify(start)}`);
+  }
+  // The definition ends at the brace that closes its first opening brace. A
+  // brace inside a string or comment would end it at the wrong place;
+  // neither definition has one.
+  let depth = 0;
+  for (let index = clientSource.indexOf("{", begin); index < clientSource.length; index += 1) {
+    if (clientSource[index] === "{") depth += 1;
+    else if (clientSource[index] === "}" && --depth === 0) return clientSource.slice(begin, index + 1);
+  }
+  throw new Error(`client.js ends inside ${JSON.stringify(start)}`);
+}
+
+// Strict mode, as client.js runs.
+const checkOpaqueHtmlRecord = new Function(
+  '"use strict";\n' +
+    `${clientDefinition("const plain = (value, name) =>")};\n` +
+    `${clientDefinition("function checkOpaqueHtmlRecord(value)")}\n` +
+    "return checkOpaqueHtmlRecord;",
+)();
+
 // Adapted from client.js: the `citry-opaque-html` component. Each record
 // is a Fragment holding one static vnode with the record's HTML (or no
-// children when the HTML parses into no nodes).
+// children when the HTML parses into no nodes). A pinned record only
+// changes later renders, and this check renders each page once.
 const opaqueHtmlComponent = {
   name: "CitryOpaqueHtml",
   props: { record: { type: Object, required: true } },
   setup(props) {
     return () => {
-      const record = props.record;
-      if (
-        Object.keys(record).sort().join(",") !== "html,nodeCount" ||
-        typeof record.html !== "string" ||
-        !Number.isSafeInteger(record.nodeCount) ||
-        record.nodeCount < 0
-      ) {
-        throw new TypeError("invalid opaque HTML record");
-      }
+      const record = checkOpaqueHtmlRecord(props.record);
       const children = record.nodeCount === 0 ? [] : [V.createStaticVNode(record.html, record.nodeCount)];
       return V.h(V.Fragment, { key: record.html }, children);
     };
