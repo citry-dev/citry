@@ -9,6 +9,8 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 pytestmark = pytest.mark.e2e
 
 
@@ -56,6 +58,27 @@ def test_tabs_overview_accessibility_and_keyboard_contract(page: Any, open_scena
         }"""
     )
     assert violations == []
+
+
+def test_tabs_overview_controlled_metric_tabs_select_once_the_page_stores_the_value(
+    page: Any,
+    open_scenario: Any,
+) -> None:
+    open_scenario("tabs.overview")
+    page.wait_for_function(
+        "[...document.querySelectorAll('[data-citry-tabs-root]')].every("
+        "root => root.hasAttribute('data-citry-tabs-initialized'))"
+    )
+
+    metrics = page.get_by_role("tablist", name="Manual metrics views")
+    quality = metrics.get_by_role("tab", name="Quality and reliability")
+    quality.click()
+    # These Tabs are controlled: the tab is selected only after the page's
+    # callback stores the requested value and passes it back down.
+    expect(page.locator("#tabs-manual-selection")).to_have_text("quality")
+    expect(quality).to_have_attribute("aria-selected", "true")
+    delivery = metrics.get_by_role("tab", name="Delivery performance over the last quarter")
+    expect(delivery).to_have_attribute("aria-selected", "false")
 
 
 @pytest.mark.parametrize(

@@ -11,11 +11,7 @@ class DialogForm(Component):
       >
         <p>Star chart</p>
         <h2>Use a native Dialog Form</h2>
-        <c-CDialog
-          :onOpenChange="(open, detail) => {
-              if (!open && detail.returnValue) result = detail.returnValue;
-            }"
-        >
+        <c-CDialog :onOpenChange="showSelectedConstellation">
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">
               Choose constellation
@@ -46,6 +42,13 @@ class DialogForm(Component):
           return {
             result: 'No constellation selected'
           };
+        },
+        methods: {
+          // Only a close from a button with a `value` carries a return
+          // value, so other closes keep the last selection on screen.
+          showSelectedConstellation(open, detail) {
+            if (!open && detail.returnValue) this.result = detail.returnValue;
+          },
         },
       });
     """

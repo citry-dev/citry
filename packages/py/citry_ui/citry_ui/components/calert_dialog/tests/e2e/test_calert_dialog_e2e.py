@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ pytest.importorskip("pytest_playwright")
 
 import citry_ui
 from citry import Citry, Component
+from citry import citry as default_citry
 
 pytestmark = pytest.mark.e2e
 
@@ -173,4 +175,100 @@ def test_focus_loop_role_description_variables_and_axe(page: Any) -> None:
           .filter((item) => ['serious', 'critical'].includes(item.impact)).map((item) => item.id)"""
     )
     assert violations == []
+    assert errors == []
+
+
+class AlertDialogPreviewDocument(Component):
+    citry = default_citry
+
+    class Kwargs:
+        content: object
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
+        return {"content": kwargs.content}
+
+    template = """
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <title>AlertDialog snippet</title>
+          <c-css />
+        </head>
+        <body>
+          <main>{{ content }}</main>
+          <c-js />
+        </body>
+      </html>
+    """
+
+
+def _open_snippet(page: Any, serve_citry_ui_live: Any, name: str) -> list[str]:
+    # Snippets register Citry UI on the default instance when imported, so the
+    # docs preview and this test render the same component.
+    module = importlib.import_module(f"citry_ui.components.calert_dialog.snippets.{name}")
+    html = AlertDialogPreviewDocument(content=module.preview).render().serialize()
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(serve_citry_ui_live(default_citry, html) + "/", wait_until="networkidle")
+    page.wait_for_selector("[data-citry-alert-dialog-initialized]")
+    return errors
+
+
+def test_quality_scenario_records_the_latest_open_change(page: Any, open_scenario: Any) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    open_scenario("alert-dialog.states")
+    page.wait_for_selector("[data-citry-alert-dialog-initialized]")
+
+    page.get_by_role("button", name="Delete project").click()
+    page.wait_for_function("document.querySelector('#quality-delete-project').open")
+    assert page.evaluate("window.__qualityAlertDialogChange") == {
+        "open": True,
+        "reason": "trigger",
+        "returnValue": "",
+    }
+
+    page.get_by_role("alertdialog", name="Delete this project?").get_by_role("button", name="Keep project").click()
+    page.wait_for_function("!document.querySelector('#quality-delete-project').open")
+    assert page.evaluate("window.__qualityAlertDialogChange") == {
+        "open": False,
+        "reason": "action",
+        "returnValue": "cancel",
+    }
+    assert errors == []
+
+
+def test_controlled_action_snippet_keeps_the_dialog_open_until_archiving_finishes(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    errors = _open_snippet(page, serve_citry_ui_live, "controlled_action")
+    trigger = page.get_by_role("button", name="Archive record")
+    result = page.locator("p[aria-live=polite]")
+
+    trigger.click()
+    page.wait_for_function("document.querySelector('#archive-record').open")
+    page.get_by_role("alertdialog", name="Archive this record?").get_by_role("button", name="Cancel").click()
+    page.wait_for_function("!document.querySelector('#archive-record').open")
+    assert result.text_content() == "Archive cancelled"
+
+    trigger.click()
+    page.wait_for_function("document.querySelector('#archive-record').open")
+    alert = page.get_by_role("alertdialog", name="Archive this record?")
+    alert.get_by_role("button", name="Archive").click()
+    # The owner keeps the controlled dialog open while the action runs. Read
+    # all three in one check, because the work finishes after 500 ms.
+    page.wait_for_function(
+        """() => document.querySelector('p[aria-live=polite]').textContent === 'Archiving...'
+          && document.querySelector('#archive-record').open
+          && [...document.querySelectorAll('#archive-record button')]
+            .find(button => button.textContent.trim() === 'Cancel').disabled"""
+    )
+    page.wait_for_function("!document.querySelector('#archive-record').open")
+    assert result.text_content() == "Record archived"
     assert errors == []

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +10,11 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 import citry_ui
 from citry import Citry, Component
+from citry import citry as default_citry
 from citry_ui import CDataGridColumn, CDataGridEditOption, CDataGridRow
 
 pytestmark = pytest.mark.e2e
@@ -333,4 +337,76 @@ def test_environment_axe_and_cleanup(page: Any, serve_citry_ui_live: Any) -> Non
 
     root.evaluate("element => element.remove()")
     page.wait_for_timeout(50)
+    assert errors == []
+
+
+class DataGridPreviewDocument(Component):
+    citry = default_citry
+
+    class Kwargs:
+        content: object
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
+        return {"content": kwargs.content}
+
+    template = """
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <title>Data Grid snippet</title>
+          <c-css />
+        </head>
+        <body>
+          <main>{{ content }}</main>
+          <c-js />
+        </body>
+      </html>
+    """
+
+
+def _open_snippet(page: Any, serve_citry_ui_live: Any, name: str) -> list[str]:
+    # Snippets register Citry UI on the default instance when imported, so the
+    # docs preview and this test render the same component.
+    module = importlib.import_module(f"citry_ui.components.cdata_grid.snippets.{name}")
+    html = DataGridPreviewDocument(content=module.preview).render().serialize()
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(serve_citry_ui_live(default_citry, html) + "/", wait_until="networkidle")
+    page.wait_for_selector("[data-citry-data-grid-initialized]")
+    return errors
+
+
+def test_sorting_selection_snippet_accepts_each_sort_and_describes_it(page: Any, serve_citry_ui_live: Any) -> None:
+    errors = _open_snippet(page, serve_citry_ui_live, "sorting_selection")
+    notice = page.locator("section > output")
+    name_header = page.locator('[data-citry-ui-part="header-cell"][data-column-key="name"]')
+    score_header = page.locator('[data-citry-ui-part="header-cell"][data-column-key="score"]')
+
+    def expect_row_keys(keys: list[str]) -> None:
+        page.wait_for_function(
+            "keys => JSON.stringify([...document.querySelectorAll('[data-citry-ui-part=row]')]"
+            ".map(row => row.dataset.rowKey)) === JSON.stringify(keys)",
+            arg=keys,
+        )
+
+    expect(name_header).to_have_attribute("aria-sort", "ascending")
+    name_header.click()
+    expect(notice).to_have_text("Sorted: 1. name desc")
+    # The owner accepts the request, so the grid shows the new order.
+    expect(name_header).to_have_attribute("aria-sort", "descending")
+    expect_row_keys(["lin", "grace", "ada"])
+
+    name_header.click()
+    expect(notice).to_have_text("Server row order restored")
+    page.wait_for_function("!document.querySelector('[data-column-key=name]').hasAttribute('aria-sort')")
+    expect_row_keys(["ada", "grace", "lin"])
+
+    score_header.click()
+    expect(notice).to_have_text("Sorted: 1. score asc")
+    expect_row_keys(["lin", "grace", "ada"])
     assert errors == []

@@ -20,9 +20,7 @@ class TabsKeyboardActivation(Component):
             default_value="orbit"
             aria_label="Automatic probe data"
             activation="automatic"
-            :onValueChange="(value) => {
-                automaticValue = value;
-              }"
+            :onValueChange="showAutomaticSelection"
           >
             <c-CTab value="orbit">
               Orbit
@@ -57,9 +55,7 @@ class TabsKeyboardActivation(Component):
             default_value="orbit"
             aria_label="Manual probe data"
             activation="manual"
-            :onValueChange="(value) => {
-                manualValue = value;
-              }"
+            :onValueChange="showManualSelection"
           >
             <c-CTab value="orbit">
               Orbit
@@ -90,6 +86,14 @@ class TabsKeyboardActivation(Component):
           return {
             automaticValue: 'orbit', manualValue: 'orbit'
           };
+        },
+        methods: {
+          showAutomaticSelection(value) {
+            this.automaticValue = value;
+          },
+          showManualSelection(value) {
+            this.manualValue = value;
+          },
         },
       });
     """

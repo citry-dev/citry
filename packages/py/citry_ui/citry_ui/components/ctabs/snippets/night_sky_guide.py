@@ -23,9 +23,7 @@ class NightSkyGuide(Component):
           aria_label="Night sky topics"
           variant="pill"
           grow
-          :onValueChange="(value) => {
-              selected = value;
-            }"
+          :onValueChange="showTopic"
         >
           <c-CTab value="planets">
             Planets
@@ -58,6 +56,11 @@ class NightSkyGuide(Component):
           return {
             selected: 'planets'
           };
+        },
+        methods: {
+          showTopic(value) {
+            this.selected = value;
+          },
         },
       });
     """

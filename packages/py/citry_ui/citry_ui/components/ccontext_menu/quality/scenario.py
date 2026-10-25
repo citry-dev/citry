@@ -117,11 +117,8 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                       'closed open pointer keyboard command checkbox radio group '
                       'separator submenu danger typeahead md'
                   }"
-                  :onOpenChange="(next,detail)=>{
-                      lastReason=detail.reason;
-                      lastPoint=`${Math.round(detail.clientX)},${Math.round(detail.clientY)}`;
-                    }" :onAction="(value,detail)=>
-                      lastAction=`${detail.path.join('/') || 'root'}:${value}`"
+                  :onOpenChange="recordOpenRequest"
+                  :onAction="(value,detail)=>lastAction=`${detail.path.join('/') || 'root'}:${value}`"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div
@@ -183,17 +180,7 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                       'controlled claim accept refuse release external same-open no-flash'
                   }"
                   :open="controlled ? controlledOpen : null"
-                  :onOpenChange="(next,detail)=>{
-                      lastReason=detail.reason;
-                      lastPoint=`${Math.round(detail.clientX)},${Math.round(detail.clientY)}`;
-                      if (!next) {
-                        controlledOpen=false;
-                        return;
-                      }
-                      if (!acceptClaim) return false;
-                      controlledOpen=true;
-                      return true;
-                    }"
+                  :onOpenChange="claimControlledOpen"
                 >
                   <c-fill name="target" data="{ target_attrs }">
                     <div
@@ -452,6 +439,26 @@ def context_menu_states_component(app: Citry) -> type[Component]:
                 targetClicks:0,
                 submits:0,
               };
+            },
+            methods: {
+              recordOpenRequest(next, detail) {
+                this.lastReason = detail.reason;
+                this.lastPoint = `${Math.round(detail.clientX)},${Math.round(detail.clientY)}`;
+              },
+              // Returning true tells the menu that the owner opened it, so the
+              // menu blocks the browser's own menu. Any other return lets the
+              // browser's menu show.
+              claimControlledOpen(next, detail) {
+                this.recordOpenRequest(next, detail);
+                // The owner always accepts a close.
+                if (!next) {
+                  this.controlledOpen = false;
+                  return;
+                }
+                if (!this.acceptClaim) return false;
+                this.controlledOpen = true;
+                return true;
+              },
             },
             mounted() {
               this.$refs.closedShadowHost.attachShadow({mode:'closed'}).textContent =

@@ -10,20 +10,7 @@ class ControlledArchive(Component):
         <c-CAlertDialog
           id="archive-record"
           :open="open"
-          :onOpenChange="(next, detail) => {
-              if (detail.returnValue === 'action') {
-                pending = true;
-                result = 'Archiving...';
-                window.setTimeout(() => {
-                  pending = false;
-                  open = false;
-                  result = 'Record archived';
-                }, 500);
-              } else {
-                open = next;
-                if (!next) result = 'Archive cancelled';
-              }
-            }"
+          :onOpenChange="applyArchiveDecision"
         >
           <c-fill name="activator" data="{activator_attrs}">
             <c-CButton c-attrs="activator_attrs">Archive record</c-CButton>
@@ -50,6 +37,26 @@ class ControlledArchive(Component):
           return {
             open: false, pending: false, result: 'No decision yet'
           };
+        },
+        methods: {
+          applyArchiveDecision(next, detail) {
+            // When Archive is chosen, keep the dialog open while the work
+            // runs and close it once the record is archived.
+            if (detail.returnValue === 'action') {
+              this.pending = true;
+              this.result = 'Archiving...';
+              window.setTimeout(() => {
+                this.pending = false;
+                this.open = false;
+                this.result = 'Record archived';
+              }, 500);
+            } else {
+              // Apply every other request as it comes, and note a cancel
+              // when the dialog closes.
+              this.open = next;
+              if (!next) this.result = 'Archive cancelled';
+            }
+          },
         },
       });
     """

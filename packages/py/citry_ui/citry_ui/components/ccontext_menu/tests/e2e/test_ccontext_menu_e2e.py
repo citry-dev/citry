@@ -1952,3 +1952,63 @@ def test_server_revision_binds_the_open_callback_when_the_root_breaks_before_the
     page.wait_for_function("window.__contextState.geometryEvents.length === 1", timeout=5_000)
     assert page.evaluate("window.__contextState.geometryEvents") == [True]
     assert errors == []
+
+
+def _wait_for_scenario_menus(page) -> None:
+    page.wait_for_function(
+        """() => {
+          const roots = document.querySelectorAll('[data-citry-ui-part="context-menu"]');
+          const ready = document.querySelectorAll(
+            '[data-citry-ui-part="context-menu"][data-citry-context-menu-initialized]',
+          );
+          return roots.length > 0 && ready.length === roots.length;
+        }"""
+    )
+
+
+def test_quality_scenario_reports_open_reason_point_and_submenu_action_path(page, open_scenario) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    open_scenario("context-menu.states")
+    _wait_for_scenario_menus(page)
+    reason = page.locator("[data-quality-reason]")
+    point = page.locator("[data-quality-point]")
+    action = page.locator("[data-quality-action]")
+    controlled_menu = "#quality-context-menu-controlled-menu"
+
+    # The scenario prints the rounded client point of the opening event.
+    page.locator("#quality-context-menu-basic-target").evaluate(
+        """target => target.addEventListener('contextmenu', event => {
+          window.__contextPoint = `${Math.round(event.clientX)},${Math.round(event.clientY)}`;
+        }, {once: true})"""
+    )
+    page.locator("#quality-context-menu-basic-target").click(button="right", position={"x": 24, "y": 24})
+    page.wait_for_function("document.querySelector('#quality-context-menu-basic-menu').matches(':popover-open')")
+    assert reason.text_content() == "contextmenu"
+    assert point.text_content() == page.evaluate("window.__contextPoint")
+
+    page.get_by_role("menuitem", name="Format").press("ArrowRight")
+    page.get_by_role("menuitem", name="PDF").press("Enter")
+    page.wait_for_function("!document.querySelector('#quality-context-menu-basic-menu').matches(':popover-open')")
+    # The action names the submenu path that led to the chosen item.
+    assert action.text_content() == "formats:pdf"
+    assert reason.text_content() == "action"
+
+    controlled_target = page.locator("#quality-context-menu-controlled-target")
+    page.get_by_role("button", name="Toggle claim acceptance").click()
+    controlled_target.click(button="right")
+    # The last reason was "action", so this wait shows that a refused claim
+    # still reports its reason. The menu stays closed.
+    page.wait_for_function("document.querySelector('[data-quality-reason]').textContent === 'contextmenu'")
+    assert page.locator(controlled_menu).evaluate("element => element.matches(':popover-open')") is False
+
+    page.get_by_role("button", name="Toggle claim acceptance").click()
+    controlled_target.click(button="right")
+    page.wait_for_function(f"document.querySelector('{controlled_menu}').matches(':popover-open')")
+    page.keyboard.press("Escape")
+    # The owner accepts the close, so the controlled menu closes.
+    page.wait_for_function(f"!document.querySelector('{controlled_menu}').matches(':popover-open')")
+    assert reason.text_content() == "escape"
+    page.get_by_role("button", name="External open").click()
+    page.wait_for_function(f"document.querySelector('{controlled_menu}').matches(':popover-open')")
+    assert errors == []
