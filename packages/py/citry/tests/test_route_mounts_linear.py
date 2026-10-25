@@ -86,3 +86,22 @@ def test_django_converter_resolves_and_rejects_in_one_pass() -> None:
     assert resolve("citry/cache/" + _LONG_NO_MATCH) is None
     assert time.perf_counter() - start < _BOUND_SECONDS
     assert isinstance(patterns[0], (URLPattern, URLResolver))
+
+
+def test_flask_mount_serves_a_cache_path_and_rejects_a_long_one_quickly() -> None:
+    flask = pytest.importorskip("flask")
+    from citry.contrib.flask import mount
+
+    host = flask.Flask(__name__)
+    app = Citry(autodiscover=False)
+    mount(host, app)
+    client = host.test_client()
+
+    # A well-formed cache path reaches Citry's route, which answers 404
+    # because no such script is cached, rather than falling through to Flask.
+    assert client.get("/citry/cache/Table_a1b2c3.js").status_code == 404
+
+    start = time.perf_counter()
+    response = client.get("/citry/cache/" + "a." * 20_000 + "x/y")
+    assert response.status_code == 404
+    assert time.perf_counter() - start < _BOUND_SECONDS
