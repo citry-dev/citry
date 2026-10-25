@@ -200,7 +200,7 @@ expressivity because each item always owns exactly one of each.
 | `size` | `Literal["sm", "md", "lg"]` | `"md"` | reactive presentation | selects trigger and panel geometry |
 | `indicator` | `bool` | `True` | reactive presentation | shows the owned decorative chevron |
 | `indicator_pos` | `Literal["start", "end"]` | `"end"` | reactive presentation | places the chevron before or after title content |
-| `heading_level` | `Literal[2, 3, 4, 5, 6]` | `3` | structural server-only | renders the native heading level for every direct item |
+| `heading_level` | `CAccordionHeadingLevel`: `2` to `6`, as a number or as text such as `"2"` | `3` | structural server-only | renders the native heading level for every direct item |
 | `region` | `bool` | `False` | structural server-only | adds `role="region"` to every panel; use deliberately to avoid landmark proliferation |
 | `id` | `str | None` | `None` | structural server-only | supplies the root and ID-pair prefix |
 | `class_` | `CClassValue | None` | `None` | server presentation | merges root classes with `attrs` |

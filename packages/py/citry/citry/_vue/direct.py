@@ -5,16 +5,28 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, TypeVar
 
-from citry.citry_render import CitryRender, RenderPart, SimpleVueRecord
+from citry.citry_render import (
+    _AFTER_RENDER_HOOKS_RENDER_ID,
+    _VALUE_CONTEXT,
+    CitryRender,
+    RenderDecoration,
+    RenderPart,
+    SimpleVueRecord,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
     from contextvars import Token
 
     from citry.citry_context import CitryContext
+    from citry.component import Component
     from citry.slots import Slot
+
+
+# Any value a template prints; bind_received_output returns it unchanged or projected.
+_Value = TypeVar("_Value")
 
 
 @dataclass(frozen=True, slots=True)
@@ -256,6 +268,11 @@ _ACTIVE_EXECUTION: ContextVar[DirectExecutionFrame | None] = ContextVar("citry_v
 _ACTIVE_RECEIVER: ContextVar[CitryContext | None] = ContextVar("citry_vue_direct_receiver", default=None)
 
 
+def receiving_context() -> CitryContext | None:
+    """Return the context of the component a Python ``Slot`` call is landing in, when one is known."""
+    return _VALUE_CONTEXT.get() or _ACTIVE_RECEIVER.get()
+
+
 def direct_session() -> DirectRenderSession | None:
     return _DIRECT_SESSION.get()
 
@@ -359,8 +376,6 @@ def wrap_slot_result(
     span: tuple[int, int],
     execution: DirectExecutionFrame,
 ) -> DirectSlotRender:
-    from citry.citry_render import RenderDecoration  # noqa: PLC0415
-
     session = direct_session()
     if session is None or session is not fill_source.session or not session.active:
         raise RuntimeError("prepared Slot belongs to a different or closed direct render session")
@@ -449,10 +464,101 @@ def bind_nested_template(value: object, context: CitryContext) -> object:
     )
 
 
+def _passed_on_by_its_component(author_id: str, receiver: Component) -> bool:
+    """
+    Whether the component ``author_id`` passed its own output on to ``receiver``.
+
+    Its hook did when the receiver sits inside the author's output, as with
+    ``return Frame(body=result)`` in ``on_render``, or when the receiver
+    renders while the author's hook runs, as with
+    ``Frame(body=ctx.render).render()`` in ``on_component_rendered``. Any
+    other component printing the output, such as a parent printing
+    ``Row().render()``, gets it as it is.
+    """
+    if _AFTER_RENDER_HOOKS_RENDER_ID.get() == author_id:
+        return True
+    current = receiver.parent
+    while current is not None:
+        if current.id == author_id:
+            return True
+        current = current.parent
+    return False
+
+
+def bind_received_output(value: _Value, context: CitryContext) -> _Value | CitryRender:
+    """
+    Return a component's own output as content that component wrote, when its hook passed the output on.
+
+    ``context`` is the component printing the value. A hook that passes the
+    output it received to another component, as in
+    ``return Frame(body=result)``, still means that output as its own
+    component's content. It becomes a nested template written by that
+    component (a ``DirectNestedTemplateRender``), so Vue compiles it in that
+    component and passes it to the receiver as a slot, instead of placing a
+    second copy of the component inside itself. Every render runs this,
+    with Vue or without: a page without Vue writes the projection as the
+    output it holds. Any other value is returned unchanged.
+    """
+    session = direct_session()
+    if session is None or not isinstance(value, CitryRender):
+        return value
+    frame = value.frame
+    author = value.context.component
+    receiver = context.component
+    if (
+        not (frame.is_component_root or frame.is_transparent_root)
+        or author is None
+        or author.id is None
+        or frame.render_id != author.id
+        or receiver is None
+    ):
+        return value
+    if receiver.id == author.id:
+        # The component prints its own output inside its own output, as a
+        # simple=True receiver does, which renders in its caller's context.
+        # Only a hook can hand a component its own output, and the output
+        # is already this component's content, so it joins in place, as a
+        # returned result does.
+        return CitryRender(parts=list(value.parts), context=value.context)
+    # A transparent receiver has no Vue definition to print a slot in, as
+    # with a nested template, so it gets the output as it is. This includes
+    # the root of a standalone template, where a simple=True component
+    # rendered on its own prints.
+    if type(receiver).transparent is True or not _passed_on_by_its_component(author.id, receiver):
+        return value
+    template = value.context.template_record
+    # The whole template is the place the content was written. A component
+    # with no template gets an empty span of an empty source.
+    source = template.source if template is not None else ""
+    fill = DirectFillSource(
+        session=session,
+        lexical_render_id=author.id,
+        kind="nested-template",
+        public_name="on_render result",
+        source=source,
+        span=(0, len(source.encode("utf-8"))),
+        origin=template.origin if template is not None else None,
+        strict_session=True,
+    )
+    # The projection keeps the output with its component's frame, so a cache
+    # entry stores it as that component's output, and a page without Vue
+    # writes it inside the receiver without its own root markers (see
+    # _EnclosingFrames). The Vue capture compiles the parts inside it as the
+    # content (see _projected_content).
+    return DirectNestedTemplateRender(
+        value,
+        execution_index=session.next_execution(),
+        fill_source=fill,
+        parent_execution=active_execution(),
+        public_name=fill.public_name,
+        receiver_render_id=receiver.id,
+        source=fill.source,
+        span=fill.span,
+    )
+
+
 def wrap_python_composition_result(selected: RenderPart) -> RenderPart:
     """Mark component roots produced at one Python expression or public Slot boundary."""
-    from citry.citry_render import RenderDecoration  # noqa: PLC0415
-
     session = direct_session()
     if session is None:
         return selected
@@ -542,9 +648,7 @@ def capture_slot_call(slot: Slot, callback: Callable[[], RenderPart]) -> RenderP
     elif current is not None:
         receiver_render_id = current.receiver_render_id
         if fill_source.kind != "fallback":
-            from citry.citry_render import _VALUE_CONTEXT  # noqa: PLC0415
-
-            context = _VALUE_CONTEXT.get() or _ACTIVE_RECEIVER.get()
+            context = receiving_context()
             component = None if context is None else context.component
             if component is not None and component.id is not None:
                 receiver_render_id = component.id
@@ -560,9 +664,7 @@ def capture_slot_call(slot: Slot, callback: Callable[[], RenderPart]) -> RenderP
         # template expression (for example ``{{ content(slot_data) }}``).  In
         # that form there is no SlotNode execution frame, but the value
         # renderer still carries the exact receiving component context.
-        from citry.citry_render import _VALUE_CONTEXT  # noqa: PLC0415
-
-        context = _VALUE_CONTEXT.get() or _ACTIVE_RECEIVER.get()
+        context = receiving_context()
         component = None if context is None else context.component
         # Named apart from the retained execution's receiver above: this one is the
         # component the call is landing in right now.

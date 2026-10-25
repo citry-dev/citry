@@ -239,7 +239,10 @@ def test_an_error_three_levels_deep_matches_the_snapshot(render_path: str, monke
     monkeypatch.setattr(component_render, "_attach_template_position", spy)
     with pytest.raises(Exception) as caught:  # noqa: PT011 - the recorded text is what is compared
         _render_root(ERROR_TEMPLATE, {"items": [1], "flag": True}, _children).serialize(deps_strategy="ignore")
+    # The error names the template's origin, this file's absolute path, which
+    # differs between checkouts; the snapshot stores a placeholder for it.
+    text = str(caught.value).replace(str(Path(__file__)), "<this test file>")
     _check(
         f"error/{render_path}",
-        {"type": type(caught.value).__name__, "text": str(caught.value), "attached": attached},
+        {"type": type(caught.value).__name__, "text": text, "attached": attached},
     )

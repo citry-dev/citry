@@ -20,7 +20,7 @@ from citry_ui.components._attrs import (
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
-from citry_ui.components._date import canonical_date
+from citry_ui.components._date import canonical_date, first_day_of_week
 from citry_ui.components._form_control_runtime import (
     FORM_CONTROL_RUNTIME_DEPENDENCY,
     FORM_CONTROL_STYLE_DEPENDENCY,
@@ -33,6 +33,9 @@ from citry_ui.components._validation import (
     validate_html_id,
     validate_non_empty_string,
     validate_optional_boolean,
+)
+from citry_ui.components.ccalendar import (
+    CCalendarFirstDayOfWeek,  # noqa: TC001 - Citry and the editor read Kwargs annotations at run time
 )
 
 if TYPE_CHECKING:
@@ -142,17 +145,6 @@ def _dates(value: object) -> tuple[str, ...]:
     return tuple(sorted(normalized))
 
 
-def _first_day(value: object) -> int | None:
-    value = const_value(value)
-    if value is None:
-        return None
-    if type(value) is not int:
-        raise TypeError(f"CDatePicker first_day_of_week must be an exact integer or None, got {value!r}.")
-    if value < 1 or value > 7:
-        raise ValueError(f"CDatePicker first_day_of_week must be from 1 through 7, got {value!r}.")
-    return value
-
-
 def _source_display_date(value: str) -> str:
     parsed = date.fromisoformat(value)
     return f"{_SOURCE_MONTHS[parsed.month]} {parsed.day}, {parsed.year:04d}"
@@ -188,7 +180,7 @@ class CDatePicker(LibraryComponent):
         dismissible: bool = True
         placement: CPopoverPlacement = "bottom-start"
         match_width: bool = True
-        first_day_of_week: int | None = None
+        first_day_of_week: CCalendarFirstDayOfWeek | None = None
         show_adjacent_days: bool = True
         fixed_weeks: bool = True
         placeholder: str = "Choose a date"
@@ -239,7 +231,7 @@ class CDatePicker(LibraryComponent):
             validate_optional_boolean("CDatePicker", input_name, getattr(kwargs, input_name))
         for input_name in ("clearable", "dismissible", "match_width", "show_adjacent_days", "fixed_weeks"):
             validate_boolean("CDatePicker", input_name, getattr(kwargs, input_name))
-        first_day = _first_day(kwargs.first_day_of_week)
+        first_day = first_day_of_week("CDatePicker", kwargs.first_day_of_week)
         validate_choice("CDatePicker", "placement", kwargs.placement, _PLACEMENTS)
         validate_choice("CDatePicker", "variant", kwargs.variant, _VARIANTS)
         validate_choice("CDatePicker", "size", kwargs.size, _SIZES)

@@ -13,13 +13,14 @@ from citry.util.html import LongReferenceSafeParser
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
 from citry_ui.components._direct_output import feed_typed_direct_output
+from citry_ui.components._heading import CHeadingLevel, resolve_heading_level
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
 
 CAccordionVariant = Literal["outline", "soft", "separated", "plain"]
 CAccordionSize = Literal["sm", "md", "lg"]
 CAccordionIndicatorPos = Literal["start", "end"]
-CAccordionHeadingLevel = Literal[2, 3, 4, 5, 6]
+CAccordionHeadingLevel = CHeadingLevel
 
 
 class CAccordionValueChangeDetail(TypedDict):
@@ -34,7 +35,6 @@ class CAccordionValueChangeDetail(TypedDict):
 _VARIANTS = ("outline", "soft", "separated", "plain")
 _SIZES = ("sm", "md", "lg")
 _INDICATOR_POSITIONS = ("start", "end")
-_HEADING_LEVELS = (2, 3, 4, 5, 6)
 _ACCORDION_CONTEXT_KEY = "citry_ui_accordion"
 _ACCORDION_ITEM_CONTEXT_KEY = "citry_ui_accordion_item"
 _ACCORDION_PANEL_CONTEXT_KEY = "citry_ui_accordion_panel"
@@ -245,16 +245,6 @@ def _plain_id(value: object) -> str | None:
         msg = "CAccordion id cannot contain U+0000."
         raise ValueError(msg)
     return plain
-
-
-def _heading_level(value: object) -> int:
-    raw = const_value(value)
-    if isinstance(raw, str) and raw.isdecimal():
-        raw = int(raw)
-    if isinstance(raw, bool) or raw not in _HEADING_LEVELS:
-        msg = "CAccordion heading_level must be one of 2, 3, 4, 5, or 6."
-        raise ValueError(msg)
-    return int(raw)
 
 
 def _plain_actions_label(value: object) -> str | None:
@@ -522,7 +512,7 @@ class CAccordion(LibraryComponent):
             kwargs.indicator_pos,
             _INDICATOR_POSITIONS,
         )
-        heading_level = _heading_level(kwargs.heading_level)
+        heading_level = resolve_heading_level("CAccordion", kwargs.heading_level)
         group_id = _plain_id(kwargs.id) or f"cui-accordion-{self.id}"
         open_values = _normalize_server_value(kwargs.value, multiple=bool(kwargs.multiple))
         # The template and browser initializer must consume the same copy even

@@ -181,6 +181,30 @@ The protocol, step by step:
   serialized form is a plain `str`, so a hook that returns it wraps it in
   `Markup`; otherwise it shows as escaped text.
 
+  Passing `result` to another component, as in `return Frame(body=result)`,
+  keeps it as this component's content. It means what a nested template
+  written in this component's template means, `<c-Frame c-body="..." />`:
+  - On a page without Vue, serialization writes it inside the other
+    component (`_EnclosingFrames` in `serialize.py`).
+  - On a page with Vue, Vue compiles it in this component's definition, and
+    it fills a slot of the other component (`bind_received_output` in
+    `_vue/direct.py`).
+  - On both, its top elements carry none of this component's root
+    markers, as with any nested template. The other component's root,
+    which is now this component's output root, carries both components'
+    markers, so the passed output inherits CSS variables from there.
+  - The same holds for an `on_component_rendered` hook that passes
+    `ctx.render` on, and for output an earlier extension decorated.
+
+  Error modes:
+  - The output exists once. Placing it in two spots raises "One rendered
+    output is printed in more than one place on the page" when the page is
+    turned into HTML, after the render, so an error boundary around the
+    component does not turn it into its fallback. Evaluating it again
+    without placing it, such as a preview render the hook drops, is fine.
+  - A transparent receiver cannot take the output on a Vue page, the same
+    limit a nested template has there.
+
 - **Multiple yields are supported.** Each `yield <content>` discards the
   previous output, renders the new content (deferring and resolving any
   components inside it), and resumes the generator with that new

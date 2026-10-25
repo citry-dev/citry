@@ -34,7 +34,7 @@ from citry.ext.dependencies.scripts import (
     cache_asset,
     cache_component_css,
     cache_component_js,
-    gen_asset_cache_key,
+    gen_cache_key,
     get_component_script,
     get_script,
     has_component_asset,
@@ -1148,22 +1148,54 @@ def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> _OwnedReso
         return None
     content = _read_asset(path)
     extension = path.suffix.lstrip(".")
+    # The file is named by its content's hash, so the content in hand is
+    # what the asset endpoint serves under that name.
     file_name = cache_asset(citry, content, extension)
-    served_content = citry.cache.get(gen_asset_cache_key(file_name))
-    if not isinstance(served_content, (str, bytes)):
-        msg = f"Cached dependency asset {file_name!r} has no text or byte content."
-        raise TypeError(msg)
     content_type = (
         "text/javascript" if extension == "js" else "text/css" if extension == "css" else "application/octet-stream"
     )
     return _OwnedResource(
         url=citry.build_url(f"asset/{file_name}"),
-        content=served_content,
+        content=content,
         content_type=content_type,
     )
 
 
 # ----- Placement -----
+
+
+def publish_css_data_stylesheets(citry: Citry, render: CitryRender) -> None:
+    """
+    Put the ``css_data()`` stylesheets of a page being written into this process's store, without a configured cache.
+
+    Without a configured cache, this process's store of page files is the
+    only copy of these stylesheets, and it drops the ones used longest ago
+    once it holds ``CitrySettings.vue_asset_max_bytes``. So they go in when
+    the page is written, not when it was rendered: other renders may fill the
+    store in between. The caller holds the page's files (see
+    ``citry._vue.events.hold_page_assets``), so the page can inline each
+    stylesheet and the browser can fetch each one it links. With a
+    configured cache, rendering already wrote them to the backend.
+    """
+    # _vue.events imports this module's package at load time, so importing
+    # it here at load time would be circular.
+    from citry._vue.events import keeps_assets_in_process_only, remember_css_data_stylesheet  # noqa: PLC0415
+
+    captures = render.context.extra.get(EXTRA_KEY)
+    if not captures or not keeps_assets_in_process_only(citry):
+        return
+    selected_ids = selected_render_ids(render)
+    # Many instances share one stylesheet, so each key is stored once.
+    published: set[str] = set()
+    for record, capture in captures.items():
+        # A record added without a capture has no stylesheet to publish.
+        css = None if capture is None else capture.css
+        if css is None or record.component_id not in selected_ids:
+            continue
+        key = gen_cache_key(record.class_id, "css", css.variables_hash)
+        if key not in published:
+            published.add(key)
+            remember_css_data_stylesheet(citry, key, css.cache_value)
 
 
 def _locate_placeholders(html: str, placeholders: dict[str, str], key: str) -> list[tuple[int, str]]:

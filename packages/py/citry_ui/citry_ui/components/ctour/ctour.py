@@ -24,7 +24,17 @@ CTourPlacement = Literal[
 CTourScroll = Literal["auto", "smooth", "none"]
 CTourMissingTarget = Literal["skip", "close"]
 CTourSize = Literal["sm", "md", "lg"]
-CTourOpenReason = Literal["activator", "close", "escape", "outside", "skip", "finish", "missing-target", "native"]
+CTourOpenReason = Literal[
+    "activator",
+    "close",
+    "escape",
+    "outside",
+    "skip",
+    "finish",
+    "missing-target",
+    "native",
+    "ancestor",
+]
 CTourActiveReason = Literal["next", "previous", "client", "missing-target"]
 
 _PLACEMENTS = (

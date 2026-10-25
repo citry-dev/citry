@@ -17,6 +17,7 @@ import types
 import typing
 from dataclasses import dataclass, field
 from decimal import Decimal
+from enum import IntEnum, StrEnum
 from fractions import Fraction
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, NewType, Optional, Protocol, TypeVar, Union
 from unittest.mock import Mock
@@ -145,6 +146,24 @@ class TestErrorMessage:
             str(card(value="1"))
 
 
+class Size(StrEnum):
+    SM = "sm"
+
+
+class Level(IntEnum):
+    ONE = 1
+
+
+class AlwaysEqual(str):
+    """A str subclass whose own __eq__ claims to equal anything."""
+
+    __slots__ = ()
+    __hash__ = str.__hash__
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+
 # Each row: annotation, values that pass, values that fail.
 ANNOTATION_CASES: list[tuple[str, object, list[object], list[object]]] = [
     ("str", str, ["a", Markup("<b>")], [1, None, b"a"]),
@@ -160,6 +179,12 @@ ANNOTATION_CASES: list[tuple[str, object, list[object], list[object]]] = [
     ("Annotated", Annotated[int, "meta"], [1], ["1"]),
     ("Literal", Literal["a", 1], ["a", 1], ["b", 2, True]),
     ("Literal with None", Literal["a", None], ["a", None], ["b"]),  # noqa: PYI061 - None inside Literal under test
+    # A subclass of the member's type that equals the member passes, as a str
+    # subclass passes for str; its own __eq__ cannot fake a match.
+    ("Literal accepts an equal str subclass", Literal["sm", "md"], [Size.SM, Markup("sm")], ["lg", AlwaysEqual("x")]),
+    ("Literal accepts an equal int subclass", Literal[1, 2], [Level.ONE], [True, 3]),
+    ("Literal keeps bool apart from int", Literal[0, True], [0, True], [False, 1, Level.ONE]),
+    ("Literal of an enum member rejects its plain value", Literal[Size.SM], [Size.SM], ["sm"]),
     ("list outer type only", list[str], [[], [1, 2]], [(), "ab", {1}]),
     ("dict outer type only", dict[str, int], [{}, {"a": "b"}], [[("a", 1)]]),
     ("tuple outer type only", tuple[int, ...], [(), ("a",)], [[1]]),

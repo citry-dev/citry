@@ -225,10 +225,9 @@ never start: the browser console shows 404 responses for component code or
 stylesheets.
 
 This happens because the worker that renders a page stores that page's
-compiled component code, stylesheets, and CSS variables in the Citry
-cache. The browser then downloads them by URL, and another worker may
-answer. If each worker keeps its own cache in memory, that worker has
-nothing stored.
+compiled component code, stylesheets, and CSS variables. The browser
+then downloads them by URL, and another worker may answer. If each
+worker keeps them in its own memory, that worker has nothing stored.
 
 Point every worker at one shared cache backend: DiskCache, Redis, or your
 Django cache through `DjangoCache` (see
@@ -237,8 +236,9 @@ without an expiry time, because a page that is already open may ask for
 them at any later time. Give the backend enough room that it does not drop
 them while such pages are still in use.
 
-A single process without a configured cache keeps this code in memory, up
-to the `vue_asset_max_bytes` setting; see
+A single process without a configured cache keeps the compiled code,
+stylesheets, and `css_data()` stylesheets in memory, up to the
+`vue_asset_max_bytes` setting; see
 [Limit asset memory](/performance/cache-backends/#limit-memory-for-interactive-page-assets).
 
 ## Render-only workers

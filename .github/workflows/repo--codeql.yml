@@ -1,0 +1,76 @@
+# CodeQL static analysis of the Python, JavaScript/TypeScript and GitHub
+# Actions sources.
+#
+# Findings go to code scanning alerts (the repository's Security tab) and
+# show on pull requests. For now they only report: the workflow fails only
+# if the analysis itself cannot run. Making a code scanning result required
+# is a branch-protection setting, left to the maintainer once the first
+# results are triaged.
+#
+# No language needs a build (build mode "none"). Python and JavaScript are
+# expected to take about 5 to 15 minutes each, and Actions seconds. None
+# blocks or waits on another workflow. A pull request runs the analysis only
+# when it changes Python, JavaScript or TypeScript sources or a workflow;
+# pushes to main and the weekly run analyse everything.
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+    paths:
+      - "**/*.py"
+      - "**/*.js"
+      - "**/*.mjs"
+      - "**/*.ts"
+      - ".github/workflows/**"
+  schedule:
+    - cron: "30 7 * * 1" # Mondays, 07:30 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          # Archived docs builds, bundled third-party code and benchmark apps
+          # are not ours to fix, and scanning them would bury our own
+          # findings.
+          config: |
+            paths-ignore:
+              - "**/node_modules"
+              - "**/dist"
+              - "**/*.min.js"
+              - docs_site/versions
+              - docs_site/static/playground/playground.js
+              - docs_site/static/playground/live_code_runtime.js
+              - packages/py/citry/citry/_vue/*.js
+              - packages/editors/vscode/out
+              - benchmarks
+              - docs/design
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

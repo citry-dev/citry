@@ -15,10 +15,11 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Literal
 
 from citry._source_lines import source_lines
+from citry._walk import Call, run
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement, parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Generator, Mapping
 
 # A type display may use these names without importing them.
 _BUILTIN_NAMES = frozenset(dir(builtins))
@@ -247,7 +248,7 @@ def template_python_query_at(
     """Return the Python expression or loop clause containing one parser byte index."""
     if type(index) is not int or index < 0:
         return None
-    return _query_in_template(template, index, (), base_index=0, parse_nested=parse_nested)
+    return run(_query_in_template(template, index, (), base_index=0, parse_nested=parse_nested))
 
 
 def template_python_queries(
@@ -256,11 +257,11 @@ def template_python_queries(
     parse_nested: Callable[[str], Any] = parse_template,
 ) -> tuple[TemplatePythonQuery, ...]:
     """Return every Python-valued host with its exact lexical context."""
-    indexes = _query_start_indexes(template, base_index=0, parse_nested=parse_nested)
+    indexes = run(_query_start_indexes(template, base_index=0, parse_nested=parse_nested))
     queries: list[TemplatePythonQuery] = []
     seen: set[tuple[int, int, str]] = set()
     for index in sorted(indexes):
-        query = _query_in_template(template, index, (), base_index=0, parse_nested=parse_nested)
+        query = run(_query_in_template(template, index, (), base_index=0, parse_nested=parse_nested))
         if query is None:
             continue
         key = query.start_index, query.end_index, query.host_kind
@@ -289,7 +290,7 @@ def template_static_input_queries(
     missing one, which passes ``True`` rather than a string.
     """
     queries: list[TemplatePythonQuery] = []
-    _collect_static_input_queries(template, queries, base_index=0, parse_nested=parse_nested)
+    run(_collect_static_input_queries(template, queries, base_index=0, parse_nested=parse_nested))
     return tuple(sorted(queries, key=lambda query: query.start_index))
 
 
@@ -299,7 +300,7 @@ def _collect_static_input_queries(
     *,
     base_index: int,
     parse_nested: Callable[[str], Any],
-) -> None:
+) -> Generator[Call, Any, None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -312,7 +313,8 @@ def _collect_static_input_queries(
                 nested = _nested_template(attr.inner_value.content, parse_nested)
                 if nested is not None:
                     nested_template, nested_start = nested
-                    _collect_static_input_queries(
+                    yield Call(
+                        _collect_static_input_queries,
                         nested_template,
                         queries,
                         base_index=base_index + attr.inner_value.start_index + nested_start,
@@ -342,7 +344,7 @@ def _collect_static_input_queries(
             )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_static_input_queries(body, queries, base_index=base_index, parse_nested=parse_nested)
+            yield Call(_collect_static_input_queries, body, queries, base_index=base_index, parse_nested=parse_nested)
 
 
 def build_inferred_template_shadow(
@@ -1853,7 +1855,7 @@ def _query_in_template(
     base_index: int,
     parse_nested: Callable[[str], Any],
     fill_owner: str | None = None,
-) -> TemplatePythonQuery | None:
+) -> Generator[Call, Any, TemplatePythonQuery | None]:
     """
     Return the query at ``index`` in one template, with the controls around it.
 
@@ -1890,7 +1892,8 @@ def _query_in_template(
             TemplatePythonControl("if", f"not (\n{source}\n)", free_names=free_names)
             for source, free_names in branch_conditions
         )
-        query = _query_in_node(
+        query = yield Call(
+            _query_in_node,
             value,
             index,
             (*controls, *prior_branch_controls),
@@ -1915,7 +1918,7 @@ def _query_start_indexes(
     *,
     base_index: int,
     parse_nested: Callable[[str], Any],
-) -> set[int]:
+) -> Generator[Call, Any, set[int]]:
     indexes: set[int] = set()
     for element in template.elements:
         value: Any = element._0
@@ -1934,17 +1937,20 @@ def _query_start_indexes(
                 if nested is not None:
                     nested_template, nested_start = nested
                     indexes.update(
-                        _query_start_indexes(
-                            nested_template,
-                            base_index=start + nested_start,
-                            parse_nested=parse_nested,
+                        (
+                            yield Call(
+                                _query_start_indexes,
+                                nested_template,
+                                base_index=start + nested_start,
+                                parse_nested=parse_nested,
+                            )
                         )
                     )
             elif attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta:  # noqa: PLR1714
                 indexes.add(start)
         body = getattr(value, "body", None)
         if body is not None:
-            indexes.update(_query_start_indexes(body, base_index=base_index, parse_nested=parse_nested))
+            indexes.update((yield Call(_query_start_indexes, body, base_index=base_index, parse_nested=parse_nested)))
     return indexes
 
 
@@ -1956,7 +1962,7 @@ def _query_in_node(
     base_index: int,
     parse_nested: Callable[[str], Any],
     fill_owner: str | None = None,
-) -> TemplatePythonQuery | None:
+) -> Generator[Call, Any, TemplatePythonQuery | None]:
     condition = _condition_control(node)
     loop = _loop_control(node)
     body_controls = (
@@ -1982,12 +1988,15 @@ def _query_in_node(
                 return None
             nested_template, nested_start = nested
             nested_controls = body_controls if _attribute_sees_loop(name) else controls
-            return _query_in_template(
-                nested_template,
-                index,
-                nested_controls,
-                base_index=start + nested_start,
-                parse_nested=parse_nested,
+            return (
+                yield Call(
+                    _query_in_template,
+                    nested_template,
+                    index,
+                    nested_controls,
+                    base_index=start + nested_start,
+                    parse_nested=parse_nested,
+                )
             )
         if not (attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta):  # noqa: PLR1714
             return None
@@ -2023,13 +2032,16 @@ def _query_in_node(
 
     body = getattr(node, "body", None)
     if body is not None and _node_body_contains(node, index, base_index=base_index):
-        return _query_in_template(
-            body,
-            index,
-            body_controls,
-            base_index=base_index,
-            parse_nested=parse_nested,
-            fill_owner=_body_fill_owner(node, fill_owner),
+        return (
+            yield Call(
+                _query_in_template,
+                body,
+                index,
+                body_controls,
+                base_index=base_index,
+                parse_nested=parse_nested,
+                fill_owner=_body_fill_owner(node, fill_owner),
+            )
         )
     return None
 

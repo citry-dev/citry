@@ -254,7 +254,29 @@ Same scheme as DJC (`dependencies.py:436`), with the citry prefix:
 | `citry:<class_id>:css` | mutable compatibility entry for the current class's `Component.css` |
 | `citry:<class_id>:js:component:<content_hash>` | immutable `Script` for one class JS version (post-hook, `$component` transformed) |
 | `citry:<class_id>:css:component:<content_hash>` | immutable `Style` for one class CSS version |
-| `citry:<class_id>:css:<vars_hash>` | generated stylesheet defining one distinct `css_data()` result |
+| `citry:<class_id>:css:<vars_hash>` | generated stylesheet defining one distinct `css_data()` result (see below for where it lives without a configured cache) |
+
+The `css_data()` stylesheets go to the cache only when one is configured.
+Each distinct result is its own stylesheet, so values that change per
+request add one per request, and the default in-memory cache never drops
+anything. Without a configured cache, they therefore go to the same
+per-process store as the compiled Vue assets (`_LocalAssets` in
+`_vue/events.py`), under the same `vue_asset_max_bytes` byte limit, which
+drops the ones used longest ago:
+
+- The page publishes them as it starts being written
+  (`publish_css_data_stylesheets` in `emission.py`) and holds them with its
+  Vue assets until it is done (`hold_page_assets`). Serialization and an
+  event response both enter that hold, so the page can inline every
+  stylesheet and link each one the browser will fetch.
+- A replayed render skips the cache write and publishes them the same way.
+- Once the limit drops one, an open page that asks for its
+  `cache/<class_id>.<vars_hash>.css` URL gets a 404. Raising the limit or
+  configuring a cache avoids that.
+
+With a configured cache, each render compares the stored value with its own
+and writes it when they differ, so a worker of another Citry version that
+wrote other bytes under the same key is corrected on the next render.
 
 During a live render, empty and whitespace-only `Component.js` or
 `Component.css` content is absent from dependency delivery. It creates no live
@@ -267,8 +289,22 @@ advertised component URL has substantive content to serve.
 class-level object. Generated class-script URLs include it, so old and new
 workers sharing a cache cannot overwrite the payload named by one another's
 pages. The stable keys remain for compatibility with unversioned URLs. A read
-through one of those URLs validates the stored payload against the class in
-that worker and repairs a mismatch before returning its local version.
+through one of those URLs returns the worker's local version and rewrites the
+stored payload when it differs, at most once a minute.
+
+A render does not ask the backend about these entries every time. Each engine
+remembers which keys it saw stored, and asks again at most once a minute
+(`_STORED_KEY_RECHECK_SECONDS` in `cache.py`). The versioned key and a served
+`Dependencies` file are named by their content, so if the backend has the
+key, it has that content, and the check is a `has` (`_store_if_missing`). The stable
+key's value changes with the class, so its check reads the value back and
+rewrites it when it differs (`_store_unless_matched`). The cost of the saving:
+if the backend drops an entry, a process that saw it stored writes it back on
+its first render after that interval. A request that finds a versioned key
+missing makes its process forget the key and write it back at once. A request
+that finds a served file missing makes its process forget the key, so that
+process's next render writes the file again; other workers can answer 404 for
+it for up to a minute.
 
 `<vars_hash>` is the first 32 hexadecimal characters of the SHA-256 digest of
 the canonical variables JSON. Identical data across instances of the same
@@ -873,10 +909,11 @@ app = Citry(cache=DiskCache("/var/cache/citry"))   # or "myproj.caches.RedisCitr
 ```
 
 `CitrySettings.cache: CitryCache | str | None = None`; `None` builds the
-built-in `InMemoryCache` (unbounded by default, optional `max_entries` with
-LRU eviction; dropping the least recently used entry keeps the memory cap
-honest for vars-heavy workloads). Import strings are supported like
-extension specs. `Citry.clear()` clears it.
+built-in `InMemoryCache` (it keeps every entry by default; with
+`max_entries` it drops the entry used longest ago). Without a configured
+cache, `css_data()` stylesheets skip it and live in the per-process store of
+page files that `vue_asset_max_bytes` limits (section 4.2). Import strings
+are supported like extension specs. `Citry.clear()` clears it.
 
 This resolves the two ❓ rows in the migration doc (`cache.py`'s
 `component_media_cache` and `app_settings.cache`): the concept returns as a

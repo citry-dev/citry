@@ -163,7 +163,10 @@ mod tests {
 
     #[test]
     fn test_c_empty_without_c_for() {
-        assert_parse_error("<c-empty><p>No items</p></c-empty>", "must follow one of");
+        assert_parse_error(
+            "<c-empty><p>No items</p></c-empty>",
+            "Tag '<c-empty>' must follow one of: <c-for>. No previous tag found.",
+        );
     }
 
     #[test]

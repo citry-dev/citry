@@ -1,0 +1,27 @@
+# cargo-deny settings for the security workflow
+# (.github/workflows/repo--security.yml). Only the advisories check runs
+# there: it fails on any RustSec advisory for a crate in Cargo.lock, because
+# nearly everything in the lock ships in the citry-core wheel (the only
+# exception is a test-only crate). An advisory that cannot be fixed yet is
+# listed below with the reason it is accepted and the issue that tracks its
+# removal.
+
+[graph]
+# Check the dependency graph with every feature on, so an advisory in an
+# optional dependency counts too.
+all-features = true
+
+[advisories]
+# Fail on yanked crates too, since authors yank a release that is broken or
+# unsafe.
+yanked = "deny"
+ignore = [
+    # zip 8.6.0 reaches us only through the vendored ruff formatter (ruff_db),
+    # which pins zip 8. Citry formats source text and never extracts an archive,
+    # so the affected extraction code never runs. Remove these once ruff moves
+    # to zip 9 (issue #378).
+    { id = "RUSTSEC-2026-0367", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
+    { id = "RUSTSEC-2026-0368", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
+    { id = "RUSTSEC-2026-0369", reason = "zip extraction, unused; vendored ruff pins zip 8 (#378)" },
+]
+
