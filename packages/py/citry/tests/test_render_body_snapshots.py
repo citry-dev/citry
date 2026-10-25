@@ -448,10 +448,14 @@ def test_fallbacks_render_the_same_way_in_development_mode(render_path: str) -> 
 
 def _paused_fallbacks() -> int:
     """Count slot fallbacks whose steps are paused, still holding their scopes."""
+    # An exact type check, because `isinstance` reads `__class__`, and on a
+    # lazy object such as Django's `staticfiles_storage` that builds the
+    # object, which raises when Django's settings leave it unconfigured. A
+    # generator type cannot be subclassed, so nothing is missed.
     return sum(
         1
         for value in gc.get_objects()
-        if isinstance(value, types.GeneratorType)
+        if type(value) is types.GeneratorType
         and value.gi_code.co_qualname == "SlotNode._render_steps.<locals>.fallback"
         and value.gi_frame is not None
     )
