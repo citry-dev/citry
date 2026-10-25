@@ -83,13 +83,14 @@ def _record_digest(payload: bytes) -> str:
 def test_expected_release_inventory_is_closed_and_includes_the_browser_wheel() -> None:
     names = expected_release_filenames("1.7.0")
 
-    assert len(names) == 36
+    assert len(names) == 46
     assert "citry_core-1.7.0.tar.gz" in names
     assert "citry_core-1.7.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl" in names
-    assert sum(name.endswith(".whl") for name in names) == 35
+    assert sum(name.endswith(".whl") for name in names) == 45
     assert sum("cp311-abi3" in name for name in names) == 14
     assert sum("pypy311_pp73" in name for name in names) == 10
     assert sum("cp314t" in name for name in names) == 10
+    assert sum("cp315t" in name for name in names) == 10
     assert "citry_core-1.7.0-cp311-abi3-manylinux_2_5_i686.manylinux1_i686.whl" in names
     assert not any("cp311-cp311" in name for name in names)
     assert not any("manylinux_2_17_i686" in name for name in names)

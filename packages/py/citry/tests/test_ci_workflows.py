@@ -72,7 +72,7 @@ def test_python_diagnostic_constrains_setup_and_passes_one_literal_target() -> N
     assert python["type"] == "choice"
     assert python["required"] is True
     assert python["default"] == "3.14"
-    assert python["options"] == ["3.11", "3.12", "3.13", "3.14"]
+    assert python["options"] == ["3.11", "3.12", "3.13", "3.14", "3.15"]
 
     profile = inputs["install_profile"]
     assert profile["type"] == "choice"

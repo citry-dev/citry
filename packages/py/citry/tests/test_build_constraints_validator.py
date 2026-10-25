@@ -150,7 +150,8 @@ def test_update_rewrites_only_the_generated_block(root: Path, monkeypatch: pytes
     monkeypatch.setattr(build_constraints, "compile_pins", fake_compile)
     build_constraints.update(pyproject=root / "pyproject.toml", packages_dir=root / "packages" / "py")
     # Each distinct package requirement reaches the resolver once, in package order.
-    assert requested == [["backend>=2.0.0", "backend==2.1.0"]]
+    # The third-party sdist backends follow the workspace packages' own.
+    assert requested == [["backend>=2.0.0", "backend==2.1.0", *build_constraints.THIRD_PARTY_BUILD_REQUIREMENTS]]
     assert (root / "pyproject.toml").read_text(encoding="utf-8") == before.replace(
         build_constraints.render_block(_PINS), build_constraints.render_block(fresh)
     )

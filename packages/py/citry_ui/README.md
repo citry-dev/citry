@@ -26,7 +26,7 @@ and test the component states your application depends on before upgrading.
 
 ## Installation
 
-Install it with Python 3.11 through 3.14. Needs `citry>=0.6.0`:
+Install it on Python 3.11 through 3.15. It needs `citry>=0.6.0`:
 
 ```console
 python -m pip install citry-ui
