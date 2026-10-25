@@ -134,10 +134,10 @@ def test_controlled_open_example_claims_refuses_breaks_and_releases_requests(
     )
     _next_frames(page)
     assert menu.is_hidden()
-    # Seen in headless Chromium: after a refused request, the next right
-    # click on this target does not reach the callback until a plain left
-    # click lands on the page. Checking a box does not count.
-    output.click()
+    # The browser's own menu selected the word under the pointer, and
+    # ContextMenu leaves a target with a selection to the browser's menu
+    # (api.md), so clear it before the next request.
+    page.evaluate("getSelection().removeAllRanges()")
 
     # Claiming without opening is a broken claim: the menu stays closed and
     # the component reports it once.
