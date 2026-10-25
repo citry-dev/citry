@@ -84,6 +84,28 @@
           let controlledInput = false;
           let controlledOpen = false;
           let controlledOpenValue = null;
+          // The owner's last `open` input, to tell a new request from a repeated one.
+          let requestedOpen = null;
+          // Whether the owner was already told that an ancestor hides the
+          // combobox. While it stays hidden, the owner is told once: an owner
+          // that asks again after each report would otherwise loop.
+          let reportedWhileHidden = false;
+          // The owner was told that an ancestor hides the combobox. That holds until
+          // the combobox can be seen again, however that happens (a dialog reopened in
+          // the browser, a collapsed region expanded), which a ResizeObserver
+          // notices; it watches only while the flag is set.
+          let shownWatch = null;
+          function markReportedWhileHidden() {
+            reportedWhileHidden = true;
+            if (shownWatch || typeof ResizeObserver !== 'function') return;
+            shownWatch = new ResizeObserver(() => {
+              if (root.getClientRects().length === 0) return;
+              shownWatch.disconnect();
+              shownWatch = null;
+              reportedWhileHidden = false;
+            });
+            shownWatch.observe(root);
+          }
           let nativeInvalid = false;
           let composing = false;
           let suppressFocusOpen = false;
@@ -810,7 +832,12 @@
               }
               if (!skipHandling) {
                 reconcileSelectedQuery(event.target);
-                requestOpen(false, "blur", event.target);
+                // Focus also leaves when an ancestor such as a dialog closes
+                // and hides the combobox. Report that close with reason
+                // "ancestor", as CMenu does.
+                const hidden = root.getClientRects().length === 0;
+                if (hidden) markReportedWhileHidden();
+                requestOpen(false, hidden ? "ancestor" : "blur", event.target);
               }
             });
           };
@@ -1058,7 +1085,15 @@
               input.value = query;
             }
 
+            // Whether the popup was showing before this update: on this run's
+            // first update, only if the previous run left it open.
+            const showingBefore = firstRun ? Boolean(handoff?.open) : open;
             const suppliedOpen = props.open;
+            // A controlled owner that asks for the popup to open after the
+            // first render is told when an ancestor keeps it closed, once per
+            // request.
+            const newlyRequested = !firstRun && suppliedOpen === true && requestedOpen !== true;
+            requestedOpen = typeof suppliedOpen === "boolean" ? suppliedOpen : null;
             if (suppliedOpen === undefined || suppliedOpen === null) {
               controlledOpen = false;
               controlledOpenValue = null;
@@ -1097,6 +1132,25 @@
                 applyOpen(false);
               } else {
                 requestOpen(false, "minimum-characters", input, { constraint: true });
+              }
+            }
+            // An ancestor such as a closed dialog hides the combobox, so its
+            // popup cannot be open either. Close it and report reason
+            // "ancestor", as CMenu does, when the popup was showing before
+            // this update or the owner just asked for it. A popup the server
+            // rendered open inside a closed dialog was never shown, so the
+            // first render reports nothing.
+            const hidden = root.getClientRects().length === 0;
+            if (!hidden) reportedWhileHidden = false;
+            if (open && hidden) {
+              applyOpen(false);
+              if (showingBefore || (newlyRequested && !reportedWhileHidden)) {
+                markReportedWhileHidden();
+                callbacks.onOpenChange?.(false, {
+                  reason: "ancestor",
+                  controlled: controlledOpen,
+                  source: null,
+                });
               }
             }
             renderItems();
@@ -1162,6 +1216,7 @@
             input.removeEventListener("keydown", onKeyDown);
             input.removeEventListener("invalid", onInvalid);
             input.removeEventListener("blur", onBlur);
+            shownWatch?.disconnect();
             input.removeEventListener("compositionstart", onCompositionStart);
             input.removeEventListener("compositionend", onCompositionEnd);
             listbox.removeEventListener("pointerdown", onListboxPointerDown);

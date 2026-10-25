@@ -91,6 +91,37 @@ $component({
     // also changed the server's `open` input.
     let pendingDisabledHandoff = Boolean(prior?.shown);
     let logicalOpen = false;
+    // Set once this run's first update is done, so a blocked open on the
+    // first render can be told apart from one the owner asked for later.
+    let settled = false;
+    // A blocked-open episode tells the owner once while an ancestor keeps the
+    // select hidden, so an owner that asks again after every report cannot
+    // loop. It ends once the trigger can be seen again, however that happens
+    // (a dialog reopened in the browser, a collapsed region expanded), which
+    // a ResizeObserver notices; it watches only while an episode lasts.
+    let shownWatch = null;
+    const startBlockedEpisode = () => {
+      invalidEpisodes.add('blocked-open');
+      if (shownWatch || typeof ResizeObserver !== 'function') return;
+      shownWatch = new ResizeObserver(() => {
+        if (trigger.getClientRects().length === 0) return;
+        shownWatch.disconnect();
+        shownWatch = null;
+        invalidEpisodes.delete('blocked-open');
+      });
+      // A ResizeObserver reports nothing for an inline element such as a
+      // link, so watch the nearest ancestor that has a box of its own,
+      // stepping out of a shadow root. If that box keeps a fixed size while
+      // only an inline wrapper inside it hides the trigger, the episode lasts
+      // until the trigger next opens.
+      let box = trigger;
+      while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
+        const next = box.parentElement ?? box.getRootNode().host;
+        if (!next) break;
+        box = next;
+      }
+      shownWatch.observe(box);
+    };
     let highlightedValue = prior?.highlightedValue ?? null;
     let controlledValue = false;
     let controlledOpen = false;
@@ -247,6 +278,10 @@ $component({
       const currentGeneration = generation;
       if (next) {
         if (!eligible() || !coordinator.mayOpen(layer)) {
+          // Only an eligible select can be blocked by an ancestor. A disabled
+          // or read-only select cannot open, so it is not reported here;
+          // disabling a showing select reports its own close.
+          const blocked = eligible();
           internalOpen = false;
           logicalOpen = false;
           // The previous run may have left this popup showing; hide it so it
@@ -254,9 +289,22 @@ $component({
           if (popup.matches(':popover-open')) popup.hidePopover();
           popup.hidden = true;
           popup.inert = true;
+          // The owner believes the select is open while an ancestor such as
+          // a closed dialog keeps it closed: a server re-render handed over a
+          // select that was showing, or the owner asked for it to open after
+          // the first render. Tell the owner once, while the select
+          // stays hidden (see startBlockedEpisode), with reason "ancestor" as CMenu
+          // does; this component's reasons have no "modal". A select the
+          // server rendered open inside a closed dialog was never shown, so
+          // the first render reports nothing.
+          if (blocked && (settled || Boolean(prior?.shown)) && !invalidEpisodes.has('blocked-open')) {
+            startBlockedEpisode();
+            notifyOpen(false, 'ancestor', popup, true);
+          }
           syncPresentation();
           return;
         }
+        invalidEpisodes.delete('blocked-open');
         highlightedValue = chooseHighlight(pendingOpenDirection);
         pendingOpenDirection = 1;
         popup.hidden = false;
@@ -334,6 +382,8 @@ $component({
       }
       internalOpen = next;
       applyOpen(next, {reason, source, focus});
+      // An ancestor kept the popup closed, and applyOpen told the owner.
+      if (next && !logicalOpen) return;
       notifyOpen(next, reason, source);
     };
     const forceClose = (reason, source) => {
@@ -342,6 +392,7 @@ $component({
       applyOpen(false, {reason, source});
       if (selectionTransaction) pendingForcedNotice = {reason, source};
       else notifyOpen(false, reason, source, true);
+      if (reason === 'ancestor') startBlockedEpisode();
     };
     const emitNativeCommit = () => {
       nativeSelect.dispatchEvent(new Event('input', {bubbles:true}));
@@ -622,6 +673,7 @@ $component({
         pendingDisabledHandoff = false;
         if (!logicalOpen && effectiveDisabled()) notifyOpen(false, 'ancestor', trigger, true);
       }
+      settled = true;
       syncPresentation();
     };
 
@@ -682,6 +734,7 @@ $component({
       active = false;
       generation += 1;
       if (typeTimer !== null) clearTimeout(typeTimer);
+      shownWatch?.disconnect();
       root[selectHandoffKey] = {
         serverFingerprint,
         serverOpen: data.serverOpen,

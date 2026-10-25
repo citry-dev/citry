@@ -368,6 +368,44 @@ class CPopover(LibraryComponent):
           let active = true;
           let controlled = false;
           let logicalOpen = false;
+          // Set once this run's first update is done, so a blocked open on the
+          // first render can be told apart from one the owner asked for later.
+          let settled = false;
+          // A blocked-open episode tells the owner once while an ancestor
+          // keeps the popover hidden, so an owner that asks again after every
+          // report cannot loop. It ends once the trigger can be seen again,
+          // however that happens (a dialog reopened in the browser, a
+          // collapsed region expanded), which a ResizeObserver notices; it
+          // watches only while an episode lasts.
+          let shownWatch = null;
+          const startBlockedEpisode = () => {
+            invalidEpisodes.add("blocked-open");
+            if (shownWatch || typeof ResizeObserver !== "function") {
+              return;
+            }
+            shownWatch = new ResizeObserver(() => {
+              if (trigger.getClientRects().length === 0) {
+                return;
+              }
+              shownWatch.disconnect();
+              shownWatch = null;
+              invalidEpisodes.delete("blocked-open");
+            });
+            // A ResizeObserver reports nothing for an inline element such as a
+            // link, so watch the nearest ancestor that has a box of its own,
+            // stepping out of a shadow root. If that box keeps a fixed size
+            // while only an inline wrapper inside it hides the trigger, the
+            // episode lasts until the trigger next opens.
+            let box = trigger;
+            while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
+              const next = box.parentElement ?? box.getRootNode().host;
+              if (!next) {
+                break;
+              }
+              box = next;
+            }
+            shownWatch.observe(box);
+          };
           // A server re-render hands the previous run's open state to this one, so
           // a popover that was open before the re-render is still open after it.
           // When the server's `open` input changed, the popover follows the server
@@ -586,8 +624,23 @@ class CPopover(LibraryComponent):
                   internalOpen = false;
                 }
                 updateTrigger();
+                // The owner believes the popover is open while an ancestor such
+                // as a closed dialog keeps it closed: a server re-render handed
+                // over a popover that was showing, or the owner asked for it to
+                // open after the first render. Tell the owner once, while the
+                // popover stays hidden (see startBlockedEpisode), as CMenu does. A
+                // popover the server rendered open inside a closed dialog was
+                // never shown, so the first render reports nothing.
+                if (
+                  (settled || Boolean(initialHandoff?.open))
+                  && !invalidEpisodes.has("blocked-open")
+                ) {
+                  startBlockedEpisode();
+                  notify(false, layerCoordinator.blockedReason(layer) ?? "ancestor", surface, true);
+                }
                 return;
               }
+              invalidEpisodes.delete("blocked-open");
               try {
                 if (!surface.matches(":popover-open")) {
                   surface.showPopover();
@@ -647,6 +700,11 @@ class CPopover(LibraryComponent):
             }
             internalOpen = nextOpen;
             applyOpen(nextOpen, { reason, source });
+            if (nextOpen && !logicalOpen) {
+              // An ancestor kept the popover closed, and applyOpen already
+              // told the owner why.
+              return;
+            }
             notify(nextOpen, reason, source);
           };
           const forceCloseLayer = (reason, source) => {
@@ -659,6 +717,9 @@ class CPopover(LibraryComponent):
             internalOpen = false;
             applyOpen(false, { reason, source });
             notify(false, reason, source, true);
+            if (reason === "ancestor" || reason === "modal") {
+              startBlockedEpisode();
+            }
           };
           const onHostClick = (event) => {
             const source = event.target?.closest?.(
@@ -800,12 +861,14 @@ class CPopover(LibraryComponent):
             if (context || nextOpen === logicalOpen) {
               pendingRequest = null;
             }
+            settled = true;
           });
           host.setAttribute("data-citry-popover-initialized", "");
 
           return () => {
             active = false;
             surface[handoffKey] = { open: logicalOpen, serverOpen: defaults.open };
+            shownWatch?.disconnect();
             host.removeEventListener("click", onHostClick, true);
             surface.removeEventListener("toggle", onToggle);
             for (const task of scheduledTasks) {
