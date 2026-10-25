@@ -197,8 +197,8 @@ The protocol, step by step:
     `ctx.render` on, and for output an earlier extension decorated.
 
   Error modes:
-  - The output exists once. Placing it in two spots raises "The same
-    rendered component id was encountered more than once" when the page is
+  - The output exists once. Placing it in two spots raises "One rendered
+    output is printed in more than one place on the page" when the page is
     turned into HTML, after the render, so an error boundary around the
     component does not turn it into its fallback. Evaluating it again
     without placing it, such as a preview render the hook drops, is fine.

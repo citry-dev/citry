@@ -1511,7 +1511,7 @@ class TestVueCompilesReceivedOutputInItsComponent:
                 $component({});
             """
 
-        with pytest.raises(RuntimeError, match="encountered more than once"):
+        with pytest.raises(RuntimeError, match="One rendered output is printed in more than one place on the page"):
             str(Inner())
 
     # The tests below are what the change makes work.
@@ -1888,7 +1888,7 @@ class TestVueCompilesReceivedOutputInItsComponent:
                 </html>
             """
 
-        with pytest.raises(RuntimeError, match="encountered more than once"):
+        with pytest.raises(RuntimeError, match="One rendered output is printed in more than one place on the page"):
             str(Guarded())
 
     def test_an_error_boundary_does_not_hide_the_result_printed_twice_without_vue(self, render_path):
@@ -1924,7 +1924,7 @@ class TestVueCompilesReceivedOutputInItsComponent:
                 <main><c-error-fallback fallback="oops"><c-inner /></c-error-fallback></main>
             """
 
-        with pytest.raises(RuntimeError, match="encountered more than once"):
+        with pytest.raises(RuntimeError, match="One rendered output is printed in more than one place on the page"):
             Guarded().render().serialize(deps_strategy="ignore")
 
     def test_a_simple_receiver_prints_the_result_in_place(self):
