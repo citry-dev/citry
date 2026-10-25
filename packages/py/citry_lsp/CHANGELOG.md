@@ -91,6 +91,9 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Fixed
 
+- The editor now analyzes the whole of a deeply nested template, such as
+  one with 256 nested `<c-if>` tags, even when the program that runs it
+  already uses part of Python's stack.
 - The editor now loads a Django project whose app module imports a
   model, such as `config.urls:citry_app`. When `DJANGO_SETTINGS_MODULE` is
   set, for example in your env file, the editor starts Django first, as
