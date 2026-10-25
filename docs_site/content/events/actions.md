@@ -190,6 +190,47 @@ fail.
 An `@c-*` attribute in a template does not receive the value. To let browser
 code react to such a call, return `actions.Dispatch` instead.
 
+### Skip the queue for a read-only call { #skip-the-queue-for-a-read-only-call }
+
+Calls from one component go to the server one at a time, so a slow call
+holds up the ones after it. A handler that only reads, such as a spell
+check while the user types, can run beside them. Declare it with
+[`@event(detached=True)`][citry.ext.events.event]:
+
+```python
+from citry.ext.events import event
+
+
+class Events:
+    @event(detached=True)
+    def spell_check(self, state: DocState):
+        return {"typos": find_typos(state.text)}
+```
+
+Then pass `wait: false` to send the call at once:
+
+```js
+const result = await this.$sendEvent(
+  "spell_check",
+  {},
+  {wait: false},
+);
+```
+
+In exchange, a detached handler must leave the page and State as they are.
+It may read State and return data, a `Dispatch`, a `Redirect`, or a URL
+change. These cases fail instead:
+
+- The handler renders, or changes State: the call fails with a
+  `handler_error`, and the server log names the handler.
+- The browser has State changes it has not sent yet: they stay in the
+  browser and go with the next call to a handler that is not detached.
+- `wait: false` on a handler without `detached=True` rejects the Promise
+  with a `TypeError` before anything is sent.
+
+The server can run a detached call at the same time as the component's
+other calls, so make sure the handler is safe to run alongside them.
+
 ## `Redirect` to a page { #redirect-to-a-page }
 
 [`actions.Redirect`][citry.ext.events.actions.Redirect] makes the browser

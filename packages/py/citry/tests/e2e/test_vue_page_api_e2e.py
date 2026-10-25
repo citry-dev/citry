@@ -18,7 +18,7 @@ import pytest
 
 from citry import Citry, Component, Extension
 from citry.ext.dependencies import Script
-from citry.ext.events import actions
+from citry.ext.events import actions, event
 from citry.ext.events.renderers import dispatcher_for
 
 pytest.importorskip("playwright.sync_api")
@@ -200,11 +200,15 @@ def _events_page(engine: Citry) -> type[Component]:
             def ping(self):
                 return actions.Data("pong")
 
+            @event(detached=True)
+            def peek(self):
+                return actions.Data("peeked")
+
     return Counter
 
 
 @pytest.mark.e2e
-def test_send_options_reject_wait_false_and_unknown_keys(page: Any, serve_live: Any) -> None:
+def test_send_options_allow_wait_false_only_for_detached_handlers(page: Any, serve_live: Any) -> None:
     engine = Citry(secret="vue-send-options-secret", autodiscover=False)  # noqa: S106
     engine.set_mounted_prefix("/citry")
     counter = _events_page(engine)
@@ -228,6 +232,8 @@ def test_send_options_reject_wait_false_and_unknown_keys(page: Any, serve_live: 
             () => counter.$sendEvent('ping', {}, {timout: 100}),
             () => Citry.events.send(counter.$el, 'ping', {}, {wait: false}),
             () => counter.$sendEvent('ping', {}, {wait: true, timeout: 5000}),
+            () => counter.$sendEvent('peek', {}, {wait: false}),
+            () => Citry.events.send(counter.$el, 'peek', {}, {wait: false}),
             // A bad handler name or non-object args rejects from both APIs, so
             // `allSettled` collects them; a synchronous throw would stop it here.
             () => counter.$sendEvent('missing'),
@@ -250,25 +256,31 @@ def test_send_options_reject_wait_false_and_unknown_keys(page: Any, serve_live: 
         unknown,
         public_wait_false,
         accepted,
+        detached,
+        public_detached,
         missing,
         public_missing,
         bad_args,
         public_bad_args,
     ) = page.evaluate("window.__sendResults")
-    assert wait_false.startswith("TypeError: Citry Events option 'wait' accepts only true.")
+    assert wait_false.startswith(
+        "TypeError: Citry Events option 'wait: false' needs a detached handler, and 'ping' is not one."
+    )
     assert "one at a time" in wait_false
+    assert "@event(detached=True)" in wait_false
     assert "@event(latest_wins=True)" in wait_false
     assert unknown == (
         "TypeError: Citry Events send got an unknown option 'timout'; the options are 'timeout' and 'wait'."
     )
     assert public_wait_false == wait_false
     assert accepted == "pong"
+    assert detached == public_detached == "peeked"
     assert "missing" in missing
     assert public_missing == missing
     assert "Citry Events arguments" in bad_args
     assert public_bad_args == bad_args
-    # Only the accepted call reached the server.
-    assert len(requests) == 1
+    # Only the accepted calls reached the server.
+    assert len(requests) == 3
     assert errors == []
 
 

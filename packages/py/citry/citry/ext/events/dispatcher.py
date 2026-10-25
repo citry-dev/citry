@@ -116,6 +116,9 @@ __all__ = [
 # ``csrf.py`` above.
 _MSG_INVALID_STATE = "The state token failed verification (tampered or malformed)."
 _MSG_STALE_STATE = "The state token is stale (expired or rotated out); reload the page to get a fresh one."
+# What a detached handler may not return: both replace what the caller shows
+# or holds, which only queued calls are ordered to do.
+_DETACHED_FORBIDDEN = frozenset({"render", "state"})
 _MSG_HANDLER_ERROR = "The event handler raised an unexpected error."
 _MSG_UNENCODABLE_RESULT = (
     "The handler returned a value strict JSON cannot encode (for example, a Decimal or a non-finite number such as "
@@ -376,6 +379,12 @@ def _state_fingerprint(state: Any) -> str | None:
         return json.dumps(values, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
     except (TypeError, ValueError):
         return None
+
+
+def _is_detached(handler: EventHandler) -> bool:
+    """Whether the handler was declared ``@event(detached=True)``."""
+    options = event_options(handler.func)
+    return options is not None and options.detached
 
 
 def _debug_enabled() -> bool:
@@ -746,6 +755,16 @@ class EventsDispatcher:
         token = call.get("stateToken")
         updates = call.get("stateUpdates")
         needs_state = "state" in handler.params
+        if updates and _is_detached(handler):
+            # A detached handler never returns a new State token, so browser
+            # State changes applied here would be lost after the call.
+            error = build_error(
+                422,
+                "invalid_args",
+                f"The call carries state updates, but event {event_name!r} on component"
+                f" {comp_cls.__name__!r} is declared with @event(detached=True), which cannot change State.",
+            )
+            return build_error_result(error, send_sequence)
         if info.state_cls is None:
             # A stray token on a stateless component is ignored (there is
             # nothing to rebuild), but updates have no writable target.
@@ -1053,6 +1072,9 @@ class EventsDispatcher:
                 )
         else:
             final_actions = encoded
+        # Checked after the hooks, so an extension cannot add what the
+        # handler itself may not return.
+        self._check_detached_result(plan, final_actions)
         try:
             final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
         except ProtocolValueError:
@@ -1121,6 +1143,35 @@ class EventsDispatcher:
             )
             raise ValueError(msg)
         return validated
+
+    def _check_detached_result(self, plan: _CallPlan, wire_actions: list[dict[str, Any]]) -> None:
+        """
+        Hold a detached handler to its promise: no render and no State change.
+
+        The browser may run a detached call alongside the component's queued
+        calls. A render would be built on a page revision that a queued call
+        may already have replaced, and a fresh State token would race the
+        queued calls' tokens, so either one fails the call instead.
+        """
+        if not _is_detached(plan.handler):
+            return
+        forbidden = next(
+            (action["action"] for action in wire_actions if action.get("action") in _DETACHED_FORBIDDEN), None
+        )
+        if forbidden is not None:
+            msg = (
+                f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} is declared with"
+                f" @event(detached=True) but returned a {forbidden!r} action. A detached handler may return"
+                f" data, dispatch an event, redirect, or update the URL; remove detached=True to render."
+            )
+            raise ValueError(msg)
+        if self._state_changed(plan):
+            msg = (
+                f"Event handler {plan.handler.name!r} on component {plan.comp_cls.__name__} is declared with"
+                f" @event(detached=True) but changed State. A detached handler may read State but not change"
+                f" it; remove detached=True to change State."
+            )
+            raise ValueError(msg)
 
     def _state_changed(self, plan: _CallPlan) -> bool:
         """Whether the call's State differs from what the verified token carried."""

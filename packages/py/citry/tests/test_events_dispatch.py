@@ -2665,3 +2665,118 @@ class TestEpochEchoOnRejections:
         calls = [{"componentClassId": "X", "handlerName": "e", "sendSequence": index} for index in range(17)]
         results = EventsDispatcher().dispatch(_envelope(*calls), _ctx(c))["results"]
         assert [item["sendSequence"] for item in results] == list(range(17))
+
+
+class TestDetachedHandlers:
+    """``@event(detached=True)``: the handler may read State but never render or change it."""
+
+    def _board(self, c, *, extensions_answer=None):
+        class BoardState:
+            moves: int = 0
+
+        class Board(Component):
+            citry = c
+            State = BoardState
+            template = "<div>{{ moves }}</div>"
+
+            def template_data(self, kwargs, slots):
+                return {"moves": 0}
+
+            class Events:
+                @event(detached=True)
+                def peek(self, state):
+                    return [actions.Dispatch("board:peeked"), {"moves": state.moves}]
+
+                @event(detached=True)
+                def bump(self, state):
+                    state.moves += 1
+                    return {"moves": state.moves}
+
+                @event(detached=True)
+                def redraw(self, state):
+                    return Board()
+
+        return Board
+
+    def _call(self, board, handler, **extra):
+        return {
+            "componentClassId": board.class_id,
+            "handlerName": handler,
+            "callerRenderId": "i1",
+            "stateToken": _token(board),
+            "sendSequence": 3,
+            **extra,
+        }
+
+    def test_reading_state_returns_the_actions_without_a_state_refresh(self):
+        c = _citry()
+        board = self._board(c)
+        [item] = _dispatch(c, self._call(board, "peek"))["results"]
+        assert item == {
+            "ok": True,
+            "sendSequence": 3,
+            "actions": [
+                {"action": "event", "eventName": "board:peeked", "target": "render:i1"},
+                {"action": "data", "value": {"moves": 0}},
+            ],
+        }
+
+    @pytest.mark.parametrize(
+        ("handler", "reason"),
+        [
+            ("bump", "but changed State"),
+            ("redraw", "but returned a 'render' action"),
+        ],
+    )
+    def test_a_render_or_a_state_change_becomes_handler_error(self, caplog, handler, reason):
+        c = _citry()
+        board = self._board(c)
+        with caplog.at_level(logging.ERROR, logger="citry"):
+            [item] = _dispatch(c, self._call(board, handler))["results"]
+        assert item == {
+            "ok": False,
+            "sendSequence": 3,
+            "error": {
+                "status": 500,
+                "code": "handler_error",
+                "message": "The event handler raised an unexpected error.",
+            },
+        }
+        # The log names the handler, the rule it broke, and the fix.
+        logged = "\n".join(record.getMessage() + str(record.exc_info[1]) for record in caplog.records)
+        assert f"Event handler {handler!r} on component Board is declared with @event(detached=True)" in logged
+        assert reason in logged
+        assert "remove detached=True" in logged
+
+    def test_an_extension_cannot_add_a_state_action_to_a_detached_result(self):
+        class AddsState(Extension):
+            name = "adds_state"
+
+            def on_event_result(self, ctx):
+                return [
+                    {"action": "state", "targetRenderId": "i1", "stateToken": "token", "publicState": {}},
+                    *ctx.actions,
+                ]
+
+        c = _citry(extensions=[AddsState])
+        board = self._board(c)
+        [item] = _dispatch(c, self._call(board, "peek"))["results"]
+        assert item["ok"] is False
+        assert item["error"]["code"] == "handler_error"
+
+    def test_state_updates_are_rejected_before_the_handler_runs(self):
+        c = _citry()
+        board = self._board(c)
+        [item] = _dispatch(c, self._call(board, "peek", stateUpdates={"moves": 5}))["results"]
+        assert item == {
+            "ok": False,
+            "sendSequence": 3,
+            "error": {
+                "status": 422,
+                "code": "invalid_args",
+                "message": (
+                    "The call carries state updates, but event 'peek' on component 'Board' is declared"
+                    " with @event(detached=True), which cannot change State."
+                ),
+            },
+        }

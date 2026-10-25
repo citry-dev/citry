@@ -22,6 +22,7 @@ import citry as citry_module
 from citry import Citry as _Citry
 from citry import Component, NestedSchemaReplacedWarning
 from citry.ext.events import EventsExtension, event
+from citry.ext.events.emission import EventInstanceEntry, build_events_manifest
 from citry.ext.events.handlers import EventOptions, event_options
 from citry.ext.events.schemas import validate_args
 
@@ -1433,6 +1434,10 @@ class TestEventDecorator:
                 def export(self):
                     return None
 
+                @event(detached=True)
+                def preview(self):
+                    return None
+
                 @event
                 def refresh(self):
                     return None
@@ -1444,10 +1449,34 @@ class TestEventDecorator:
         # Each knob rides independently; the one not given keeps its default.
         assert event_options(handlers["autosave"].func) == EventOptions(latest_wins=True)
         assert event_options(handlers["export"].func) == EventOptions(bundle=False)
-        # Omitted knobs default to latest_wins=False, bundle=True; an
+        assert event_options(handlers["preview"].func) == EventOptions(detached=True)
+        # Omitted knobs default to latest_wins=False, bundle=True, detached=False; an
         # undecorated handler carries no options record at all.
         assert event_options(handlers["refresh"].func) == EventOptions()
         assert event_options(handlers["plain"].func) is None
+
+    def test_manifest_marks_only_detached_handlers(self):
+        app = _Citry()
+
+        class Comp(Component):
+            citry = app
+
+            class Events:
+                @event(detached=True, latest_wins=True)
+                def preview(self):
+                    return None
+
+                def save(self):
+                    return None
+
+        entry = EventInstanceEntry("r1", Comp.class_id, None, "{}")
+        manifest = build_events_manifest(_events_ext(app), app, [entry])
+        [descriptor] = manifest["componentClasses"]
+        # The browser reads `detached` to allow `wait: false`; the default stays omitted.
+        assert descriptor["eventHandlers"] == {
+            "preview": {"httpMethod": "POST", "latestCallWins": True, "detached": True},
+            "save": {"httpMethod": "POST"},
+        }
 
     def test_decorator_value_validation(self):
         with pytest.raises(ValueError, match="name") as err:
@@ -1484,6 +1513,10 @@ class TestEventDecorator:
         with pytest.raises(ValueError, match="bundle") as err:
             event(bundle="no")
         assert "@event(bundle=...) must be True or False; got 'no'." in str(err.value)
+
+        with pytest.raises(ValueError, match="detached") as err:
+            event(detached=1)
+        assert "@event(detached=...) must be True or False; got 1." in str(err.value)
 
 
 class TestConfigResolution:

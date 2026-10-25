@@ -280,14 +280,17 @@ The optional third argument takes these options:
 | Option | Meaning |
 | --- | --- |
 | `timeout` | Milliseconds to wait for the server before the call fails. Overrides the page default. |
-| `wait` | Accepts only `true`, the default. |
+| `wait` | `true`, the default, waits for this app's earlier calls. `false` sends the call at once; only a detached handler accepts it. |
 
 Calls from one Vue app go to the server one at a time, in order, because
-each server render builds on the one before it. A call cannot skip ahead,
-so `wait: false` rejects the Promise with a `TypeError`. To let a new call
-replace an older call to the same handler, as live search needs, declare
-the handler with `@event(latest_wins=True)`. An unknown option also
-rejects, and the error names it.
+each server render builds on the one before it. A handler declared with
+`@event(detached=True)` never renders or changes State, so a call to it
+can skip ahead with `wait: false`
+([details](/events/actions/#skip-the-queue-for-a-read-only-call)). For any
+other handler, `wait: false` rejects the Promise with a `TypeError`. To let
+a new call replace an older call to the same handler, as live search needs,
+declare the handler with `@event(latest_wins=True)`. An unknown option
+also rejects, and the error names it.
 
 <h3 class="doc-heading" id="on-event"><code>$onEvent</code></h3>
 

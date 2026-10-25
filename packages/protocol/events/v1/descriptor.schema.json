@@ -61,6 +61,10 @@
         "allowBatching": {
           "const": false,
           "description": "Present only when the handler must be sent alone."
+        },
+        "detached": {
+          "const": true,
+          "description": "Present only when the browser may send calls to this handler outside its queue. The handler never renders or changes State."
         }
       }
     }

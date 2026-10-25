@@ -1,0 +1,15 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_detached_state_updates",
+  "results": [
+    {
+      "ok": false,
+      "sendSequence": 7,
+      "error": {
+        "status": 422,
+        "code": "invalid_args",
+        "message": "The call carries state updates, but event 'peek' on component 'Counter' is declared with @event(detached=True), which cannot change State."
+      }
+    }
+  ]
+}

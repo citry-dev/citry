@@ -84,7 +84,9 @@ and self-addressed `render:` targets derived from a live render ID.
 | `history` | `push` and `replace` history actions retain their authored order and timing. |
 | `rename_coerce` | A State mutation returns the State refresh first, with the token and public State values, then an event and data value. |
 | `batch_two` | `results[i]` answers `calls[i]`, including mixed stateful and stateless calls. |
+| `detached_data` | A detached handler that reads State returns its data value and no State refresh. |
 | `error_invalid_args` | `invalid_args` carries a strict `fieldErrors` map. |
+| `error_detached_state_updates` | A call that sends `stateUpdates` to a detached handler answers `invalid_args`. |
 | `error_invalid_state` | A token the server cannot read answers `invalid_state`. |
 | `error_stale_state` | An expired token, or one whose signature matches no current secret, answers `stale_state`. |
 | `error_unknown_event` | An undeclared handler answers `unknown_event`. |
