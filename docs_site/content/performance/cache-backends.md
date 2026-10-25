@@ -19,8 +19,8 @@ The backend holds more than [cached rendered output](/performance/caching/):
 - the generated scripts that load each page's JavaScript and CSS;
 - [Events State](/events/state/) that the server keeps for the browser,
   when you turn that on;
-- the compiled code and styles of interactive components, when you pass
-  a backend.
+- the compiled code and styles of interactive components, and the
+  stylesheets that `css_data()` produces, when you pass a backend.
 
 Size and protect it for all of these uses.
 
@@ -146,17 +146,25 @@ string for either, raises `ValueError` when you create `Citry`.
 
 ## Limit asset memory { #limit-memory-for-interactive-page-assets }
 
-An interactive page loads its compiled component code and styles from
-URLs after the HTML arrives, and a page that stays open may request one
-much later. Without a configured backend, each `Citry` instance keeps
-these files in its own process, up to 64 MiB by default. Past the limit,
-it drops the files used longest ago, but never the files of a page it is
-still rendering.
+Without a configured backend, each `Citry` instance keeps in its own
+process the files that pages fetch by URL after the HTML arrives: the
+compiled code and styles of interactive components, and the stylesheets
+that
+[`css_data()`](/advanced/js-and-css-dependencies/#send-values-to-css)
+produces. `css_data()` makes one small stylesheet for each set of values
+it returns, so values that change per request, such as a per-user color,
+add a new one each time. A page that stays open may request one of these
+files much later.
+
+Together they can use up to 64 MiB by default. Past the limit, Citry
+drops the files used longest ago, but never the files of a page it is
+still writing out.
 
 If the limit is too small, a page that has been open for a while stops
-loading a component, and the browser shows a 404 for a URL containing
-`/ext/events/definitions/` or `/ext/events/assets/`. Raise the limit, or
-pass `None` to remove it:
+loading a component or a stylesheet. The browser shows a 404 for a URL
+containing `/ext/events/definitions/` or `/ext/events/assets/`, or for a
+stylesheet URL containing `/cache/`. Raise the limit, or pass `None` to
+remove it:
 
 ```python
 app = Citry(vue_asset_max_bytes=256 * 1024 * 1024)

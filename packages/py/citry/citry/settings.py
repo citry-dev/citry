@@ -668,21 +668,24 @@ class CitrySettings:
             its server HTML. Must be a non-negative ``int``:
             another type raises ``TypeError`` and a negative value raises
             ``ValueError`` when the settings are created.
-        vue_asset_max_bytes: How many bytes of compiled component code and
-            stylesheets for interactive pages each process keeps in memory
-            when ``cache`` is not set. Interactive pages load these files by
-            URL, possibly long after the page was rendered. When the total
-            grows past this limit, the files used longest ago are dropped,
-            and a page that is still open gets a 404 if it later asks for
-            one of them. The files of the page being rendered are never
-            dropped, so the total can exceed the limit by that page's
-            files. The default is 64 MiB. ``None`` removes the limit.
-            When ``cache`` is set, the files are stored there instead, and
-            the backend's own capacity and eviction apply, so this setting
-            has no effect. Must be a
-            positive ``int`` or ``None``: another type raises ``TypeError``
-            and zero or a negative value raises ``ValueError`` when the
-            settings are created.
+        vue_asset_max_bytes: The most bytes each ``Citry`` instance keeps in
+            memory, when ``cache`` is not set, for the files that pages
+            fetch by URL: the compiled component code and stylesheets of
+            interactive pages, and the stylesheets that
+            [`css_data()`][citry.Component.css_data] produces on any page.
+            The default is 64 MiB, and ``None`` removes the limit.
+            Pages load these files possibly long after they were rendered.
+            When the total grows past this limit, the files used longest
+            ago are dropped, and a page that is still open gets a 404 if it
+            later asks for one of them. The files of a page being written
+            out are never dropped, so the total can exceed the limit by
+            that page's files.
+            When ``cache`` is set, the files are stored there, this setting
+            has no effect, and the backend's own size limit and rules for
+            dropping entries apply.
+            Must be a positive ``int`` or ``None``: another type raises
+            ``TypeError`` and zero or a negative value raises
+            ``ValueError`` when the settings are created.
         max_component_depth: How many components deep a page may nest before
             rendering stops with ``RecursionError``. The default, ``2000``, is
             far deeper than real pages nest, so it only stops a component

@@ -3,10 +3,11 @@ The pluggable cache backend.
 
 Citry stores derived content in a cache: replayable component and named-fragment
 render artifacts, the dependencies extension's processed JS/CSS scripts and
-served ``Dependencies`` files, optional server-held Events State, and, when
-a backend is configured, the compiled Vue definition bundles and stylesheets
-that interactive pages load. (Without one, each engine keeps those in its
-process, up to ``CitrySettings.vue_asset_max_bytes``.)
+served ``Dependencies`` files, and optional server-held Events State. When a
+backend is configured, it also holds the compiled Vue definition bundles and
+stylesheets that interactive pages load, and the stylesheets that
+``css_data()`` produces; without one, each ``Citry`` instance keeps those in
+its process, up to ``CitrySettings.vue_asset_max_bytes``.
 The backend is pluggable so deployments with multiple processes can point all
 of them at one shared store::
 

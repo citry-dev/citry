@@ -66,7 +66,11 @@ _LOCAL_ASSET_LIMIT = 128
 _MAX_SAFE_INTEGER = 2**53 - 1
 _REVISION_DIGITS = len(str(_MAX_SAFE_INTEGER))
 # The asset name each kind uses in its collision error message.
-_ASSET_LABELS = {"definition": "definition bundle", "style": "stylesheet asset"}
+_ASSET_LABELS = {
+    "definition": "Vue definition bundle",
+    "style": "Vue stylesheet asset",
+    "css-data": "css_data() stylesheet",
+}
 # Renders publish into these maps while route requests read and refill them,
 # so one lock keeps an eviction from removing an entry mid-update.
 _LOCAL_ASSETS_LOCK = Lock()
@@ -168,7 +172,10 @@ def _asset_cache_key(kind: str, digest: str) -> str:
 
 class _LocalAssets:
     """
-    One engine's compiled Vue assets held in this process, dropping the ones used longest ago.
+    One engine's page files held in this process, dropping the ones used longest ago.
+
+    It holds the compiled Vue assets and the stylesheets that ``css_data()``
+    produces (kind ``"css-data"``).
 
     Which limit applies depends on where else the assets live. When the
     engine has no configured cache, this map is the only place they are kept,
@@ -211,7 +218,7 @@ def _uses_own_store(citry: Citry) -> bool:
 
 # The assets published by the render in progress in this context (thread or
 # async task), with the engine that owns each. ``None`` outside a render.
-_RENDER_PUBLISHES: ContextVar[list[tuple[Citry, tuple[str, str]]] | None] = ContextVar(
+_RENDER_PUBLISHES: ContextVar[dict[tuple[Citry, tuple[str, str]], None] | None] = ContextVar(
     "citry_vue_render_publishes", default=None
 )
 
@@ -219,11 +226,16 @@ _RENDER_PUBLISHES: ContextVar[list[tuple[Citry, tuple[str, str]]] | None] = Cont
 @contextmanager
 def _hold_render_assets() -> Iterator[None]:
     """
-    Keep every asset a render publishes until the render has finished preparing its page.
+    Keep every asset a render publishes until its page has been written.
+
+    ``hold_page_assets`` enters this block once per page, around the Vue
+    preparation and every extension's ``on_serialize``, so the page's
+    compiled Vue files and its ``css_data()`` stylesheets stay in memory
+    together until the page is written.
 
     One page links several assets. Without this, a small limit or several
-    concurrent renders could drop an asset the page links before the page is
-    even sent, and the browser's first request for it would get a 404.
+    concurrent renders could drop an asset the page links before the page
+    is even sent, and the browser's first request for it would get a 404.
 
     Finishing only releases the hold; it drops nothing. The page is sent
     after this point and the browser asks for its files right away, so the
@@ -233,7 +245,9 @@ def _hold_render_assets() -> Iterator[None]:
         # A nested preparation: the outermost render holds everything.
         yield
         return
-    published: list[tuple[Citry, tuple[str, str]]] = []
+    # A dict rather than a list, so checking whether a page already holds
+    # an asset stays cheap on a page that publishes thousands.
+    published: dict[tuple[Citry, tuple[str, str]], None] = {}
     token = _RENDER_PUBLISHES.set(published)
     try:
         yield
@@ -262,6 +276,13 @@ def _enforce_limit(citry: Citry, local: _LocalAssets, *, newest: tuple[str, str]
             byte_limit is not None and local.total_bytes > byte_limit
         )
 
+    # Return before walking the entries when nothing can be dropped: most
+    # adds fit, and on a page that publishes thousands of held files under a
+    # small limit, walking them all on every add would make writing the page
+    # slow down with the square of their number.
+    droppable = len(local.entries) - len(local.held) - (0 if newest in local.held else 1)
+    if not over_limit() or droppable <= 0:
+        return
     for key in list(local.entries):
         if not over_limit():
             return
@@ -280,7 +301,7 @@ def _remember_locally(citry: Citry, kind: str, digest: str, content: bytes) -> N
         local = _LOCAL_ASSETS.setdefault(citry, _LocalAssets())
         prior = local.entries.get(key)
         if prior is not None and prior != content:
-            raise RuntimeError(f"Vue {_ASSET_LABELS[kind]} digest collision.")
+            raise RuntimeError(f"{_ASSET_LABELS[kind]} digest collision.")
         if prior is None:
             local.total_bytes += len(content)
         local.entries[key] = content
@@ -288,7 +309,7 @@ def _remember_locally(citry: Citry, kind: str, digest: str, content: bytes) -> N
         # A render holds each asset it publishes once, however often it
         # publishes it, so the release at its end balances exactly.
         if published is not None and (citry, key) not in published:
-            published.append((citry, key))
+            published[(citry, key)] = None
             local.held[key] = local.held.get(key, 0) + 1
         _enforce_limit(citry, local, newest=key)
 
@@ -303,6 +324,60 @@ def _local_asset(citry: Citry, kind: str, digest: str) -> bytes | None:
         if content is not None:
             local.entries.move_to_end((kind, digest))
         return content
+
+
+def remember_css_data_stylesheet(citry: Citry, key: str, value: str) -> None:
+    """
+    Keep one ``css_data()`` stylesheet in this process, in the store and under the limit the Vue assets use.
+
+    ``key`` is the stylesheet's cache key and ``value`` its serialized
+    ``Style``. The key's hash is taken from the values that build the
+    stylesheet, and only this process's renders publish here, so one key
+    always names the same bytes. It is used only without a configured
+    cache, where this is the only copy: the stylesheets of every request
+    share ``CitrySettings.vue_asset_max_bytes`` with the compiled Vue
+    assets, and the ones used longest ago are dropped first. A page being
+    written out holds the stylesheets it publishes, as it holds its Vue
+    assets (see ``hold_page_assets``).
+    """
+    _remember_locally(citry, "css-data", key, value.encode())
+
+
+def css_data_stylesheet(citry: Citry, key: str) -> str | None:
+    """This process's copy of one ``css_data()`` stylesheet, marked as recently used, or ``None``."""
+    content = _local_asset(citry, "css-data", key)
+    return None if content is None else content.decode()
+
+
+@contextmanager
+def hold_page_assets(citry: Citry, render: CitryRender, *, publish_css_data: bool = True) -> Iterator[None]:
+    """
+    Keep every file a page publishes in memory until the block ends, the page's ``css_data()`` stylesheets included.
+
+    ``citry.serialize`` enters this block before preparing the page's Vue
+    code and running every extension's ``on_serialize``, and preparing an
+    event response enters it too. On entry it publishes the render's
+    ``css_data()`` stylesheets (see
+    ``citry.ext.dependencies.emission.publish_css_data_stylesheets``)
+    before anything reads them back, so the Vue preparation and the
+    dependencies extension both find them. ``publish_css_data=False`` skips
+    that for a page that links no dependencies. A block inside another one,
+    such as a render serialized by an ``on_serialize`` hook, publishes its
+    own stylesheets into the outer hold.
+    """
+    # The dependencies package imports this module at load time, so
+    # importing it here at load time would be circular.
+    from citry.ext.dependencies.emission import publish_css_data_stylesheets  # noqa: PLC0415
+
+    with _hold_render_assets():
+        if publish_css_data:
+            publish_css_data_stylesheets(citry, render)
+        yield
+
+
+def keeps_assets_in_process_only(citry: Citry) -> bool:
+    """Whether this engine has no configured cache, so its page assets live only in this process."""
+    return _uses_own_store(citry)
 
 
 def _store_asset(citry: Citry, kind: str, digest: str, content: bytes) -> None:
@@ -628,7 +703,7 @@ class DirectVueEventsProducer:
         """Prepare initial or event output without rendering the selected tree again."""
         # Every asset this preparation publishes stays in memory until it is
         # done, so the page never links an asset the limit already dropped.
-        with _hold_render_assets():
+        with hold_page_assets(citry, render):
             return self._prepare_holding_assets(
                 render,
                 citry=citry,
