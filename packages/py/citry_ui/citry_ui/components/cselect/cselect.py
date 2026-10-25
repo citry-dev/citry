@@ -21,6 +21,7 @@ from citry_ui.components._attrs import (
     reject_vue_directive_attrs,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
+from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -305,7 +306,7 @@ def _normalize_options(
 
 class CSelect(LibraryComponent):
     class Dependencies:
-        js = (ANCHORED_LAYER_RUNTIME_DEPENDENCY,)
+        js = (ANCHORED_LAYER_RUNTIME_DEPENDENCY, REVEAL_RUNTIME_DEPENDENCY)
 
     @dataclass(slots=True)
     class Kwargs:

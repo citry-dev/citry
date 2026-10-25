@@ -14,7 +14,7 @@ from citry import Citry, Component
 pytestmark = pytest.mark.e2e
 
 
-def _local_page() -> str:
+def _local_page(*, auto_highlight: bool = False) -> str:
     app = Citry(autodiscover=False)
     app.register_library(citry_ui)
 
@@ -54,6 +54,7 @@ def _local_page() -> str:
                       <c-CCombobox
                         name="owner_id"
                         c-options="options"
+                        c-auto_highlight="auto_highlight"
                         c-attrs="root_attrs"
                         c-input_attrs="input_attrs"
                         :value="state.comboDemo.value"
@@ -124,6 +125,7 @@ def _local_page() -> str:
                     citry_ui.CComboboxOption("linus", "Linus Torvalds"),
                 ),
                 "root_attrs": {"data-workflow": "people"},
+                "auto_highlight": auto_highlight,
                 "input_attrs": {"data-probe": "owner-search"},
             }
 
@@ -655,6 +657,29 @@ def test_remote_loader_aborts_and_rejects_stale_results_even_when_loader_ignores
     page.evaluate("window.__remoteDemo.loading = true")
     page.evaluate("window.__remoteDemo.loading = false")
     assert page.locator('[data-citry-ui-part="option"]').get_attribute("data-value") == "ada-value"
+
+
+def test_new_items_that_move_the_highlight_leave_the_page_where_the_reader_scrolled(page):
+    _load(page, _local_page(auto_highlight=True))
+    # A page long enough to scroll the open list out of view.
+    page.evaluate("document.body.append(Object.assign(document.createElement('div'), {style: 'height: 5000px'}))")
+    page.get_by_role("combobox").press("ArrowDown")
+    page.wait_for_function("document.querySelector('[data-citry-ui-part=option][data-highlighted]') !== null")
+    page.evaluate("window.scrollTo(0, 3000)")
+    page.wait_for_function("window.scrollY === 3000")
+
+    # New items drop the highlighted option, so the first new one is
+    # highlighted, and the page must stay where the reader scrolled (#383).
+    assert (
+        page.evaluate("document.querySelector('[data-citry-ui-part=option][data-highlighted]').dataset.value")
+        != "grace"
+    )
+    page.evaluate("window.__comboDemo.items = [{ value: 'grace', label: 'Grace Hopper' }]")
+    page.wait_for_function(
+        "document.querySelector('[data-citry-ui-part=option][data-highlighted]')?.dataset.value === 'grace'"
+    )
+    page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    assert page.evaluate("window.scrollY") == 3000
 
 
 def test_controlled_query_loads_only_after_owner_commit(page):

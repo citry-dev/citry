@@ -6,6 +6,8 @@ const anchoredLayerRuntime = globalThis[
 ];
 
 const selectHandoffKey = Symbol.for("citry-ui:select-handoff");
+// Scrolls only the popup's own list; see `_reveal.py`.
+const revealRuntime = globalThis[Symbol.for("citry-ui:reveal")];
 
 $component({
   props: {
@@ -333,6 +335,12 @@ $component({
         }
         syncPresentation();
         if (focus) trigger.focus({preventScroll:true});
+        // An open popup shows its highlighted option by scrolling only its
+        // list. A re-render reopens the popup this way too, and
+        // `scrollIntoView` would pull a reader who scrolled away back to it.
+        // It runs before the open animation, which scales the popup and
+        // would make the measured distances too short.
+        revealRuntime.reveal(optionFor(highlightedValue), popup);
         const rawDuration = getComputedStyle(popup)
           .getPropertyValue('--_cui-select-duration')
           .trim();
@@ -347,7 +355,6 @@ $component({
             {duration:milliseconds, easing:'ease-out'},
           ).finished.catch(() => {});
         }
-        optionFor(highlightedValue)?.scrollIntoView({block:'nearest'});
         return;
       }
       logicalOpen = false;

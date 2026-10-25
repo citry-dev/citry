@@ -26,6 +26,7 @@ from citry_ui.components._attrs import (
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._form_control_runtime import FORM_CONTROL_RUNTIME_DEPENDENCY, FORM_CONTROL_STYLE_DEPENDENCY
+from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -317,7 +318,7 @@ def _options(
 
 class CMultiSelect(LibraryComponent):
     class Dependencies:
-        js = (ANCHORED_LAYER_RUNTIME_DEPENDENCY, FORM_CONTROL_RUNTIME_DEPENDENCY)
+        js = (ANCHORED_LAYER_RUNTIME_DEPENDENCY, FORM_CONTROL_RUNTIME_DEPENDENCY, REVEAL_RUNTIME_DEPENDENCY)
         css = (FORM_CONTROL_STYLE_DEPENDENCY,)
 
     @dataclass(slots=True)
@@ -832,7 +833,7 @@ class CMultiSelect(LibraryComponent):
             // component, or one with no enabled option, cannot open, so it is
             // not reported here; disabling a showing one reports its own
             // close.
-            const blocked=eligible();internalOpen=false;logicalOpen=false;if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;popup.inert=true;if(blocked&&(settled||Boolean(prior?.shown))&&!invalidEpisodes.has('blocked-open')){startBlockedEpisode();notifyOpen(false,'ancestor',popup,true);}sync();return;}invalidEpisodes.delete('blocked-open');highlightedValue=chooseHighlight(pendingDirection);pendingDirection=1;popup.hidden=false;popup.inert=false;try{if(!popup.matches(':popover-open'))popup.showPopover();}catch(error){console.error('[citry-ui] CMultiSelect could not open:',error);popup.hidden=true;popup.inert=true;internalOpen=false;sync();return;}logicalOpen=true;popup.setAttribute('data-open','');if(!coordinator.register(layer)){logicalOpen=false;popup.hidePopover();popup.hidden=true;popup.inert=true;popup.removeAttribute('data-open');sync();return;}sync();if(focus)formRuntime.focus(trigger);optionFor(highlightedValue)?.scrollIntoView({block:'nearest'});return;}logicalOpen=false;highlightedValue=null;popup.inert=true;popup.removeAttribute('data-open');coordinator.unregister(layer);if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;sync();void reason;void source;};
+            const blocked=eligible();internalOpen=false;logicalOpen=false;if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;popup.inert=true;if(blocked&&(settled||Boolean(prior?.shown))&&!invalidEpisodes.has('blocked-open')){startBlockedEpisode();notifyOpen(false,'ancestor',popup,true);}sync();return;}invalidEpisodes.delete('blocked-open');highlightedValue=chooseHighlight(pendingDirection);pendingDirection=1;popup.hidden=false;popup.inert=false;try{if(!popup.matches(':popover-open'))popup.showPopover();}catch(error){console.error('[citry-ui] CMultiSelect could not open:',error);popup.hidden=true;popup.inert=true;internalOpen=false;sync();return;}logicalOpen=true;popup.setAttribute('data-open','');if(!coordinator.register(layer)){logicalOpen=false;popup.hidePopover();popup.hidden=true;popup.inert=true;popup.removeAttribute('data-open');sync();return;}sync();if(focus)formRuntime.focus(trigger);globalThis[Symbol.for('citry-ui:reveal')].reveal(optionFor(highlightedValue),popup);return;}logicalOpen=false;highlightedValue=null;popup.inert=true;popup.removeAttribute('data-open');coordinator.unregister(layer);if(popup.matches(':popover-open'))popup.hidePopover();popup.hidden=true;sync();void reason;void source;};
           const requestOpen=(next,reason,source,focus=false,direction=1)=>{if(next===logicalOpen)return;if(next){pendingDirection=direction;coordinator.clearSuppression(layer);}if(controlledOpen){notifyOpen(next,reason,source);return;}internalOpen=next;applyOpen(next,{reason,source,focus});
             // An ancestor kept the popup closed, and applyOpen told the owner.
             if(next&&!logicalOpen)return;notifyOpen(next,reason,source);};
