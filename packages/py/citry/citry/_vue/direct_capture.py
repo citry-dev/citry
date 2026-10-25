@@ -4233,10 +4233,14 @@ def _authored_element_only(part: PreparedElementOpen) -> bool:
 
 def _authored_markup_only(parts: Sequence[RenderPart]) -> bool:
     """Return whether these parts are markup written in the template, which Vue can read as written."""
-    # The transparent components being read, whose own `<c-slot />` outlets
-    # hold content written in these parts. A stack of part iterators keeps
-    # the number of Python frames the same however deep the template nests.
+    # The render ids of the transparent components entered so far. Their
+    # `<c-slot />` outlets show content written in these parts, so that
+    # content is read too. Like `_ignored_contents_html`, this keeps one set
+    # for the whole walk, so content that a hook moved from one of these
+    # components to a later one is still read as written here.
     receivers: set[str] = set()
+    # A stack of part iterators keeps the number of Python frames the same
+    # however deep the template nests.
     pending = [iter(parts)]
     while pending:
         part = next(pending[-1], _END_OF_PARTS)
@@ -4268,6 +4272,8 @@ def _authored_markup_only(parts: Sequence[RenderPart]) -> bool:
             pending.append(iter(part.parts))
             continue
         if isinstance(part, DirectProjectionRender) and part.receiver_render_id in receivers:
+            # An outlet of a transparent component entered earlier in this
+            # walk shows content written here, so read that content too.
             pending.append(iter(part.parts))
             continue
         return False
@@ -4288,12 +4294,14 @@ def _authored_vue_syntax(parts: Sequence[RenderPart], component_name: Callable[[
     # The same import cycle as in `_ignored_contents_html` keeps this lazy.
     from citry._simple_runtime import SimpleRender  # noqa: PLC0415
 
-    # The transparent and `simple = True` components being read, whose own
-    # outlets hold content written here. Each stack entry is a part list and
-    # the index of its next part: a stack keeps the number of Python frames
-    # the same however deep the template nests, and an index lets a nested
-    # `v-pre` element be skipped to its close.
+    # The render ids of the transparent and `simple = True` components
+    # entered so far, whose outlets show content written here. As in
+    # `_authored_markup_only`, one set covers the whole walk.
     receivers: set[str] = set()
+    # Each stack entry is a part list and the index of its next part. A
+    # stack keeps the number of Python frames the same however deep the
+    # template nests, and an index lets a nested `v-pre` element be skipped
+    # to its close.
     pending: list[tuple[Sequence[RenderPart], int]] = [(parts, 0)]
     while pending:
         current, index = pending[-1]
@@ -4301,6 +4309,8 @@ def _authored_vue_syntax(parts: Sequence[RenderPart], component_name: Callable[[
             pending.pop()
             continue
         part = current[index]
+        # Move past this part first, so the walk resumes after it once a
+        # body pushed below is done.
         pending[-1] = (current, index + 1)
         if isinstance(part, PreparedElementOpen):
             if is_v_pre_element_open(part) and not part.is_void:
@@ -4328,6 +4338,9 @@ def _authored_vue_syntax(parts: Sequence[RenderPart], component_name: Callable[[
             # inside the block.
             return f"the component {component_name(part.frame.class_id)}"
         elif isinstance(part, DirectProjectionRender) and part.receiver_render_id in receivers:
+            # An outlet of a transparent or `simple = True` component entered
+            # earlier in this walk shows content written here, so check that
+            # content too.
             pending.append((part.parts, 0))
     return None
 
@@ -4358,7 +4371,8 @@ def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int, l
     raise UnsupportedPreparedView(f"{label} has no matching close tag in the same template")
 
 
-# Marks the end of a part iterator in `_ignored_contents_html`'s stack walk.
+# Marks the end of a part iterator in the stack walks of `_authored_markup_only`
+# and `_ignored_contents_html`.
 _END_OF_PARTS = object()
 
 
