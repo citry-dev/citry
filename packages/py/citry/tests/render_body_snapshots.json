@@ -1043,7 +1043,7 @@
    "ForNode",
    "IfNode"
   ],
-  "text": "An error occurred while rendering components Root:\nError in attribute: AttributeError: 'int' object has no attribute 'missing'\n\n     1 | x.missing \n         ^^^^^^^^^\n\nIn template of 'Root' (/Users/mac/repos/citry-deep/packages/py/citry/tests/test_render_body_snapshots.py::Root):\n\n     1 | <main><c-Row label=\"r\" /><c-if cond=\"flag\"><c-for each=\"x in items\"><p class=\"row\">{{ x.missing }}</p></c-for></c-if></main>\n                                                                                            ^^^^^^^^^^^^^^^",
+  "text": "An error occurred while rendering components Root:\nError in attribute: AttributeError: 'int' object has no attribute 'missing'\n\n     1 | x.missing \n         ^^^^^^^^^\n\nIn template of 'Root' (<this test file>::Root):\n\n     1 | <main><c-Row label=\"r\" /><c-if cond=\"flag\"><c-for each=\"x in items\"><p class=\"row\">{{ x.missing }}</p></c-for></c-if></main>\n                                                                                            ^^^^^^^^^^^^^^^",
   "type": "AttributeError"
  },
  "error/rust": {
@@ -1052,7 +1052,7 @@
    "ForNode",
    "IfNode"
   ],
-  "text": "An error occurred while rendering components Root:\nError in attribute: AttributeError: 'int' object has no attribute 'missing'\n\n     1 | x.missing \n         ^^^^^^^^^\n\nIn template of 'Root' (/Users/mac/repos/citry-deep/packages/py/citry/tests/test_render_body_snapshots.py::Root):\n\n     1 | <main><c-Row label=\"r\" /><c-if cond=\"flag\"><c-for each=\"x in items\"><p class=\"row\">{{ x.missing }}</p></c-for></c-if></main>\n                                                                                            ^^^^^^^^^^^^^^^",
+  "text": "An error occurred while rendering components Root:\nError in attribute: AttributeError: 'int' object has no attribute 'missing'\n\n     1 | x.missing \n         ^^^^^^^^^\n\nIn template of 'Root' (<this test file>::Root):\n\n     1 | <main><c-Row label=\"r\" /><c-if cond=\"flag\"><c-for each=\"x in items\"><p class=\"row\">{{ x.missing }}</p></c-for></c-if></main>\n                                                                                            ^^^^^^^^^^^^^^^",
   "type": "AttributeError"
  },
  "for_empty_branch/python": {
