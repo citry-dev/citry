@@ -54,6 +54,9 @@
 
 ### Fixed
 
+- `html_transform.transform_html()` stays fast on a tag with thousands of
+  attributes when it tracks added attributes. Such a tag used to take time
+  that grew with the square of the attribute count.
 - The `SyntaxError` for a misplaced `<c-elif>`, `<c-else>` or `<c-empty>`
   now always lists the tags it may follow in the same order, for example
   `<c-if>, <c-elif>` for `<c-else>`. The order used to change from one run

@@ -46,10 +46,12 @@ def test_pull_request_workflows_cancel_only_stale_pull_request_runs() -> None:
         "py--examples--tests.yml",
         "py--tests.yml",
         "repo--check.yml",
+        "repo--codeql.yml",
         "repo--dependabot-relock.yml",
         "repo--discord-pr.yml",
         "repo--docs-check.yml",
         "repo--docs-lighthouse.yml",
+        "repo--security.yml",
         "rust--tests.yml",
     }
 
