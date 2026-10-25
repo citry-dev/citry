@@ -121,6 +121,28 @@ class CTimeInput(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "attrs",
+            "autocomplete",
+            "disabled",
+            "field_control",
+            "form",
+            "invalid",
+            "maximum",
+            "minimum",
+            "name",
+            "public_id",
+            "readonly",
+            "required",
+            "size",
+            "step",
+            "value",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_time_input_snapshot", None)
         if cached is not None:

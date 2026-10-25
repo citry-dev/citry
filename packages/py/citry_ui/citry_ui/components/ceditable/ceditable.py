@@ -198,6 +198,57 @@ class CEditable(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "actionPosition",
+            "aria_describedby",
+            "aria_errormessage",
+            "aria_invalid",
+            "attrs",
+            "autocomplete",
+            "cancel_label",
+            "catalogPlaceholder",
+            "catalog_cancel_label",
+            "catalog_edit_label",
+            "catalog_submit_label",
+            "disabled",
+            "display_value",
+            "edit_label",
+            "editing",
+            "empty",
+            "externalDescribedBy",
+            "externalErrorMessage",
+            "field_control",
+            "form",
+            "input_attrs",
+            "input_id",
+            "inputmode",
+            "invalid",
+            "max_length",
+            "name",
+            "placeholder",
+            "preview_attrs",
+            "readonly",
+            "required",
+            "selectOnFocus",
+            "serverActionPosition",
+            "serverDisabled",
+            "serverEditing",
+            "serverInvalid",
+            "serverReadonly",
+            "serverRequired",
+            "serverSelectOnFocus",
+            "serverSize",
+            "serverSubmitMode",
+            "serverValue",
+            "serverVariant",
+            "size",
+            "submitMode",
+            "submit_label",
+            "value",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_editable_snapshot", None)
         if cached is not None:

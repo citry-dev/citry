@@ -232,6 +232,25 @@ class CContextMenu(LibraryComponent):
         target: SlotInput[CContextMenuTargetSlotData]
         menu: SlotInput[CContextMenuMenuSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "aria_label",
+            "close_on_select",
+            "disabled",
+            "loop",
+            "menu_surface",
+            "open",
+            "point_anchor_name",
+            "point_attrs",
+            "point_id",
+            "root_attrs",
+            "root_id",
+            "size",
+            "surface_id",
+            "target_attrs",
+            "target_id",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_context_menu_snapshot", None)
         if cached is not None:

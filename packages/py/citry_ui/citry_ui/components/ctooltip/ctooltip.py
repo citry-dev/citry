@@ -183,6 +183,20 @@ class CTooltip(LibraryComponent):
         activator: SlotInput[CTooltipActivatorSlotData]
         default: SlotInput[CTooltipDefaultSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "activator_attrs",
+            "attrs",
+            "close_delay",
+            "delay",
+            "disabled",
+            "open",
+            "placement",
+            "tooltip_id",
+            "tooltip_text",
+            "uses_text",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tooltip_snapshot", None)
         if cached is not None:

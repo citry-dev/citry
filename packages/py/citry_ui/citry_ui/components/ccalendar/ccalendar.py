@@ -159,6 +159,33 @@ class CCalendar(LibraryComponent):
     # docs/component-authoring.md.
     class Lint:
         check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "catalog_label",
+            "catalog_next_label",
+            "catalog_previous_label",
+            "described_by",
+            "disabled",
+            "error_message",
+            "field_control",
+            "form",
+            "heading_id",
+            "invalid",
+            "label",
+            "labelled_by",
+            "maximum",
+            "minimum",
+            "name",
+            "next_label",
+            "previous_label",
+            "public_id",
+            "readonly",
+            "required",
+            "root_id",
+            "size",
+            "value",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_calendar_snapshot", None)

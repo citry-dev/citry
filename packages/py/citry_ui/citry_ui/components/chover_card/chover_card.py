@@ -180,6 +180,20 @@ class CHoverCard(LibraryComponent):
         activator: SlotInput[CHoverCardActivatorSlotData]
         default: SlotInput[CHoverCardDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "activator_attrs",
+            "arrow",
+            "attrs",
+            "close_delay",
+            "delay",
+            "disabled",
+            "hover_card_id",
+            "open",
+            "placement",
+            "size",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_hover_card_snapshot", None)
         if cached is not None:

@@ -195,6 +195,20 @@ class CStepper(LibraryComponent):
     class Slots:
         default: SlotInput[CStepperDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "active",
+            "attrs",
+            "disabled",
+            "interactive",
+            "label",
+            "linear",
+            "orientation",
+            "registry",
+            "size",
+            "variant",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_STEPPER_CONTEXT, None) is not None:
             raise ValueError(

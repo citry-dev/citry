@@ -199,6 +199,21 @@ class CSortable(LibraryComponent):
     class Slots:
         default: SlotInput[CSortableDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "catalog",
+            "disabled",
+            "form",
+            "labels",
+            "layout",
+            "name",
+            "order",
+            "registry",
+            "root_id",
+            "size",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_sortable_snapshot", None)
         if cached is not None:
@@ -509,6 +524,26 @@ class CInternalSortableItem(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "button_disabled",
+            "catalog_handle_attr",
+            "content",
+            "declaration",
+            "form",
+            "handle",
+            "handle_label",
+            "handle_values_expression",
+            "index",
+            "item_id",
+            "label",
+            "morph_key",
+            "name",
+            "root_disabled",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item

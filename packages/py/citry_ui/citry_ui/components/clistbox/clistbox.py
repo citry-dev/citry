@@ -369,6 +369,23 @@ class CListbox(LibraryComponent):
     class Slots:
         default: SlotInput[CListboxDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "disabled",
+            "label",
+            "label_id",
+            "listbox_attrs",
+            "loop",
+            "mandatory",
+            "multiple",
+            "root_id",
+            "size",
+            "surface_id",
+            "value",
+            "variant",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_CONTEXT, None) is not None:
             raise ValueError("CListbox cannot be nested inside a CListbox declaration collection.")
@@ -1001,6 +1018,27 @@ class CListboxOption(LibraryComponent):
         start: SlotInput[CListboxOptionStateSlotData] | None = None
         description: SlotInput[CListboxOptionDescriptionSlotData] | None = None
         end: SlotInput[CListboxOptionStateSlotData] | None = None
+
+    class Lint:
+        template_data_keys = (
+            "active",
+            "attrs",
+            "default_slot_data",
+            "described_by",
+            "description_id",
+            "description_slot_data",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "label_id",
+            "morph_key",
+            "option_id",
+            "selected",
+            "state_slot_data",
+            "text_value",
+            "value",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_listbox_option_snapshot", None)

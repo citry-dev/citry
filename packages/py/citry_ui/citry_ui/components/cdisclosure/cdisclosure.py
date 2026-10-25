@@ -505,6 +505,28 @@ class CDisclosure(LibraryComponent):
     # docs/component-authoring.md.
     class Lint:
         check_input_types = False
+        template_data_keys = (
+            "actions_attrs",
+            "actions_label",
+            "attrs",
+            "disabled",
+            "has_actions",
+            "heading_attrs",
+            "heading_tag",
+            "icon",
+            "indicator",
+            "indicator_pos",
+            "open",
+            "own_disabled",
+            "panel_attrs",
+            "panel_id",
+            "region",
+            "root_id",
+            "size",
+            "trigger_attrs",
+            "trigger_id",
+            "variant",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_disclosure_snapshot", None)

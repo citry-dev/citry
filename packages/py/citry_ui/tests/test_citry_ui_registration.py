@@ -382,6 +382,31 @@ def test_an_app_that_only_registers_citry_ui_checks_clean():
     assert any("registered library 'citry-ui'" in note for note in report.all_notes)
 
 
+def test_citry_ui_templates_check_clean_against_their_declared_keys():
+    """Each Citry UI template reads only names its `Lint.template_data_keys` lists, and each list is complete."""
+    engine = Citry(autodiscover=False)
+    engine.register_library(citry_ui)
+
+    report = check_project(CheckAppSelection(spec="citry-ui-check", engine=engine), Path.cwd(), include_libraries=True)
+
+    # A template reading a name its list leaves out, or a literal key its
+    # template_data() returns that the list leaves out, shows up here.
+    codes = {"citry.template.unknown-variable", "citry.template.undeclared-template-data-key"}
+    assert [(finding.origin, finding.message) for finding in report.findings if finding.code in codes] == []
+
+
+def test_a_subclass_of_a_citry_ui_component_may_describe_its_data_with_a_schema():
+    installed = Citry(autodiscover=False).register_library(citry_ui)
+
+    # CButton lists its template data keys; the subclass's schema names them
+    # instead, without the app touching CButton's Lint class.
+    class MyButton(installed[CButton]):  # type: ignore[misc,valid-type]
+        class TemplateData:
+            variant: str
+
+    assert MyButton.TemplateData is not None
+
+
 def test_library_publication_rejects_invalid_invocations_and_manifests():
     with pytest.raises(TypeError, match="abstract publishing base"):
         LibraryComponent()

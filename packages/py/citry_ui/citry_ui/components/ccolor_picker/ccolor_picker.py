@@ -151,6 +151,34 @@ class CColorPicker(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "brightness",
+            "catalog",
+            "disabled",
+            "form",
+            "format",
+            "hue",
+            "label",
+            "label_attrs",
+            "label_id",
+            "labels",
+            "name",
+            "native_id",
+            "open",
+            "popup_id",
+            "readonly",
+            "root_attrs",
+            "root_id",
+            "saturation",
+            "size",
+            "swatches",
+            "value",
+            "value_id",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_color_picker_snapshot", None)
         if cached is not None:

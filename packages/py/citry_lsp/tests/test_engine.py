@@ -2862,6 +2862,44 @@ def test_template_lint_diagnostics_use_inferred_roots_and_warning_policy(tmp_pat
     )
 
 
+def test_template_lint_diagnostics_check_against_declared_template_data_keys(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ title }} {{ titel }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "def build(kwargs):\n"
+        "    return {'title': 'Hi'}\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class Lint:\n"
+        "        template_data_keys = ('title',)\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return build(kwargs)\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    # The list closes the namespace that the helper call leaves open, so
+    # the typo gets the same message as for a literal dict.
+    assert [item.message for item in diagnostics] == [
+        "Template variable 'titel' is not available in this template.",
+    ]
+
+    # Completion offers the listed keys, so the editor can suggest the
+    # name it reports the typo against.
+    position = _position(template_source, "titel", 2)
+    labels = [item.label for item in completion_items(document, position, project, {document.uri: document})]
+    assert "title" in labels
+
+
 def test_template_lint_diagnostics_do_not_run_without_registry_ownership():
     source = "{{ unknown }}"
     project = _syntax_state()

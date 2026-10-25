@@ -228,6 +228,26 @@ class CTransferList(LibraryComponent):
     class Slots:
         default: SlotInput[CTransferListDefaultSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "available_title_id",
+            "catalog",
+            "chosen_title_id",
+            "disabled",
+            "form",
+            "labels",
+            "name",
+            "native_id",
+            "registry",
+            "required",
+            "root_id",
+            "show_move_all",
+            "show_reorder",
+            "size",
+            "value",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_transfer_list_snapshot", None)
         if cached is not None:
@@ -497,6 +517,37 @@ class CInternalTransferList(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    class Lint:
+        template_data_keys = (
+            "ae_catalog",
+            "ae_label",
+            "attrs",
+            "available_items",
+            "available_title_id",
+            "available_total",
+            "catalog",
+            "catalog_move_bottom",
+            "chosen_items",
+            "chosen_title_id",
+            "chosen_total",
+            "count_available",
+            "count_chosen",
+            "disabled",
+            "form",
+            "items",
+            "labels",
+            "move_bottom_label",
+            "name",
+            "native_id",
+            "native_items",
+            "native_size",
+            "required",
+            "root_id",
+            "show_move_all",
+            "show_reorder",
+            "size",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         declarations = kwargs.registry.items

@@ -883,7 +883,9 @@ class Component(metaclass=ComponentMeta):
 
     Define a nested ``Lint`` class with any of the rule severities
     (``rule_*``), variable mappings, and ``check_input_types`` that
-    [`LintSettings`][citry.LintSettings] accepts. Nested declarations
+    [`LintSettings`][citry.LintSettings] accepts, plus
+    ``template_data_keys``, which only a component's ``Lint`` class takes.
+    Nested declarations
     compose in the same order Python uses to resolve methods across base
     classes. Assign ``None`` to return to the Citry instance's application
     lint settings, including its ``check_input_types``. When the class is
@@ -902,11 +904,39 @@ class Component(metaclass=ComponentMeta):
     component, when its library is registered), so changing the ``Lint``
     class's attribute afterwards has no effect.
 
+    ``template_data_keys`` lists every key that ``template_data()``
+    returns. Use it when the method builds its result in a way Citry
+    cannot read, such as by calling a helper function. ``citry check``
+    and the editor then accept the listed names and report any other
+    name. Rendering ignores the list.
+
+    ``citry check`` warns about a key the method writes as a literal but
+    the list leaves out.
+
+    The value must be a tuple, list, or frozenset of strings, or
+    ``TypeError`` is raised. A name that cannot be a Python variable name,
+    such as ``"class"``, or a name listed twice, raises ``ValueError``. A
+    component that declares both the list and a
+    [`TemplateData`][citry.Component.TemplateData] schema raises
+    ``TypeError``, because the schema already names every key. A schema on
+    a subclass replaces an inherited list, and ``template_data_keys = None``
+    clears one.
+
     Example:
         ```python
         class LegacyCard(Component):
             class Lint:
                 check_input_types = False
+        ```
+
+        ```python
+        class Avatar(Component):
+            class Lint:
+                template_data_keys = ("src", "alt", "img_attrs")
+
+            def template_data(self, kwargs, slots):
+                # Returns {"src": ..., "alt": ..., "img_attrs": ...}.
+                return build_avatar_data(kwargs)
         ```
     """
 

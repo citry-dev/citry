@@ -788,3 +788,32 @@ def test_bound_methods_and_nested_container_aliases_taint_local_mappings():
     for shape in (bound_pop, list_alias, dict_alias):
         assert shape.roots == ()
         assert shape.completeness == "open"
+
+
+def test_keys_set_on_a_helper_result_are_known_while_the_result_stays_open():
+    # A helper's result has keys Citry cannot see, but the literal keys the
+    # method sets on it afterwards are proven.
+    _source, shape = _shape(
+        """
+        data = build(kwargs)
+        data["badge"] = "new"
+        data.update({"title": "Hi"})
+        return data
+        """,
+    )
+
+    assert shape.completeness == "open"
+    assert sorted(root.name for root in shape.roots) == ["badge", "title"]
+
+
+def test_a_non_call_value_that_is_not_a_mapping_still_proves_nothing():
+    _source, shape = _shape(
+        """
+        data = kwargs.items
+        data["badge"] = "new"
+        return data
+        """,
+    )
+
+    assert shape.completeness == "open"
+    assert shape.roots == ()

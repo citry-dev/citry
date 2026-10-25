@@ -217,6 +217,39 @@ class CPinInput(LibraryComponent):
     class Slots:
         separator: SlotInput[CPinInputSeparatorSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "aria_label",
+            "aria_labelledby",
+            "attached",
+            "autocomplete",
+            "cells",
+            "complete",
+            "disabled",
+            "field_control",
+            "filled",
+            "form",
+            "input_attrs",
+            "input_dir",
+            "inputmode",
+            "invalid",
+            "length",
+            "mask",
+            "name",
+            "native_placeholder",
+            "pattern",
+            "public_id",
+            "readonly",
+            "required",
+            "root_attrs",
+            "root_id",
+            "size",
+            "value",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
         cached = getattr(self, "_cui_pin_input_snapshot", None)
         if cached is not None:

@@ -336,6 +336,57 @@ class CSelect(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "anchorName",
+            "anchor_name",
+            "aria_describedby",
+            "aria_disabled",
+            "aria_errormessage",
+            "aria_expanded",
+            "aria_invalid",
+            "aria_label",
+            "aria_labelledby",
+            "aria_readonly",
+            "aria_required",
+            "attrs",
+            "disabled",
+            "empty",
+            "externalDescribedBy",
+            "externalErrorMessage",
+            "field_control",
+            "form",
+            "groups",
+            "inheritsReadonly",
+            "input_id",
+            "invalid",
+            "listbox_aria_label",
+            "listbox_attrs",
+            "listbox_id",
+            "loop",
+            "matchWidth",
+            "name",
+            "native_disabled",
+            "native_name",
+            "open",
+            "options",
+            "options_resolved",
+            "placeholder",
+            "placement",
+            "popup_anchor_style",
+            "popup_id",
+            "readonly",
+            "readonly_name",
+            "required",
+            "selected_label",
+            "size",
+            "trigger_anchor_style",
+            "trigger_attrs",
+            "trigger_id",
+            "value",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_select_snapshot", None)
         if cached is not None:

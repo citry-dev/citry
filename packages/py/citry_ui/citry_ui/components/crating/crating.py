@@ -210,6 +210,38 @@ class CRating(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "allow_clear",
+            "choices",
+            "described_by",
+            "disabled",
+            "error_message",
+            "field_control",
+            "form",
+            "group_label",
+            "group_labelledby",
+            "input_attrs",
+            "invalid",
+            "maximum",
+            "name",
+            "precision",
+            "public_id",
+            "ratio_style",
+            "readonly",
+            "readonly_described_by",
+            "readonly_value_id",
+            "readonly_value_label",
+            "required",
+            "root_attrs",
+            "root_id",
+            "size",
+            "stars",
+            "transport_id",
+            "value",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_rating_snapshot", None)
         if cached is not None:

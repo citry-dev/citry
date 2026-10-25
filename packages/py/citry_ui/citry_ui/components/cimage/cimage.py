@@ -435,6 +435,30 @@ class CImage(LibraryComponent):
         placeholder: SlotInput[_CImageVisualSlotData] | None = None
         fallback: SlotInput[_CImageVisualSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "alt",
+            "attrs",
+            "cross_origin",
+            "decoding",
+            "draggable",
+            "fetch_priority",
+            "fit",
+            "has_fallback",
+            "has_placeholder",
+            "has_sources",
+            "height",
+            "image_attrs",
+            "loading",
+            "position",
+            "referrer_policy",
+            "sizes",
+            "sources",
+            "src",
+            "srcset",
+            "width",
+        )
+
     def _normalized(self, kwargs: Kwargs) -> dict[str, object]:
         src = _plain_url("src", kwargs.src)
         alt = cast("str", _plain_string("alt", kwargs.alt, empty=True))

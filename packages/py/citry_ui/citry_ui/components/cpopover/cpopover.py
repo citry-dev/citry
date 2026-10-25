@@ -174,6 +174,23 @@ class CPopover(LibraryComponent):
         description: SlotInput[CPopoverDescriptionSlotData] | None = None
         actions: SlotInput[CPopoverActionsSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "activator_attrs",
+            "attrs",
+            "close_attrs",
+            "described_by",
+            "description_id",
+            "dismissible",
+            "has_actions",
+            "has_description",
+            "match_width",
+            "open",
+            "placement",
+            "popover_id",
+            "title_id",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_popover_snapshot", None)
         if cached is not None:

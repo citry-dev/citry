@@ -76,6 +76,7 @@ from citry._diagnostic_catalog import (
     JS_DATA_UNSUPPORTED_TYPE,
     PARSE_CONFIGURATION,
     TEMPLATE_MARKER_NAME_INVALID,
+    TEMPLATE_UNDECLARED_TEMPLATE_DATA_KEY,
     TEMPLATE_UNKNOWN_COMPONENT,
 )
 from citry._diagnostics import render_diagnostic
@@ -583,6 +584,7 @@ def _check_registry(
                 )
             )
         findings.extend(_counted_in(_check_js_data_types(engine, comp_cls), "file"))
+        findings.extend(_undeclared_template_data_key_findings(engine, comp_cls))
         _collect_browser_source(engine, comp_cls, browser_sources)
         _collect_browser_source(engine, comp_cls, css_sources, kind="css")
         class_label = _class_label(comp_cls)
@@ -2041,6 +2043,12 @@ def _checker_lint_consumer(engine: Citry, component: type[Component]) -> Templat
                 namespace_policy = kwargs_schema.namespace_policy
             else:
                 namespace_policy = "closed"
+    if lint.template_data_keys is not None:
+        # The component lists every key its template_data() returns, so the
+        # template may use only the listed keys, the keys Citry can read from
+        # the method, and the declared variables.
+        known_names.update(lint.template_data_keys)
+        namespace_policy = "closed"
     if lint.allows_extra_variables:
         namespace_policy = "allow-extra"
     return TemplateLintConsumer(
@@ -2048,6 +2056,56 @@ def _checker_lint_consumer(engine: Citry, component: type[Component]) -> Templat
         namespace_policy=namespace_policy,
         rule_unknown_template_variable=lint.rule_unknown_template_variable,
     )
+
+
+def _undeclared_template_data_key_findings(engine: Citry, component: type[Component]) -> list[CheckFinding]:
+    """
+    Report a key that template_data() provably returns but ``Lint.template_data_keys`` leaves out.
+
+    The list should name every key the method returns. A literal key it
+    leaves out still works in the template, because Citry adds the keys it
+    can read, but the list no longer says what the method returns. Only
+    keys written as literals count: the keys a helper adds are the reason
+    the list exists, and Citry cannot see them.
+    """
+    declared = _component_lint_info(engine, component).template_data_keys
+    if declared is None:
+        return []
+    component_info = engine.inspect_component(component)
+    kwargs_schema = component_info.schemas.kwargs
+    kwargs_fields = tuple(field.name for field in kwargs_schema.fields) if kwargs_schema.kind == "fields" else None
+    shape = _disk_template_data_shape(component, kwargs_fields)
+    # Key ranges are offsets in the file of the class that defines
+    # template_data(), which may be a base class.
+    owner = next(
+        (candidate for candidate in _static_class_mro(component) if "template_data" in _static_class_dict(candidate)),
+        None,
+    )
+    source_file = None if owner is None else _loaded_python_file(owner)
+    if shape is None or source_file is None:
+        return []
+    try:
+        with tokenize.open(source_file) as source_stream:
+            source = source_stream.read()
+    except (OSError, SyntaxError, UnicodeError):
+        return []
+    findings: list[CheckFinding] = []
+    known = set(declared)
+    for root in shape.roots:
+        if root.name in known or "literal" not in root.origins or not root.definitions:
+            continue
+        key_range = root.definitions[0].key_range
+        findings.append(
+            _source_finding(
+                origin=f"{source_file} ({_class_label(component)}.template_data)",
+                message=render_diagnostic(TEMPLATE_UNDECLARED_TEMPLATE_DATA_KEY, name=root.name),
+                code=TEMPLATE_UNDECLARED_TEMPLATE_DATA_KEY,
+                severity="warning",
+                coordinates=_lsp_range_coordinates(source, key_range),
+                source_kind="file",
+            )
+        )
+    return findings
 
 
 def _checker_alpine_lint_consumer(engine: Citry, component: type[Component]) -> AlpineAttributeLintConsumer:

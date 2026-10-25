@@ -780,10 +780,17 @@ def template_lint_diagnostics(
                 break
             known_names.update(current_schema_names)
             known_names.update(variable.name for variable in lint.template_variables)
+            namespace_policy = context.namespace_policy
+            if lint.template_data_keys is not None:
+                # The component lists every key its template_data() returns,
+                # so the template is checked against that list, as `citry
+                # check` does.
+                known_names.update(lint.template_data_keys)
+                namespace_policy = "closed"
             consumers.append(
                 TemplateLintConsumer(
                     known_names=frozenset(known_names),
-                    namespace_policy=("allow-extra" if lint.allows_extra_variables else context.namespace_policy),
+                    namespace_policy=("allow-extra" if lint.allows_extra_variables else namespace_policy),
                     rule_unknown_template_variable=lint.rule_unknown_template_variable,
                 )
             )
@@ -12449,6 +12456,22 @@ def _with_component_lint_roots(
     if len(by_name) != len(roots):
         return roots
     ordered = list(roots)
+    # The keys a component lists in `Lint.template_data_keys` are its own
+    # template data, which wins over a lint variable of the same name at
+    # runtime, so they come first, and completion offers them as the
+    # diagnostics accept them.
+    for name in lint.template_data_keys or ():
+        key = _identifier_key(name)
+        if key in by_name:
+            continue
+        root = _TemplateRoot(
+            name=name,
+            presence="always",
+            origins=frozenset({"component template_data_keys"}),
+            access="analysis",
+        )
+        by_name[key] = root
+        ordered.append(root)
     for variable in lint.template_variables:
         key = _identifier_key(variable.name)
         if key in by_name:
