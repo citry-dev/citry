@@ -91,6 +91,15 @@ if TYPE_CHECKING:
 
 _VALUE_CONTEXT: ContextVar[CitryContext | None] = ContextVar("citry_value_context", default=None)
 
+# How to show the same content in several places, for the errors that find
+# one rendered output printed twice. A Slot or an element renders again at
+# each place that prints it; what it rendered exists once.
+_PRINT_IN_MANY_PLACES_ADVICE = (
+    "To show it in several places, pass the slot itself instead of calling it, or a component element "
+    "such as MyComponent() instead of MyComponent().render(): each place that prints a slot or an "
+    "element renders its own copy. In an on_render hook, place the output the hook received only once."
+)
+
 # A component's after-render hooks (its `on_render` generator and the
 # extensions' `on_component_rendered`) may serialize the component's own live
 # result and return that HTML as its new output. The returned HTML becomes the

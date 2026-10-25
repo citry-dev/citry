@@ -43,6 +43,7 @@ from citry._serialization_security import _ScriptSecurityMaterializer
 from citry.attrs import format_attrs
 from citry.citry_render import (
     _AFTER_RENDER_HOOKS_RENDER_ID,
+    _PRINT_IN_MANY_PLACES_ADVICE,
     CitryRender,
     DepsPosition,
     DepsStrategy,
@@ -428,8 +429,12 @@ _FrameStackItem = tuple[CitryRender, list[str], list[str], str, "_EnclosingFrame
 
 
 _REPEATED_RENDER_MESSAGE = (
-    "The same rendered component id was encountered more than once during serialization; "
-    "render a fresh occurrence for each physical position."
+    "One rendered output is printed in more than one place on the page, so the components in it would "
+    f"appear more than once. {_PRINT_IN_MANY_PLACES_ADVICE}"
+)
+_SELF_CONTAINING_RENDER_MESSAGE = (
+    "This rendered output contains itself, so writing the page would never finish. "
+    "Remove the output from its own parts."
 )
 
 
@@ -485,7 +490,7 @@ class _EnclosingFrames:
             if frames._render is part:
                 # Each trip round the loop would add a level, so the keys
                 # would never collide and serialization would never stop.
-                raise RuntimeError(_REPEATED_RENDER_MESSAGE)
+                raise RuntimeError(_SELF_CONTAINING_RENDER_MESSAGE)
             if frames._render_id == render_id:
                 level += 1
             frames = frames._parent
