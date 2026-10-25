@@ -309,19 +309,26 @@ mod tests {
 
     #[test]
     fn test_c_elif_without_c_if() {
-        assert_parse_error(r#"<c-elif cond="a">A</c-elif>"#, "must follow one of");
+        // The allowed tags are named in the order the rules list them, the same in every process.
+        assert_parse_error(
+            r#"<c-elif cond="a">A</c-elif>"#,
+            "Tag '<c-elif>' must follow one of: <c-if>, <c-elif>. No previous tag found.",
+        );
     }
 
     #[test]
     fn test_c_else_without_c_if() {
-        assert_parse_error("<c-else>A</c-else>", "must follow one of");
+        assert_parse_error(
+            "<c-else>A</c-else>",
+            "Tag '<c-else>' must follow one of: <c-if>, <c-elif>. No previous tag found.",
+        );
     }
 
     #[test]
     fn test_c_elif_after_c_else() {
         assert_parse_error(
             r#"<c-if cond="a">A</c-if><c-else>B</c-else><c-elif cond="c">C</c-elif>"#,
-            "must follow one of",
+            "Tag '<c-elif>' must follow one of: <c-if>, <c-elif>. Found '<c-else>' instead.",
         );
     }
 
@@ -329,7 +336,7 @@ mod tests {
     fn test_c_else_after_c_else() {
         assert_parse_error(
             r#"<c-if cond="a">A</c-if><c-else>B</c-else><c-else>C</c-else>"#,
-            "must follow one of",
+            "Tag '<c-else>' must follow one of: <c-if>, <c-elif>. Found '<c-else>' instead.",
         );
     }
 
@@ -364,7 +371,7 @@ mod tests {
     fn test_text_between_branches_is_rejected() {
         assert_parse_error(
             r#"<c-if cond="a">A</c-if>text<c-else>B</c-else>"#,
-            "Found other content in between",
+            "Tag '<c-else>' must follow one of: <c-if>, <c-elif>. Found other content in between.",
         );
     }
 

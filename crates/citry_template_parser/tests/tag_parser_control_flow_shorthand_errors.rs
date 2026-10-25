@@ -58,6 +58,11 @@ fn shorthand_branches_enforce_group_ordering() {
     ] {
         assert_error(source, "must follow one of");
     }
+    // The attribute form names the allowed tags in the same order as the tag form.
+    assert_error(
+        r#"<p c-else>orphan</p>"#,
+        "Tag '<c-else>' must follow one of: <c-if>, <c-elif>. No previous tag found.",
+    );
 }
 
 #[test]
