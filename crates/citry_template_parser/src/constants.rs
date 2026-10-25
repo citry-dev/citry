@@ -522,18 +522,13 @@ pub const TAG_ORDERING_RULES_DATA: &[(&str, &[&str])] = &[
     (C_EMPTY_TAG, &[C_FOR_TAG]),
 ];
 
-// Tag ordering rules: maps tag names to the set of tag names they can follow.
+// Tag ordering rules: maps tag names to the tag names they can follow.
 // If a tag is not in this map, it can follow any tag.
-// If a tag is in this map, it can only follow tags in the specified set.
+// If a tag is in this map, it can only follow the listed tags.
+// The lists keep `TAG_ORDERING_RULES_DATA`'s order, because error messages
+// name them in that order and must read the same in every process.
 // NOTE: Defined statically so it's only initialized once.
 lazy_static! {
-    pub static ref TAG_ORDERING_RULES: HashMap<&'static str, HashSet<&'static str>> = {
-        TAG_ORDERING_RULES_DATA
-            .iter()
-            .map(|(tag, allowed_tags)| {
-                let allowed_set: HashSet<&'static str> = allowed_tags.iter().copied().collect();
-                (*tag, allowed_set)
-            })
-            .collect()
-    };
+    pub static ref TAG_ORDERING_RULES: HashMap<&'static str, &'static [&'static str]> =
+        TAG_ORDERING_RULES_DATA.iter().copied().collect();
 }

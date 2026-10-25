@@ -34,7 +34,6 @@ from citry.ext.dependencies.scripts import (
     cache_asset,
     cache_component_css,
     cache_component_js,
-    gen_asset_cache_key,
     get_component_script,
     get_script,
     has_component_asset,
@@ -1148,17 +1147,15 @@ def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> _OwnedReso
         return None
     content = _read_asset(path)
     extension = path.suffix.lstrip(".")
+    # The file is named by its content's hash, so the content in hand is
+    # what the asset endpoint serves under that name.
     file_name = cache_asset(citry, content, extension)
-    served_content = citry.cache.get(gen_asset_cache_key(file_name))
-    if not isinstance(served_content, (str, bytes)):
-        msg = f"Cached dependency asset {file_name!r} has no text or byte content."
-        raise TypeError(msg)
     content_type = (
         "text/javascript" if extension == "js" else "text/css" if extension == "css" else "application/octet-stream"
     )
     return _OwnedResource(
         url=citry.build_url(f"asset/{file_name}"),
-        content=served_content,
+        content=content,
         content_type=content_type,
     )
 

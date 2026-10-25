@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from difflib import get_close_matches
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from citry._browser_expressions import (
     BrowserExpression,
@@ -43,12 +43,13 @@ from citry._html_attribute_values import (
     OBSOLETE_ELEMENTS,
     SVG_ELEMENTS,
 )
+from citry._walk import Call, run
 from citry.util.html import decode_attribute_entities
 from citry_core.template_parser import HtmlAttr, HtmlAttrKind, TemplateElement
 from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Generator, Sequence
 
     from citry_core.template_parser import Template
 
@@ -286,7 +287,7 @@ def lint_invalid_vue_expressions(
     severity = _active_severities(tuple(consumers) or (MarkupLintConsumer(),)).get("rule_invalid_vue_expression")
     if severity is None:
         return ()
-    unchecked = _v_pre_ranges(template, parse_nested=parse_nested, base_index=0)
+    unchecked = run(_v_pre_ranges(template, parse_nested=parse_nested, base_index=0))
     found: list[MarkupLintFinding] = []
     for expression in expressions:
         if expression.transform == "dynamic-slot":
@@ -405,7 +406,7 @@ def _v_pre_ranges(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> list[tuple[int, int]]:
+) -> Generator[Call, Any, list[tuple[int, int]]]:
     """Return the source ranges of elements with ``v-pre``, whose content Vue leaves as written."""
     ranges: list[tuple[int, int]] = []
     for element in template.elements:
@@ -424,15 +425,18 @@ def _v_pre_ranges(
                 if nested is not None:
                     parsed, nested_start = nested
                     ranges.extend(
-                        _v_pre_ranges(
-                            parsed,
-                            parse_nested=parse_nested,
-                            base_index=base_index + inner.start_index + nested_start,
+                        (
+                            yield Call(
+                                _v_pre_ranges,
+                                parsed,
+                                parse_nested=parse_nested,
+                                base_index=base_index + inner.start_index + nested_start,
+                            )
                         )
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            ranges.extend(_v_pre_ranges(body, parse_nested=parse_nested, base_index=base_index))
+            ranges.extend((yield Call(_v_pre_ranges, body, parse_nested=parse_nested, base_index=base_index)))
     return ranges
 
 
@@ -575,7 +579,7 @@ class _MarkupWalker:
 
     def walk_template(self, template: Template, *, base_index: int) -> None:
         """Visit one template; a nested template starts with nothing open around it."""
-        self._walk(template, _Context(), base_index=base_index, roots=_single_root_starts(template))
+        run(self._walk(template, _Context(), base_index=base_index, roots=run(_single_root_starts(template))))
 
     def _walk(
         self,
@@ -584,7 +588,7 @@ class _MarkupWalker:
         *,
         base_index: int,
         roots: frozenset[int] = frozenset(),
-    ) -> None:
+    ) -> Generator[Call, Any, None]:
         for element in template.elements:
             if not isinstance(element, TemplateElement.Node):
                 continue
@@ -640,7 +644,8 @@ class _MarkupWalker:
                     nested = _nested_template(inner.content, self.parse_nested)
                     if nested is not None:
                         parsed, nested_start = nested
-                        self._walk(
+                        yield Call(
+                            self._walk,
                             parsed,
                             _Context(foreign=foreign, may_repeat=True, vue_skipped=vue_skipped),
                             base_index=base_index + inner.start_index + nested_start,
@@ -653,7 +658,8 @@ class _MarkupWalker:
                 self._check_image_alt(node, names, attrs, base_index)
             body = getattr(node, "body", None)
             if body is not None:
-                self._walk(
+                yield Call(
+                    self._walk,
                     body,
                     _Context(
                         foreign=foreign,
@@ -932,7 +938,7 @@ class _MarkupWalker:
         )
 
 
-def _single_root_starts(template: Template) -> frozenset[int]:
+def _single_root_starts(template: Template) -> Generator[Call, Any, frozenset[int]]:
     """
     Return where the start tag of each element that may be the template's only root begins.
 
@@ -951,7 +957,7 @@ def _single_root_starts(template: Template) -> frozenset[int]:
         for node in nodes:
             body = getattr(node, "body", None)
             if body is not None:
-                starts.update(_single_root_starts(body))
+                starts.update((yield Call(_single_root_starts, body)))
         return frozenset(starts)
     if len(nodes) == 1:
         return frozenset({nodes[0].start_tag.token.start_index})

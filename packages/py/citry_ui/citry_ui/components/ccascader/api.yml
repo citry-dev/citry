@@ -60,7 +60,7 @@ events:
     component: CCascader
     entries:
       - {id: value-change, name: onValueChange, signature: {display: '(value: string[], detail: CCascaderValueChangeDetail) => void', interfaces: [CCascaderValueChangeDetail]}, trigger: An allowed Option is activated., detail: {display: '{value, labels, previousValue, controlled, source, option, sourceEvent}', interfaces: [CCascaderValueChangeDetail]}, behavior: Commits only while uncontrolled.}
-      - {id: open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CCascaderOpenChangeDetail) => void', interfaces: [CCascaderOpenChangeDetail]}, trigger: "The popup is requested open or closed, or disabling closes an open popup.", detail: {display: '{open, reason, sourceEvent}', interfaces: [CCascaderOpenChangeDetail]}, behavior: Commits only while uncontrolled.}
+      - {id: open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CCascaderOpenChangeDetail) => void', interfaces: [CCascaderOpenChangeDetail]}, trigger: "The popup is requested open or closed, disabling closes an open popup, or a dialog or popover around the cascader closes it.", detail: {display: '{open, reason, sourceEvent}', interfaces: [CCascaderOpenChangeDetail]}, behavior: "Commits only while uncontrolled, except that disabling or a closing ancestor closes the popup either way."}
 
 methods: []
 
@@ -146,7 +146,7 @@ interfaces:
     name: CCascaderOpenChangeDetail
     entries:
       - {id: open, name: open, type: bool, meaning: Requested popup visibility.}
-      - {id: reason, name: reason, type: str, meaning: Trigger selection escape tab outside or disabled.}
+      - {id: reason, name: reason, type: str, meaning: Trigger selection escape tab outside disabled or ancestor.}
       - {id: source-event, name: sourceEvent, type: object, meaning: Native source Event.}
 
 translations:

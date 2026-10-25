@@ -30,7 +30,12 @@ from citry.constness import const_value
 from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprHtmlAttr, ExprNode, ForNode, Node
 from citry.util.html import Markup, decode_character_references
 
-from .direct import DirectProjectionRender, bind_nested_template, wrap_python_composition_result
+from .direct import (
+    DirectProjectionRender,
+    bind_nested_template,
+    bind_received_output,
+    wrap_python_composition_result,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
@@ -881,7 +886,7 @@ class PreparedExprNode(ExprNode):
 
     def resolve_evaluated_value(self, value: object, context: CitryContext) -> RenderPart:
         """Normalize one already evaluated expression without evaluating it again."""
-        value = bind_nested_template(value, context)
+        value = bind_received_output(bind_nested_template(value, context), context)
         if isinstance(value, DirectProjectionRender):
             return value
         if isinstance(value, (PreparedDynamicElementOpen, PreparedDynamicElementClose)):

@@ -20,13 +20,14 @@ from citry_ui.components._attrs import (
     merge_root_attrs,
 )
 from citry_ui.components._context import FORM_CONTEXT_KEY
+from citry_ui.components._heading import CHeadingLevel, resolve_heading_level
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 from citry_ui.components.cicon.cicon import _resolve_registered_icon
 
 CDisclosureVariant = Literal["outline", "soft", "plain"]
 CDisclosureSize = Literal["sm", "md", "lg"]
 CDisclosureIndicatorPos = Literal["start", "end"]
-CDisclosureHeadingLevel = Literal[2, 3, 4, 5, 6]
+CDisclosureHeadingLevel = CHeadingLevel
 
 
 class CDisclosureOpenChangeDetail(TypedDict):
@@ -51,7 +52,6 @@ class CDisclosureActionsSlotData:
 _VARIANTS = ("outline", "soft", "plain")
 _SIZES = ("sm", "md", "lg")
 _INDICATOR_POSITIONS = ("start", "end")
-_HEADING_LEVELS = (2, 3, 4, 5, 6)
 _DISCLOSURE_CONTEXT_KEY = "citry_ui_disclosure"
 _ACCORDION_ITEM_CONTEXT_KEY = "citry_ui_accordion_item"
 _ACCORDION_PANEL_CONTEXT_KEY = "citry_ui_accordion_panel"
@@ -304,16 +304,6 @@ def _plain_id(value: object) -> str | None:
     return plain
 
 
-def _heading_level(value: object) -> int:
-    raw = const_value(value)
-    if isinstance(raw, str) and raw.isdecimal():
-        raw = int(raw)
-    if isinstance(raw, bool) or raw not in _HEADING_LEVELS:
-        msg = "CDisclosure heading_level must be one of 2, 3, 4, 5, or 6."
-        raise ValueError(msg)
-    return int(raw)
-
-
 def _actions_label(value: object) -> str | None:
     plain = _plain_optional_string("actions_label", value)
     if plain is None:
@@ -538,7 +528,7 @@ class CDisclosure(LibraryComponent):
             kwargs.indicator_pos,
             _INDICATOR_POSITIONS,
         )
-        heading_level = _heading_level(kwargs.heading_level)
+        heading_level = resolve_heading_level("CDisclosure", kwargs.heading_level)
         actions_label = _actions_label(kwargs.actions_label)
         has_actions = "actions" in self.raw_slots
         if actions_label is not None and not has_actions:

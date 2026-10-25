@@ -1214,6 +1214,44 @@ class CMenu(LibraryComponent):
           let internalOpen = data.open;
           let controlled = false;
           let structuralSuppressed = false;
+          // Set once this run's first reconcile is done, so a blocked open on
+          // the first render can be told apart from one asked for later.
+          let settled = false;
+          // A blocked-open episode tells the owner once while an ancestor
+          // keeps the menu hidden, so an owner that asks again after every
+          // report cannot loop. It ends once the trigger can be seen again,
+          // however that happens (a dialog reopened in the browser, a
+          // collapsed region expanded), which a ResizeObserver notices; it
+          // watches only while an episode lasts.
+          let shownWatch = null;
+          const startBlockedEpisode = () => {
+            invalidEpisodes.add("ancestor-open");
+            if (shownWatch || typeof ResizeObserver !== "function") {
+              return;
+            }
+            shownWatch = new ResizeObserver(() => {
+              if (trigger.getClientRects().length === 0) {
+                return;
+              }
+              shownWatch.disconnect();
+              shownWatch = null;
+              invalidEpisodes.delete("ancestor-open");
+            });
+            // A ResizeObserver reports nothing for an inline element such as a
+            // link, so watch the nearest ancestor that has a box of its own,
+            // stepping out of a shadow root. If that box keeps a fixed size
+            // while only an inline wrapper inside it hides the trigger, the
+            // episode lasts until the trigger next opens.
+            let box = trigger;
+            while (/^(inline|contents)/.test(getComputedStyle(box).display)) {
+              const next = box.parentElement ?? box.getRootNode().host;
+              if (!next) {
+                break;
+              }
+              box = next;
+            }
+            shownWatch.observe(box);
+          };
           let previousControlledOpen = null;
           let onOpenChange = null;
           let onAction = null;
@@ -1797,8 +1835,17 @@ class CMenu(LibraryComponent):
               }
               if (!layerCoordinator.mayOpen(layer)) {
                 structuralSuppressed = true;
-                if (!invalidEpisodes.has("ancestor-open")) {
-                  invalidEpisodes.add("ancestor-open");
+                // Report the blocked open when the menu was showing before a
+                // server re-render handed it over, or the owner asked for it
+                // after the first render, once while it stays hidden (see
+                // startBlockedEpisode). A menu the server rendered open inside a
+                // closed dialog was never shown, so the first render reports
+                // nothing.
+                if (
+                  (settled || Boolean(retainedRuntimeState && runtimeState.open))
+                  && !invalidEpisodes.has("ancestor-open")
+                ) {
+                  startBlockedEpisode();
                   notifyOpen(false, "ancestor", surface, true);
                 }
                 normalizeRootClosed("ancestor", surface);
@@ -2068,6 +2115,9 @@ class CMenu(LibraryComponent):
                 pendingForcedCloseNotice ??= { reason: publicReason, source };
               } else {
                 notifyOpen(false, publicReason, source, true);
+              }
+              if (publicReason === "ancestor") {
+                startBlockedEpisode();
               }
             } else {
               normalizeRootClosed(publicReason, source);
@@ -2631,6 +2681,7 @@ class CMenu(LibraryComponent):
               });
             }
             pendingOpenRequest = null;
+            settled = true;
           };
           const scheduleReconcile = () => {
             if (reconciliationTimer !== null) {
@@ -2994,6 +3045,7 @@ class CMenu(LibraryComponent):
             if (service.controller === context) service.controller = null;
             const handoff = options.handoff === true;
             active = false;
+            shownWatch?.disconnect();
             runtimeState.open = logicalOpen;
             runtimeState.currentKey = currentEntry?.key ?? null;
             runtimeState.currentValue = currentEntry?.value ?? null;

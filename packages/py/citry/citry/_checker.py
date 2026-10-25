@@ -107,6 +107,7 @@ from citry._template_data_source import (
 )
 from citry._vue.json_data import _json_plain, _secret_key_path, _SecretInBrowserDataError
 from citry._vue_compile_lint import lint_vue_compile
+from citry._walk import Call, run
 from citry._wire_classes import KwargsWireClasses, kwargs_wire_classes
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
@@ -200,7 +201,7 @@ from citry_core.template_parser import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Generator, Iterable
 
     from citry.citry import Citry
     from citry.ext.i18n.extension import I18nExtension
@@ -789,7 +790,7 @@ def _check_template(
                 end_index=diagnostic.end_index,
             )
         ]
-    findings = _unknown_component_findings(source, template, known_names) if known_names is not None else []
+    findings = run(_unknown_component_findings(source, template, known_names)) if known_names is not None else []
     nested_parser = lambda value: parse_template(  # noqa: E731 - parser hook is passed as a value
         value,
         user_rules=dict(rules) if rules is not None else None,
@@ -1418,7 +1419,7 @@ def _i18n_template_findings(
                 fallback_severity=fallback_severity,
             )
         )
-    for node in _trans_nodes(template):
+    for node in run(_trans_nodes(template)):
         attrs = {attr.key.content: attr for attr in node.start_tag.attrs}
         message_attr = attrs.get("message")
         if message_attr is None or message_attr.inner_value is None:
@@ -1520,7 +1521,7 @@ def _browser_i18n_type_accepts(expected: str, actual: JsonWireType) -> bool:
     return True if allowed is None or actual.kind == "unknown" else actual.kind in allowed
 
 
-def _trans_nodes(template: Template) -> list[Any]:
+def _trans_nodes(template: Template) -> Generator[Call, Any, list[Any]]:
     result: list[Any] = []
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -1530,7 +1531,7 @@ def _trans_nodes(template: Template) -> list[Any]:
             result.append(node)
         body = getattr(node, "body", None)
         if body is not None:
-            result.extend(_trans_nodes(body))
+            result.extend((yield Call(_trans_nodes, body)))
     return result
 
 
@@ -3628,7 +3629,7 @@ def _unknown_component_findings(
     source: _TemplateSource,
     template: Template,
     known_names: set[str],
-) -> list[CheckFinding]:
+) -> Generator[Call, Any, list[CheckFinding]]:
     findings: list[CheckFinding] = []
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -3651,7 +3652,7 @@ def _unknown_component_findings(
                 )
         body = getattr(node, "body", None)
         if body is not None:
-            findings.extend(_unknown_component_findings(source, body, known_names))
+            findings.extend((yield Call(_unknown_component_findings, source, body, known_names)))
     return findings
 
 

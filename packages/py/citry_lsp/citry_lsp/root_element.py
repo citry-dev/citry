@@ -27,8 +27,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+from citry._walk import Call, run
 from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttrKind, TemplateElement
 
 # The type of `$el` when the root is a fragment or cannot be proven.
@@ -64,11 +68,13 @@ def template_root_element_type(template: Any, resolve_component: ComponentRootRe
     depth limits, since only it knows which components it is already
     resolving.
     """
-    types = _root_types(template.elements, resolve_component)
+    types = run(_root_types(template.elements, resolve_component))
     return UNKNOWN_ROOT if types is None else _union(types)
 
 
-def _root_types(elements: Any, resolve_component: ComponentRootResolver) -> tuple[str, ...] | None:
+def _root_types(
+    elements: Any, resolve_component: ComponentRootResolver
+) -> Generator[Call, Any, tuple[str, ...] | None]:
     """
     Return the possible root node types of one list of sibling nodes.
 
@@ -83,13 +89,13 @@ def _root_types(elements: Any, resolve_component: ComponentRootResolver) -> tupl
     if _is_node(first) and _server_branch(first) == "c-if":
         chain, rest = _server_chain(items)
         # Anything after the chain is another root, which makes a fragment.
-        return None if rest else _server_chain_types(chain, resolve_component)
+        return None if rest else (yield Call(_server_chain_types, chain, resolve_component))
     if _is_node(first) and _attr(first, "v-if") is not None:
         chain, rest = _vue_chain(items)
-        return None if rest else _vue_chain_types(chain, resolve_component)
+        return None if rest else (yield Call(_vue_chain_types, chain, resolve_component))
     if len(items) > 1:
         return None
-    return _single_types(first, resolve_component)
+    return (yield Call(_single_types, first, resolve_component))
 
 
 def _meaningful(elements: Any) -> list[Any]:
@@ -106,7 +112,9 @@ def _meaningful(elements: Any) -> list[Any]:
     return kept
 
 
-def _single_types(element: Any, resolve_component: ComponentRootResolver) -> tuple[str, ...] | None:
+def _single_types(
+    element: Any, resolve_component: ComponentRootResolver
+) -> Generator[Call, Any, tuple[str, ...] | None]:
     """Return the node types one top-level template element can render."""
     if isinstance(element, TemplateElement.Text):
         return ("Text",)
@@ -114,10 +122,12 @@ def _single_types(element: Any, resolve_component: ComponentRootResolver) -> tup
         # A `{{ }}` output or text from an external template provider may
         # render markup as well as text.
         return None
-    return _element_types(element._0, resolve_component)
+    return (yield Call(_element_types, element._0, resolve_component))
 
 
-def _element_types(node: Any, resolve_component: ComponentRootResolver) -> tuple[str, ...] | None:
+def _element_types(
+    node: Any, resolve_component: ComponentRootResolver
+) -> Generator[Call, Any, tuple[str, ...] | None]:
     """Return the node type of one element, ignoring any `v-if` it carries."""
     authored = node.start_tag.name.content
     tag = authored.lower()
@@ -129,7 +139,11 @@ def _element_types(node: Any, resolve_component: ComponentRootResolver) -> tuple
         # `<template v-if>` renders its children in place of itself; a bare
         # `<template>` is a real `<template>` element.
         if any(_node_attr(node, name) is not None for name in ("v-if", "v-else-if", "v-else", "v-slot")):
-            return _root_types(node.body.elements, resolve_component) if hasattr(node, "body") else ("Comment",)
+            return (
+                (yield Call(_root_types, node.body.elements, resolve_component))
+                if hasattr(node, "body")
+                else ("Comment",)
+            )
         return ("HTMLTemplateElement",)
     if tag in RESERVED_TAG_NAMES or tag in _VUE_BUILTIN_TAGS:
         return None
@@ -185,11 +199,13 @@ def _chain_closed(chain: list[Any]) -> bool:
     return _attr(chain[-1], "v-else") is not None
 
 
-def _vue_chain_types(chain: list[Any], resolve_component: ComponentRootResolver) -> tuple[str, ...] | None:
+def _vue_chain_types(
+    chain: list[Any], resolve_component: ComponentRootResolver
+) -> Generator[Call, Any, tuple[str, ...] | None]:
     """Join the branch types; without `v-else` Vue may render a comment instead."""
     found: list[str] = []
     for item in chain:
-        types = _element_types(item._0, resolve_component)
+        types = yield Call(_element_types, item._0, resolve_component)
         if types is None:
             return None
         found.extend(types)
@@ -228,7 +244,9 @@ def _server_chain(items: list[Any]) -> tuple[list[Any], list[Any]]:
     return chain, []
 
 
-def _server_chain_types(chain: list[Any], resolve_component: ComponentRootResolver) -> tuple[str, ...] | None:
+def _server_chain_types(
+    chain: list[Any], resolve_component: ComponentRootResolver
+) -> Generator[Call, Any, tuple[str, ...] | None]:
     """
     Join the server-selected branches.
 
@@ -241,9 +259,9 @@ def _server_chain_types(chain: list[Any], resolve_component: ComponentRootResolv
     for item in chain:
         node = item._0
         if _tag(item) in {"c-if", "c-elif", "c-else"}:
-            types = _root_types(node.body.elements if hasattr(node, "body") else [], resolve_component)
+            types = yield Call(_root_types, node.body.elements if hasattr(node, "body") else [], resolve_component)
         else:
-            types = _element_types(node, resolve_component)
+            types = yield Call(_element_types, node, resolve_component)
         if types is None:
             return None
         found.extend(types)
