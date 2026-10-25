@@ -260,6 +260,10 @@ and `rule_i18n_cross_language_fallback`
 raises `TypeError` when a component renders with an input of the wrong
 type, and `citry check` and the editor ignore it
 ([Turn the check off](/concepts/inputs-and-validation/#turn-the-check-off)).
+`LintSettings.include_libraries` is not a lint rule either: it makes
+`citry check` report findings in the components of a library you
+registered
+([Library components](/advanced/cli/#check-library-components)).
 
 ## Override one component
 

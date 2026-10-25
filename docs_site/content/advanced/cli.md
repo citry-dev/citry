@@ -128,6 +128,39 @@ The exit status is:
 Add `--format json` to print one JSON report instead of text lines; see
 [JSON report](#check-json-output).
 
+### Library components { #check-library-components }
+
+Citry also checks the components of a library you install with
+[`register_library()`][citry.Citry.register_library], such as Citry UI.
+You cannot change that code, so their findings are left out of the
+report and the exit status, and one note says how many:
+
+```text
+citry check: note: left out 12 findings in components from the
+registered library 'citry-ui'; pass --include-libraries to report them
+```
+
+(The note is one line; it is wrapped here to fit.)
+
+To report them too, for example in the library's own tests, pass
+`--include-libraries`:
+
+```bash
+citry --app myproject.engine:app check --include-libraries
+```
+
+Or turn it on for every run in your settings:
+
+```python
+from citry import Citry, LintSettings
+
+app = Citry(lint=LintSettings(include_libraries=True))
+```
+
+A finding stays in the report when any component it belongs to is
+yours. So when you subclass a library component, the findings in the
+template, JavaScript, and CSS it inherits are reported as yours.
+
 ### JSON report { #check-json-output }
 
 With `--format json`, the command prints one JSON object. It holds the

@@ -135,6 +135,13 @@
 
 ### Changed
 
+- `citry check` now leaves out findings in the components of a library
+  you registered with `register_library()`, such as Citry UI, so an app
+  that uses Citry UI no longer fails the check on code it cannot change.
+  One note says how many findings it left out. Pass
+  `--include-libraries`, or set `LintSettings(include_libraries=True)`, to
+  report them
+  ([details](https://citry.dev/advanced/cli/#check-library-components)).
 - Output that an `on_render` hook passes to another component, as in
   `return Frame(body=result)`, or that an `on_component_rendered` hook
   passes on as `ctx.render`, no longer carries the component's own

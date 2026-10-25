@@ -367,15 +367,19 @@ def test_every_production_component_is_in_the_manifest_and_installed():
     assert frozenset(installation.definitions) == discovered
 
 
-def test_check_project_loads_the_whole_library():
-    """`citry check` must be able to analyze every Citry UI component without failing to load the app."""
+def test_an_app_that_only_registers_citry_ui_checks_clean():
+    """`citry check` loads every Citry UI component and reports nothing an app could fix (GitHub #149)."""
     engine = Citry(autodiscover=False)
     engine.register_library(citry_ui)
 
     report = check_project(CheckAppSelection(spec="citry-ui-check", engine=engine), Path.cwd())
 
-    # Findings may include errors; this test only proves the registry loads.
+    # An app's author cannot change Citry UI, so its findings are left out
+    # and counted, and the app passes.
     assert report.app_failure is None
+    assert report.findings == ()
+    assert report.exit_code == 0
+    assert any("registered library 'citry-ui'" in note for note in report.all_notes)
 
 
 def test_library_publication_rejects_invalid_invocations_and_manifests():
