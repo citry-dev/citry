@@ -1498,74 +1498,40 @@ class CMenu(LibraryComponent):
               }
             }
           };
-          // Set while the menu handles a key press: only a key the reader
-          // pressed may scroll the page to show the item it moved to.
+          // Only a key the reader pressed may scroll the page to an item.
           let keyboardReveal = false;
-          // Show an item by scrolling the scrollable elements between it and
-          // the menu's popup. `scrollIntoView` also scrolls the page, and any
-          // page that holds this one in a frame, so each time the menu
-          // refocuses an item it would pull a reader who scrolled away back
-          // to the menu.
+          // The least scroll that shows the span start..end in view..viewEnd.
+          const nearest = (start, end, view, viewEnd) => (
+            start < view ? start - view : end > viewEnd ? Math.min(end - viewEnd, start - view) : 0
+          );
+          // Scroll only the boxes between the item and its popup:
+          // `scrollIntoView` also scrolls the page, which would pull a
+          // reader who scrolled away back to the menu on every refocus.
           const revealInSurface = (element, menuSurface) => {
-            // An item outside its menu has no menu to scroll, and walking up
-            // its parents would reach the page's scrolling element.
-            if (!menuSurface?.contains(element)) {
-              return;
-            }
-            for (
-              let box = element.parentElement;
-              box;
-              box = box === menuSurface ? null : box.parentElement
-            ) {
+            if (!menuSurface?.contains(element)) return;
+            for (let box = element.parentElement; box; box = box === menuSurface ? null : box.parentElement) {
               const style = getComputedStyle(box);
-              // Measured again for each box, because scrolling an inner box
-              // moves the item within the outer ones.
-              const target = element.getBoundingClientRect();
+              // Measured per box, since scrolling an inner box moves the
+              // item; `client*` is the area inside the border and scrollbar.
+              const item = element.getBoundingClientRect();
               const outer = box.getBoundingClientRect();
-              // `clientTop` and `clientHeight` give the visible area: inside
-              // the border, without any scrollbar.
               const top = outer.top + box.clientTop;
-              const bottom = top + box.clientHeight;
               const left = outer.left + box.clientLeft;
-              const right = left + box.clientWidth;
-              if (
-                box.scrollHeight > box.clientHeight
-                && /auto|scroll/.test(style.overflowY)
-              ) {
-                // Scroll the least distance that shows the item.
-                if (target.top < top) {
-                  box.scrollTop -= top - target.top;
-                } else if (target.bottom > bottom) {
-                  box.scrollTop += Math.min(target.bottom - bottom, target.top - top);
-                }
+              if (box.scrollHeight > box.clientHeight && /auto|scroll/.test(style.overflowY)) {
+                box.scrollTop += nearest(item.top, item.bottom, top, top + box.clientHeight);
               }
-              if (
-                box.scrollWidth > box.clientWidth
-                && /auto|scroll/.test(style.overflowX)
-              ) {
-                if (target.left < left) {
-                  box.scrollLeft -= left - target.left;
-                } else if (target.right > right) {
-                  box.scrollLeft += Math.min(target.right - right, target.left - left);
-                }
+              if (box.scrollWidth > box.clientWidth && /auto|scroll/.test(style.overflowX)) {
+                box.scrollLeft += nearest(item.left, item.right, left, left + box.clientWidth);
               }
             }
           };
-          // A menu taller than the viewport, as at high zoom, can hold the
-          // item a key moved to below the bottom of the screen, and the menu
-          // takes the keys a reader would scroll with. So after a key press
-          // the page scrolls too, but only when the item is still off screen.
-          // It checks this window only: a frame partly outside the page that
-          // holds it does not scroll that page.
+          // A menu taller than the screen, as at high zoom, takes the keys a
+          // reader would scroll with, so a key press scrolls the page to an
+          // item still off screen (this window only, not a parent page).
           const revealOnPage = (element) => {
             const rect = element.getBoundingClientRect();
             const view = element.ownerDocument.defaultView;
-            if (
-              rect.top < 0
-              || rect.left < 0
-              || rect.bottom > view.innerHeight
-              || rect.right > view.innerWidth
-            ) {
+            if (rect.top < 0 || rect.left < 0 || rect.bottom > view.innerHeight || rect.right > view.innerWidth) {
               element.scrollIntoView({ block: "nearest", inline: "nearest" });
             }
           };
@@ -1961,8 +1927,7 @@ class CMenu(LibraryComponent):
               queueMicrotask(() => {
                 if (active && logicalOpen && currentGeneration === generation) {
                   context.restore?.();
-                  // The key that opened the menu has been handled by now, so
-                  // its permission to scroll the page travels with the request.
+                  // The opening key's handler has returned; its request says.
                   keyboardReveal = Boolean(context.reveal);
                   try {
                     if (context.focus === "current") {
@@ -2056,8 +2021,7 @@ class CMenu(LibraryComponent):
                 // the opening commit even before the owner prop settles.
                 generation += 1;
               }
-              // A key that opens the menu may also scroll the page to the item
-              // it focuses, which happens after the key handler returns.
+              // Focus lands after the key handler returns, so note the key.
               pendingOpenRequest = { nextOpen, reason, source, focus, reveal: keyboardReveal };
               const request = pendingOpenRequest;
               const repairEntry = currentEntry;
