@@ -156,8 +156,11 @@ unique tokens already present when it adds the Tooltip ID.
 | `onOpenChange` | function or null | none | none | report once, none | visibility request callback |
 
 `disabled` dominates `open`: a disabled Tooltip is hidden even when an owner
-supplies `open=True`; re-enabling reapplies the current controlled or
-uncontrolled state. Client values beat server fallbacks while valid. Every
+supplies `open=True`. Disabling an open Tooltip, from the server or with the
+client `disabled` prop, closes it and reports one forced close with reason
+`disabled`. Re-enabling reapplies the current controlled state; an
+uncontrolled Tooltip that the disable closed stays closed until the reader
+opens it again. Client values beat server fallbacks while valid. Every
 invalid episode reports once until a valid or omitted value ends it.
 
 ## 5. State model
@@ -206,9 +209,9 @@ rejects known interactive/focusable descendants.
 | `onOpenChange` | `(requestedOpen, CTooltipOpenChangeDetail)` | hover/focus, pointer leave/blur, Escape, press, peer, native visibility | after delay when applicable, before owner commit when controlled | owner must update `open`; unchanged value declines | no return-value cancellation |
 
 `detail.reason` is `hover`, `focus`, `pointer-leave`, `blur`, `escape`,
-`press`, `peer`, `native`, `ancestor`, or `modal`; it also supplies
-`controlled`, `forced`, and browser `source`. Ancestor and modal safety closes
-set `forced: true` and cannot be declined. Owner commits do not notify. Native
+`press`, `peer`, `native`, `ancestor`, `modal`, or `disabled`; it also supplies
+`controlled`, `forced`, and browser `source`. Ancestor and modal safety closes,
+and the close a disable causes, set `forced: true` and cannot be declined. Owner commits do not notify. Native
 trigger events remain ordinary Alpine `@...` events, and Tooltip never
 prevents the trigger's activation.
 
@@ -318,7 +321,12 @@ no-JavaScript in-flow fallback; client activation upgrades it to the top layer.
 
 On retained correlated rerender, uncontrolled committed visibility, pending
 dismissal latch, and relevant focus/pointer ownership are handed to the new
-initializer where the retained elements allow it. Latest controlled state and
+initializer where the retained elements allow it. Committed open intent
+transfers only when the server open baseline is unchanged; a changed
+baseline opens or closes the Tooltip to match without calling
+`onOpenChange`. A render that disables an open Tooltip closes it and reports
+one forced close with reason `disabled`, including when the same render also
+changes `open`. Latest controlled state and
 configuration win. Text-mode edits from a valid client prop remain controlled;
 slot content follows the server morph.
 

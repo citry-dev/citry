@@ -1692,13 +1692,11 @@ _OPENING: dict[str, tuple[str, str]] = {
 # Components whose open popup is a modal dialog. CTour's dialog is not modal.
 _MODAL = {"cdialog", "calert_dialog", "cdrawer", "ccommand_palette"}
 
+# Every popup in this file takes part in the re-render tests.
+_OVERLAYS = list(_OPENING)
+
 # Components whose server render takes an `open` input, and those that take
 # `disabled`.
-# CTooltip takes part only in the dialog tests at the end of this file. The
-# re-render tests above find a separate gap in how it reports a disable and a
-# change to the server's `open` input (#367).
-_DIALOG_TESTS_ONLY = {"ctooltip"}
-_OVERLAYS = [name for name in _OPENING if name not in _DIALOG_TESTS_ONLY]
 _SERVER_OPEN = [name for name in _OVERLAYS if name not in {"cdate_picker", "cdate_range", "ctime_picker"}]
 _DISABLED = [name for name in _OVERLAYS if name not in {"cdialog", "calert_dialog", "cdrawer", "cpopover", "ctour"}]
 

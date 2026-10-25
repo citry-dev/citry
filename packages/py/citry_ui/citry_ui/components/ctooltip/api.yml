@@ -64,8 +64,8 @@ events:
       - id: on-open-change
         name: onOpenChange
         signature: {display: '(requestedOpen: boolean, detail: CTooltipOpenChangeDetail) => void', interfaces: [CTooltipOpenChangeDetail]}
-        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer Tooltip, or external native visibility requests another state.
-        detail: {display: '{reason: "hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal", controlled: boolean, forced: boolean, source: EventTarget | null}', interfaces: [CTooltipOpenChangeDetail]}
+        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer Tooltip, or external native visibility requests another state; disabling an open tooltip also closes it and calls it with reason `disabled`.
+        detail: {display: '{reason: "hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal" | "disabled", controlled: boolean, forced: boolean, source: EventTarget | null}', interfaces: [CTooltipOpenChangeDetail]}
         behavior: Uncontrolled requests commit before notification. Controlled requests wait for the owner. Owner commits do not notify.
 
 methods: []
@@ -121,7 +121,7 @@ interfaces:
     kind: record
     name: CTooltipOpenChangeDetail
     entries:
-      - {id: reason, name: reason, type: '"hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal"', meaning: Source of the requested visibility change.}
+      - {id: reason, name: reason, type: '"hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal" | "disabled"', meaning: Source of the requested visibility change.}
       - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client `open` Boolean currently owns state.}
       - {id: forced, name: forced, type: boolean, meaning: Whether structural or modal safety required the component to close regardless of controlled ownership.}
       - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source associated with the request.}

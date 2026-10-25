@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- `CTooltip` now opens or closes when a re-render changes its server `open`
+  input, as the other popups do. Disabling an open tooltip, from the server
+  or with the client `disabled` prop, closes it and calls
+  `onOpenChange(false, ...)` with reason `"disabled"`. An uncontrolled
+  tooltip closed this way stays closed when it is enabled again.
 - A component that checks its rendered fills, such as `CDisclosure`'s
   title, now reads a numeric character reference with thousands of digits
   (`&#` followed by 5,000 zeros and `106;`) instead of raising
