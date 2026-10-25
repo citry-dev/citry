@@ -51,6 +51,7 @@ def test_pull_request_workflows_cancel_only_stale_pull_request_runs() -> None:
         "repo--discord-pr.yml",
         "repo--docs-check.yml",
         "repo--docs-lighthouse.yml",
+        "repo--generated.yml",
         "repo--security.yml",
         "rust--tests.yml",
     }
@@ -212,3 +213,14 @@ def test_workspace_core_wheel_consumers_reject_ambiguous_cached_outputs() -> Non
         assert step["shell"] == "bash"
         assert "${#core_wheels[@]} -ne 1" in step["run"]
         assert "-print -quit" not in step["run"]
+
+
+def test_generated_files_workflow_runs_on_every_change() -> None:
+    # A required check on a path-filtered workflow waits forever when the
+    # filter skips it, so this early check must never have a path filter.
+    workflow = _load_workflow("repo--generated.yml")
+    events = workflow["on"]
+    assert set(events) == {"push", "pull_request", "workflow_dispatch"}
+    for event in ("push", "pull_request"):
+        assert "paths" not in (events[event] or {})
+        assert "paths-ignore" not in (events[event] or {})

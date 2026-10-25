@@ -3,8 +3,9 @@
 The project gate: run every check in one pass and report all results.
 
 Phases: uv lock, cargo fmt, cargo clippy, cargo test, ruff check, ruff format,
-mypy, pyright, the private protocol packages, citry-client (tsc, biome, and the
-canary over the events client package), the generated docs playground bundle,
+mypy, pnpm install (from the lockfile, offline), pyright, the private protocol
+packages, citry-client (tsc, biome, and the canary over the events client
+package), the generated docs playground bundle,
 the VS Code language extension, pytest, the Vue render parity check over the
 pages the pytest phase recorded, and the custom validators (scripts/validate.py).
 Every phase runs even after an earlier one fails, so a single invocation
@@ -13,10 +14,12 @@ surfaces every problem at once instead of one-at-a-time.
 Before any phase, the gate compares `uv --version` with the uv release recorded
 in packages/py/citry_core/pyodide-build.json and stops when uv is older.
 
-This only CHECKS; it never edits files. Fix the reported issues yourself, then
-re-run. It assumes the workspace is already set up (`uv sync --all-packages`,
-plus `pnpm install` for the pinned Node tools and package-local checks) and that
-`cargo`, `uv`, `node`, `pnpm`, and a Rust toolchain are on PATH.
+It never edits source files. It does reinstall node_modules from the lockfile,
+and the VS Code phase rebuilds packages/editors/vscode/out/. Fix the reported
+issues yourself, then re-run. It assumes the workspace is already set up
+(`uv sync --all-packages`, plus one `pnpm install` with the network so pnpm's
+store holds every locked package) and that `cargo`, `uv`, `node`, `pnpm`, and a
+Rust toolchain are on PATH.
 
 Usage:
     python scripts/check.py                         # full integration gate
@@ -215,11 +218,18 @@ def _phases(profile: CheckProfile = "full", *, parity_corpus: Path) -> list[tupl
                 "scripts",
             ],
         ),
+        # Every Node phase below builds or checks with node_modules, and a
+        # node_modules left behind by another branch makes a rebuilt bundle
+        # differ from the committed one. Installing from the lockfile first,
+        # without the network, is a quick no-op when the install already
+        # matches. When pnpm's store lacks a locked package it fails with
+        # ERR_PNPM_NO_OFFLINE_TARBALL; run `pnpm install --frozen-lockfile`
+        # once with the network, then re-run the gate.
+        ("pnpm install", ["pnpm", "install", "--frozen-lockfile", "--offline"]),
         # pyright type-checks the same typed Events base contract that mypy covers
         # above, so the two checkers sit together. It runs the LOCAL, pinned pyright
         # (node_modules/.bin/pyright), never a global one, so the version is
-        # reproducible; this assumes `pnpm install` has run, the way the rest of
-        # the gate assumes `uv sync`. The flags reproduce the pinned
+        # reproducible; the `pnpm install` phase above installs it. The flags reproduce the pinned
         # invocation verified in docs/design/events_research/typing-lab-report.md
         # (pyright 1.1.413, --pythonversion 3.13, and --pythonpath at the repo venv
         # python so pyright resolves citry from the same environment mypy uses).
@@ -247,9 +257,8 @@ def _phases(profile: CheckProfile = "full", *, parity_corpus: Path) -> list[tupl
         # tsc --noEmit over the TypeScript runtime source, biome check (lint
         # plus format), and the pinned-version canary (node --test). Sits by
         # pyright as the other Node-based phase: both run pinned local tools
-        # and assume `pnpm install` has run, the way the rest of the gate
-        # assumes `uv sync`. pnpm resolves from PATH (CI sets it up before
-        # the gate; see repo--check.yml).
+        # that the `pnpm install` phase installs. pnpm resolves from PATH (CI
+        # sets it up before the gate; see repo--check.yml).
         (
             "citry-client",
             ["pnpm", "--dir", "packages/js/citry-client", "run", "check"],
