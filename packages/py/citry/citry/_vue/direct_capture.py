@@ -7,12 +7,13 @@ import hashlib
 import json
 import re
 from collections import defaultdict
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from html import escape
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeGuard, TypeVar, cast
 
+from citry._walk import Call, run
 from citry.assets import _TEMPLATE_CACHE
 from citry.attrs import (
     VueCodeError,
@@ -115,6 +116,19 @@ if TYPE_CHECKING:
     from citry.citry_context import CitryContext
     from citry.component import Component
     from citry_core import _rust
+
+# The assembler runs its nested walks directly, one inside another with
+# ``yield from``, while the direct walks stay under the limits below, and
+# hands deeper ones to the walk driver, which starts a fresh count (see
+# `nested`). One component's body runs at most this many nested levels
+# directly, at two frames each.
+_INLINE_WALK_DEPTH = 8
+# The direct walks together, across components, use at most about this many
+# Python frames. An ordinary page stays well below it, so only a very deep
+# component tree pays for the driver.
+_INLINE_WALK_FRAMES = 128
+
+_R = TypeVar("_R")
 
 TagForType = Callable[[str], str]
 ComponentMetadataForType = Callable[[str, type[object] | None], str]
@@ -1129,6 +1143,48 @@ def assemble_typed_render(
         native_run_taken = True
         return run.member_ids(), member_tag
 
+    # Since the driver last started a walk: how many nested levels of the
+    # current component's body run inside one another with ``yield from``,
+    # and how many Python frames all the direct walks use. See `nested`.
+    inline_depth = 0
+    inline_frames = 0
+
+    def nested(
+        function: Callable[..., Generator[Call, Any, _R]], *args: Any, **kwargs: Any
+    ) -> Generator[Call, Any, _R]:
+        """
+        Run one nested walk of the assembler; a walker writes ``result = yield from`` this helper.
+
+        The assembler's walkers are generators run by `citry._walk.run`, so
+        the walk uses the same number of Python frames however deep the
+        template nests. Handing every nested body to the driver costs about
+        0.7 microseconds a call, which an ordinary page makes about a
+        thousand times, so the first `_INLINE_WALK_DEPTH` levels of a
+        component's body run directly with ``yield from``, while the direct
+        walks stay under `_INLINE_WALK_FRAMES`. Deeper levels go through the
+        driver, which starts both counts again at 0.
+        """
+        nonlocal inline_depth, inline_frames
+        if inline_depth < _INLINE_WALK_DEPTH and inline_frames < _INLINE_WALK_FRAMES:
+            inline_depth += 1
+            inline_frames += 2
+            try:
+                return (yield from function(*args, **kwargs))
+            finally:
+                inline_depth -= 1
+                inline_frames -= 2
+        return (yield from by_driver(function(*args, **kwargs)))
+
+    def by_driver(walker: Generator[Call, Any, _R]) -> Generator[Call, Any, _R]:
+        """Hand an assembler walker to the walk driver, which starts the direct-walk counts again at 0."""
+        nonlocal inline_depth, inline_frames
+        saved = inline_depth, inline_frames
+        inline_depth = inline_frames = 0
+        try:
+            return (yield Call(_resume, walker))
+        finally:
+            inline_depth, inline_frames = saved
+
     def run_members(
         run_group: list[CitryRender | SimpleVueRecord],
         occurrence_id: str,
@@ -1137,7 +1193,7 @@ def assemble_typed_render(
         placement_route: tuple[str, ...],
         element_stack: list[str],
         local_identity_keys: set[tuple[tuple[object, ...], tuple[str, ...], object]],
-    ) -> tuple[list[tuple[str, str, str, tuple[_FillFragment, ...]]], str | None]:
+    ) -> Generator[Call, Any, tuple[list[tuple[str, str, str, tuple[_FillFragment, ...]]], str | None]]:
         """
         Record every row of one call run, one row at a time; return the rows and their component tag.
 
@@ -1149,6 +1205,7 @@ def assemble_typed_render(
         every other run, and every run that ``take_native_run`` declines,
         raising any error at the row it belongs to.
         """
+        nonlocal inline_depth, inline_frames
         members: list[tuple[str, str, str, tuple[_FillFragment, ...]]] = []
         run_component_tag: str | None = None
         # On the native render path Rust computes both ids of
@@ -1241,7 +1298,7 @@ def assemble_typed_render(
                     member, occurrence_id, member_child_id, member_placement_key, data_owner_id
                 )
             else:
-                transform_component(
+                child_walker = transform_component(
                     member,
                     occurrence_id,
                     member_child_id,
@@ -1249,6 +1306,18 @@ def assemble_typed_render(
                     physical_parent_stack=tuple(element_stack),
                     marker_owner_id=data_owner_id,
                 )
+                # The child's own body starts its nested-level count again, and the
+                # child runs directly while the direct walks stay under
+                # `_INLINE_WALK_FRAMES`; see `nested`.
+                saved_counts = inline_depth, inline_frames
+                try:
+                    if inline_frames < _INLINE_WALK_FRAMES:
+                        inline_depth, inline_frames = 0, inline_frames + 2
+                        yield from child_walker
+                    else:
+                        yield from by_driver(child_walker)
+                finally:
+                    inline_depth, inline_frames = saved_counts
                 member_tag = component_tag(member_type)
             if run_component_tag is None:
                 run_component_tag = member_tag
@@ -1267,7 +1336,7 @@ def assemble_typed_render(
         inherited_root_markers: tuple[tuple[str, object], ...] = (),
         physical_parent_stack: tuple[str, ...] = (),
         marker_owner_id: str | None = None,
-    ) -> str:
+    ) -> Generator[Call, Any, str]:
         # A simple='vue' record is its own frame. The type checker
         # forbids subclasses of the final SimpleVueRecord, so isinstance acts
         # like an exact type check and narrows
@@ -1517,8 +1586,8 @@ def assemble_typed_render(
             # values of parts another occurrence wrote are copied into its
             # data, which its template reads.
             definition_owner_id: str = occurrence_id,
-        ) -> _DefinitionFragment:
-            nonlocal dynamic_site_index
+        ) -> Generator[Call, Any, _DefinitionFragment]:
+            nonlocal dynamic_site_index, inline_depth, inline_frames
             output = _DefinitionFragment.empty()
             dynamic_stack: list[tuple[str, str]] = []
             element_stack = list(parent_element_stack)
@@ -1586,16 +1655,19 @@ def assemble_typed_render(
                     active_projected_data_keys.pop()
                     active_projected_data_containers.pop()
                     active_definition_owners.pop()
-                    return transform_parts(
-                        parts,
-                        placement_route=placement_route,
-                        data_owner_id=data_owner_id,
-                        call_owner_id=call_owner_id,
-                        containing_slot=containing_slot,
-                        project_root_markers=project_root_markers,
-                        parent_element_stack=tuple(element_stack),
-                        parent_element_keys=tuple(element_keys),
-                        definition_owner_id=definition_owner_id,
+                    return (
+                        yield from nested(
+                            transform_parts,
+                            parts,
+                            placement_route=placement_route,
+                            data_owner_id=data_owner_id,
+                            call_owner_id=call_owner_id,
+                            containing_slot=containing_slot,
+                            project_root_markers=project_root_markers,
+                            parent_element_stack=tuple(element_stack),
+                            parent_element_keys=tuple(element_keys),
+                            definition_owner_id=definition_owner_id,
+                        )
                     )
                 if parts:
                     # `matching` has just proven every part eligible, so the run is all of them.
@@ -1867,7 +1939,7 @@ def assemble_typed_render(
                     fill_reads: list[str] = []
                     if copied_outside_author:
                         browser_read_trackers.append((lexical_owner, call_owner_id, fill_reads))
-                    selected = transform_parts(
+                    walker = transform_parts(
                         _projected_content(part, placed_outputs),
                         placement_route=(*placement_route, body_route_step),
                         data_owner_id=lexical_owner,
@@ -1890,6 +1962,19 @@ def assemble_typed_render(
                         # author's definition.
                         definition_owner_id=definition_owner_id if body_stays_here else lexical_owner,
                     )
+                    # Every slot a page shows passes through here, so this site runs
+                    # the walker without `nested`'s extra frame and call, under
+                    # the same two limits.
+                    if inline_depth < _INLINE_WALK_DEPTH and inline_frames < _INLINE_WALK_FRAMES:
+                        inline_depth += 1
+                        inline_frames += 1
+                        try:
+                            selected = yield from walker
+                        finally:
+                            inline_depth -= 1
+                            inline_frames -= 1
+                    else:
+                        selected = yield from by_driver(walker)
                     if copied_outside_author:
                         browser_read_trackers.pop()
                         if fill_reads:
@@ -1934,7 +2019,8 @@ def assemble_typed_render(
                 if isinstance(part, RenderDecoration) and (
                     not part.frame.is_component_root or part.frame.render_id == frame.render_id
                 ):
-                    decorated = transform_parts(
+                    decorated = yield from nested(
+                        transform_parts,
                         list(part.parts),
                         placement_route=placement_route,
                         data_owner_id=data_owner_id,
@@ -1948,16 +2034,19 @@ def assemble_typed_render(
                     )
                     wrapped = _DefinitionFragment.empty()
                     wrapped.extend(
-                        transform_parts(
-                            list(cast("Sequence[RenderPart]", part.opening)),
-                            placement_route=placement_route,
-                            data_owner_id=data_owner_id,
-                            call_owner_id=call_owner_id,
-                            containing_slot=containing_slot,
-                            project_root_markers=False,
-                            parent_element_stack=tuple(element_stack),
-                            parent_element_keys=tuple(element_keys),
-                            definition_owner_id=definition_owner_id,
+                        (
+                            yield from nested(
+                                transform_parts,
+                                list(cast("Sequence[RenderPart]", part.opening)),
+                                placement_route=placement_route,
+                                data_owner_id=data_owner_id,
+                                call_owner_id=call_owner_id,
+                                containing_slot=containing_slot,
+                                project_root_markers=False,
+                                parent_element_stack=tuple(element_stack),
+                                parent_element_keys=tuple(element_keys),
+                                definition_owner_id=definition_owner_id,
+                            )
                         )
                     )
                     wrapped.extend(decorated)
@@ -1974,33 +2063,39 @@ def assemble_typed_render(
                         else None
                     )
                     output.extend(
-                        transform_parts(
-                            list(part.parts),
-                            placement_route=placement_route,
-                            data_owner_id=data_owner_id,
-                            call_owner_id=call_owner_id,
-                            containing_slot=containing_slot,
-                            call_run=eligible_run,
-                            project_root_markers=project_root_markers and dom_depth == 0,
-                            parent_element_stack=tuple(element_stack),
-                            parent_element_keys=tuple(element_keys),
-                            definition_owner_id=definition_owner_id,
+                        (
+                            yield from nested(
+                                transform_parts,
+                                list(part.parts),
+                                placement_route=placement_route,
+                                data_owner_id=data_owner_id,
+                                call_owner_id=call_owner_id,
+                                containing_slot=containing_slot,
+                                call_run=eligible_run,
+                                project_root_markers=project_root_markers and dom_depth == 0,
+                                parent_element_stack=tuple(element_stack),
+                                parent_element_keys=tuple(element_keys),
+                                definition_owner_id=definition_owner_id,
+                            )
                         )
                     )
                     continue
                 if type(part) is SimpleRender:
                     validate_flattened_render_identity(part, "simple")
                     output.extend(
-                        transform_parts(
-                            list(part.parts),
-                            placement_route=placement_route,
-                            data_owner_id=data_owner_id,
-                            call_owner_id=call_owner_id,
-                            containing_slot=containing_slot,
-                            project_root_markers=project_root_markers and dom_depth == 0,
-                            parent_element_stack=tuple(element_stack),
-                            parent_element_keys=tuple(element_keys),
-                            definition_owner_id=definition_owner_id,
+                        (
+                            yield from nested(
+                                transform_parts,
+                                list(part.parts),
+                                placement_route=placement_route,
+                                data_owner_id=data_owner_id,
+                                call_owner_id=call_owner_id,
+                                containing_slot=containing_slot,
+                                project_root_markers=project_root_markers and dom_depth == 0,
+                                parent_element_stack=tuple(element_stack),
+                                parent_element_keys=tuple(element_keys),
+                                definition_owner_id=definition_owner_id,
+                            )
                         )
                     )
                     continue
@@ -2104,7 +2199,7 @@ def assemble_typed_render(
                                 call_owner_id,
                             )
                             call_values[wrapper_binding] = wrapper_key
-                        transparent_body = transform_parts(
+                        walker = transform_parts(
                             list(render_part.parts),
                             placement_route=transparent_route,
                             data_owner_id=data_owner_id,
@@ -2115,6 +2210,19 @@ def assemble_typed_render(
                             parent_element_keys=tuple(element_keys),
                             definition_owner_id=definition_owner_id,
                         )
+                        # Every transparent component passes through here, so this site
+                        # runs the walker without `nested`'s extra frame and call,
+                        # under the same two limits.
+                        if inline_depth < _INLINE_WALK_DEPTH and inline_frames < _INLINE_WALK_FRAMES:
+                            inline_depth += 1
+                            inline_frames += 1
+                            try:
+                                transparent_body = yield from walker
+                            finally:
+                                inline_depth -= 1
+                                inline_frames -= 1
+                        else:
+                            transparent_body = yield from by_driver(walker)
                         if wrapper_key is None:
                             output.extend(transparent_body)
                             continue
@@ -2193,15 +2301,21 @@ def assemble_typed_render(
                             run_member_ids, run_component_tag = taken
                             members: list[tuple[str, str, str, tuple[_FillFragment, ...]]] = []
                         else:
-                            members, run_component_tag = run_members(
-                                run_group,
-                                occurrence_id,
-                                call_owner_id,
-                                data_owner_id,
-                                placement_route,
-                                element_stack,
-                                local_identity_keys,
-                            )
+                            # The run's own frame counts toward the direct
+                            # walks' frame limit; see `nested`.
+                            inline_frames += 1
+                            try:
+                                members, run_component_tag = yield from run_members(
+                                    run_group,
+                                    occurrence_id,
+                                    call_owner_id,
+                                    data_owner_id,
+                                    placement_route,
+                                    element_stack,
+                                    local_identity_keys,
+                                )
+                            finally:
+                                inline_frames -= 1
                         if run_component_tag is None:
                             raise AssertionError("nonempty prepared call run produced no component tag")
                         if not any(member_fills for _, _, _, member_fills in members):
@@ -2283,7 +2397,7 @@ def assemble_typed_render(
                     )
                     placement_key = f"citryPlacement{placement_digest[:24]}"
                     child_id = f"citryOccurrence{_digest(occurrence_id, placement_key)[:24]}"
-                    transform_component(
+                    child_walker = transform_component(
                         render_part,
                         occurrence_id,
                         child_id,
@@ -2292,6 +2406,18 @@ def assemble_typed_render(
                         tuple(element_stack),
                         data_owner_id,
                     )
+                    # The child's own body starts its nested-level count again, and the
+                    # child runs directly while the direct walks stay under
+                    # `_INLINE_WALK_FRAMES`; see `nested`.
+                    saved_counts = inline_depth, inline_frames
+                    try:
+                        if inline_frames < _INLINE_WALK_FRAMES:
+                            inline_depth, inline_frames = 0, inline_frames + 2
+                            yield from child_walker
+                        else:
+                            yield from by_driver(child_walker)
+                    finally:
+                        inline_depth, inline_frames = saved_counts
                     refuse_compiled_elsewhere("a component")
                     calls = call_values["calls"]
                     if type(calls) is not dict:
@@ -3152,15 +3278,19 @@ def assemble_typed_render(
             if len(call_children) != len(call_fragment_source.calls):
                 raise UnsupportedPreparedView("simple='vue' called children do not match the template's calls")
             attach_leaf_data(call_leaf, prepared_values)
-            call_outputs = [
+            call_outputs = []
+            for call, child in zip(call_fragment_source.calls, call_children, strict=True):
                 # Each row's template is compiled into this occurrence's
                 # definition, so parts authored elsewhere copy their values here.
-                transform_parts(
-                    [child],
-                    parent_element_stack=(*physical_parent_stack, *call.element_stack),
+                call_outputs.append(
+                    (
+                        yield from nested(
+                            transform_parts,
+                            [child],
+                            parent_element_stack=(*physical_parent_stack, *call.element_stack),
+                        )
+                    )
                 )
-                for call, child in zip(call_fragment_source.calls, call_children, strict=True)
-            ]
             # The element text names the child's tag and call id, both fixed
             # by the call site and the child's class, so equal text means an
             # equal definition.
@@ -3234,7 +3364,10 @@ def assemble_typed_render(
             else:
                 # The body is compiled into this occurrence's definition, so a
                 # part authored elsewhere inside it has its values copied here.
-                fragment = transform_parts(
+                # The component's own body runs directly: the call site that
+                # assembles this component already counted its frames (see
+                # `nested`).
+                fragment = yield from transform_parts(
                     selected_parts,
                     parent_element_stack=physical_parent_stack,
                 )
@@ -3272,7 +3405,7 @@ def assemble_typed_render(
         raise UnsupportedPreparedView("prepared root occurrence id is not a string")
     if re.fullmatch(r"citryOccurrence[0-9A-Za-z]+", root_id) is None:
         raise UnsupportedPreparedView("prepared root occurrence id is not generated-safe")
-    transform_component(root_record or render, None, root_id, marker_owner_id=root_id)
+    run(transform_component(root_record or render, None, root_id, marker_owner_id=root_id))
     if any(supplied_fills.values()):
         raise UnsupportedPreparedView("selected direct fills were not consumed by their receiver call")
     placements: set[tuple[str, str]] = set()
@@ -4098,14 +4231,18 @@ def _authored_element_only(part: PreparedElementOpen) -> bool:
     )
 
 
-def _authored_markup_only(parts: Sequence[RenderPart], transparent_receivers: frozenset[str] = frozenset()) -> bool:
-    """
-    Return whether these parts are markup written in the template, which Vue can read as written.
-
-    ``transparent_receivers`` holds the transparent components being read,
-    whose own `<c-slot />` outlets hold content written in these parts.
-    """
-    for part in parts:
+def _authored_markup_only(parts: Sequence[RenderPart]) -> bool:
+    """Return whether these parts are markup written in the template, which Vue can read as written."""
+    # The transparent components being read, whose own `<c-slot />` outlets
+    # hold content written in these parts. A stack of part iterators keeps
+    # the number of Python frames the same however deep the template nests.
+    receivers: set[str] = set()
+    pending = [iter(parts)]
+    while pending:
+        part = next(pending[-1], _END_OF_PARTS)
+        if part is _END_OF_PARTS:
+            pending.pop()
+            continue
         if (type(part) is str and part == "") or isinstance(
             part, (PreparedSourceText, PreparedStaticRun, PreparedElementClose)
         ):
@@ -4116,34 +4253,28 @@ def _authored_markup_only(parts: Sequence[RenderPart], transparent_receivers: fr
             continue
         if isinstance(part, PreparedElementOpen) and _authored_element_only(part):
             continue
-        receivers = transparent_receivers
-        if type(part) is CitryRender and part.frame.is_transparent_root and part.frame.render_id is not None:
-            receivers = receivers | {part.frame.render_id}
         if (
             type(part) is CitryRender
             and not part.frame.is_component_root
             and (part.frame.is_transparent_root or part.frame.class_id is None)
-            and _authored_markup_only(part.parts, receivers)
-        ) or (
-            isinstance(part, DirectProjectionRender)
-            and part.receiver_render_id in transparent_receivers
-            and _authored_markup_only(part.parts, transparent_receivers)
         ):
             # A transparent component, such as `<c-provide>`, that renders
             # only written markup adds nothing for Vue to read. Its body
             # renders under no component class. A `<c-if>` or `<c-for>` body
             # renders under its component's class and takes Citry's path,
             # since the branch or the rows it picks are data.
+            if part.frame.is_transparent_root and part.frame.render_id is not None:
+                receivers.add(part.frame.render_id)
+            pending.append(iter(part.parts))
+            continue
+        if isinstance(part, DirectProjectionRender) and part.receiver_render_id in receivers:
+            pending.append(iter(part.parts))
             continue
         return False
     return True
 
 
-def _authored_vue_syntax(
-    parts: Sequence[RenderPart],
-    component_name: Callable[[str], str],
-    transparent_receivers: frozenset[str] = frozenset(),
-) -> str | None:
+def _authored_vue_syntax(parts: Sequence[RenderPart], component_name: Callable[[str], str]) -> str | None:
     """
     Name the first Vue syntax in these parts that Vue would read once Citry compiles them, or return None.
 
@@ -4152,18 +4283,28 @@ def _authored_vue_syntax(
     own. A child component counts as Vue syntax, because Vue would compile
     the slot content this template gives it. A `<c-slot />` outlet holds
     content another template wrote, so it is skipped, except the outlet of a
-    transparent or `simple = True` component written inside these parts
-    (``transparent_receivers``).
+    transparent or `simple = True` component written inside these parts.
     """
     # The same import cycle as in `_ignored_contents_html` keeps this lazy.
     from citry._simple_runtime import SimpleRender  # noqa: PLC0415
 
-    index = 0
-    while index < len(parts):
-        part = parts[index]
+    # The transparent and `simple = True` components being read, whose own
+    # outlets hold content written here. Each stack entry is a part list and
+    # the index of its next part: a stack keeps the number of Python frames
+    # the same however deep the template nests, and an index lets a nested
+    # `v-pre` element be skipped to its close.
+    receivers: set[str] = set()
+    pending: list[tuple[Sequence[RenderPart], int]] = [(parts, 0)]
+    while pending:
+        current, index = pending[-1]
+        if index >= len(current):
+            pending.pop()
+            continue
+        part = current[index]
+        pending[-1] = (current, index + 1)
         if isinstance(part, PreparedElementOpen):
             if is_v_pre_element_open(part) and not part.is_void:
-                index = _ignored_element_close_index(parts, index) + 1
+                pending[-1] = (current, _ignored_element_close_index(current, index) + 1)
                 continue
             vue_attr = next(
                 (attr.name for attr in part.attrs if attr.origin == "source" and is_vue_directive_name(attr.name)),
@@ -4178,22 +4319,16 @@ def _authored_vue_syntax(
         elif (type(part) is CitryRender and not part.frame.is_component_root) or type(part) is SimpleRender:
             # A transparent or `simple = True` component writes its body
             # here, and its `<c-slot />` outlets hold content written here.
-            receivers = transparent_receivers
             if (part.frame.is_transparent_root or type(part) is SimpleRender) and part.frame.render_id is not None:
-                receivers = receivers | {part.frame.render_id}
-            found = _authored_vue_syntax(part.parts, component_name, receivers)
-            if found is not None:
-                return found
+                receivers.add(part.frame.render_id)
+            pending.append((part.parts, 0))
         elif isinstance(part, CitryRender) and part.frame.class_id and not isinstance(part, DirectProjectionRender):
             # A child component's slot content is written in this template
             # and Vue would compile it there, so a child is refused here, as
             # inside the block.
             return f"the component {component_name(part.frame.class_id)}"
-        elif isinstance(part, DirectProjectionRender) and part.receiver_render_id in transparent_receivers:
-            found = _authored_vue_syntax(part.parts, component_name, transparent_receivers)
-            if found is not None:
-                return found
-        index += 1
+        elif isinstance(part, DirectProjectionRender) and part.receiver_render_id in receivers:
+            pending.append((part.parts, 0))
     return None
 
 
@@ -4221,6 +4356,15 @@ def _ignored_element_close_index(parts: Sequence[RenderPart], open_index: int, l
                 return index
             depth -= 1
     raise UnsupportedPreparedView(f"{label} has no matching close tag in the same template")
+
+
+# Marks the end of a part iterator in `_ignored_contents_html`'s stack walk.
+_END_OF_PARTS = object()
+
+
+def _resume(walker: Generator[Call, Any, _R]) -> Generator[Call, Any, _R]:
+    """Run an already created walker as a nested walk of the driver."""
+    return (yield from walker)
 
 
 def _ignored_contents_html(
@@ -4266,7 +4410,15 @@ def _ignored_contents_html(
     transparent_receivers: set[str] = set()
 
     def visit(items: Sequence[RenderPart]) -> None:
-        for part in items:
+        # Nested bodies are walked with a stack of part iterators rather than
+        # a call per level, so this walk uses the same number of Python
+        # frames however deep the template nests.
+        pending = [iter(items)]
+        while pending:
+            part = next(pending[-1], _END_OF_PARTS)
+            if part is _END_OF_PARTS:
+                pending.pop()
+                continue
             if type(part) is str and part == "":
                 continue
             if isinstance(part, PreparedSourceText):
@@ -4342,9 +4494,9 @@ def _ignored_contents_html(
                 # which the template parser refuses inside `#c-ignore`.
                 if part.frame.is_transparent_root and part.frame.render_id is not None:
                     transparent_receivers.add(part.frame.render_id)
-                visit(part.parts)
+                pending.append(iter(part.parts))
             elif isinstance(part, DirectProjectionRender) and part.receiver_render_id in transparent_receivers:
-                visit(part.parts)
+                pending.append(iter(part.parts))
             elif isinstance(part, Placeholder) and part.key in {"deps:css", "deps:js"}:
                 # `<c-js />` and `<c-css />` write nothing inside a component.
                 continue
@@ -4358,7 +4510,7 @@ def _ignored_contents_html(
                 # content its `<c-slot />` outlets show.
                 if part.frame.render_id is not None:
                     transparent_receivers.add(part.frame.render_id)
-                visit(part.parts)
+                pending.append(iter(part.parts))
             elif isinstance(part, CitryRender) and part.frame.class_id:
                 raise reject(f"the component {component_name(part.frame.class_id)}")
             else:

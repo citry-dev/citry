@@ -2648,6 +2648,49 @@ def _i18n_body_capture_is_empty(component: Component) -> bool:
 
 def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInteriorBody | PurePreparedPart | None:
     """Detach one ownership-free output part for a render-local pure plan."""
+    first = _capture_pure_leaf(part, context)
+    if first is not _DESCEND:
+        return cast("str | PurePreparedPart | None", first)
+    # A nested body is captured with a stack of (part iterator, plan) entries
+    # rather than a call per level, so this walk uses the same number of Python
+    # frames however deep the template nests.
+    stack: list[tuple[Iterator[RenderPart], list[str | PureInteriorBody | PurePreparedPart]]] = [
+        (iter(cast("CitryRender", part).parts), [])
+    ]
+    while True:
+        nested_parts, plan = stack[-1]
+        nested_part = next(nested_parts, _END)
+        if nested_part is _END:
+            stack.pop()
+            body = PureInteriorBody(tuple(plan))
+            if not stack:
+                return body
+            stack[-1][1].append(body)
+            continue
+        captured = _capture_pure_leaf(nested_part, context)
+        if captured is None:
+            # One part that cannot be replayed makes the whole part live.
+            return None
+        if captured is _DESCEND:
+            stack.append((iter(cast("CitryRender", nested_part).parts), []))
+            continue
+        plan.append(cast("str | PurePreparedPart", captured))
+
+
+# `_DESCEND` marks a render whose parts `_capture_pure_part` captures one level
+# down, and `_END` marks a used-up part iterator in this module's stack walks.
+_DESCEND = object()
+_END = object()
+
+
+def _capture_pure_leaf(part: object, context: CitryContext) -> str | PurePreparedPart | object | None:
+    """
+    Capture one part that holds no nested parts, or say how to handle it.
+
+    Returns the captured value, ``None`` when the part cannot be replayed,
+    or ``_DESCEND`` for a render of this component's own body, whose parts
+    are captured in turn.
+    """
     if isinstance(part, str):
         return part
     from citry._vue.capture import (  # noqa: PLC0415
@@ -2658,7 +2701,7 @@ def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInt
     )
 
     if type(part) in {PreparedSourceText, PreparedStaticRun, PreparedElementClose}:
-        return PurePreparedPart(part)
+        return PurePreparedPart(cast("RenderPart", part))
     if (
         type(part) is PreparedTextValue
         and part.browser_binding is None
@@ -2672,13 +2715,7 @@ def _capture_pure_part(part: RenderPart, context: CitryContext) -> str | PureInt
         or part.frame.is_transparent_root
     ):
         return None
-    plan: list[str | PureInteriorBody | PurePreparedPart] = []
-    for nested_part in part.parts:
-        captured = _capture_pure_part(nested_part, context)
-        if captured is None:
-            return None
-        plan.append(captured)
-    return PureInteriorBody(tuple(plan))
+    return _DESCEND
 
 
 def _render_and_capture_pure_body(
@@ -2730,15 +2767,26 @@ def _render_pure_live_item(item: Node, context: CitryContext, *, tracing: bool) 
 def _replay_pure_body(plan: PureBodyPlan, context: CitryContext) -> list[RenderPart]:
     """Recreate transparent render wrappers against the current component context."""
     parts: list[RenderPart] = []
-    for item in plan:
+    # Each entry is a nested plan's item iterator and the parts built for it. A
+    # stack keeps the number of Python frames the same however deep the
+    # template nests, and items still replay in document order.
+    stack: list[tuple[Iterator[object], list[RenderPart]]] = [(iter(plan), parts)]
+    while stack:
+        items, current = stack[-1]
+        item = next(items, _END)
+        if item is _END:
+            stack.pop()
+            if stack:
+                stack[-1][1].append(CitryRender(parts=current, context=context))
+            continue
         if isinstance(item, str):
-            parts.append(item)
+            current.append(item)
         elif isinstance(item, PurePreparedPart):
-            parts.append(item.part)
+            current.append(item.part)
         elif isinstance(item, PureInteriorBody):
-            parts.append(CitryRender(parts=_replay_pure_body(item.parts, context), context=context))
+            stack.append((iter(item.parts), []))
         else:
-            parts.append(_render_pure_live_item(item.item, context, tracing=is_tracing()))
+            current.append(_render_pure_live_item(cast("PureLiveBodyItem", item).item, context, tracing=is_tracing()))
     return parts
 
 

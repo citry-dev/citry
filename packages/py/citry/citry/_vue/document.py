@@ -9,9 +9,13 @@ from citry.citry_render import CitryRender, Placeholder, SimpleVueRecord, simple
 from citry.util.html import Markup, escape_to_str
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
 
     from citry._vue.capture import PreparedElementOpen
+
+
+# Marks the end of a part iterator in the stack walks below.
+_END = object()
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,9 +51,18 @@ def typed_document_shell(render: CitryRender, host_html: str) -> TypedDocumentSh
     active_render_ids: list[str] = []
 
     def contains_document(parts: Iterable[object]) -> bool:
-        for part in parts:
-            if isinstance(part, CitryRender) and contains_document(part.parts):
-                return True
+        # Nested renders are walked with a stack of part iterators rather than
+        # a call per level, so this walk uses the same number of Python frames
+        # however deep the template nests.
+        pending = [iter(parts)]
+        while pending:
+            part = next(pending[-1], _END)
+            if part is _END:
+                pending.pop()
+                continue
+            if isinstance(part, CitryRender):
+                pending.append(iter(part.parts))
+                continue
             if isinstance(part, PreparedElementOpen) and part.tag.lower() in {"html", "head", "body"}:
                 return True
             if isinstance(
@@ -74,114 +87,144 @@ def typed_document_shell(render: CitryRender, host_html: str) -> TypedDocumentSh
 
     def visit(parts: Iterable[object]) -> None:
         nonlocal body_count, body_depth, document_marker
-        for part in parts:
-            if isinstance(part, CitryRender):
-                render_id = part.frame.render_id
-                if render_id is not None:
-                    active_render_ids.append(render_id)
-                visit(part.parts)
-                if render_id is not None:
-                    active_render_ids.pop()
-                continue
-            if isinstance(part, PreparedElementOpen):
-                tag = part.tag.lower()
-                if (
-                    document_hint
-                    and not body_depth
-                    and tag != "body"
-                    and any(attr.name.startswith(("@c-", ":c-", "v-", "@", ":", "#")) for attr in part.attrs)
-                ):
-                    raise ValueError("Interactive Vue bindings are unsupported in the physical document head.")
-                if tag in {"html", "head", "body"}:
-                    document_marker = True
-                if tag == "body":
-                    body_count += 1
-                    if body_count != 1 or body_depth:
-                        raise ValueError("Interactive Vue document serialization requires exactly one body element.")
-                    body_depth = 1
-                    output.append(_open_html(part))
-                    output.append(host_html)
-                    record_region("body")
-                    continue
-                if body_depth:
-                    record_region("body")
-                    continue
-                record_region("head")
-                output.append(_open_html(part))
-                continue
-            if isinstance(part, PreparedElementClose):
-                tag = part.tag.lower()
-                if body_depth:
+        # `current` is the part iterator being read, and `pushed_id` says
+        # whether its render added an id to `active_render_ids`, which must
+        # come off again once its parts are done. `pending` holds the outer
+        # iterators. A stack keeps the number of Python frames the same however
+        # deep the template nests.
+        pending: list[tuple[Iterator[object], bool]] = []
+        current: Iterator[object] = iter(parts)
+        pushed_id = False
+        while True:
+            for part in current:
+                if isinstance(part, CitryRender):
+                    render_id = part.frame.render_id
+                    if render_id is not None:
+                        active_render_ids.append(render_id)
+                    # Descend: this render's parts come next, and the loop
+                    # resumes the outer iterator once they are done.
+                    pending.append((current, pushed_id))
+                    current, pushed_id = iter(part.parts), render_id is not None
+                    break
+                if isinstance(part, PreparedElementOpen):
+                    tag = part.tag.lower()
+                    if (
+                        document_hint
+                        and not body_depth
+                        and tag != "body"
+                        and any(attr.name.startswith(("@c-", ":c-", "v-", "@", ":", "#")) for attr in part.attrs)
+                    ):
+                        raise ValueError("Interactive Vue bindings are unsupported in the physical document head.")
+                    if tag in {"html", "head", "body"}:
+                        document_marker = True
                     if tag == "body":
-                        body_depth = 0
-                        output.append(f"</{part.tag}>")
+                        body_count += 1
+                        if body_count != 1 or body_depth:
+                            raise ValueError(
+                                "Interactive Vue document serialization requires exactly one body element."
+                            )
+                        body_depth = 1
+                        output.append(_open_html(part))
+                        output.append(host_html)
+                        record_region("body")
+                        continue
+                    if body_depth:
+                        record_region("body")
+                        continue
+                    record_region("head")
+                    output.append(_open_html(part))
+                    continue
+                if isinstance(part, PreparedElementClose):
+                    tag = part.tag.lower()
+                    if body_depth:
+                        if tag == "body":
+                            body_depth = 0
+                            output.append(f"</{part.tag}>")
+                        record_region("body")
+                        continue
+                    record_region("head")
+                    output.append(f"</{part.tag}>")
+                    continue
+                if isinstance(part, (PreparedDynamicElementOpen, PreparedDynamicElementClose)):
+                    if body_depth:
+                        record_region("body")
+                        continue
+                    if not document_marker:
+                        unsupported_before_document.append(type(part).__name__)
+                        continue
+                    raise TypeError(
+                        f"interactive document shell received unsupported typed part {type(part).__name__}"
+                    )
+                text_part = isinstance(
+                    part,
+                    (
+                        PreparedSourceText,
+                        PreparedStaticRun,
+                        PreparedTextValue,
+                        PreparedTrustedHtmlValue,
+                        PreparedVerbatimHtml,
+                    ),
+                )
+                if body_depth and text_part:
                     record_region("body")
                     continue
+                if body_depth and isinstance(part, PreparedLeafProgram):
+                    record_region("body")
+                    continue
+                if body_depth and type(part) is SimpleVueRecord:
+                    record_region("body")
+                    # Ordinary children the record called record their own regions.
+                    if part.call_children is not None:
+                        called_renders = [
+                            called for called in simple_vue_called_components(part) if isinstance(called, CitryRender)
+                        ]
+                        pending.append((current, pushed_id))
+                        current, pushed_id = iter(called_renders), False
+                        break
+                    continue
+                if body_depth and type(part) in {Markup, _EscapedSlotText}:
+                    # Markup is already trusted by the ordinary rendering
+                    # contract. The physical shell still cannot infer structure
+                    # from it, but Vue replaces all content inside the typed body.
+                    record_region("body")
+                    continue
+                if isinstance(part, PreparedSourceText):
+                    text = part.text
+                elif isinstance(part, PreparedStaticRun):
+                    text = part.html
+                elif isinstance(part, PreparedTextValue):
+                    text = escape_to_str(part.value)
+                elif isinstance(part, (PreparedTrustedHtmlValue, PreparedVerbatimHtml)):
+                    text = part.html
+                elif isinstance(part, Placeholder):
+                    if part.key not in {"deps:css", "deps:js"}:
+                        raise TypeError("interactive document shell cannot contain an unresolved placeholder")
+                    record_region("body" if body_depth else "head")
+                    continue
+                elif part == "" and type(part) is str:
+                    # ``None`` has always rendered as the exact empty string. It
+                    # carries no markup or ownership and is safe to erase here.
+                    continue
+                else:
+                    if not document_marker and not body_depth:
+                        unsupported_before_document.append(type(part).__name__)
+                        continue
+                    raise TypeError(
+                        f"interactive document shell received unsupported typed part {type(part).__name__}"
+                    )
+                if text.lstrip().lower().startswith("<!doctype"):
+                    document_marker = True
                 record_region("head")
-                output.append(f"</{part.tag}>")
-                continue
-            if isinstance(part, (PreparedDynamicElementOpen, PreparedDynamicElementClose)):
-                if body_depth:
-                    record_region("body")
-                    continue
-                if not document_marker:
-                    unsupported_before_document.append(type(part).__name__)
-                    continue
-                raise TypeError(f"interactive document shell received unsupported typed part {type(part).__name__}")
-            text_part = isinstance(
-                part,
-                (
-                    PreparedSourceText,
-                    PreparedStaticRun,
-                    PreparedTextValue,
-                    PreparedTrustedHtmlValue,
-                    PreparedVerbatimHtml,
-                ),
-            )
-            if body_depth and text_part:
-                record_region("body")
-                continue
-            if body_depth and isinstance(part, PreparedLeafProgram):
-                record_region("body")
-                continue
-            if body_depth and type(part) is SimpleVueRecord:
-                record_region("body")
-                # Ordinary children the record called record their own regions.
-                if part.call_children is not None:
-                    visit([called for called in simple_vue_called_components(part) if isinstance(called, CitryRender)])
-                continue
-            if body_depth and type(part) in {Markup, _EscapedSlotText}:
-                # Markup is already trusted by the ordinary rendering
-                # contract. The physical shell still cannot infer structure
-                # from it, but Vue replaces all content inside the typed body.
-                record_region("body")
-                continue
-            if isinstance(part, PreparedSourceText):
-                text = part.text
-            elif isinstance(part, PreparedStaticRun):
-                text = part.html
-            elif isinstance(part, PreparedTextValue):
-                text = escape_to_str(part.value)
-            elif isinstance(part, (PreparedTrustedHtmlValue, PreparedVerbatimHtml)):
-                text = part.html
-            elif isinstance(part, Placeholder):
-                if part.key not in {"deps:css", "deps:js"}:
-                    raise TypeError("interactive document shell cannot contain an unresolved placeholder")
-                record_region("body" if body_depth else "head")
-                continue
-            elif part == "" and type(part) is str:
-                # ``None`` has always rendered as the exact empty string. It
-                # carries no markup or ownership and is safe to erase here.
-                continue
+                output.append(text)
             else:
-                if not document_marker and not body_depth:
-                    unsupported_before_document.append(type(part).__name__)
-                    continue
-                raise TypeError(f"interactive document shell received unsupported typed part {type(part).__name__}")
-            if text.lstrip().lower().startswith("<!doctype"):
-                document_marker = True
-            record_region("head")
-            output.append(text)
+                # This iterator is used up: take its render's id off
+                # `active_render_ids`, then go back to the outer iterator, or
+                # stop after the root.
+                if pushed_id:
+                    active_render_ids.pop()
+                if not pending:
+                    break
+                current, pushed_id = pending.pop()
 
     visit((render,))
     if not document_marker:
