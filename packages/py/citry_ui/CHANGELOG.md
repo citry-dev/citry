@@ -26,6 +26,11 @@
   `CDisclosure`.
 - `CCalendar`, `CDatePicker`, and `CDateRange` now accept
   `first_day_of_week="1"`, where they used to raise `TypeError`.
+- While a `CMenu`, `CContextMenu`, or `CSplitButton` menu is open,
+  scrolling the page no longer jumps back to the menu, for example when
+  the pointer leaves a submenu trigger or the menu re-renders. The menu
+  scrolls its own list to show the focused item, and scrolls the page only
+  after a key press moves focus to an item that is off screen.
 
 ### Changed
 
