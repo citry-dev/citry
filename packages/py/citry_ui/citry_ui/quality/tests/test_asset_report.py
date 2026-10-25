@@ -498,7 +498,11 @@ def test_context_menu_assets_stay_within_the_family_budgets():
     assert incremental["javascript"]["gzip"] < 10 * 1024
     assert incremental["javascript"]["brotli"] < 9 * 1024
     assert family["javascript"]["raw"] < 160 * 1024
-    assert family["javascript"]["gzip"] < 34 * 1024
+    # 35 KiB from 34 KiB: CMenu now scrolls only its own list to show the
+    # focused item, and scrolls the page only after a key press (#383),
+    # which added about 880 gzip bytes that shorter comments could not
+    # recover.
+    assert family["javascript"]["gzip"] < 35 * 1024
     assert family["javascript"]["brotli"] < 30 * 1024
     assert family["css"]["raw"] < 20 * 1024
     assert family["css"]["gzip"] < 3 * 1024
