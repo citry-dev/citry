@@ -13,6 +13,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypeVar, cast, final, overload
 
 import citry.citry_render as render_module
+from citry._walk import Call, run, walk
 from citry.attrs import (
     _format_resolved_attrs_to_str,
     _has_default_attr_formatting,
@@ -80,7 +81,7 @@ from .compiler import (
 from .json_data import _JS_SAFE_INTEGER, _vue_attribute_map, _vue_attribute_value
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import Callable, Generator, Iterator, Sequence
     from typing import Protocol, TypeAlias
 
     from citry.citry_context import CitryContext
@@ -811,13 +812,16 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
             depth, raw, _positions = scanned
         return depth, raw
 
-    def walk(
+    # `walk_body` yields `Call(...)` where it would call itself, and
+    # `citry._walk.run` runs those calls from a list, so checking the plan
+    # does not need one Python call per level of control flow.
+    def walk_body(
         simple_operations: tuple[_SimpleJsonOperation, ...],
         depth: int,
         raw: str | None,
         *,
         top: bool,
-    ) -> tuple[int, str | None] | None:
+    ) -> Generator[Call, Any, tuple[int, str | None] | None]:
         for simple in simple_operations:
             if simple.kind == "skip":
                 operation = simple.operation
@@ -853,7 +857,7 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
                     else (simple.body, simple.empty)
                 )
                 for body in bodies:
-                    if walk(body, depth, None, top=False) != (depth, None):
+                    if (yield Call(walk_body, body, depth, None, top=False)) != (depth, None):
                         return None
                 continue
             else:
@@ -863,7 +867,7 @@ def _materialized_row_plan(operations: tuple[_SimpleJsonOperation, ...]) -> _Mat
             depth, raw = state
         return depth, raw
 
-    if walk(operations, 0, None, top=True) is None:
+    if run(walk_body(operations, 0, None, top=True)) is None:
         return None
     return _MaterializedRowPlan(literal_pieces, runtime_opens, frozenset(plain_name_opens))
 
@@ -1071,6 +1075,27 @@ def _compile_simple_json_operations(
     lexical_names: tuple[str, ...] = (),
     allow_instance_free_spread: bool = False,
 ) -> tuple[_SimpleJsonOperation, ...] | None:
+    """Compile operations for the generated evaluator, or return None when one is unsupported."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(
+        _compile_simple_json_walk(
+            operations,
+            nested=nested,
+            lexical_names=lexical_names,
+            allow_instance_free_spread=allow_instance_free_spread,
+        )
+    )
+
+
+def _compile_simple_json_walk(
+    operations: tuple[object, ...],
+    *,
+    nested: bool,
+    lexical_names: tuple[str, ...],
+    allow_instance_free_spread: bool,
+) -> Generator[Call, Any, tuple[_SimpleJsonOperation, ...] | None]:
+    """The walk generator behind ``_compile_simple_json_operations``."""
     compiled: list[_SimpleJsonOperation] = []
     for operation in operations:
         if isinstance(operation, (_Static, _Close)):
@@ -1146,7 +1171,8 @@ def _compile_simple_json_operations(
                     condition = _compile_simple_json_expr(condition_attr.expr, condition_attr.used_vars)
                     if condition is None or condition.kind != "path":
                         return None
-                body = _compile_simple_json_operations(
+                body = yield Call(
+                    _compile_simple_json_walk,
                     branch_operations,
                     nested=True,
                     lexical_names=lexical_names,
@@ -1163,13 +1189,15 @@ def _compile_simple_json_operations(
             target, iterable = loop
             if target in lexical_names:
                 return None
-            body = _compile_simple_json_operations(
+            body = yield Call(
+                _compile_simple_json_walk,
                 operation.body,
                 nested=True,
                 lexical_names=(*lexical_names, target),
                 allow_instance_free_spread=allow_instance_free_spread,
             )
-            empty = _compile_simple_json_operations(
+            empty = yield Call(
+                _compile_simple_json_walk,
                 operation.empty,
                 nested=True,
                 lexical_names=lexical_names,
@@ -1262,10 +1290,12 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
             return
         raise AssertionError(f"unknown simple JSON read expression: {expression.kind}")
 
+    # `visit` and `freeze` are walk generators run by `run`, so Python's call
+    # depth does not grow with how deeply the template nests.
     def visit(
         scoped_operations: tuple[_SimpleJsonOperation, ...],
         local_nodes: dict[str, _SimpleJsonReadNodeBuilder],
-    ) -> None:
+    ) -> Generator[Call, Any, None]:
         for simple in scoped_operations:
             if simple.kind == "text":
                 add_expression(cast("_SimpleJsonExpr", simple.expression), "scalar", local_nodes)
@@ -1282,7 +1312,7 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
                 for condition, body in simple.branches:
                     if condition is not None:
                         add_expression(condition, "truth", local_nodes)
-                    visit(body, local_nodes)
+                    yield Call(visit, body, local_nodes)
             elif simple.kind == "call":
                 # A call passes each value to the child unchanged, as the
                 # ordinary call does. The walk to it must still go through
@@ -1298,49 +1328,68 @@ def _simple_json_read_set(operations: tuple[_SimpleJsonOperation, ...]) -> _Simp
                     iterable.items = new_node()
                 loop_nodes = dict(local_nodes)
                 loop_nodes[cast("str", simple.target)] = iterable.items
-                visit(simple.body, loop_nodes)
+                yield Call(visit, simple.body, loop_nodes)
                 # Empty branches do not introduce the loop variable.
-                visit(simple.empty, local_nodes)
+                yield Call(visit, simple.empty, local_nodes)
 
-    visit(operations, {})
+    run(visit(operations, {}))
 
-    def freeze(node: _SimpleJsonReadNodeBuilder) -> _SimpleJsonReadNode:
-        return _SimpleJsonReadNode(
-            frozenset(node.kinds),
-            tuple((key, freeze(child)) for key, child in node.children.items()),
-            None if node.items is None else freeze(node.items),
-        )
+    def freeze(node: _SimpleJsonReadNodeBuilder) -> Generator[Call, Any, _SimpleJsonReadNode]:
+        children: list[tuple[str, _SimpleJsonReadNode]] = []
+        for key, child in node.children.items():
+            children.append((key, (yield Call(freeze, child))))
+        items = None if node.items is None else (yield Call(freeze, node.items))
+        return _SimpleJsonReadNode(frozenset(node.kinds), tuple(children), items)
 
     return _SimpleJsonReadSet(
-        tuple((name, freeze(node)) for name, node in roots.items()),
+        tuple((name, run(freeze(node))) for name, node in roots.items()),
         _simple_json_loop_targets(operations),
     )
 
 
 def _simple_json_loop_targets(operations: tuple[_SimpleJsonOperation, ...]) -> tuple[str, ...]:
+    """Return every loop variable in ``operations``, in first-seen order."""
+    return run(_loop_targets_walk(operations))
+
+
+def _loop_targets_walk(operations: tuple[_SimpleJsonOperation, ...]) -> Generator[Call, Any, tuple[str, ...]]:
+    """The walk generator behind ``_simple_json_loop_targets``."""
     targets: list[str] = []
     for operation in operations:
         if operation.kind == "for":
             targets.append(cast("str", operation.target))
-            targets.extend(_simple_json_loop_targets(operation.body))
-            targets.extend(_simple_json_loop_targets(operation.empty))
+            targets.extend((yield Call(_loop_targets_walk, operation.body)))
+            targets.extend((yield Call(_loop_targets_walk, operation.empty)))
         elif operation.kind == "if":
             for _condition, body in operation.branches:
-                targets.extend(_simple_json_loop_targets(body))
+                targets.extend((yield Call(_loop_targets_walk, body)))
     return tuple(dict.fromkeys(targets))
 
 
 def _simple_json_nested_operations(
     operations: tuple[_SimpleJsonOperation, ...],
 ) -> Iterator[_SimpleJsonOperation]:
+    """
+    Yield every operation in ``operations``, nested ones included, in source order.
+
+    `walk` drives the nested bodies, so reading the operations does not cost
+    one Python frame per level of nesting.
+    """
+    return walk(_nested_operations_walk(operations))
+
+
+def _nested_operations_walk(
+    operations: tuple[_SimpleJsonOperation, ...],
+) -> Generator[_SimpleJsonOperation | Call, Any, None]:
+    """The walk generator behind ``_simple_json_nested_operations``."""
     for operation in operations:
         yield operation
         if operation.kind == "if":
             for _condition, body in operation.branches:
-                yield from _simple_json_nested_operations(body)
+                yield Call(_nested_operations_walk, body)
         elif operation.kind == "for":
-            yield from _simple_json_nested_operations(operation.body)
-            yield from _simple_json_nested_operations(operation.empty)
+            yield Call(_nested_operations_walk, operation.body)
+            yield Call(_nested_operations_walk, operation.empty)
 
 
 def _simple_json_has_dynamic_attributes(operations: tuple[_SimpleJsonOperation, ...]) -> bool:
@@ -1476,7 +1525,10 @@ class _SimpleJsonCodegen:
         operations: tuple[_SimpleJsonOperation, ...],
         local_names: tuple[tuple[str, str], ...],
         indent: int,
-    ) -> list[str]:
+    ) -> Generator[Call, Any, list[str]]:
+        # A walk generator: each branch and loop body's function is written
+        # through the walk driver, so writing the code does not need one Python
+        # call per level of nesting.
         lines: list[str] = []
         pad = " " * indent
         for simple in operations:
@@ -1592,7 +1644,7 @@ class _SimpleJsonCodegen:
                     )
                 )
                 for branch_index, (_condition, body) in enumerate(simple.branches):
-                    branch_function = self._evaluate_function(body, local_names)
+                    branch_function = yield Call(self._evaluate_function, body, local_names)
                     lines.append(f"{pad}if {selected} == {branch_index}:")
                     lines.append(
                         f"{pad}    {branch_function}("
@@ -1607,8 +1659,10 @@ class _SimpleJsonCodegen:
                 rendered_any = self._new_name("rendered_any")
                 loop_value = self._new_name("loop_value")
                 body_locals = (*local_names, (cast("str", simple.target), loop_value))
-                body_function = self._evaluate_function(simple.body, body_locals)
-                empty_function = self._evaluate_function(simple.empty, local_names) if simple.empty else None
+                body_function = yield Call(self._evaluate_function, simple.body, body_locals)
+                empty_function = (
+                    (yield Call(self._evaluate_function, simple.empty, local_names)) if simple.empty else None
+                )
                 lines.extend(
                     (
                         f"{pad}{records} = []",
@@ -1706,12 +1760,16 @@ class _SimpleJsonCodegen:
         local_names: tuple[tuple[str, str], ...] = (),
         *,
         sets_value_context: bool = False,
-    ) -> str:
+    ) -> Generator[Call, Any, str]:
         outer_depth = self._depth
         self._depth = outer_depth + 1
         self.max_depth = max(self.max_depth, self._depth)
         try:
-            return self._write_evaluate_function(operations, local_names, sets_value_context=sets_value_context)
+            return (
+                yield Call(
+                    self._write_evaluate_function, operations, local_names, sets_value_context=sets_value_context
+                )
+            )
         finally:
             self._depth = outer_depth
 
@@ -1721,7 +1779,7 @@ class _SimpleJsonCodegen:
         local_names: tuple[tuple[str, str], ...],
         *,
         sets_value_context: bool,
-    ) -> str:
+    ) -> Generator[Call, Any, str]:
         name = self._new_name("evaluate")
         lines = [
             f"def {name}(context, variables, data, root_data, vue_errors, special, resolved_opens"
@@ -1731,19 +1789,19 @@ class _SimpleJsonCodegen:
             # Branch and loop-body functions run only inside the root function,
             # which already made this same `context` current, and any other
             # code that sets `_VALUE_CONTEXT` resets it before returning.
-            body_lines = self._evaluate_lines(operations, local_names, 4)
+            body_lines = yield Call(self._evaluate_lines, operations, local_names, 4)
             lines.extend(body_lines or ["    pass"])
             self.functions.append("\n".join(lines))
             return name
         lines.extend(("    value_token = _VALUE_CONTEXT.set(context)", "    try:"))
-        body_lines = self._evaluate_lines(operations, local_names, 8)
+        body_lines = yield Call(self._evaluate_lines, operations, local_names, 8)
         lines.extend(body_lines or ["        pass"])
         lines.extend(("    finally:", "        _VALUE_CONTEXT.reset(value_token)"))
         self.functions.append("\n".join(lines))
         return name
 
     def build(self) -> _SimpleJsonProgram:
-        evaluate_root = self._evaluate_function(self._root_operations, sets_value_context=True)
+        evaluate_root = run(self._evaluate_function(self._root_operations, sets_value_context=True))
         source = "\n\n".join(self.functions)
         namespace: dict[str, object] = {
             "_ConstMapping": _ConstMapping,
@@ -1993,7 +2051,9 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
     lines.append(f"{pad}plain_scalar_types = _simple_json_plain_scalar_types()")
     counter = 0
 
-    def emit(value: str, plan: _SimpleJsonReadNode, depth: int) -> None:
+    # `emit` is a walk generator run by `run`, so writing the check does not
+    # need one Python call per level of the read set.
+    def emit(value: str, plan: _SimpleJsonReadNode, depth: int) -> Generator[Call, Any, None]:
         nonlocal counter
         counter += 1
         kind = f"value_type{counter}"
@@ -2046,7 +2106,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                         f"{at}{child_value} = dict.__getitem__({value}, {key!r})",
                     )
                 )
-                emit(child_value, child, depth)
+                yield Call(emit, child_value, child, depth)
         if plan.items is not None:
             counter += 1
             item_value = f"item{counter}"
@@ -2057,7 +2117,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                     f"{at}for {item_value} in {value}:",
                 )
             )
-            emit(item_value, plan.items, depth + 4)
+            yield Call(emit, item_value, plan.items, depth + 4)
 
     for name, plan in read_set.roots:
         counter += 1
@@ -2069,7 +2129,7 @@ def _simple_json_readset_check_lines(read_set: _SimpleJsonReadSet, *, indent: in
                 f"{pad}{root_value} = dict.__getitem__(variables, {name!r})",
             )
         )
-        emit(root_value, plan, indent)
+        run(emit(root_value, plan, indent))
     lines.append(f"{pad}return True")
     return lines
 
@@ -2203,6 +2263,13 @@ def _simple_json_plain_scalar_types() -> frozenset[type[object]]:
 
 def _evaluation_only_operations(operations: tuple[object, ...]) -> tuple[object, ...]:
     """Drop static materialization visits while retaining dynamic branch/loop decisions."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(_evaluation_only_walk(operations))
+
+
+def _evaluation_only_walk(operations: tuple[object, ...]) -> Generator[Call, Any, tuple[object, ...]]:
+    """The walk generator behind ``_evaluation_only_operations``."""
     selected: list[object] = []
     for operation in operations:
         if isinstance(operation, (_Static, _Close)):
@@ -2210,22 +2277,14 @@ def _evaluation_only_operations(operations: tuple[object, ...]) -> tuple[object,
         if isinstance(operation, _Open) and operation.static is not None:
             continue
         if isinstance(operation, _If):
-            selected.append(
-                _If(
-                    operation.node,
-                    operation.key,
-                    tuple(_evaluation_only_operations(branch) for branch in operation.branches),
-                )
-            )
+            branches: list[tuple[object, ...]] = []
+            for branch in operation.branches:
+                branches.append((yield Call(_evaluation_only_walk, branch)))
+            selected.append(_If(operation.node, operation.key, tuple(branches)))
         elif isinstance(operation, _For):
-            selected.append(
-                _For(
-                    operation.node,
-                    operation.key,
-                    _evaluation_only_operations(operation.body),
-                    _evaluation_only_operations(operation.empty),
-                )
-            )
+            body = yield Call(_evaluation_only_walk, operation.body)
+            empty = yield Call(_evaluation_only_walk, operation.empty)
+            selected.append(_For(operation.node, operation.key, body, empty))
         else:
             selected.append(operation)
     return tuple(selected)
@@ -2301,6 +2360,15 @@ def _native_row_operations(
     operations: tuple[_SimpleJsonOperation, ...],
 ) -> tuple[tuple[object, ...], ...] | None:
     """Describe one scope of simple JSON operations, or return None for a shape Rust does not run."""
+    # The walk runs as generators on one driver loop, so Python's call depth
+    # does not grow with how deeply the template nests.
+    return run(_native_row_operations_walk(operations))
+
+
+def _native_row_operations_walk(
+    operations: tuple[_SimpleJsonOperation, ...],
+) -> Generator[Call, Any, tuple[tuple[object, ...], ...] | None]:
+    """The walk generator behind ``_native_row_operations``."""
     described: list[tuple[object, ...]] = []
     for simple in operations:
         operation = simple.operation
@@ -2339,15 +2407,15 @@ def _native_row_operations(
             branches: list[tuple[tuple[object, ...] | None, tuple[tuple[object, ...], ...]]] = []
             for condition, body in simple.branches:
                 described_condition = None if condition is None else _native_row_expr(condition)
-                described_body = _native_row_operations(body)
+                described_body = yield Call(_native_row_operations_walk, body)
                 if (condition is not None and described_condition is None) or described_body is None:
                     return None
                 branches.append((described_condition, described_body))
             described.append(("if", cast("_If", operation).key, tuple(branches)))
         elif simple.kind == "for":
             iterable = _native_row_expr(cast("_SimpleJsonExpr", simple.iterable))
-            loop_body = _native_row_operations(simple.body)
-            loop_empty = _native_row_operations(simple.empty)
+            loop_body = yield Call(_native_row_operations_walk, simple.body)
+            loop_empty = yield Call(_native_row_operations_walk, simple.empty)
             if iterable is None or loop_body is None or loop_empty is None:
                 return None
             described.append(("for", cast("_For", operation).key, simple.target, iterable, loop_body, loop_empty))
@@ -2360,11 +2428,18 @@ def _native_row_operations(
 
 def _native_row_read_node(node: _SimpleJsonReadNode) -> tuple[object, ...]:
     """Describe one read-set node as (kinds, children, items)."""
-    return (
-        tuple(sorted(node.kinds)),
-        tuple((key, _native_row_read_node(child)) for key, child in node.children),
-        None if node.items is None else _native_row_read_node(node.items),
-    )
+    # A read set nests as deeply as the template's paths and loops; the walk
+    # driver keeps that from costing one Python frame per level.
+    return run(_native_row_read_node_walk(node))
+
+
+def _native_row_read_node_walk(node: _SimpleJsonReadNode) -> Generator[Call, Any, tuple[object, ...]]:
+    """The walk generator behind ``_native_row_read_node``."""
+    children: list[tuple[str, tuple[object, ...]]] = []
+    for key, child in node.children:
+        children.append((key, (yield Call(_native_row_read_node_walk, child))))
+    items = None if node.items is None else (yield Call(_native_row_read_node_walk, node.items))
+    return (tuple(sorted(node.kinds)), tuple(children), items)
 
 
 # What ``native_row_plan_tuples`` returns: the described operations, the
@@ -2533,7 +2608,19 @@ class LeafProgramNode(Node):
         if self._simple_json_program is None or self._simple_json_has_i18n_spread or self._simple_json_has_i18n_attrs:
             return False
 
-        def supported(operations: Sequence[object]) -> bool:
+        # Nested branch and loop bodies are checked on this function's own
+        # stack, so the check does not need Python stack in proportion to how
+        # deeply the template nests. The answer does not depend on the order
+        # bodies are checked in.
+        def supported(root: Sequence[object]) -> bool:
+            pending: list[Sequence[object]] = [root]
+            while pending:
+                if not supported_level(pending.pop(), pending):
+                    return False
+            return True
+
+        def supported_level(operations: Sequence[object], pending: list[Sequence[object]]) -> bool:
+            """Check one body's own operations; queue its branch and loop bodies on ``pending``."""
             for operation in operations:
                 if isinstance(operation, (_Static, _Close, _Text)):
                     continue
@@ -2569,12 +2656,11 @@ class LeafProgramNode(Node):
                         return False
                     continue
                 if isinstance(operation, _If):
-                    if any(not supported(branch) for branch in operation.branches):
-                        return False
+                    pending.extend(operation.branches)
                     continue
                 if isinstance(operation, _For):
-                    if not supported(operation.body) or not supported(operation.empty):
-                        return False
+                    pending.append(operation.body)
+                    pending.append(operation.empty)
                     continue
                 if isinstance(operation, _Call):
                     continue
@@ -2821,7 +2907,9 @@ def compile_leaf_program(
     how to render the children the evaluator records.
     """
     compiler = _Compiler(allow_i18n_passthrough=allow_i18n_passthrough, allow_calls=allow_calls)
-    operations = compiler.compile_body(body)
+    # The compiler's methods are walk generators, so Python's call depth does
+    # not grow with how deeply the template nests.
+    operations = run(compiler.compile_body(body))
     if operations is None or (not compiler.has_data_ops and not allow_static_only) or not compiler.safe_body:
         return None
     evaluation_operations = _evaluation_only_operations(operations)
@@ -2876,7 +2964,7 @@ class _Compiler:
         self.output.append(value)
         self.byte_position += len(value.encode("utf-8"))
 
-    def compile_body(self, body: Sequence[object]) -> tuple[object, ...] | None:
+    def compile_body(self, body: Sequence[object]) -> Generator[Call, Any, tuple[object, ...] | None]:
         operations: list[object] = []
         skip_close_tag: str | None = None
         index = 0
@@ -2891,7 +2979,7 @@ class _Compiler:
                 index += 1
                 continue
             skip_close_tag = None
-            operation = self.compile_item(item)
+            operation = yield Call(self.compile_item, item)
             if operation is None:
                 return None
             operations.append(operation)
@@ -2900,7 +2988,7 @@ class _Compiler:
             index += 1
         return tuple(operations)
 
-    def compile_item(self, item: object) -> object | None:
+    def compile_item(self, item: object) -> Generator[Call, Any, object | None]:
         if type(item) is PreparedStaticRunNode:
             if _unsafe_body_text(item._prepared.html):
                 self.safe_body = False
@@ -2943,11 +3031,11 @@ class _Compiler:
         if type(item) is ComponentNode and self.allow_calls:
             return self._compile_call(item)
         if type(item) is IfNode:
-            return self._compile_if(item)
+            return (yield Call(self._compile_if, item))
         if type(item) is ForNode:
             if item._precomputed_parts is not None:
                 return None
-            return self._compile_for(item)
+            return (yield Call(self._compile_for, item))
         return None
 
     def _compile_open(self, node: PreparedElementOpenNode, renderer: Node) -> _Open:
@@ -3168,7 +3256,7 @@ class _Compiler:
         self.calls.append(call)
         return call
 
-    def _compile_if(self, node: IfNode) -> _If | None:
+    def _compile_if(self, node: IfNode) -> Generator[Call, Any, _If | None]:
         self.has_data_ops = True
         key = f"citryIf{self.if_index}"
         self.if_index += 1
@@ -3176,7 +3264,7 @@ class _Compiler:
         for index, branch in enumerate(node.branches):
             self.append(branch_opening(key, index))
             self.scope_steps.append({"kind": "branch", "key": key, "index": index})
-            compiled = self.compile_body(branch[2])
+            compiled = yield Call(self.compile_body, branch[2])
             self.scope_steps.pop()
             if compiled is None:
                 return None
@@ -3184,7 +3272,7 @@ class _Compiler:
             self.append("</template>")
         return _If(node, key, tuple(branches))
 
-    def _compile_for(self, node: ForNode) -> _For | None:
+    def _compile_for(self, node: ForNode) -> Generator[Call, Any, _For | None]:
         self.has_data_ops = True
         key = f"citryLoop{self.loop_index}"
         self.loop_index += 1
@@ -3196,7 +3284,7 @@ class _Compiler:
         )
         child.open_tags = list(self.open_tags)
         child.scope_steps = [*self.scope_steps, {"kind": "each", "key": key}]
-        compiled_body = child.compile_body(node.branches[0][2])
+        compiled_body = yield Call(child.compile_body, node.branches[0][2])
         if compiled_body is None:
             return None
         offset = self.byte_position
@@ -3214,7 +3302,7 @@ class _Compiler:
         if len(node.branches) > 1:
             self.append(loop_empty_opening(key))
             self.scope_steps.append({"kind": "empty", "key": key})
-            compiled_empty = self.compile_body(node.branches[1][2])
+            compiled_empty = yield Call(self.compile_body, node.branches[1][2])
             self.scope_steps.pop()
             if compiled_empty is None:
                 return None
