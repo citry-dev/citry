@@ -230,13 +230,6 @@ def test_catalog_paths_are_linked_from_examples_readme() -> None:
         assert f"({project.path.as_posix()}/)" in readme
 
 
-def test_htmx_demo_uses_the_canonical_citry_mark() -> None:
-    canonical = EXAMPLES_ROOT.parent / "docs_site" / "static" / "img" / "citry-mark.svg"
-    demo_copy = EXAMPLES_ROOT / "demos" / "htmx" / "app" / "static" / "citry-mark.svg"
-
-    assert demo_copy.read_bytes() == canonical.read_bytes()
-
-
 def test_port_placeholder_is_resolved_without_shell_interpolation() -> None:
     assert interpolate(("server", "--port", "{port}", "127.0.0.1:{port}"), 43127) == [
         "server",

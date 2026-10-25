@@ -13,11 +13,14 @@ const componentsRoot = resolve(
   "packages/py/citry_ui/citry_ui/components",
 );
 
-async function discoverAssets() {
-  const entries = await readdir(componentsRoot, {
+async function listFiles() {
+  return readdir(componentsRoot, {
     recursive: true,
     withFileTypes: true,
   });
+}
+
+async function discoverAssets(entries) {
   return entries
     .filter((entry) => entry.isFile() && /\.source\.(css|js)$/.test(entry.name))
     .map((entry) => {
@@ -54,7 +57,21 @@ async function compile(sourcePath, kind) {
   return `${result.code.trimEnd()}\n`;
 }
 
-const assets = await discoverAssets();
+// A built file whose readable source was deleted would still ship, and the
+// rebuild below only visits sources, so also list every .min file and report
+// the ones no source produces.
+function orphanedOutputs(entries, assets) {
+  const expected = new Set(assets.map(([sourcePath, kind]) => outputPath(sourcePath, kind)));
+  return entries
+    .filter((entry) => entry.isFile() && /\.min\.(css|js)$/.test(entry.name))
+    .map((entry) => resolve(entry.parentPath, entry.name))
+    .filter((path) => !expected.has(path))
+    .sort();
+}
+
+const entries = await listFiles();
+const assets = await discoverAssets(entries);
+const orphaned = orphanedOutputs(entries, assets);
 const stale = [];
 for (const [sourcePath, kind] of assets) {
   const generatedPath = outputPath(sourcePath, kind);
@@ -78,6 +95,16 @@ if (stale.length) {
       .map((path) => `- ${path.slice(repositoryRoot.length + 1)}`)
       .join("\n")}\n` +
       "Run `pnpm citry-ui:build-assets`.\n",
+  );
+  process.exitCode = 1;
+}
+
+if (orphaned.length) {
+  process.stderr.write(
+    `Citry UI production assets have no readable source:\n${orphaned
+      .map((path) => `- ${path.slice(repositoryRoot.length + 1)}`)
+      .join("\n")}\n` +
+      "Delete each listed file, or restore its `.source.css` or `.source.js` file and run `pnpm citry-ui:build-assets`.\n",
   );
   process.exitCode = 1;
 }

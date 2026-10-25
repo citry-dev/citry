@@ -535,13 +535,22 @@ processes, and Citry UI's public demo `snippets/`, which are excluded from the
 wheel and verified through the docs and UI scenario suites. The threshold is a
 ratchet immediately below the current measured runtime coverage; raise it as
 focused tests recover headroom.
+Before the first Node phase, the `pnpm install` phase runs
+`pnpm install --frozen-lockfile --offline`, so every Node phase builds with the
+dependencies `pnpm-lock.yaml` names. It is a quick no-op when the install
+already matches. When pnpm's store lacks a locked package, the phase fails with
+`ERR_PNPM_NO_OFFLINE_TARBALL`; run `pnpm install --frozen-lockfile` once with
+the network, then re-run the gate.
 The `pyright` phase runs the pinned pyright from `node_modules` alongside mypy.
 The package-local Node phases run `pnpm run check` for `citry-client`, the docs
-playground, and the VS Code language extension. In CI the VS Code check also
-fails when the rebuilt `out/extension.js` differs from the committed copy,
-because release qualification rejects that VSIX; locally it only warns. The `citry-ui assets` phase
+playground, and the VS Code language extension. The VS Code check also fails
+when the rebuilt `out/extension.js` differs from the committed copy while none
+of its sources, `package.json`, `tsconfig.json`, or `pnpm-lock.yaml` changed,
+because release qualification rejects that VSIX. When one of those inputs did
+change, the check only reminds you to commit the rebuilt bundle. The `citry-ui assets` phase
 fails when a committed, minified Citry UI file (a `runtime.min.js` or
-production CSS) does not match the readable source it is built from. The
+production CSS) does not match the readable source it is built from, or has no
+readable source at all. The
 `vue render parity` phase
 runs Node with the Vue that `citry-client` pins. One root `pnpm install` covers
 all of them, the same way `uv sync` installs the Python tools.
@@ -1989,7 +1998,7 @@ webhook workflows are event-scoped and intentionally have no file path filter.
 
 ### Test Workflows
 
-The repository uses **three separate test workflows** to optimize CI performance and only run tests when relevant code changes:
+The repository uses **four separate test workflows** to keep CI fast, and the path-filtered ones run only when relevant code changes:
 
 #### 1. `repo--check.yml` - The full gate
 
@@ -1997,7 +2006,7 @@ The repository uses **three separate test workflows** to optimize CI performance
 (`python scripts/check.py --profile full`) on all changes: formatting, lints,
 types, coverage, the custom validators, and a single-environment test pass.
 
-**Triggers**: Runs on all pushes and pull requests (no path filters).
+**Triggers**: Runs on pushes to `main` and `dev` and on every pull request (no path filters).
 
 **What it runs**:
 
@@ -2013,7 +2022,34 @@ types, coverage, the custom validators, and a single-environment test pass.
 - `uv sync --locked --all-packages` and `pnpm install --frozen-lockfile` to
   build both workspaces, then `python scripts/check.py --profile full`
 
-#### 2. `rust--tests.yml` - Rust Tests
+#### 2. `repo--generated.yml` - Generated files, checked early
+
+**Purpose**: Checks, in about a minute once it has a runner, that the
+committed files built from other files in the repository still match what
+their builds write. The full gate runs the same checks, but only after it
+builds `citry_core`, so this job reports a stale file well before the gate
+does.
+
+**Triggers**: Runs on pushes to `main` and `dev` and on every pull request (no
+path filters), so it always reports and can be made a required check.
+
+**What it runs**: `pnpm install --frozen-lockfile`, then each of these, every
+one even after an earlier one fails:
+
+- the docs playground bundles and `portable_ide.py` (`build.mjs --check`)
+- the browser runtimes built from `packages/js/citry-client` (its canary test)
+  and the Vue types copied for the language server (`build-vue-types.mjs --check`)
+- the minified Citry UI assets (`pnpm run citry-ui:check-assets`)
+- the VS Code extension bundle (`compile`, then `check-built-output.mjs`)
+- the protocol Python copies, the diagnostic catalog bindings, and the copied
+  logo files and recorded Vue version (`scripts/validators/generated_copies.py`),
+  all with Python's standard library only
+
+Generated files that need a built `citry_core`, such as the Citry UI message
+catalog and the native-render fixtures, are checked only by the full gate's
+pytest phase.
+
+#### 3. `rust--tests.yml` - Rust Tests
 
 **Purpose**: Tests all Rust crates in the workspace.
 
@@ -2038,7 +2074,7 @@ types, coverage, the custom validators, and a single-environment test pass.
 
 **Why path filters**: Avoids running Rust tests when only Python code, documentation, or unrelated files change.
 
-#### 3. `py--tests.yml` - Python Tests
+#### 4. `py--tests.yml` - Python Tests
 
 **Purpose**: Tests all Python packages.
 

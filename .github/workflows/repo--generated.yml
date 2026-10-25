@@ -1,0 +1,98 @@
+# Checks that the committed files built from other files in the repository
+# (except those that need a built citry_core) still match what their builds
+# write. The full gate in repo--check.yml runs the same checks, but only after
+# it builds citry_core and runs about 20 minutes of tests, and its job can wait
+# longer than that for a runner, so a merge can land before a stale bundle
+# shows up there. This job needs only Node and Python's standard library and
+# takes about a minute once it has a runner.
+#
+# It has no path filter, so it reports on every pull request and can be made a
+# required check: GitHub never reports a skipped path-filtered workflow, so a
+# required check on one would wait forever. Until it is required, a merge that
+# does not wait for it can still land a stale file.
+name: Generated files
+
+on:
+  push:
+    branches:
+      - "main"
+      - "dev"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+
+jobs:
+  generated-files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm goes first: setup-node's pnpm cache needs the pnpm binary. The
+      # action reads the pinned pnpm version from package.json.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      # The bundles below depend on the exact dependency versions, so install
+      # them from the lockfile as the full gate does.
+      - name: Install the Node workspace
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # Each check below runs even when an earlier one fails, so one run
+      # reports every stale file.
+      - name: Check the docs playground bundles and portable_ide.py
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node docs_site/_internal/frontend/scripts/build.mjs --check
+
+      - name: Check the browser runtimes built from packages/js/citry-client
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node --test packages/js/citry-client/test/canary.test.mjs
+
+      - name: Check the Vue types copied for the language server
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: node packages/js/citry-client/build-vue-types.mjs --check
+
+      - name: Check the minified Citry UI assets
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run citry-ui:check-assets
+
+      # `compile` rewrites out/extension.js, then check-built-output.mjs asks
+      # git whether that file changed.
+      - name: Check the VS Code extension bundle
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          pnpm --dir packages/editors/vscode run compile
+          node packages/editors/vscode/scripts/check-built-output.mjs
+
+      - name: Set up Python
+        if: ${{ !cancelled() }}
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # These three scripts use only the standard library, so the job skips
+      # the workspace install the full gate needs.
+      - name: Check the protocol Python copies
+        if: ${{ !cancelled() }}
+        run: python -I scripts/sync_protocol_python.py --check
+
+      - name: Check the diagnostic catalog bindings
+        if: ${{ !cancelled() }}
+        run: python -I scripts/generate_diagnostic_catalog.py --check
+
+      - name: Check the copied files and the recorded Vue version
+        if: ${{ !cancelled() }}
+        run: python -I scripts/validators/generated_copies.py

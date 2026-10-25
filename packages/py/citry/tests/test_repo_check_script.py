@@ -71,6 +71,22 @@ def test_vue_render_parity_compares_the_pages_the_main_pytest_phase_recorded(tmp
         assert parity[parity.index("--corpus") + 1] == str(tmp_path)
 
 
+def test_node_phases_run_after_installing_from_the_lockfile(tmp_path: Path) -> None:
+    # A node_modules that no longer matches pnpm-lock.yaml rebuilds committed
+    # bundles differently, so the install comes before the first Node phase.
+    for profile in ("fast", "full"):
+        phases = check_script._phases(profile, parity_corpus=tmp_path)
+        names = [name for name, _command in phases]
+        assert dict(phases)["pnpm install"] == ["pnpm", "install", "--frozen-lockfile", "--offline"]
+        node_phases = [
+            name
+            for name, command in phases
+            if name != "pnpm install" and (command[0] in {"pnpm", "node"} or "node_modules" in command[0])
+        ]
+        assert node_phases
+        assert all(names.index("pnpm install") < names.index(name) for name in node_phases)
+
+
 def test_python_test_workflow_runs_reload_once_outside_the_platform_matrix() -> None:
     workflow_path = _REPO_ROOT / ".github" / "workflows" / "py--tests.yml"
     jobs = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))["jobs"]
