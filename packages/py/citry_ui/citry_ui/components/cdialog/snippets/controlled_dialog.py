@@ -16,10 +16,8 @@ class ControlledDialog(Component):
           Accept Dialog requests
         </label>
         <c-CDialog
-          :open="open" :onOpenChange="(nextOpen, detail) => {
-              lastReason = detail.reason;
-              if (accept) open = nextOpen;
-            }"
+          :open="open"
+          :onOpenChange="applyOpenRequest"
         >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">
@@ -49,6 +47,15 @@ class ControlledDialog(Component):
           return {
             open: false, accept: false, lastReason: 'none'
           };
+        },
+        methods: {
+          // Show every request's reason, but change `open` only while the
+          // owner accepts requests, so a declined request leaves the Dialog
+          // as is.
+          applyOpenRequest(nextOpen, detail) {
+            this.lastReason = detail.reason;
+            if (this.accept) this.open = nextOpen;
+          },
         },
       });
     """

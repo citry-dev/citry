@@ -7,9 +7,10 @@ citry.register_library(citry_ui)
 class ControlledDrawer(Component):
     template = """
       <section class="controlled-drawer" >
-        <c-CDrawer :open="open" :onOpenChange="(next, detail) => {
-          log = `${detail.reason}: ${next ? 'open' : 'closed'}`; if (accept) open = next;
-        }">
+        <c-CDrawer
+          :open="open"
+          :onOpenChange="applyOpenRequest"
+        >
           <c-fill name="activator" data="{ activator_attrs }">
             <c-CButton c-attrs="activator_attrs">Controlled archive</c-CButton>
           </c-fill>
@@ -26,6 +27,15 @@ class ControlledDrawer(Component):
           return {
             open:false, accept:true, log:'No request yet'
           };
+        },
+        methods: {
+          // Show every request's reason, but change `open` only while the
+          // owner accepts requests, so a declined request leaves the Drawer
+          // as is.
+          applyOpenRequest(next, detail) {
+            this.log = `${detail.reason}: ${next ? 'open' : 'closed'}`;
+            if (this.accept) this.open = next;
+          },
         },
       });
     """

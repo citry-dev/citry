@@ -4,13 +4,17 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 import pytest
 
 pytest.importorskip("pytest_playwright")
 
+from playwright.sync_api import expect
+
 from citry import Citry, Component, ComponentLibrary
+from citry import citry as default_citry
 from citry_ui.components.ccommand_palette import CCommandPalette
 
 pytestmark = pytest.mark.e2e
@@ -531,3 +535,224 @@ def test_hostile_owned_mutation_fails_closed_and_removal_cleans_resources(page: 
     after = page.evaluate("() => globalThis[Symbol.for('citry-ui:dialog-controller-runtime')].counts().modals")
     assert before == after == 0
     assert len(errors) == 1
+
+
+class CommandPalettePreviewDocument(Component):
+    citry = default_citry
+
+    class Kwargs:
+        content: object
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, _slots: Slots) -> dict[str, object]:
+        return {"content": kwargs.content}
+
+    template = """
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <title>CommandPalette snippet</title>
+          <c-css />
+        </head>
+        <body>
+          <main>{{ content }}</main>
+          <c-js />
+        </body>
+      </html>
+    """
+
+
+def _open_snippet(page: Any, serve_citry_ui_live: Any, name: str) -> list[str]:
+    # Snippets register Citry UI on the default instance when imported, so the
+    # docs preview and this test render the same component.
+    module = importlib.import_module(f"citry_ui.components.ccommand_palette.snippets.{name}")
+    html = CommandPalettePreviewDocument(content=module.preview).render().serialize()
+    errors: list[str] = []
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.goto(serve_citry_ui_live(default_citry, html) + "/", wait_until="networkidle")
+    page.wait_for_selector("[data-citry-command-palette-initialized]")
+    return errors
+
+
+def _set_inert_box(page: Any, label: str, *, checked: bool = True) -> None:
+    # The open modal palette makes the owner's checkbox inert, so change it
+    # the way its v-model listens: set the native state and fire `change`.
+    page.get_by_label(label).evaluate(
+        "(element, checked) => {"
+        " element.checked = checked;"
+        " element.dispatchEvent(new Event('change', {bubbles: true}));"
+        " }",
+        checked,
+    )
+
+
+def _count_focus_calls(page: Any, selector: str) -> None:
+    # The open modal palette makes the owner's button inert, so its focus()
+    # call cannot move focus. Count the calls to prove the owner made one.
+    page.locator(selector).evaluate(
+        """element => {
+          window.__ownerFocusCalls = 0;
+          element.focus = function (...args) {
+            window.__ownerFocusCalls += 1;
+            return HTMLElement.prototype.focus.apply(this, args);
+          };
+        }"""
+    )
+
+
+def _wait_for_scenario_palettes(page: Any) -> None:
+    page.wait_for_function(
+        "['#quality-command-palette-lifecycle', '#quality-command-palette-actions'].every(id => "
+        "document.querySelector(id)?.closest('[data-citry-command-palette-initialized]'))"
+    )
+
+
+def test_quality_lifecycle_palette_counts_each_open_and_query_request(page: Any, open_scenario: Any) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    open_scenario("command-palette.states")
+    _wait_for_scenario_palettes(page)
+    # The spans read: open state, query, actions, query requests, open requests.
+    counters = page.locator("#quality-command-palette-lifecycle-output span")
+
+    page.get_by_role("button", name="Open lifecycle palette").click()
+    page.wait_for_function("document.querySelector('#quality-command-palette-lifecycle').open")
+    lifecycle_input = page.locator('#quality-command-palette-lifecycle [data-citry-ui-part="command-palette-input"]')
+    lifecycle_input.fill("settings")
+    expect(counters).to_have_text(["open", "settings", "0", "1", "0"])
+
+    lifecycle_input.press("Escape")
+    page.wait_for_function("!document.querySelector('#quality-command-palette-lifecycle').open")
+    # Closing also clears the query, which is the second query request.
+    expect(counters).to_have_text(["closed", "empty", "0", "2", "1"])
+    assert errors == []
+
+
+def test_quality_controlled_palette_takes_the_close_reset_while_declining_query_edits(
+    page: Any,
+    open_scenario: Any,
+) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    open_scenario("command-palette.states")
+    _wait_for_scenario_palettes(page)
+    palette = page.locator("#quality-command-palette-controlled")
+    palette_input = palette.locator('[data-citry-ui-part="command-palette-input"]')
+    # The spans read: open state, query.
+    owner = page.locator("#quality-command-palette-controlled-output span")
+
+    page.get_by_role("button", name="Restore controlled open").click()
+    page.wait_for_function("document.querySelector('#quality-command-palette-controlled').open")
+    palette_input.fill("rejected")
+    expect(palette_input).to_have_value("open")
+    expect(owner).to_have_text(["open", "open"])
+
+    _set_inert_box(page, "Accept close")
+    palette.locator('[data-citry-ui-part="command-palette-close"]').click()
+    page.wait_for_function("!document.querySelector('#quality-command-palette-controlled').open")
+    # The owner still declines query edits but takes the close's empty query.
+    expect(owner).to_have_text(["closed", ""])
+    assert errors == []
+
+
+def test_quality_action_palette_logs_each_action_and_asks_the_owner_to_take_focus(
+    page: Any,
+    open_scenario: Any,
+) -> None:
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    open_scenario("command-palette.states")
+    _wait_for_scenario_palettes(page)
+    _count_focus_calls(page, "#quality-command-palette-owner-focus")
+    palette = page.locator("#quality-command-palette-actions")
+    palette_input = palette.locator('[data-citry-ui-part="command-palette-input"]')
+    output = page.locator("#quality-command-palette-action-output")
+
+    page.get_by_role("button", name="Restore action palette").click()
+    page.wait_for_function("document.querySelector('#quality-command-palette-actions').open")
+    palette_input.fill("copy draft")
+    palette_input.press("Enter")
+    expect(output).to_have_text("action:copy-id:keyboard:false")
+    assert palette.evaluate("element => element.open") is True
+    assert page.evaluate("window.__ownerFocusCalls") == 1
+
+    palette_input.fill("create project")
+    palette_input.press("Enter")
+    expect(output).to_have_text("action:copy-id:keyboard:false|action:create-project:keyboard:true|open:false:action")
+    assert palette.evaluate("element => element.open") is False
+    # Only the copy command asks the owner to take focus.
+    assert page.evaluate("window.__ownerFocusCalls") == 1
+    assert errors == []
+
+
+def test_command_actions_snippet_logs_actions_moves_focus_and_reports_a_throw(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    errors = _open_snippet(page, serve_citry_ui_live, "command_actions")
+    _count_focus_calls(page, "#command-action-focus-target")
+    palette = page.locator("dialog")
+    palette_input = page.locator('[data-citry-ui-part="command-palette-input"]')
+    output = page.locator("output[aria-live=polite]")
+
+    palette_input.fill("copy")
+    palette_input.press("Enter")
+    expect(output).to_have_text("query:copy:input | action:copy-id:keyboard:false")
+    assert page.evaluate("window.__ownerFocusCalls") == 0
+
+    _set_inert_box(page, "Move owner focus")
+    palette_input.press("Enter")
+    expect(output).to_have_text("query:copy:input | action:copy-id:keyboard:false | action:copy-id:keyboard:false")
+    assert page.evaluate("window.__ownerFocusCalls") == 1
+
+    _set_inert_box(page, "Throw in next action")
+    palette_input.press("Enter")
+    page.wait_for_function("window.__ownerFocusCalls === 2")
+    # The owner logs the action and clears the checkbox before it throws, so
+    # only one action fails.
+    expect(page.get_by_label("Throw in next action")).not_to_be_checked()
+    expect(output).to_have_text(
+        "query:copy:input | action:copy-id:keyboard:false"
+        " | action:copy-id:keyboard:false | action:copy-id:keyboard:false"
+    )
+    assert palette.evaluate("element => element.open") is True
+    assert errors == ["Application action failed"]
+
+
+def test_controlled_snippet_declines_requests_until_the_owner_accepts_them(
+    page: Any,
+    serve_citry_ui_live: Any,
+) -> None:
+    errors = _open_snippet(page, serve_citry_ui_live, "controlled_command_palette")
+    palette = page.locator("dialog")
+    palette_input = page.locator('[data-citry-ui-part="command-palette-input"]')
+    owner = page.locator("output[aria-live=polite]")
+    expect(owner).to_have_text("Owner: open; query: work; requests: none")
+
+    palette_input.fill("alpha")
+    expect(owner).to_have_text("Owner: open; query: work; requests: query:alpha:input")
+    assert palette_input.input_value() == "work"
+    palette_input.press("Escape")
+    expect(owner).to_have_text("Owner: open; query: work; requests: query:alpha:input | open:false:escape")
+    assert palette.evaluate("element => element.open") is True
+
+    _set_inert_box(page, "Accept query edits")
+    palette_input.fill("bravo")
+    expect(owner).to_have_text(
+        "Owner: open; query: bravo; requests: query:alpha:input | open:false:escape | query:bravo:input"
+    )
+    # Turn query edits back off, so the close below shows the owner taking
+    # the empty query that comes with a close even while it declines edits.
+    _set_inert_box(page, "Accept query edits", checked=False)
+    _set_inert_box(page, "Accept close")
+    palette_input.press("Escape")
+    # Closing sends an empty query with reason `close`.
+    expect(owner).to_have_text(
+        "Owner: closed; query: empty; requests: query:bravo:input | open:false:escape | query::close"
+    )
+    assert palette.evaluate("element => element.open") is False
+    assert errors == []

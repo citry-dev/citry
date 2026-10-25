@@ -31,9 +31,7 @@ def tabs_overview_component(app: Citry) -> type[Component]:
               aria_label="Account settings"
               variant="pill"
               grow
-              :onValueChange="(value) => {
-                  selected = value;
-                }"
+              :onValueChange="showAccountSelection"
             >
               <c-CTab #c-key="'account'" value="account">
                 Account
@@ -93,9 +91,7 @@ def tabs_overview_component(app: Citry) -> type[Component]:
                 density="compact"
                 align="end"
                 :value="selectedMetric"
-                :onValueChange="(value) => {
-                    selectedMetric = value;
-                  }"
+                :onValueChange="selectMetric"
               >
                 <c-CTab #c-key="'delivery'" value="delivery">
                   Delivery performance over the last quarter
@@ -120,6 +116,17 @@ def tabs_overview_component(app: Citry) -> type[Component]:
                 selected: 'account',
                 selectedMetric: 'delivery'
               };
+            },
+            methods: {
+              // The account Tabs own their selection; the page only shows it.
+              showAccountSelection(value) {
+                this.selected = value;
+              },
+              // The metric Tabs are controlled, so a request takes effect
+              // only once the page stores the new value.
+              selectMetric(value) {
+                this.selectedMetric = value;
+              },
             },
           });
         """

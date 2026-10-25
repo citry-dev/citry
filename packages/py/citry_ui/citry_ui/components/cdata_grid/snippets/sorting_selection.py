@@ -6,37 +6,6 @@ citry.register_library(citry_ui)
 
 
 class DataGridSortingSelection(Component):
-    template = """
-      <section >
-        <output v-text="notice">Activate a sortable header or select a row</output>
-        <c-CDataGrid
-          c-columns="columns"
-          c-rows="rows"
-          c-sort="sort"
-          label="Sortable people"
-          selection="multiple"
-          c-selected="['grace']"
-          :sort="sort"
-          :onSortChange="(next)=>{
-              sort=next;
-              notice=next.length
-                ? `Sorted: ${next.map((item,index)=>`${index + 1}. ${item.key} ${item.direction}`).join(', ')}`
-                : 'Server row order restored';
-            }"
-          :onSelectionChange="(selected)=>notice=`Selected: ${selected.join(', ') || 'none'}`"
-        />
-      </section>
-    """
-    js = """
-      $component({
-        data() {
-          return {
-            sort:[{key:'name',direction:'asc'}],notice:'Activate a sortable header or select a row'
-          };
-        },
-      });
-    """
-
     def template_data(self, _kwargs: object, _slots: object) -> dict[str, object]:
         return {
             "columns": (
@@ -51,6 +20,42 @@ class DataGridSortingSelection(Component):
             ),
             "sort": (CDataGridSort("name", "asc"),),
         }
+
+    template = """
+      <section >
+        <output v-text="notice">Activate a sortable header or select a row</output>
+        <c-CDataGrid
+          c-columns="columns"
+          c-rows="rows"
+          c-sort="sort"
+          label="Sortable people"
+          selection="multiple"
+          c-selected="['grace']"
+          :sort="sort"
+          :onSortChange="applySort"
+          :onSelectionChange="(selected)=>notice=`Selected: ${selected.join(', ') || 'none'}`"
+        />
+      </section>
+    """
+    js = """
+      $component({
+        data() {
+          return {
+            sort:[{key:'name',direction:'asc'}],notice:'Activate a sortable header or select a row'
+          };
+        },
+        methods: {
+          // The grid reorders only after the owner accepts the requested sort.
+          applySort(next) {
+            this.sort = next;
+            const order = next
+              .map((item, index) => `${index + 1}. ${item.key} ${item.direction}`)
+              .join(', ');
+            this.notice = next.length ? `Sorted: ${order}` : 'Server row order restored';
+          },
+        },
+      });
+    """
 
 
 preview = DataGridSortingSelection()

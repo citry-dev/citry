@@ -137,14 +137,8 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                 }"
                 :open="lifecycleOpen"
                 :query="lifecycleQuery"
-                :onOpenChange="(value)=>{
-                    lifecycleOpens++;
-                    lifecycleOpen=value;
-                  }"
-                :onQueryChange="(value)=>{
-                    lifecycleQueries++;
-                    lifecycleQuery=value;
-                  }"
+                :onOpenChange="recordLifecycleOpen"
+                :onQueryChange="recordLifecycleQuery"
                 :onAction="()=>lifecycleActions++"
               />
             </c-if>
@@ -167,6 +161,18 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                 lifecycleQueries:0,
                 lifecycleOpens:0
               };
+            },
+            methods: {
+              // These counters let a browser test check that every open and
+              // query request reaches the owner.
+              recordLifecycleOpen(value) {
+                this.lifecycleOpens++;
+                this.lifecycleOpen = value;
+              },
+              recordLifecycleQuery(value) {
+                this.lifecycleQueries++;
+                this.lifecycleQuery = value;
+              },
             },
           });
         """
@@ -250,12 +256,8 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                   }"
                   :open="controlledOpen"
                   :query="controlledQuery"
-                  :onOpenChange="(value)=>{
-                      if (value || acceptClose) controlledOpen=value;
-                    }"
-                  :onQueryChange="(value,detail)=>{
-                      if (acceptQuery || detail.reason==='close') controlledQuery=value;
-                    }"
+                  :onOpenChange="applyControlledOpen"
+                  :onQueryChange="applyControlledQuery"
                 />
                 <output id="quality-command-palette-controlled-output">
                   <span v-text="controlledOpen ? 'open' : 'closed'">closed</span>|
@@ -279,14 +281,8 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                       'action-once stay-open focus-winner',
                   }"
                   :open="actionOpen"
-                  :onOpenChange="(value,detail)=>{
-                      actionLog.push(`open:${value}:${detail.reason}`);
-                      actionOpen=value;
-                    }"
-                  :onAction="(value,detail)=>{
-                      actionLog.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
-                      if (value==='copy-id') focusOwnerTarget();
-                    }"
+                  :onOpenChange="logActionPaletteOpen"
+                  :onAction="logActionAndMoveFocus"
                 />
                 <button type="button" @click="actionOpen=true">Restore action palette</button>
                 <output id="quality-command-palette-action-output" v-text="actionLog.slice(-4).join('|')">
@@ -312,9 +308,7 @@ def command_palette_states_component(app: Citry) -> type[Component]:
                       'data-quality-states':
                         'form implicit-submit ime composition',
                     }"
-                    :onAction="(value)=>{
-                        if (value==='copy-id') submitProfileForm();
-                      }"
+                    :onAction="submitProfileOnCopy"
                   >
                     <c-fill name="activator" data="{ activator_attrs, activator_disabled }">
                       <c-CButton
@@ -404,13 +398,31 @@ def command_palette_states_component(app: Citry) -> type[Component]:
               };
             },
             methods: {
-              // Template expressions cannot reach document, so actions that
-              // move focus or submit the native form go through refs here.
-              focusOwnerTarget() {
-                this.$refs.ownerFocus.focus();
+              // The controlled palette opens on request but closes only once
+              // the owner ticks Accept close.
+              applyControlledOpen(value) {
+                if (value || this.acceptClose) this.controlledOpen = value;
               },
-              submitProfileForm() {
-                this.$refs.profileForm.requestSubmit();
+              // Query edits wait for Accept query, but the reset that comes
+              // with a close is always taken so the next open starts empty.
+              applyControlledQuery(value, detail) {
+                if (this.acceptQuery || detail.reason === 'close') this.controlledQuery = value;
+              },
+              logActionPaletteOpen(value, detail) {
+                this.actionLog.push(`open:${value}:${detail.reason}`);
+                this.actionOpen = value;
+              },
+              // Copy keeps the palette open, so this asks the owner's button
+              // for focus while the modal palette is still showing.
+              logActionAndMoveFocus(value, detail) {
+                this.actionLog.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
+                if (value === 'copy-id') this.$refs.ownerFocus.focus();
+              },
+              // Copy submits the surrounding form on purpose, so a test can
+              // tell this submit from an Enter key the palette must keep
+              // away from the form.
+              submitProfileOnCopy(value) {
+                if (value === 'copy-id') this.$refs.profileForm.requestSubmit();
               },
               handleShortcut(event) {
                 if (

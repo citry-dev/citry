@@ -47,16 +47,9 @@ class CommandActions(Component):
           label="Draft commands"
           c-entries="commands"
           :open="open"
-          :onOpenChange="(value,detail)=>{
-              events.push(`open:${value}:${detail.reason}`);
-              open=value;
-            }"
+          :onOpenChange="logOpenChange"
           :onQueryChange="(value,detail)=>events.push(`query:${value}:${detail.reason}`)"
-          :onAction="(value,detail)=>{
-              events.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
-              if (moveFocus) $refs.focusTarget.focus();
-              if (throwNext) { throwNext=false; throw new Error('Application action failed'); }
-            }"
+          :onAction="runAction"
         />
         <output aria-live="polite" v-text="events.slice(-4).join(' | ') || 'No actions yet'">
           No actions yet
@@ -69,6 +62,21 @@ class CommandActions(Component):
           return {
             open:true,events:[],throwNext:false,moveFocus:false
           };
+        },
+        methods: {
+          logOpenChange(value, detail) {
+            this.events.push(`open:${value}:${detail.reason}`);
+            this.open = value;
+          },
+          runAction(value, detail) {
+            this.events.push(`action:${value}:${detail.source}:${detail.closeOnAction}`);
+            if (this.moveFocus) this.$refs.focusTarget.focus();
+            // Throw once, so the next action shows the palette recovering.
+            if (this.throwNext) {
+              this.throwNext = false;
+              throw new Error('Application action failed');
+            }
+          },
         },
       });
     """
