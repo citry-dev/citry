@@ -257,7 +257,7 @@ def template_python_queries(
     parse_nested: Callable[[str], Any] = parse_template,
 ) -> tuple[TemplatePythonQuery, ...]:
     """Return every Python-valued host with its exact lexical context."""
-    indexes = _query_start_indexes(template, base_index=0, parse_nested=parse_nested)
+    indexes = run(_query_start_indexes(template, base_index=0, parse_nested=parse_nested))
     queries: list[TemplatePythonQuery] = []
     seen: set[tuple[int, int, str]] = set()
     for index in sorted(indexes):
@@ -1924,7 +1924,7 @@ def _query_start_indexes(
     *,
     base_index: int,
     parse_nested: Callable[[str], Any],
-) -> set[int]:
+) -> Generator[Call, Any, set[int]]:
     indexes: set[int] = set()
     for element in template.elements:
         value: Any = element._0
@@ -1943,17 +1943,20 @@ def _query_start_indexes(
                 if nested is not None:
                     nested_template, nested_start = nested
                     indexes.update(
-                        _query_start_indexes(
-                            nested_template,
-                            base_index=start + nested_start,
-                            parse_nested=parse_nested,
+                        (
+                            yield Call(
+                                _query_start_indexes,
+                                nested_template,
+                                base_index=start + nested_start,
+                                parse_nested=parse_nested,
+                            )
                         )
                     )
             elif attr.kind == HtmlAttrKind.Expression or attr.kind == HtmlAttrKind.Meta:  # noqa: PLR1714
                 indexes.add(start)
         body = getattr(value, "body", None)
         if body is not None:
-            indexes.update(_query_start_indexes(body, base_index=base_index, parse_nested=parse_nested))
+            indexes.update((yield Call(_query_start_indexes, body, base_index=base_index, parse_nested=parse_nested)))
     return indexes
 
 

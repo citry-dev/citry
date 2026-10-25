@@ -3076,11 +3076,13 @@ def html_projection(
     if parser_index is None:
         return None
     parser = project.analysis.parse_template if project.analysis is not None else parse_template
-    projected = _html_projection_slice(
-        parsed.template,
-        region.source_map.template_source,
-        parser_index,
-        parser,
+    projected = run(
+        _html_projection_slice(
+            parsed.template,
+            region.source_map.template_source,
+            parser_index,
+            parser,
+        )
     )
     if projected is None:
         return None
@@ -3121,7 +3123,7 @@ def _html_projection_slice(
     parser: Any,
     *,
     base_index: int = 0,
-) -> _HtmlProjectionSlice | None:
+) -> Generator[Call, Any, _HtmlProjectionSlice | None]:
     """Prefer the smallest parser-proven HTML context containing ``index``."""
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -3138,7 +3140,8 @@ def _html_projection_slice(
             absolute_end = absolute_start + len(nested_source.encode("utf-8"))
             if not (absolute_start <= index <= absolute_end):
                 continue
-            deeper = _html_projection_slice(
+            deeper = yield Call(
+                _html_projection_slice,
                 nested_template,
                 template_source,
                 index,
@@ -3157,7 +3160,9 @@ def _html_projection_slice(
             return c_element
         body = getattr(node, "body", None)
         if body is not None and _node_body_contains(node, index, base_index=base_index):
-            body_projection = _html_projection_slice(body, template_source, index, parser, base_index=base_index)
+            body_projection = yield Call(
+                _html_projection_slice, body, template_source, index, parser, base_index=base_index
+            )
             if body_projection is not None:
                 return body_projection
     return None
@@ -3359,7 +3364,7 @@ def _i18n_use_at(
             )
             if expression is not None:
                 uses.extend(_mapped_browser_i18n_uses(expression, region, owners=frozenset({"$i18n"})))
-            uses.extend(_trans_i18n_uses(parsed.template, region))
+            uses.extend(run(_trans_i18n_uses(parsed.template, region)))
     js_region = document.js_region_at(position)
     if js_region is not None:
         expression = BrowserExpression(
@@ -3852,7 +3857,7 @@ def _mapped_i18n_binding_uses(template: Any, region: TemplateRegion, parser: Any
     return uses
 
 
-def _trans_i18n_uses(template: Any, region: TemplateRegion) -> list[_I18nUse]:
+def _trans_i18n_uses(template: Any, region: TemplateRegion) -> Generator[Call, Any, list[_I18nUse]]:
     uses: list[_I18nUse] = []
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -3918,7 +3923,7 @@ def _trans_i18n_uses(template: Any, region: TemplateRegion) -> list[_I18nUse]:
                         )
         body = getattr(node, "body", None)
         if body is not None:
-            uses.extend(_trans_i18n_uses(body, region))
+            uses.extend((yield Call(_trans_i18n_uses, body, region)))
     return uses
 
 
@@ -4211,7 +4216,7 @@ def completion_result(
     template_roots = _template_data_roots(document, region, project, open_documents) if catalog is not None else ()
     parsed = document.parsed.get(region.key)
     if parsed is not None:
-        lexical = _lexical_bindings_at(parsed.template, parser_index, ())
+        lexical = run(_lexical_bindings_at(parsed.template, parser_index, ()))
         if lexical is not None:
             nested_parser = project.analysis.parse_template if project.analysis is not None else parse_template
             query = template_python_query_at(parsed.template, parser_index, parse_nested=nested_parser)
@@ -4396,7 +4401,7 @@ def _citry_binding_reference(
     parsed = document.parsed.get(region.key)
     if parser_index is None or parsed is None:
         return None
-    reference = _citry_binding_reference_at(parsed.template, parser_index)
+    reference = run(_citry_binding_reference_at(parsed.template, parser_index))
     return (region, reference) if reference is not None else None
 
 
@@ -4585,7 +4590,7 @@ def hover(
     source = region.source_map.template_source
     parsed = document.parsed.get(region.key)
     if parsed is not None:
-        syntax_reference = _syntax_reference_at(parsed.template, parser_index)
+        syntax_reference = run(_syntax_reference_at(parsed.template, parser_index))
     else:
         syntax_reference = None
     # A parser-shaped scan keeps syntax help available when a misplaced
@@ -4793,7 +4798,7 @@ def references(
                 document.uri,
                 _range(region.source_map.map_range(reference.start_index, reference.end_index)),
             )
-            for reference in _lexical_references(parsed.template, lexical.binding)
+            for reference in run(_lexical_references(parsed.template, lexical.binding))
         ]
         if include_declaration:
             found.append(
@@ -4975,7 +4980,7 @@ def document_symbols(document: DocumentState) -> list[types.DocumentSymbol]:
     """Return a hierarchy of parsed component and structural tags."""
     symbols: list[types.DocumentSymbol] = []
     for parsed in document.parsed.values():
-        symbols.extend(_template_symbols(parsed.template, parsed.region))
+        symbols.extend(run(_template_symbols(parsed.template, parsed.region)))
     return symbols
 
 
@@ -5785,7 +5790,7 @@ def _lexical_definition(
     environment: tuple[_LexicalBinding, ...],
     *,
     base_index: int = 0,
-) -> _LexicalReference | None:
+) -> Generator[Call, Any, _LexicalReference | None]:
     for element in template.elements:
         value: Any = element._0
         if isinstance(element, TemplateElement.Expr):
@@ -5803,7 +5808,8 @@ def _lexical_definition(
                 parsed_nested = _parse_nested_template(attr.inner_value.content)
                 if parsed_nested is not None:
                     nested, nested_start = parsed_nested
-                    target = _lexical_definition(
+                    target = yield Call(
+                        _lexical_definition,
                         nested,
                         index,
                         attr_environment,
@@ -5822,7 +5828,8 @@ def _lexical_definition(
                 return target
         body = getattr(node, "body", None)
         if body is not None:
-            target = _lexical_definition(
+            target = yield Call(
+                _lexical_definition,
                 body,
                 index,
                 (*environment, *introduced),
@@ -5853,10 +5860,10 @@ def _definition_for_uses(
 
 
 def _lexical_reference_at(template: Any, index: int) -> _LexicalReference | None:
-    declared = _introduced_binding_at(template, index, base_index=0)
+    declared = run(_introduced_binding_at(template, index, base_index=0))
     if declared is not None:
         return _LexicalReference(declared, declared.start_index, declared.end_index)
-    return _lexical_definition(template, index, ())
+    return run(_lexical_definition(template, index, ()))
 
 
 def _lexical_references(
@@ -5865,7 +5872,7 @@ def _lexical_references(
     environment: tuple[_LexicalBinding, ...] = (),
     *,
     base_index: int = 0,
-) -> tuple[_LexicalReference, ...]:
+) -> Generator[Call, Any, tuple[_LexicalReference, ...]]:
     """Collect uses that resolve to one exact parser-proven binding."""
     found: list[_LexicalReference] = []
     for element in template.elements:
@@ -5884,11 +5891,14 @@ def _lexical_references(
                 if parsed_nested is not None:
                     nested, nested_start = parsed_nested
                     found.extend(
-                        _lexical_references(
-                            nested,
-                            target,
-                            attr_environment,
-                            base_index=base_index + attr.inner_value.start_index + nested_start,
+                        (
+                            yield Call(
+                                _lexical_references,
+                                nested,
+                                target,
+                                attr_environment,
+                                base_index=base_index + attr.inner_value.start_index + nested_start,
+                            )
                         )
                     )
                     continue
@@ -5896,11 +5906,14 @@ def _lexical_references(
         body = getattr(node, "body", None)
         if body is not None:
             found.extend(
-                _lexical_references(
-                    body,
-                    target,
-                    (*environment, *introduced),
-                    base_index=base_index,
+                (
+                    yield Call(
+                        _lexical_references,
+                        body,
+                        target,
+                        (*environment, *introduced),
+                        base_index=base_index,
+                    )
                 )
             )
     return tuple(sorted(found, key=lambda reference: (reference.start_index, reference.end_index)))
@@ -5934,7 +5947,9 @@ def _references_for_uses(
     return tuple(found)
 
 
-def _introduced_binding_at(template: Any, index: int, *, base_index: int) -> _LexicalBinding | None:
+def _introduced_binding_at(
+    template: Any, index: int, *, base_index: int
+) -> Generator[Call, Any, _LexicalBinding | None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -5950,7 +5965,8 @@ def _introduced_binding_at(template: Any, index: int, *, base_index: int) -> _Le
             if parsed_nested is None:
                 continue
             nested, nested_start = parsed_nested
-            target = _introduced_binding_at(
+            target = yield Call(
+                _introduced_binding_at,
                 nested,
                 index,
                 base_index=base_index + attr.inner_value.start_index + nested_start,
@@ -5959,7 +5975,7 @@ def _introduced_binding_at(template: Any, index: int, *, base_index: int) -> _Le
                 return target
         body = getattr(node, "body", None)
         if body is not None:
-            target = _introduced_binding_at(body, index, base_index=base_index)
+            target = yield Call(_introduced_binding_at, body, index, base_index=base_index)
             if target is not None:
                 return target
     return None
@@ -5971,7 +5987,7 @@ def _lexical_bindings_at(
     environment: tuple[_LexicalBinding, ...],
     *,
     base_index: int = 0,
-) -> tuple[_LexicalBinding, ...] | None:
+) -> Generator[Call, Any, tuple[_LexicalBinding, ...] | None]:
     """Return the active environment only when ``index`` is in Python source."""
     for element in template.elements:
         value: Any = element._0
@@ -5998,16 +6014,20 @@ def _lexical_bindings_at(
                 parsed_nested = _parse_nested_template(inner.content)
                 if parsed_nested is not None:
                     nested, nested_start = parsed_nested
-                    return _lexical_bindings_at(
-                        nested,
-                        index,
-                        attr_environment,
-                        base_index=base_index + inner.start_index + nested_start,
+                    return (
+                        yield Call(
+                            _lexical_bindings_at,
+                            nested,
+                            index,
+                            attr_environment,
+                            base_index=base_index + inner.start_index + nested_start,
+                        )
                     )
             return None
         body = getattr(node, "body", None)
         if body is not None and _node_body_contains(node, index, base_index=base_index):
-            resolved = _lexical_bindings_at(
+            resolved = yield Call(
+                _lexical_bindings_at,
                 body,
                 index,
                 (*environment, *introduced),
@@ -6108,7 +6128,7 @@ def _identifier_key(value: str) -> str:
     return unicodedata.normalize("NFKC", value)
 
 
-def _template_symbols(template: Any, region: TemplateRegion) -> list[types.DocumentSymbol]:
+def _template_symbols(template: Any, region: TemplateRegion) -> Generator[Call, Any, list[types.DocumentSymbol]]:
     symbols: list[types.DocumentSymbol] = []
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -6126,7 +6146,7 @@ def _template_symbols(template: Any, region: TemplateRegion) -> list[types.Docum
                 kind=types.SymbolKind.Class if tag.content.startswith("c-") else types.SymbolKind.Object,
                 range=symbol_range,
                 selection_range=selection,
-                children=_template_symbols(body, region) if body is not None else None,
+                children=(yield Call(_template_symbols, body, region)) if body is not None else None,
             )
         )
     return symbols
@@ -6768,7 +6788,7 @@ def _citry_binding_reference_at(
     index: int,
     *,
     base_index: int = 0,
-) -> _CitryBindingReference | None:
+) -> Generator[Call, Any, _CitryBindingReference | None]:
     """Find one Citry binding-key segment from parser-proven template nodes."""
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -6788,7 +6808,8 @@ def _citry_binding_reference_at(
             if parsed_nested is None:
                 continue
             nested, nested_start = parsed_nested
-            reference = _citry_binding_reference_at(
+            reference = yield Call(
+                _citry_binding_reference_at,
                 nested,
                 index,
                 base_index=base_index + attr.inner_value.start_index + nested_start,
@@ -6797,7 +6818,7 @@ def _citry_binding_reference_at(
                 return reference
         body = getattr(node, "body", None)
         if body is not None:
-            reference = _citry_binding_reference_at(body, index, base_index=base_index)
+            reference = yield Call(_citry_binding_reference_at, body, index, base_index=base_index)
             if reference is not None:
                 return reference
     return None
@@ -6853,7 +6874,7 @@ def _syntax_reference_at(
     index: int,
     *,
     base_index: int = 0,
-) -> _SyntaxReference | None:
+) -> Generator[Call, Any, _SyntaxReference | None]:
     """Find parser-owned syntax using AST tokens, including nested templates."""
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -6895,7 +6916,8 @@ def _syntax_reference_at(
             if parsed_nested is None:
                 continue
             nested, nested_start = parsed_nested
-            reference = _syntax_reference_at(
+            reference = yield Call(
+                _syntax_reference_at,
                 nested,
                 index,
                 base_index=base_index + attr.inner_value.start_index + nested_start,
@@ -6904,7 +6926,7 @@ def _syntax_reference_at(
                 return reference
         body = getattr(node, "body", None)
         if body is not None:
-            reference = _syntax_reference_at(body, index, base_index=base_index)
+            reference = yield Call(_syntax_reference_at, body, index, base_index=base_index)
             if reference is not None:
                 return reference
     return None
@@ -7897,13 +7919,13 @@ def _bindings_from_start_tag(tag_text: str, source_start: int, tag_name: str) ->
         parsed = parse_template(f"{prefix}{synthetic}{suffix}")
     except (SyntaxError, ValueError):
         return ()
-    node = _first_node_named(parsed, tag_name)
+    node = run(_first_node_named(parsed, tag_name))
     if node is None:
         return ()
     return _node_bindings(node, base_index=source_start - len(prefix))
 
 
-def _first_node_named(template: Any, tag_name: str) -> Any | None:
+def _first_node_named(template: Any, tag_name: str) -> Generator[Call, Any, Any | None]:
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
             continue
@@ -7912,7 +7934,7 @@ def _first_node_named(template: Any, tag_name: str) -> Any | None:
             return node
         body = getattr(node, "body", None)
         if body is not None:
-            nested = _first_node_named(body, tag_name)
+            nested = yield Call(_first_node_named, body, tag_name)
             if nested is not None:
                 return nested
     return None
