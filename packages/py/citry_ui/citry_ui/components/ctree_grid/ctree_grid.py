@@ -273,6 +273,29 @@ class CTreeGrid(LibraryComponent):
         header: SlotInput[CTreeGridHeaderSlotData] | None = None
         cell: SlotInput[CTreeGridCellSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "catalog",
+            "column_count",
+            "columns",
+            "density",
+            "disabled",
+            "expanded",
+            "form",
+            "has_caption",
+            "has_toolbar",
+            "label",
+            "labels",
+            "name",
+            "root_id",
+            "row_count",
+            "rows",
+            "selected",
+            "selection",
+            "table_attrs",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tree_grid_snapshot", None)
         if cached is not None:

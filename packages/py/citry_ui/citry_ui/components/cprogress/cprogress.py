@@ -127,6 +127,21 @@ class CProgress(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "catalogFallbackText",
+            "fallback_text",
+            "intent",
+            "label",
+            "max",
+            "shape",
+            "size",
+            "state",
+            "value",
+            "value_text",
+        )
+
     def _normalized(self, kwargs: Kwargs) -> dict[str, object]:
         maximum = _number("max", kwargs.max)
         if maximum <= 0:

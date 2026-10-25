@@ -1182,6 +1182,52 @@ class CSlider(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "catalog_lower_label",
+            "catalog_upper_label",
+            "disabled",
+            "field_control",
+            "form",
+            "invalid",
+            "is_range",
+            "lower_id",
+            "lower_input_attrs",
+            "lower_label",
+            "lower_label_id",
+            "lower_labelledby",
+            "lower_name",
+            "lower_transport_id",
+            "marks",
+            "maximum",
+            "minimum",
+            "orientation",
+            "part",
+            "public_id",
+            "readonly",
+            "root_attrs",
+            "root_id",
+            "show_marks",
+            "show_value",
+            "single_aria_label",
+            "single_aria_labelledby",
+            "size",
+            "step",
+            "thumbs",
+            "upper_aria_describedby",
+            "upper_aria_errormessage",
+            "upper_id",
+            "upper_input_attrs",
+            "upper_label",
+            "upper_label_id",
+            "upper_labelledby",
+            "upper_name",
+            "upper_transport_id",
+            "variant",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _snapshot(self, kwargs, is_range=False)
 
@@ -1236,6 +1282,52 @@ class CRangeSlider(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    class Lint:
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "catalog_lower_label",
+            "catalog_upper_label",
+            "disabled",
+            "field_control",
+            "form",
+            "invalid",
+            "is_range",
+            "lower_id",
+            "lower_input_attrs",
+            "lower_label",
+            "lower_label_id",
+            "lower_labelledby",
+            "lower_name",
+            "lower_transport_id",
+            "marks",
+            "maximum",
+            "minimum",
+            "orientation",
+            "part",
+            "public_id",
+            "readonly",
+            "root_attrs",
+            "root_id",
+            "show_marks",
+            "show_value",
+            "single_aria_label",
+            "single_aria_labelledby",
+            "size",
+            "step",
+            "thumbs",
+            "upper_aria_describedby",
+            "upper_aria_errormessage",
+            "upper_id",
+            "upper_input_attrs",
+            "upper_label",
+            "upper_label_id",
+            "upper_labelledby",
+            "upper_name",
+            "upper_transport_id",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _snapshot(self, kwargs, is_range=True)

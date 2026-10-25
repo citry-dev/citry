@@ -265,6 +265,28 @@ class CTour(LibraryComponent):
         activator: SlotInput[CTourActivatorSlotData] | None = None
         close: SlotInput[CTourCloseSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "activator",
+            "activator_attrs",
+            "active",
+            "attrs",
+            "catalog",
+            "close",
+            "close_on_escape",
+            "close_on_outside",
+            "dialog_id",
+            "dismissible",
+            "labels",
+            "missing_target",
+            "open",
+            "registry",
+            "root_id",
+            "scroll",
+            "size",
+            "skippable",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_tour_snapshot", None)
         if cached is not None:
@@ -640,6 +662,35 @@ class CInternalTourStep(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         pass
+
+    class Lint:
+        template_data_keys = (
+            "active",
+            "arrow",
+            "attrs",
+            "catalog",
+            "content",
+            "declaration",
+            "describe",
+            "description_id",
+            "index",
+            "is_first",
+            "is_last",
+            "labels",
+            "media",
+            "morph_key",
+            "placement",
+            "progress",
+            "progress_current",
+            "progress_total",
+            "progress_values",
+            "skippable",
+            "step_positions",
+            "target_id",
+            "title",
+            "title_id",
+            "total",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         item = kwargs.item

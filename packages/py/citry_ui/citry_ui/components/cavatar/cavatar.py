@@ -168,6 +168,20 @@ class CAvatar(LibraryComponent):
     class Slots:
         default: SlotInput[CAvatarDefaultSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "alt",
+            "attrs",
+            "has_fallback",
+            "img_attrs",
+            "role",
+            "shape",
+            "size",
+            "src",
+            "status",
+            "variant",
+        )
+
     def _normalized(self, kwargs: Kwargs) -> dict[str, object]:
         return {
             "src": _plain_string("src", kwargs.src, optional=True, empty=False),

@@ -91,7 +91,7 @@
       "title": "Unknown template variable",
       "summary": "A template reads a variable that nothing provides, often because of a typo. Rendering then fails with a KeyError.",
       "when": "A name in {{ ... }} or in a c-* attribute is not in the component's template data, a c-for or c-fill binding around it, template_globals, or the declared template_variables. In a template that several components share, every one of them must provide the name.",
-      "fix": "Correct the name, or add it to the data that template_data() returns. If another integration provides it, declare it in template_variables, or change rule_unknown_template_variable.",
+      "fix": "Correct the name, or add it to the data that template_data() returns. If template_data() builds its result in a way Citry cannot read, such as by calling a helper function, list every key it returns in Lint.template_data_keys. If another integration provides the name, declare it in template_variables, or change rule_unknown_template_variable.",
       "defaultSeverity": "error",
       "configurableSeverity": true,
       "surfaces": [
@@ -119,6 +119,33 @@
         }
       ],
       "documentationPath": "/ide/diagnostics/#citry.template.unknown-variable"
+    },
+    {
+      "code": "citry.template.undeclared-template-data-key",
+      "constant": "TEMPLATE_UNDECLARED_TEMPLATE_DATA_KEY",
+      "title": "Key missing from template_data_keys",
+      "summary": "A component's template_data() returns a key that its Lint.template_data_keys does not list, so the list no longer names every key the method returns.",
+      "when": "A component declares Lint.template_data_keys, and its template_data() writes a key as a literal, such as {\"title\": ...} or data[\"title\"] = ..., that the list leaves out.",
+      "fix": "Add the key to Lint.template_data_keys, or stop returning it.",
+      "defaultSeverity": "warning",
+      "configurableSeverity": false,
+      "surfaces": [
+        "check"
+      ],
+      "parameters": {
+        "name": "The key that template_data() returns."
+      },
+      "messages": {
+        "default": "template_data() returns '{name}', but Lint.template_data_keys does not list it. Add '{name}' to the list so it names every key the method returns."
+      },
+      "examples": [
+        {
+          "title": "A key the list leaves out",
+          "language": "citry",
+          "source": "class Card(Component):\n    class Lint:\n        template_data_keys = (\"title\",)\n\n    def template_data(self, kwargs, slots):\n        data = build_card(kwargs)\n        data[\"badge\"] = \"new\"\n        return data"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.template.undeclared-template-data-key"
     },
     {
       "code": "citry.template.unknown-component",

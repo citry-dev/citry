@@ -190,6 +190,27 @@ class CButton(LibraryComponent):
         end: SlotInput[CButtonEndSlotData] | None = None
         loading: SlotInput[CButtonLoadingSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "aria_busy",
+            "aria_disabled",
+            "attrs",
+            "block",
+            "disabled",
+            "disabled_without_js",
+            "has_end",
+            "has_start",
+            "href_without_js",
+            "intent",
+            "loading",
+            "loading_pos",
+            "root_tag",
+            "size",
+            "tabindex_without_js",
+            "type_without_js",
+            "variant",
+        )
+
     def template_data(
         self,
         kwargs: Kwargs,

@@ -88,6 +88,14 @@ class CSpinner(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "intent",
+            "label",
+            "size",
+        )
+
     def _normalized(self, kwargs: Kwargs) -> dict[str, str]:
         return {
             "label": _plain_string("label", kwargs.label),

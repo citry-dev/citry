@@ -387,6 +387,43 @@ class CCommandPalette(LibraryComponent):
         item_end: SlotInput[CCommandPaletteItemSlotData] | None = None
         empty: SlotInput[_CCommandPaletteEmptySlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "activator_attrs",
+            "activator_disabled",
+            "aria_expanded",
+            "attrs",
+            "catalog_close_label",
+            "catalog_empty_label",
+            "catalog_placeholder",
+            "catalog_search_label",
+            "close_label",
+            "close_on_action",
+            "dialog_id",
+            "disabled",
+            "empty_label",
+            "entries",
+            "fingerprint",
+            "has_activator",
+            "has_empty",
+            "has_item_end",
+            "has_item_start",
+            "input_attrs",
+            "input_id",
+            "label",
+            "label_attrs",
+            "listbox_id",
+            "loop",
+            "open",
+            "placeholder",
+            "query",
+            "regions",
+            "root_id",
+            "search_label",
+            "size",
+            "title_id",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_command_palette_snapshot", None)
         if cached is not None:

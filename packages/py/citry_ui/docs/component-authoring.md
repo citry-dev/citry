@@ -136,6 +136,14 @@ class CDisclosure(LibraryComponent):
         check_input_types = False
 ```
 
+When `template_data()` builds its result through a helper, which most
+Citry UI components do, list every key it returns in the same `Lint`
+class with `template_data_keys`. `citry check --include-libraries` and the
+editor then check the template against that list. When you add a key to
+the helper and read it in the template, add it to the list too:
+`test_citry_ui_templates_check_clean_against_their_declared_keys` fails
+until you do.
+
 ## Edit readable assets and ship checked production files
 
 Citry UI keeps readable file-backed CSS next to each production family and

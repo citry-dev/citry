@@ -371,6 +371,39 @@ class CSplitButton(LibraryComponent):
         end: SlotInput[CSplitButtonEndSlotData] | None = None
         loading: SlotInput[CSplitButtonLoadingSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "anchor_name",
+            "block",
+            "disabled",
+            "has_end",
+            "has_start",
+            "intent",
+            "label",
+            "loading",
+            "loading_pos",
+            "match_width",
+            "menu_disabled",
+            "menu_label",
+            "menu_surface",
+            "open",
+            "placement",
+            "primary_aria_busy",
+            "primary_aria_disabled",
+            "primary_attrs",
+            "primary_disabled",
+            "primary_disabled_without_js",
+            "primary_id",
+            "root_attrs",
+            "root_id",
+            "size",
+            "surface_id",
+            "trigger_attrs",
+            "trigger_id",
+            "type",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_split_button_snapshot", None)
         if cached is not None:

@@ -171,6 +171,22 @@ class CVirtualList(LibraryComponent):
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "aria_label",
+            "attrs",
+            "estimated_item_size",
+            "focusable",
+            "initial_index",
+            "item_size",
+            "overscan",
+            "registry",
+            "start_index",
+            "strategy",
+            "total_count",
+            "viewport_size",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_virtual_list_snapshot", None)
         if cached is not None:
@@ -500,6 +516,22 @@ class CVirtualWindow(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CVirtualListDefaultSlotData] | None = None
+
+    class Lint:
+        template_data_keys = (
+            "aria_label",
+            "attrs",
+            "estimated_item_size",
+            "focusable",
+            "initial_index",
+            "item_size",
+            "overscan",
+            "registry",
+            "start_index",
+            "strategy",
+            "total_count",
+            "viewport_size",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_virtual_window_snapshot", None)

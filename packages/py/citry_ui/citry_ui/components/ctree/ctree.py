@@ -236,6 +236,19 @@ class CTree(LibraryComponent):
     class Slots:
         default: SlotInput[CTreeDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "disabled",
+            "expanded",
+            "label",
+            "root_id",
+            "selected",
+            "selectionMode",
+            "size",
+            "variant",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_CONTEXT, None) is not None:
             raise ValueError("Nested CTree must be rendered outside a CTreeItem declaration collection.")

@@ -834,6 +834,24 @@ class CMenu(LibraryComponent):
         activator: SlotInput[CMenuActivatorSlotData]
         default: SlotInput[CMenuDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "activator_attrs",
+            "activator_disabled",
+            "attrs",
+            "close_on_select",
+            "declarations",
+            "disabled",
+            "loop",
+            "match_width",
+            "menu_id",
+            "menu_surface",
+            "open",
+            "placement",
+            "registry",
+            "size",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         return _build_menu_root_snapshot(self, kwargs)
 
@@ -4059,6 +4077,27 @@ class CMenuItem(LibraryComponent):
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "checked",
+            "checked_text",
+            "close_on_select",
+            "described_by",
+            "description_id",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "href",
+            "intent",
+            "kind",
+            "label_id",
+            "root_tag",
+            "text_value",
+            "value",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _item_snapshot(self, "CMenuItem", kwargs, kind="item")
 
@@ -4156,6 +4195,28 @@ class CMenuCheckboxItem(LibraryComponent):
         start: SlotInput[CMenuItemStartSlotData] | None = None
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
+
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "checked",
+            "checked_text",
+            "close_on_select",
+            "described_by",
+            "description_id",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "href",
+            "indicator",
+            "intent",
+            "kind",
+            "label_id",
+            "root_tag",
+            "text_value",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         snapshot = _item_snapshot(self, "CMenuCheckboxItem", kwargs, kind="checkbox")
@@ -4272,6 +4333,27 @@ class CMenuRadioItem(LibraryComponent):
         start: SlotInput[CMenuItemStartSlotData] | None = None
         description: SlotInput[CMenuItemDescriptionSlotData] | None = None
         end: SlotInput[CMenuItemEndSlotData] | None = None
+
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "checked",
+            "checked_text",
+            "close_on_select",
+            "described_by",
+            "description_id",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "href",
+            "intent",
+            "kind",
+            "label_id",
+            "root_tag",
+            "text_value",
+            "value",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return _item_snapshot(self, "CMenuRadioItem", kwargs, kind="radio")
@@ -4488,6 +4570,16 @@ class CMenuRadioGroup(LibraryComponent):
     class Slots:
         default: SlotInput[CMenuRadioGroupDefaultSlotData]
         label: SlotInput[CMenuRadioGroupLabelSlotData] | None = None
+
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "has_label",
+            "key",
+            "label_id",
+            "registry",
+            "value",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_menu_radio_group_snapshot", None)
@@ -4891,6 +4983,29 @@ class CMenuSubmenu(LibraryComponent):
         start: SlotInput[CMenuSubmenuStartSlotData] | None = None
         description: SlotInput[CMenuSubmenuDescriptionSlotData] | None = None
         end: SlotInput[CMenuSubmenuEndSlotData] | None = None
+
+    class Lint:
+        template_data_keys = (
+            "anchor_name",
+            "attrs",
+            "described_by",
+            "description_id",
+            "disabled",
+            "has_description",
+            "has_end",
+            "has_start",
+            "indicator",
+            "intent",
+            "key",
+            "label_id",
+            "menu_attrs",
+            "menu_id",
+            "registry",
+            "text_value",
+            "trigger_attrs",
+            "trigger_id",
+            "value",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
         cached = getattr(self, "_cui_menu_submenu_snapshot", None)

@@ -225,6 +225,19 @@ class CSplitter(LibraryComponent):
     class Slots:
         default: SlotInput[CSplitterDefaultSlotData]
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "disabled",
+            "group_id",
+            "keyboardStep",
+            "orientation",
+            "registry",
+            "size",
+            "sizes",
+            "variant",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(_CONTEXT, None) is not None:
             raise ValueError("Nested CSplitter must be rendered inside panel content, not as a direct declaration.")

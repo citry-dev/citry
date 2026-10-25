@@ -422,6 +422,37 @@ class CInternalCascader(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "aria_label",
+            "aria_labelledby",
+            "attrs",
+            "catalog",
+            "catalog_empty",
+            "catalog_placeholder",
+            "change_on_select",
+            "disabled",
+            "display",
+            "form",
+            "groups",
+            "joined",
+            "labels",
+            "name",
+            "open",
+            "popup_id",
+            "registry",
+            "root_attrs",
+            "root_entries",
+            "root_id",
+            "roots",
+            "separator",
+            "size",
+            "status",
+            "trigger_id",
+            "value",
+            "variant",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         data = kwargs.snapshot
         registry = cast("_Registry", data["registry"])

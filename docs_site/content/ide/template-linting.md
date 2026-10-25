@@ -203,6 +203,70 @@ or event helpers. Read it from the callback's argument or the `component`
 instance instead. Declaring it as a global would hide the bug where you forgot
 to destructure it.
 
+## List template data keys { #list-template-data-keys }
+
+When `template_data()` returns a `dict` literal, Citry reads its keys
+and checks the template against them. When the method builds its result
+in a way Citry cannot read, such as by calling a helper function, Citry
+cannot see the keys. It then reports every name in the template, even
+names the helper does return:
+
+```citry-html
+{# error: Template variable 'img_attrs' is not declared.
+   Citry could not determine whether it is supplied
+   dynamically. #}
+<img
+  c-src="src"
+  c-alt="alt"
+  c-attrs="img_attrs"
+>
+```
+
+List every key the method returns in the component's `Lint` class:
+
+```citry
+from citry import Component
+
+
+class Avatar(Component):
+    class Lint:
+        template_data_keys = ("src", "alt", "img_attrs")
+
+    def template_data(self, kwargs, slots):
+        # Returns {"src": ..., "alt": ..., "img_attrs": ...}.
+        return build_avatar_data(kwargs)
+
+    template = """
+      <img
+        c-src="src"
+        c-alt="alt"
+        c-attrs="img_attrs"
+      >
+    """
+```
+
+Citry then accepts the listed names and reports any other name, such as
+a typo like `img_attr`. Only `citry check` and the editor read the list;
+rendering ignores it. A subclass's list replaces its base class's list,
+`template_data_keys = None` clears it, and a `TemplateData` schema on a
+subclass replaces it too.
+
+If the method also writes a key as a literal, such as `{"title": ...}`
+or `data["title"] = ...`, and the list leaves it out, `citry check`
+warns. This warning has no `rule_*` setting. Citry cannot see the keys
+the helper adds, so keep the list in step with the helper yourself: a
+listed key that the helper never returns passes the check, and the page
+fails with `KeyError` when it renders.
+
+Citry checks the list when the class is defined:
+
+- A value that is not a tuple, list, or frozenset of strings raises
+  `TypeError`. A `set` raises it too.
+- A name that cannot be a Python variable name, such as `"class"` or
+  `"my-key"`, or a name listed twice, raises `ValueError`.
+- A component that declares both the list and a `TemplateData` schema
+  raises `TypeError`, because the schema already names every key.
+
 ## Change rule severity { #change-how-strict-a-rule-is }
 
 Each rule has a `rule_*` setting on `LintSettings` that accepts `"ignore"`,

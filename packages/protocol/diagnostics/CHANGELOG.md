@@ -2,6 +2,9 @@
 
 ## v1 - Unreleased
 
+- Added `citry.template.undeclared-template-data-key`, the `citry check`
+  warning for a key that `template_data()` writes as a literal but the
+  component's `Lint.template_data_keys` leaves out.
 - Added the schema-validated source catalog for Citry-owned diagnostic codes,
   message variants, trigger conditions, examples, severities, reporting
   surfaces, and documentation links.

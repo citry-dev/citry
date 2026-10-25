@@ -240,6 +240,37 @@ class CNumberInput(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "aria_describedby",
+            "aria_errormessage",
+            "autocomplete",
+            "catalog_decrement_label",
+            "catalog_increment_label",
+            "decrement_label",
+            "disabled",
+            "field_control",
+            "form",
+            "formatted_value",
+            "increment_label",
+            "input_attrs",
+            "invalid",
+            "maximum",
+            "minimum",
+            "name",
+            "placeholder",
+            "public_id",
+            "readonly",
+            "required",
+            "root_attrs",
+            "show_controls",
+            "size",
+            "step",
+            "transport_id",
+            "value",
+            "variant",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_number_input_snapshot", None)
         if cached is not None:

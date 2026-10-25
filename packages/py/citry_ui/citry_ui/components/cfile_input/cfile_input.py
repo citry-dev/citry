@@ -215,6 +215,26 @@ class CFileInput(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "accept",
+            "aria_describedby",
+            "aria_errormessage",
+            "aria_invalid",
+            "attrs",
+            "capture",
+            "disabled",
+            "element_id",
+            "field_control",
+            "id",
+            "invalid",
+            "multiple",
+            "name",
+            "required",
+            "size",
+            "variant",
+        )
+
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         normalized = _normalize_common(
             "CFileInput",
@@ -575,6 +595,26 @@ class CDropTarget(LibraryComponent):
     @dataclass(slots=True)
     class Slots:
         default: SlotInput[CDropTargetDefaultSlotData] | None = None
+
+    class Lint:
+        template_data_keys = (
+            "accept",
+            "aria_invalid",
+            "attrs",
+            "capture",
+            "disabled",
+            "element_id",
+            "has_default",
+            "id",
+            "input_attrs",
+            "invalid",
+            "label",
+            "multiple",
+            "name",
+            "required",
+            "size",
+            "variant",
+        )
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         if self.inject(FIELD_CONTEXT_KEY, None) is not None:

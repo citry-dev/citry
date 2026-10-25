@@ -203,6 +203,44 @@ class CDatePicker(LibraryComponent):
     # docs/component-authoring.md.
     class Lint:
         check_input_types = False
+        template_data_keys = (
+            "attrs",
+            "calendar_id",
+            "catalog_clear_label",
+            "catalog_picker_label",
+            "clear_label",
+            "clearable",
+            "described_by",
+            "disabled",
+            "dismissible",
+            "display_value",
+            "error_message",
+            "field_control",
+            "first_day",
+            "fixed_weeks",
+            "form",
+            "invalid",
+            "match_width",
+            "maximum",
+            "minimum",
+            "name",
+            "native_id",
+            "picker_label",
+            "placeholder",
+            "placement",
+            "popover_id",
+            "public_id",
+            "readonly",
+            "required",
+            "root_id",
+            "show_adjacent_days",
+            "size",
+            "trigger_label",
+            "unavailable_dates",
+            "value",
+            "variant",
+            "visible_id",
+        )
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_date_picker_snapshot", None)

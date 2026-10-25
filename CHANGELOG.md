@@ -4,6 +4,12 @@
 
 ### Added
 
+- When `template_data()` builds its result through a helper, you can list
+  its keys in `Lint.template_data_keys`. `citry check` and the editor then
+  report only names outside the list, not every name in the template.
+  `citry check` also warns about a literal key the list leaves out.
+  Rendering ignores the list
+  ([details](https://citry.dev/ide/template-linting/#list-template-data-keys)).
 - `citry check` now fails on a misspelled directive such as
   `<div c-iff="show">`, which Citry would render as an `iff` attribute; set
   `rule_misspelled_directive` to change the severity.

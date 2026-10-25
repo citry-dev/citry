@@ -245,6 +245,43 @@ class CTimePicker(LibraryComponent):
     class Slots:
         pass
 
+    class Lint:
+        template_data_keys = (
+            "attrs",
+            "catalog_clear_label",
+            "catalog_picker_label",
+            "clear_label",
+            "clearable",
+            "described_by",
+            "disabled",
+            "dismissible",
+            "display_value",
+            "error_message",
+            "field_control",
+            "form",
+            "invalid",
+            "match_width",
+            "maximum",
+            "minimum",
+            "name",
+            "native_id",
+            "native_step",
+            "options",
+            "picker_label",
+            "placeholder",
+            "placement",
+            "popover_id",
+            "public_id",
+            "readonly",
+            "required",
+            "root_id",
+            "size",
+            "trigger_label",
+            "value",
+            "variant",
+            "visible_id",
+        )
+
     def _snapshot(self, kwargs: Kwargs) -> dict[str, Any]:
         cached = getattr(self, "_cui_time_picker_snapshot", None)
         if cached is not None:
