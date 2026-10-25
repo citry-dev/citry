@@ -435,10 +435,6 @@ class CImage(LibraryComponent):
         placeholder: SlotInput[_CImageVisualSlotData] | None = None
         fallback: SlotInput[_CImageVisualSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def _normalized(self, kwargs: Kwargs) -> dict[str, object]:
         src = _plain_url("src", kwargs.src)
         alt = cast("str", _plain_string("alt", kwargs.alt, empty=True))

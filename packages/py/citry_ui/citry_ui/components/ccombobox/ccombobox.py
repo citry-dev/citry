@@ -104,10 +104,6 @@ class CCombobox(LibraryComponent):
         empty: SlotInput[CComboboxEmptySlotData] | None = None
         error: SlotInput[CComboboxErrorSlotData] | None = None
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
-    class Lint:
-        check_input_types = False
-
     def _localized_messages(self, kwargs: Kwargs) -> dict[str, object]:
         specs = (
             ("required_message", "citry-ui-combobox-required"),

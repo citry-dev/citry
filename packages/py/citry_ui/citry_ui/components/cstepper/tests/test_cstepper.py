@@ -162,7 +162,7 @@ def test_root_and_step_class_style_attrs_reach_concrete_roots() -> None:
         (
             '<c-CStepper label="Setup" orientation="diagonal">'
             "<c-CStep>One</c-CStep><c-CStep>Two</c-CStep></c-CStepper>",
-            "orientation must be one of",
+            r"CStepper\.Kwargs\.orientation expects Literal\['horizontal', 'vertical'\]",
         ),
         ('<c-CStepper label="Setup"><c-CStep>Only</c-CStep></c-CStepper>', "at least two"),
         (

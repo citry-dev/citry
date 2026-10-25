@@ -1640,10 +1640,13 @@ def test_elements_nested_past_what_browsers_parse_become_a_shell() -> None:
 
 
 def test_a_deep_template_renders_on_a_thread_with_a_small_stack() -> None:
-    # Threads other than the main one get 512 KiB of stack on macOS. Vue's
-    # compiler and the server renderer run on the thread that renders. The
-    # nested elements send flat data, so only those two steps go deep.
-    page = _nested_page(_DEEP_TEMPLATES["elements"])
+    # A thread started outside Python gets 512 KiB of stack on macOS, and
+    # `threading.stack_size()` gives a Python thread the same. Vue's compiler,
+    # the server renderer and the native path's leaf JSON writer all run on
+    # the thread that renders. The 256 nested `c-for` loops send data about
+    # 512 containers deep, which the leaf JSON writer walks 200 levels into
+    # before leaving it to Python.
+    page = _nested_page(_DEEP_TEMPLATES["c-for attributes"])
     results: list[tuple[str, HydrationAdmission]] = []
     previous = threading.stack_size(512 * 1024)
     try:

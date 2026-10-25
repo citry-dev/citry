@@ -3,10 +3,12 @@
 //!
 //! Compiling a template, reading the render function it produces, writing
 //! its HTML, evaluating its expressions and freeing what was read all call
-//! themselves once per nesting level. Python may run them on any thread,
-//! and a thread other than the main one can have as little as 512 KiB of
-//! stack (macOS) or 128 KiB (musl Linux), so without a guard a deep template
-//! overflows it and aborts the process.
+//! themselves once per nesting level. Python may run them on any thread. A
+//! thread gets the platform's default stack unless Python sets one: 128 KiB
+//! on musl Linux, also for Python's own threads, and 512 KiB on macOS for a
+//! thread started outside Python; and `threading.stack_size()` can make any
+//! Python thread as small. So without a guard a deep template overflows it
+//! and aborts the process.
 //!
 //! Each recursion entry in the reader, the writers, `eval`, `fully_supported`
 //! and the class and style normalizers runs its work through

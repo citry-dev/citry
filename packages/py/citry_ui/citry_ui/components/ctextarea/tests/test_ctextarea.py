@@ -7,12 +7,12 @@ import pytest
 from markupsafe import Markup
 
 import citry_ui
-from citry import Citry, Component, Const
+from citry import Citry, Component, Const, LintSettings
 from citry_ui import CField, CForm, CTextarea
 
 
-def _render(value: object) -> str:
-    app = Citry(autodiscover=False)
+def _render(value: object, *, check_input_types: bool = True) -> str:
+    app = Citry(autodiscover=False, lint=LintSettings(check_input_types=check_input_types))
     app.register_library(citry_ui)
 
     class Page(Component):
@@ -115,17 +115,17 @@ def test_textarea_accepts_python_decimal_string_dimensions():
     [
         ({"name": ""}, ValueError, "name must be non-empty"),
         ({"id": "two words"}, ValueError, "cannot contain ASCII whitespace"),
-        ({"value": 3}, TypeError, "value must be a string or None"),
+        ({"value": 3}, TypeError, r"CTextarea\.Kwargs\.value expects str \| None"),
         ({"rows": 0}, ValueError, "rows must be greater than zero"),
         ({"rows": True}, TypeError, "rows must be a positive integer"),
         ({"cols": 0}, ValueError, "cols must be greater than zero"),
         ({"wrap": "hard"}, ValueError, "wrap='hard' requires cols"),
-        ({"wrap": "physical"}, ValueError, "wrap must be one of"),
-        ({"variant": "raised"}, ValueError, "variant must be one of"),
-        ({"size": "xl"}, ValueError, "size must be one of"),
-        ({"resize": "auto"}, ValueError, "resize must be one of"),
-        ({"required": 1}, TypeError, "required must be a bool"),
-        ({"attrs": "id=notes"}, TypeError, "attrs must be a mapping"),
+        ({"wrap": "physical"}, TypeError, r"CTextarea\.Kwargs\.wrap expects Literal"),
+        ({"variant": "raised"}, TypeError, r"CTextarea\.Kwargs\.variant expects Literal"),
+        ({"size": "xl"}, TypeError, r"CTextarea\.Kwargs\.size expects Literal"),
+        ({"resize": "auto"}, TypeError, r"CTextarea\.Kwargs\.resize expects Literal"),
+        ({"required": 1}, TypeError, r"CTextarea\.Kwargs\.required expects bool \| None"),
+        ({"attrs": "id=notes"}, TypeError, r"CTextarea\.Kwargs\.attrs expects Mapping"),
         ({"attrs": {"rows": 9}}, ValueError, "cannot override owned attribute"),
         ({"attrs": {"data-citry-root": "x"}}, ValueError, "reserved Citry runtime attribute"),
     ],
@@ -140,7 +140,9 @@ def test_non_string_html_protocol_objects_are_rejected_before_rendering():
         def __html__(self):
             return "</textarea><script>bad()</script>"
 
-    with pytest.raises(TypeError, match="value must be a string or None"):
+    # An object with __html__ is not a str, so Citry's input check rejects it
+    # before its markup can reach the page.
+    with pytest.raises(TypeError, match=r"CTextarea\.Kwargs\.value expects str \| None"):
         _render(CTextarea(value=TrustedValue()))
 
 
@@ -317,3 +319,14 @@ def test_const_safe_string_uses_the_same_de_trusted_value_pipeline():
     assert html.count("<textarea") == 1
     assert "&lt;/textarea&gt;&lt;b&gt;safe text&lt;/b&gt;" in html
     assert "<b>safe text</b>" not in html
+
+
+def test_html_protocol_objects_are_rejected_with_citrys_check_off():
+    # An app can turn Citry's input check off, and then Citry UI's own check
+    # is the only thing that keeps an object with __html__ out of the page.
+    class TrustedValue:
+        def __html__(self):
+            return "<b>trusted</b>"
+
+    with pytest.raises(TypeError, match="value must be a string or None"):
+        _render(CTextarea(value=TrustedValue()), check_input_types=False)

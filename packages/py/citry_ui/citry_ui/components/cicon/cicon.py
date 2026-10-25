@@ -218,7 +218,9 @@ class CIcon(LibraryComponent):
     class Slots:
         pass
 
-    # Citry UI checks its public inputs itself; see docs/component-authoring.md.
+    # Citry's error for name would print all 57 icon names twice; Citry UI's
+    # says in one line that it must be a documented icon name. See
+    # docs/component-authoring.md.
     class Lint:
         check_input_types = False
 

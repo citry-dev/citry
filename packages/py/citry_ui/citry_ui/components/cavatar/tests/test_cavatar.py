@@ -111,13 +111,13 @@ def test_root_and_image_attributes_have_distinct_destinations():
     ("input_name", "bad_value", "error", "match"),
     [
         ("src", "", ValueError, "src must be non-empty"),
-        ("src", 3, TypeError, "src must be a string or None"),
-        ("alt", None, TypeError, "alt must be a string"),
-        ("variant", "raised", ValueError, "variant must be one of"),
-        ("size", "xl", ValueError, "size must be one of"),
-        ("shape", "pill", ValueError, "shape must be one of"),
-        ("attrs", [], TypeError, "attrs must be a mapping"),
-        ("img_attrs", [], TypeError, "img_attrs must be a mapping"),
+        ("src", 3, TypeError, r"CAvatar\.Kwargs\.src expects str \| None"),
+        ("alt", None, TypeError, r"CAvatar\.Kwargs\.alt expects str"),
+        ("variant", "raised", TypeError, r"CAvatar\.Kwargs\.variant expects Literal"),
+        ("size", "xl", TypeError, r"CAvatar\.Kwargs\.size expects Literal"),
+        ("shape", "pill", TypeError, r"CAvatar\.Kwargs\.shape expects Literal"),
+        ("attrs", [], TypeError, r"CAvatar\.Kwargs\.attrs expects Mapping"),
+        ("img_attrs", [], TypeError, r"CAvatar\.Kwargs\.img_attrs expects Mapping"),
     ],
 )
 def test_invalid_inputs_fail_deterministically(input_name, bad_value, error, match):

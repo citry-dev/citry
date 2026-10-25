@@ -184,7 +184,7 @@ def test_separator_slot_receives_boundary_index() -> None:
         ({}, ValueError, "requires label"),
         ({"label": "Code", "length": 0}, ValueError, "between 1 and 32"),
         ({"label": "Code", "length": True}, TypeError, "must be an integer"),
-        ({"label": "Code", "type": "unicode"}, ValueError, "must be one of"),
+        ({"label": "Code", "type": "unicode"}, TypeError, "CPinInput.Kwargs.type expects Literal["),
         ({"label": "Code", "value": "12a"}, ValueError, "numeric alphabet"),
         ({"label": "Code", "value": "1234567"}, ValueError, "at most 6"),
         ({"label": "Code", "placeholder": "ab"}, ValueError, "one Unicode code point"),

@@ -132,7 +132,7 @@ def test_attrs_without_vue_syntax_stay_ordinary_attributes() -> None:
 
 
 def test_invalid_server_configuration_fails() -> None:
-    with pytest.raises(ValueError, match="size"):
+    with pytest.raises(TypeError, match=r"CAlertDialog\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"):
         _render(_MINIMAL.replace('id="delete"', 'size="full"'))
     with pytest.raises(TypeError, match="close_on_escape"):
         _render(_MINIMAL.replace('id="delete"', 'c-close_on_escape="1"'))

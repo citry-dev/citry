@@ -162,7 +162,7 @@ def test_field_owns_label_state_and_relationships() -> None:
     ("kwargs", "error", "match"),
     [
         ({}, ValueError, "requires label"),
-        ({"label": "Rating", "value": 1.5}, TypeError, "int, Decimal"),
+        ({"label": "Rating", "value": 1.5}, TypeError, "CRating.Kwargs.value expects int | Decimal | str | None"),
         ({"label": "Rating", "value": "1e2"}, ValueError, "plain-decimal"),
         ({"label": "Rating", "max": 0}, ValueError, "between 1 and 20"),
         ({"label": "Rating", "max": True}, TypeError, "must be an integer"),
@@ -171,7 +171,11 @@ def test_field_owns_label_state_and_relationships() -> None:
         ({"label": "Rating", "precision": "0.01", "max": 3}, ValueError, "at most 200"),
         ({"label": "Rating", "value": "2.3", "precision": "0.5"}, ValueError, "precision-grid"),
         ({"label": "Rating", "value_label": "{value}"}, ValueError, "both {value} and {max}"),
-        ({"label": "Rating", "variant": "outline"}, ValueError, "must be one of"),
+        (
+            {"label": "Rating", "variant": "outline"},
+            TypeError,
+            "CRating.Kwargs.variant expects Literal['solid', 'subtle']",
+        ),
     ],
 )
 def test_invalid_inputs_fail_deterministically(kwargs, error, match) -> None:

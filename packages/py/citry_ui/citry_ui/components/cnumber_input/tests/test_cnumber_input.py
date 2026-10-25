@@ -174,7 +174,7 @@ def test_field_owns_state_and_editor_relationships() -> None:
 @pytest.mark.parametrize(
     ("kwargs", "error", "match"),
     [
-        ({"value": 1.5}, TypeError, "int, Decimal"),
+        ({"value": 1.5}, TypeError, r"CNumberInput\.Kwargs\.value expects int \| Decimal \| str \| None"),
         ({"value": True}, TypeError, "int, Decimal"),
         ({"value": "1e3"}, ValueError, "plain-decimal"),
         ({"value": Decimal("NaN")}, ValueError, "finite"),
@@ -182,9 +182,9 @@ def test_field_owns_state_and_editor_relationships() -> None:
         ({"min": "2", "max": "1"}, ValueError, "min cannot be greater"),
         ({"value": "0", "min": "1"}, ValueError, "less than min"),
         ({"value": "11", "max": "10"}, ValueError, "greater than max"),
-        ({"commit_behavior": "snap"}, ValueError, "must be one of"),
-        ({"size": "xl"}, ValueError, "must be one of"),
-        ({"attrs": []}, TypeError, "mapping or None"),
+        ({"commit_behavior": "snap"}, TypeError, r"CNumberInput\.Kwargs\.commit_behavior expects Literal\["),
+        ({"size": "xl"}, TypeError, r"CNumberInput\.Kwargs\.size expects Literal\['sm', 'md', 'lg'\]"),
+        ({"attrs": []}, TypeError, r"CNumberInput\.Kwargs\.attrs expects Mapping\[str, object\] \| None"),
         ({"minimum_message": "Too small"}, ValueError, r"must contain \{min\}"),
         ({"step_message": "Use {step.__class__}"}, ValueError, "unsupported placeholder"),
     ],
