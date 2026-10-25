@@ -501,6 +501,22 @@ run a hook at once, Citry keeps the result of the run that finishes first,
 so a hook that returns different text on different runs makes the page
 depend on which thread finished first.
 
+## Walk deep node lists
+
+The `on_template_compiled` and `on_template_foreign_compiled` hooks receive
+`ctx.nodes`, the node list Citry built from the template. It nests as
+deeply as the template's `<c-if>`, `<c-for>`, `<c-slot>`, `<c-fill>`, and
+component tags do.
+
+If your hook walks `ctx.nodes` with a function that calls itself for each
+nested node, a deeply nested template can make the component's first
+render fail with `RecursionError`. Each nested call counts toward Python's
+recursion limit, on top of the calls your web framework already uses.
+
+Walk the list with a loop instead. Keep a list of the node lists you still
+have to visit, and take one from it each time round the loop, so the walk
+works the same at any depth.
+
 ## Related reference
 
 - [`Extension`][citry.Extension]

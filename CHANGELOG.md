@@ -319,16 +319,18 @@
   expression into smaller ones.
 - A template that nests 50 or more `<c-if>` or `<c-for>` tags now renders.
   It used to fail with `SyntaxError: too many nested parentheses`.
-  Templates nested more than about 300 levels raise `RecursionError`
-  instead, and much deeper ones can crash the process.
 - In a component that uses Vue, `<c-for>` tags nested a few hundred deep,
   each with a `<c-empty>`, no longer raise `RecursionError` while Citry
   writes the data Vue receives, on Python 3.11 and PyPy or when your web
   framework already uses part of Python's stack. `citry check` now also
   reports a `Secret`, or a value that cannot be sent as JSON, however
   deeply it sits in `js_data()`.
-- A template that nests about 90 or more `<c-slot>` tags inside each
-  other's fallback content now renders. It used to raise `RecursionError`.
+- Rendering, serializing, or running `citry check` on a template nested
+  up to 256 levels deep no longer raises `RecursionError`, even when your
+  web framework already uses part of Python's stack. This includes
+  `<c-slot>` tags nested inside each other's fallback content. A slot
+  passed on through a long chain of components can still raise it,
+  because each component in the chain adds to the stack.
 - In a component that uses Vue, a `Markup` value without tags, such as
   `Markup("a&#127;b")`, now keeps a character such as U+007F, or the
   Unicode noncharacter U+FDD0, that a numeric reference names, as the

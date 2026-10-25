@@ -2,8 +2,10 @@
 Run a recursive walk without one Python call per level.
 
 A walker that would call itself once per nested level is written as a
-generator. Where it would call itself, it yields ``Call(child, ...)``, and
-the yield expression gives back what the call returned::
+generator. Where it would call itself, it yields
+``Call(function, *args, **kwargs)`` instead, naming the walker to run and
+its arguments, and the yield expression gives back what the call
+returned::
 
     def depth(node):
         best = 0
