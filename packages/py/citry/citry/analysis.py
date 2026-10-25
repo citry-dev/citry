@@ -14,7 +14,7 @@ from difflib import SequenceMatcher, get_close_matches
 from enum import Enum
 from itertools import pairwise
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from citry._browser_expressions import (
     SERVER_EVENT_CALL_NAMES,
@@ -180,6 +180,7 @@ from citry._template_python import build_schema_template_shadow as _build_schema
 from citry._template_python import template_python_queries as _template_python_queries
 from citry._template_python import template_python_query_at as _template_python_query_at
 from citry._template_python import template_static_input_queries as _template_static_input_queries
+from citry._walk import Call, run
 from citry.util.html import decode_attribute_entities
 from citry_core.template_formatter import (
     EmbeddedFormatPlan as _CoreEmbeddedFormatPlan,
@@ -204,7 +205,7 @@ from citry_core.template_parser import RESERVED_TAG_NAMES, HtmlAttr, HtmlAttrKin
 from citry_core.template_parser import parse_template as _parse_template
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Generator, Mapping
     from pathlib import Path
 
     from citry._template_data_source import TemplateDataSourceShape
@@ -1091,7 +1092,7 @@ def lint_alpine_attributes(
     # attribute is an Alpine leftover does not depend on the component.
     effective = tuple(consumers) or (AlpineAttributeLintConsumer(),)
     found: list[tuple[str, int, int]] = []
-    _collect_alpine_attributes(template, found, parse_nested=parse_nested, base_index=0)
+    run(_collect_alpine_attributes(template, found, parse_nested=parse_nested, base_index=0))
     findings: list[AlpineAttributeFinding] = []
     for name, start_index, end_index in sorted(found, key=lambda item: (item[1], item[2])):
         is_cloak = _ascii_lower(name) == "x-cloak"
@@ -1142,7 +1143,7 @@ def _collect_alpine_attributes(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     """Collect each ``x-*`` attribute name on an HTML element with its byte span."""
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -1163,7 +1164,8 @@ def _collect_alpine_attributes(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_alpine_attributes(
+                    yield Call(
+                        _collect_alpine_attributes,
                         parsed,
                         found,
                         parse_nested=parse_nested,
@@ -1171,7 +1173,7 @@ def _collect_alpine_attributes(
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_alpine_attributes(body, found, parse_nested=parse_nested, base_index=base_index)
+            yield Call(_collect_alpine_attributes, body, found, parse_nested=parse_nested, base_index=base_index)
 
 
 def lint_attribute_values(
@@ -1242,7 +1244,7 @@ def lint_attribute_values(
         return ()
     severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
     found: list[AttributeValueFinding] = []
-    _collect_attribute_values(template, found, severity, parse_nested=parse_nested, base_index=0)
+    run(_collect_attribute_values(template, found, severity, parse_nested=parse_nested, base_index=0))
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
 
@@ -1253,7 +1255,7 @@ def _collect_attribute_values(
     *,
     parse_nested: Callable[[str], Template],
     base_index: int,
-) -> None:
+) -> Generator[Call, Any, None]:
     """Check each static attribute of each HTML element in one template and its nested templates."""
     for element in template.elements:
         if not isinstance(element, TemplateElement.Node):
@@ -1279,7 +1281,8 @@ def _collect_attribute_values(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_attribute_values(
+                    yield Call(
+                        _collect_attribute_values,
                         parsed,
                         found,
                         severity,
@@ -1288,7 +1291,9 @@ def _collect_attribute_values(
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_attribute_values(body, found, severity, parse_nested=parse_nested, base_index=base_index)
+            yield Call(
+                _collect_attribute_values, body, found, severity, parse_nested=parse_nested, base_index=base_index
+            )
 
 
 def _attribute_value_finding(
@@ -1556,13 +1561,15 @@ def lint_misspelled_directives(
         return ()
     severity: Literal["warning", "error"] = "error" if "error" in active else "warning"
     found: list[MisspelledDirectiveFinding] = []
-    _collect_misspelled_directives(
-        template,
-        found,
-        severity,
-        parse_nested=parse_nested,
-        base_index=0,
-        consumers=effective,
+    run(
+        _collect_misspelled_directives(
+            template,
+            found,
+            severity,
+            parse_nested=parse_nested,
+            base_index=0,
+            consumers=effective,
+        )
     )
     return tuple(sorted(found, key=lambda item: (item.start_index, item.end_index)))
 
@@ -1576,7 +1583,7 @@ def _collect_misspelled_directives(
     base_index: int,
     consumers: tuple[MisspelledDirectiveLintConsumer, ...],
     vue_skipped: bool = False,
-) -> None:
+) -> Generator[Call, Any, None]:
     """
     Check each ``c-*`` and ``v-*`` attribute of each element in one template and its nested templates.
 
@@ -1622,7 +1629,8 @@ def _collect_misspelled_directives(
                 nested = _nested_template(inner.content, parse_nested)
                 if nested is not None:
                     parsed, nested_start = nested
-                    _collect_misspelled_directives(
+                    yield Call(
+                        _collect_misspelled_directives,
                         parsed,
                         found,
                         severity,
@@ -1633,7 +1641,8 @@ def _collect_misspelled_directives(
                     )
         body = getattr(node, "body", None)
         if body is not None:
-            _collect_misspelled_directives(
+            yield Call(
+                _collect_misspelled_directives,
                 body,
                 found,
                 severity,
