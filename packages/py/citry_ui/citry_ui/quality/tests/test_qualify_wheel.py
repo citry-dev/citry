@@ -73,7 +73,15 @@ def test_runtime_boundary_matches_every_shipped_python_module():
         for path in _RUNTIME_PACKAGE.rglob(suffix)
     }
 
-    assert shipped_python | shipped_assets | {"citry_ui/py.typed"} == EXPECTED_RUNTIME_FILES
+    shipped = shipped_python | shipped_assets | {"citry_ui/py.typed"}
+    # Name each file and where to fix it, because a new module is the usual
+    # cause and its author needs only to add one line.
+    missing = sorted(shipped - EXPECTED_RUNTIME_FILES)
+    stale = sorted(EXPECTED_RUNTIME_FILES - shipped)
+    assert not missing, (
+        f"Add these shipped files to EXPECTED_RUNTIME_FILES in citry_ui/quality/qualify_wheel.py: {missing}"
+    )
+    assert not stale, f"Remove these files from EXPECTED_RUNTIME_FILES in citry_ui/quality/qualify_wheel.py: {stale}"
 
 
 def test_runtime_boundary_includes_split_button_private_dependencies():
