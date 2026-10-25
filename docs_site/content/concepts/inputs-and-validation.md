@@ -102,7 +102,12 @@ str(button)
 ```
 
 The message names the component, the input, the type the annotation
-expects, and the value it got. The check runs on every render, in
+expects, and the value it got. When the component comes from a registered
+component library, such as Citry UI, the message names the library and
+asks you to change the value you pass, because its annotation is not yours
+to edit. When the wrong value is one the component's own code computes,
+such as its template data, the message names the library and asks you to
+report the error to it, unless the value came from an input you passed. The check runs on every render, in
 development and in production, so a value of the wrong type from a form,
 an API, or a database fails here too.
 
