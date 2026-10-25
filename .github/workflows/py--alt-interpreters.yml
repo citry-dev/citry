@@ -1,0 +1,120 @@
+# Runs the non-browser Python suite on PyPy 3.11 and free-threaded CPython
+# 3.14 (3.14t). On those interpreters Citry renders through its Python render
+# path, and their object identity, garbage collection and thread scheduling
+# differ from standard CPython, so the per-PR matrix in py--tests.yml cannot
+# show that Citry still works there.
+#
+# It runs once a week and on demand, never on pull requests, so it adds
+# nothing to the routine CI or release path. When a scheduled run fails, the
+# last job opens one tracking issue, or comments on it if it is still open.
+name: Python tests on PyPy and free-threaded CPython
+
+on:
+  schedule:
+    # Mondays at 05:17 UTC, away from the top of the hour when runners are busiest.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+  # TEMPORARY for the trial run on this branch: workflow_dispatch works only
+  # once the file is on the default branch. Removed before merge.
+  push:
+    branches:
+      - "ci/alt-interpreters"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      # One interpreter failing must not hide the other one's result.
+      fail-fast: false
+      matrix:
+        python: ["pypy3.11", "3.14t"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Initialize the vendored Ruff submodule (a build/runtime dependency)
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        with:
+          prune-cache: true
+          version: "0.13.5"
+
+      # uv's own interpreter builds include PyPy and the free-threaded 3.14t.
+      - name: Install Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      # `uv sync` builds citry_core for this interpreter through maturin.
+      # These interpreters cannot use the stable ABI, so it builds a wheel
+      # for this exact interpreter, as the release workflow does.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.python }}
+
+      # The browser test tools are left out: the non-browser suite does not
+      # use them, and greenlet, which Playwright needs, does not build on
+      # PyPy.
+      - name: Install the workspace
+        run: >-
+          uv sync --locked --all-packages
+          --python ${{ matrix.python }}
+          --no-install-package playwright
+          --no-install-package pytest-playwright
+          --no-install-package greenlet
+
+      - name: Show the interpreter
+        run: >-
+          uv run --no-sync python -c
+          "import sys, sysconfig; print(sys.version);
+          print('GIL disabled build:', bool(sysconfig.get_config_var('Py_GIL_DISABLED')))"
+
+      - name: Run Python tests
+        run: >-
+          uv run --no-sync pytest
+          -m "not e2e and not qualification"
+          --ignore packages/py/citry/tests/test_server_reload.py
+          -p no:playwright
+          -n 4
+          --dist loadfile
+          --durations 30
+
+  report-failure:
+    # Only the weekly run reports: a manual run's author is already watching.
+    if: ${{ failure() && github.event_name == 'schedule' }}
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: "Weekly Python tests on PyPy or free-threaded CPython failed"
+        run: |
+          # One open issue collects every failed week, so a long failure does
+          # not open a new issue each Monday.
+          number=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number,title \
+            --jq "map(select(.title == env.TITLE)) | first | .number // empty")
+          body="The weekly run failed: $RUN_URL"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$TITLE" --body "$body"
+          fi
