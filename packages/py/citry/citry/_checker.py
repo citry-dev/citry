@@ -2961,9 +2961,6 @@ _PLAIN_ATTRIBUTE_CLASSES = (object, type, ModuleType, SimpleNamespace)
 # code the value's own class defines. A Secret is a leaf the check reports.
 _PLAIN_JSON_LEAVES = (type(None), bool, int, float, str, Secret)
 _PLAIN_JSON_KEYS = (type(None), bool, int, float, str)
-# Frames that rendering has already used when it starts reading data, so a
-# part this close to Python's recursion limit is never reached.
-_RECURSION_MARGIN = 200
 
 
 def _is_one_of(cls: type, classes: tuple[type, ...]) -> bool:
@@ -3067,8 +3064,6 @@ class _OpaquePart:
     path: str
     # Whether the part is a dict key rather than a value.
     is_key: bool
-    # How many containers deep the part sits.
-    depth: int
 
 
 def _key_text(key: object) -> str:
@@ -3088,14 +3083,14 @@ def _first_opaque_part(value: object) -> _OpaquePart | None:
     only, so it runs none of it, and it does not recurse, so a deeply nested
     value cannot stop the check.
     """
-    pending: list[tuple[object, str, int]] = [(value, "", 0)]
+    pending: list[tuple[object, str]] = [(value, "")]
     seen: set[int] = set()
     while pending:
-        current, path, depth = pending.pop()
+        current, path = pending.pop()
         # Citry's own Const proxy sends what it wraps unchanged.
         unwrapped, current = _unwrap_const_markers(current)
         if not unwrapped:
-            return _OpaquePart(current, path, is_key=False, depth=depth)
+            return _OpaquePart(current, path, is_key=False)
         current_type = type(current)
         if _is_one_of(current_type, _PLAIN_JSON_LEAVES):
             continue
@@ -3108,15 +3103,15 @@ def _first_opaque_part(value: object) -> _OpaquePart | None:
             items = list(cast("dict[object, object]", current).items())
             for key, _item in items:
                 if not _is_one_of(type(key), _PLAIN_JSON_KEYS):
-                    return _OpaquePart(key, path, is_key=True, depth=depth)
+                    return _OpaquePart(key, path, is_key=True)
             # Reversed so the stack pops them in the order the JSON check reads them.
-            pending.extend((item, f"{path}{_key_text(key)}", depth + 1) for key, item in reversed(items))
+            pending.extend((item, f"{path}{_key_text(key)}") for key, item in reversed(items))
         elif current_type is list or current_type is tuple:
             seen.add(id(current))
             items = list(enumerate(cast("list[object]", current)))
-            pending.extend((item, f"{path}[{index}]", depth + 1) for index, item in reversed(items))
+            pending.extend((item, f"{path}[{index}]") for index, item in reversed(items))
         else:
-            return _OpaquePart(current, path, is_key=False, depth=depth)
+            return _OpaquePart(current, path, is_key=False)
     return None
 
 
@@ -3241,17 +3236,11 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         if opaque is not None:
             # A value reached through attributes is judged only when it is
             # plain data. A module constant that holds something else is
-            # reported only when no code of its own could make it pass, and
-            # only within the depth rendering can read. Rendering fails with
-            # RecursionError somewhat before Python's recursion limit,
-            # because frames are already in use, so the cutoff leaves room.
+            # reported only when no code of its own could make it pass.
+            # Rendering checks data at any depth and raises for such a part,
+            # so the part is reported however deeply it sits.
             name = _safe_class_text(type(opaque.value), "__name__")
-            if (
-                len(sent.path) > 1
-                or name is None
-                or opaque.depth >= sys.getrecursionlimit() - _RECURSION_MARGIN
-                or not _never_json(opaque.value, is_key=opaque.is_key)
-            ):
+            if len(sent.path) > 1 or name is None or not _never_json(opaque.value, is_key=opaque.is_key):
                 return None
             what = "a dict key" if opaque.is_key else "a value"
             return _ModuleValueIssue(
@@ -3263,10 +3252,7 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
         except _SecretInBrowserDataError:
             # Rendering would raise for this value, so name the key that
             # holds the Secret, the way the runtime error does.
-            try:
-                path = _secret_key_path(value) or ""
-            except RecursionError:
-                path = ""
+            path = _secret_key_path(value) or ""
             return _ModuleValueIssue(
                 f"{label}{path} is a Secret; read the value on the server instead",
                 secret=True,
@@ -3275,10 +3261,6 @@ def _js_data_module_values(component: type[Component], source: str) -> Callable[
             return _ModuleValueIssue(f"{label}: {exc}", secret=False)
         except ValueError as exc:
             return _ModuleValueIssue(f"{label}: {exc}", secret=False)
-        except RecursionError:
-            # A value nested too deeply for the JSON check is left
-            # unjudged, so one constant cannot stop the whole check.
-            return None
         return None
 
     return issue

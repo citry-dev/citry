@@ -888,20 +888,20 @@ def test_a_secret_declines_and_python_keeps_its_refusal() -> None:
         _json_plain(values["citryText0"])
 
 
-def test_rust_writes_data_a_low_recursion_limit_stops_python_on() -> None:
-    # The accepted difference native_leaf_json.py states: Rust has its own
-    # depth limit (200), not the interpreter's.
+def test_python_and_rust_both_write_deep_data_under_a_low_recursion_limit() -> None:
+    # Rust has its own depth limit (200), and Python's conversion uses a
+    # bounded number of frames, so a low recursion limit stops neither.
     value: object = "bottom"
     for _ in range(150):
         value = [value]
     limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(len(_frame_stack()) + 60)
+    sys.setrecursionlimit(len(_frame_stack()) + 100)
     try:
-        with pytest.raises(RecursionError):
-            _json_plain(value)
+        plain = _json_plain(value)
         leaf_json = _native._leaf_values_json({"citryDeep": value}, PLACEHOLDER)
     finally:
         sys.setrecursionlimit(limit)
+    assert plain == value
     assert len(leaf_json) == 1
 
 

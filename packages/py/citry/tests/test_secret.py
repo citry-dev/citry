@@ -898,10 +898,9 @@ def _nested_lists(depth: int, leaf: object) -> list[object]:
     return outer
 
 
-# Too deep for the JSON check's recursion, which must not stop `citry check`.
+# Deeper than Python's recursion limit. Rendering still reaches the bottom
+# of each and raises there, so the check reports both.
 DEEP_CONSTANT = _nested_lists(5000, SECRET_TOKEN)
-# Rendering fails with RecursionError before it reaches the object at the
-# bottom, so the object's type is not reported.
 DEEP_OBJECT = _nested_lists(5000, object())
 _OPAQUE_ENGINE = Citry(autodiscover=False)
 
@@ -918,8 +917,6 @@ class OpaqueValuesPage(Component):
             "lazyConstant": LAZY_CONSTANT,
             "recordingConstant": RECORDING_CONSTANT,
             "shadowed": SHADOWED_SETTINGS.token,
-            "deep": DEEP_CONSTANT,
-            "deepObject": DEEP_OBJECT,
             "constLazy": CONST_LAZY,
             "constLazyList": CONST_LAZY_LIST,
             # The check still reaches the values after the ones above.
@@ -935,9 +932,36 @@ def test_check_runs_no_code_of_a_value_it_reads_and_skips_what_it_cannot_judge(t
     assert _OPAQUE_CALLS == []
     # Only the plain module constant is reported. The others are left
     # unjudged: an object that may pass for another class, also inside a
-    # Const, a dict subclass, a class attribute that a property hides, and
-    # a value nested too deeply.
+    # Const, a dict subclass, and a class attribute that a property hides.
     assert findings == [_secret_finding("token", "SECRET_TOKEN")]
+
+
+_DEEP_ENGINE = Citry(autodiscover=False)
+
+
+class DeepValuesPage(Component):
+    citry = _DEEP_ENGINE
+    template = "<p></p>"
+
+    def js_data(self, kwargs, slots):
+        return {"deep": DEEP_CONSTANT, "deepObject": DEEP_OBJECT}
+
+
+def test_check_reports_values_nested_deeper_than_the_recursion_limit(tmp_path):
+    findings = _findings(_DEEP_ENGINE, tmp_path)
+
+    path = "[0]" * 5001
+    assert findings == [
+        _secret_finding("deep", "DEEP_CONSTANT" + path),
+        (
+            "warning",
+            f"JsData field 'deepObject' is not a clean JSON value: DEEP_OBJECT{path} holds a value of type object,"
+            " which cannot be sent to the browser as JSON. Browser tooling will treat its type as unknown.",
+        ),
+    ]
+    # Rendering reaches the Secret at the bottom too, so the finding is real.
+    with pytest.raises(TypeError, match=r'js_data\(\)\["deep"\](\[0\]){5001} holds a citry\.Secret'):
+        DeepValuesPage().render().serialize()
 
 
 _ANNOTATION_ENGINE = Citry(autodiscover=False)
