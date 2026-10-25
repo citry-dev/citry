@@ -247,6 +247,16 @@
   that content or fail with an unrelated error. Content passed through
   a captured `Slot` to another component no longer shows the page's
   own text in its place.
+- In a component that uses Vue, `{{ }}` expressions, `c-` bindings such
+  as `c-title`, `<c-if>`, `<c-for>`, and `simple = True` and transparent
+  components inside an element with `v-pre` now render, and the `v-pre`
+  element's own `c-` bindings and `#c-key` work. The page used to show
+  internal names such as `{{ $citryPrepared.citryText0 }}`, or the
+  template failed to compile. Where Citry's values meet something Vue
+  would read, such as a child component, a `<c-slot>`, or a `:title` on
+  the `v-pre` element itself, Citry now raises an error that says what to
+  move. A `v-pre` element that holds only HTML and Vue syntax renders as
+  before.
 - In a component that uses Vue, `&amp;#40;` written in text or an
   attribute value now shows `&#40;`, as the same component without Vue
   does; it used to show `(`. A static `style` with `&quot;` inside a

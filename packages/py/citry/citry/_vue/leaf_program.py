@@ -2961,6 +2961,11 @@ class _Compiler:
         # writes them as HTML the browser keeps.
         if any(item[0] == "morph" for item in node.element_metadata):
             self.safe_body = False
+        # Vue does not compile anything inside `v-pre`, so a leaf template's
+        # data bindings there would reach the page as written. The general
+        # assembler writes the contents as the HTML the server renders.
+        if any(attr.key.casefold() == "v-pre" for attr in node._authored_vue_attrs):
+            self.safe_body = False
         if node._has_spread and not _source_attrs_are_projectable(node):
             # A spread can remove or replace these authored values, so the
             # leaf template would have to carry the selected value through
