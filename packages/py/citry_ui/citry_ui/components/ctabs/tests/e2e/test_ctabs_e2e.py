@@ -1157,6 +1157,28 @@ def test_removing_the_selected_focused_tab_chooses_and_focuses_an_enabled_fallba
     }
 
 
+def test_removing_the_selected_tab_leaves_the_page_where_the_reader_scrolled(page):
+    _load(page, _dynamic_removal_tabs_page())
+    # A page long enough to scroll the tabs out of view.
+    page.evaluate("document.body.append(Object.assign(document.createElement('div'), {style: 'height: 5000px'}))")
+    page.get_by_role("tab", name="Security").click()
+    page.evaluate("document.activeElement?.blur()")
+    page.evaluate("window.scrollTo(0, 3000)")
+    page.wait_for_function("window.scrollY === 3000")
+
+    # Removing the selected tab, as a re-render would, selects a fallback
+    # without scrolling the page (#383).
+    page.evaluate(
+        """() => {
+          document.querySelector('[data-citry-tabs-tab][data-value="security"]').remove();
+          document.querySelector('[data-citry-tabs-panel][data-value="security"]').remove();
+        }"""
+    )
+    page.wait_for_function("document.querySelector('[data-citry-tabs-root]').dataset.value === 'account'")
+    page.evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+    assert page.evaluate("window.scrollY") == 3000
+
+
 def test_events_reorder_preserves_focus_and_server_removal_selects_without_callback(
     page,
     serve_citry_ui_live,

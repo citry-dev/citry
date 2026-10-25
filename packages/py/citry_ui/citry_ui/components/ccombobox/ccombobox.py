@@ -14,6 +14,7 @@ from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import CClassValue, CStyleValue, is_vue_directive_attribute, merge_root_attrs
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
 from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._reveal import REVEAL_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -872,7 +873,7 @@ class CCombobox(LibraryComponent):
 
 
 class _CComboboxDependencies:
-    js: ClassVar = [ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY]
+    js: ClassVar = [ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY, REVEAL_RUNTIME_DEPENDENCY]
 
 
 CCombobox.Dependencies = _CComboboxDependencies

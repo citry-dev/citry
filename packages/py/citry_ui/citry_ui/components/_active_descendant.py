@@ -137,7 +137,10 @@ ACTIVE_DESCENDANT_RUNTIME_JS = r"""
         if (activeElement) {
           input.setAttribute("aria-activedescendant", activeElement.id);
           if (scroll && owner.lastScrolled !== activeValue) {
-            activeElement.scrollIntoView({ block: "nearest" });
+            // Scroll only the list via `_reveal.py`; a page with only the modal palette has no reveal.
+            const reveal = globalThis[Symbol.for("citry-ui:reveal")];
+            if (reveal) reveal.reveal(activeElement, listbox);
+            else activeElement.scrollIntoView({ block: "nearest" });
             owner.lastScrolled = activeValue;
           }
         } else {

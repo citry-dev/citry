@@ -26,6 +26,11 @@
   `CDisclosure`.
 - `CCalendar`, `CDatePicker`, and `CDateRange` now accept
   `first_day_of_week="1"`, where they used to raise `TypeError`.
+- When a re-render keeps a `CSelect` or `CMultiSelect` open, gives an open
+  `CCombobox` new items, or removes the selected tab of a `CTabs` or the
+  focused item of a `CTagGroup` or `CToolbar`, the page no longer scrolls
+  back to that component. They scroll only their own list, or move focus
+  without scrolling.
 - While a `CMenu`, `CContextMenu`, or `CSplitButton` menu is open,
   scrolling the page no longer jumps back to the menu, for example when
   the pointer leaves a submenu trigger or the menu re-renders. The menu

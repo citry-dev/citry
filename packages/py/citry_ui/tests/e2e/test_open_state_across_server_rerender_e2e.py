@@ -2086,6 +2086,37 @@ def test_server_rerender_that_keeps_an_open_overlay_keeps_it_open(
     assert page.evaluate("window.__openChanges") == opened
 
 
+# A modal dialog locks the page's scrolling while it is open, so only the
+# components that leave the page free to scroll take part.
+_PAGE_SCROLLS = [name for name in _OVERLAYS if name not in _MODAL]
+
+
+@pytest.mark.parametrize("component", _PAGE_SCROLLS)
+def test_server_rerender_of_an_open_overlay_leaves_the_page_where_the_reader_scrolled(
+    page: Any,
+    serve_citry_ui_live: Any,
+    wait_for_citry_ready: Any,
+    send_event: Any,
+    wait_for_count: Any,
+    settle_timers: Any,
+    component: str,
+) -> None:
+    """A re-render that keeps an overlay open does not scroll the page back to it (#383)."""
+    _load(page, serve_citry_ui_live, wait_for_citry_ready, component)
+    # A page long enough to scroll the open overlay out of view.
+    page.evaluate("document.body.append(Object.assign(document.createElement('div'), {style: 'height: 5000px'}))")
+    _open_by_user(page, component)
+    page.evaluate("window.scrollTo(0, 3000)")
+    page.wait_for_function("window.scrollY === 3000")
+
+    _rerender_while_open(page, component, send_event, wait_for_count, _FIRST)
+    # A component may bring its option into view on a timer or an
+    # animation frame, so wait for both before reading the scroll position.
+    settle_timers()
+
+    assert page.evaluate("window.scrollY") == 3000, f"{component} scrolled the page back to itself"
+
+
 @pytest.mark.parametrize("component", _OVERLAYS)
 def test_two_overlays_on_one_page_keep_their_own_open_state(
     page: Any,

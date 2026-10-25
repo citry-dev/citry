@@ -292,3 +292,50 @@ def test_css_environment_geometry_and_axe(page: Any, wait_for_animations: Any) -
     )
     assert violations == []
     assert errors == []
+
+
+def _long_page() -> str:
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class Page(Component):
+        citry = app
+        template = """
+          <!doctype html><html lang="en"><head><meta charset="utf-8"><c-css /></head>
+          <body>
+            <c-CSelect
+              c-options="options"
+              value="o35"
+              placeholder="Choose"
+              c-trigger_attrs="{'aria-label': 'Long list'}"
+            />
+          </body></html>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"options": [CSelectOption(f"o{index}", f"Option {index}") for index in range(40)]}
+
+    return str(Page())
+
+
+def test_opening_shows_the_highlighted_option_inside_the_list(page: Any, wait_for_animations: Any) -> None:
+    page.set_content(_long_page(), wait_until="load")
+    page.wait_for_selector("[data-citry-select-initialized]")
+    page.get_by_role("combobox", name="Long list").click()
+    page.wait_for_selector('[data-citry-ui-part="popup"]:popover-open')
+    wait_for_animations(page.locator('[data-citry-ui-part="popup"]'))
+
+    # The list scrolls to the selected option far down, and the whole
+    # option is inside the popup's visible area.
+    assert page.evaluate(
+        """() => {
+          const popup = document.querySelector('[data-citry-ui-part="popup"]');
+          const option = popup.querySelector('[data-value="o35"]');
+          const outer = popup.getBoundingClientRect();
+          const top = outer.top + popup.clientTop;
+          const item = option.getBoundingClientRect();
+          return popup.scrollTop > 0
+            && item.top >= top - 0.5
+            && item.bottom <= top + popup.clientHeight + 0.5;
+        }"""
+    )
