@@ -27,7 +27,7 @@ inputs:
       - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Permits Escape outside and focus-outside close requests.}
       - {id: placement, name: placement, type: {display: CPopoverPlacement, interfaces: [CPopoverPlacement]}, default: {kind: literal, value: bottom-start}, effect: Sets the preferred logical Popover placement.}
       - {id: match-width, name: match_width, type: bool, default: {kind: literal, value: true}, effect: Makes the Popover at least as wide as the visible control.}
-      - {id: first-day-of-week, name: first_day_of_week, type: 'Literal[1, 2, 3, 4, 5, 6, 7] | None', default: {kind: literal, value: null}, effect: Overrides locale week start using ISO Monday 1 through Sunday 7.}
+      - {id: first-day-of-week, name: first_day_of_week, type: {display: 'CCalendarFirstDayOfWeek | None', interfaces: [CCalendarFirstDayOfWeek]}, default: {kind: literal, value: null}, effect: 'Sets the first day of the week in place of the locale''s choice: 1 is Monday and 7 is Sunday. Pass the number, or the same number as text such as "1".'}
       - {id: show-adjacent-days, name: show_adjacent_days, type: bool, default: {kind: literal, value: true}, effect: Shows selectable neighboring-month dates in the Calendar.}
       - {id: fixed-weeks, name: fixed_weeks, type: bool, default: {kind: literal, value: true}, effect: Uses six stable Calendar rows instead of the natural month row count.}
       - {id: placeholder, name: placeholder, type: str, default: {kind: literal, value: Choose dates}, effect: Supplies visible empty-state text when explicitly overridden.}
@@ -141,6 +141,7 @@ interfaces:
       - {id: variant, name: CDateRangeVariant, definition: 'Literal["outline", "filled", "plain"]'}
       - {id: size, name: CDateRangeSize, definition: 'Literal["sm", "md", "lg"]'}
       - {id: value-source, name: CDateRangeValueChangeSource, definition: 'Literal["calendar", "clear", "reset", "native"]'}
+      - {id: calendar-first-day-of-week, name: CCalendarFirstDayOfWeek, definition: 'Literal[1, 2, 3, 4, 5, 6, 7, "1", "2", "3", "4", "5", "6", "7"]'}
       - {id: popover-placement, name: CPopoverPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]'}
       - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
       - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
