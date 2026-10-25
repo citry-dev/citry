@@ -26,11 +26,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 from hashlib import md5, sha256
 from typing import TYPE_CHECKING, cast
 
 from citry._class_introspection import _safe_class_text
+from citry.cache import _forget_stored_key, _remember_confirmed, _store_if_missing, _store_unless_matched
 from citry.constness import _unwrap_const_markers, const_value
 from citry.ext.dependencies.types import Script, ScriptType, Style
 from citry.secret import Secret
@@ -613,17 +615,30 @@ def _cache_component_script(
     if capture.serialized is None or capture.content_hash is None:
         raise RuntimeError("A present component asset has no serialized capture.")
 
-    cache = comp_cls.citry.cache
+    citry = comp_cls.citry
+    cache = citry.cache
+    serialized = capture.serialized
+    # The versioned key is named by the payload's hash, so a key the backend
+    # holds holds this payload: check it at most once per recheck interval
+    # instead of reading it back on every render.
     versioned_key = gen_component_cache_key(comp_cls.class_id, script_type, capture.content_hash)
-    if force or cache.get(versioned_key) != capture.serialized:
-        cache.set(versioned_key, capture.serialized)
-
     # Keep the original stable key for old URLs and integrations. It is a
     # mutable compatibility entry, so every reader validates it against its
     # current class before returning. Generated URLs use the immutable key.
+    # Its value changes with the class, so it is compared, again at most once
+    # per recheck interval for one class version.
     stable_key = gen_cache_key(comp_cls.class_id, script_type)
-    if force or cache.get(stable_key) != capture.serialized:
-        cache.set(stable_key, capture.serialized)
+    if force:
+        # A caller that passes `force` rewrites both entries whatever this
+        # process remembers about them.
+        cache.set(versioned_key, serialized)
+        cache.set(stable_key, serialized)
+        now = time.monotonic()
+        _remember_confirmed(citry, versioned_key, None, now)
+        _remember_confirmed(citry, stable_key, capture.content_hash, now)
+    else:
+        _store_if_missing(citry, cache, versioned_key, lambda: serialized)
+        _store_unless_matched(citry, cache, stable_key, serialized, capture.content_hash)
     # Return the object built from this class, rather than reading the shared
     # key again. An old and new worker can legitimately alternate writes
     # during a rolling deployment; neither may serve the other's version.
@@ -636,10 +651,9 @@ def cache_component_js(comp_cls: type[Component], *, force: bool = False) -> Non
 
     The ``$component`` sugar is expanded here, once per class, so both the
     inlined tag and the URL-served file carry the expanded form. Does nothing
-    for a component with no JS. Skips the write when the stored payload already
-    matches this class version, unless ``force`` is set (used after a file
-    reset). A deterministic class ID can be shared by replacement classes, so
-    existence alone is not enough to establish a cache hit.
+    for a component with no JS. Each process checks the stored payload at most
+    once a minute, and writes it when it is missing or differs; ``force``
+    writes it at once.
     """
     _cache_component_script("js", comp_cls, force=force)
 
@@ -662,8 +676,12 @@ def get_cached_component_script(
     content_hash: str,
 ) -> Script | Style | None:
     """Read one immutable class-level script version by its URL hash."""
-    cached = citry.cache.get(gen_component_cache_key(class_id, script_type, content_hash))
+    key = gen_component_cache_key(class_id, script_type, content_hash)
+    cached = citry.cache.get(key)
     if cached is None:
+        # The backend no longer holds it; the next store must write it again
+        # instead of trusting this process's record that it is stored.
+        _forget_stored_key(citry, key)
         return None
     data = json.loads(cached)
     return Script.from_json(data) if script_type == "js" else Style.from_json(data)
@@ -921,9 +939,9 @@ def cache_asset(citry: Citry, content: str, extension: str) -> str:
     changed file gets a new URL and browsers can cache the old one forever.
     """
     file_name = f"{md5(content.encode(), usedforsecurity=False).hexdigest()[:12]}.{extension}"
-    key = gen_asset_cache_key(file_name)
-    if not citry.cache.has(key):
-        citry.cache.set(key, content)
+    # The name is the content's hash, so the backend is asked at most once
+    # per recheck interval whether it holds the file.
+    _store_if_missing(citry, citry.cache, gen_asset_cache_key(file_name), lambda: content)
     return file_name
 
 
@@ -939,5 +957,7 @@ def evict_component_scripts(comp_cls: type[Component]) -> None:
 
 def evict_component_script_keys(citry: Citry, class_id: str) -> None:
     """Drop class-level JS and CSS cache entries for one stable class ID after unregistration."""
-    citry.cache.delete(gen_cache_key(class_id, "js"))
-    citry.cache.delete(gen_cache_key(class_id, "css"))
+    for script_type in ("js", "css"):
+        key = gen_cache_key(class_id, script_type)
+        citry.cache.delete(key)
+        _forget_stored_key(citry, key)
