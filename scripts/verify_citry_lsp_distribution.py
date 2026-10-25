@@ -43,7 +43,7 @@ EXPECTED_REQUIRES_DIST: Final = {
     "packaging>=25.0",
     "pygls==2.1.1",
     "python-dotenv<2,>=1.2.3",
-    "ty==0.0.89",
+    "ty==0.0.90",
 }
 
 
@@ -543,7 +543,7 @@ import citry_lsp
 
 assert importlib.metadata.version("citry-lsp") == "__VERSION__"
 assert importlib.metadata.version("pygls") == "2.1.1"
-assert importlib.metadata.version("ty") == "0.0.89"
+assert importlib.metadata.version("ty") == "0.0.90"
 citry_version = tuple(int(part) for part in importlib.metadata.version("citry").split(".")[:3])
 assert citry_lsp.MINIMUM_CITRY_VERSION <= citry_version, citry_version
 assert citry_lsp.SERVER_VERSION == "__VERSION__"
