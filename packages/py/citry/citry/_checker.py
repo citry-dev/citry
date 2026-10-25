@@ -14,6 +14,7 @@ import weakref
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from types import (
     GetSetDescriptorType,
@@ -259,11 +260,27 @@ class CheckFinding:
 
 @dataclass(frozen=True, slots=True)
 class CheckReport:
-    """Complete output and exit status for one check run."""
+    """
+    Complete output and exit status for one check run.
+
+    ``skipped_library_findings`` counts, per library name, the findings
+    left out because they are in components a registered library provides.
+    ``library_owners`` tells which findings those are, so
+    ``citry check --types`` can leave out its own findings in the same
+    components; it is ``None`` when the run reports library findings or
+    checked no registry.
+    """
 
     findings: tuple[CheckFinding, ...] = ()
     app_failure: str | None = None
     notes: tuple[str, ...] = ()
+    skipped_library_findings: tuple[tuple[str, int], ...] = ()
+    library_owners: _LibraryOwners | None = dataclass_field(default=None, compare=False, repr=False)
+
+    @property
+    def all_notes(self) -> tuple[str, ...]:
+        """The notes to print, ending with the count of left-out library findings when there are any."""
+        return (*self.notes, *library_findings_note(dict(self.skipped_library_findings)))
 
     def __post_init__(self) -> None:
         # A position without its base cannot be placed by a tool reading the
@@ -305,8 +322,15 @@ class _BrowserSource:
     source_kind: SourceKind
 
 
-def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
-    """Check a registry when one is available, otherwise scan definite literals."""
+def check_project(selection: CheckAppSelection, cwd: Path, *, include_libraries: bool = False) -> CheckReport:
+    """
+    Check a registry when one is available, otherwise scan definite literals.
+
+    Findings in components that a registered library provides are left out
+    and counted in a note, unless ``include_libraries`` or
+    ``LintSettings.include_libraries`` asks for them: the app's author
+    cannot change that code, so they would only hide the app's own findings.
+    """
     if selection.failure is not None:
         findings, notes = _check_static(cwd)
         return CheckReport(findings=tuple(findings), app_failure=selection.failure, notes=tuple(notes))
@@ -323,22 +347,163 @@ def check_project(selection: CheckAppSelection, cwd: Path) -> CheckReport:
         findings, notes = _check_static(cwd)
         return CheckReport(findings=tuple(findings), app_failure=app_failure_message(exc), notes=tuple(notes))
 
-    findings, notes = _check_registry(engine, registrations, rules)
+    findings, notes, origin_consumers = _check_registry(engine, registrations, rules)
     # An inject key finding points into the component's Python file.
     findings.extend(_counted_in(_unknown_inject_key_findings(engine, registrations, cwd), "file"))
-    return CheckReport(findings=tuple(findings), notes=(TRANSFORM_NOTE, *notes))
+    if include_libraries or engine.settings.lint.include_libraries:
+        return CheckReport(findings=tuple(findings), notes=(TRANSFORM_NOTE, *notes))
+    owners = _LibraryOwners(engine, origin_consumers)
+    kept, skipped = owners.split(findings)
+    return CheckReport(
+        findings=tuple(kept),
+        notes=(TRANSFORM_NOTE, *notes),
+        skipped_library_findings=tuple(sorted(skipped.items())),
+        library_owners=owners,
+    )
+
+
+def library_findings_note(skipped: Mapping[str, int]) -> tuple[str, ...]:
+    """The one note that says how many findings were left out and which libraries they came from, or none."""
+    total = sum(skipped.values())
+    if total == 0:
+        return ()
+    names = ", ".join(repr(name) for name in sorted(skipped))
+    noun = "library" if len(skipped) == 1 else "libraries"
+    findings = "finding" if total == 1 else "findings"
+    return (
+        f"left out {total} {findings} in components from the registered {noun} {names}; "
+        "pass --include-libraries to report them",
+    )
+
+
+class _LibraryOwners:
+    """
+    Which registered components each finding belongs to, and which of them a library provides.
+
+    A finding names its place as text: a component's import path with the
+    attribute it is about (``pkg.mod.Card.template``), a file path with a
+    component in brackets (``/src/card.py (pkg.mod.Card.js_data)``), or a
+    file path with a line and column (``/src/card.py:3:5``). A finding
+    belongs to a library only when every component it can be traced to
+    comes from a library; a finding that names no known component is kept.
+    """
+
+    def __init__(self, engine: Citry, origin_consumers: Mapping[str, set[type[Component]]]) -> None:
+        # A library's own classes are the concrete components it installed.
+        self._library_of: dict[type[Component], str] = {}
+        for name, installation in engine._library_installations.items():
+            for definition in installation.library.components:
+                concrete = engine._library_components.get(definition)
+                if concrete is not None:
+                    self._library_of[concrete] = name
+        self._by_origin: dict[str, set[type[Component]]] = {}
+        for origin, consumers in origin_consumers.items():
+            self._by_origin.setdefault(_origin_path_key(origin), set()).update(consumers)
+        self._by_label: dict[str, set[type[Component]]] = {}
+        unique = {id(comp_cls): comp_cls for comp_cls in engine.components.values()}
+        for comp_cls in unique.values():
+            self._by_label.setdefault(_class_label(comp_cls), set()).add(comp_cls)
+            module_file = _loaded_python_file(comp_cls)
+            if module_file is not None:
+                self._by_origin.setdefault(_origin_path_key(str(module_file)), set()).add(comp_cls)
+            messages_file = _resolved_messages_file(engine, comp_cls)
+            if messages_file is not None:
+                self._by_origin.setdefault(_origin_path_key(str(messages_file)), set()).add(comp_cls)
+
+    def library(self, origin: str) -> str | None:
+        """The library a finding at ``origin`` is counted under, or ``None`` when an app component may own it."""
+        owners = self._owners(origin)
+        if not owners:
+            return None
+        libraries = {self._library_of.get(owner) for owner in owners}
+        if None in libraries:
+            return None
+        # Code shared by two libraries, such as a theme library built on
+        # another one, is still no app's code; it counts under one name.
+        return min(cast("set[str]", libraries))
+
+    def split(self, findings: Iterable[CheckFinding]) -> tuple[list[CheckFinding], dict[str, int]]:
+        """Keep the findings an app component may own, and count the others per library."""
+        kept: list[CheckFinding] = []
+        skipped: dict[str, int] = {}
+        for finding in findings:
+            library = self.library(finding.origin)
+            if library is None:
+                kept.append(finding)
+            else:
+                skipped[library] = skipped.get(library, 0) + 1
+        return kept, skipped
+
+    def _owners(self, origin: str) -> set[type[Component]]:
+        match = _ORIGIN_SHAPE.fullmatch(origin)
+        place = origin if match is None else match["place"]
+        label = None if match is None else match["label"]
+        # A component in brackets is the one the finding is about, even when
+        # the file holds code it inherits from another component.
+        if label is not None:
+            labelled = self._label_owners(label)
+            if labelled:
+                return labelled
+        # A template, script, or stylesheet names exactly the components that use it.
+        owners = self._by_origin.get(_origin_path_key(place))
+        if owners:
+            return owners
+        # An inline `messages` string is named `<file>::<Class>.messages`.
+        file_part, separator, _ = place.partition("::")
+        if separator:
+            owners = self._by_origin.get(_origin_path_key(file_part))
+            if owners:
+                return owners
+        return self._label_owners(place)
+
+    def _label_owners(self, text: str) -> set[type[Component]]:
+        # The longest import path that the text starts with names the
+        # component, so `pkg.mod.Card.JsData.field` finds `pkg.mod.Card`.
+        candidate = text
+        while candidate:
+            owners = self._by_label.get(candidate)
+            if owners:
+                return owners
+            candidate, _, _ = candidate.rpartition(".")
+        return set()
+
+
+def _resolved_messages_file(engine: Citry, comp_cls: type[Component]) -> Path | None:
+    """The messages file a component reads, resolved as for its template file, or ``None``."""
+    with suppress(Exception):
+        owner, _inline, filepath = _find_pair_declaration(comp_cls, "messages", "messages_file")
+        if isinstance(filepath, (str, Path)):
+            inspection = _inspect_asset_path(filepath, owner_dir=module_dir(owner), search_dirs=engine.settings.dirs)
+            if inspection.resolved_path is not None:
+                return inspection.resolved_path.resolve()
+    return None
+
+
+# A place with an optional `:line:column` and an optional `(component label)`.
+_ORIGIN_SHAPE = re.compile(r"(?P<place>.+?)(?::\d+:\d+)?(?: \((?P<label>[^()]*)\))?")
+
+
+def _origin_path_key(place: str) -> str:
+    """The text two origins share when they name the same file, however each spelled the path."""
+    if not (place.startswith(("/", "\\")) or re.match(r"[A-Za-z]:[\\/]", place)):
+        return place
+    with suppress(OSError, ValueError):
+        return str(Path(place).resolve())
+    return place
 
 
 def _check_registry(
     engine: Citry,
     registrations: Mapping[str, type[Component]],
     rules: Mapping[str, TagRules],
-) -> tuple[list[CheckFinding], list[str]]:
+) -> tuple[list[CheckFinding], list[str], dict[str, set[type[Component]]]]:
     """
     Read each authored registry template directly and continue after failures.
 
-    Returns the findings, and the notes about checks that could not run,
-    such as link paths no web framework integration could answer for.
+    Returns the findings, the notes about checks that could not run, such
+    as link paths no web framework integration could answer for, and the
+    components that use each template, script, and stylesheet, keyed by
+    the origin its findings name.
     """
     known_names = {name.lower() for name in registrations}
     unique_classes = {id(comp_cls): comp_cls for comp_cls in registrations.values()}
@@ -623,7 +788,12 @@ def _check_registry(
     findings.extend(_css_class_findings(engine, css_templates, known_css))
     for css_source in css_sources.values():
         findings.extend(_counted_in(_check_css_source(engine, css_source, known_css), css_source.source_kind))
-    return findings, links.notes()
+    origin_consumers: dict[str, set[type[Component]]] = {}
+    for template_source in sources.values():
+        origin_consumers.setdefault(template_source.origin, set()).update(template_source.consumers)
+    for browser_source in (*browser_sources.values(), *css_sources.values()):
+        origin_consumers.setdefault(browser_source.origin, set()).update(browser_source.consumers)
+    return findings, links.notes(), origin_consumers
 
 
 def _checker_foreign_options(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, ClassVar, NoReturn, cast
 
@@ -55,6 +56,11 @@ class CheckCommand(ExtensionCommand):
     ``tsc`` compiler in the project's ``node_modules`` or on ``PATH``. When
     one of them is missing, or ty cannot start, the command says what to
     install or fix and exits with status 2.
+
+    Findings in the components of a registered library, such as Citry UI,
+    are left out of the report and the exit status, and one note says how
+    many were left out. ``--include-libraries``, or
+    ``LintSettings.include_libraries``, reports them too.
     """
 
     name = "check"
@@ -74,6 +80,11 @@ class CheckCommand(ExtensionCommand):
             ),
         ),
         CommandArg(
+            "--include-libraries",
+            action="store_true",
+            help="Also report findings in components from registered libraries, such as Citry UI.",
+        ),
+        CommandArg(
             "--format",
             choices=("text", "json"),
             default="text",
@@ -87,6 +98,7 @@ class CheckCommand(ExtensionCommand):
         *,
         static: bool = False,
         types: bool = False,
+        include_libraries: bool = False,
         format: str = "text",  # noqa: A002
         **_kwargs: Any,
     ) -> None:
@@ -113,18 +125,18 @@ class CheckCommand(ExtensionCommand):
             else:
                 selection = CheckAppSelection(spec=selection.spec, engine=engine)
 
-        report = check_project(selection, Path.cwd())
+        report = check_project(selection, Path.cwd(), include_libraries=include_libraries)
         if types and report.app_failure is None and selection.spec is not None:
             report = _with_type_findings(report, selection.spec, Path.cwd())
         elif types:
             # A registry that failed to load has no components to type-check.
-            report = CheckReport(report.findings, report.app_failure, (*report.notes, TYPES_SKIPPED_NOTE))
+            report = replace(report, notes=(*report.notes, TYPES_SKIPPED_NOTE))
         if format == "json":
             print(_json_report(report, static=static, app_spec=selection.spec))
         else:
             if report.app_failure is not None:
                 sys.stderr.write(f"citry check: app unavailable: {report.app_failure}\n")
-            for note in report.notes:
+            for note in report.all_notes:
                 sys.stderr.write(f"citry check: note: {note}\n")
             for finding in report.findings:
                 # The checker's own spelling of its code leads the message, as
@@ -148,7 +160,7 @@ def _json_report(report: CheckReport, *, static: bool, app_spec: str | None) -> 
         "mode": mode,
         "app": app_spec,
         "app_failure": report.app_failure,
-        "notes": list(report.notes),
+        "notes": list(report.all_notes),
         "exit_code": report.exit_code,
         "findings": [
             {
@@ -264,7 +276,21 @@ def _with_type_findings(report: CheckReport, app_spec: str, cwd: Path) -> CheckR
                 source_kind="file",
             )
         )
-    return CheckReport(tuple(findings), report.app_failure, report.notes)
+    added = findings[len(report.findings) :]
+    owners = report.library_owners
+    if owners is None:
+        return replace(report, findings=(*report.findings, *added))
+    # The registry check left out its findings in library components; the
+    # type findings in the same components are left out and counted with them.
+    kept, skipped = owners.split(added)
+    counts = dict(report.skipped_library_findings)
+    for library, count in skipped.items():
+        counts[library] = counts.get(library, 0) + count
+    return replace(
+        report,
+        findings=(*report.findings, *kept),
+        skipped_library_findings=tuple(sorted(counts.items())),
+    )
 
 
 def _type_check_error(message: str, *, checker: str = "TypeScript") -> NoReturn:

@@ -79,7 +79,19 @@ def test_citry_ui_components_have_no_typescript_or_ty_findings(tmp_path):
     # Each check spends most of its time in TypeScript and ty, so both apps are checked at the same time.
     runs = {
         module: subprocess.Popen(
-            [sys.executable, "-m", "citry", "--app", f"{module}:engine", "check", "--types", "--format", "json"],
+            # Citry UI is registered as a library here, so `--include-libraries` asks for its findings.
+            [
+                sys.executable,
+                "-m",
+                "citry",
+                "--app",
+                f"{module}:engine",
+                "check",
+                "--types",
+                "--include-libraries",
+                "--format",
+                "json",
+            ],
             cwd=_CITRY_UI_PACKAGE,
             env=environment,
             stdout=subprocess.PIPE,

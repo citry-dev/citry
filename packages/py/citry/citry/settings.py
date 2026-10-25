@@ -389,10 +389,22 @@ class LintSettings:
             lists what each annotation accepts. A component overrides this
             for itself with ``check_input_types`` in its nested
             [`Lint`][citry.Component.Lint] class.
+        include_libraries: Whether ``citry check`` also reports findings in
+            the components of a library you registered with
+            [`register_library()`][citry.Citry.register_library], such as
+            Citry UI. Off by default: you cannot change a library's code, so
+            ``citry check`` leaves those findings out of the report and the
+            exit status, and prints how many it left out. Set it to
+            ``True``, or pass ``citry check --include-libraries``, to report
+            them, for example in the library's own tests. A finding is left
+            out only when every component it belongs to comes from a
+            library, so a finding in your subclass of a library component,
+            including one in the code it inherits, is reported. The editor
+            ignores this setting and checks every file you open.
 
     Raises:
         TypeError: If a variable or global collection is not a mapping, or
-            ``check_input_types`` is not a ``bool``.
+            ``check_input_types`` or ``include_libraries`` is not a ``bool``.
         ValueError: If a severity or variable name is invalid.
 
     """
@@ -436,6 +448,7 @@ class LintSettings:
     rule_unknown_url: LintSeverity = "warning"
     rule_unknown_inject_key: LintSeverity = "warning"
     check_input_types: bool = True
+    include_libraries: bool = False
 
     # Hidden from type checkers so they keep checking calls against the
     # generated __init__ signature.
@@ -565,6 +578,11 @@ class LintSettings:
         # must fail here rather than silently keep the check on.
         if type(self.check_input_types) is not bool:
             msg = f"LintSettings.check_input_types must be True or False, got {self.check_input_types!r}."
+            raise TypeError(msg)
+        # A truthy string such as "false" must not quietly turn the
+        # library findings back on.
+        if type(self.include_libraries) is not bool:
+            msg = f"LintSettings.include_libraries must be True or False, got {self.include_libraries!r}."
             raise TypeError(msg)
 
 
