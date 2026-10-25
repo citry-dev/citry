@@ -195,9 +195,11 @@ def test_v_pre_checks_walk_deep_bodies_in_constant_frames() -> None:
         # Inside a table, `v-pre` contents cannot sit in a block of HTML, so
         # Citry checks them for authored markup and then for Vue syntax.
         # Each `<c-provide>` level is a transparent body both checks enter.
+        # `{{ value }}` is a data value, so the markup check fails and the
+        # Vue syntax check runs too.
         body = '<c-provide key="k" data="1">' * depth + "{{ value }}" + "</c-provide>" * depth
-        template = "<main><table v-pre><tr><td>" + body + "</td></tr></table><c-Child /></main>"
-        page = pages.setdefault(depth, _vue_page(template, child_template="<b>c</b>"))
+        template = "<main><table v-pre><tr><td>" + body + "</td></tr></table></main>"
+        page = pages.setdefault(depth, _vue_page(template))
         return page().render().serialize()
 
     _assert_flat(

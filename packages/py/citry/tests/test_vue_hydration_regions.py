@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from citry import Citry, Component, Markup
+from citry import Citry, Component, Extension, Markup
 from citry._vue.compiler import NativeCompiler
 from citry._vue.direct_capture import _prepared_root_markers, _source_attribute_reads_instance
 from citry._vue.serialization import HydrationAdmission, VueSerializationPlan, hydration_admission
@@ -959,6 +959,107 @@ def test_v_pre_refuses_what_it_cannot_write_as_html(
 ) -> None:
     with pytest.raises(error, match=match):
         _v_pre_page(template, data)().render().serialize()
+
+
+def _moved_slot_page(page_template: str, data: dict[str, object], *, hide_first: bool) -> type[Component]:
+    """
+    Build a page where an `on_slot_rendered` hook moves one slot result to another component.
+
+    `Wrap` passes its content to `Inner`, and both are transparent. The hook
+    saves the first `Inner` slot result and returns it again at the second
+    `Inner`, so that content sits under a `Wrap` that did not receive it.
+    """
+    saved: list[object] = []
+
+    class MoveSlot(Extension):
+        name = "move_slot"
+
+        def on_slot_rendered(self, ctx):
+            # Moving the result at `Inner` puts the first `Wrap`'s content
+            # inside the second `Wrap`.
+            if not isinstance(ctx.component, Inner):
+                return None
+            if not saved:
+                saved.append(ctx.result)
+                # Hiding the first copy means anything Citry reads or refuses
+                # comes from the moved copy alone.
+                return "" if hide_first else None
+            return saved[0]
+
+    engine = Citry(autodiscover=False, extensions=[MoveSlot])
+
+    class Inner(Component):
+        citry = engine
+        transparent = True
+        template = """
+<c-slot />
+"""
+
+    class Wrap(Component):
+        citry = engine
+        transparent = True
+        template = """
+<c-Inner><c-slot /></c-Inner>
+"""
+
+    class Page(Component):
+        citry = engine
+
+        def template_data(self, kwargs, slots):
+            return data
+
+        template = page_template
+        js = """
+$component({});
+"""
+
+    return Page
+
+
+@pytest.mark.parametrize(
+    ("template", "hide_first", "expected"),
+    [
+        (
+            "<main><div v-pre><c-Wrap>A</c-Wrap><c-Wrap>B</c-Wrap></div></main>",
+            False,
+            "<main><div v-pre>AA</div></main>",
+        ),
+        (
+            "<main><table v-pre><tr><td><c-Wrap><b :x='y'>A</b></c-Wrap><c-Wrap>B</c-Wrap></td></tr></table></main>",
+            True,
+            "<main><table v-pre><tr><td><b :x='y'>A</b></td></tr></table></main>",
+        ),
+    ],
+)
+def test_v_pre_reads_written_markup_that_a_hook_moved_between_transparent_components(
+    template: str, hide_first: bool, expected: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The moved content is still markup written in this template, so Vue
+    # reads it as written and Citry keeps `v-pre`.
+    compiled: list[str] = []
+    compile_vue = _rust.vue._compile_vue
+
+    def record(*args: Any) -> str:
+        compiled.append(args[0])
+        return compile_vue(*args)
+
+    monkeypatch.setattr(_rust.vue, "_compile_vue", record)
+    _moved_slot_page(template, {}, hide_first=hide_first)().render().serialize()
+    # The components' templates add line breaks around the content.
+    assert [text.replace("\n", "") for text in compiled] == [expected]
+
+
+def test_v_pre_refuses_vue_syntax_that_a_hook_moved_between_transparent_components() -> None:
+    # The data value makes Citry compile the table's contents. Compiling the
+    # moved `<b :x>` would make Vue run `:x` under `v-pre`, so it is refused.
+    template = """
+<main><table v-pre><tr><td>{{ name }}<c-Wrap><b :x='y'>A</b></c-Wrap><c-Wrap>B</c-Wrap></td></tr></table></main>
+"""
+    page = _moved_slot_page(template, {"name": "Ann"}, hide_first=True)
+    with pytest.raises(
+        TypeError, match=r"'v-pre' on the <table> element .* cannot hold the Vue attribute ':x' on <b>"
+    ):
+        page().render().serialize()
 
 
 def test_spread_attributes_vary_per_row_and_follow_vue_value_rules() -> None:
