@@ -390,12 +390,7 @@ class _LibraryOwners:
 
     def __init__(self, engine: Citry, origin_consumers: Mapping[str, set[type[Component]]]) -> None:
         # A library's own classes are the concrete components it installed.
-        self._library_of: dict[type[Component], str] = {}
-        for name, installation in engine._library_installations.items():
-            for definition in installation.library.components:
-                concrete = engine._library_components.get(definition)
-                if concrete is not None:
-                    self._library_of[concrete] = name
+        self._library_of = engine._library_names_by_component()
         self._by_origin: dict[str, set[type[Component]]] = {}
         for origin, consumers in origin_consumers.items():
             self._by_origin.setdefault(_origin_path_key(origin), set()).update(consumers)

@@ -135,6 +135,11 @@
 
 ### Changed
 
+- When a component from a registered component library, such as Citry UI,
+  gets an input of the wrong type, the `TypeError` now names the library
+  and asks you to change the value you pass, instead of suggesting you
+  change the library's annotation
+  ([details](https://citry.dev/concepts/inputs-and-validation/#typed-kwargs-checks)).
 - `citry check` now leaves out findings in the components of a library
   you registered with `register_library()`, such as Citry UI, so an app
   that uses Citry UI no longer fails the check on code it cannot change.

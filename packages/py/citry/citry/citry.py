@@ -849,6 +849,28 @@ class Citry:
         with self._registry._lifecycle.read("validate a component library installation"):
             self._validate_library_installation_locked(installation)
 
+    def _library_name_of(self, comp_cls: type[Component]) -> str | None:
+        """Name the registered library that installed ``comp_cls``, or ``None`` for an app component."""
+        # Most components are the app's own, and this map answers them
+        # without walking every installation.
+        definition = self._library_definitions_by_class.get(comp_cls)
+        if definition is None:
+            return None
+        for name, installation in tuple(self._library_installations.items()):
+            if definition in installation.library.components:
+                return name
+        return None
+
+    def _library_names_by_component(self) -> dict[type[Component], str]:
+        """Map each component a registered library installed to that library's name."""
+        names: dict[type[Component], str] = {}
+        for name, installation in self._library_installations.items():
+            for definition in installation.library.components:
+                concrete = self._library_components.get(definition)
+                if concrete is not None:
+                    names[concrete] = name
+        return names
+
     def _validate_library_installation_locked(self, installation: LibraryInstallation) -> None:
         """Check one installation while lifecycle access is already protected."""
         if self._library_installations.get(installation.library.name) is not installation:
